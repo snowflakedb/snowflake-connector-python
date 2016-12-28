@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.8 (January 6, 2016)
+
+    - Convert non-UTF-8 data in the large result set chunk to Unicode replacement characters to avoid decode error
+
 - v1.3.7 (December 8, 2016)
 
     - Increased the validity date acceptance window to prevent OCSP returning invalid responses due to out-of-scope validity dates for certificates.

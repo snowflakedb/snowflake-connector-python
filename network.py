@@ -55,6 +55,8 @@ else:
     from urllib.request import proxy_bypass
     from io import BytesIO as BytesIO_
 
+from io import StringIO
+
 """
 Moneky patch for PyOpenSSL Socket wrapper
 """
@@ -664,18 +666,13 @@ class SnowflakeRestful(object):
                     if is_raw_text:
                         ret = raw_ret.text
                     elif is_raw_binary:
+                        raw_data = decompress_raw_data(
+                            raw_ret.raw, add_bracket=True
+                        ).decode('utf-8', 'replace')
                         if not use_ijson:
-                            ret = iter(
-                                json.loads(decompress_raw_data(
-                                    raw_ret.raw, add_bracket=True
-                                ).decode('utf-8'))
-                            )
+                            ret = iter(json.loads(raw_data))
                         else:
-                            ret = split_rows_from_stream(
-                                BytesIO_(decompress_raw_data(
-                                    raw_ret.raw, add_bracket=True
-                                ))
-                            )
+                            ret = split_rows_from_stream(StringIO(raw_data))
                     else:
                         ret = raw_ret.json()
                     return ret, True
