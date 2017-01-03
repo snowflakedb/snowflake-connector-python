@@ -9,7 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
-- v1.3.8 (January 6, 2016)
+- v1.3.8 (January 6, 2017)
 
     - Convert non-UTF-8 data in the large result set chunk to Unicode replacement characters to avoid decode error
 

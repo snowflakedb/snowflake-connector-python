@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2016 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 u"""
 This module implements some constructors and singletons as required by the

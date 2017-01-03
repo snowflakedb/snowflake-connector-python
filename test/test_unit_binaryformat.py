@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2016 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 from snowflake.connector.sfbinaryformat import (
     SnowflakeBinaryFormat, binary_to_python, binary_to_snowflake)
