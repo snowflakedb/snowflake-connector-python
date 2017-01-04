@@ -6,7 +6,9 @@
 import decimal
 import sys
 
-import os
+from six import string_types, text_type, binary_type, PY2
+from six.moves import getcwd
+from six.moves.urllib.parse import urlsplit, urlunsplit, urlencode
 
 NUM_DATA_TYPES = []
 try:
@@ -20,33 +22,24 @@ except:
 
 from snowflake.connector.constants import UTF8
 
-PY2 = sys.version_info[0] == 2
-
+GET_CWD = getcwd
+STR_DATA_TYPE = string_types
+UNICODE_DATA_TYPE = text_type
+BYTE_DATA_TYPE = binary_type
 if PY2:
     BASE_EXCEPTION_CLASS = StandardError
-    GET_CWD = os.getcwdu
     TO_UNICODE = unicode
-    BYTE_DATA_TYPE = str
-    STR_DATA_TYPE = basestring
-    UNICODE_DATA_TYPE = unicode
     NUM_DATA_TYPES += [int, float, long, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-ord(v[-1])]
     PKCS5_OFFSET = lambda v: ord(v[-1])
     IS_BINARY = lambda v: isinstance(v, bytearray)
-    from urlparse import urlsplit, urlunsplit
-    from urllib import urlencode
 else:
     BASE_EXCEPTION_CLASS = Exception
-    GET_CWD = os.getcwd
     TO_UNICODE = str
-    BYTE_DATA_TYPE = bytes
-    STR_DATA_TYPE = str
-    UNICODE_DATA_TYPE = str
     NUM_DATA_TYPES += [int, float, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-v[-1]]
     PKCS5_OFFSET = lambda v: v[-1]
     IS_BINARY = lambda v: isinstance(v, (bytes, bytearray))
-    from urllib.parse import urlsplit, urlunsplit, urlencode
 
 IS_BYTES = lambda v: isinstance(v, BYTE_DATA_TYPE)
 IS_STR = lambda v: isinstance(v, STR_DATA_TYPE)

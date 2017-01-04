@@ -14,10 +14,10 @@ from . import network
 from .compat import (TO_UNICODE, IS_OLD_PYTHON, URL_ENCODE, PY2)
 from .converter import SnowflakeConverter
 from .cursor import SnowflakeCursor
-from .errorcode import (ER_FAILED_TO_GET_BOOTSTRAP, ER_CONNECTION_IS_CLOSED,
+from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
                         ER_NO_PASSWORD, ER_INVALID_VALUE)
-from .errors import (Error, OperationalError, ProgrammingError, InterfaceError,
+from .errors import (Error, ProgrammingError, InterfaceError,
                      DatabaseError)
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
@@ -356,7 +356,6 @@ class SnowflakeConnection(object):
         """
         # load current session info
         self.logger.info(u'__post connection')
-        self.__bootstrap()
         """
         NOTE: abort detached query mode is TRUE by default
 
@@ -442,45 +441,6 @@ class SnowflakeConnection(object):
         self._password = None
         self._token = self._con.token
         self._master_token = self._con.master_token
-
-    def __bootstrap(self):
-        u"""
-        Bootstrap to get current session info
-        """
-        self.logger.info(u'__bootstrap')
-        try:
-            data = {
-                u'dataKinds': [u'CURRENT_SESSION']
-            }
-            client = u'sfsql'
-
-            self.logger.debug(u'reading current session')
-            ret = self._con.request(u'/console/bootstrap-data-request', data,
-                                    client=client)
-
-            self.logger.debug(u'session parameters: %s', ret)
-            if ret[u'success'] and u'currentSession' in ret[u'data']:
-                current_session = ret[u'data'][u'currentSession']
-                self._session_id = current_session[u'id']
-                self._database = current_session[u'currentDatabase']
-                self._schema = current_session[u'currentSchema']
-                self._warehouse = current_session[u'currentWarehouse']
-                self._account = current_session[u'accountName']
-                if u'currentRole' in current_session:
-                    self._role = current_session[u'currentRole']
-            else:
-                msg = ret[u'message'] \
-                    if u'message' in ret \
-                    else u'Failed to get bootstrap data'
-                errno = ret[u'data'][u'errorCode'] \
-                    if u'data' in ret and u'errorCode' in ret[u'data'] \
-                    else ER_FAILED_TO_GET_BOOTSTRAP
-                raise OperationalError(
-                    errno=errno,
-                    msg=msg,
-                )
-        finally:
-            self.logger.info(u'completed')
 
     def __config(self, **kwargs):
         u"""

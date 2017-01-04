@@ -12,9 +12,7 @@ import sys
 import threading
 import time
 import uuid
-from http.client import (BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
-                         FORBIDDEN,
-                         UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK)
+from io import StringIO, BytesIO
 from logging import getLogger
 from multiprocessing.pool import (ThreadPool, TimeoutError)
 
@@ -25,9 +23,14 @@ from botocore.vendored.requests.auth import AuthBase
 from botocore.vendored.requests.exceptions import (ConnectionError, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError)
+from six.moves.http_client import (
+    BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
+    FORBIDDEN,
+    UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
+from six.moves.urllib.request import proxy_bypass
 
 from . import ssl_wrap_socket
-from .compat import (TO_UNICODE, PY2, URL_ENCODE)
+from .compat import (TO_UNICODE, URL_ENCODE)
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
                         ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION,
                         ER_FAILED_TO_SERVER)
@@ -41,21 +44,6 @@ from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_REJECTED)
 from .util_text import split_rows_from_stream
 from .version import VERSION
-
-if PY2:
-    from httplib import BadStatusLine
-    from urllib import proxy_bypass
-
-    try:
-        from cStringIO import StringIO as BytesIO_
-    except ImportError:
-        from StringIO import StringIO as BytesIO_
-else:
-    from http.client import BadStatusLine
-    from urllib.request import proxy_bypass
-    from io import BytesIO as BytesIO_
-
-from io import StringIO
 
 """
 Moneky patch for PyOpenSSL Socket wrapper
@@ -362,6 +350,18 @@ class SnowflakeRestful(object):
             self._master_token = ret[u'data'][u'masterToken']
             self.logger.debug(u'token = %s', self._token)
             self.logger.debug(u'master_token = %s', self._master_token)
+            if u'sessionId' in ret[u'data']:
+                self._connection._session_id = ret[u'data'][u'sessionId']
+            if u'sessionInfo' in ret[u'data']:
+                session_info = ret[u'data'][u'sessionInfo']
+                if u'databaseName' in session_info:
+                    self._connection._database = session_info[u'databaseName']
+                if u'schemaName' in session_info:
+                    self._connection.schema = session_info[u'schemaName']
+                if u'roleName' in session_info:
+                    self._connection._role = session_info[u'roleName']
+                if u'warehouseName' in session_info:
+                    self._connection._warehouse = session_info[u'warehouseName']
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
                 _no_results=False):
@@ -632,7 +632,7 @@ class SnowflakeRestful(object):
                 #             connection_timeout)
 
                 if compress and data:
-                    gzdata = BytesIO_()
+                    gzdata = BytesIO()
                     gzip.GzipFile(fileobj=gzdata, mode=u'wb').write(
                         data.encode(u'utf-8'))
                     gzdata.seek(0, 0)
