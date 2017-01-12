@@ -23,14 +23,14 @@ from botocore.vendored.requests.auth import AuthBase
 from botocore.vendored.requests.exceptions import (ConnectionError, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError)
-from six.moves.http_client import (
+
+from . import ssl_wrap_socket
+from .compat import (
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
-from six.moves.urllib.request import proxy_bypass
-
-from . import ssl_wrap_socket
-from .compat import (TO_UNICODE, URL_ENCODE)
+from .compat import (TO_UNICODE, urlencode)
+from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
                         ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION,
                         ER_FAILED_TO_SERVER)
@@ -271,7 +271,7 @@ class SnowflakeRestful(object):
             url_parameters[u'roleName'] = role
 
         if len(url_parameters) > 0:
-            url = url + u'?' + URL_ENCODE(url_parameters)
+            url = url + u'?' + urlencode(url_parameters)
 
         # first auth request
         if passcode_in_password:
@@ -412,7 +412,7 @@ class SnowflakeRestful(object):
         }
         request_id = TO_UNICODE(uuid.uuid4())
         self.logger.debug(u'request_id: %s', request_id)
-        url = u'/session/token-request?' + URL_ENCODE({
+        url = u'/session/token-request?' + urlencode({
             u'requestId': request_id})
 
         body = {
@@ -452,7 +452,7 @@ class SnowflakeRestful(object):
                     u'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
                 })
 
-        url = u'/session?' + URL_ENCODE({u'delete': u'true'})
+        url = u'/session?' + urlencode({u'delete': u'true'})
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": CONTENT_TYPE_APPLICATION_JSON,
@@ -870,7 +870,7 @@ class SnowflakeRestful(object):
             u'RelayState': u"/some/deep/link",
             u'onetimetoken': one_time_token,
         }
-        sso_url = sso_url + u'?' + URL_ENCODE(url_parameters)
+        sso_url = sso_url + u'?' + urlencode(url_parameters)
 
         headers = {
             u"Accept": u'*/*',

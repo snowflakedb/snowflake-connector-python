@@ -41,7 +41,7 @@ setup(
         'pycryptodome>=3.2',
         'pyOpenSSL==16.2.0',
         'cffi==1.9.1',
-        'cryptography==1.5.3',
+        'cryptography==1.7.1',
         'pyasn1',
         'pyasn1-modules',
         'ijson',

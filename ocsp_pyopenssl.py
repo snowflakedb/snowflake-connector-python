@@ -37,7 +37,7 @@ from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type import (univ, tag)
 from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 
-from .compat import (PY2, URL_SPLIT, URL_UNSPLIT)
+from .compat import (PY2, urlsplit, urlunsplit)
 from .errorcode import (ER_FAILED_TO_GET_OCSP_URI,
                         ER_INVALID_OCSP_RESPONSE,
                         ER_SERVER_CERTIFICATE_REVOKED,
@@ -539,9 +539,9 @@ def execute_ocsp_request(ocsp_uri, cert_id):
 
     # transform objects into data in requests
     data = der_encoder.encode(ocsp_request)
-    parsed_url = URL_SPLIT(ocsp_uri)
+    parsed_url = urlsplit(ocsp_uri)
     ip = socket.gethostbyname(parsed_url.hostname)
-    new_uri = URL_UNSPLIT((parsed_url.scheme, ip, parsed_url.path,
+    new_uri = urlunsplit((parsed_url.scheme, ip, parsed_url.path,
                            parsed_url.query, parsed_url.fragment))
     session = requests.session()
     session.mount('http://', HTTPAdapter(max_retries=5))
@@ -736,7 +736,7 @@ def update_ocsp_response_cache_file(ocsp_response_cache_url):
     lock_file = None
     if ocsp_response_cache_url is not None:
         try:
-            parsed_url = URL_SPLIT(ocsp_response_cache_url)
+            parsed_url = urlsplit(ocsp_response_cache_url)
             if parsed_url.scheme == 'file':
                 filename = parsed_url.path
                 lock_file = filename + '.lck'
@@ -1025,7 +1025,7 @@ class SnowflakeOCSP(object):
                         len(OCSP_VALIDATION_CACHE) == 0:
             try:
                 with OCSP_VALIDATION_CACHE_LOCK:
-                    parsed_url = URL_SPLIT(self._ocsp_response_cache_url)
+                    parsed_url = urlsplit(self._ocsp_response_cache_url)
                     if parsed_url.scheme == 'file':
                         read_ocsp_response_cache_file(
                             parsed_url.path,
@@ -1215,7 +1215,7 @@ Usage: {0} <url>
 """.format(path.basename(sys.argv[0])))
         sys.exit(2)
     elif url.startswith('https://'):
-        parsed_url = URL_SPLIT(url)
+        parsed_url = urlsplit(url)
         url = parsed_url.hostname
         port = int(parsed_url.port or 443)
     else:

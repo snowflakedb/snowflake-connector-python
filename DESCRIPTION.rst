@@ -9,9 +9,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
-- v1.3.8 (January 6, 2017)
+- v1.3.8 (January 12, 2017)
 
-    - Convert non-UTF-8 data in the large result set chunk to Unicode replacement characters to avoid decode error
+    - Convert non-UTF-8 data in the large result set chunk to Unicode replacement characters to avoid decode error.
+    - Updated copyright year to 2017.
+    - Use `six` package to support both PY2 and PY3 for some functions
+    - Upgraded ``cryptography`` to 1.7.1 to address MacOS Python 3.6 build issue.
+    - Fixed OverflowError caused by invalid range of timetamp data for SnowSQL.
 
 - v1.3.7 (December 8, 2016)
 

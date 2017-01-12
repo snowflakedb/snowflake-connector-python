@@ -11,7 +11,7 @@ from threading import Lock
 
 from . import errors
 from . import network
-from .compat import (TO_UNICODE, IS_OLD_PYTHON, URL_ENCODE, PY2)
+from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2)
 from .converter import SnowflakeConverter
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
@@ -546,7 +546,7 @@ class SnowflakeConnection(object):
 
         if self._client_use_v1_query_api:
             ret = self._con.request(
-                u'/queries/v1/query-request?' + URL_ENCODE(url_parameters),
+                u'/queries/v1/query-request?' + urlencode(url_parameters),
                 data,
                 client=client,
                 _no_results=_no_results)
@@ -569,13 +569,13 @@ class SnowflakeConnection(object):
 
         if self._client_use_v1_query_api:
             return self._con.request(
-                u'/queries/v1/abort-request?' + URL_ENCODE(url_parameters), {
+                u'/queries/v1/abort-request?' + urlencode(url_parameters), {
                     u'sqlText': sql,
                     u'requestId': TO_UNICODE(request_id),
                 })
         else:
             return self._con.request(
-                u'/queries/abort-request?' + URL_ENCODE(url_parameters), {
+                u'/queries/abort-request?' + urlencode(url_parameters), {
                     u'sqlText': sql,
                     u'sequenceId': sequence_counter,
                 })

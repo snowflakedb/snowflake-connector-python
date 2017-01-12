@@ -119,7 +119,7 @@ class SnowflakeConverter(object):
             else:
                 return getattr(self, u'_{type_name}_to_python'.format(
                     type_name=type_name)), None
-        except KeyError as e:
+        except KeyError:
             # no type is defined
             return self._str_to_snowflake, None
 
@@ -170,11 +170,23 @@ class SnowflakeConverter(object):
 
         No timezone is attached.
         """
-        ts = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
-        if fmt:
-            return SnowflakeDateTimeFormat(fmt).format(ts)
-
-        return TO_UNICODE(date(ts.year, ts.month, ts.day))
+        try:
+            t = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
+            if fmt:
+                return SnowflakeDateTimeFormat(fmt).format(t)
+            return TO_UNICODE(date(t.year, t.month, t.day))
+        except OverflowError:
+            self.logger.debug(
+                "OverflowError in converting from epoch time to date: %s(s). "
+                "Falling back to use struct_time.",
+                value)
+            t = time.gmtime(value)
+            if fmt:
+                return SnowflakeDateTimeFormat(fmt).format(
+                    SnowflakeDateTime(t, nanosecond=0)
+                )
+            return u'{year:d}-{month:02d}-{day:02d}'.format(
+                year=t.tm_year, month=t.tm_mon, day=t.tm_mday)
 
     def _DATE_numpy_to_python(self, value, *_):
         """
@@ -208,9 +220,10 @@ class SnowflakeConverter(object):
             return None, None, None
 
     def _pre_TIMESTAMP_TZ_to_python(self, value, col_desc):
-        u"""try to split value by space for handling new timestamp with
-          timezone encoding format which has timezone
-         index separate from the timestamp value
+        u"""
+        try to split value by space for handling new timestamp with timezone
+        encoding format which has timezone index separate from the timestamp
+        value
         """
 
         tzoffset_extracted = None
@@ -288,9 +301,17 @@ class SnowflakeConverter(object):
             except:
                 tzinfo_value = pytz.timezone('UTC')
 
-        t0 = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-        t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo_value)
-        return t, fraction_of_nanoseconds
+        try:
+            t0 = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
+            t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo_value)
+            return t, fraction_of_nanoseconds
+        except OverflowError:
+            self.logger.debug(
+                "OverflowError in converting from epoch time to "
+                "timestamp_ltz: %s(ms). Falling back to use struct_time."
+            )
+            t = time.gmtime(microseconds/float(1000000))
+            return t, fraction_of_nanoseconds
 
     def _TIMESTAMP_LTZ_to_python(self, value, col_desc, *_):
         t, _ = self._pre_TIMESTAMP_LTZ_to_python(value, col_desc)
@@ -333,6 +354,8 @@ class SnowflakeConverter(object):
         if microseconds is None:
             return None
 
+        # NOTE: date range must fit into datetime data type or will raise
+        # OverflowError
         t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
         return t
 
@@ -346,8 +369,14 @@ class SnowflakeConverter(object):
             self._pre_TIMESTAMP_NTZ_to_python(value, col_desc)
         if microseconds is None:
             return None
-
-        t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
+        try:
+            t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
+        except OverflowError:
+            self.logger.debug(
+                "OverflowError in converting from epoch time to datetime: %s("
+                "ms). Falling back to use struct_time.",
+                microseconds)
+            t = time.gmtime(microseconds / float(1000000))
         return _format_sftimestamp(fmt, t, fraction_of_nanoseconds)
 
     def _TIMESTAMP_NTZ_numpy_to_python(self, value, col_desc, *_):
@@ -398,8 +427,15 @@ class SnowflakeConverter(object):
         microseconds, fraction_of_nanoseconds = \
             self._extract_time(value, col_desc)
 
-        ts = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-        return _format_sftimestamp(fmt, ts, fraction_of_nanoseconds)
+        try:
+            t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
+        except OverflowError:
+            self.logger.debug(
+                "OverflowError in converting from epoch time to datetime: %s("
+                "ms). Falling back to use struct_time.",
+                microseconds)
+            t = time.gmtime(microseconds / float(1000000))
+        return _format_sftimestamp(fmt, t, fraction_of_nanoseconds)
 
     _TIME_numpy_to_python = _TIME_to_python
 

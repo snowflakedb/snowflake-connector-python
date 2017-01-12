@@ -4,11 +4,10 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 import decimal
+import os
 import sys
 
 from six import string_types, text_type, binary_type, PY2
-from six.moves import getcwd
-from six.moves.urllib.parse import urlsplit, urlunsplit, urlencode
 
 NUM_DATA_TYPES = []
 try:
@@ -22,32 +21,68 @@ except:
 
 from snowflake.connector.constants import UTF8
 
-GET_CWD = getcwd
 STR_DATA_TYPE = string_types
 UNICODE_DATA_TYPE = text_type
 BYTE_DATA_TYPE = binary_type
 if PY2:
+    import urlparse
+    import urllib
+    import httplib
+
+    GET_CWD = os.getcwdu
     BASE_EXCEPTION_CLASS = StandardError
     TO_UNICODE = unicode
+
+    urlsplit = urlparse.urlsplit
+    urlunsplit = urlparse.urlunsplit
+
     NUM_DATA_TYPES += [int, float, long, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-ord(v[-1])]
     PKCS5_OFFSET = lambda v: ord(v[-1])
     IS_BINARY = lambda v: isinstance(v, bytearray)
+
+    BAD_REQUEST = httplib.BAD_REQUEST
+    SERVICE_UNAVAILABLE = httplib.SERVICE_UNAVAILABLE
+    GATEWAY_TIMEOUT = httplib.SERVICE_UNAVAILABLE
+    FORBIDDEN = httplib.FORBIDDEN
+    UNAUTHORIZED = httplib.UNAUTHORIZED
+    INTERNAL_SERVER_ERROR = httplib.INTERNAL_SERVER_ERROR
+    OK = httplib.OK
+    BadStatusLine = httplib.BadStatusLine
+    urlencode = urllib.urlencode
+    proxy_bypass = urllib.proxy_bypass
 else:
+    import urllib.parse
+    import http.client
+    import urllib.request
+
+    GET_CWD = os.getcwd
     BASE_EXCEPTION_CLASS = Exception
     TO_UNICODE = str
+
+    urlsplit = urllib.parse.urlsplit
+    urlunsplit = urllib.parse.urlunsplit
+    urlencode = urllib.parse.urlencode
     NUM_DATA_TYPES += [int, float, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-v[-1]]
     PKCS5_OFFSET = lambda v: v[-1]
     IS_BINARY = lambda v: isinstance(v, (bytes, bytearray))
 
+    BAD_REQUEST = http.client.BAD_REQUEST
+    SERVICE_UNAVAILABLE = http.client.SERVICE_UNAVAILABLE
+    GATEWAY_TIMEOUT = http.client.SERVICE_UNAVAILABLE
+    FORBIDDEN = http.client.FORBIDDEN
+    UNAUTHORIZED = http.client.UNAUTHORIZED
+    INTERNAL_SERVER_ERROR = http.client.INTERNAL_SERVER_ERROR
+    OK = http.client.OK
+    BadStatusLine = http.client.BadStatusLine
+
+    proxy_bypass = urllib.request.proxy_bypass
+
 IS_BYTES = lambda v: isinstance(v, BYTE_DATA_TYPE)
 IS_STR = lambda v: isinstance(v, STR_DATA_TYPE)
 IS_UNICODE = lambda v: isinstance(v, UNICODE_DATA_TYPE)
 IS_NUMERIC = lambda v: isinstance(v, tuple(NUM_DATA_TYPES))
-URL_SPLIT = urlsplit
-URL_UNSPLIT = urlunsplit
-URL_ENCODE = urlencode
 
 
 def PKCS5_PAD(value, block_size):
