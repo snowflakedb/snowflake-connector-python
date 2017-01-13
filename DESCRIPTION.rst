@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.9 (January 19?, 2017)
+
+    - Upgraded ``botocore`` to 1.4.93 to fix and ``boto3`` to 1.4.3 to fix the HTTPS request failure in Python 3.6
+
 - v1.3.8 (January 12, 2017)
 
     - Convert non-UTF-8 data in the large result set chunk to Unicode replacement characters to avoid decode error.

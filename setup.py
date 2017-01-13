@@ -33,8 +33,8 @@ setup(
     use_2to3=False,
 
     install_requires=[
-        'boto3==1.3.1',
-        'botocore==1.4.37',
+        'boto3==1.4.3',
+        'botocore==1.4.93',
         'future',
         'six',
         'pytz',
