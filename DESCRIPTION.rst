@@ -12,6 +12,7 @@ Release Notes
 - v1.3.9 (January 19?, 2017)
 
     - Upgraded ``botocore`` to 1.4.93 to fix and ``boto3`` to 1.4.3 to fix the HTTPS request failure in Python 3.6
+    - Fixed python2 incomaptible import http.client
 
 - v1.3.8 (January 12, 2017)
 

@@ -19,7 +19,6 @@ import platform
 import re
 import socket
 import time
-from http.client import (OK)
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from os import path
@@ -37,7 +36,7 @@ from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type import (univ, tag)
 from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 
-from .compat import (PY2, urlsplit, urlunsplit)
+from .compat import (PY2, urlsplit, urlunsplit, OK)
 from .errorcode import (ER_FAILED_TO_GET_OCSP_URI,
                         ER_INVALID_OCSP_RESPONSE,
                         ER_SERVER_CERTIFICATE_REVOKED,
