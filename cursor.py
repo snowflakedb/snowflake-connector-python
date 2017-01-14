@@ -370,9 +370,6 @@ class SnowflakeCursor(object):
                     self._client_result_prefetch_threads = kv[u'value']
                 if u'CLIENT_RESULT_PREFETCH_SLOTS' in kv[u'name']:
                     self._client_result_prefetch_slots = kv[u'value']
-                if u'CLIENT_USE_V1_QUERY_API' in kv[u'name']:
-                    self._connection._client_use_v1_query_api = kv[
-                        u'value']
             self._connection.converter.set_parameters(
                 ret[u'data'][u'parameters'])
 

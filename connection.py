@@ -102,7 +102,6 @@ class SnowflakeConnection(object):
         for name, value in DEFAULT_CONFIGURATION.items():
             setattr(self, u'_' + name, value)
 
-        self._client_use_v1_query_api = True
         self.converter = None
         self.connect(**kwargs)
 
@@ -212,6 +211,9 @@ class SnowflakeConnection(object):
 
     @property
     def errorhandler(self):
+        u"""
+        Error handler. By default, an exception is raised on error.
+        """
         return self._errorhandler
 
     @errorhandler.setter
@@ -544,15 +546,12 @@ class SnowflakeConnection(object):
 
         url_parameters = {u'requestId': request_id}
 
-        if self._client_use_v1_query_api:
-            ret = self._con.request(
-                u'/queries/v1/query-request?' + urlencode(url_parameters),
-                data,
-                client=client,
-                _no_results=_no_results)
-        else:
-            ret = self._con.request(u'/queries', data,
-                                    client=client, _no_results=_no_results)
+        ret = self._con.request(
+            u'/queries/v1/query-request?' + urlencode(url_parameters),
+            data,
+            client=client,
+            _no_results=_no_results)
+
         if ret is not None and u'data' in ret and ret[u'data'] is None:
             ret[u'data'] = {}
         return ret
@@ -567,18 +566,11 @@ class SnowflakeConnection(object):
             u'sql=[%s], sequence_id=[%s]', sql, sequence_counter)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
-        if self._client_use_v1_query_api:
-            return self._con.request(
-                u'/queries/v1/abort-request?' + urlencode(url_parameters), {
-                    u'sqlText': sql,
-                    u'requestId': TO_UNICODE(request_id),
-                })
-        else:
-            return self._con.request(
-                u'/queries/abort-request?' + urlencode(url_parameters), {
-                    u'sqlText': sql,
-                    u'sequenceId': sequence_counter,
-                })
+        return self._con.request(
+            u'/queries/v1/abort-request?' + urlencode(url_parameters), {
+                u'sqlText': sql,
+                u'requestId': TO_UNICODE(request_id),
+            })
 
     def _next_sequence_counter(self):
         u"""Gets next sequence counter. Used internally.
