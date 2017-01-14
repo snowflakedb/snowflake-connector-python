@@ -9,12 +9,12 @@ import json
 import logging
 import platform
 import sys
-import threading
 import time
 import uuid
 from io import StringIO, BytesIO
 from logging import getLogger
-from multiprocessing.pool import (ThreadPool, TimeoutError)
+from queue import Queue, Empty
+from threading import Thread
 
 import OpenSSL
 from botocore.vendored import requests
@@ -88,6 +88,14 @@ PYTHON_CONNECTOR_USER_AGENT = \
 
 DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
 NO_TOKEN = u'no-token'
+
+STATUS_TO_EXCEPTION = {
+    INTERNAL_SERVER_ERROR: InternalServerError,
+    FORBIDDEN: ForbiddenError,
+    SERVICE_UNAVAILABLE: ServiceUnavailableError,
+    GATEWAY_TIMEOUT: GatewayTimeoutError,
+    BAD_REQUEST: BadRequest,
+}
 
 
 class RequestRetry(Exception):
@@ -299,8 +307,9 @@ class SnowflakeRestful(object):
                 self.ret = self._post_request(url, headers, body)
 
             # send new request to wait until MFA is approved
-            t = threading.Thread(daemon=True, target=post_request_wrapper,
-                                 args=[self, url, headers, json.dumps(body)])
+            t = Thread(target=post_request_wrapper,
+                       args=[self, url, headers, json.dumps(body)])
+            t.daemon = True
             t.start()
             if callable(mfa_callback):
                 c = mfa_callback()
@@ -609,9 +618,7 @@ class SnowflakeRestful(object):
         connection_timeout = timeout[0:2]
         request_timeout = timeout[2]
 
-        def request_thread(params):
-            t = params[0]
-            del t
+        def request_thread(result_queue):
             try:
                 if session_context._session is None:
                     session_context._session = requests.Session()
@@ -628,10 +635,7 @@ class SnowflakeRestful(object):
                             pool_maxsize=int(max_connection_pool),
                             max_retries=requests_retry))
 
-                # logger.debug('%s: %s, timeout=%s', method.upper(), full_url,
-                #             connection_timeout)
-
-                if compress and data:
+                if data and len(data) > 0:
                     gzdata = BytesIO()
                     gzip.GzipFile(fileobj=gzdata, mode=u'wb').write(
                         data.encode(u'utf-8'))
@@ -675,55 +679,41 @@ class SnowflakeRestful(object):
                             ret = split_rows_from_stream(StringIO(raw_data))
                     else:
                         ret = raw_ret.json()
-                    return ret, True
-                elif raw_ret.status_code == INTERNAL_SERVER_ERROR:
-                    raise InternalServerError()
-                elif raw_ret.status_code == FORBIDDEN:
-                    raise ForbiddenError()
-                elif raw_ret.status_code == SERVICE_UNAVAILABLE:
-                    raise ServiceUnavailableError()
-                elif raw_ret.status_code == GATEWAY_TIMEOUT:
-                    raise GatewayTimeoutError()
-                elif raw_ret.status_code == BAD_REQUEST:
-                    raise BadRequest()
+                    result_queue.put((ret, False))
+                elif raw_ret.status_code in STATUS_TO_EXCEPTION:
+                    # retryable exceptions
+                    result_queue.put(
+                        (STATUS_TO_EXCEPTION[raw_ret.status_code], True))
                 elif raw_ret.status_code == UNAUTHORIZED and \
                         catch_okta_unauthorized_error:
-                    Error.errorhandler_wrapper(
-                        conn, None, DatabaseError,
-                        {
-                            u'msg': (u'Failed to get '
-                                     u'authentication by OKTA: '
-                                     u'{status}: {reason}'.format(
+                    # OKTA Unauthorized errors
+                    result_queue.put(
+                        (DatabaseError(
+                            msg=(u'Failed to get '
+                                 u'authentication by OKTA: '
+                                 u'{status}: {reason}'.format(
                                 status=raw_ret.status_code,
                                 reason=raw_ret.reason,
                             )),
-                            u'errno': ER_FAILED_TO_CONNECT_TO_DB,
-                            u'sqlstate': SQLSTATE_CONNECTION_REJECTED,
-                        }
-                    )
+                            errno=ER_FAILED_TO_CONNECT_TO_DB,
+                            sqlstate=SQLSTATE_CONNECTION_REJECTED),
+                         False))
                 else:
-                    Error.errorhandler_wrapper(
-                        conn, None, InterfaceError,
-                        {
-                            u'msg': (u"{status} {reason}: "
-                                     u"{method} {url}").format(
+                    result_queue.put(
+                        (InterfaceError(
+                            msg=(u"{status} {reason}: "
+                                 u"{method} {url}").format(
                                 status=raw_ret.status_code,
                                 reason=raw_ret.reason,
                                 method=method,
                                 url=full_url),
-                            u'errno': ER_FAILED_TO_REQUEST,
-                            u'sqlstate':
-                                SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                        })
-            except (GatewayTimeoutError,
-                    ServiceUnavailableError,
-                    InternalServerError,
-                    ForbiddenError,
-                    BadStatusLine,
-                    BadRequest,
+                            errno=ER_FAILED_TO_REQUEST,
+                            sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                        ), False))
+            except (BadStatusLine,
                     SSLError,
                     ProtocolError,
-                    OpenSSL.SSL.SysCallError) as err:
+                    OpenSSL.SSL.SysCallError, ValueError) as err:
                 logger.exception('who is hitting error?')
                 if logger.getEffectiveLevel() <= logging.DEBUG:
                     logger.debug(err)
@@ -733,62 +723,81 @@ class SnowflakeRestful(object):
                                 errno.ETIMEDOUT,
                                 errno.EPIPE,
                                 -1):
-                    return err, False
-                raise err
+                    result_queue.put((err, True))
+                else:
+                    # all other OpenSSL errors are not retryable
+                    result_queue.put((err, False))
             except ConnectionError as err:
-                if logger.getEffectiveLevel() <= logging.DEBUG:
-                    logger.debug(err)
-                Error.errorhandler_wrapper(
-                    conn, None, OperationalError,
-                    {
-                        u'msg': u'Failed to connect: {0}'.format(err),
-                        u'errno': ER_FAILED_TO_SERVER,
-                        u'sqlstate':
-                            SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                    })
-            except KeyboardInterrupt:
-                logger.info(u'Keyboard Interrupt')
-                raise
+                logger.exception(u'ConnectionError: %s', err)
+                result_queue.put((OperationalError(
+                    msg=u'Failed to connect: {0}'.format(err),
+                    errno=ER_FAILED_TO_SERVER,
+                    sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                ), False))
             except ValueError as err:
-                if logger.getEffectiveLevel() <= logging.DEBUG:
-                    logger.debug(err)
                 logger.exception(u'Return value is not JSON: %s', err)
-                Error.errorhandler_wrapper(
-                    conn, None, InterfaceError,
-                    {
-                        u'msg': u"Failed to decode JSON output",
-                        u'errno': ER_FAILED_TO_REQUEST,
-                    })
+                result_queue.put((InterfaceError(
+                    msg=u"Failed to decode JSON output",
+                    errno=ER_FAILED_TO_REQUEST,
+                ), False))
 
         if retry == 1:
-            return_object, is_success = request_thread([0])
-            return return_object
+            # This is dedicated code for DELETE SESSION when Python exists.
+            request_result_queue = Queue()
+            request_thread(request_result_queue)
+            try:
+                # don't care about the return value, because no rety and
+                # no error will show up
+                _, _ = request_result_queue.get(timeout=request_timeout)
+            except:
+                pass
 
         sleeping_time = 1
-        return_object = None
-        for t in range(retry):
-            params = [t]
-            pool = ThreadPool(1)
-            pool_result = pool.map_async(request_thread, [params])
+        for retry_cnt in range(retry):
+            return_object = None
+            request_result_queue = Queue()
+            th = Thread(name='request_thread', target=request_thread,
+                        args=(request_result_queue,))
+            th.daemon = True
+            th.start()
             try:
-                pool.close()
                 logger.debug('request timeout: %s: (%s/%s)',
-                             request_timeout, t + 1, retry)
-                ret = pool_result.get(timeout=request_timeout)
-                return_object, is_success = ret[0]
-                if not is_success:
+                             request_timeout, retry_cnt + 1, retry)
+                th.join(timeout=request_timeout)
+                logger.debug('request thread joined')
+                return_object, retryable = request_result_queue.get(
+                    timeout=request_timeout)
+                logger.debug('request thread returned object')
+                if retryable:
                     raise RequestRetry()
+                elif isinstance(return_object, Error):
+                    Error.errorhandler_wrapper(conn, None, return_object)
+                elif isinstance(return_object, Exception):
+                    Error.errorhandler_wrapper(
+                        conn, None, OperationalError,
+                        {
+                            u'msg': u'Failed to execute request: {0}'.format(
+                                return_object),
+                            u'errno': ER_FAILED_TO_REQUEST,
+                        })
                 break
-            except (TimeoutError, RequestRetry, AttributeError) as e:
+            except (RequestRetry, AttributeError, Empty) as e:
+                # RequestRetry is raised in case of retryable error
+                # Empty is raised if the result queue is empty
                 if sleeping_time < 16:
                     sleeping_time *= 2
                 logger.info(
-                    u'retrying in %s: error=%s, counter=%s/%s, '
-                    u'sleeping=%s(s)', e, return_object, t + 1,
-                    retry, sleeping_time)
-            finally:
-                pool.join()
-            logger.debug('sleepging: %s', sleeping_time)
+                    u'retrying: errorclass=%s, '
+                    u'error=%s, '
+                    u'return_object=%s, '
+                    u'counter=%s/%s, '
+                    u'sleeping=%s(s)',
+                    type(e),
+                    e,
+                    return_object,
+                    retry_cnt + 1,
+                    retry,
+                    sleeping_time)
             time.sleep(sleeping_time)
 
         return return_object

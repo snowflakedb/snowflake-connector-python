@@ -310,7 +310,7 @@ class SnowflakeConverter(object):
                 "OverflowError in converting from epoch time to "
                 "timestamp_ltz: %s(ms). Falling back to use struct_time."
             )
-            t = time.gmtime(microseconds/float(1000000))
+            t = time.gmtime(microseconds / float(1000000))
             return t, fraction_of_nanoseconds
 
     def _TIMESTAMP_LTZ_to_python(self, value, col_desc, *_):

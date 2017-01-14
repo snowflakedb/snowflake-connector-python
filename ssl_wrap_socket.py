@@ -409,9 +409,8 @@ def ssl_wrap_socket_with_ocsp(
         ca_certs=ca_certs, server_hostname=server_hostname,
         ssl_version=ssl_version)
     logger = getLogger(__name__)
-    logger.info(u'ssl_wrap_socket_with_ocsp')
-    logger.info(u'insecure_mode: %s', FEATURE_INSECURE_MODE)
-    logger.info(u'OCSP response cache file name: %s',
+    logger.info(u'insecure_mode: %s, OCSP response cache file name: %s',
+                FEATURE_INSECURE_MODE,
                 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME)
     if not FEATURE_INSECURE_MODE:
         v = SnowflakeOCSP(

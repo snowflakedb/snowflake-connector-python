@@ -15,7 +15,8 @@ class Error(BASE_EXCEPTION_CLASS):
     Exception that is base class for all other error exceptions
     """
 
-    def __init__(self, msg=None, errno=None, sqlstate=None, sfqid=None):
+    def __init__(self, msg=None, errno=None, sqlstate=None, sfqid=None,
+                 done_format_msg=False):
         self.logger = getLogger(__name__)
         self.msg = msg
         self.errno = errno or -1
@@ -25,7 +26,7 @@ class Error(BASE_EXCEPTION_CLASS):
         if not self.msg:
             self.msg = u'Unknown error'
 
-        if self.errno != -1:
+        if self.errno != -1 and not done_format_msg:
             if self.sqlstate != "n/a":
                 if self.logger.getEffectiveLevel() in (logging.INFO,
                                                        logging.DEBUG):
@@ -63,17 +64,30 @@ class Error(BASE_EXCEPTION_CLASS):
         Default error handler that raises an error
         """
         raise errorclass(
-            msg=errorvalue[u'msg'] if u'msg' in errorvalue else None,
-            errno=errorvalue[u'errno'] if u'errno' in errorvalue else None,
-            sqlstate=errorvalue[
-                u'sqlstate'] if u'sqlstate' in errorvalue else None,
-            sfqid=errorvalue[u'sfqid'] if u'sfqid' in errorvalue else None)
+            msg=errorvalue.get(u'msg'),
+            errno=errorvalue.get(u'errno'),
+            sqlstate=errorvalue.get(u'sqlstate'),
+            sfqid=errorvalue.get(u'sfqid'),
+            done_format_msg=errorvalue.get(u'done_format_msg'))
 
     @staticmethod
-    def errorhandler_wrapper(connection, cursor, errorclass, errorvalue):
+    def errorhandler_wrapper(connection, cursor, errorclass, errorvalue=None):
         u"""
         Error handler wrapper that calls the errorhandler method
         """
+        if errorvalue is None:
+            # no value indicates erroclass is errorobject
+            errorobject = errorclass
+            errorclass = type(errorobject)
+            errorvalue = {
+                u'msg': errorobject.msg,
+                u'errno': errorobject.errno,
+                u'sqlstate': errorobject.sqlstate,
+                u'done_format_msg': True
+            }
+        else:
+            errorvalue[u'done_format_msg'] = False
+
         if connection is not None:
             connection.messages.append((errorclass, errorvalue))
         if cursor is not None:
@@ -86,12 +100,9 @@ class Error(BASE_EXCEPTION_CLASS):
 
         if issubclass(errorclass, Error):
             raise errorclass(msg=errorvalue[u'msg'],
-                             errno=errorvalue[
-                                 u'errno'] if u'errno' in errorvalue else None,
-                             sqlstate=errorvalue[u'sqlstate'
-                             ] if u'sqlstate' in errorvalue else None,
-                             sfqid=errorvalue[
-                                 u'sfqid'] if u'sfqid' in errorvalue else None)
+                             errno=errorvalue.get(u'errno'),
+                             sqlstate=errorvalue.get(u'sqlstate'),
+                             sfqid=errorvalue.get(u'sfqid'))
         else:
             raise errorclass(errorvalue)
 

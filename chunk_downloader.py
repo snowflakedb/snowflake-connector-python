@@ -114,12 +114,12 @@ class SnowflakeChunkDownloader(object):
                 headers[SSE_C_KEY] = self._qrmk
 
             self.logger.debug(u"started getting the result set %s: %s",
-                              idx, self._chunks[idx].url)
+                              idx + 1, self._chunks[idx].url)
             result_data = self._get_request(
                 self._chunks[idx].url,
                 headers)
             self.logger.debug(u"finished getting the result set %s: %s",
-                              idx, self._chunks[idx].url)
+                              idx + 1, self._chunks[idx].url)
 
             with self._chunk_locks[idx]:
                 self._chunks[idx] = self._chunks[idx]._replace(
@@ -127,7 +127,7 @@ class SnowflakeChunkDownloader(object):
                     ready=True)
                 self._chunk_locks[idx].notify()
                 self.logger.debug(
-                    u'added chunk %s/%s to a chunk list.', idx,
+                    u'added chunk %s/%s to a chunk list.', idx + 1,
                     self._chunk_size)
         except Exception as e:
             self.logger.exception(
