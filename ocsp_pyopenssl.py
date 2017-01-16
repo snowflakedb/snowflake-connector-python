@@ -541,20 +541,35 @@ def execute_ocsp_request(ocsp_uri, cert_id):
     parsed_url = urlsplit(ocsp_uri)
     ip = socket.gethostbyname(parsed_url.hostname)
     new_uri = urlunsplit((parsed_url.scheme, ip, parsed_url.path,
-                           parsed_url.query, parsed_url.fragment))
-    session = requests.session()
+                          parsed_url.query, parsed_url.fragment))
+    session = requests.Session()
     session.mount('http://', HTTPAdapter(max_retries=5))
     session.mount('https://', HTTPAdapter(max_retries=5))
-    response = session.post(
-        new_uri,
-        headers={
-            'Content-Type': 'application/ocsp-request',
-            'Content-Length': '{0}'.format(
-                len(data)),
-            'Host': parsed_url.hostname.encode(
-                'utf-8'),
-        },
-        data=data)
+
+    max_retry = 5
+    for attempt in range(max_retry):
+        response = session.post(
+            new_uri,
+            headers={
+                'Content-Type': 'application/ocsp-request',
+                'Content-Length': '{0}'.format(
+                    len(data)),
+                'Host': parsed_url.hostname.encode(
+                    'utf-8'),
+            },
+            data=data)
+        if response.status_code == OK:
+            logger.debug("OCSP response was successfully returned")
+            break
+        else:
+            wait_time = 2 ** attempt
+            wait_time = 16 if wait_time > 16 else wait_time
+            logger.debug("OCSP server returned %s. Retrying in %s(s)",
+                         response.status_code, wait_time)
+            time.sleep(wait_time)
+    else:
+        logger.error("Failed to get OCSP response after %s attempt.",
+                     max_retry)
 
     return response.content
 
