@@ -13,7 +13,6 @@ import time
 import uuid
 from io import StringIO, BytesIO
 from logging import getLogger
-from queue import Queue, Empty
 from threading import Thread
 
 import OpenSSL
@@ -29,6 +28,7 @@ from .compat import (
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
+from .compat import (Queue, EmptyQueue)
 from .compat import (TO_UNICODE, urlencode)
 from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
@@ -781,7 +781,7 @@ class SnowflakeRestful(object):
                             u'errno': ER_FAILED_TO_REQUEST,
                         })
                 break
-            except (RequestRetry, AttributeError, Empty) as e:
+            except (RequestRetry, AttributeError, EmptyQueue) as e:
                 # RequestRetry is raised in case of retryable error
                 # Empty is raised if the result queue is empty
                 if sleeping_time < 16:

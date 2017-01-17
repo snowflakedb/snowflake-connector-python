@@ -3,11 +3,13 @@
 #
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
-u"""Various constants"""
-
-from builtins import str as text
+"""
+Various constants
+"""
 
 from collections import defaultdict
+
+from six import PY2
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -32,7 +34,7 @@ FIELD_TYPES = [
 ]
 
 FIELD_NAME_TO_ID = defaultdict(int)
-FIELD_ID_TO_NAME = defaultdict(text)
+FIELD_ID_TO_NAME = defaultdict(unicode if PY2 else str)
 
 __binary_types = []
 __binary_type_names = []

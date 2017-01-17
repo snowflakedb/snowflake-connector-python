@@ -28,6 +28,7 @@ if PY2:
     import urlparse
     import urllib
     import httplib
+    import Queue
 
     GET_CWD = os.getcwdu
     BASE_EXCEPTION_CLASS = StandardError
@@ -51,10 +52,15 @@ if PY2:
     BadStatusLine = httplib.BadStatusLine
     urlencode = urllib.urlencode
     proxy_bypass = urllib.proxy_bypass
+
+    EmptyQueue = Queue.Empty
+    Queue = Queue.Queue
+
 else:
     import urllib.parse
     import http.client
     import urllib.request
+    import queue
 
     GET_CWD = os.getcwd
     BASE_EXCEPTION_CLASS = Exception
@@ -78,6 +84,9 @@ else:
     BadStatusLine = http.client.BadStatusLine
 
     proxy_bypass = urllib.request.proxy_bypass
+
+    EmptyQueue = queue.Empty
+    Queue = queue.Queue
 
 IS_BYTES = lambda v: isinstance(v, BYTE_DATA_TYPE)
 IS_STR = lambda v: isinstance(v, STR_DATA_TYPE)
