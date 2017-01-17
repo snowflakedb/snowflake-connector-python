@@ -513,7 +513,7 @@ def process_ocsp_response(response, ocsp_issuer):
     return single_response_map
 
 
-def execute_ocsp_request(ocsp_uri, cert_id):
+def execute_ocsp_request(ocsp_uri, cert_id, do_retry=True):
     """
     Executes OCSP request for the given cert id
     """
@@ -546,7 +546,8 @@ def execute_ocsp_request(ocsp_uri, cert_id):
     session.mount('http://', HTTPAdapter(max_retries=5))
     session.mount('https://', HTTPAdapter(max_retries=5))
 
-    max_retry = 5
+    max_retry = 5 if do_retry else 1
+    # NOTE: This retry is to retry getting HTTP 200.
     for attempt in range(max_retry):
         response = session.post(
             new_uri,
@@ -561,7 +562,7 @@ def execute_ocsp_request(ocsp_uri, cert_id):
         if response.status_code == OK:
             logger.debug("OCSP response was successfully returned")
             break
-        else:
+        elif max_retry > 1:
             wait_time = 2 ** attempt
             wait_time = 16 if wait_time > 16 else wait_time
             logger.debug("OCSP server returned %s. Retrying in %s(s)",
@@ -1128,25 +1129,29 @@ class SnowflakeOCSP(object):
         return ret
 
     def validate_by_direct_connection(
-            self, ocsp_uri, ocsp_issuer, ocsp_subject):
+            self, ocsp_uri, ocsp_issuer, ocsp_subject, do_retry=True):
         u"""
         Validates the certificate using requests package
         """
+        # If we do retry, use cache
+        use_cache = do_retry
         cache_status, cert_id, ocsp_response = is_cert_id_in_cache(
-            ocsp_issuer, ocsp_subject)
+            ocsp_issuer, ocsp_subject, use_cache=use_cache)
 
         assert not self._must_use_cache or \
                self._must_use_cache and cache_status, 'Test: Must use cache!'
 
         err = None
-        max_retry = 3
+        max_retry = 5 if do_retry else 1
+        # NOTE: this retry is connection error retry
         for retry in range(max_retry):
             # retry up to three times
             try:
                 if not cache_status:
                     # not cached or invalid
                     self.logger.info('getting OCSP response from remote')
-                    ocsp_response = execute_ocsp_request(ocsp_uri, cert_id)
+                    ocsp_response = execute_ocsp_request(ocsp_uri, cert_id,
+                                                         do_retry=do_retry)
                 else:
                     self.logger.info('using OCSP response cache')
                 single_response_map = process_ocsp_response(
@@ -1162,6 +1167,8 @@ class SnowflakeOCSP(object):
                     'Failed to get OCSP response: %s. '
                     'Retrying...%s/%s .', e, retry + 1, max_retry)
                 err = e
+                if max_retry == 1:
+                    raise err
                 # if fails, it always attempts to access the OCSP server
                 # to get the fresh status
                 cache_status = False
@@ -1170,7 +1177,7 @@ class SnowflakeOCSP(object):
 
         return True, cert_id, ocsp_response
 
-    def generate_cert_id_response(self, hostname, connection):
+    def generate_cert_id_response(self, hostname, connection, do_retry=True):
         current_time = int(time.time())
         cert_data = _extract_certificate_chain(connection)
         results = {}
@@ -1183,7 +1190,7 @@ class SnowflakeOCSP(object):
             if ocsp_uri:
                 ret, cert_id, ocsp_response = \
                     self.validate_by_direct_connection(
-                        ocsp_uri, ocsp_issuer, ocsp_subject)
+                        ocsp_uri, ocsp_issuer, ocsp_subject, do_retry)
                 if ret and cert_id and ocsp_response:
                     cert_id_der = der_encoder.encode(cert_id)
                     results[cert_id_der] = (
