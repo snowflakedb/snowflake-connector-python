@@ -66,6 +66,12 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             # no type is defined, pass through it
             return self._TEXT_to_python, None
 
+    def _BOOLEAN_to_python(self, value, *_):
+        """
+        No conversion for SnowSQL
+        """
+        return u"True" if value in (u'1', u"True") else u"False"
+
     def _FIXED_to_python(self, value, *_):
         """
         No conversion for SnowSQL

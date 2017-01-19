@@ -214,6 +214,13 @@ class SnowflakeConnection(object):
         """
         return self._errorhandler
 
+    @property
+    def converter_class(self):
+        """
+        Converter Class
+        """
+        return self._converter_class
+
     @errorhandler.setter
     def errorhandler(self, value):
         if value is None:

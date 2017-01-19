@@ -5,18 +5,20 @@
 #
 import glob
 import mimetypes
+import os
+import shutil
 import sys
+import tempfile
 import threading
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from time import (time, sleep)
 
 import botocore.exceptions
-import os
-import shutil
-import tempfile
+
 from .compat import (GET_CWD, TO_UNICODE)
 from .constants import (SHA256_DIGEST)
+from .converter_snowsql import SnowflakeConverterSnowSQL
 from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
                         ER_LOCAL_PATH_NOT_DIRECTORY,
                         ER_FILE_NOT_EXISTS,
@@ -510,6 +512,7 @@ class SnowflakeFileTransferAgent(object):
             use_accelerate_endpoint=self._use_accelerate_endpoint)
 
     def result(self):
+        converter_class = self._cursor._connection.converter_class
         rowset = []
         if self._command_type == CMD_TYPE_UPLOAD:
             if hasattr(self, u'_results'):
@@ -531,11 +534,19 @@ class SnowflakeFileTransferAgent(object):
                     else:
                         error_details = u''
 
+                    src_file_size = meta[u'src_file_size'] \
+                        if converter_class != SnowflakeConverterSnowSQL \
+                        else TO_UNICODE(meta[u'src_file_size'])
+
+                    dst_file_size = meta[u'dst_file_size'] \
+                        if converter_class != SnowflakeConverterSnowSQL \
+                        else TO_UNICODE(meta[u'dst_file_size'])
+
                     rowset.append([
                         meta[u'name'],
                         meta[u'dst_file_name'],
-                        meta[u'src_file_size'],
-                        meta[u'dst_file_size'],
+                        src_file_size,
+                        dst_file_size,
                         src_compression_type,
                         dst_compression_type,
                         meta[u'result_status'],
@@ -557,13 +568,17 @@ class SnowflakeFileTransferAgent(object):
         else:  # DOWNLOAD
             if hasattr(self, u'_results'):
                 for meta in self._results:
+                    dst_file_size = meta[u'dst_file_size'] \
+                        if converter_class != SnowflakeConverterSnowSQL \
+                        else TO_UNICODE(meta[u'dst_file_size'])
+
                     if u'error_details' in meta:
                         error_details = meta[u'error_details']
                     else:
                         error_details = u''
                     rowset.append([
                         meta[u'dst_file_name'],
-                        meta[u'dst_file_size'],
+                        dst_file_size,
                         meta[u'result_status'],
                         error_details
                     ])

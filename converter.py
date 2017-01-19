@@ -10,8 +10,7 @@ from logging import getLogger
 
 import pytz
 
-from .compat import (IS_UNICODE, IS_BYTES, IS_BINARY, TO_UNICODE, IS_NUMERIC)
-from .constants import (UTF8)
+from .compat import (IS_BINARY, TO_UNICODE, IS_NUMERIC)
 from .errorcode import (ER_NOT_SUPPORT_DATA_TYPE)
 from .errors import (ProgrammingError)
 from .sfbinaryformat import (binary_to_python,
@@ -335,11 +334,7 @@ class SnowflakeConverter(object):
     _TIME_numpy_to_python = _TIME_to_python
 
     def _VARIANT_to_python(self, value, *_):
-        if IS_UNICODE(value):
-            return value
-        elif IS_BYTES(value):
-            return value.decode(UTF8)
-        return TO_UNICODE(value)
+        return value
 
     _VARIANT_numpy_to_python = _VARIANT_to_python
 
@@ -359,7 +354,7 @@ class SnowflakeConverter(object):
     _BOOLEAN_numpy_to_python = _BOOLEAN_to_python
 
     #
-    # TO Snowflake
+    # From Python to Snowflake
     #
     def to_snowflake(self, value):
         type_name = value.__class__.__name__.lower()
