@@ -1077,8 +1077,6 @@ class SnowflakeOCSP(object):
             return True
 
         cert_data = _extract_certificate_chain(connection)
-        # Workaround for https://bugs.python.org/issue7980
-        strptime('20150102030405', '%Y%m%d%H%M%S')
 
         pool = ThreadPool(len(cert_data))
         results = []

@@ -8,12 +8,12 @@ import sys
 import uuid
 from io import StringIO
 from threading import Lock
+from time import strptime
 
 from . import errors
 from . import network
 from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2)
 from .converter import SnowflakeConverter
-from .converter_snowsql import SnowflakeConverterSnowSQL
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
@@ -80,6 +80,9 @@ APPLICATION_RE = re.compile(r'[\w\d_]+')
 for m in [method for method in dir(errors) if
           callable(getattr(errors, method))]:
     setattr(sys.modules[__name__], m, getattr(errors, m))
+
+# Workaround for https://bugs.python.org/issue7980
+strptime('20150102030405', '%Y%m%d%H%M%S')
 
 
 class SnowflakeConnection(object):
