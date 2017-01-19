@@ -4,6 +4,7 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 import snowflake.connector
+from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
 
 def test_snowsql_timestamp_format(db_parameters):
@@ -19,7 +20,7 @@ def test_snowsql_timestamp_format(db_parameters):
         port=db_parameters['port'],
         database=db_parameters['database'],
         schema=db_parameters['schema'],
-        is_sfsql=True,
+        converter_class=SnowflakeConverterSnowSQL,
     )
     ret = connection.cursor().execute(
         "SELECT '19999-09-30 12:34:56'::timestamp_ltz").fetchone()

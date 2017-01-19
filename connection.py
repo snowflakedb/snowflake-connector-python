@@ -13,6 +13,7 @@ from . import errors
 from . import network
 from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2)
 from .converter import SnowflakeConverter
+from .converter_snowsql import SnowflakeConverterSnowSQL
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
@@ -70,6 +71,7 @@ DEFAULT_CONFIGURATION = {
     u'numpy': False,
     u'max_connection_pool': network.MAX_CONNECTION_POOL,
     u'ocsp_response_cache_filename': None,
+    u'converter_class': SnowflakeConverter,
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -193,13 +195,6 @@ class SnowflakeConnection(object):
         later release
         """
         return self._con
-
-    @property
-    def is_sfsql(self):
-        u"""
-        Is sfsql or not. Internal use. Maybe removed in the latest release
-        """
-        return hasattr(self, u'_is_sfsql') and self._is_sfsql
 
     @property
     def application(self):
@@ -353,7 +348,7 @@ class SnowflakeConnection(object):
             setattr(self, m, getattr(errors, m))
 
     def __post_connection(self):
-        u"""
+        """
         Executes post connection process
         """
         # load current session info
@@ -378,10 +373,8 @@ class SnowflakeConnection(object):
                 request_id=request_id,
                 is_internal=True)
 
-        self.logger.info(u'is_sfsql: %s', self.is_sfsql)
-        self.converter = SnowflakeConverter(
-            use_sfdatetime=self.is_sfsql,
-            use_sfbinaryformat=self.is_sfsql,
+        self.converter = self._converter_class(
+            use_sfbinaryformat=False,
             use_numpy=self._numpy)
 
     def __open_connection(self, mfa_callback, password_callback):

@@ -11,13 +11,12 @@ from logging import getLogger
 import pytz
 
 from .compat import (IS_UNICODE, IS_BYTES, IS_BINARY, TO_UNICODE, IS_NUMERIC)
-from .constants import (UTF8, is_timestamp_type_name)
+from .constants import (UTF8)
 from .errorcode import (ER_NOT_SUPPORT_DATA_TYPE)
 from .errors import (ProgrammingError)
-from .sfbinaryformat import (SnowflakeBinaryFormat, binary_to_python,
+from .sfbinaryformat import (binary_to_python,
                              binary_to_snowflake)
-from .sfdatetime import (SnowflakeDateTimeFormat, SnowflakeDateTime,
-                         sfdatetime_total_seconds_from_timedelta,
+from .sfdatetime import (sfdatetime_total_seconds_from_timedelta,
                          sfdatetime_to_snowflake)
 
 try:
@@ -34,26 +33,16 @@ ZERO_EPOCH = datetime.utcfromtimestamp(0)
 _TZINFO_CLASS_CACHE = {}
 
 
-def _format_sftimestamp(fmt, value, franction_of_nanoseconds):
-    if fmt:
-        return SnowflakeDateTimeFormat(fmt).format(
-            SnowflakeDateTime(
-                value, nanosecond=franction_of_nanoseconds))
-    return TO_UNICODE(SnowflakeDateTime(
-        value, nanosecond=franction_of_nanoseconds))
-
-
 class SnowflakeConverter(object):
-    def __init__(self, use_sfdatetime=False, use_sfbinaryformat=False,
-                 use_numpy=False):
+    def __init__(self, **kwargs):
         self._parameters = {}
-        self._use_sfdatetime = use_sfdatetime
-        self._use_sfbinaryformat = use_sfbinaryformat
-        self._use_numpy = use_numpy and numpy is not None
+        self._use_sfbinaryformat = kwargs.get('use_sfbinaryformat', False)
+        self._use_numpy = kwargs.get('use_numpy', False) and numpy is not None
 
         self.logger = getLogger(__name__)
-        self.logger.info('use_sfdatetime: %s', self._use_sfdatetime)
-        self.logger.info('use_sfbinaryformat: %s', self._use_sfbinaryformat)
+        self.logger.info('use_sfbinaryformat: %s, use_numpy: %s',
+                         self._use_sfbinaryformat,
+                         self._use_numpy)
 
     def set_parameters(self, parameters):
         self._parameters = {}
@@ -98,7 +87,7 @@ class SnowflakeConverter(object):
         return tzinfo_cls
 
     #
-    # FROM Snowflake
+    # FROM Snowflake to Python Objects
     #
     def to_python_method(self, type_name, row_type):
         try:
@@ -107,15 +96,6 @@ class SnowflakeConverter(object):
                     type_name=type_name)), None
             elif type_name == 'FIXED' and row_type['scale'] == 0:
                 return self._FIXED_INT_to_python, None
-            elif self._use_sfdatetime and is_timestamp_type_name(type_name):
-                return getattr(
-                    self,
-                    u'_{type_name}_sfdatetime_to_python'.format(
-                        type_name=type_name)), self._get_timestamp_format(
-                    type_name)
-            elif self._use_sfbinaryformat and type_name == 'BINARY':
-                return (self._BINARY_sfbinaryformat_to_python,
-                        self._parameters.get(u'BINARY_OUTPUT_FORMAT'))
             else:
                 return getattr(self, u'_{type_name}_to_python'.format(
                     type_name=type_name)), None
@@ -146,13 +126,6 @@ class SnowflakeConverter(object):
     def _BINARY_to_python(self, value, *_):
         return binary_to_python(value)
 
-    def _BINARY_sfbinaryformat_to_python(self, value, _, fmt):
-        """
-        BINARY to a string formatted by BINARY_OUTPUT_FORMAT
-        """
-        bytes_value = binary_to_python(value)
-        return SnowflakeBinaryFormat(fmt).format(bytes_value)
-
     _BINARY_numpy_to_python = _BINARY_to_python
 
     def _DATE_to_python(self, value, *_):
@@ -163,30 +136,6 @@ class SnowflakeConverter(object):
         """
         ts = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
         return date(ts.year, ts.month, ts.day)
-
-    def _DATE_sfdatetime_to_python(self, value, _, fmt):
-        """
-        DATE to datetime
-
-        No timezone is attached.
-        """
-        try:
-            t = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
-            if fmt:
-                return SnowflakeDateTimeFormat(fmt).format(t)
-            return TO_UNICODE(date(t.year, t.month, t.day))
-        except OverflowError:
-            self.logger.debug(
-                "OverflowError in converting from epoch time to date: %s(s). "
-                "Falling back to use struct_time.",
-                value)
-            t = time.gmtime(value)
-            if fmt:
-                return SnowflakeDateTimeFormat(fmt).format(
-                    SnowflakeDateTime(t, nanosecond=0)
-                )
-            return u'{year:d}-{month:02d}-{day:02d}'.format(
-                year=t.tm_year, month=t.tm_mon, day=t.tm_mday)
 
     def _DATE_numpy_to_python(self, value, *_):
         """
@@ -259,16 +208,6 @@ class SnowflakeConverter(object):
         t, _ = self._pre_TIMESTAMP_TZ_to_python(value, col_desc)
         return t
 
-    def _TIMESTAMP_TZ_sfdatetime_to_python(self, value, col_desc, fmt):
-        """
-        TIMESTAMP TZ to datetime
-
-        The timezone offset is piggybacked.
-        """
-        t, fraction_of_nanoseconds = self._pre_TIMESTAMP_TZ_to_python(
-            value, col_desc)
-        return _format_sftimestamp(fmt, t, fraction_of_nanoseconds)
-
     def _TIMESTAMP_TZ_numpy_to_python(self, value, col_desc, *_):
         """TIMESTAMP TZ to datetime
 
@@ -317,11 +256,6 @@ class SnowflakeConverter(object):
         t, _ = self._pre_TIMESTAMP_LTZ_to_python(value, col_desc)
         return t
 
-    def _TIMESTAMP_LTZ_sfdatetime_to_python(self, value, col_desc, fmt):
-        t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
-            value, col_desc)
-        return _format_sftimestamp(fmt, t, fraction_of_nanoseconds)
-
     def _TIMESTAMP_LTZ_numpy_to_python(self, value, col_desc, *_):
         t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
             value, col_desc)
@@ -358,26 +292,6 @@ class SnowflakeConverter(object):
         # OverflowError
         t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
         return t
-
-    def _TIMESTAMP_NTZ_sfdatetime_to_python(self, value, col_desc, fmt):
-        """
-        TIMESTAMP NTZ to Snowflake Formatted String
-
-        No timezone info is attached.
-        """
-        _, microseconds, fraction_of_nanoseconds = \
-            self._pre_TIMESTAMP_NTZ_to_python(value, col_desc)
-        if microseconds is None:
-            return None
-        try:
-            t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-        except OverflowError:
-            self.logger.debug(
-                "OverflowError in converting from epoch time to datetime: %s("
-                "ms). Falling back to use struct_time.",
-                microseconds)
-            t = time.gmtime(microseconds / float(1000000))
-        return _format_sftimestamp(fmt, t, fraction_of_nanoseconds)
 
     def _TIMESTAMP_NTZ_numpy_to_python(self, value, col_desc, *_):
         """
@@ -418,41 +332,7 @@ class SnowflakeConverter(object):
         ts = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
         return ts.time()
 
-    def _TIME_sfdatetime_to_python(self, value, col_desc, fmt):
-        """
-        TIME to formatted string, SnowflakeDateTime, or datetime.time
-
-        No timezone is attached.
-        """
-        microseconds, fraction_of_nanoseconds = \
-            self._extract_time(value, col_desc)
-
-        try:
-            t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-        except OverflowError:
-            self.logger.debug(
-                "OverflowError in converting from epoch time to datetime: %s("
-                "ms). Falling back to use struct_time.",
-                microseconds)
-            t = time.gmtime(microseconds / float(1000000))
-        return _format_sftimestamp(fmt, t, fraction_of_nanoseconds)
-
     _TIME_numpy_to_python = _TIME_to_python
-
-    def _get_timestamp_format(self, timestamp_type_name):
-        """
-        Gets the date time format
-        """
-        fmt = None
-        if timestamp_type_name == u'DATE':
-            fmt = self._parameters.get(u'DATE_OUTPUT_FORMAT')
-        elif timestamp_type_name == u'TIME':
-            fmt = self._parameters.get(u'TIME_OUTPUT_FORMAT')
-        elif timestamp_type_name + u'_OUTPUT_FORMAT' in self._parameters:
-            fmt = self._parameters[timestamp_type_name + u'_OUTPUT_FORMAT']
-            if not fmt:
-                fmt = self._parameters[u'TIMESTAMP_OUTPUT_FORMAT']
-        return fmt
 
     def _VARIANT_to_python(self, value, *_):
         if IS_UNICODE(value):
