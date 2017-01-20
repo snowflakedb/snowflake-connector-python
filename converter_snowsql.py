@@ -59,7 +59,9 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         try:
             fmt = None
             if is_timestamp_type_name(type_name):
-                fmt = SnowflakeDateTimeFormat(self._get_format(type_name))
+                fmt = SnowflakeDateTimeFormat(
+                    self._get_format(type_name),
+                    datetime_class=SnowflakeDateTime)
             elif type_name == u'BINARY':
                 fmt = SnowflakeBinaryFormat(self._get_format(type_name))
             return getattr(self, u'_{type_name}_to_python'.format(

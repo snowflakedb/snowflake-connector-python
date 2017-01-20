@@ -110,6 +110,13 @@ def sfdatetime_to_snowflake(value):
 
 
 class SnowflakeDateTime(UnicodeMixin):
+    """
+    Snowflake DateTime class.
+
+    The differene to the native datetime class is Snowflake supports up to
+    nanoseconds precision.
+    """
+
     def __init__(self, ts, nanosecond):
         self._datetime = ts
         self._nanosecond = nanosecond
@@ -133,13 +140,17 @@ class SnowflakeDateTime(UnicodeMixin):
 
 
 class SnowflakeDateTimeFormat(object):
-    def __init__(self, sql_format):
+    """
+    Snowflake DateTime Formatter
+    """
+
+    def __init__(self, sql_format, datetime_class=datetime, scale=None):
         self._sql_format = sql_format
         self._fragments = []
+        self._scale = scale
         self.logger = getLogger(__name__)
 
         self._compile()
-        self._fraction_pos = -1
         if len(self._fragments) != 1:
             raise errors.InternalError(
                 u'Only one fragment is allowed {0}'.format(
@@ -147,43 +158,67 @@ class SnowflakeDateTimeFormat(object):
 
         self._simple_datetime_pattern = self._to_simple_datetime_pattern()
 
+        if self._scale is None and self._fractions_len >= 0:
+            self._scale = self._fractions_len
+        else:
+            self._scale = 6
+
+        self._nano_str = None
+        if self._fractions_pos >= 0:
+            if issubclass(datetime_class, datetime):
+                self._nano_str = u"{0:06d}"  # milliseconds precision
+            else:
+                self._nano_str = u"{0:09d}"  # nanoseconds precision
+            if self._fractions_with_dot:
+                self._nano_str = u'.{0}'.format(self._nano_str)
+                self._scale += 1
+
+        self.format = getattr(self, u'_format_{type_name}'.format(
+            type_name=datetime_class.__name__))
+
     def python_format(self):
         return self._python_format
 
-    def format(self, value, scale=6):
-        if isinstance(value, time.struct_time):
-            return TO_UNICODE(time.strftime(
-                self._simple_datetime_pattern, value))
-        if self._fractions_pos >= 0:
-            if self._fractions_len >= 0:
-                scale = self._fractions_len
-            if isinstance(value, datetime):
-                nanos = value.microsecond
-                nano_str = (u"{0:06d}".format(nanos))[:scale]
-            else:
-                nanos = value.nanosecond
-                nano_str = (u"{0:09d}".format(nanos))[:scale]
-            old_format = self._fragments[0][u'python_format']
-            if self._fractions_with_dot:
-                nano_str = u'.{0}'.format(nano_str)
-            new_format = old_format[:self._fractions_pos] + nano_str + \
-                         old_format[self._fractions_pos:]
-        else:
-            new_format = self._simple_datetime_pattern
+    def _pre_format(self, value):
+        updated_format = self._simple_datetime_pattern
 
-        if isinstance(value, SnowflakeDateTime):
-            if isinstance(value.datetime, time.struct_time):
-                return TO_UNICODE(time.strftime(new_format, value.datetime))
+        if self._nano_str:
+            if hasattr(value, 'microsecond'):
+                nanos = value.microsecond
+            elif hasattr(value, 'nanosecond'):
+                nanos = value.nanosecond
             else:
-                if value.datetime.year < 1900:
-                    # NOTE: still not supported
-                    return value.datetime.isoformat()
-                return value.datetime.strftime(new_format)
-        else:
-            if value.year < 1900:
-                # NOTE: still not supported
-                return value.isoformat()
-            return value.strftime(new_format)
+                nanos = 0  # struct_time. no fraction of second
+            nano_value = self._nano_str.format(nanos)[:self._scale]
+            updated_format = \
+                updated_format[:self._fractions_pos] + nano_value + \
+                updated_format[self._fractions_pos:]
+        return updated_format
+
+    def _format_SnowflakeDateTime(self, value):
+        """
+        Formats SnowflakeDateTime object
+        """
+        updated_format = self._pre_format(value)
+        if isinstance(value.datetime, time.struct_time):
+            return TO_UNICODE(time.strftime(
+                updated_format, value.datetime))
+        if value.datetime.year < 1900:
+            # NOTE: still not supported
+            return value.datetime.isoformat()
+        return value.datetime.strftime(updated_format)
+
+    def _format_datetime(self, value):
+        """
+        Formats datetime object
+        """
+        updated_format = self._pre_format(value)
+        if isinstance(value, time.struct_time):
+            return TO_UNICODE(time.strftime(updated_format, value))
+        if value.year < 1900:
+            # NOTE: still not supported
+            return value.isoformat()
+        return value.strftime(updated_format)
 
     def _to_simple_datetime_pattern(self):
         if len(self._fragments) == 1:

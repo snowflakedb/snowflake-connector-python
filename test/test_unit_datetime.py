@@ -52,12 +52,31 @@ def test_datetime_format_negative():
 
 
 def test_struct_time_format():
+    # struct_time for general use
     value = time.strptime("30 Sep 01 11:20:30", "%d %b %y %H:%M:%S")
     formatter = sfdatetime.SnowflakeDateTimeFormat(
         u'YYYY-MM-DD"T"HH24:MI:SS.FF')
-    assert formatter.format(value) == '2001-09-30T11:20:30'
+    assert formatter.format(value) == '2001-09-30T11:20:30.000000'
 
+    # struct_time encapsulated in SnowflakeDateTime. Mainly used by SnowSQL
     value = sfdatetime.SnowflakeDateTime(
         time.strptime("30 Sep 01 11:20:30", "%d %b %y %H:%M:%S"), nanosecond=0
     )
+    formatter = sfdatetime.SnowflakeDateTimeFormat(
+        u'YYYY-MM-DD"T"HH24:MI:SS.FF',
+        datetime_class=sfdatetime.SnowflakeDateTime)
     assert formatter.format(value) == '2001-09-30T11:20:30.000000'
+
+    # format without fraction of seconds
+    formatter = sfdatetime.SnowflakeDateTimeFormat(
+        u'YYYY-MM-DD"T"HH24:MI:SS',
+        datetime_class=sfdatetime.SnowflakeDateTime)
+    assert formatter.format(value) == '2001-09-30T11:20:30'
+
+    # extreme large epoch time
+    value = sfdatetime.SnowflakeDateTime(
+        time.gmtime(14567890123567), nanosecond=0)
+    formatter = sfdatetime.SnowflakeDateTimeFormat(
+        u'YYYY-MM-DD"T"HH24:MI:SS.FF',
+        datetime_class=sfdatetime.SnowflakeDateTime)
+    assert formatter.format(value) == '463608-01-23T09:26:07.000000'
