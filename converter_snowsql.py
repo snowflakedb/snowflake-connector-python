@@ -9,6 +9,7 @@ from datetime import timedelta, date
 from logging import getLogger
 
 from .compat import TO_UNICODE
+from .constants import is_timestamp_type_name
 from .converter import (SnowflakeConverter, ZERO_EPOCH)
 from .sfbinaryformat import (binary_to_python, SnowflakeBinaryFormat)
 from .sfdatetime import (SnowflakeDateTimeFormat, SnowflakeDateTime)
@@ -17,12 +18,8 @@ logger = getLogger(__name__)
 
 
 def _format_sftimestamp(fmt, value, franction_of_nanoseconds):
-    if fmt:
-        return SnowflakeDateTimeFormat(fmt).format(
-            SnowflakeDateTime(
-                value, nanosecond=franction_of_nanoseconds))
-    return TO_UNICODE(SnowflakeDateTime(
-        value, nanosecond=franction_of_nanoseconds))
+    sf_datetime = SnowflakeDateTime(value, nanosecond=franction_of_nanoseconds)
+    return fmt.format(sf_datetime) if fmt else TO_UNICODE(sf_datetime)
 
 
 class SnowflakeConverterSnowSQL(SnowflakeConverter):
@@ -60,8 +57,13 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     #
     def to_python_method(self, type_name, row_type):
         try:
+            fmt = None
+            if is_timestamp_type_name(type_name):
+                fmt = SnowflakeDateTimeFormat(self._get_format(type_name))
+            elif type_name == u'BINARY':
+                fmt = SnowflakeBinaryFormat(self._get_format(type_name))
             return getattr(self, u'_{type_name}_to_python'.format(
-                type_name=type_name)), self._get_format(type_name)
+                type_name=type_name)), fmt
         except KeyError:
             # no type is defined, pass through it
             return self._TEXT_to_python, None
@@ -88,8 +90,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
         BINARY to a string formatted by BINARY_OUTPUT_FORMAT
         """
-        bytes_value = binary_to_python(value)
-        return SnowflakeBinaryFormat(fmt).format(bytes_value)
+        return fmt.format(binary_to_python(value))
 
     def _DATE_to_python(self, value, _, fmt):
         """
@@ -100,7 +101,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         try:
             t = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
             if fmt:
-                return SnowflakeDateTimeFormat(fmt).format(t)
+                return fmt.format(t)
             return TO_UNICODE(date(t.year, t.month, t.day))
         except OverflowError:
             self.logger.debug(
@@ -109,7 +110,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 value)
             t = time.gmtime(value)
             if fmt:
-                return SnowflakeDateTimeFormat(fmt).format(
+                return fmt.format(
                     SnowflakeDateTime(t, nanosecond=0)
                 )
             return u'{year:d}-{month:02d}-{day:02d}'.format(
