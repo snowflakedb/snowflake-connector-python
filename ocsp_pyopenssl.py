@@ -546,7 +546,7 @@ def execute_ocsp_request(ocsp_uri, cert_id, do_retry=True):
     session.mount('http://', HTTPAdapter(max_retries=5))
     session.mount('https://', HTTPAdapter(max_retries=5))
 
-    max_retry = 5 if do_retry else 1
+    max_retry = 100 if do_retry else 1
     # NOTE: This retry is to retry getting HTTP 200.
     for attempt in range(max_retry):
         response = session.post(
@@ -1140,7 +1140,7 @@ class SnowflakeOCSP(object):
                self._must_use_cache and cache_status, 'Test: Must use cache!'
 
         err = None
-        max_retry = 5 if do_retry else 1
+        max_retry = 100 if do_retry else 1
         # NOTE: this retry is connection error retry
         for retry in range(max_retry):
             # retry up to three times
