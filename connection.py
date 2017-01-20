@@ -48,6 +48,7 @@ DEFAULT_CONFIGURATION = {
     u'database': None,  # standard
     u'protocol': u'http',  # support http/https
     u'warehouse': None,  # snowflake
+    u'region': None,  # snowflake
     u'account': None,  # snowflake
     u'schema': None,  # snowflake
     u'role': None,  # snowflake
@@ -143,6 +144,13 @@ class SnowflakeConnection(object):
         Port number
         """
         return self._port
+
+    @property
+    def region(self):
+        u"""
+        Region name if not the default Snowflake Database deployment
+        """
+        return self._region
 
     @property
     def proxy_host(self):
@@ -469,8 +477,13 @@ class SnowflakeConnection(object):
 
         if u'account' in kwargs and kwargs[u'account'] not in TEST_ACCOUNTS:
             if u'host' not in kwargs:
-                setattr(self, u'_host',
-                        self._account + u'.snowflakecomputing.com')
+                if kwargs.get(u'region'):
+                    host = u'{0}.{1}.snowflakecomputing.com'.format(
+                        self._account[0:self._account.find(u'.')],
+                        kwargs.get(u'region'))
+                else:
+                    host = u'{0}.snowflakecomputing.com'.format(self._account)
+                setattr(self, u'_host', host)
             if u'port' not in kwargs:
                 setattr(self, u'_port', u'443')
             if u'protocol' not in kwargs:
