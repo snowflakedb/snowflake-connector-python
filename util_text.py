@@ -41,18 +41,20 @@ def split_statements(buf, remove_comments=False):
                 if col0 < col:
                     if not in_comment and not in_quote \
                             and not in_double_dollars:
-                        statement.append(line[col0:col])
-                        if len(statement) == 1 and statement[0] == '':
+                        statement.append((line[col0:col], True))
+                        if len(statement) == 1 and statement[0][0] == '':
                             statement = []
                         break
-                    elif not remove_comments or in_quote:
-                        statement.append(line[col0:col])
+                    elif not in_comment and in_quote:
+                        statement.append((line[col0:col], True))
+                    elif not remove_comments:
+                        statement.append((line[col0:col], False))
                 break
             elif in_comment:
                 if line[col:].startswith("*/"):
                     in_comment = False
                     if not remove_comments:
-                        statement.append(line[col0:col + 2])
+                        statement.append((line[col0:col + 2], False))
                     col += 2
                     col0 = col
                 else:
@@ -60,7 +62,7 @@ def split_statements(buf, remove_comments=False):
             elif in_double_dollars:
                 if line[col:].startswith("$$"):
                     in_double_dollars = False
-                    statement.append(line[col0:col + 2])
+                    statement.append((line[col0:col + 2], False))
                     col += 2
                     col0 = col
                 else:
@@ -71,7 +73,7 @@ def split_statements(buf, remove_comments=False):
                                     col == len_line - 1:
                         # exits quote
                         in_quote = False
-                        statement.append(line[col0:col + 1])
+                        statement.append((line[col0:col + 1], True))
                         col += 1
                         col0 = col
                     else:
@@ -85,60 +87,79 @@ def split_statements(buf, remove_comments=False):
                     ch_quote = line[col]
                     col += 1
                 elif line[col] in (' ', '\t'):
-                    statement.append(line[col0:col + 1])
+                    statement.append((line[col0:col + 1], True))
                     col += 1
                     col0 = col
                 elif line[col:].startswith("--"):
-                    statement.append(line[col0:col])
+                    statement.append((line[col0:col], True))
                     if not remove_comments:
                         # keep the comment
-                        statement.append(line[col:])
+                        statement.append((line[col:], False))
                     col = len_line + 1
                     col0 = col
                 elif line[col:].startswith("/*") and \
                         not line[col0:].startswith("file://"):
                     if not remove_comments:
-                        statement.append(line[col0:col + 2])
+                        statement.append((line[col0:col + 2], False))
                     col += 2
                     col0 = col
                     in_comment = True
                 elif line[col:].startswith("$$"):
-                    statement.append(line[col0:col + 2])
+                    statement.append((line[col0:col + 2], True))
                     col += 2
                     col0 = col
                     in_double_dollars = True
                 elif line[col] == ';':
-                    statement.append(line[col0:col + 1])
+                    statement.append((line[col0:col + 1], True))
                     col += 1
                     try:
                         if line[col] == '>':
                             col += 1
-                            statement[-1] += '>'
+                            statement[-1] = (statement[-1][0] + '>',
+                                             statement[-1][1])
                     except IndexError:
                         pass
                     if COMMENT_PATTERN_RE.match(line[col:]) or \
                             EMPTY_LINE_RE.match(line[col:]):
                         if not remove_comments:
                             # keep the comment
-                            statement.append(line[col:])
+                            statement.append((line[col:], False))
                         col = len_line
                     while col < len_line and line[col] in (' ', '\t'):
                         col += 1
-                    yield ''.join(statement).strip()
+                    yield _concatenate_statements(statement)
                     col0 = col
                     statement = []
                 elif col == 0 and line[col] == '!':  # command
                     if len(statement) > 0:
-                        yield ''.join(statement).strip()
+                        yield _concatenate_statements(statement)
                         statement = []
-                    yield line.rstrip(';').strip()
+                    yield line.rstrip(';').strip(), False
                     break
                 else:
                     col += 1
         line = buf.readline()
 
     if len(statement) > 0:
-        yield ''.join(statement).strip()
+        yield _concatenate_statements(statement)
+
+
+def _concatenate_statements(statement_list):
+    """
+    concatenate statements
+
+    is_put_or_get is set to True if the statement is PUT or GET otherwise
+    False for valid statement. None is set if the statement is empty or
+    comment only.
+    :return: a statement, is_put_or_get
+    """
+    valid_statement_list = []
+    is_put_or_get = None
+    for text, is_statement in statement_list:
+        valid_statement_list.append(text)
+        if is_put_or_get is None and is_statement and len(text.strip()) >= 3:
+            is_put_or_get = text[:3].upper() in ('PUT', 'GET')
+    return u''.join(valid_statement_list).strip(), is_put_or_get
 
 
 def split_rows_from_stream(stream):

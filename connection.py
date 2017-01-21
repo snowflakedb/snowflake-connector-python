@@ -340,12 +340,12 @@ class SnowflakeConnection(object):
                 sql_text, str) else sql_text)
         else:
             stream = StringIO(sql_text)
-        for sql in split_statements(
+        for sql, is_put_or_get in split_statements(
                 stream, remove_comments=remove_comments):
             cur = self.cursor()
             if return_cursors:
                 ret.append(cur)
-            cur.execute(sql)
+            cur.execute(sql, _is_put_get=is_put_or_get)
         return ret
 
     def execute_stream(self, stream,
@@ -354,10 +354,10 @@ class SnowflakeConnection(object):
         Executes a stream of SQL statements.
         This is a non-standard convenient method.
         """
-        for sql in split_statements(
+        for sql, is_put_or_get in split_statements(
                 stream, remove_comments=remove_comments):
             cur = self.cursor()
-            cur.execute(sql)
+            cur.execute(sql, _is_put_get=is_put_or_get)
             yield cur
 
     def __set_error_attributes(self):

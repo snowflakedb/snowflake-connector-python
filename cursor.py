@@ -75,6 +75,7 @@ class SnowflakeCursor(object):
         self._total_rowcount = -1
         self._sequence_counter = -1
         self._request_id = None
+        self._is_file_transfer = False
 
         self._timestamp_output_format = None
         self._timestamp_ltz_output_format = None
@@ -245,7 +246,7 @@ class SnowflakeCursor(object):
         """
         Is PUT or GET command?
         """
-        return self._is_file_transfer is not None
+        return hasattr(self, '_is_file_transfer') and self._is_file_transfer
 
     def callproc(self, procname, args=()):
         u"""
@@ -458,8 +459,8 @@ class SnowflakeCursor(object):
                 self._connection._role = data[u'finalRoleName']
 
             # self.logger.debug(ret)
-            self.logger.debug(u"PUT OR GET: %s", self._is_file_transfer)
-            if self._is_file_transfer:
+            self.logger.debug(u"PUT OR GET: %s", self.is_file_transfer)
+            if self.is_file_transfer:
                 sf_file_transfer_agent = SnowflakeFileTransferAgent(
                     self, query, ret,
                     put_callback=_put_callback,
