@@ -397,7 +397,7 @@ class SnowflakeRestful(object):
         }
         if method == u'post':
             return self._post_request(url, headers, json.dumps(body),
-                                      token=self._token, compress=True,
+                                      token=self._token,
                                       _no_results=_no_results)
         else:
             return self._get_request(url, headers, token=self._token)
@@ -523,7 +523,7 @@ class SnowflakeRestful(object):
         return ret
 
     def _post_request(self, url, headers, body, token=None, retry=10,
-                      timeout=None, compress=False, _no_results=False):
+                      timeout=None, _no_results=False):
         full_url = u'{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
@@ -548,7 +548,6 @@ class SnowflakeRestful(object):
             timeout=(self._connect_timeout, self._connect_timeout, timeout),
             retry=retry,
             token=token,
-            compress=compress,
             max_connection_pool=self._max_connection_pool)
         self.logger.debug(
             u'ret[code] = {code}, after post request'.format(
@@ -560,8 +559,8 @@ class SnowflakeRestful(object):
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret[u'code'] if u'code' in ret else u'N/A')))
             if u'success' in ret and ret[u'success']:
-                return self._post_request(url, headers, body,
-                                          token=self._token, compress=compress)
+                return self._post_request(
+                    url, headers, body, token=self._token)
 
         is_session_renewed = False
         result_url = None
@@ -610,7 +609,6 @@ class SnowflakeRestful(object):
                    is_raw_text=False,
                    catch_okta_unauthorized_error=False,
                    is_raw_binary=False,
-                   compress=False,
                    max_connection_pool=MAX_CONNECTION_POOL,
                    use_ijson=False):
         logger = getLogger(__name__)
