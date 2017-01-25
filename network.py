@@ -634,7 +634,7 @@ class SnowflakeRestful(object):
                             pool_maxsize=int(max_connection_pool),
                             max_retries=requests_retry))
 
-                if data and len(data) > 0:
+                if not catch_okta_unauthorized_error and data and len(data) > 0:
                     gzdata = BytesIO()
                     gzip.GzipFile(fileobj=gzdata, mode=u'wb').write(
                         data.encode(u'utf-8'))
