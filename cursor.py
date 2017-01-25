@@ -13,8 +13,7 @@ from threading import (Timer, Lock)
 
 from six import u
 
-from .chunk_downloader import (SnowflakeChunkDownloader,
-                               DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
+from .chunk_downloader import (DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
                                DEFAULT_CLIENT_RESULT_PREFETCH_THREADS)
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (FIELD_NAME_TO_ID, FIELD_ID_TO_NAME)
@@ -541,7 +540,7 @@ class SnowflakeCursor(object):
                         header_value)
 
             self.logger.debug(u'qrmk=%s', qrmk)
-            self._chunk_downloader = SnowflakeChunkDownloader(
+            self._chunk_downloader = self._connection._chunk_downloader_class(
                 chunks, self._connection, self, qrmk, chunk_headers,
                 prefetch_slots=self._client_result_prefetch_slots,
                 prefetch_threads=self._client_result_prefetch_threads,

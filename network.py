@@ -609,6 +609,7 @@ class SnowflakeRestful(object):
                    is_raw_text=False,
                    catch_okta_unauthorized_error=False,
                    is_raw_binary=False,
+                   is_raw_binary_iterator=True,
                    max_connection_pool=MAX_CONNECTION_POOL,
                    use_ijson=False):
         logger = getLogger(__name__)
@@ -671,7 +672,9 @@ class SnowflakeRestful(object):
                         raw_data = decompress_raw_data(
                             raw_ret.raw, add_bracket=True
                         ).decode('utf-8', 'replace')
-                        if not use_ijson:
+                        if not is_raw_binary_iterator:
+                            ret = json.loads(raw_data)
+                        elif not use_ijson:
                             ret = iter(json.loads(raw_data))
                         else:
                             ret = split_rows_from_stream(StringIO(raw_data))
@@ -744,15 +747,15 @@ class SnowflakeRestful(object):
             request_result_queue = Queue()
             request_thread(request_result_queue)
             try:
-                # don't care about the return value, because no rety and
+                # don't care about the return value, because no retry and
                 # no error will show up
                 _, _ = request_result_queue.get(timeout=request_timeout)
             except:
                 pass
 
         sleeping_time = 1
+        return_object = None
         for retry_cnt in range(retry):
-            return_object = None
             request_result_queue = Queue()
             th = Thread(name='request_thread', target=request_thread,
                         args=(request_result_queue,))
@@ -764,7 +767,7 @@ class SnowflakeRestful(object):
                 th.join(timeout=request_timeout)
                 logger.debug('request thread joined')
                 return_object, retryable = request_result_queue.get(
-                    timeout=request_timeout)
+                    timeout=int(request_timeout / 2))
                 logger.debug('request thread returned object')
                 if retryable:
                     raise RequestRetry()
@@ -797,6 +800,7 @@ class SnowflakeRestful(object):
                     retry,
                     sleeping_time)
             time.sleep(sleeping_time)
+            return_object = None
 
         return return_object
 

@@ -12,6 +12,7 @@ from time import strptime
 
 from . import errors
 from . import network
+from .chunk_downloader import SnowflakeChunkDownloader
 from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2)
 from .converter import SnowflakeConverter
 from .cursor import SnowflakeCursor
@@ -41,18 +42,18 @@ DEFAULT_CONFIGURATION = {
     u'password': u'',  # standard
     u'host': u'127.0.0.1',  # standard
     u'port': 8080,  # standard
+    u'database': None,  # standard
     u'proxy_host': None,  # snowflake
     u'proxy_port': None,  # snowflake
     u'proxy_user': None,  # snowflake
     u'proxy_password': None,  # snowflake
-    u'database': None,  # standard
-    u'protocol': u'http',  # support http/https
+    u'protocol': u'http',  # snowflake
     u'warehouse': None,  # snowflake
     u'region': None,  # snowflake
     u'account': None,  # snowflake
     u'schema': None,  # snowflake
     u'role': None,  # snowflake
-    u'session_id': None,
+    u'session_id': None,  # snowflake
     u'connect_timeout': None,  # connection timeout
     u'request_timeout': None,  # request timeout
     u'passcode_in_password': False,  # Snowflake MFA
@@ -60,19 +61,19 @@ DEFAULT_CONFIGURATION = {
     u'authenticator': network.DEFAULT_AUTHENTICATOR,
     u'mfa_callback': None,
     u'password_callback': None,
-    # Snowflake Federated Authentication
     u'application': network.CLIENT_NAME,
     u'internal_application_name': network.CLIENT_NAME,
     u'internal_application_version': network.CLIENT_VERSION,
 
     u'insecure_mode': False,  # Error security fix requirement
     u'injectClientPause': 0,  # snowflake internal
-    u'session_parameters': None,
-    u'autocommit': None,
-    u'numpy': False,
-    u'max_connection_pool': network.MAX_CONNECTION_POOL,
-    u'ocsp_response_cache_filename': None,
-    u'converter_class': SnowflakeConverter,
+    u'session_parameters': None,  # snowflake internal
+    u'autocommit': None,  # snowflake
+    u'numpy': False,  # snowflake
+    u'max_connection_pool': network.MAX_CONNECTION_POOL,  # snowflake internal
+    u'ocsp_response_cache_filename': None,  # snowflake internal
+    u'converter_class': SnowflakeConverter,  # snowflake internal
+    u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
