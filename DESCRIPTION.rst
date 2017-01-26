@@ -9,6 +9,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.10 (January 26, 2017)
+
+    - Compress data in HTTP requests at all times except empty data or OKTA request
+    - Refactored FIXED, REAL and TIMESTAMP data fetch to improve performance. This mainly impacts SnowSQL
+    - Added ``region`` option to support EU deployments better
+    - Increased the retry counter for OCSP servers to mitigate intermittent failure
+    - Refactored HTTP access retry logic
+
 - v1.3.9 (January 16, 2017)
 
     - Upgraded ``botocore`` to 1.4.93 to fix and ``boto3`` to 1.4.3 to fix the HTTPS request failure in Python 3.6
