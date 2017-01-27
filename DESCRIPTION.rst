@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.11 (January 27, 2017)
+
+    - Fixed the regression in 1.3.8 that caused intermittent 504 errors
+
 - v1.3.10 (January 26, 2017)
 
     - Compress data in HTTP requests at all times except empty data or OKTA request
