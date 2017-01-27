@@ -5,10 +5,14 @@
 #
 
 import io
+import subprocess
 import zlib
+from logging import getLogger
 
 CHUNK_SIZE = 16384
 MAGIC_NUMBER = 16  # magic number from requests/packages/urllib3/response.py
+
+logger = getLogger(__name__)
 
 
 def decompress_raw_data(raw_data_fd, add_bracket=True):
@@ -29,6 +33,23 @@ def decompress_raw_data(raw_data_fd, add_bracket=True):
             writer.write(obj.decompress(unused_data))
         d = raw_data_fd.read(CHUNK_SIZE)
         writer.write(obj.flush())
+    if add_bracket:
+        writer.write(b']')
+    return writer.getvalue()
+
+
+def decompress_raw_data_by_zcat(raw_data_fd, add_bracket=True):
+    """
+    Experiment: Decompresses raw data from file like object and return
+    a byte array
+    """
+    writer = io.BytesIO()
+    if add_bracket:
+        writer.write(b'[')
+    p = subprocess.Popen(["zcat"],
+                         stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE)
+    writer.write(p.communicate(input=raw_data_fd.read())[0])
     if add_bracket:
         writer.write(b']')
     return writer.getvalue()

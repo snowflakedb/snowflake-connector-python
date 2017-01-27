@@ -640,29 +640,21 @@ class SnowflakeRestful(object):
                         data.encode(u'utf-8'))
                     gzdata.seek(0, 0)
                     headers['Content-Encoding'] = 'gzip'
-                    raw_ret = session_context._session.request(
-                        method=method,
-                        url=full_url,
-                        proxies=proxies,
-                        headers=headers,
-                        data=gzdata,
-                        timeout=connection_timeout,
-                        verify=True,
-                        stream=is_raw_binary,
-                        auth=SnowflakeAuth(token),
-                    )
+                    input_data = gzdata
                 else:
-                    raw_ret = session_context._session.request(
-                        method=method,
-                        url=full_url,
-                        proxies=proxies,
-                        headers=headers,
-                        data=data,
-                        timeout=connection_timeout,
-                        verify=True,
-                        stream=is_raw_binary,
-                        auth=SnowflakeAuth(token),
-                    )
+                    input_data = data
+
+                raw_ret = session_context._session.request(
+                    method=method,
+                    url=full_url,
+                    proxies=proxies,
+                    headers=headers,
+                    data=input_data,
+                    timeout=connection_timeout,
+                    verify=True,
+                    stream=is_raw_binary,
+                    auth=SnowflakeAuth(token),
+                )
 
                 if raw_ret.status_code == OK:
                     logger.debug(u'SUCCESS')

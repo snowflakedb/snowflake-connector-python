@@ -643,10 +643,9 @@ class SnowflakeCursor(object):
         """
         Fetch one row
         """
-        row = None
         try:
+            row = None
             self._total_row_index += 1
-
             try:
                 row = next(self._current_chunk_row)
             except StopIteration:
@@ -669,12 +668,11 @@ class SnowflakeCursor(object):
                     self._chunk_downloader = None
                     self._chunk_count = 0
                     self._current_chunk_row = iter(())
+            return self._row_to_python(row) if row is not None else None
 
         except IndexError:
             # returns None if the iteration is completed so that iter() stops
             return None
-
-        return self._row_to_python(row) if row is not None else None
 
     def fetchmany(self, size=None):
         u"""
@@ -824,43 +822,37 @@ class SnowflakeCursor(object):
                                        ProgrammingError,
                                        errorvalue)
 
-    def _convert_column(self, row):
-        try:
-            for idx, col in enumerate(row):
-                if col is not None:
-                    col_desc = self._description[idx]
-                    try:
-                        conv_func, fmt = self._column_converter[idx]
-                        value = conv_func(col, col_desc, fmt)
-                    except Exception as e:
-                        self.logger.exception(
-                            u'Failed to convert: field %s: %s::%s, Error: %s',
-                            col_desc[0],
-                            FIELD_ID_TO_NAME(col_desc[1]),
-                            col,
-                            e)
-                        raise Exception(
-                            u"{error} (field {name}: {type}::{value})".format(
-                                error=e, name=col_desc[0],
-                                type=FIELD_ID_TO_NAME(col_desc[1]), value=col))
-                else:
-                    value = None
-                yield (idx, value)
-        except Exception as e:
-            self.logger.exception(u'failed to convert row to python')
-            errorvalue = {
-                u'msg': u"Failed converting row to Python types: {0}".format(
-                    e),
-                u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE}
-            Error.errorhandler_wrapper(self.connection, self,
-                                       InterfaceError,
-                                       errorvalue)
-
     def _row_to_python(self, row):
-        res = []
-        for _, value in self._convert_column(row):
-            res.append(value)
-        return tuple(res)
+        """
+        Converts data in row if required.
+
+        NOTE: surprisingly using idx+1 is faster than enumerate here. Also
+        removing generator improved performance even better.
+        """
+        idx = 0
+        for col in row:
+            if col is not None:
+                try:
+                    conv_method, conv_ctx = self._column_converter[idx]
+                    row[idx] = conv_method(col, conv_ctx)
+                except Exception as e:
+                    col_desc = self._description[idx]
+                    msg = u'Failed to convert: ' \
+                          u'field {name}: {type}::{value}, Error: ' \
+                          u'{error}'.format(
+                        name=col_desc[0],
+                        type=FIELD_ID_TO_NAME(col_desc[1]),
+                        value=col,
+                        error=e
+                    )
+                    self.logger.exception(msg)
+                    Error.errorhandler_wrapper(
+                        self.connection, self, InterfaceError, {
+                            u'msg': msg,
+                            u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                        })
+            idx += 1
+        return tuple(row)
 
     def __enter__(self):
         """
@@ -884,7 +876,31 @@ class DictCursor(SnowflakeCursor):
         SnowflakeCursor.__init__(self, connection)
 
     def _row_to_python(self, row):
+        # see the base class
         res = {}
-        for idx, value in self._convert_column(row):
+        idx = 0
+        for col in row:
+            value = col
+            if col is not None:
+                try:
+                    conv_method, conv_ctx = self._column_converter[idx]
+                    value = conv_method(col, conv_ctx)
+                except Exception as e:
+                    col_desc = self._description[idx]
+                    msg = u'Failed to convert: ' \
+                          u'field {name}: {type}::{value}, Error: ' \
+                          u'{error}'.format(
+                        name=col_desc[0],
+                        type=FIELD_ID_TO_NAME(col_desc[1]),
+                        value=col,
+                        error=e
+                    )
+                    self.logger.exception(msg)
+                    Error.errorhandler_wrapper(
+                        self.connection, self, InterfaceError, {
+                            u'msg': msg,
+                            u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                        })
             res[self._column_idx_to_name[idx]] = value
+            idx += 1
         return res
