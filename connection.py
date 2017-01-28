@@ -23,7 +23,7 @@ from .errors import (Error, ProgrammingError, InterfaceError,
                      DatabaseError)
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
-from .util_text import split_statements
+from .util_text import split_statements, construct_hostname
 
 try:
     import snowflake.internal.constants
@@ -478,13 +478,9 @@ class SnowflakeConnection(object):
 
         if u'account' in kwargs and kwargs[u'account'] not in TEST_ACCOUNTS:
             if u'host' not in kwargs:
-                if kwargs.get(u'region'):
-                    host = u'{0}.{1}.snowflakecomputing.com'.format(
-                        self._account[0:self._account.find(u'.')],
-                        kwargs.get(u'region'))
-                else:
-                    host = u'{0}.snowflakecomputing.com'.format(self._account)
-                setattr(self, u'_host', host)
+                setattr(self, u'_host',
+                        construct_hostname(
+                            kwargs.get(u'region'), self._account))
             if u'port' not in kwargs:
                 setattr(self, u'_port', u'443')
             if u'protocol' not in kwargs:

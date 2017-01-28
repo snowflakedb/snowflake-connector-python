@@ -180,3 +180,16 @@ def split_rows_from_stream(stream):
                 row.append(value)
         elif event == 'start_array':
             in_row = True
+
+
+def construct_hostname(region, account):
+    """
+    Constructs hostname from region and account
+    """
+    if region:
+        if account.find(u'.') > 0:
+            account = account[0:account.find(u'.')]
+        host = u'{0}.{1}.snowflakecomputing.com'.format(account, region)
+    else:
+        host = u'{0}.snowflakecomputing.com'.format(account)
+    return host

@@ -108,7 +108,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         try:
             t = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
             if fmt:
-                return fmt.format(t)
+                return fmt.format(SnowflakeDateTime(t, nanosecond=0))
             return TO_UNICODE(date(t.year, t.month, t.day))
         except OverflowError:
             self.logger.debug(
@@ -117,9 +117,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 value)
             t = time.gmtime(value)
             if fmt:
-                return fmt.format(
-                    SnowflakeDateTime(t, nanosecond=0)
-                )
+                return fmt.format(SnowflakeDateTime(t, nanosecond=0))
             return u'{year:d}-{month:02d}-{day:02d}'.format(
                 year=t.tm_year, month=t.tm_mon, day=t.tm_mday)
 
