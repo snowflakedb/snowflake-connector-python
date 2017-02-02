@@ -559,11 +559,12 @@ class SnowflakeConnection(object):
 
         url_parameters = {u'requestId': request_id}
 
+        # retry 1000 times/4.5 hours for general queries
         ret = self._con.request(
             u'/queries/v1/query-request?' + urlencode(url_parameters),
             data,
             client=client,
-            _no_results=_no_results)
+            _no_results=_no_results, retry=1000)
 
         if ret is not None and u'data' in ret and ret[u'data'] is None:
             ret[u'data'] = {}

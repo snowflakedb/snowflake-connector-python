@@ -199,3 +199,10 @@ class BadRequest(Error):
 
     def __init__(self):
         Error.__init__(self, msg=u'HTTP 400: BadRequest')
+
+
+class BadGatewayError(Error):
+    u"""Exception for 502 HTTP error for retry"""
+
+    def __init__(self):
+        Error.__init__(self, msg=u'HTTP 502: BadGateway')

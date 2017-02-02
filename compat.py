@@ -42,6 +42,7 @@ if PY2:
     PKCS5_OFFSET = lambda v: ord(v[-1])
     IS_BINARY = lambda v: isinstance(v, bytearray)
 
+    BAD_GATEWAY = httplib.BAD_GATEWAY
     BAD_REQUEST = httplib.BAD_REQUEST
     SERVICE_UNAVAILABLE = httplib.SERVICE_UNAVAILABLE
     GATEWAY_TIMEOUT = httplib.GATEWAY_TIMEOUT
@@ -74,6 +75,7 @@ else:
     PKCS5_OFFSET = lambda v: v[-1]
     IS_BINARY = lambda v: isinstance(v, (bytes, bytearray))
 
+    BAD_GATEWAY = http.client.BAD_GATEWAY
     BAD_REQUEST = http.client.BAD_REQUEST
     SERVICE_UNAVAILABLE = http.client.SERVICE_UNAVAILABLE
     GATEWAY_TIMEOUT = http.client.GATEWAY_TIMEOUT

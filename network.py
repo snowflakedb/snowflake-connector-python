@@ -26,7 +26,7 @@ from botocore.vendored.requests.packages.urllib3.exceptions import (
 from . import ssl_wrap_socket
 from .compat import (
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
-    FORBIDDEN,
+    FORBIDDEN, BAD_GATEWAY,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
 from .compat import (Queue, EmptyQueue)
 from .compat import (TO_UNICODE, urlencode)
@@ -37,7 +37,7 @@ from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
 from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      GatewayTimeoutError, ServiceUnavailableError,
                      InterfaceError, InternalServerError, ForbiddenError,
-                     BadRequest)
+                     BadGatewayError, BadRequest)
 from .gzip_decoder import (decompress_raw_data)
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -95,6 +95,7 @@ STATUS_TO_EXCEPTION = {
     SERVICE_UNAVAILABLE: ServiceUnavailableError,
     GATEWAY_TIMEOUT: GatewayTimeoutError,
     BAD_REQUEST: BadRequest,
+    BAD_GATEWAY: BadGatewayError,
 }
 
 
@@ -295,7 +296,9 @@ class SnowflakeRestful(object):
             "body['data']: %s",
             {k: v for (k, v) in body[u'data'].items() if k != u'PASSWORD'})
 
-        ret = self._post_request(url, headers, json.dumps(body))
+        # retry 10 times for authentication
+        ret = self._post_request(
+            url, headers, json.dumps(body), retry=10)
         # this means we are waiting for MFA authentication
         if ret[u'data'].get(u'nextAction') and ret[u'data'][
             u'nextAction'] == u'EXT_AUTHN_DUO_ALL':
@@ -304,7 +307,8 @@ class SnowflakeRestful(object):
             self.ret = None
 
             def post_request_wrapper(self, url, headers, body):
-                self.ret = self._post_request(url, headers, body)
+                # retry 10 times for MFA approval
+                self.ret = self._post_request(url, headers, body, retry=10)
 
             # send new request to wait until MFA is approved
             t = Thread(target=post_request_wrapper,
@@ -316,14 +320,16 @@ class SnowflakeRestful(object):
                 while not self.ret:
                     next(c)
             else:
-                t.join()
+                t.join(timeout=120)
             ret = self.ret
             if ret[u'data'].get(u'nextAction') and ret[u'data'][
                 u'nextAction'] == u'EXT_AUTHN_SUCCESS':
                 body = copy.deepcopy(body_template)
                 body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
                 # final request to get tokens
-                ret = self._post_request(url, headers, json.dumps(body))
+                # retry 10 times
+                ret = self._post_request(
+                    url, headers, json.dumps(body), retry=10)
 
         elif ret[u'data'].get(u'nextAction') and ret[u'data'][
             u'nextAction'] == u'PWD_CHANGE':
@@ -333,7 +339,9 @@ class SnowflakeRestful(object):
                 body[u'data'][u"LOGIN_NAME"] = user
                 body[u'data'][u"PASSWORD"] = password
                 body[u'data'][u'CHOSEN_NEW_PASSWORD'] = password_callback()
-                ret = self._post_request(url, headers, json.dumps(body))
+                # retry 10 times for New Password input
+                ret = self._post_request(
+                    url, headers, json.dumps(body), retry=10)
 
         self.logger.debug(u'completed authentication')
         if not ret[u'success']:
@@ -373,7 +381,7 @@ class SnowflakeRestful(object):
                     self._connection._warehouse = session_info[u'warehouseName']
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
-                _no_results=False):
+                _no_results=False, retry=10):
         if body is None:
             body = {}
         if not hasattr(self, u'_master_token'):
@@ -396,11 +404,12 @@ class SnowflakeRestful(object):
             u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
         }
         if method == u'post':
-            return self._post_request(url, headers, json.dumps(body),
-                                      token=self._token,
-                                      _no_results=_no_results)
+            return self._post_request(
+                url, headers, json.dumps(body),
+                token=self._token, _no_results=_no_results, retry=retry)
         else:
-            return self._get_request(url, headers, token=self._token)
+            return self._get_request(
+                url, headers, token=self._token, retry=retry)
 
     def _renew_session(self):
         if not hasattr(self, u'_master_token'):
