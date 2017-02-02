@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.12 (February 2, 2017)
+
+    - Fixed ``regiaon`` parameter. One character was truncated from the tail of account name
+    - Improved performance of fetching data by refactoring fetchone method
+
 - v1.3.11 (January 27, 2017)
 
     - Fixed the regression in 1.3.8 that caused intermittent 504 errors
