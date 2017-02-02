@@ -441,3 +441,17 @@ select 2;
             "--- test comment 1\n"
             "select /*another test comments*/ 1; -- test comment 2", False)
         assert next(itr) == ("-- test comment 3\nselect 2;", False)
+
+
+def test_comments_with_semicolon():
+    s = """--test ;
+select 1;
+"""
+    with StringIO(_to_unicode(s)) as f:
+        itr = split_statements(f, remove_comments=False)
+        assert next(itr) == (
+            "--test ;\n"
+            "select 1;", False
+        )
+        with pytest.raises(StopIteration):
+            next(itr)
