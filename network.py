@@ -46,7 +46,7 @@ from .util_text import split_rows_from_stream
 from .version import VERSION
 
 """
-Moneky patch for PyOpenSSL Socket wrapper
+Monkey patch for PyOpenSSL Socket wrapper
 """
 ssl_wrap_socket.inject_into_urllib3()
 
@@ -209,7 +209,7 @@ class SnowflakeRestful(object):
                      warehouse=None, role=None, passcode=None,
                      passcode_in_password=False, saml_response=None,
                      mfa_callback=None, password_callback=None,
-                     session_parameters=None):
+                     session_parameters=None, retry_connection_auth=True):
         self.logger.info(u'authenticate')
 
         if token and master_token:
@@ -296,9 +296,10 @@ class SnowflakeRestful(object):
             "body['data']: %s",
             {k: v for (k, v) in body[u'data'].items() if k != u'PASSWORD'})
 
-        # retry 10 times for authentication
+        max_retry = 10 if retry_connection_auth else 1
+        # max_retry times for authentication
         ret = self._post_request(
-            url, headers, json.dumps(body), retry=10)
+            url, headers, json.dumps(body), retry=max_retry)
         # this means we are waiting for MFA authentication
         if ret[u'data'].get(u'nextAction') and ret[u'data'][
             u'nextAction'] == u'EXT_AUTHN_DUO_ALL':
@@ -307,8 +308,9 @@ class SnowflakeRestful(object):
             self.ret = None
 
             def post_request_wrapper(self, url, headers, body):
-                # retry 10 times for MFA approval
-                self.ret = self._post_request(url, headers, body, retry=10)
+                # max_retry times for MFA approval
+                self.ret = self._post_request(
+                    url, headers, body, retry=max_retry)
 
             # send new request to wait until MFA is approved
             t = Thread(target=post_request_wrapper,
@@ -327,9 +329,9 @@ class SnowflakeRestful(object):
                 body = copy.deepcopy(body_template)
                 body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
                 # final request to get tokens
-                # retry 10 times
+                # max_retry times
                 ret = self._post_request(
-                    url, headers, json.dumps(body), retry=10)
+                    url, headers, json.dumps(body), retry=max_retry)
 
         elif ret[u'data'].get(u'nextAction') and ret[u'data'][
             u'nextAction'] == u'PWD_CHANGE':
@@ -339,9 +341,9 @@ class SnowflakeRestful(object):
                 body[u'data'][u"LOGIN_NAME"] = user
                 body[u'data'][u"PASSWORD"] = password
                 body[u'data'][u'CHOSEN_NEW_PASSWORD'] = password_callback()
-                # retry 10 times for New Password input
+                # max_retry times for New Password input
                 ret = self._post_request(
-                    url, headers, json.dumps(body), retry=10)
+                    url, headers, json.dumps(body), retry=max_retry)
 
         self.logger.debug(u'completed authentication')
         if not ret[u'success']:
@@ -560,7 +562,7 @@ class SnowflakeRestful(object):
             max_connection_pool=self._max_connection_pool)
         self.logger.debug(
             u'ret[code] = {code}, after post request'.format(
-                code=(ret[u'code'] if u'code' in ret else u'N/A')))
+                code=(ret.get(u'code', u'N/A'))))
 
         if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
@@ -685,7 +687,7 @@ class SnowflakeRestful(object):
                 elif raw_ret.status_code in STATUS_TO_EXCEPTION:
                     # retryable exceptions
                     result_queue.put(
-                        (STATUS_TO_EXCEPTION[raw_ret.status_code], True))
+                        (STATUS_TO_EXCEPTION[raw_ret.status_code](), True))
                 elif raw_ret.status_code == UNAUTHORIZED and \
                         catch_okta_unauthorized_error:
                     # OKTA Unauthorized errors
@@ -757,6 +759,7 @@ class SnowflakeRestful(object):
         sleeping_time = 1
         return_object = None
         for retry_cnt in range(retry):
+            return_object = None
             request_result_queue = Queue()
             th = Thread(name='request_thread', target=request_thread,
                         args=(request_result_queue,))
@@ -801,8 +804,17 @@ class SnowflakeRestful(object):
                     retry,
                     sleeping_time)
             time.sleep(sleeping_time)
-            return_object = None
 
+        if isinstance(return_object, Error):
+            Error.errorhandler_wrapper(conn, None, return_object)
+        elif isinstance(return_object, Exception):
+            Error.errorhandler_wrapper(
+                conn, None, OperationalError,
+                {
+                    u'msg': u'Failed to execute request: {0}'.format(
+                        return_object),
+                    u'errno': ER_FAILED_TO_REQUEST,
+                })
         return return_object
 
     def authenticate_by_saml(self, authenticator, account, user, password):

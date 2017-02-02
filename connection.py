@@ -74,6 +74,7 @@ DEFAULT_CONFIGURATION = {
     u'ocsp_response_cache_filename': None,  # snowflake internal
     u'converter_class': SnowflakeConverter,  # snowflake internal
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
+    u'retry_connection_auth': True,  # snowflake internal
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -451,6 +452,7 @@ class SnowflakeConnection(object):
             mfa_callback=mfa_callback,
             password_callback=password_callback,
             session_parameters=self._session_parameters,
+            retry_connection_auth=self._retry_connection_auth,
         )
         self._password = None
         self._token = self._con.token

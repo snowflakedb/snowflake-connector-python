@@ -7,8 +7,10 @@
 import pytest
 
 import snowflake.connector
-from snowflake.connector import (DatabaseError,
-                                 ProgrammingError)
+from snowflake.connector import (
+    DatabaseError,
+    ProgrammingError)
+from snowflake.connector.errors import ForbiddenError
 
 
 def test_basic(conn_testaccount):
@@ -120,7 +122,9 @@ def test_bogus(db_parameters):
             password='bogus',
             host=db_parameters['host'],
             port=db_parameters['port'],
-            account=db_parameters['account'])
+            account=db_parameters['account'],
+            retry_connection_auth=False
+        )
 
     with pytest.raises(DatabaseError):
         snowflake.connector.connect(
@@ -130,7 +134,8 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
-            insecure_mode=True)
+            insecure_mode=True,
+            retry_connection_auth=False)
 
     with pytest.raises(DatabaseError):
         snowflake.connector.connect(
@@ -140,6 +145,7 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
+            retry_connection_auth=False
         )
 
     with pytest.raises(ProgrammingError):
@@ -150,6 +156,7 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
+            retry_connection_auth=False
         )
 
 
@@ -224,3 +231,13 @@ def test_drop_create_user(conn_cnx, db_parameters):
                 db_parameters['database']))
         exe('drop role snowdog_role')
         exe('drop user if exists snowdog')
+
+
+def test_invalid_account():
+    with pytest.raises(ForbiddenError):
+        snowflake.connector.connect(
+            account='bogus',
+            user='test',
+            password='test',
+            retry_connection_auth=False
+        )

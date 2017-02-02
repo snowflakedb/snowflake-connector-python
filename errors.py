@@ -162,47 +162,47 @@ class NotSupportedError(DatabaseError):
 class InternalServerError(Error):
     u"""Exception for 500 HTTP code for retry"""
 
-    def __init__(self):
+    def __init__(self, **_):
         Error.__init__(self, msg=u'HTTP 500: InternalServerError')
 
 
 class ServiceUnavailableError(Error):
     u"""Exception for 503 HTTP code for retry"""
 
-    def __init__(self):
+    def __init__(self, **_):
         Error.__init__(self, msg=u'HTTP 503: ServiceUnavailable')
 
 
 class GatewayTimeoutError(Error):
     u"""Exception for 504 HTTP error for retry"""
 
-    def __init__(self):
+    def __init__(self, **_):
         Error.__init__(self, msg=u'HTTP 504: GatewayTimeout')
 
 
 class ForbiddenError(Error):
     """Exception for 403 HTTP error for retry"""
 
-    def __init__(self):
+    def __init__(self, **_):
         Error.__init__(self, msg=u'HTTP 403: Forbidden')
 
 
 class RequestTimeoutError(Error):
     u"""Exception for 408 HTTP error for retry"""
 
-    def __init__(self):
+    def __init__(self, **_):
         Error.__init__(self, msg=u'HTTP 408: RequestTimeout')
 
 
 class BadRequest(Error):
     u"""Exception for 400 HTTP error for retry"""
 
-    def __init__(self):
+    def __init__(self, **_):
         Error.__init__(self, msg=u'HTTP 400: BadRequest')
 
 
 class BadGatewayError(Error):
     u"""Exception for 502 HTTP error for retry"""
 
-    def __init__(self):
+    def __init__(self, **_):
         Error.__init__(self, msg=u'HTTP 502: BadGateway')
