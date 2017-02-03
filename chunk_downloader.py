@@ -13,7 +13,7 @@ from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
 from .network import (SnowflakeRestful, NO_TOKEN, MAX_CONNECTION_POOL)
 
-DEFAULT_REQUEST_TIMEOUT = 300
+DEFAULT_REQUEST_TIMEOUT = 3600
 DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS = 2
 DEFAULT_CLIENT_RESULT_PREFETCH_THREADS = 1
 
@@ -257,8 +257,7 @@ class SnowflakeChunkDownloader(object):
     def _get_request(
             self, url, headers,
             is_raw_binary_iterator=True,
-            max_connection_pool=MAX_CONNECTION_POOL,
-            retry=10):
+            max_connection_pool=MAX_CONNECTION_POOL):
         """
         GET request for Large Result set chunkloader
         """
@@ -282,7 +281,6 @@ class SnowflakeChunkDownloader(object):
             timeout=(self._connection._connect_timeout,
                      self._connection._connect_timeout,
                      DEFAULT_REQUEST_TIMEOUT),
-            retry=retry,
             token=NO_TOKEN,
             is_raw_binary=True,
             is_raw_binary_iterator=is_raw_binary_iterator,

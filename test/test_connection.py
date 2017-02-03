@@ -123,7 +123,6 @@ def test_bogus(db_parameters):
             host=db_parameters['host'],
             port=db_parameters['port'],
             account=db_parameters['account'],
-            retry_connection_auth=False
         )
 
     with pytest.raises(DatabaseError):
@@ -134,8 +133,7 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
-            insecure_mode=True,
-            retry_connection_auth=False)
+            insecure_mode=True)
 
     with pytest.raises(DatabaseError):
         snowflake.connector.connect(
@@ -145,7 +143,6 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
-            retry_connection_auth=False
         )
 
     with pytest.raises(ProgrammingError):
@@ -156,7 +153,6 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
-            retry_connection_auth=False
         )
 
 
@@ -233,11 +229,12 @@ def test_drop_create_user(conn_cnx, db_parameters):
         exe('drop user if exists snowdog')
 
 
-def test_invalid_account():
+@pytest.mark.timeout(15)
+def test_invalid_account_timeout():
     with pytest.raises(ForbiddenError):
         snowflake.connector.connect(
             account='bogus',
             user='test',
             password='test',
-            retry_connection_auth=False
+            login_timeout=5
         )

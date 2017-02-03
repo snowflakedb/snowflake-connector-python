@@ -209,7 +209,7 @@ class SnowflakeRestful(object):
                      warehouse=None, role=None, passcode=None,
                      passcode_in_password=False, saml_response=None,
                      mfa_callback=None, password_callback=None,
-                     session_parameters=None, retry_connection_auth=True):
+                     session_parameters=None):
         self.logger.info(u'authenticate')
 
         if token and master_token:
@@ -296,10 +296,9 @@ class SnowflakeRestful(object):
             "body['data']: %s",
             {k: v for (k, v) in body[u'data'].items() if k != u'PASSWORD'})
 
-        max_retry = 10 if retry_connection_auth else 1
-        # max_retry times for authentication
         ret = self._post_request(
-            url, headers, json.dumps(body), retry=max_retry)
+            url, headers, json.dumps(body),
+            timeout=self._connection._login_timeout)
         # this means we are waiting for MFA authentication
         if ret[u'data'].get(u'nextAction') and ret[u'data'][
             u'nextAction'] == u'EXT_AUTHN_DUO_ALL':
@@ -308,9 +307,10 @@ class SnowflakeRestful(object):
             self.ret = None
 
             def post_request_wrapper(self, url, headers, body):
-                # max_retry times for MFA approval
+                # get the MFA response
                 self.ret = self._post_request(
-                    url, headers, body, retry=max_retry)
+                    url, headers, body,
+                    timeout=self._connection._login_timeout)
 
             # send new request to wait until MFA is approved
             t = Thread(target=post_request_wrapper,
@@ -329,9 +329,9 @@ class SnowflakeRestful(object):
                 body = copy.deepcopy(body_template)
                 body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
                 # final request to get tokens
-                # max_retry times
                 ret = self._post_request(
-                    url, headers, json.dumps(body), retry=max_retry)
+                    url, headers, json.dumps(body),
+                    timeout=self._connection._login_timeout)
 
         elif ret[u'data'].get(u'nextAction') and ret[u'data'][
             u'nextAction'] == u'PWD_CHANGE':
@@ -341,9 +341,10 @@ class SnowflakeRestful(object):
                 body[u'data'][u"LOGIN_NAME"] = user
                 body[u'data'][u"PASSWORD"] = password
                 body[u'data'][u'CHOSEN_NEW_PASSWORD'] = password_callback()
-                # max_retry times for New Password input
+                # New Password input
                 ret = self._post_request(
-                    url, headers, json.dumps(body), retry=max_retry)
+                    url, headers, json.dumps(body),
+                    timeout=self._connection._login_timeout)
 
         self.logger.debug(u'completed authentication')
         if not ret[u'success']:
@@ -383,7 +384,7 @@ class SnowflakeRestful(object):
                     self._connection._warehouse = session_info[u'warehouseName']
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
-                _no_results=False, retry=10):
+                _no_results=False):
         if body is None:
             body = {}
         if not hasattr(self, u'_master_token'):
@@ -408,10 +409,12 @@ class SnowflakeRestful(object):
         if method == u'post':
             return self._post_request(
                 url, headers, json.dumps(body),
-                token=self._token, _no_results=_no_results, retry=retry)
+                token=self._token, _no_results=_no_results,
+                timeout=self._connection._network_timeout)
         else:
             return self._get_request(
-                url, headers, token=self._token, retry=retry)
+                url, headers, token=self._token,
+                timeout=self._connection._network_timeout)
 
     def _renew_session(self):
         if not hasattr(self, u'_master_token'):
@@ -441,7 +444,9 @@ class SnowflakeRestful(object):
         }
         self._session = None  # invalidate session object
         ret = self._post_request(
-            url, headers, json.dumps(body), token=self._master_token)
+            url, headers, json.dumps(body),
+            token=self._master_token,
+            timeout=self._connection._network_timeout)
         if ret[u'success'] and u'data' in ret \
                 and u'sessionToken' in ret[u'data']:
             self.logger.debug(u'success: %s', ret)
@@ -481,18 +486,18 @@ class SnowflakeRestful(object):
         body = {}
         try:
             ret = self._post_request(
-                url, headers, json.dumps(body), token=self._token,
-                retry=1, timeout=5)
-            if u'success' in ret and ret[u'success']:
+                url, headers, json.dumps(body),
+                token=self._token, timeout=5, is_single_thread=True)
+            if not ret or ret.get(u'success'):
                 return
             err = ret[u'message']
-            if u'data' in ret and u'errorMessage' in ret[u'data']:
+            if ret.get(u'data') and ret[u'data'].get(u'errorMessage'):
                 err += ret[u'data'][u'errorMessage']
                 # no exception is raised
         except:
             pass
 
-    def _get_request(self, url, headers, token=None, retry=10):
+    def _get_request(self, url, headers, token=None, timeout=None):
         if 'Content-Encoding' in headers:
             del headers['Content-Encoding']
         if 'Content-Length' in headers:
@@ -517,9 +522,7 @@ class SnowflakeRestful(object):
             headers=headers,
             data=None,
             proxies=proxies,
-            timeout=(self._connect_timeout, self._connect_timeout,
-                     self._request_timeout),
-            retry=retry,
+            timeout=(self._connect_timeout, self._connect_timeout, timeout),
             token=token,
             max_connection_pool=self._max_connection_pool)
 
@@ -533,7 +536,7 @@ class SnowflakeRestful(object):
 
         return ret
 
-    def _post_request(self, url, headers, body, token=None, retry=10,
+    def _post_request(self, url, headers, body, token=None,
                       timeout=None, _no_results=False):
         full_url = u'{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
@@ -541,12 +544,9 @@ class SnowflakeRestful(object):
             port=self._port,
             url=url,
         )
-        timeout = timeout or DEFAULT_REQUEST_TIMEOUT
         proxies = SnowflakeRestful.set_proxies(
             self._proxy_host, self._proxy_port, self._proxy_user,
             self._proxy_password)
-        # self.logger.debug(u'url=%s, proxies=%s, timeout=%s',
-        #                  full_url, proxies, timeout)
 
         ret = SnowflakeRestful.access_url(
             conn=self._connection,
@@ -556,8 +556,8 @@ class SnowflakeRestful(object):
             headers=headers,
             data=body,
             proxies=proxies,
-            timeout=(self._connect_timeout, self._connect_timeout, timeout),
-            retry=retry,
+            timeout=(
+                self._connect_timeout, self._connect_timeout, timeout),
             token=token,
             max_connection_pool=self._max_connection_pool)
         self.logger.debug(
@@ -571,7 +571,7 @@ class SnowflakeRestful(object):
                     code=(ret[u'code'] if u'code' in ret else u'N/A')))
             if u'success' in ret and ret[u'success']:
                 return self._post_request(
-                    url, headers, body, token=self._token)
+                    url, headers, body, token=self._token, timeout=timeout)
 
         is_session_renewed = False
         result_url = None
@@ -591,7 +591,7 @@ class SnowflakeRestful(object):
                 u'getResultUrl'] if not is_session_renewed else result_url
             self.logger.debug(u'ping pong starting...')
             ret = self._get_request(
-                result_url, headers, token=self._token)
+                result_url, headers, token=self._token, timeout=timeout)
             self.logger.debug(
                 u'ret[code] = %s',
                 ret[u'code'] if u'code' in ret else u'N/A')
@@ -614,7 +614,6 @@ class SnowflakeRestful(object):
                     DEFAULT_CONNECT_TIMEOUT,
                     DEFAULT_CONNECT_TIMEOUT,
                     DEFAULT_REQUEST_TIMEOUT),
-                   retry=10,
                    requests_retry=REQUESTS_RETRY,
                    token=None,
                    is_raw_text=False,
@@ -622,11 +621,12 @@ class SnowflakeRestful(object):
                    is_raw_binary=False,
                    is_raw_binary_iterator=True,
                    max_connection_pool=MAX_CONNECTION_POOL,
-                   use_ijson=False):
+                   use_ijson=False, is_single_thread=False):
         logger = getLogger(__name__)
 
         connection_timeout = timeout[0:2]
-        request_timeout = timeout[2]
+        request_timeout = timeout[2]  # total request timeout
+        request_thread_timeout = 60  # one request thread timeout
 
         def request_thread(result_queue):
             try:
@@ -745,7 +745,7 @@ class SnowflakeRestful(object):
                     errno=ER_FAILED_TO_REQUEST,
                 ), False))
 
-        if retry == 1:
+        if is_single_thread:
             # This is dedicated code for DELETE SESSION when Python exists.
             request_result_queue = Queue()
             request_thread(request_result_queue)
@@ -755,10 +755,10 @@ class SnowflakeRestful(object):
                 _, _ = request_result_queue.get(timeout=request_timeout)
             except:
                 pass
+            return None
 
-        sleeping_time = 1
-        return_object = None
-        for retry_cnt in range(retry):
+        retry_cnt = 0
+        while True:
             return_object = None
             request_result_queue = Queue()
             th = Thread(name='request_thread', target=request_thread,
@@ -766,12 +766,16 @@ class SnowflakeRestful(object):
             th.daemon = True
             th.start()
             try:
-                logger.debug('request timeout: %s: (%s/%s)',
-                             request_timeout, retry_cnt + 1, retry)
-                th.join(timeout=request_timeout)
+                logger.debug('request thread timeout: %s, '
+                             'rest of request timeout: %s, '
+                             'retry cnt: %s',
+                             request_thread_timeout,
+                             request_timeout,
+                             retry_cnt + 1)
+                th.join(timeout=request_thread_timeout)
                 logger.debug('request thread joined')
                 return_object, retryable = request_result_queue.get(
-                    timeout=int(request_timeout / 2))
+                    timeout=int(request_thread_timeout / 2))
                 logger.debug('request thread returned object')
                 if retryable:
                     raise RequestRetry()
@@ -789,21 +793,29 @@ class SnowflakeRestful(object):
             except (RequestRetry, AttributeError, EmptyQueue) as e:
                 # RequestRetry is raised in case of retryable error
                 # Empty is raised if the result queue is empty
-                if sleeping_time < 16:
-                    sleeping_time *= 2
+                if request_timeout is not None:
+                    sleeping_time = min(2 ** retry_cnt,
+                                        min(request_timeout, 16))
+                else:
+                    sleeping_time = min(2 ** retry_cnt, 16)
+                if sleeping_time <= 0:
+                    # no more sleeping time
+                    break
+                if request_timeout is not None:
+                    request_timeout -= sleeping_time
                 logger.info(
                     u'retrying: errorclass=%s, '
                     u'error=%s, '
                     u'return_object=%s, '
-                    u'counter=%s/%s, '
+                    u'counter=%s, '
                     u'sleeping=%s(s)',
                     type(e),
                     e,
                     return_object,
                     retry_cnt + 1,
-                    retry,
                     sleeping_time)
             time.sleep(sleeping_time)
+            retry_cnt += 1
 
         if isinstance(return_object, Error):
             Error.errorhandler_wrapper(conn, None, return_object)
@@ -843,7 +855,10 @@ class SnowflakeRestful(object):
             account, authenticator,
         )
 
-        ret = self._post_request(url, headers, json.dumps(body))
+        # Get OKTA token
+        ret = self._post_request(
+            url, headers, json.dumps(body),
+            timeout=self._connection._login_timeout)
 
         if not ret[u'success']:
             Error.errorhandler_wrapper(
@@ -886,7 +901,9 @@ class SnowflakeRestful(object):
             headers=headers,
             data=json.dumps(data),
             proxies=proxies,
-            timeout=(self._connect_timeout, self._connect_timeout, 120),
+            timeout=(self._connect_timeout,
+                     self._connect_timeout,
+                     self._connection._login_timeout),
             catch_okta_unauthorized_error=True)
 
         one_time_token = ret[u'cookieToken']
@@ -908,6 +925,8 @@ class SnowflakeRestful(object):
             headers=headers,
             data=None,
             proxies=proxies,
-            timeout=(self._connect_timeout, self._connect_timeout, 120),
+            timeout=(self._connect_timeout,
+                     self._connect_timeout,
+                     self._connection._login_timeout),
             is_raw_text=True)
         return ret

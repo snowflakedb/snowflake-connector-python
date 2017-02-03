@@ -54,8 +54,10 @@ DEFAULT_CONFIGURATION = {
     u'schema': None,  # snowflake
     u'role': None,  # snowflake
     u'session_id': None,  # snowflake
-    u'connect_timeout': None,  # connection timeout
-    u'request_timeout': None,  # request timeout
+    u'connect_timeout': None,  # snowflake internal connection timeout
+    u'request_timeout': None,  # snowflake internalrequest timeout
+    u'login_timeout': 60,  # login timeout
+    u'network_timeout': None,  # network timeout (infinite by default)
     u'passcode_in_password': False,  # Snowflake MFA
     u'passcode': None,  # Snowflake MFA
     u'authenticator': network.DEFAULT_AUTHENTICATOR,
@@ -74,7 +76,6 @@ DEFAULT_CONFIGURATION = {
     u'ocsp_response_cache_filename': None,  # snowflake internal
     u'converter_class': SnowflakeConverter,  # snowflake internal
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
-    u'retry_connection_auth': True,  # snowflake internal
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -200,6 +201,20 @@ class SnowflakeConnection(object):
         u"""Request timeout for one query
         """
         return self._request_timeout
+
+    @property
+    def login_timeout(self):
+        """
+        Login timeout. Used in authentication
+        """
+        return self._login_timeout
+
+    @property
+    def network_timeout(self):
+        """
+        Network timeout. Used for general purpose
+        """
+        return self._network_timeout
 
     @property
     def rest(self):
@@ -452,7 +467,6 @@ class SnowflakeConnection(object):
             mfa_callback=mfa_callback,
             password_callback=password_callback,
             session_parameters=self._session_parameters,
-            retry_connection_auth=self._retry_connection_auth,
         )
         self._password = None
         self._token = self._con.token
@@ -564,9 +578,7 @@ class SnowflakeConnection(object):
         # retry 1000 times/4.5 hours for general queries
         ret = self._con.request(
             u'/queries/v1/query-request?' + urlencode(url_parameters),
-            data,
-            client=client,
-            _no_results=_no_results, retry=1000)
+            data, client=client, _no_results=_no_results)
 
         if ret is not None and u'data' in ret and ret[u'data'] is None:
             ret[u'data'] = {}
