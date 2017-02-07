@@ -41,6 +41,7 @@ def test_ocsp_using_pyopenssl():
     ocsp_pyopenssl.OCSP_VALIDATION_CACHE = {}  # reset the memory cache
     ocsp = ocsp_pyopenssl.SnowflakeOCSP()
     urls = [
+        'sqs.us-west-2.amazonaws.com',
         'sfc-dev1-regression.s3.amazonaws.com',
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',

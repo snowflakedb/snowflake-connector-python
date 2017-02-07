@@ -428,8 +428,8 @@ def process_ocsp_response(response, ocsp_issuer):
             if ex.get_short_name() == b'extendedKeyUsage':
                 # ensure the purpose is OCSP signing
                 der_data, _ = der_decoder.decode(ex.get_data())
-                for d in der_data:
-                    if d == OCSP_SIGNING:
+                for idx in range(len(der_data)):
+                    if der_data[idx] == OCSP_SIGNING:
                         is_for_ocsp = True
                         break
             elif ex.get_short_name() == b'noCheck':
