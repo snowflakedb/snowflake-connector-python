@@ -9,9 +9,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.13 (February 9, 2017)
+
+    - Fixed AWS SQS connection error with OCSP checks
+    - Added ``login_timeout`` and ``network_timeout`` parameters to the ``Connection`` objects.
+    - Fixed forbidden access error handing
+
 - v1.3.12 (February 2, 2017)
 
-    - Fixed ``regiaon`` parameter. One character was truncated from the tail of account name
+    - Fixed ``region`` parameter. One character was truncated from the tail of account name
     - Improved performance of fetching data by refactoring fetchone method
 
 - v1.3.11 (January 27, 2017)
