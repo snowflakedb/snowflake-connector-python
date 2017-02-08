@@ -3,10 +3,10 @@
 #
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
+import os
 from getpass import getuser
 from logging import getLogger
 
-import os
 import pytest
 
 logger = getLogger(__name__)
@@ -186,7 +186,8 @@ put file://{0}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
             cur.execute("rm @%pytest_putget_t1")
             results = cur.fetchall()
             assert len(results) == 2, 'two files were not removed'
-            cur.execute("select STATUS from information_schema.load_history where table_name='PYTEST_PUTGET_T1'")
+            cur.execute(
+                "select STATUS from information_schema.load_history where table_name='PYTEST_PUTGET_T1'")
             results = cur.fetchall()
             assert results[0][0] == 'LOADED', (
                 'history does not show file to be loaded')
@@ -406,3 +407,40 @@ union
                 "drop stage {stage_name}".format(
                     stage_name=test_data.stage_name))
             cur.close()
+
+
+def test_put_with_auto_compress_false(tmpdir, db_parameters):
+    """
+    Test PUT command with auto_compress=False
+    """
+    import snowflake.connector
+    cnx = snowflake.connector.connect(
+        user=db_parameters['s3_user'],
+        password=db_parameters['s3_password'],
+        host=db_parameters['s3_host'],
+        port=db_parameters['s3_port'],
+        database=db_parameters['s3_database'],
+        account=db_parameters['s3_account'],
+        protocol=db_parameters['s3_protocol'])
+
+    tmp_dir = str(tmpdir.mkdir('data'))
+    test_data = os.path.join(tmp_dir, 'data.txt')
+    with open(test_data, 'w') as f:
+        f.write("test1,test2")
+        f.write("test3,test4")
+
+    cnx.cursor().execute("RM @~/test_put_uncompress_file")
+    try:
+        with cnx.cursor() as cur:
+            for rec in cur.execute("""
+PUT file://{0} @~/test_put_uncompress_file auto_compress=FALSE
+""".format(test_data)):
+                print(rec)
+
+        ret = cnx.cursor().execute("""
+LS @~/test_put_uncompress_file
+""").fetchone()
+        assert "test_put_uncompress_file/data.txt" in ret[0]
+        assert "data.txt.gz" not in ret[0]
+    finally:
+        cnx.cursor().execute("RM @~/test_put_uncompress_file")
