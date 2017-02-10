@@ -42,6 +42,7 @@ from .gzip_decoder import (decompress_raw_data)
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                        SQLSTATE_CONNECTION_REJECTED)
+from .ssl_wrap_socket import (set_proxies)
 from .util_text import split_rows_from_stream
 from .version import VERSION
 
@@ -151,10 +152,18 @@ class SnowflakeRestful(object):
         self._max_connection_pool = max_connection_pool
         self._connection = connection
         self.logger = getLogger(__name__)
+
+        # insecure mode (disabled by default)
         ssl_wrap_socket.FEATURE_INSECURE_MODE = \
             self._connection and self._connection._insecure_mode
+        # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = \
             self._connection and self._connection._ocsp_response_cache_filename
+        #
+        ssl_wrap_socket.PROXY_HOST = self._proxy_host
+        ssl_wrap_socket.PROXY_PORT = self._proxy_port
+        ssl_wrap_socket.PROXY_USER = self._proxy_user
+        ssl_wrap_socket.PROXY_PASSWORD = self._proxy_password
 
         # This is to address the issue where requests hangs
         _ = 'dummy'.encode('idna').decode('utf-8')
@@ -167,35 +176,6 @@ class SnowflakeRestful(object):
     @property
     def master_token(self):
         return self._master_token if hasattr(self, u'_master_token') else None
-
-    @staticmethod
-    def set_proxies(proxy_host,
-                    proxy_port,
-                    proxy_user=None,
-                    proxy_password=None):
-        proxies = None
-        if proxy_host and proxy_port:
-            if proxy_user or proxy_password:
-                proxy_auth = u'{proxy_user}:{proxy_password}@'.format(
-                    proxy_user=proxy_user if proxy_user is not None else '',
-                    proxy_password=proxy_password if proxy_password is not
-                                                     None else ''
-                )
-            else:
-                proxy_auth = u''
-            proxies = {
-                u'http': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
-                    proxy_host=proxy_host,
-                    proxy_port=TO_UNICODE(proxy_port),
-                    proxy_auth=proxy_auth,
-                ),
-                u'https': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
-                    proxy_host=proxy_host,
-                    proxy_port=TO_UNICODE(proxy_port),
-                    proxy_auth=proxy_auth,
-                ),
-            }
-        return proxies
 
     def close(self):
         if hasattr(self, u'_token'):
@@ -509,7 +489,7 @@ class SnowflakeRestful(object):
             port=self._port,
             url=url,
         )
-        proxies = SnowflakeRestful.set_proxies(
+        proxies = set_proxies(
             self._proxy_host, self._proxy_port, self._proxy_user,
             self._proxy_password
         )
@@ -544,7 +524,7 @@ class SnowflakeRestful(object):
             port=self._port,
             url=url,
         )
-        proxies = SnowflakeRestful.set_proxies(
+        proxies = set_proxies(
             self._proxy_host, self._proxy_port, self._proxy_user,
             self._proxy_password)
 
@@ -883,7 +863,7 @@ class SnowflakeRestful(object):
         token_url = data[u'tokenUrl']
         sso_url = data[u'ssoUrl']
 
-        proxies = SnowflakeRestful.set_proxies(
+        proxies = set_proxies(
             self._proxy_host, self._proxy_port, self._proxy_user,
             self._proxy_password)
         self.logger.debug(u'token_url=%s, proxies=%s', token_url, proxies)

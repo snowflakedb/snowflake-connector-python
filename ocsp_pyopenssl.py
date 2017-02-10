@@ -513,7 +513,7 @@ def process_ocsp_response(response, ocsp_issuer):
     return single_response_map
 
 
-def execute_ocsp_request(ocsp_uri, cert_id, do_retry=True):
+def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
     """
     Executes OCSP request for the given cert id
     """
@@ -558,6 +558,7 @@ def execute_ocsp_request(ocsp_uri, cert_id, do_retry=True):
                 'Host': parsed_url.hostname.encode(
                     'utf-8'),
             },
+            proxies=proxies,
             data=data)
         if response.status_code == OK:
             logger.debug("OCSP response was successfully returned")
@@ -1014,13 +1015,15 @@ class SnowflakeOCSP(object):
     OCSP validator using PyOpenSSL.
     """
 
-    def __init__(self, must_use_cache=False, ocsp_response_cache_url=None):
+    def __init__(self, must_use_cache=False,
+                 proxies=None, ocsp_response_cache_url=None):
         """
         :param must_use_cache: Test purpose. must use cache or raises an error
         :param ocsp_response_cache_url: the location of cache file
         """
         self.logger = getLogger(__name__)
         self._must_use_cache = must_use_cache
+        self._proxies = proxies
         if ocsp_response_cache_url is None and CACHE_DIR is not None:
             self._ocsp_response_cache_url = 'file://' + path.join(
                 CACHE_DIR, 'ocsp_response_cache')
@@ -1148,8 +1151,10 @@ class SnowflakeOCSP(object):
                 if not cache_status:
                     # not cached or invalid
                     self.logger.info('getting OCSP response from remote')
-                    ocsp_response = execute_ocsp_request(ocsp_uri, cert_id,
-                                                         do_retry=do_retry)
+                    ocsp_response = execute_ocsp_request(
+                        ocsp_uri, cert_id,
+                        proxies=self._proxies,
+                        do_retry=do_retry)
                 else:
                     self.logger.info('using OCSP response cache')
                 single_response_map = process_ocsp_response(
@@ -1175,7 +1180,8 @@ class SnowflakeOCSP(object):
 
         return True, cert_id, ocsp_response
 
-    def generate_cert_id_response(self, hostname, connection, do_retry=True):
+    def generate_cert_id_response(
+            self, hostname, connection, proxies=None, do_retry=True):
         current_time = int(time.time())
         cert_data = _extract_certificate_chain(connection)
         results = {}
@@ -1188,7 +1194,8 @@ class SnowflakeOCSP(object):
             if ocsp_uri:
                 ret, cert_id, ocsp_response = \
                     self.validate_by_direct_connection(
-                        ocsp_uri, ocsp_issuer, ocsp_subject, do_retry)
+                        ocsp_uri, ocsp_issuer, ocsp_subject,
+                        do_retry=do_retry)
                 if ret and cert_id and ocsp_response:
                     cert_id_der = der_encoder.encode(cert_id)
                     results[cert_id_der] = (
@@ -1242,7 +1249,7 @@ Usage: {0} <url>
 
     ocsp = SnowflakeOCSP()
     connection = _openssl_connect(url, port)
-    results = ocsp.generate_cert_id_response(url, connection)
+    results = ocsp.generate_cert_id_response(url, connection, proxies=None)
     current_Time = int(time.time())
     print("Target URL: https://{0}:{1}/".format(url, port))
     print("Current Time: {0}".format(

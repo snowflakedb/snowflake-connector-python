@@ -18,6 +18,14 @@ OCSP Reponse cache file name
 """
 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 
+"""
+Proxy, shared across all connections
+"""
+PROXY_HOST = None
+PROXY_PORT = None
+PROXY_USER = None
+PROXY_PASSWORD = None
+
 # imports
 import select
 import socket
@@ -36,6 +44,7 @@ from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend
 from cryptography.hazmat.backends.openssl.x509 import _Certificate
 
+from .compat import (TO_UNICODE)
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
 from .ocsp_pyopenssl import SnowflakeOCSP
@@ -414,6 +423,8 @@ def ssl_wrap_socket_with_ocsp(
                 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME)
     if not FEATURE_INSECURE_MODE:
         v = SnowflakeOCSP(
+            proxies=set_proxies(PROXY_HOST, PROXY_PORT, PROXY_USER,
+                                PROXY_PASSWORD),
             ocsp_response_cache_url=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
         ).validate(server_hostname, ret.connection)
         if not v:
@@ -430,6 +441,38 @@ def ssl_wrap_socket_with_ocsp(
                     u'STATUS WILL NOT BE CHECKED.')
 
     return ret
+
+
+def set_proxies(proxy_host,
+                proxy_port,
+                proxy_user=None,
+                proxy_password=None):
+    """
+    Set proxy dict for requests
+    """
+    proxies = None
+    if proxy_host and proxy_port:
+        if proxy_user or proxy_password:
+            proxy_auth = u'{proxy_user}:{proxy_password}@'.format(
+                proxy_user=proxy_user if proxy_user is not None else '',
+                proxy_password=proxy_password if proxy_password is not
+                                                 None else ''
+            )
+        else:
+            proxy_auth = u''
+        proxies = {
+            u'http': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
+                proxy_host=proxy_host,
+                proxy_port=TO_UNICODE(proxy_port),
+                proxy_auth=proxy_auth,
+            ),
+            u'https': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
+                proxy_host=proxy_host,
+                proxy_port=TO_UNICODE(proxy_port),
+                proxy_auth=proxy_auth,
+            ),
+        }
+    return proxies
 
 
 def inject_into_urllib3():

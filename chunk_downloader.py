@@ -12,6 +12,7 @@ from threading import (Condition)
 from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
 from .network import (SnowflakeRestful, NO_TOKEN, MAX_CONNECTION_POOL)
+from .ssl_wrap_socket import (set_proxies)
 
 DEFAULT_REQUEST_TIMEOUT = 3600
 DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS = 2
@@ -262,7 +263,7 @@ class SnowflakeChunkDownloader(object):
         GET request for Large Result set chunkloader
         """
         # sharing the proxy and certificate
-        proxies = SnowflakeRestful.set_proxies(
+        proxies = set_proxies(
             self._connection.rest._proxy_host,
             self._connection.rest._proxy_port,
             self._connection.rest._proxy_user,
