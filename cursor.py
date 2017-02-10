@@ -66,7 +66,7 @@ class SnowflakeCursor(object):
 
         self._errorhandler = Error.default_errorhandler
         self.messages = []
-        self.timebomb = None
+        self._timebomb = None  # must be here for abort_exit method
         self._description = None
         self._column_idx_to_name = None
         self._sfqid = None
@@ -278,8 +278,9 @@ class SnowflakeCursor(object):
     def is_closed(self):
         return self._connection is None or self._connection.is_closed()
 
-    def _execute_helper(self, query, timeout=0, statement_params=None,
-                        is_internal=False, _no_results=False, _is_put_get=None):
+    def _execute_helper(
+            self, query, timeout=0, statement_params=None,
+            is_internal=False, _no_results=False, _is_put_get=None):
         del self.messages[:]
 
         if statement_params is not None and not isinstance(
@@ -296,14 +297,6 @@ class SnowflakeCursor(object):
         self._sequence_counter = self._connection._next_sequence_counter()
         self._request_id = uuid.uuid4()
 
-        real_timeout = timeout if timeout and timeout > 0 \
-            else self._connection.connect_timeout
-        if real_timeout is not None:
-            self.timebomb = Timer(real_timeout, self.__cancel_query, [query])
-        else:
-            self.timebomb = None
-        if self.timebomb is not None:
-            self.timebomb.start()
         if self.logger.getEffectiveLevel() <= logging.DEBUG:
             self.logger.debug(
                 u'running query [%s]',
@@ -319,13 +312,24 @@ class SnowflakeCursor(object):
         self.logger.debug(u'is_file_transfer: %s',
                           self._is_file_transfer is not None)
 
+        real_timeout = timeout if timeout and timeout > 0 \
+            else self._connection.request_timeout
+
+        if real_timeout is not None:
+            self._timebomb = Timer(
+                real_timeout, self.__cancel_query, [query])
+            self._timebomb.start()
+        else:
+            self._timebomb = None
+
         original_sigint = signal.getsignal(signal.SIGINT)
 
         def abort_exit(signum, frame):
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             try:
-                if self.timebomb is not None:
-                    self.timebomb.cancel()
+                if self._timebomb is not None:
+                    self._timebomb.cancel()
+                    self._timebomb = None
                 self.__cancel_query(query)
             finally:
                 signal.signal(signal.SIGINT, original_sigint)
@@ -334,20 +338,29 @@ class SnowflakeCursor(object):
         try:
             signal.signal(signal.SIGINT, abort_exit)
         except ValueError:
-            pass
-        ret = self._connection._cmd_query(
-            query,
-            self._sequence_counter,
-            self._request_id,
-            is_file_transfer=self._is_file_transfer,
-            statement_params=statement_params,
-            is_internal=is_internal,
-            _no_results=_no_results)
-
+            self.logger.info(
+                u'Failed to set SIGINT handler. '
+                u'Not in main thread. Ignored...')
         try:
-            signal.signal(signal.SIGINT, original_sigint)
-        except ValueError:
-            pass
+            ret = self._connection._cmd_query(
+                query,
+                self._sequence_counter,
+                self._request_id,
+                is_file_transfer=self._is_file_transfer,
+                statement_params=statement_params,
+                is_internal=is_internal,
+                _no_results=_no_results)
+        finally:
+            try:
+                signal.signal(signal.SIGINT, original_sigint)
+            except ValueError:
+                self.logger.info(
+                    u'Failed to reset SIGINT handler. Not in main '
+                    u'thread. Ignored...')
+            if self._timebomb is not None:
+                self._timebomb.cancel()
+            self.logger.debug(u'cancelled timebomb in finally')
+
         if u'data' in ret and u'parameters' in ret[u'data']:
             for kv in ret[u'data'][u'parameters']:
                 if u'TIMESTAMP_OUTPUT_FORMAT' in kv[u'name']:
@@ -373,10 +386,7 @@ class SnowflakeCursor(object):
             self._connection.converter.set_parameters(
                 ret[u'data'][u'parameters'])
 
-        if self.timebomb is not None:
-            self.timebomb.cancel()
         self._sequence_counter = -1
-        self.logger.debug(u'cancelled timebomb in finally')
         return ret
 
     def execute(self, command, params=None, timeout=None,
@@ -770,9 +780,10 @@ class SnowflakeCursor(object):
             self.logger.debug(u'canceled : %s, %s',
                               query, self._sequence_counter)
             with self._lock_canceling:
-                self._connection._cancel_query(query,
-                                               self._sequence_counter,
-                                               self._request_id)
+                self._connection._cancel_query(
+                    query,
+                    self._sequence_counter,
+                    self._request_id)
 
     def __process_params_dict(self, params):
         try:

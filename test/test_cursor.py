@@ -823,10 +823,6 @@ def test_execute_after_close(conn_testaccount):
         cursor.execute('show tables')
 
 
-def ctrlc():
-    raise KeyboardInterrupt("CTRL-C!")
-
-
 def test_cancel_query(conn_cnx):
     with conn_cnx() as cnx:
         # run one query first to set the client API version to V2
