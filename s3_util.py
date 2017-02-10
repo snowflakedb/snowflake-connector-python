@@ -204,7 +204,7 @@ class SnowflakeS3Util(object):
         put_callback = meta[u'put_callback']
         put_callback_output_stream = meta[u'put_callback_output_stream']
 
-        sleeping_time = 1
+        last_err = None
         retry = 5
         for t in range(retry):
             try:
@@ -231,26 +231,30 @@ class SnowflakeS3Util(object):
                     logger.debug(u"AWS Token expired. Renew and retry")
                     meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                     return
-                logger.debug(u"Failed to upload a file: %s", err)
+                logger.exception(
+                    u"Failed to upload a file: %s, err: %s",
+                    data_file, err)
                 raise err
-            except OpenSSL.SSL.SysCallError as err:
+            except (OpenSSL.SSL.SysCallError, S3UploadFailedError) as err:
+                last_err = err
                 if t == retry - 1 or err.args[0] not in (
                         errno.ECONNRESET,
                         errno.ETIMEDOUT,
                         errno.EPIPE,
                         -1):
                     raise err
-                logger.warn('Failed to upload a file [%s]. Retrying', err)
-                if sleeping_time < 16:
-                    sleeping_time *= 2
+                logger.info(
+                    'Failed to upload a file: %s, err: %s. Retrying',
+                    data_file, err)
+                sleeping_time = min(2 ** t, 16)
                 logger.debug(u"sleeping: %s", sleeping_time)
                 time.sleep(sleeping_time)
-            except S3UploadFailedError as err:
-                logger.debug(u"Failed to upload a file [%s]. Retrying", err)
-                if sleeping_time < 16:
-                    sleeping_time *= 2
-                logger.debug(u"sleeping: %s", sleeping_time)
-                time.sleep(sleeping_time)
+        else:
+            if last_err:
+                raise last_err
+            else:
+                raise Exception(
+                    "Unknown Error in uploading a file: %s", data_file)
 
         logger.debug(u'DONE putting a file')
         meta[u'dst_file_size'] = meta[u'upload_size']
@@ -298,7 +302,7 @@ class SnowflakeS3Util(object):
         get_callback = meta[u'get_callback']
         get_callback_output_stream = meta[u'get_callback_output_stream']
 
-        sleeping_time = 1
+        last_err = None
         retry = 5
         for t in range(retry):
             try:
@@ -321,26 +325,31 @@ class SnowflakeS3Util(object):
                     logger.debug(u"AWS Token expired. Renew and retry")
                     meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                     return
-                logger.debug(u"Failed to download a file: %s", e)
+                logger.exception(
+                    u"Failed to download a file: %s, err: %s",
+                    full_dst_file_name, err)
                 raise err
-            except OpenSSL.SSL.SysCallError as err:
+            except (OpenSSL.SSL.SysCallError, RetriesExceededError) as err:
+                last_err = err
                 if t == retry - 1 or err.args[0] not in (
                         errno.ECONNRESET,
                         errno.ETIMEDOUT,
                         errno.EPIPE,
                         -1):
                     raise err
-                logger.warn('Failed to download a file [%s]. Retrying', err)
-                if sleeping_time < 16:
-                    sleeping_time *= 2
+                logger.info(
+                    'Failed to download a file: %s, err: %s. Retrying',
+                    full_dst_file_name, err)
+                sleeping_time = min(2 ** t, 16)
                 logger.debug(u"sleeping: %s", sleeping_time)
                 time.sleep(sleeping_time)
-            except RetriesExceededError as err:
-                logger.debug(u"Failed to download a file [%s]. Retrying", err)
-                if sleeping_time < 16:
-                    sleeping_time *= 2
-                logger.debug(u"sleeping: %s", sleeping_time)
-                time.sleep(sleeping_time)
+        else:
+            if last_err:
+                raise last_err
+            else:
+                raise Exception(
+                    "Unknown Error in downloading a file: %s",
+                    full_dst_file_name)
 
         if u'encryption_material' in meta:
             akey = s3client.Object(s3location.bucket_name, s3path)
