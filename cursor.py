@@ -589,6 +589,14 @@ class SnowflakeCursor(object):
     def query_result(self, qid, _use_ijson=False):
         url = ('/queries/{qid}/result').format(qid=qid)
         ret = self._connection._con.request(url=url, method='get')
+        self._sfqid = ret[u'data'][
+            u'queryId'] if u'data' in ret and u'queryId' in ret[
+            u'data'] else None
+        self._sqlstate = ret[u'data'][
+            u'sqlState'] if u'data' in ret and u'sqlState' in ret[
+            u'data'] else None
+        self.logger.debug(u'sfqid=%s', self._sfqid)
+
         if ret.get(u'success'):
             data = ret.get(u'data')
             self.chunk_info(data, use_ijson=_use_ijson)
