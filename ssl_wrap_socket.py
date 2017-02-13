@@ -26,6 +26,36 @@ PROXY_PORT = None
 PROXY_USER = None
 PROXY_PASSWORD = None
 
+
+def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
+    """
+    Set proxy dict for requests
+    """
+    proxies = None
+    if proxy_host and proxy_port:
+        if proxy_user or proxy_password:
+            proxy_auth = u'{proxy_user}:{proxy_password}@'.format(
+                proxy_user=proxy_user if proxy_user is not None else '',
+                proxy_password=proxy_password if proxy_password is not
+                                                 None else ''
+            )
+        else:
+            proxy_auth = u''
+        proxies = {
+            u'http': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
+                proxy_host=proxy_host,
+                proxy_port=TO_UNICODE(proxy_port),
+                proxy_auth=proxy_auth,
+            ),
+            u'https': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
+                proxy_host=proxy_host,
+                proxy_port=TO_UNICODE(proxy_port),
+                proxy_auth=proxy_auth,
+            ),
+        }
+    return proxies
+
+
 # imports
 import select
 import socket
@@ -33,6 +63,23 @@ import ssl
 import sys
 from logging import getLogger
 from socket import error as SocketError
+
+import botocore.endpoint
+
+# Monkey patch for all connections for AWS API. This is mainly for PUT
+# and GET commands
+original_get_proxies = botocore.endpoint.EndpointCreator._get_proxies
+
+
+def _get_proxies(self, url):
+    return set_proxies(
+        PROXY_HOST,
+        PROXY_PORT,
+        PROXY_USER,
+        PROXY_PASSWORD) or original_get_proxies(self, url)
+
+
+botocore.endpoint.EndpointCreator._get_proxies = _get_proxies
 
 import OpenSSL
 import idna
@@ -441,38 +488,6 @@ def ssl_wrap_socket_with_ocsp(
                     u'STATUS WILL NOT BE CHECKED.')
 
     return ret
-
-
-def set_proxies(proxy_host,
-                proxy_port,
-                proxy_user=None,
-                proxy_password=None):
-    """
-    Set proxy dict for requests
-    """
-    proxies = None
-    if proxy_host and proxy_port:
-        if proxy_user or proxy_password:
-            proxy_auth = u'{proxy_user}:{proxy_password}@'.format(
-                proxy_user=proxy_user if proxy_user is not None else '',
-                proxy_password=proxy_password if proxy_password is not
-                                                 None else ''
-            )
-        else:
-            proxy_auth = u''
-        proxies = {
-            u'http': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
-                proxy_host=proxy_host,
-                proxy_port=TO_UNICODE(proxy_port),
-                proxy_auth=proxy_auth,
-            ),
-            u'https': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
-                proxy_host=proxy_host,
-                proxy_port=TO_UNICODE(proxy_port),
-                proxy_auth=proxy_auth,
-            ),
-        }
-    return proxies
 
 
 def inject_into_urllib3():
