@@ -25,6 +25,8 @@ PROXY_HOST = None
 PROXY_PORT = None
 PROXY_USER = None
 PROXY_PASSWORD = None
+PREFIX_HTTP = 'http://'
+PREFIX_HTTPS = 'https://'
 
 
 def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
@@ -33,6 +35,10 @@ def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
     """
     proxies = None
     if proxy_host and proxy_port:
+        if proxy_host.startswith(PREFIX_HTTP):
+            proxy_host = proxy_host[len(PREFIX_HTTP):]
+        elif proxy_host.startswith(PREFIX_HTTPS):
+            proxy_host = proxy_host[len(PREFIX_HTTPS):]
         if proxy_user or proxy_password:
             proxy_auth = u'{proxy_user}:{proxy_password}@'.format(
                 proxy_user=proxy_user if proxy_user is not None else '',
