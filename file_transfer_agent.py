@@ -55,7 +55,6 @@ INJECT_WAIT_IN_PUT = 0
 
 def _update_progress(file_name, start_time, total_size, progress,
                      output_stream):
-    full_width = 70
     barLength = 10  # Modify this to change the length of the progress bar
     total_size /= MB
     status = ""
