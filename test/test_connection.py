@@ -9,8 +9,8 @@ import pytest
 import snowflake.connector
 from snowflake.connector import (
     DatabaseError,
-    ProgrammingError)
-from snowflake.connector.errors import ForbiddenError
+    ProgrammingError, InterfaceError, OperationalError)
+from snowflake.connector.errors import (ForbiddenError)
 
 
 def test_basic(conn_testaccount):
@@ -237,4 +237,46 @@ def test_invalid_account_timeout():
             user='test',
             password='test',
             login_timeout=5
+        )
+
+
+@pytest.mark.timeout(15)
+def test_invalid_host():
+    with pytest.raises(InterfaceError):
+        snowflake.connector.connect(
+            account='bogus',
+            user='test',
+            password='test',
+            host='bogus.com',
+            login_timeout=5
+        )
+
+
+@pytest.mark.timeout(15)
+def test_invalid_port(db_parameters):
+    with pytest.raises(OperationalError):
+        snowflake.connector.connect(
+            protocol='http',
+            account='testaccount',
+            user=db_parameters['user'],
+            password=db_parameters['password'],
+            host=db_parameters['host'],
+            port=12345,
+            login_timeout=5,
+        )
+
+
+@pytest.mark.timeout(15)
+def test_invalid_proxy(db_parameters):
+    with pytest.raises(OperationalError):
+        snowflake.connector.connect(
+            protocol='http',
+            account='testaccount',
+            user=db_parameters['user'],
+            password=db_parameters['password'],
+            host=db_parameters['host'],
+            port=db_parameters['port'],
+            login_timeout=5,
+            proxy_host='localhost',
+            proxy_port='3333'
         )

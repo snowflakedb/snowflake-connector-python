@@ -6,7 +6,6 @@
 import copy
 import gzip
 import json
-import logging
 import platform
 import sys
 import time
@@ -276,9 +275,43 @@ class SnowflakeRestful(object):
             "body['data']: %s",
             {k: v for (k, v) in body[u'data'].items() if k != u'PASSWORD'})
 
-        ret = self._post_request(
-            url, headers, json.dumps(body),
-            timeout=self._connection._login_timeout)
+        try:
+            ret = self._post_request(
+                url, headers, json.dumps(body),
+                timeout=self._connection._login_timeout)
+        except ForbiddenError as err:
+            # HTTP 403
+            raise err.__class__(
+                msg=(u"Failed to connect to DB. "
+                     u"Verify the account name is correct: {host}:{port}, "
+                     u"proxies={proxy_host}:{proxy_port}, "
+                     u"proxy_user={proxy_user}. {message}").format(
+                    host=self._host,
+                    port=self._port,
+                    proxy_host=self._proxy_host,
+                    proxy_port=self._proxy_port,
+                    proxy_user=self._proxy_user,
+                    message=TO_UNICODE(err)
+                ),
+                errno=ER_FAILED_TO_CONNECT_TO_DB,
+                sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
+        except (ServiceUnavailableError, BadGatewayError) as err:
+            # HTTP 502/504
+            raise err.__class__(
+                msg=(u"Failed to connect to DB. "
+                     u"Service is unavailable: {host}:{port}, "
+                     u"proxies={proxy_host}:{proxy_port}, "
+                     u"proxy_user={proxy_user}. {message}").format(
+                    host=self._host,
+                    port=self._port,
+                    proxy_host=self._proxy_host,
+                    proxy_port=self._proxy_port,
+                    proxy_user=self._proxy_user,
+                    message=TO_UNICODE(err)
+                ),
+                errno=ER_FAILED_TO_CONNECT_TO_DB,
+                sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
+
         # this means we are waiting for MFA authentication
         if ret[u'data'].get(u'nextAction') and ret[u'data'][
             u'nextAction'] == u'EXT_AUTHN_DUO_ALL':
@@ -699,8 +732,7 @@ class SnowflakeRestful(object):
                     ProtocolError,
                     OpenSSL.SSL.SysCallError, ValueError) as err:
                 logger.exception('who is hitting error?')
-                if logger.getEffectiveLevel() <= logging.DEBUG:
-                    logger.debug(err)
+                logger.debug(err)
                 if not isinstance(err, OpenSSL.SSL.SysCallError) or \
                                 err.args[0] in (
                                 errno.ECONNRESET,
@@ -714,12 +746,14 @@ class SnowflakeRestful(object):
             except ConnectionError as err:
                 logger.exception(u'ConnectionError: %s', err)
                 result_queue.put((OperationalError(
+                    # no full_url is required in the message
+                    # as err includes all information
                     msg=u'Failed to connect: {0}'.format(err),
                     errno=ER_FAILED_TO_SERVER,
                     sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
                 ), False))
             except ValueError as err:
-                logger.exception(u'Return value is not JSON: %s', err)
+                logger.exception(u'Return value is NOT JSON: %s', err)
                 result_queue.put((InterfaceError(
                     msg=u"Failed to decode JSON output",
                     errno=ER_FAILED_TO_REQUEST,
@@ -752,10 +786,19 @@ class SnowflakeRestful(object):
                              request_thread_timeout,
                              request_timeout,
                              retry_cnt + 1)
+                start_request_thread = time.time()
                 th.join(timeout=request_thread_timeout)
                 logger.debug('request thread joined')
+                if request_timeout is not None:
+                    request_timeout -= min(
+                        int(time.time() - start_request_thread),
+                        request_timeout)
+                start_get_queue = time.time()
                 return_object, retryable = request_result_queue.get(
-                    timeout=int(request_thread_timeout / 2))
+                    timeout=int(request_thread_timeout / 4))
+                if request_timeout is not None:
+                    request_timeout -= min(
+                        int(time.time() - start_get_queue), request_timeout)
                 logger.debug('request thread returned object')
                 if retryable:
                     raise RequestRetry()
@@ -797,7 +840,41 @@ class SnowflakeRestful(object):
             time.sleep(sleeping_time)
             retry_cnt += 1
 
-        if isinstance(return_object, Error):
+        if return_object is None:
+            if data:
+                try:
+                    decoded_data = json.loads(data)
+                    if decoded_data.get(
+                            'data') and decoded_data['data'].get('PASSWORD'):
+                        # masking the password
+                        decoded_data['data']['PASSWORD'] = '********'
+                        data = json.dumps(decoded_data)
+                except:
+                    logger.info("data is not JSON")
+            logger.error(
+                u'Failed to get the response. Hanging? '
+                u'method: {method}, url: {url}, headers:{headers}, '
+                u'data: {data}, proxies: {proxies}'.format(
+                    method=method,
+                    url=full_url,
+                    headers=headers,
+                    data=data,
+                    proxies=proxies
+                )
+            )
+            Error.errorhandler_wrapper(
+                conn, None, OperationalError,
+                {
+                    u'msg': u'Failed to get the response. Hanging? '
+                            u'method: {method}, url: {url}, '
+                            u'proxies: {proxies}'.format(
+                        method=method,
+                        url=full_url,
+                        proxies=proxies
+                    ),
+                    u'errno': ER_FAILED_TO_REQUEST,
+                })
+        elif isinstance(return_object, Error):
             Error.errorhandler_wrapper(conn, None, return_object)
         elif isinstance(return_object, Exception):
             Error.errorhandler_wrapper(
@@ -844,7 +921,7 @@ class SnowflakeRestful(object):
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
                 {
-                    u'msg': (u"failed to connect to DB: {host}:{port}, "
+                    u'msg': (u"Failed to connect to DB: {host}:{port}, "
                              u"proxies={proxy_host}:{proxy_port}, "
                              u"proxy_user={proxy_user}, "
                              u"{message}").format(

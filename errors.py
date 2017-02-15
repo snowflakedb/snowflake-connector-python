@@ -162,47 +162,76 @@ class NotSupportedError(DatabaseError):
 class InternalServerError(Error):
     u"""Exception for 500 HTTP code for retry"""
 
-    def __init__(self, **_):
-        Error.__init__(self, msg=u'HTTP 500: InternalServerError')
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self,
+            msg=kwargs.get('msg') or u'HTTP 500: Internal Server Error',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
 
 
 class ServiceUnavailableError(Error):
     u"""Exception for 503 HTTP code for retry"""
 
-    def __init__(self, **_):
-        Error.__init__(self, msg=u'HTTP 503: ServiceUnavailable')
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP 503: Service Unavailable',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
 
 
 class GatewayTimeoutError(Error):
     u"""Exception for 504 HTTP error for retry"""
 
-    def __init__(self, **_):
-        Error.__init__(self, msg=u'HTTP 504: GatewayTimeout')
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP 504: Gateway Timeout',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
 
 
 class ForbiddenError(Error):
     """Exception for 403 HTTP error for retry"""
 
-    def __init__(self, **_):
-        Error.__init__(self, msg=u'HTTP 403: Forbidden')
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP 403: Forbidden',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
 
 
 class RequestTimeoutError(Error):
     u"""Exception for 408 HTTP error for retry"""
 
-    def __init__(self, **_):
-        Error.__init__(self, msg=u'HTTP 408: RequestTimeout')
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP 408: Request Timeout',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
 
 
 class BadRequest(Error):
     u"""Exception for 400 HTTP error for retry"""
 
-    def __init__(self, **_):
-        Error.__init__(self, msg=u'HTTP 400: BadRequest')
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP 400: Bad Request',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
 
 
 class BadGatewayError(Error):
     u"""Exception for 502 HTTP error for retry"""
 
-    def __init__(self, **_):
-        Error.__init__(self, msg=u'HTTP 502: BadGateway')
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP 502: Bad Gateway',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
