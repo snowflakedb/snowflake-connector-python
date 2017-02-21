@@ -539,25 +539,25 @@ def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
     # transform objects into data in requests
     data = der_encoder.encode(ocsp_request)
     parsed_url = urlsplit(ocsp_uri)
-    ip = socket.gethostbyname(parsed_url.hostname)
-    new_uri = urlunsplit((parsed_url.scheme, ip, parsed_url.path,
-                          parsed_url.query, parsed_url.fragment))
     session = requests.Session()
     session.mount('http://', HTTPAdapter(max_retries=5))
     session.mount('https://', HTTPAdapter(max_retries=5))
 
     max_retry = 100 if do_retry else 1
     # NOTE: This retry is to retry getting HTTP 200.
+    headers = {
+        'Content-Type': 'application/ocsp-request',
+        'Content-Length': '{0}'.format(
+            len(data)),
+        'Host': parsed_url.hostname.encode(
+            'utf-8'),
+    }
+    logger.debug('url: %s, headers: %s, proxies: %s',
+                 ocsp_uri, headers, proxies)
     for attempt in range(max_retry):
         response = session.post(
-            new_uri,
-            headers={
-                'Content-Type': 'application/ocsp-request',
-                'Content-Length': '{0}'.format(
-                    len(data)),
-                'Host': parsed_url.hostname.encode(
-                    'utf-8'),
-            },
+            ocsp_uri,
+            headers=headers,
             proxies=proxies,
             data=data)
         if response.status_code == OK:
