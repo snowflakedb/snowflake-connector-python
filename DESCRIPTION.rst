@@ -9,6 +9,17 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.14 (February 24, 2017)
+
+    - Improved PUT and GET error handler.
+    - Added proxy support to OCSP checks.
+    - Use proxy parameters for PUT and GET commands.
+    - Added ``sfqid`` and ``sqlstate`` to the results from query results.
+    - Fixed the connection timeout calculation based on ``login_timeout`` and ``network_timeout``.
+    - Improved error messages in case of 403, 502 and 504 HTTP reponse code.
+    - Upgraded ``cryptography`` to 1.7.2, ``boto3`` to 1.4.4 and ``botocore`` to 1.5.14.
+    - Removed explicit DNS lookup for OCSP URL.
+
 - v1.3.13 (February 9, 2017)
 
     - Fixed AWS SQS connection error with OCSP checks
