@@ -883,3 +883,13 @@ def test_fetch_before_execute(conn_testaccount):
 def test_close_twice(conn_testaccount):
     conn_testaccount.close()
     conn_testaccount.close()
+
+
+def test_fetch_out_of_range_timestamp_value(conn):
+    with conn() as cnx:
+        cur = cnx.cursor()
+        cur.execute("""
+select '12345-01-02'::timestamp_ntz
+""")
+        with pytest.raises(errors.InterfaceError):
+            cur.fetchone()
