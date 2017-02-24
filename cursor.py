@@ -860,7 +860,7 @@ class SnowflakeCursor(object):
                           u'field {name}: {type}::{value}, Error: ' \
                           u'{error}'.format(
                         name=col_desc[0],
-                        type=FIELD_ID_TO_NAME(col_desc[1]),
+                        type=FIELD_ID_TO_NAME[col_desc[1]],
                         value=col,
                         error=e
                     )
@@ -910,7 +910,7 @@ class DictCursor(SnowflakeCursor):
                           u'field {name}: {type}::{value}, Error: ' \
                           u'{error}'.format(
                         name=col_desc[0],
-                        type=FIELD_ID_TO_NAME(col_desc[1]),
+                        type=FIELD_ID_TO_NAME[col_desc[1]],
                         value=col,
                         error=e
                     )
