@@ -35,6 +35,7 @@ except ImportError:
 import logging
 from logging import getLogger
 
+
 # default configs
 DEFAULT_CONFIGURATION = {
     u'dsn': None,  # standard
@@ -72,7 +73,6 @@ DEFAULT_CONFIGURATION = {
     u'session_parameters': None,  # snowflake internal
     u'autocommit': None,  # snowflake
     u'numpy': False,  # snowflake
-    u'max_connection_pool': network.MAX_CONNECTION_POOL,  # snowflake internal
     u'ocsp_response_cache_filename': None,  # snowflake internal
     u'converter_class': SnowflakeConverter,  # snowflake internal
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
@@ -428,7 +428,6 @@ class SnowflakeConnection(object):
             connect_timeout=self._connect_timeout,
             request_timeout=self._request_timeout,
             injectClientPause=self._injectClientPause,
-            max_connection_pool=self._max_connection_pool,
             connection=self)
         self.logger.debug(u'REST API object was created: %s:%s, proxy=%s:%s, '
                           u'proxy_user=%s',
