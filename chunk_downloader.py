@@ -11,7 +11,7 @@ from threading import (Condition)
 
 from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
-from .network import (SnowflakeRestful, NO_TOKEN, MAX_CONNECTION_POOL)
+from .network import (SnowflakeRestful, NO_TOKEN, make_session)
 from .ssl_wrap_socket import (set_proxies)
 
 DEFAULT_REQUEST_TIMEOUT = 3600
@@ -126,9 +126,7 @@ class SnowflakeChunkDownloader(object):
 
             logger.debug(u"started getting the result set %s: %s",
                          idx + 1, self._chunks[idx].url)
-            result_data = self._get_request(
-                self._chunks[idx].url,
-                headers, max_connection_pool=self._effective_threads)
+            result_data = self._get_request(self._chunks[idx].url, headers)
             logger.debug(u"finished getting the result set %s: %s",
                          idx + 1, self._chunks[idx].url)
 
@@ -255,10 +253,7 @@ class SnowflakeChunkDownloader(object):
             # ignore all errors in the destructor
             pass
 
-    def _get_request(
-            self, url, headers,
-            is_raw_binary_iterator=True,
-            max_connection_pool=MAX_CONNECTION_POOL):
+    def _get_request(self, url, headers, is_raw_binary_iterator=True):
         """
         GET request for Large Result set chunkloader
         """
@@ -273,7 +268,7 @@ class SnowflakeChunkDownloader(object):
 
         return SnowflakeRestful.access_url(
             self._connection,
-            self,
+            make_session(),
             u'get',
             full_url=url,
             headers=headers,
@@ -285,5 +280,4 @@ class SnowflakeChunkDownloader(object):
             token=NO_TOKEN,
             is_raw_binary=True,
             is_raw_binary_iterator=is_raw_binary_iterator,
-            max_connection_pool=max_connection_pool,
             use_ijson=self._use_ijson)

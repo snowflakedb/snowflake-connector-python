@@ -3,6 +3,8 @@
 #
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
+import collections
+import contextlib
 import copy
 import gzip
 import json
@@ -16,7 +18,7 @@ from threading import Thread
 
 import OpenSSL
 from botocore.vendored import requests
-from botocore.vendored.requests.adapters import (HTTPAdapter, DEFAULT_POOLSIZE)
+from botocore.vendored.requests.adapters import HTTPAdapter
 from botocore.vendored.requests.auth import AuthBase
 from botocore.vendored.requests.exceptions import (ConnectionError, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
@@ -69,8 +71,6 @@ REQUEST_TYPE_ISSUE = u'ISSUE'
 HEADER_AUTHORIZATION_KEY = u"Authorization"
 HEADER_SNOWFLAKE_TOKEN = u'Snowflake Token="{token}"'
 
-MAX_CONNECTION_POOL = DEFAULT_POOLSIZE  # max connetion pool size in urllib3
-
 SNOWFLAKE_CONNECTOR_VERSION = u'.'.join(TO_UNICODE(v) for v in VERSION[0:3])
 PYTHON_VERSION = u'.'.join(TO_UNICODE(v) for v in sys.version_info[:3])
 PLATFORM = platform.platform()
@@ -97,6 +97,14 @@ STATUS_TO_EXCEPTION = {
     BAD_REQUEST: BadRequest,
     BAD_GATEWAY: BadGatewayError,
 }
+
+
+def make_session():
+    """ Make a custom requests.Session instance. """
+    s = requests.Session()
+    s.mount(u'http://', HTTPAdapter(max_retries=REQUESTS_RETRY))
+    s.mount(u'https://', HTTPAdapter(max_retries=REQUESTS_RETRY))
+    return s
 
 
 class RequestRetry(Exception):
@@ -135,7 +143,6 @@ class SnowflakeRestful(object):
                  connect_timeout=DEFAULT_CONNECT_TIMEOUT,
                  request_timeout=DEFAULT_REQUEST_TIMEOUT,
                  injectClientPause=0,
-                 max_connection_pool=MAX_CONNECTION_POOL,
                  connection=None):
         self._host = host
         self._port = port
@@ -146,10 +153,10 @@ class SnowflakeRestful(object):
         self._protocol = protocol
         self._connect_timeout = connect_timeout or DEFAULT_CONNECT_TIMEOUT
         self._request_timeout = request_timeout or DEFAULT_REQUEST_TIMEOUT
-        self._session = None
         self._injectClientPause = injectClientPause
-        self._max_connection_pool = max_connection_pool
         self._connection = connection
+        self._avail_sessions = collections.deque()
+        self._active_sessions = set()
         self.logger = getLogger(__name__)
 
         # insecure mode (disabled by default)
@@ -181,7 +188,17 @@ class SnowflakeRestful(object):
             del self._token
         if hasattr(self, u'_master_token'):
             del self._master_token
-        self._session = None
+        sessions = list(self._active_sessions)
+        if sessions:
+            self.logger.warn("Closing %d active sessions" % len(sessions))
+        sessions.extend(self._avail_sessions)
+        self._active_sessions.clear()
+        self._avail_sessions.clear()
+        for s in sessions:
+            try:
+                s.close()
+            except Exception as e:
+                self.logger.warn("Session cleanup failed: %s" % e)
 
     def authenticate(self, account, user, password, master_token=None,
                      token=None, database=None, schema=None,
@@ -527,17 +544,20 @@ class SnowflakeRestful(object):
             self._proxy_password
         )
         self.logger.debug(u'url=%s, proxies=%s', full_url, proxies)
-        ret = SnowflakeRestful.access_url(
-            conn=self._connection,
-            session_context=self,
-            method=u'get',
-            full_url=full_url,
-            headers=headers,
-            data=None,
-            proxies=proxies,
-            timeout=(self._connect_timeout, self._connect_timeout, timeout),
-            token=token,
-            max_connection_pool=self._max_connection_pool)
+        with self._use_session() as session:
+            ret = SnowflakeRestful.access_url(
+                conn=self._connection,
+                session=session,
+                method=u'get',
+                full_url=full_url,
+                headers=headers,
+                data=None,
+                proxies=proxies,
+                timeout=(
+                    self._connect_timeout,
+                    self._connect_timeout,
+                    timeout),
+                token=token)
 
         if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
@@ -561,18 +581,18 @@ class SnowflakeRestful(object):
             self._proxy_host, self._proxy_port, self._proxy_user,
             self._proxy_password)
 
-        ret = SnowflakeRestful.access_url(
-            conn=self._connection,
-            session_context=self,
-            method=u'post',
-            full_url=full_url,
-            headers=headers,
-            data=body,
-            proxies=proxies,
-            timeout=(
-                self._connect_timeout, self._connect_timeout, timeout),
-            token=token,
-            max_connection_pool=self._max_connection_pool)
+        with self._use_session() as session:
+            ret = SnowflakeRestful.access_url(
+                conn=self._connection,
+                session=session,
+                method=u'post',
+                full_url=full_url,
+                headers=headers,
+                data=body,
+                proxies=proxies,
+                timeout=(
+                    self._connect_timeout, self._connect_timeout, timeout),
+                token=token)
         self.logger.debug(
             u'ret[code] = {code}, after post request'.format(
                 code=(ret.get(u'code', u'N/A'))))
@@ -622,18 +642,16 @@ class SnowflakeRestful(object):
         return ret
 
     @staticmethod
-    def access_url(conn, session_context, method, full_url, headers, data,
+    def access_url(conn, session, method, full_url, headers, data,
                    proxies, timeout=(
                     DEFAULT_CONNECT_TIMEOUT,
                     DEFAULT_CONNECT_TIMEOUT,
                     DEFAULT_REQUEST_TIMEOUT),
-                   requests_retry=REQUESTS_RETRY,
                    token=None,
                    is_raw_text=False,
                    catch_okta_unauthorized_error=False,
                    is_raw_binary=False,
                    is_raw_binary_iterator=True,
-                   max_connection_pool=MAX_CONNECTION_POOL,
                    use_ijson=False, is_single_thread=False):
         logger = getLogger(__name__)
 
@@ -643,21 +661,6 @@ class SnowflakeRestful(object):
 
         def request_thread(result_queue):
             try:
-                if session_context._session is None:
-                    session_context._session = requests.Session()
-                    session_context._session.mount(
-                        u'http://',
-                        HTTPAdapter(
-                            pool_connections=int(max_connection_pool),
-                            pool_maxsize=int(max_connection_pool),
-                            max_retries=requests_retry))
-                    session_context._session.mount(
-                        u'https://',
-                        HTTPAdapter(
-                            pool_connections=int(max_connection_pool),
-                            pool_maxsize=int(max_connection_pool),
-                            max_retries=requests_retry))
-
                 if not catch_okta_unauthorized_error and data and len(data) > 0:
                     gzdata = BytesIO()
                     gzip.GzipFile(fileobj=gzdata, mode=u'wb').write(
@@ -668,7 +671,7 @@ class SnowflakeRestful(object):
                 else:
                     input_data = data
 
-                raw_ret = session_context._session.request(
+                raw_ret = session.request(
                     method=method,
                     url=full_url,
                     proxies=proxies,
@@ -952,7 +955,6 @@ class SnowflakeRestful(object):
         self.logger.debug(u'token url: %s', token_url)
         ret = SnowflakeRestful.access_url(
             conn=self._connection,
-            session_context=self,
             method=u'post',
             full_url=token_url,
             headers=headers,
@@ -976,7 +978,6 @@ class SnowflakeRestful(object):
         self.logger.debug(u'sso url: %s', sso_url)
         ret = SnowflakeRestful.access_url(
             conn=self._connection,
-            session_context=self,
             method=u'get',
             full_url=sso_url,
             headers=headers,
@@ -987,3 +988,19 @@ class SnowflakeRestful(object):
                      self._connection._login_timeout),
             is_raw_text=True)
         return ret
+
+    @contextlib.contextmanager
+    def _use_session(self):
+        """ Session caching context manager.  Note that the session is not
+        closed until Snowflakerestful.close is called so each session may be
+        used multiple times. """
+        try:
+            session = self._avail_sessions.pop()
+        except IndexError:
+            session = make_session()
+        self._active_sessions.add(session)
+        try:
+            yield session
+        finally:
+            self._avail_sessions.appendleft(session)
+            self._active_sessions.remove(session)
