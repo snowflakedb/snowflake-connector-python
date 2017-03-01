@@ -7,13 +7,14 @@ import collections
 import contextlib
 import copy
 import gzip
+import itertools
 import json
+import logging
 import platform
 import sys
 import time
 import uuid
 from io import StringIO, BytesIO
-from logging import getLogger
 from threading import Thread
 
 import OpenSSL
@@ -39,13 +40,15 @@ from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      GatewayTimeoutError, ServiceUnavailableError,
                      InterfaceError, InternalServerError, ForbiddenError,
                      BadGatewayError, BadRequest)
-from .gzip_decoder import (decompress_raw_data)
+from .gzip_decoder import decompress_raw_data
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                        SQLSTATE_CONNECTION_REJECTED)
-from .ssl_wrap_socket import (set_proxies)
+from .ssl_wrap_socket import set_proxies
 from .util_text import split_rows_from_stream
 from .version import VERSION
+
+logger = logging.getLogger(__name__)
 
 """
 Monkey patch for PyOpenSSL Socket wrapper
@@ -99,14 +102,6 @@ STATUS_TO_EXCEPTION = {
 }
 
 
-def make_session():
-    """ Make a custom requests.Session instance. """
-    s = requests.Session()
-    s.mount(u'http://', HTTPAdapter(max_retries=REQUESTS_RETRY))
-    s.mount(u'https://', HTTPAdapter(max_retries=REQUESTS_RETRY))
-    return s
-
-
 class RequestRetry(Exception):
     pass
 
@@ -155,9 +150,9 @@ class SnowflakeRestful(object):
         self._request_timeout = request_timeout or DEFAULT_REQUEST_TIMEOUT
         self._injectClientPause = injectClientPause
         self._connection = connection
-        self._avail_sessions = collections.deque()
+        self._idle_sessions = collections.deque()
         self._active_sessions = set()
-        self.logger = getLogger(__name__)
+        self._request_count = itertools.count()
 
         # insecure mode (disabled by default)
         ssl_wrap_socket.FEATURE_INSECURE_MODE = \
@@ -190,15 +185,15 @@ class SnowflakeRestful(object):
             del self._master_token
         sessions = list(self._active_sessions)
         if sessions:
-            self.logger.warn("Closing %d active sessions" % len(sessions))
-        sessions.extend(self._avail_sessions)
+            logger.warn("Closing %d active sessions" % len(sessions))
+        sessions.extend(self._idle_sessions)
         self._active_sessions.clear()
-        self._avail_sessions.clear()
+        self._idle_sessions.clear()
         for s in sessions:
             try:
                 s.close()
             except Exception as e:
-                self.logger.warn("Session cleanup failed: %s" % e)
+                logger.warn("Session cleanup failed: %s" % e)
 
     def authenticate(self, account, user, password, master_token=None,
                      token=None, database=None, schema=None,
@@ -206,12 +201,12 @@ class SnowflakeRestful(object):
                      passcode_in_password=False, saml_response=None,
                      mfa_callback=None, password_callback=None,
                      session_parameters=None):
-        self.logger.info(u'authenticate')
+        logger.info(u'authenticate')
 
         if token and master_token:
             self._token = token
             self._master_token = token
-            self.logger.debug(u'token is given. no authentication was done')
+            logger.debug(u'token is given. no authentication was done')
             return
 
         application = self._connection.application if \
@@ -246,14 +241,14 @@ class SnowflakeRestful(object):
         }
 
         body = copy.deepcopy(body_template)
-        self.logger.info(u'saml: %s', saml_response is not None)
+        logger.info(u'saml: %s', saml_response is not None)
         if saml_response:
             body[u'data'][u'RAW_SAML_RESPONSE'] = saml_response
         else:
             body[u'data'][u"LOGIN_NAME"] = user
             body[u'data'][u"PASSWORD"] = password
 
-        self.logger.debug(
+        logger.debug(
             u'account=%s, user=%s, database=%s, schema=%s, '
             u'warehouse=%s, role=%s, request_id=%s',
             account,
@@ -288,7 +283,7 @@ class SnowflakeRestful(object):
         if session_parameters:
             body[u'data'][u'SESSION_PARAMETERS'] = session_parameters
 
-        self.logger.debug(
+        logger.debug(
             "body['data']: %s",
             {k: v for (k, v) in body[u'data'].items() if k != u'PASSWORD'})
 
@@ -376,7 +371,7 @@ class SnowflakeRestful(object):
                     url, headers, json.dumps(body),
                     timeout=self._connection._login_timeout)
 
-        self.logger.debug(u'completed authentication')
+        logger.debug(u'completed authentication')
         if not ret[u'success']:
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
@@ -398,8 +393,8 @@ class SnowflakeRestful(object):
         else:
             self._token = ret[u'data'][u'token']
             self._master_token = ret[u'data'][u'masterToken']
-            self.logger.debug(u'token = %s', self._token)
-            self.logger.debug(u'master_token = %s', self._master_token)
+            logger.debug(u'token = %s', self._token)
+            logger.debug(u'master_token = %s', self._master_token)
             if u'sessionId' in ret[u'data']:
                 self._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
@@ -456,15 +451,15 @@ class SnowflakeRestful(object):
                     u'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
                 })
 
-        self.logger.debug(u'updating session')
-        self.logger.debug(u'master_token: %s', self._master_token)
+        logger.debug(u'updating session')
+        logger.debug(u'master_token: %s', self._master_token)
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": CONTENT_TYPE_APPLICATION_JSON,
             u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
         }
         request_id = TO_UNICODE(uuid.uuid4())
-        self.logger.debug(u'request_id: %s', request_id)
+        logger.debug(u'request_id: %s', request_id)
         url = u'/session/token-request?' + urlencode({
             u'requestId': request_id})
 
@@ -479,13 +474,13 @@ class SnowflakeRestful(object):
             timeout=self._connection._network_timeout)
         if ret[u'success'] and u'data' in ret \
                 and u'sessionToken' in ret[u'data']:
-            self.logger.debug(u'success: %s', ret)
+            logger.debug(u'success: %s', ret)
             self._token = ret[u'data'][u'sessionToken']
             self._master_token = ret[u'data'][u'masterToken']
-            self.logger.debug(u'updating session completed')
+            logger.debug(u'updating session completed')
             return ret
         else:
-            self.logger.debug(u'failed: %s', ret)
+            logger.debug(u'failed: %s', ret)
             err = ret[u'message']
             if u'data' in ret and u'errorMessage' in ret[u'data']:
                 err += ret[u'data'][u'errorMessage']
@@ -539,29 +534,11 @@ class SnowflakeRestful(object):
             port=self._port,
             url=url,
         )
-        proxies = set_proxies(
-            self._proxy_host, self._proxy_port, self._proxy_user,
-            self._proxy_password
-        )
-        self.logger.debug(u'url=%s, proxies=%s', full_url, proxies)
-        with self._use_session() as session:
-            ret = SnowflakeRestful.access_url(
-                conn=self._connection,
-                session=session,
-                method=u'get',
-                full_url=full_url,
-                headers=headers,
-                data=None,
-                proxies=proxies,
-                timeout=(
-                    self._connect_timeout,
-                    self._connect_timeout,
-                    timeout),
-                token=token)
-
+        ret = self.fetch(u'get', full_url, headers, timeout=timeout,
+                         token=token)
         if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
-            self.logger.debug(
+            logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret[u'code'] if u'code' in ret else u'N/A')))
             if u'success' in ret and ret[u'success']:
@@ -577,29 +554,15 @@ class SnowflakeRestful(object):
             port=self._port,
             url=url,
         )
-        proxies = set_proxies(
-            self._proxy_host, self._proxy_port, self._proxy_user,
-            self._proxy_password)
-
-        with self._use_session() as session:
-            ret = SnowflakeRestful.access_url(
-                conn=self._connection,
-                session=session,
-                method=u'post',
-                full_url=full_url,
-                headers=headers,
-                data=body,
-                proxies=proxies,
-                timeout=(
-                    self._connect_timeout, self._connect_timeout, timeout),
-                token=token)
-        self.logger.debug(
+        ret = self.fetch(u'post', full_url, headers, data=body,
+                         timeout=timeout, token=token)
+        logger.debug(
             u'ret[code] = {code}, after post request'.format(
                 code=(ret.get(u'code', u'N/A'))))
 
         if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
-            self.logger.debug(
+            logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret[u'code'] if u'code' in ret else u'N/A')))
             if u'success' in ret and ret[u'success']:
@@ -615,23 +578,23 @@ class SnowflakeRestful(object):
         while is_session_renewed or u'code' in ret and ret[u'code'] in \
                 (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
             if self._injectClientPause > 0:
-                self.logger.debug(
+                logger.debug(
                     u'waiting for {inject_client_pause}...'.format(
                         inject_client_pause=self._injectClientPause))
                 time.sleep(self._injectClientPause)
             # ping pong
             result_url = ret[u'data'][
                 u'getResultUrl'] if not is_session_renewed else result_url
-            self.logger.debug(u'ping pong starting...')
+            logger.debug(u'ping pong starting...')
             ret = self._get_request(
                 result_url, headers, token=self._token, timeout=timeout)
-            self.logger.debug(
+            logger.debug(
                 u'ret[code] = %s',
                 ret[u'code'] if u'code' in ret else u'N/A')
-            self.logger.debug(u'ping pong done')
+            logger.debug(u'ping pong done')
             if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
                 ret = self._renew_session()
-                self.logger.debug(
+                logger.debug(
                     u'ret[code] = %s after renew_session',
                     ret[u'code'] if u'code' in ret else u'N/A')
                 if u'success' in ret and ret[u'success']:
@@ -641,25 +604,40 @@ class SnowflakeRestful(object):
 
         return ret
 
-    @staticmethod
-    def access_url(conn, session, method, full_url, headers, data,
-                   proxies, timeout=(
-                    DEFAULT_CONNECT_TIMEOUT,
-                    DEFAULT_CONNECT_TIMEOUT,
-                    DEFAULT_REQUEST_TIMEOUT),
-                   token=None,
-                   is_raw_text=False,
-                   catch_okta_unauthorized_error=False,
-                   is_raw_binary=False,
-                   is_raw_binary_iterator=True,
-                   use_ijson=False, is_single_thread=False):
-        logger = getLogger(__name__)
+    def fetch(self, method, full_url, headers, *, data=None, timeout=None, **kwargs):
+        """ Curried API request with session management. """
+        if timeout is not None and 'timeouts' in kwargs:
+            raise TypeError("Mutually exclusive args: timeout, timeouts")
+        if timeout is None:
+            timeout = self._request_timeout
+        timeouts = kwargs.pop('timeouts', (self._connect_timeout,
+                                           self._connect_timeout, timeout))
+        proxies = set_proxies(self._proxy_host, self._proxy_port,
+                              self._proxy_user, self._proxy_password)
+        with self._use_requests_session() as session:
+            return self._fetch(session, method, full_url, headers, data,
+                               proxies, timeouts, **kwargs)
 
-        connection_timeout = timeout[0:2]
-        request_timeout = timeout[2]  # total request timeout
-        request_thread_timeout = 60  # one request thread timeout
+    def _fetch(self, session, method, full_url, headers, data, proxies,
+               timeouts=(DEFAULT_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT,
+                         DEFAULT_REQUEST_TIMEOUT),
+               token=NO_TOKEN,
+               is_raw_text=False,
+               catch_okta_unauthorized_error=False,
+               is_raw_binary=False,
+               is_raw_binary_iterator=True,
+               use_ijson=False, is_single_thread=False):
+        """ This is the lowest level of HTTP handling.  All arguments culminate
+        here and the `requests.request` is issued and monitored from this
+        call using an inline thread for timeout monitoring. """
+        connection_timeout = timeouts[0:2]
+        request_timeout = timeouts[2]  # total request timeout
+        request_exec_timeout = 60  # one request thread timeout
+        conn = self._connection
+        proxies = set_proxies(conn.rest._proxy_host, conn.rest._proxy_port,
+                              conn.rest._proxy_user, conn.rest._proxy_password)
 
-        def request_thread(result_queue):
+        def request_exec(result_queue):
             try:
                 if not catch_okta_unauthorized_error and data and len(data) > 0:
                     gzdata = BytesIO()
@@ -765,7 +743,7 @@ class SnowflakeRestful(object):
         if is_single_thread:
             # This is dedicated code for DELETE SESSION when Python exists.
             request_result_queue = Queue()
-            request_thread(request_result_queue)
+            request_exec(request_result_queue)
             try:
                 # don't care about the return value, because no retry and
                 # no error will show up
@@ -778,19 +756,19 @@ class SnowflakeRestful(object):
         while True:
             return_object = None
             request_result_queue = Queue()
-            th = Thread(name='request_thread', target=request_thread,
-                        args=(request_result_queue,))
+            th = Thread(name='RequestExec-%d' % next(self._request_count),
+                        target=request_exec, args=(request_result_queue,))
             th.daemon = True
             th.start()
             try:
                 logger.debug('request thread timeout: %s, '
                              'rest of request timeout: %s, '
                              'retry cnt: %s',
-                             request_thread_timeout,
+                             request_exec_timeout,
                              request_timeout,
                              retry_cnt + 1)
                 start_request_thread = time.time()
-                th.join(timeout=request_thread_timeout)
+                th.join(timeout=request_exec_timeout)
                 logger.debug('request thread joined')
                 if request_timeout is not None:
                     request_timeout -= min(
@@ -798,7 +776,7 @@ class SnowflakeRestful(object):
                         request_timeout)
                 start_get_queue = time.time()
                 return_object, retryable = request_result_queue.get(
-                    timeout=int(request_thread_timeout / 4))
+                    timeout=int(request_exec_timeout / 4))
                 if request_timeout is not None:
                     request_timeout -= min(
                         int(time.time() - start_get_queue), request_timeout)
@@ -889,11 +867,18 @@ class SnowflakeRestful(object):
                 })
         return return_object
 
+    def make_requests_session(self):
+        s = requests.Session()
+        s.mount(u'http://', HTTPAdapter(max_retries=REQUESTS_RETRY))
+        s.mount(u'https://', HTTPAdapter(max_retries=REQUESTS_RETRY))
+        s._reuse_count = itertools.count()
+        return s
+
     def authenticate_by_saml(self, authenticator, account, user, password):
         u"""
         SAML Authentication
         """
-        self.logger.info(u'authenticating by SAML')
+        logger.info(u'authenticating by SAML')
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": CONTENT_TYPE_APPLICATION_JSON,
@@ -910,7 +895,7 @@ class SnowflakeRestful(object):
             },
         }
 
-        self.logger.debug(
+        logger.debug(
             u'account=%s, authenticator=%s',
             account, authenticator,
         )
@@ -943,27 +928,13 @@ class SnowflakeRestful(object):
         token_url = data[u'tokenUrl']
         sso_url = data[u'ssoUrl']
 
-        proxies = set_proxies(
-            self._proxy_host, self._proxy_port, self._proxy_user,
-            self._proxy_password)
-        self.logger.debug(u'token_url=%s, proxies=%s', token_url, proxies)
-
         data = {
             u'username': user,
             u'password': password,
         }
-        self.logger.debug(u'token url: %s', token_url)
-        ret = SnowflakeRestful.access_url(
-            conn=self._connection,
-            method=u'post',
-            full_url=token_url,
-            headers=headers,
-            data=json.dumps(data),
-            proxies=proxies,
-            timeout=(self._connect_timeout,
-                     self._connect_timeout,
-                     self._connection._login_timeout),
-            catch_okta_unauthorized_error=True)
+        ret = self.fetch(u'post', token_url, headers, data=json.dumps(data),
+                         timeout=self._connection._login_timeout,
+                         catch_okta_unauthorized_error=True)
 
         one_time_token = ret[u'cookieToken']
         url_parameters = {
@@ -975,32 +946,28 @@ class SnowflakeRestful(object):
         headers = {
             u"Accept": u'*/*',
         }
-        self.logger.debug(u'sso url: %s', sso_url)
-        ret = SnowflakeRestful.access_url(
-            conn=self._connection,
-            method=u'get',
-            full_url=sso_url,
-            headers=headers,
-            data=None,
-            proxies=proxies,
-            timeout=(self._connect_timeout,
-                     self._connect_timeout,
-                     self._connection._login_timeout),
-            is_raw_text=True)
-        return ret
+        return self.fetch(u'get', sso_url, headers,
+                          timeout=self._connection._login_timeout,
+                          is_raw_text=True)
 
     @contextlib.contextmanager
-    def _use_session(self):
+    def _use_requests_session(self):
         """ Session caching context manager.  Note that the session is not
-        closed until Snowflakerestful.close is called so each session may be
-        used multiple times. """
+        closed until close() is called so each session may be used multiple
+        times. """
         try:
-            session = self._avail_sessions.pop()
+            session = self._idle_sessions.pop()
         except IndexError:
-            session = make_session()
+            session = self.make_requests_session()
         self._active_sessions.add(session)
+        logger.info("Active requests sessions: %d, idle: %d" % (
+                    len(self._active_sessions), len(self._idle_sessions)))
         try:
             yield session
         finally:
-            self._avail_sessions.appendleft(session)
+            self._idle_sessions.appendleft(session)
             self._active_sessions.remove(session)
+            active = len(self._active_sessions)
+            idle = len(self._idle_sessions)
+            logger.info("Active requests sessions: %d, idle: %d" % (active,
+                        idle))
