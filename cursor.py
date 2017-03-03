@@ -403,7 +403,7 @@ class SnowflakeCursor(object):
         u"""
         Executes a command/query
         """
-        self.logger.info(u'executing SQL/command')
+        self.logger.debug(u'executing SQL/command')
         if self.is_closed():
             Error.errorhandler_wrapper(
                 self.connection, self,
@@ -456,7 +456,7 @@ class SnowflakeCursor(object):
         self.logger.debug(u'sfqid=%s', self._sfqid)
 
         if ret[u'success']:
-            self.logger.info(u'SUCCESS')
+            self.logger.debug(u'SUCCESS')
             data = ret[u'data']
             if u'finalDatabaseName' in data:
                 self._connection._database = data[u'finalDatabaseName']
