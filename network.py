@@ -201,7 +201,7 @@ class SnowflakeRestful(object):
                      passcode_in_password=False, saml_response=None,
                      mfa_callback=None, password_callback=None,
                      session_parameters=None):
-        logger.info(u'authenticate')
+        logger.debug(u'authenticate')
 
         if token and master_token:
             self._token = token
@@ -241,7 +241,7 @@ class SnowflakeRestful(object):
         }
 
         body = copy.deepcopy(body_template)
-        logger.info(u'saml: %s', saml_response is not None)
+        logger.debug(u'saml: %s', saml_response is not None)
         if saml_response:
             body[u'data'][u'RAW_SAML_RESPONSE'] = saml_response
         else:

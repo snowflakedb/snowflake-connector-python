@@ -39,9 +39,9 @@ class SnowflakeConverter(object):
         self._use_numpy = kwargs.get('use_numpy', False) and numpy is not None
 
         self.logger = getLogger(__name__)
-        self.logger.info('use_sfbinaryformat: %s, use_numpy: %s',
-                         self._use_sfbinaryformat,
-                         self._use_numpy)
+        self.logger.debug('use_sfbinaryformat: %s, use_numpy: %s',
+                          self._use_sfbinaryformat,
+                          self._use_numpy)
 
     def set_parameters(self, parameters):
         self._parameters = {}

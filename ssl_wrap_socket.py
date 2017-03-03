@@ -8,6 +8,8 @@
 # and added OCSP validator on the top.
 #
 
+import warnings
+
 """
 Insecure mode flag. OCSP validation will be skipped if True
 """
@@ -471,13 +473,13 @@ def ssl_wrap_socket_with_ocsp(
         ca_certs=ca_certs, server_hostname=server_hostname,
         ssl_version=ssl_version)
     logger = getLogger(__name__)
-    logger.info(u'insecure_mode: %s, '
-                u'OCSP response cache file name: %s, '
-                u'PROXY_HOST: %s, PROXY_PORT: %s, PROXY_USER: %s '
-                u'PROXY_PASSWORD: %s',
-                FEATURE_INSECURE_MODE,
-                FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
-                PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASSWORD)
+    logger.debug(u'insecure_mode: %s, '
+                 u'OCSP response cache file name: %s, '
+                 u'PROXY_HOST: %s, PROXY_PORT: %s, PROXY_USER: %s '
+                 u'PROXY_PASSWORD: %s',
+                 FEATURE_INSECURE_MODE,
+                 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+                 PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASSWORD)
     if not FEATURE_INSECURE_MODE:
         v = SnowflakeOCSP(
             proxies=set_proxies(PROXY_HOST, PROXY_PORT, PROXY_USER,
@@ -492,10 +494,10 @@ def ssl_wrap_socket_with_ocsp(
                         server_hostname)),
                 errno=ER_SERVER_CERTIFICATE_REVOKED)
     else:
-        logger.info(u'WARNING: THIS CONNECTION IS IN INSECURE '
-                    u'MODE. IT MEANS THE CERTIFICATE WILL BE '
-                    u'VALIDATED BUT THE CERTIFICATE REVOCATION '
-                    u'STATUS WILL NOT BE CHECKED.')
+        warnings.warn(u'THIS CONNECTION IS IN INSECURE '
+                      u'MODE. IT MEANS THE CERTIFICATE WILL BE '
+                      u'VALIDATED BUT THE CERTIFICATE REVOCATION '
+                      u'STATUS WILL NOT BE CHECKED.')
 
     return ret
 
