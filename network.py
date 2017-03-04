@@ -604,7 +604,8 @@ class SnowflakeRestful(object):
 
         return ret
 
-    def fetch(self, method, full_url, headers, *, data=None, timeout=None, **kwargs):
+    def fetch(self, method, full_url, headers, data=None, timeout=None,
+              **kwargs):
         """ Curried API request with session management. """
         if timeout is not None and 'timeouts' in kwargs:
             raise TypeError("Mutually exclusive args: timeout, timeouts")
