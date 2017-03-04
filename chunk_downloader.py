@@ -11,8 +11,6 @@ from threading import (Condition)
 
 from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
-from .network import (SnowflakeRestful, NO_TOKEN, MAX_CONNECTION_POOL)
-from .ssl_wrap_socket import (set_proxies)
 
 DEFAULT_REQUEST_TIMEOUT = 3600
 DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS = 2
@@ -126,9 +124,7 @@ class SnowflakeChunkDownloader(object):
 
             logger.debug(u"started getting the result set %s: %s",
                          idx + 1, self._chunks[idx].url)
-            result_data = self._get_request(
-                self._chunks[idx].url,
-                headers, max_connection_pool=self._effective_threads)
+            result_data = self._fetch_chunk(self._chunks[idx].url, headers)
             logger.debug(u"finished getting the result set %s: %s",
                          idx + 1, self._chunks[idx].url)
 
@@ -255,35 +251,15 @@ class SnowflakeChunkDownloader(object):
             # ignore all errors in the destructor
             pass
 
-    def _get_request(
-            self, url, headers,
-            is_raw_binary_iterator=True,
-            max_connection_pool=MAX_CONNECTION_POOL):
+    def _fetch_chunk(self, url, headers):
         """
-        GET request for Large Result set chunkloader
+        Fetch the chunk from S3.
         """
-        # sharing the proxy and certificate
-        proxies = set_proxies(
-            self._connection.rest._proxy_host,
-            self._connection.rest._proxy_port,
-            self._connection.rest._proxy_user,
-            self._connection.rest._proxy_password)
-
-        logger.debug(u'proxies=%s, url=%s', proxies, url)
-
-        return SnowflakeRestful.access_url(
-            self._connection,
-            self,
-            u'get',
-            full_url=url,
-            headers=headers,
-            data=None,
-            proxies=proxies,
-            timeout=(self._connection._connect_timeout,
-                     self._connection._connect_timeout,
-                     DEFAULT_REQUEST_TIMEOUT),
-            token=NO_TOKEN,
-            is_raw_binary=True,
-            is_raw_binary_iterator=is_raw_binary_iterator,
-            max_connection_pool=max_connection_pool,
+        timeouts = (
+            self._connection._connect_timeout,
+            self._connection._connect_timeout,
+            DEFAULT_REQUEST_TIMEOUT
+        )
+        return self._connection.rest.fetch(u'get', url, headers,
+            timeouts=timeouts, is_raw_binary=True, is_raw_binary_iterator=True,
             use_ijson=self._use_ijson)
