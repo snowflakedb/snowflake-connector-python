@@ -539,9 +539,6 @@ def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
     # transform objects into data in requests
     data = der_encoder.encode(ocsp_request)
     parsed_url = urlsplit(ocsp_uri)
-    session = requests.Session()
-    session.mount('http://', HTTPAdapter(max_retries=5))
-    session.mount('https://', HTTPAdapter(max_retries=5))
 
     max_retry = 100 if do_retry else 1
     # NOTE: This retry is to retry getting HTTP 200.
@@ -554,25 +551,27 @@ def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
     }
     logger.debug('url: %s, headers: %s, proxies: %s',
                  ocsp_uri, headers, proxies)
-    for attempt in range(max_retry):
-        response = session.post(
-            ocsp_uri,
-            headers=headers,
-            proxies=proxies,
-            data=data)
-        if response.status_code == OK:
-            logger.debug("OCSP response was successfully returned")
-            break
-        elif max_retry > 1:
-            wait_time = 2 ** attempt
-            wait_time = 16 if wait_time > 16 else wait_time
-            logger.debug("OCSP server returned %s. Retrying in %s(s)",
-                         response.status_code, wait_time)
-            time.sleep(wait_time)
-    else:
-        logger.error("Failed to get OCSP response after %s attempt.",
-                     max_retry)
-
+    with requests.Session() as session:
+        session.mount('http://', HTTPAdapter(max_retries=5))
+        session.mount('https://', HTTPAdapter(max_retries=5))
+        for attempt in range(max_retry):
+            response = session.post(
+                ocsp_uri,
+                headers=headers,
+                proxies=proxies,
+                data=data)
+            if response.status_code == OK:
+                logger.debug("OCSP response was successfully returned")
+                break
+            elif max_retry > 1:
+                wait_time = 2 ** attempt
+                wait_time = 16 if wait_time > 16 else wait_time
+                logger.debug("OCSP server returned %s. Retrying in %s(s)",
+                             response.status_code, wait_time)
+                time.sleep(wait_time)
+        else:
+            logger.error("Failed to get OCSP response after %s attempt.",
+                         max_retry)
     return response.content
 
 
@@ -793,10 +792,10 @@ def download_ocsp_response_cache(url):
     Downloads OCSP response cache from Snowflake.
     """
     import binascii
-    session = requests.session()
-    session.mount('http://', HTTPAdapter(max_retries=5))
-    session.mount('https://', HTTPAdapter(max_retries=5))
-    response = session.get(url)
+    with requests.Session() as session:
+        session.mount('http://', HTTPAdapter(max_retries=5))
+        session.mount('https://', HTTPAdapter(max_retries=5))
+        response = session.get(url)
     if response.status_code == OK:
         try:
             _decode_ocsp_response_cache(response.json(), OCSP_VALIDATION_CACHE)
