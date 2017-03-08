@@ -96,7 +96,8 @@ class SnowflakeChunkDownloader(object):
     def __init__(self, chunks, connection, cursor, qrmk, chunk_headers,
                  prefetch_slots=DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
                  prefetch_threads=DEFAULT_CLIENT_RESULT_PREFETCH_THREADS,
-                 use_ijson=False):
+                 use_ijson=False, row_filter=None):
+        self._row_filter = row_filter
         self._pre_init(chunks, connection, cursor, qrmk, chunk_headers,
                        prefetch_slots=prefetch_slots,
                        prefetch_threads=prefetch_threads,
@@ -259,6 +260,8 @@ class SnowflakeChunkDownloader(object):
             self._connection._connect_timeout,
             DEFAULT_REQUEST_TIMEOUT
         )
-        return self._connection.rest.fetch(u'get', url, headers,
-            timeouts=timeouts, is_raw_binary=True, is_raw_binary_iterator=True,
-            use_ijson=self._use_ijson)
+        data = self._connection.rest.fetch(u'get', url, headers,
+            timeouts=timeouts, is_raw_binary=True,
+            is_raw_binary_iterator=False, use_ijson=self._use_ijson)
+        return iter([self._row_filter(x) if x is not None else None
+                     for x in data])
