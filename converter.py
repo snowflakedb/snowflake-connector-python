@@ -20,8 +20,12 @@ from .sfdatetime import (sfdatetime_total_seconds_from_timedelta,
 
 try:
     import numpy
-except:
+except ImportError:
     numpy = None
+try:
+    import tzlocal
+except ImportError:
+    tzlocal = None
 
 BITS_FOR_TIMEZONE = 14
 MASK_OF_TIMEZONE = int((1 << BITS_FOR_TIMEZONE) - 1)
@@ -61,9 +65,10 @@ class SnowflakeConverter(object):
         """
         Generates tzinfo object from tzoffset.
         """
-        if str(tzoffset_minutes) in _TZINFO_CLASS_CACHE:
-            return _TZINFO_CLASS_CACHE[str(tzoffset_minutes)]
-
+        try:
+            return _TZINFO_CLASS_CACHE[tzoffset_minutes]
+        except KeyError:
+            pass
         sign = u'P' if tzoffset_minutes >= 0 else u'N'
         abs_tzoffset_minutes = abs(tzoffset_minutes)
         hour, minute = divmod(abs_tzoffset_minutes, 60)
@@ -82,73 +87,72 @@ class SnowflakeConverter(object):
             )
         )
         tzinfo_cls = tzinfo_class_type()
-        _TZINFO_CLASS_CACHE[str(tzoffset_minutes)] = tzinfo_cls
+        _TZINFO_CLASS_CACHE[tzoffset_minutes] = tzinfo_cls
         return tzinfo_cls
 
     #
     # FROM Snowflake to Python Objects
     #
-    def to_python_method(self, type_name, row_type):
-        ctx = {
-            u'scale': row_type['scale'],
-        }
-        try:
-            if self._use_numpy:
-                return getattr(self, u'_{type_name}_numpy_to_python'.format(
-                    type_name=type_name)), ctx
-            elif type_name == 'FIXED' and row_type['scale'] == 0:
-                return self._FIXED_INT_to_python, None
-            else:
-                return getattr(self, u'_{type_name}_to_python'.format(
-                    type_name=type_name)), ctx
-        except KeyError:
-            # no type is defined
-            return self._TEXT_to_python, None
+    def to_python_method(self, type_name, column, data_version):
+        ctx = column.copy()
+        ctx['data_version'] = data_version
+        converters = [u'_{type_name}_to_python'.format(type_name=type_name)]
+        if self._use_numpy:
+            converters.insert(0, u'_{type_name}_numpy_to_python'.format(
+                type_name=type_name))
+        for conv in converters:
+            try:
+                return getattr(self, conv)(ctx)
+            except AttributeError:
+                pass
+        self.logger.warn("No column converter found for type: %s", type_name)
+        return None  # Skip conversion
 
-    def _FIXED_INT_to_python(self, value, *_):
-        return int(value)
+    def _FIXED_to_python(self, ctx):
+        return int if ctx['scale'] == 0 else decimal.Decimal
 
-    def _FIXED_to_python(self, value, *_):
-        return decimal.Decimal(value)
+    def _FIXED_numpy_to_python(self, ctx):
+        if ctx['scale']:
+            return decimal.Decimal
+        else:
 
-    def _FIXED_numpy_to_python(self, value, *_):
-        return numpy.int64(value)
+            def conv(value):
+                try:
+                    return numpy.int64(value)
+                except OverflowError:
+                    return int(value)
+            return conv
 
-    def _REAL_to_python(self, value, *_):
-        return float(value)
+    def _REAL_to_python(self, ctx):
+        return float
 
-    def _REAL_numpy_to_python(self, value, *_):
-        return numpy.float64(value)
+    def _REAL_numpy_to_python(self, ctx):
+        return numpy.float64
 
-    def _TEXT_to_python(self, value, *_):
-        return value
+    def _TEXT_to_python(self, ctx):
+        return None  # skip conv
 
-    _TEXT_numpy_to_python = _TEXT_to_python
+    def _BINARY_to_python(self, ctx):
+        return binary_to_python
 
-    def _BINARY_to_python(self, value, *_):
-        return binary_to_python(value)
-
-    _BINARY_numpy_to_python = _BINARY_to_python
-
-    def _DATE_to_python(self, value, *_):
+    def _DATE_to_python(self, ctx):
         """
         DATE to datetime
 
         No timezone is attached.
         """
-        ts = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
-        return date(ts.year, ts.month, ts.day)
+        return lambda x: datetime.utcfromtimestamp(int(x) * 86400).date()
 
-    def _DATE_numpy_to_python(self, value, *_):
+    def _DATE_numpy_to_python(self, ctx):
         """
         DATE to datetime
 
         No timezone is attached.
         """
-        return numpy.datetime64(int(value), 'D')
+        return lambda x: numpy.datetime64(int(x), 'D')
 
     def _extract_timestamp(self, value, ctx, has_tz=False):
-        """Extracts timstamp from a raw data
+        """Extracts timestamp from a raw data
         """
         scale = ctx['scale']
         try:
@@ -176,7 +180,6 @@ class SnowflakeConverter(object):
         encoding format which has timezone index separate from the timestamp
         value
         """
-
         tzoffset_extracted = None
 
         valueComponents = str(value).split(" ")
@@ -201,25 +204,65 @@ class SnowflakeConverter(object):
             t += tzinfo_value.utcoffset(t, is_dst=False)
         return t.replace(tzinfo=tzinfo_value), fraction_of_nanoseconds
 
-    def _TIMESTAMP_TZ_to_python(self, value, ctx):
+    def _TIMESTAMP_TZ_to_python(self, ctx):
         """
         TIMESTAMP TZ to datetime
 
         The timezone offset is piggybacked.
         """
-        t, _ = self._pre_TIMESTAMP_TZ_to_python(value, ctx)
-        return t
+        if ctx['data_version'] >= 1:
+            return self._v1_TIMESTAMP_TZ_to_python(ctx)
+        else:
+            return self._v0_TIMESTAMP_TZ_to_python(ctx)
 
-    def _TIMESTAMP_TZ_numpy_to_python(self, value, ctx):
+    def _v0_TIMESTAMP_TZ_to_python(self, ctx):
+        """ Version 0 data is a single decimal value with the timezone stored
+        in the lower bits and the epoch value in the higher bit range. """
+
+        def conv(encoded_value):
+            t = int(decimal.Decimal(encoded_value).scaleb(ctx['scale']))
+            tzoffset = (t & MASK_OF_TIMEZONE) - 1440
+            value = t >> BITS_FOR_TIMEZONE
+            tzinfo = self._generate_tzinfo_from_tzoffset(tzoffset)
+            return datetime.fromtimestamp(value, tz=tzinfo)
+        return conv
+
+    def _v1_TIMESTAMP_TZ_to_python(self, ctx):
+        """ Version 1 data is formatted as `<TS> <TZ>`. """
+
+        def conv(encoded_value):
+            value, tz = encoded_value.split()
+            tzinfo = self._generate_tzinfo_from_tzoffset(int(tz) - 1440)
+            return datetime.fromtimestamp(float(value), tz=tzinfo)
+        return conv
+
+    def _TIMESTAMP_TZ_numpy_to_python(self, ctx):
         """TIMESTAMP TZ to datetime
 
         The timezone offset is piggybacked.
         """
-        t, fraction_of_nanoseconds = self._pre_TIMESTAMP_TZ_to_python(
-            value, ctx)
-        ts = int(time.mktime(t.timetuple())) * 1000000000 + int(
-            fraction_of_nanoseconds)
-        return numpy.datetime64(ts, 'ns')
+
+        def conv(value):
+            t, fraction_of_nanoseconds = self._pre_TIMESTAMP_TZ_to_python(
+                value, ctx)
+            ts = int(time.mktime(t.timetuple())) * 1000000000 + int(
+                fraction_of_nanoseconds)
+            return numpy.datetime64(ts, 'ns')
+        return conv
+
+    def _get_session_tz(self):
+        """ Get the session timezone or use the local computer's timezone. """
+        try:
+            return pytz.timezone(self.get_parameter(u'TIMEZONE'))
+        except pytz.exceptions.UnknownTimeZoneError:
+            self.logger.warn('converting to tzinfo failed')
+            if tzlocal is not None:
+                return tzlocal.get_localzone()
+            else:
+                try:
+                    return datetime.timezone.utc
+                except AttributeError:  # py2k
+                    return pytz.timezone('UTC')
 
     def _pre_TIMESTAMP_LTZ_to_python(self, value, ctx):
         u""" TIMESTAMP LTZ to datetime
@@ -254,16 +297,19 @@ class SnowflakeConverter(object):
             t = time.gmtime(microseconds / float(1000000))
             return t, fraction_of_nanoseconds
 
-    def _TIMESTAMP_LTZ_to_python(self, value, ctx):
-        t, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
-        return t
+    def _TIMESTAMP_LTZ_to_python(self, ctx):
+        tzinfo = self._get_session_tz()
+        return lambda x: datetime.fromtimestamp(float(x), tz=tzinfo)
 
-    def _TIMESTAMP_LTZ_numpy_to_python(self, value, ctx):
-        t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
-            value, ctx)
-        ts = int(time.mktime(t.timetuple())) * 1000000000 + int(
-            fraction_of_nanoseconds)
-        return numpy.datetime64(ts, 'ns')
+    def _TIMESTAMP_LTZ_numpy_to_python(self, ctx):
+
+        def conv(value):
+            t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
+                value, ctx)
+            ts = int(time.mktime(t.timetuple())) * 1000000000 + int(
+                fraction_of_nanoseconds)
+            return numpy.datetime64(ts, 'ns')
+        return conv
 
     _TIMESTAMP_to_python = _TIMESTAMP_LTZ_to_python
 
@@ -280,29 +326,25 @@ class SnowflakeConverter(object):
 
         return nanoseconds, microseconds, fraction_of_nanoseconds
 
-    def _TIMESTAMP_NTZ_to_python(self, value, ctx):
+    def _TIMESTAMP_NTZ_to_python(self, ctx):
         """
         TIMESTAMP NTZ to datetime
 
         No timezone info is attached.
         """
-        _, microseconds, _ = self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
-        if microseconds is None:
-            return None
+        return lambda value: datetime.utcfromtimestamp(float(value))
 
-        # NOTE: date range must fit into datetime data type or will raise
-        # OverflowError
-        t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-        return t
-
-    def _TIMESTAMP_NTZ_numpy_to_python(self, value, ctx):
+    def _TIMESTAMP_NTZ_numpy_to_python(self, ctx):
         """
         TIMESTAMP NTZ to datetime64
 
         No timezone info is attached.
         """
-        nanoseconds, _, _ = self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
-        return numpy.datetime64(nanoseconds, 'ns')
+
+        def conv(value):
+            nanoseconds, _, _ = self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
+            return numpy.datetime64(nanoseconds, 'ns')
+        return conv
 
     def _extract_time(self, value, ctx):
         u"""Extracts time from raw data
@@ -324,37 +366,23 @@ class SnowflakeConverter(object):
         except decimal.InvalidOperation:
             return None, None
 
-    def _TIME_to_python(self, value, ctx):
+    def _TIME_to_python(self, ctx):
         """
         TIME to formatted string, SnowflakeDateTime, or datetime.time
 
         No timezone is attached.
         """
-        microseconds, _ = self._extract_time(value, ctx)
-        ts = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-        return ts.time()
+        return lambda x: datetime.utcfromtimestamp(float(x)).time()
 
-    _TIME_numpy_to_python = _TIME_to_python
+    def _VARIANT_to_python(self, ctx):
+        return None  # skip conv
 
-    def _VARIANT_to_python(self, value, *_):
-        return value
+    _OBJECT_to_python = _VARIANT_to_python
 
-    _VARIANT_numpy_to_python = _VARIANT_to_python
+    _ARRAY_to_python = _VARIANT_to_python
 
-    def _OBJECT_to_python(self, value, *_):
-        return self._VARIANT_to_python(value)
-
-    _OBJECT_numpy_to_python = _OBJECT_to_python
-
-    def _ARRAY_to_python(self, value, *_):
-        return self._VARIANT_to_python(value)
-
-    _ARRAY_numpy_to_python = _ARRAY_to_python
-
-    def _BOOLEAN_to_python(self, value, *_):
-        return value in (u'1', u'TRUE')
-
-    _BOOLEAN_numpy_to_python = _BOOLEAN_to_python
+    def _BOOLEAN_to_python(self, ctx):
+        return lambda value: value in (u'1', u'TRUE')
 
     #
     # From Python to Snowflake
@@ -468,7 +496,6 @@ class SnowflakeConverter(object):
         if pytz.utc != tzinfo_value:
             t += tzinfo_value.utcoffset(t)
         t = t.replace(tzinfo=tzinfo_value)
-
         return self._datetime_to_snowflake(t)
 
     def _timedelta_to_snowflake(self, value):
@@ -525,7 +552,7 @@ class SnowflakeConverter(object):
                     item[1:item.find('_to_snowflake')]),
                 errno=ER_NOT_SUPPORT_DATA_TYPE
             )
-        raise Exception('No method is available: {0}'.format(item))
+        raise AttributeError('No method is available: {0}'.format(item))
 
     @staticmethod
     def escape(value):
