@@ -278,11 +278,9 @@ class SnowflakeConverter(object):
             tzinfo_value = pytz.timezone(self.get_parameter(u'TIMEZONE'))
         except pytz.exceptions.UnknownTimeZoneError:
             self.logger.warn('converting to tzinfo_value failed')
-            try:
-                # tzlocal is optional.
-                import tzlocal
+            if tzlocal is not None:
                 tzinfo_value = tzlocal.get_localzone()
-            except:
+            else:
                 tzinfo_value = pytz.timezone('UTC')
 
         try:

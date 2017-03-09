@@ -525,13 +525,6 @@ class SnowflakeCursor(object):
                 is not None:
             self._total_rowcount = data['total']
 
-        self._total_row_index = -1  # last fetched number of rows
-
-        self._chunk_index = 0
-        self._chunk_count = 0
-        self._current_chunk_row = iter(data.get(u'rowset'))
-        self._current_chunk_row_count = len(data.get(u'rowset'))
-
         self._description = []
         self._column_idx_to_name = {}
         self._column_converter = []
@@ -548,6 +541,15 @@ class SnowflakeCursor(object):
             self._column_converter.append(
                 self._connection.converter.to_python_method(
                     column[u'type'].upper(), column, data.get(u'version', 0)))
+
+        self._total_row_index = -1  # last fetched number of rows
+
+        self._chunk_index = 0
+        self._chunk_count = 0
+        self._current_chunk_row = iter(
+            [self.row_to_python(x) if x is not None else None
+             for x in data.get(u'rowset')])
+        self._current_chunk_row_count = len(data.get(u'rowset'))
 
         if u'chunks' in data:
             chunks = data[u'chunks']
@@ -571,7 +573,7 @@ class SnowflakeCursor(object):
                 chunks, self._connection, self, qrmk, chunk_headers,
                 prefetch_slots=self._client_result_prefetch_slots,
                 prefetch_threads=self._client_result_prefetch_threads,
-                use_ijson=use_ijson, row_filter=self._row_to_python)
+                use_ijson=use_ijson)
 
         if is_dml:
             updated_rows = 0
@@ -842,7 +844,7 @@ class SnowflakeCursor(object):
                                        ProgrammingError,
                                        errorvalue)
 
-    def _row_to_python(self, row):
+    def row_to_python(self, row):
         """
         Converts data in row if required.
 
@@ -894,7 +896,7 @@ class DictCursor(SnowflakeCursor):
     def __init__(self, connection):
         SnowflakeCursor.__init__(self, connection)
 
-    def _row_to_python(self, row):
+    def row_to_python(self, row):
         # see the base class
         res = {}
         idx = 0
