@@ -185,7 +185,7 @@ class SnowflakeRestful(object):
             del self._master_token
         sessions = list(self._active_sessions)
         if sessions:
-            logger.warn("Closing %d active sessions" % len(sessions))
+            logger.warn("Closing %s active sessions", len(sessions))
         sessions.extend(self._idle_sessions)
         self._active_sessions.clear()
         self._idle_sessions.clear()
@@ -193,7 +193,7 @@ class SnowflakeRestful(object):
             try:
                 s.close()
             except Exception as e:
-                logger.warn("Session cleanup failed: %s" % e)
+                logger.warn("Session cleanup failed: %s", e)
 
     def authenticate(self, account, user, password, master_token=None,
                      token=None, database=None, schema=None,
@@ -604,7 +604,7 @@ class SnowflakeRestful(object):
 
         return ret
 
-    def fetch(self, method, full_url, headers, *, data=None, timeout=None, **kwargs):
+    def fetch(self, method, full_url, headers, data=None, timeout=None, **kwargs):
         """ Curried API request with session management. """
         if timeout is not None and 'timeouts' in kwargs:
             raise TypeError("Mutually exclusive args: timeout, timeouts")
