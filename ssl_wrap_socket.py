@@ -366,9 +366,6 @@ class WrappedSocket(object):
                 data[total_sent:total_sent + SSL_WRITE_BLOCKSIZE])
             total_sent += sent
 
-    def settimeout(self, timeout):
-        return self.socket.settimeout(timeout)
-
     def shutdown(self):
         self.connection.shutdown()
 
