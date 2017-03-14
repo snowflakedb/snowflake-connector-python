@@ -19,6 +19,7 @@ class Error(BASE_EXCEPTION_CLASS):
                  done_format_msg=False):
         self.logger = getLogger(__name__)
         self.msg = msg
+        self.raw_msg = msg
         self.errno = errno or -1
         self.sqlstate = sqlstate or "n/a"
         self.sfqid = sfqid
