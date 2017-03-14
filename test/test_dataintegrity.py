@@ -34,7 +34,6 @@ def table_exists(conn_cnx, name):
 def create_table(conn_cnx, columndefs, partial_name):
     table = '"dbabi_dibasic_{0}"'.format(partial_name)
     with conn_cnx() as cnx:
-        cnx.cursor().execute('alter session set enable_binary_datatype=true')
         cnx.cursor().execute(
             "CREATE OR REPLACE TABLE {table} ({columns})".format(
                 table=table, columns='\n'.join(columndefs)))
@@ -56,7 +55,6 @@ def check_data_integrity(conn_cnx, columndefs, partial_name, generator):
                  ','.join(['%s'] * len(columndefs))))
             data = [[generator(i, j) for j in range(len(columndefs))]
                     for i in range(rows)]
-            cursor.execute('alter session set enable_binary_datatype=true')
             cursor.executemany(insert_statement, data)
             cnx.commit()
 
