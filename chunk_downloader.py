@@ -70,7 +70,8 @@ class SnowflakeChunkDownloader(object):
                                            self._chunk_size)
 
         for idx, chunk in enumerate(chunks):
-            logger.info(u"queued chunk %d: rowCount=%s" % (idx, chunk[u'rowCount']))
+            logger.info(u"queued chunk %d: rowCount=%s", idx,
+                        chunk[u'rowCount'])
             self._chunks[idx] = SnowflakeChunk(
                 url=chunk[u'url'],
                 result_data=None,
