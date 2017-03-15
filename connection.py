@@ -587,8 +587,8 @@ class SnowflakeConnection(object):
         Cancels the query by the sequence counter. The sequence counter
         is used to identify the query submitted by the client.
         """
-        self.logger.debug(u'_cancel_query sql=[%s], sequence_id=[%s]' % (sql,
-                          sequence_counter))
+        self.logger.debug(u'_cancel_query sql=[%s], sequence_id=[%s]', sql,
+                          sequence_counter)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
         return self._con.request(
