@@ -5,7 +5,7 @@
 #
 import decimal
 import time
-from datetime import datetime, timedelta, tzinfo, date
+from datetime import datetime, timedelta, tzinfo
 from logging import getLogger
 
 import pytz
