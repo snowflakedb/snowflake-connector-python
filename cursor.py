@@ -546,9 +546,7 @@ class SnowflakeCursor(object):
 
         self._chunk_index = 0
         self._chunk_count = 0
-        self._current_chunk_row = iter(
-            [self.row_to_python(x) if x is not None else None
-             for x in data.get(u'rowset')])
+        self._current_chunk_row = iter(data.get(u'rowset'))
         self._current_chunk_row_count = len(data.get(u'rowset'))
 
         if u'chunks' in data:
@@ -689,7 +687,7 @@ class SnowflakeCursor(object):
                     self._chunk_downloader = None
                     self._chunk_count = 0
                     self._current_chunk_row = iter(())
-            return row
+            return self._row_to_python(row) if row is not None else None
 
         except IndexError:
             # returns None if the iteration is completed so that iter() stops
@@ -844,7 +842,7 @@ class SnowflakeCursor(object):
                                        ProgrammingError,
                                        errorvalue)
 
-    def row_to_python(self, row):
+    def _row_to_python(self, row):
         """
         Converts data in row if required.
 
@@ -896,7 +894,7 @@ class DictCursor(SnowflakeCursor):
     def __init__(self, connection):
         SnowflakeCursor.__init__(self, connection)
 
-    def row_to_python(self, row):
+    def _row_to_python(self, row):
         # see the base class
         res = {}
         idx = 0
