@@ -52,9 +52,6 @@ def conn(request, conn_cnx, db_parameters):
     request.addfinalizer(fin)
 
     with conn_cnx() as cnx:
-        # TODO: Can remove this when binary is enabled by default.
-        cnx.cursor().execute('alter session set enable_binary_datatype=true')
-
         cnx.cursor().execute("""
 create table {name} (
 aa int,
@@ -394,7 +391,6 @@ def test_insert_binary_select(conn, db_parameters):
 
     with conn() as cnx:
         c = cnx.cursor()
-        c.execute('alter session set enable_binary_datatype=true')
         try:
             fmt = ("insert into {name}(b) values(%(b)s)")
             c.execute(fmt.format(name=db_parameters['name']), {'b': value})
@@ -417,7 +413,6 @@ def test_insert_binary_select(conn, db_parameters):
     _create_warehouse(cnx2, db_parameters)
     try:
         c = cnx2.cursor()
-        c.execute('alter session set enable_binary_datatype=true')
         c.execute("select b from {name}".format(name=db_parameters['name']))
 
         results = [b for (b,) in c]
@@ -441,7 +436,6 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
 
     with conn() as cnx:
         c = cnx.cursor()
-        c.execute('alter session set enable_binary_datatype=true')
         try:
             fmt = ("insert into {name}(b) values(%(b)s)")
             c.execute(fmt.format(name=db_parameters['name']), {'b': value})
@@ -464,7 +458,6 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
     _create_warehouse(cnx2, db_parameters)
     try:
         c = cnx2.cursor()
-        c.execute('alter session set enable_binary_datatype=true')
         c.execute("select b from {name}".format(name=db_parameters['name']))
 
         results = [b for (b,) in c]
