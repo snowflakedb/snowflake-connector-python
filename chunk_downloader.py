@@ -259,8 +259,6 @@ class SnowflakeChunkDownloader(object):
             self._connection._connect_timeout,
             DEFAULT_REQUEST_TIMEOUT
         )
-        data = self._connection.rest.fetch(u'get', url, headers,
+        return self._connection.rest.fetch(u'get', url, headers,
             timeouts=timeouts, is_raw_binary=True,
-            is_raw_binary_iterator=False, use_ijson=self._use_ijson)
-        return iter([self._cursor.row_to_python(x) if x is not None else None
-                     for x in data])
+            is_raw_binary_iterator=True, use_ijson=self._use_ijson)
