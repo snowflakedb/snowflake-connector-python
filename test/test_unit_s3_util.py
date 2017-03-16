@@ -4,13 +4,27 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 import codecs
+import errno
 import glob
 import os
 import tempfile
+from os import path
 
-from snowflake.connector.constants import UTF8
-from snowflake.connector.s3_util import SnowflakeS3Util, \
-    SnowflakeS3FileEncryptionMaterial
+import OpenSSL
+
+from snowflake.connector.compat import PY2
+from snowflake.connector.constants import (SHA256_DIGEST, UTF8)
+from snowflake.connector.s3_util import (
+    SnowflakeS3Util,
+    SnowflakeS3FileEncryptionMaterial,
+    ERRORNO_WSAECONNABORTED, DEFAULT_MAX_RETRY)
+
+THIS_DIR = path.dirname(path.realpath(__file__))
+
+if PY2:
+    from mock import Mock
+else:
+    from unittest.mock import Mock
 
 
 def test_encrypt_decrypt_file():
@@ -123,3 +137,118 @@ def test_extract_bucket_name_and_path():
         'sfc-dev1-regression///')
     assert s3_loc.bucket_name == 'sfc-dev1-regression'
     assert s3_loc.s3path == '//'
+
+
+def test_upload_one_file_to_s3_wsaeconnaborted():
+    """
+    Tests Upload one file to S3 with retry on ERRORNO_WSAECONNABORTED.
+    The last attempted max_currency should be (initial_parallel/max_retry)
+    """
+    upload_file = Mock(side_effect=OpenSSL.SSL.SysCallError(
+        ERRORNO_WSAECONNABORTED, 'mock err. connection aborted'))
+    s3client = Mock(meta=Mock(client=Mock(upload_file=upload_file)))
+    initial_parallel = 100
+    upload_meta = {
+        u'no_sleeping_time': True,
+        u'parallel': initial_parallel,
+        u'put_callback': None,
+        u'put_callback_output_stream': None,
+        u'existing_files': [],
+        SHA256_DIGEST: '123456789abcdef',
+        u'stage_location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+        u's3client': s3client,
+        u'dst_file_name': 'data1.txt.gz',
+        u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+    }
+    upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
+    upload_meta[u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+    tmp_upload_meta = upload_meta.copy()
+    try:
+        SnowflakeS3Util.upload_one_file_to_s3(tmp_upload_meta)
+        raise Exception("Should fail with OpenSSL.SSL.SysCallError")
+    except OpenSSL.SSL.SysCallError:
+        assert upload_file.call_count == DEFAULT_MAX_RETRY
+        assert 'last_max_concurrency' in tmp_upload_meta
+        assert tmp_upload_meta[
+                   'last_max_concurrency'
+               ] == initial_parallel / DEFAULT_MAX_RETRY
+
+    # min parallel == 1
+    upload_file.reset_mock()
+    initial_parallel = 4
+    upload_meta[u'parallel'] = initial_parallel
+    tmp_upload_meta = upload_meta.copy()
+    try:
+        SnowflakeS3Util.upload_one_file_to_s3(tmp_upload_meta)
+        raise Exception("Should fail with OpenSSL.SSL.SysCallError")
+    except OpenSSL.SSL.SysCallError:
+        assert upload_file.call_count == DEFAULT_MAX_RETRY
+        assert 'last_max_concurrency' in tmp_upload_meta
+        assert tmp_upload_meta['last_max_concurrency'] == 1
+
+
+def test_upload_one_file_to_s3_econnreset():
+    """
+    Tests Upload one file to S3 with retry on errno.ECONNRESET.
+    The last attempted max_currency should not be changed.
+    """
+    for error_code in [errno.ECONNRESET,
+                       errno.ETIMEDOUT,
+                       errno.EPIPE,
+                       -1]:
+        upload_file = Mock(side_effect=OpenSSL.SSL.SysCallError(
+            error_code, 'mock err. connection aborted'))
+        s3client = Mock(meta=Mock(client=Mock(upload_file=upload_file)))
+        initial_parallel = 100
+        upload_meta = {
+            u'no_sleeping_time': True,
+            u'parallel': initial_parallel,
+            u'put_callback': None,
+            u'put_callback_output_stream': None,
+            u'existing_files': [],
+            SHA256_DIGEST: '123456789abcdef',
+            u'stage_location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+            u's3client': s3client,
+            u'dst_file_name': 'data1.txt.gz',
+            u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        }
+        upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
+        upload_meta[
+            u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+        try:
+            SnowflakeS3Util.upload_one_file_to_s3(upload_meta)
+            raise Exception("Should fail with OpenSSL.SSL.SysCallError")
+        except OpenSSL.SSL.SysCallError:
+            assert upload_file.call_count == DEFAULT_MAX_RETRY
+            assert 'last_max_concurrency' not in upload_meta
+
+
+def test_upload_one_file_to_s3_unknown_openssl_error():
+    """
+    Tests Upload one file to S3 with unknown OpenSSL error
+    """
+    for error_code in [123]:
+        upload_file = Mock(side_effect=OpenSSL.SSL.SysCallError(
+            error_code, 'mock err. connection aborted'))
+        s3client = Mock(meta=Mock(client=Mock(upload_file=upload_file)))
+        initial_parallel = 100
+        upload_meta = {
+            u'no_sleeping_time': True,
+            u'parallel': initial_parallel,
+            u'put_callback': None,
+            u'put_callback_output_stream': None,
+            u'existing_files': [],
+            SHA256_DIGEST: '123456789abcdef',
+            u'stage_location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+            u's3client': s3client,
+            u'dst_file_name': 'data1.txt.gz',
+            u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        }
+        upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
+        upload_meta[
+            u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+        try:
+            SnowflakeS3Util.upload_one_file_to_s3(upload_meta)
+            raise Exception("Should fail with OpenSSL.SSL.SysCallError")
+        except OpenSSL.SSL.SysCallError:
+            assert upload_file.call_count == 1
