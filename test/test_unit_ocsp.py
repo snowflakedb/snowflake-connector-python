@@ -110,7 +110,7 @@ def test_negative_response():
     # bogus response
     response_bytes['responseType'] = backup_response_type
     backup_response_bytes_respose = response_bytes['response']
-    response_bytes['response'] = univ.Null
+    response_bytes['response'] = univ.OctetString(hexValue="ABCDEF")
     response = der_encoder.encode(ocsp_response)
 
     with pytest.raises(SubstrateUnderrunError):
