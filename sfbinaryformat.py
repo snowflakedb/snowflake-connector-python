@@ -6,11 +6,8 @@
 from base64 import (b16encode, standard_b64encode, b16decode)
 
 
-def binary_to_python(string):
-    """
-    Converts a Snowflake binary value into a "bytes" object.
-    """
-    return b16decode(string)
+# Converts a Snowflake binary value into a "bytes" object.
+binary_to_python = b16decode
 
 
 def binary_to_snowflake(binary_value):
