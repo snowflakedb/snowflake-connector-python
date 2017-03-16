@@ -8,8 +8,6 @@
 # and added OCSP validator on the top.
 #
 
-import warnings
-
 """
 Insecure mode flag. OCSP validation will be skipped if True
 """
@@ -491,10 +489,10 @@ def ssl_wrap_socket_with_ocsp(
                         server_hostname)),
                 errno=ER_SERVER_CERTIFICATE_REVOKED)
     else:
-        warnings.warn(u'THIS CONNECTION IS IN INSECURE '
-                      u'MODE. IT MEANS THE CERTIFICATE WILL BE '
-                      u'VALIDATED BUT THE CERTIFICATE REVOCATION '
-                      u'STATUS WILL NOT BE CHECKED.')
+        logger.info(u'THIS CONNECTION IS IN INSECURE '
+                    u'MODE. IT MEANS THE CERTIFICATE WILL BE '
+                    u'VALIDATED BUT THE CERTIFICATE REVOCATION '
+                    u'STATUS WILL NOT BE CHECKED.')
 
     return ret
 

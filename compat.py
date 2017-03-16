@@ -125,8 +125,19 @@ def INPUT(prompt):
 
 
 def IS_OLD_PYTHON():
-    u"""
+    """
     Is old Python
     """
     return PY2 and sys.hexversion < 0x02070900 or \
            not PY2 and sys.hexversion < 0x03040300
+
+
+def PY_ISSUE_23517():
+    """
+    Is Python 3.4.3 or 3.5.0
+    This is to check if a workaround for http://bugs.python.org/issue23517
+    is required or not. 3.6.0 already has the fix.
+    No RC or dev version will be checked.
+    """
+    return 0x03040300 <= sys.hexversion < 0x03040400 or \
+           0x03050000 <= sys.hexversion < 0x03050100
