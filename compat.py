@@ -29,6 +29,7 @@ if PY2:
     import urllib
     import httplib
     import Queue
+    from HTMLParser import HTMLParser
 
     GET_CWD = os.getcwdu
     BASE_EXCEPTION_CLASS = StandardError
@@ -54,6 +55,8 @@ if PY2:
     urlencode = urllib.urlencode
     proxy_bypass = urllib.proxy_bypass
 
+    unescape = HTMLParser().unescape
+
     EmptyQueue = Queue.Empty
     Queue = Queue.Queue
 
@@ -62,6 +65,7 @@ else:
     import http.client
     import urllib.request
     import queue
+    import html
 
     GET_CWD = os.getcwd
     BASE_EXCEPTION_CLASS = Exception
@@ -70,6 +74,7 @@ else:
     urlsplit = urllib.parse.urlsplit
     urlunsplit = urllib.parse.urlunsplit
     urlencode = urllib.parse.urlencode
+    unescape = html.unescape
     NUM_DATA_TYPES += [int, float, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-v[-1]]
     PKCS5_OFFSET = lambda v: v[-1]
