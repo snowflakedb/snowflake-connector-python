@@ -6,6 +6,7 @@
 import re
 import sys
 import uuid
+import warnings
 from io import StringIO
 from threading import Lock
 from time import strptime
@@ -256,7 +257,7 @@ class SnowflakeConnection(object):
         u"""
         Connects to the database
         """
-        self.logger.info(u'connect')
+        self.logger.debug(u'connect')
         if len(kwargs) > 0:
             self.__config(**kwargs)
 
@@ -332,7 +333,7 @@ class SnowflakeConnection(object):
         u"""Creates a cursor object. Each statement should create a new cursor
         object.
         """
-        self.logger.info(u'cursor')
+        self.logger.debug(u'cursor')
         if not self._con:
             Error.errorhandler_wrapper(
                 self, None, DatabaseError,
@@ -387,7 +388,7 @@ class SnowflakeConnection(object):
         Executes post connection process
         """
         # load current session info
-        self.logger.info(u'__post connection')
+        self.logger.debug(u'__post connection')
         """
         NOTE: abort detached query mode is TRUE by default
 
@@ -416,7 +417,6 @@ class SnowflakeConnection(object):
         u"""
         Opens a new network connection
         """
-        self.logger.info(u'opening a connection')
         self._con = network.SnowflakeRestful(
             host=self._host,
             port=self._port,
@@ -475,7 +475,7 @@ class SnowflakeConnection(object):
         u"""
         Sets the parameters
         """
-        self.logger.info(u'__config')
+        self.logger.debug(u'__config')
         for name, value in kwargs.items():
             if name == u'sequence_counter':
                 self.sequence_counter = value
@@ -527,12 +527,11 @@ class SnowflakeConnection(object):
             # remove region subdomain
             self._account = self._account[0:self._account.find(u'.')]
 
-        self.logger.info(u'insecure_mode: %s', self._insecure_mode)
         if self._insecure_mode:
-            self.logger.info(u'WARNING: THIS CONNECTION IS IN INSECURE '
-                             u'MODE. IT MEANS THE CERTIFICATE WILL BE '
-                             u'VALIDATED BUT THE CERTIFICATE REVOCATION '
-                             u'STATUS WILL NOT BE CHECKED.')
+            warnings.warn(u'THIS CONNECTION IS IN INSECURE MODE. IT MEANS '
+                          u'THE CERTIFICATE WILL BE VALIDATED BUT THE '
+                          u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
+                          u'CHECKED.')
         if not self._insecure_mode and self._protocol == u'https' and \
                         self._account not in TEST_ACCOUNTS:
             if IS_OLD_PYTHON():
@@ -550,7 +549,7 @@ class SnowflakeConnection(object):
         u"""
         Executes a query with a sequence counter.
         """
-        self.logger.info(u'_cmd_query')
+        self.logger.debug(u'_cmd_query')
         data = {
             u'sqlText': sql,
             u'asyncExec': _no_results,
@@ -562,8 +561,8 @@ class SnowflakeConnection(object):
             data[u'isInternal'] = is_internal
         client = u'sfsql_file_transfer' if is_file_transfer else u'sfsql'
 
-        if self.logger.getEffectiveLevel() <= logging.INFO:
-            self.logger.info(
+        if self.logger.getEffectiveLevel() <= logging.DEBUG:
+            self.logger.debug(
                 u'sql=[%s], sequence_id=[%s], is_file_transfer=[%s]',
                 u' '.join(
                     line.strip() for line in
@@ -588,9 +587,8 @@ class SnowflakeConnection(object):
         Cancels the query by the sequence counter. The sequence counter
         is used to identify the query submitted by the client.
         """
-        self.logger.info(u'_cancel_query')
-        self.logger.debug(
-            u'sql=[%s], sequence_id=[%s]', sql, sequence_counter)
+        self.logger.debug(u'_cancel_query sql=[%s], sequence_id=[%s]', sql,
+                          sequence_counter)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
         return self._con.request(
