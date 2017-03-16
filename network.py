@@ -959,15 +959,16 @@ class SnowflakeRestful(object):
             session = self._idle_sessions.pop()
         except IndexError:
             session = self.make_requests_session()
+            uses = 0
+        else:
+            uses = next(session._reuse_count)
         self._active_sessions.add(session)
-        logger.info("Active requests sessions: %d, idle: %d" % (
-                    len(self._active_sessions), len(self._idle_sessions)))
+        logger.info("Using requests session [%d uses]: active %d, idle: %d",
+                    uses, len(self._active_sessions), len(self._idle_sessions))
         try:
             yield session
         finally:
             self._idle_sessions.appendleft(session)
             self._active_sessions.remove(session)
-            active = len(self._active_sessions)
-            idle = len(self._idle_sessions)
-            logger.info("Active requests sessions: %d, idle: %d" % (active,
-                        idle))
+            logger.info("Freed requests sessions: active %d, idle: %d",
+                        len(self._active_sessions), len(self._idle_sessions))
