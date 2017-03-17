@@ -121,6 +121,7 @@ class SnowflakeConverter(object):
                     return numpy.int64(value)
                 except OverflowError:
                     return int(value)
+
             return conv
 
     def _REAL_to_python(self, ctx):
@@ -225,6 +226,7 @@ class SnowflakeConverter(object):
             value = t >> BITS_FOR_TIMEZONE
             tzinfo = self._generate_tzinfo_from_tzoffset(tzoffset)
             return datetime.fromtimestamp(value, tz=tzinfo)
+
         return conv
 
     def _v1_TIMESTAMP_TZ_to_python(self, ctx):
@@ -234,6 +236,7 @@ class SnowflakeConverter(object):
             value, tz = encoded_value.split()
             tzinfo = self._generate_tzinfo_from_tzoffset(int(tz) - 1440)
             return datetime.fromtimestamp(float(value), tz=tzinfo)
+
         return conv
 
     def _TIMESTAMP_TZ_numpy_to_python(self, ctx):
@@ -248,6 +251,7 @@ class SnowflakeConverter(object):
             ts = int(time.mktime(t.timetuple())) * 1000000000 + int(
                 fraction_of_nanoseconds)
             return numpy.datetime64(ts, 'ns')
+
         return conv
 
     def _get_session_tz(self):
@@ -307,6 +311,7 @@ class SnowflakeConverter(object):
             ts = int(time.mktime(t.timetuple())) * 1000000000 + int(
                 fraction_of_nanoseconds)
             return numpy.datetime64(ts, 'ns')
+
         return conv
 
     _TIMESTAMP_to_python = _TIMESTAMP_LTZ_to_python
@@ -342,6 +347,7 @@ class SnowflakeConverter(object):
         def conv(value):
             nanoseconds, _, _ = self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
             return numpy.datetime64(nanoseconds, 'ns')
+
         return conv
 
     def _extract_time(self, value, ctx):

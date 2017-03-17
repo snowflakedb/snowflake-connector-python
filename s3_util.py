@@ -39,6 +39,10 @@ RESULT_STATUS_COLLISION = u'COLLISION'
 RESULT_STATUS_SKIPPED = u'SKIPPED'
 RESULT_STATUS_RENEW_TOKEN = u'RENEW_TOKEN'
 
+DEFAULT_CONCURRENCY = 1
+DEFAULT_MAX_RETRY = 5
+ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
+
 """
 S3 Location: S3 bucket name + path
 """
@@ -204,9 +208,10 @@ class SnowflakeS3Util(object):
         put_callback = meta[u'put_callback']
         put_callback_output_stream = meta[u'put_callback_output_stream']
 
+        max_concurrency = meta[u'parallel']
         last_err = None
-        retry = 5
-        for t in range(retry):
+        max_retry = DEFAULT_MAX_RETRY
+        for retry in range(max_retry):
             try:
                 s3client.meta.client.upload_file(
                     data_file, s3location.bucket_name, s3path,
@@ -221,7 +226,7 @@ class SnowflakeS3Util(object):
                     },
                     Config=TransferConfig(
                         multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
-                        max_concurrency=meta[u'parallel'],
+                        max_concurrency=max_concurrency,
                         num_download_attempts=10,
                     )
                 )
@@ -235,26 +240,48 @@ class SnowflakeS3Util(object):
                     u"Failed to upload a file: %s, err: %s",
                     data_file, err)
                 raise err
-            except (OpenSSL.SSL.SysCallError, S3UploadFailedError) as err:
+            except OpenSSL.SSL.SysCallError as err:
                 last_err = err
-                if t == retry - 1 or err.args[0] not in (
+                if err.args[0] not in (
+                        ERRORNO_WSAECONNABORTED,
                         errno.ECONNRESET,
                         errno.ETIMEDOUT,
                         errno.EPIPE,
                         -1):
                     raise err
+                if err.args[0] == ERRORNO_WSAECONNABORTED:
+                    # connection was disconnected by S3
+                    # because of too many connections. retry with
+                    # less concurrency to mitigate it
+                    max_concurrency = meta[u'parallel'] - int(
+                        retry * meta[u'parallel'] / max_retry)
+                    max_concurrency = max(DEFAULT_CONCURRENCY, max_concurrency)
+                    meta['last_max_concurrency'] = max_concurrency
+                logger.info(
+                    'Failed to upload a file: %s, err: %s. Retrying with '
+                    'max concurrency: %s',
+                    data_file, err, max_concurrency)
+                if 'no_sleeping_time' not in meta:
+                    sleeping_time = min(2 ** retry, 16)
+                    logger.debug(u"sleeping: %s", sleeping_time)
+                    time.sleep(sleeping_time)
+            except S3UploadFailedError as err:
+                last_err = err
                 logger.info(
                     'Failed to upload a file: %s, err: %s. Retrying',
                     data_file, err)
-                sleeping_time = min(2 ** t, 16)
-                logger.debug(u"sleeping: %s", sleeping_time)
-                time.sleep(sleeping_time)
+                if 'no_sleeping_time' not in meta:
+                    sleeping_time = min(2 ** retry, 16)
+                    logger.debug(u"sleeping: %s", sleeping_time)
+                    time.sleep(sleeping_time)
+
         else:
             if last_err:
                 raise last_err
             else:
                 raise Exception(
-                    "Unknown Error in uploading a file: %s", data_file)
+                    "Unknown Error in uploading a file: %s",
+                    data_file)
 
         logger.debug(u'DONE putting a file')
         meta[u'dst_file_size'] = meta[u'upload_size']
@@ -302,9 +329,10 @@ class SnowflakeS3Util(object):
         get_callback = meta[u'get_callback']
         get_callback_output_stream = meta[u'get_callback_output_stream']
 
+        max_concurrency = meta[u'parallel']
         last_err = None
-        retry = 5
-        for t in range(retry):
+        max_retry = DEFAULT_MAX_RETRY
+        for retry in range(max_retry):
             try:
                 s3client.meta.client.download_file(
                     s3location.bucket_name, s3path, full_dst_file_name,
@@ -315,7 +343,7 @@ class SnowflakeS3Util(object):
                         get_callback else None,
                     Config=TransferConfig(
                         multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
-                        max_concurrency=meta[u'parallel'],
+                        max_concurrency=max_concurrency,
                         num_download_attempts=10,
                     )
                 )
@@ -329,20 +357,40 @@ class SnowflakeS3Util(object):
                     u"Failed to download a file: %s, err: %s",
                     full_dst_file_name, err)
                 raise err
-            except (OpenSSL.SSL.SysCallError, RetriesExceededError) as err:
+            except OpenSSL.SSL.SysCallError as err:
                 last_err = err
-                if t == retry - 1 or err.args[0] not in (
+                if err.args[0] not in (
+                        ERRORNO_WSAECONNABORTED,
                         errno.ECONNRESET,
                         errno.ETIMEDOUT,
                         errno.EPIPE,
                         -1):
                     raise err
+                if err.args[0] == ERRORNO_WSAECONNABORTED:
+                    # connection was disconnected by S3
+                    # because of too many connections. retry with
+                    # less concurrency to mitigate it
+                    max_concurrency = meta[u'parallel'] - int(
+                        retry * meta[u'parallel'] / max_retry)
+                    max_concurrency = max(DEFAULT_CONCURRENCY, max_concurrency)
+                    meta['last_max_concurrency'] = max_concurrency
+                logger.info(
+                    'Failed to download a file: %s, err: %s. Retrying with '
+                    'max concurrency: %s',
+                    full_dst_file_name, err, max_concurrency)
+                if 'no_sleeping_time' not in meta:
+                    sleeping_time = min(2 ** retry, 16)
+                    logger.debug(u"sleeping: %s", sleeping_time)
+                    time.sleep(sleeping_time)
+            except RetriesExceededError as err:
+                last_err = err
                 logger.info(
                     'Failed to download a file: %s, err: %s. Retrying',
                     full_dst_file_name, err)
-                sleeping_time = min(2 ** t, 16)
-                logger.debug(u"sleeping: %s", sleeping_time)
-                time.sleep(sleeping_time)
+                if 'no_sleeping_time' not in meta:
+                    sleeping_time = min(2 ** retry, 16)
+                    logger.debug(u"sleeping: %s", sleeping_time)
+                    time.sleep(sleeping_time)
         else:
             if last_err:
                 raise last_err

@@ -6,7 +6,6 @@
 import re
 import sys
 import uuid
-import warnings
 from io import StringIO
 from threading import Lock
 from time import strptime
@@ -14,8 +13,9 @@ from time import strptime
 from . import errors
 from . import network
 from .chunk_downloader import SnowflakeChunkDownloader
-from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2)
+from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517)
 from .converter import SnowflakeConverter
+from .converter_issue23517 import SnowflakeConverterIssue23517
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
@@ -35,7 +35,6 @@ except ImportError:
 
 import logging
 from logging import getLogger
-
 
 # default configs
 DEFAULT_CONFIGURATION = {
@@ -75,7 +74,8 @@ DEFAULT_CONFIGURATION = {
     u'autocommit': None,  # snowflake
     u'numpy': False,  # snowflake
     u'ocsp_response_cache_filename': None,  # snowflake internal
-    u'converter_class': SnowflakeConverter,  # snowflake internal
+    u'converter_class':
+        SnowflakeConverter if not PY_ISSUE_23517 else SnowflakeConverterIssue23517,
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
 }
 
@@ -528,10 +528,11 @@ class SnowflakeConnection(object):
             self._account = self._account[0:self._account.find(u'.')]
 
         if self._insecure_mode:
-            warnings.warn(u'THIS CONNECTION IS IN INSECURE MODE. IT MEANS '
-                          u'THE CERTIFICATE WILL BE VALIDATED BUT THE '
-                          u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
-                          u'CHECKED.')
+            self.logger.info(
+                u'THIS CONNECTION IS IN INSECURE MODE. IT '
+                u'MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE '
+                u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
+                u'CHECKED.')
         if not self._insecure_mode and self._protocol == u'https' and \
                         self._account not in TEST_ACCOUNTS:
             if IS_OLD_PYTHON():
