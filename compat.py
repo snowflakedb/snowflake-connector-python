@@ -29,6 +29,7 @@ if PY2:
     import urllib
     import httplib
     import Queue
+    from HTMLParser import HTMLParser
 
     GET_CWD = os.getcwdu
     BASE_EXCEPTION_CLASS = StandardError
@@ -54,6 +55,8 @@ if PY2:
     urlencode = urllib.urlencode
     proxy_bypass = urllib.proxy_bypass
 
+    unescape = HTMLParser().unescape
+
     EmptyQueue = Queue.Empty
     Queue = Queue.Queue
 
@@ -62,6 +65,7 @@ else:
     import http.client
     import urllib.request
     import queue
+    import html
 
     GET_CWD = os.getcwd
     BASE_EXCEPTION_CLASS = Exception
@@ -70,6 +74,7 @@ else:
     urlsplit = urllib.parse.urlsplit
     urlunsplit = urllib.parse.urlunsplit
     urlencode = urllib.parse.urlencode
+    unescape = html.unescape
     NUM_DATA_TYPES += [int, float, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-v[-1]]
     PKCS5_OFFSET = lambda v: v[-1]
@@ -120,8 +125,19 @@ def INPUT(prompt):
 
 
 def IS_OLD_PYTHON():
-    u"""
+    """
     Is old Python
     """
     return PY2 and sys.hexversion < 0x02070900 or \
            not PY2 and sys.hexversion < 0x03040300
+
+
+def PY_ISSUE_23517():
+    """
+    Is Python 3.4.3 or 3.5.0
+    This is to check if a workaround for http://bugs.python.org/issue23517
+    is required or not. 3.6.0 already has the fix.
+    No RC or dev version will be checked.
+    """
+    return 0x03040300 <= sys.hexversion < 0x03040400 or \
+           0x03050000 <= sys.hexversion < 0x03050100
