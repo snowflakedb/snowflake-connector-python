@@ -167,8 +167,7 @@ class SnowflakeConverter(object):
             fraction_of_nanoseconds = 0
         else:
             max_fraction = ctx['max_fraction']
-            zero_fill = ctx['zero_fill']
-            fraction_of_nanoseconds = int(value[-scale:] + zero_fill)
+            fraction_of_nanoseconds = int(value[-scale:])
             if is_negative and fraction_of_nanoseconds > 0:
                 fraction_of_nanoseconds = max_fraction - fraction_of_nanoseconds
 

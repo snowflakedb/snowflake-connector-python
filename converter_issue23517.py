@@ -6,6 +6,8 @@
 from datetime import timedelta
 from logging import getLogger
 
+import pytz
+
 from .converter import (SnowflakeConverter, ZERO_EPOCH)
 
 logger = getLogger(__name__)
@@ -20,6 +22,37 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
     def __init__(self, **kwargs):
         super(SnowflakeConverterIssue23517, self).__init__(**kwargs)
         logger.info('initialized')
+
+    def _TIMESTAMP_TZ_to_python(self, ctx):
+        """
+        TIMESTAMP TZ to datetime
+
+        The timezone offset is piggybacked.
+        """
+
+        scale = ctx['scale']
+
+        def conv0(encoded_value):
+            value, tz = encoded_value.split()
+            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                int(tz) - 1440)
+            microseconds = float(value)
+            t = ZERO_EPOCH + timedelta(seconds=microseconds)
+            if pytz.utc != tzinfo:
+                t += tzinfo.utcoffset(t, is_dst=False)
+            return t.replace(tzinfo=tzinfo)
+
+        def conv(encoded_value):
+            value, tz = encoded_value.split()
+            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                int(tz) - 1440)
+            microseconds = float(value[0:-scale + 6])
+            t = ZERO_EPOCH + timedelta(seconds=microseconds)
+            if pytz.utc != tzinfo:
+                t += tzinfo.utcoffset(t, is_dst=False)
+            return t.replace(tzinfo=tzinfo)
+
+        return conv if scale > 6 else conv0
 
     def _TIMESTAMP_NTZ_to_python(self, ctx):
         """

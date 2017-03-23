@@ -4,12 +4,28 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 
-from datetime import datetime, timedelta, time
+from datetime import timedelta, time
 
 import pytz
 
 from snowflake.connector.converter import (SnowflakeConverter, ZERO_EPOCH)
 from snowflake.connector.converter_snowsql import (SnowflakeConverterSnowSQL)
+
+
+def _compose_tz(dt, tzinfo):
+    ret = ZERO_EPOCH + timedelta(seconds=float(dt))
+    ret += tzinfo.utcoffset(ret, is_dst=False)
+    return ret.replace(tzinfo=tzinfo)
+
+
+def _componse_ntz(dt):
+    return ZERO_EPOCH + timedelta(seconds=float(dt))
+
+
+def _compose_ltz(dt, tz):
+    ret = ZERO_EPOCH + timedelta(seconds=float(dt))
+    return pytz.utc.localize(ret, is_dst=False).astimezone(
+        pytz.timezone(tz))
 
 
 def test_fetch_timestamps(conn_cnx):
@@ -19,60 +35,40 @@ def test_fetch_timestamps(conn_cnx):
     tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(tzdiff)
 
     # TIMESTAMP_TZ
-    r0 = datetime.fromtimestamp(float('1325568896.123456'), tz=tzinfo)
-    r1 = datetime.fromtimestamp(float('1325568896.123456'), tz=tzinfo)
-    r2 = datetime.fromtimestamp(float('1325568896.123456'), tz=tzinfo)
-    r3 = 1  # SNOW-28597: wrong result
-    r4 = datetime.fromtimestamp(float('1325568896.12345'), tz=tzinfo)
-    r5 = datetime.fromtimestamp(float('1325568896.1234'), tz=tzinfo)
-    r6 = datetime.fromtimestamp(float('1325568896.123'), tz=tzinfo)
-    r7 = datetime.fromtimestamp(float('1325568896.12'), tz=tzinfo)
-    r8 = datetime.fromtimestamp(float('1325568896.1'), tz=tzinfo)
-    r9 = datetime.fromtimestamp(float('1325568896'), tz=tzinfo)
+    r0 = _compose_tz('1325568896.123456', tzinfo)
+    r1 = _compose_tz('1325568896.123456', tzinfo)
+    r2 = _compose_tz('1325568896.123456', tzinfo)
+    r3 = 1
+    r4 = _compose_tz('1325568896.12345', tzinfo)
+    r5 = _compose_tz('1325568896.1234', tzinfo)
+    r6 = _compose_tz('1325568896.123', tzinfo)
+    r7 = _compose_tz('1325568896.12', tzinfo)
+    r8 = _compose_tz('1325568896.1', tzinfo)
+    r9 = _compose_tz('1325568896', tzinfo)
 
     # TIMESTAMP_NTZ
-    r10 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r11 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r12 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r13 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r14 = ZERO_EPOCH + timedelta(seconds=float('1325568896.12345'))
-    r15 = ZERO_EPOCH + timedelta(seconds=float('1325568896.1234'))
-    r16 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123'))
-    r17 = ZERO_EPOCH + timedelta(seconds=float('1325568896.12'))
-    r18 = ZERO_EPOCH + timedelta(seconds=float('1325568896.1'))
-    r19 = ZERO_EPOCH + timedelta(seconds=float('1325568896'))
+    r10 = _componse_ntz('1325568896.123456')
+    r11 = _componse_ntz('1325568896.123456')
+    r12 = _componse_ntz('1325568896.123456')
+    r13 = _componse_ntz('1325568896.123456')
+    r14 = _componse_ntz('1325568896.12345')
+    r15 = _componse_ntz('1325568896.1234')
+    r16 = _componse_ntz('1325568896.123')
+    r17 = _componse_ntz('1325568896.12')
+    r18 = _componse_ntz('1325568896.1')
+    r19 = _componse_ntz('1325568896')
 
     # TIMESTAMP_LTZ
-    r20 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r20 = pytz.utc.localize(r20, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r21 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r21 = pytz.utc.localize(r21, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r22 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r22 = pytz.utc.localize(r22, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r23 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123456'))
-    r23 = pytz.utc.localize(r23, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r24 = ZERO_EPOCH + timedelta(seconds=float('1325568896.12345'))
-    r24 = pytz.utc.localize(r24, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r25 = ZERO_EPOCH + timedelta(seconds=float('1325568896.1234'))
-    r25 = pytz.utc.localize(r25, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r26 = ZERO_EPOCH + timedelta(seconds=float('1325568896.123'))
-    r26 = pytz.utc.localize(r26, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r27 = ZERO_EPOCH + timedelta(seconds=float('1325568896.12'))
-    r27 = pytz.utc.localize(r27, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r28 = ZERO_EPOCH + timedelta(seconds=float('1325568896.1'))
-    r28 = pytz.utc.localize(r28, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
-    r29 = ZERO_EPOCH + timedelta(seconds=float('1325568896'))
-    r29 = pytz.utc.localize(r29, is_dst=False).astimezone(
-        pytz.timezone(PST_TZ))
+    r20 = _compose_ltz('1325568896.123456', PST_TZ)
+    r21 = _compose_ltz('1325568896.123456', PST_TZ)
+    r22 = _compose_ltz('1325568896.123456', PST_TZ)
+    r23 = _compose_ltz('1325568896.123456', PST_TZ)
+    r24 = _compose_ltz('1325568896.12345', PST_TZ)
+    r25 = _compose_ltz('1325568896.1234', PST_TZ)
+    r26 = _compose_ltz('1325568896.123', PST_TZ)
+    r27 = _compose_ltz('1325568896.12', PST_TZ)
+    r28 = _compose_ltz('1325568896.1', PST_TZ)
+    r29 = _compose_ltz('1325568896', PST_TZ)
 
     # TIME
     r30 = time(5, 7, 8, 123456)
