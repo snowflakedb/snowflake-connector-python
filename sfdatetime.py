@@ -198,6 +198,9 @@ class SnowflakeDateTimeFormat(object):
         if isinstance(value.datetime, time.struct_time):
             return TO_UNICODE(time.strftime(
                 updated_format, value.datetime))
+        if value.datetime.year < 1000:
+            # NOTE: still not supported
+            return value.datetime.isoformat()
         return value.datetime.strftime(updated_format)
 
     def _format_datetime(self, value):
@@ -207,6 +210,9 @@ class SnowflakeDateTimeFormat(object):
         updated_format = self._pre_format(value)
         if isinstance(value, time.struct_time):
             return TO_UNICODE(time.strftime(updated_format, value))
+        if value.year < 1000:
+            # NOTE: still not supported.
+            return value.isoformat()
         return value.strftime(updated_format)
 
     def _create_new_fragment(self, element_types):
