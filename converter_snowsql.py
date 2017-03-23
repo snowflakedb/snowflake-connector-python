@@ -57,9 +57,11 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     #
     # FROM Snowflake to Python objects
     #
-    def to_python_method(self, type_name, column, data_version):
+    def to_python_method(self, type_name, column):
         ctx = column.copy()
-        ctx['data_version'] = data_version
+        if ctx.get('scale'):
+            ctx['max_fraction'] = int(10 ** ctx['scale'])
+            ctx['zero_fill'] = '0' * (9 - ctx['scale'])
         fmt = None
         if is_timestamp_type_name(type_name):
             fmt = SnowflakeDateTimeFormat(
@@ -67,6 +69,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 datetime_class=SnowflakeDateTime)
         elif type_name == u'BINARY':
             fmt = SnowflakeBinaryFormat(self._get_format(type_name))
+        logger.debug('Type: %s, Format: %s', type_name, fmt)
         ctx['fmt'] = fmt
         converters = [u'_{type_name}_to_python'.format(type_name=type_name)]
         for conv in converters:
@@ -121,24 +124,45 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         The timezone offset is piggybacked.
         """
 
-        def conv(encoded_value):
-            scale = ctx['scale']
+        scale = ctx['scale']
+        max_fraction = ctx.get('max_fraction')
+        zero_fill = ctx.get('zero_fill')
+
+        def conv0(encoded_value):
             value, tz = encoded_value.split()
-            microseconds = float(
-                value[0:-scale + 6]) if scale > 6 else float(value)
+            microseconds = float(value)
             tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
                 int(tz) - 1440)
             t = datetime.fromtimestamp(microseconds, tz=tzinfo)
-            fraction_of_nanoseconds = int(
-                value[-scale:] + '0' * (9 - scale)) if scale > 0 else 0
+            if scale == 0:
+                fraction_of_nanoseconds = 0
+            else:
+                fraction_of_nanoseconds = int(value[-scale:] + zero_fill)
+                if value[0] == '-':
+                    fraction_of_nanoseconds = max_fraction - fraction_of_nanoseconds
 
             return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
 
-        return conv
+        def conv(encoded_value):
+            value, tz = encoded_value.split()
+            microseconds = float(value[0:-scale + 6])
+            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                int(tz) - 1440)
+            t = datetime.fromtimestamp(microseconds, tz=tzinfo)
+            if scale == 0:
+                fraction_of_nanoseconds = 0
+            else:
+                fraction_of_nanoseconds = int(value[-scale:] + zero_fill)
+                if value[0] == '-':
+                    fraction_of_nanoseconds = max_fraction - fraction_of_nanoseconds
+
+            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+
+        return conv if scale > 6 else conv0
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         def conv(value):
-            t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
+            t, _, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
                 value, ctx)
             return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
 
@@ -152,8 +176,8 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value):
-            microseconds, fraction_of_nanoseconds = self._extract_timestamp(
-                value, ctx)
+            microseconds, _, fraction_of_nanoseconds = \
+                self._extract_timestamp(value, ctx)
             try:
                 t = ZERO_EPOCH + timedelta(seconds=(microseconds))
             except OverflowError:

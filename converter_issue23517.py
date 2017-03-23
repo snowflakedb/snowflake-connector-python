@@ -28,18 +28,22 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         No timezone info is attached.
         """
 
-        def conv(value):
-            scale = ctx['scale']
-            microseconds = float(
-                value[0:-scale + 6]) if scale > 6 else float(value)
-            t = ZERO_EPOCH + timedelta(seconds=(microseconds))
-            return t
+        scale = ctx['scale']
 
-        return conv
+        def conv0(value):
+            logger.debug('timestamp_ntz: %s', value)
+            return ZERO_EPOCH + timedelta(seconds=(float(value)))
+
+        def conv(value):
+            logger.debug('timestamp_ntz: %s', value)
+            microseconds = float(value[0:-scale + 6])
+            return ZERO_EPOCH + timedelta(seconds=(microseconds))
+
+        return conv if scale > 6 else conv0
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         def conv(value):
-            t, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
+            t, _, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
             return t
 
         return conv
@@ -51,10 +55,13 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         No timezone is attached.
         """
 
+        scale = ctx['scale']
+
+        conv0 = lambda value: (
+            ZERO_EPOCH + timedelta(seconds=(float(value)))).time()
+
         def conv(value):
-            scale = ctx['scale']
-            microseconds = float(
-                value[0:-scale + 6]) if scale > 6 else float(value)
+            microseconds = float(value[0:-scale + 6])
             return (ZERO_EPOCH + timedelta(seconds=(microseconds))).time()
 
-        return conv
+        return conv if scale > 6 else conv0

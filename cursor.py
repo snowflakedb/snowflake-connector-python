@@ -540,7 +540,7 @@ class SnowflakeCursor(object):
                                       column[u'nullable']))
             self._column_converter.append(
                 self._connection.converter.to_python_method(
-                    column[u'type'].upper(), column, data.get(u'version', 0)))
+                    column[u'type'].upper(), column))
 
         self._total_row_index = -1  # last fetched number of rows
 

@@ -8,11 +8,8 @@ from datetime import datetime, timedelta, time
 
 import pytz
 
-from snowflake.connector.compat import (PY_ISSUE_23517)
 from snowflake.connector.converter import (SnowflakeConverter, ZERO_EPOCH)
 from snowflake.connector.converter_snowsql import (SnowflakeConverterSnowSQL)
-from snowflake.connector.converter_snowsql_issue23517 import (
-    SnowflakeConverterSnowSQLIssue23517)
 
 
 def test_fetch_timestamps(conn_cnx):
@@ -184,8 +181,7 @@ SELECT
 def test_fetch_timestamps_snowsql(conn_cnx):
     PST_TZ = "America/Los_Angeles"
 
-    converter_class = SnowflakeConverterSnowSQL if not PY_ISSUE_23517 else \
-        SnowflakeConverterSnowSQLIssue23517
+    converter_class = SnowflakeConverterSnowSQL
     sql = """
 SELECT
     '2012-01-03 12:34:56.123456789+07:00'::timestamp_tz(9),
