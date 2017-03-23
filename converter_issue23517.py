@@ -29,13 +29,10 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         """
 
         def conv(value):
-            _, microseconds, _ = self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
-            if microseconds is None:
-                return None
-
-            # NOTE: date range must fit into datetime data type or will raise
-            # OverflowError
-            t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
+            scale = ctx['scale']
+            microseconds = float(
+                value[0:-scale + 6]) if scale > 6 else float(value)
+            t = ZERO_EPOCH + timedelta(seconds=(microseconds))
             return t
 
         return conv
@@ -55,8 +52,9 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         """
 
         def conv(value):
-            microseconds, _ = self._extract_time(value, ctx)
-            ts = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-            return ts.time()
+            scale = ctx['scale']
+            microseconds = float(
+                value[0:-scale + 6]) if scale > 6 else float(value)
+            return (ZERO_EPOCH + timedelta(seconds=(microseconds))).time()
 
         return conv

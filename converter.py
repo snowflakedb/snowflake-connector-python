@@ -28,7 +28,6 @@ except ImportError:
     tzlocal = None
 
 BITS_FOR_TIMEZONE = 14
-MASK_OF_TIMEZONE = int((1 << BITS_FOR_TIMEZONE) - 1)
 ZERO_TIMEDELTA = timedelta(seconds=0)
 ZERO_EPOCH = datetime.utcfromtimestamp(0)
 
@@ -61,7 +60,8 @@ class SnowflakeConverter(object):
     def get_parameter(self, param):
         return self._parameters[param] if param in self._parameters else None
 
-    def _generate_tzinfo_from_tzoffset(self, tzoffset_minutes):
+    @staticmethod
+    def _generate_tzinfo_from_tzoffset(tzoffset_minutes):
         """
         Generates tzinfo object from tzoffset.
         """
@@ -127,10 +127,10 @@ class SnowflakeConverter(object):
     def _REAL_to_python(self, ctx):
         return float
 
-    def _REAL_numpy_to_python(self, ctx):
+    def _REAL_numpy_to_python(self, _):
         return numpy.float64
 
-    def _TEXT_to_python(self, ctx):
+    def _TEXT_to_python(self, _):
         return None  # skip conv
 
     def _BINARY_to_python(self, ctx):
@@ -144,7 +144,7 @@ class SnowflakeConverter(object):
         """
         return lambda x: datetime.utcfromtimestamp(int(x) * 86400).date()
 
-    def _DATE_numpy_to_python(self, ctx):
+    def _DATE_numpy_to_python(self, _):
         """
         DATE to datetime
 
@@ -152,55 +152,31 @@ class SnowflakeConverter(object):
         """
         return lambda x: numpy.datetime64(int(x), 'D')
 
-    def _extract_timestamp(self, value, ctx, has_tz=False):
-        """Extracts timestamp from a raw data
+    def _extract_timestamp(self, value, ctx):
+        """
+        Extracts timestamp from a raw data
         """
         scale = ctx['scale']
-        try:
-            value1 = decimal.Decimal(value)
-            big_int = int(value1.scaleb(scale))  # removed fraction
+        microseconds = float(
+            value[0:-scale + 6]) if scale > 6 else float(value)
+        fraction_of_nanoseconds = int(
+            value[-scale:] + '0' * (9 - scale)) if scale > 0 else 0
 
-            if has_tz:
-                tzoffset = (big_int & MASK_OF_TIMEZONE) - 1440
-                secs_wo_tz_off = (big_int >> BITS_FOR_TIMEZONE)
-            else:
-                tzoffset = 0
-                secs_wo_tz_off = big_int
+        return microseconds, fraction_of_nanoseconds
 
-            nanoseconds = secs_wo_tz_off * 10 ** (9 - scale)
-            microseconds = nanoseconds // 1000
-
-            fraction_of_nanoseconds = nanoseconds % 1000000000
-            return tzoffset, microseconds, fraction_of_nanoseconds, nanoseconds
-        except decimal.InvalidOperation:
-            return None, None, None
-
-    def _pre_TIMESTAMP_TZ_to_python(self, value, ctx):
+    def _pre_TIMESTAMP_TZ_to_python(self, encoded_value, ctx):
         u"""
         try to split value by space for handling new timestamp with timezone
         encoding format which has timezone index separate from the timestamp
         value
         """
-        tzoffset_extracted = None
+        value, tz = encoded_value.split()
+        microseconds, fraction_of_nanoseconds = self._extract_timestamp(
+            value, ctx)
+        tzinfo_value = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+            int(tz) - 1440)
 
-        valueComponents = str(value).split(" ")
-        if len(valueComponents) == 2:
-            tzoffset_extracted = int(valueComponents[1]) - 1440
-            value = valueComponents[0]
-
-        tzoffset, microseconds, fraction_of_nanoseconds, nanoseconds = \
-            self._extract_timestamp(value, ctx,
-                                    has_tz=(tzoffset_extracted is None))
-
-        if tzoffset_extracted is not None:
-            tzoffset = tzoffset_extracted
-
-        if tzoffset is None:
-            return None
-
-        tzinfo_value = self._generate_tzinfo_from_tzoffset(tzoffset)
-
-        t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
+        t = ZERO_EPOCH + timedelta(seconds=(microseconds))
         if pytz.utc != tzinfo_value:
             t += tzinfo_value.utcoffset(t, is_dst=False)
         return t.replace(tzinfo=tzinfo_value), fraction_of_nanoseconds
@@ -211,31 +187,15 @@ class SnowflakeConverter(object):
 
         The timezone offset is piggybacked.
         """
-        if ctx['data_version'] >= 1:
-            return self._v1_TIMESTAMP_TZ_to_python(ctx)
-        else:
-            return self._v0_TIMESTAMP_TZ_to_python(ctx)
-
-    def _v0_TIMESTAMP_TZ_to_python(self, ctx):
-        """ Version 0 data is a single decimal value with the timezone stored
-        in the lower bits and the epoch value in the higher bit range. """
 
         def conv(encoded_value):
-            t = int(decimal.Decimal(encoded_value).scaleb(ctx['scale']))
-            tzoffset = (t & MASK_OF_TIMEZONE) - 1440
-            value = t >> BITS_FOR_TIMEZONE
-            tzinfo = self._generate_tzinfo_from_tzoffset(tzoffset)
-            return datetime.fromtimestamp(value, tz=tzinfo)
-
-        return conv
-
-    def _v1_TIMESTAMP_TZ_to_python(self, ctx):
-        """ Version 1 data is formatted as `<TS> <TZ>`. """
-
-        def conv(encoded_value):
+            scale = ctx['scale']
             value, tz = encoded_value.split()
-            tzinfo = self._generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            return datetime.fromtimestamp(float(value), tz=tzinfo)
+            microseconds = float(
+                value[0:-scale + 6]) if scale > 6 else float(value)
+            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                int(tz) - 1440)
+            return datetime.fromtimestamp(microseconds, tz=tzinfo)
 
         return conv
 
@@ -274,21 +234,12 @@ class SnowflakeConverter(object):
         This takes consideration of the session parameter TIMEZONE if
         available. If not, tzlocal is used
         """
-        tzoffset, microseconds, fraction_of_nanoseconds, nanoseconds = \
-            self._extract_timestamp(value, ctx)
-        if tzoffset is None:
-            return None
-        try:
-            tzinfo_value = pytz.timezone(self.get_parameter(u'TIMEZONE'))
-        except pytz.exceptions.UnknownTimeZoneError:
-            self.logger.warn('converting to tzinfo_value failed')
-            if tzlocal is not None:
-                tzinfo_value = tzlocal.get_localzone()
-            else:
-                tzinfo_value = pytz.timezone('UTC')
+        microseconds, fraction_of_nanoseconds = self._extract_timestamp(
+            value, ctx)
+        tzinfo_value = self._get_session_tz()
 
         try:
-            t0 = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
+            t0 = ZERO_EPOCH + timedelta(seconds=(microseconds))
             t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo_value)
             return t, fraction_of_nanoseconds
         except OverflowError:
@@ -296,12 +247,18 @@ class SnowflakeConverter(object):
                 "OverflowError in converting from epoch time to "
                 "timestamp_ltz: %s(ms). Falling back to use struct_time."
             )
-            t = time.gmtime(microseconds / float(1000000))
-            return t, fraction_of_nanoseconds
+            return time.gmtime(microseconds), fraction_of_nanoseconds
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         tzinfo = self._get_session_tz()
-        return lambda x: datetime.fromtimestamp(float(x), tz=tzinfo)
+
+        def conv(value):
+            scale = ctx['scale']
+            microseconds = float(
+                value[0:-scale + 6]) if scale > 6 else float(value)
+            return datetime.fromtimestamp(microseconds, tz=tzinfo)
+
+        return conv
 
     def _TIMESTAMP_LTZ_numpy_to_python(self, ctx):
 
@@ -316,26 +273,20 @@ class SnowflakeConverter(object):
 
     _TIMESTAMP_to_python = _TIMESTAMP_LTZ_to_python
 
-    def _pre_TIMESTAMP_NTZ_to_python(self, value, ctx):
-        """TIMESTAMP NTZ to datetime
-
-        No timezone info is attached.
-        """
-        tzoffset, microseconds, fraction_of_nanoseconds, nanoseconds = \
-            self._extract_timestamp(value, ctx)
-
-        if tzoffset is None:
-            return None, None, None
-
-        return nanoseconds, microseconds, fraction_of_nanoseconds
-
     def _TIMESTAMP_NTZ_to_python(self, ctx):
         """
         TIMESTAMP NTZ to datetime
 
         No timezone info is attached.
         """
-        return lambda value: datetime.utcfromtimestamp(float(value))
+
+        def conv(value):
+            scale = ctx['scale']
+            microseconds = float(
+                value[0:-scale + 6]) if scale > 6 else float(value)
+            return datetime.utcfromtimestamp(microseconds)
+
+        return conv
 
     def _TIMESTAMP_NTZ_numpy_to_python(self, ctx):
         """
@@ -345,30 +296,11 @@ class SnowflakeConverter(object):
         """
 
         def conv(value):
-            nanoseconds, _, _ = self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
+            scale = ctx['scale']
+            nanoseconds = int(decimal.Decimal(value).scaleb(scale))
             return numpy.datetime64(nanoseconds, 'ns')
 
         return conv
-
-    def _extract_time(self, value, ctx):
-        u"""Extracts time from raw data
-
-        Returns a pair containing microseconds since midnight and nanoseconds
-        since the last whole-numebr second. The last 6 digits of microseconds
-        will be the same as the first 6 digits of nanoseconds.
-        """
-        scale = ctx['scale']
-        try:
-            value1 = decimal.Decimal(value)
-            big_int = int(value1.scaleb(scale))  # removed fraction
-
-            nanoseconds = big_int * 10 ** (9 - scale)
-            microseconds = nanoseconds // 1000
-
-            fraction_of_nanoseconds = nanoseconds % 1000000000
-            return microseconds, fraction_of_nanoseconds
-        except decimal.InvalidOperation:
-            return None, None
 
     def _TIME_to_python(self, ctx):
         """
@@ -376,9 +308,16 @@ class SnowflakeConverter(object):
 
         No timezone is attached.
         """
-        return lambda x: datetime.utcfromtimestamp(float(x)).time()
 
-    def _VARIANT_to_python(self, ctx):
+        def conv(value):
+            scale = ctx['scale']
+            microseconds = float(
+                value[0:-scale + 6]) if scale > 6 else float(value)
+            return datetime.utcfromtimestamp(microseconds).time()
+
+        return conv
+
+    def _VARIANT_to_python(self, _):
         return None  # skip conv
 
     _OBJECT_to_python = _VARIANT_to_python
@@ -420,8 +359,7 @@ class SnowflakeConverter(object):
     def _bool_to_snowflake(self, value):
         return value
 
-    def _nonetype_to_snowflake(self, value):
-        del value
+    def _nonetype_to_snowflake(self, _):
         return None
 
     def _total_seconds_from_timedelta(self, td):
@@ -494,7 +432,7 @@ class SnowflakeConverter(object):
         return value.strftime(u'%H:%M:%S')
 
     def _struct_time_to_snowflake(self, value):
-        tzinfo_value = self._generate_tzinfo_from_tzoffset(
+        tzinfo_value = SnowflakeConverter._generate_tzinfo_from_tzoffset(
             -time.timezone // 60)
         t = datetime.fromtimestamp(time.mktime(value))
         if pytz.utc != tzinfo_value:
