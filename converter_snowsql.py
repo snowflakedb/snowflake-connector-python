@@ -126,7 +126,6 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
 
         scale = ctx['scale']
         max_fraction = ctx.get('max_fraction')
-        zero_fill = ctx.get('zero_fill')
 
         def conv0(encoded_value):
             value, tz = encoded_value.split()
@@ -137,7 +136,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             if scale == 0:
                 fraction_of_nanoseconds = 0
             else:
-                fraction_of_nanoseconds = int(value[-scale:] + zero_fill)
+                fraction_of_nanoseconds = int(value[-scale:])
                 if value[0] == '-':
                     fraction_of_nanoseconds = max_fraction - fraction_of_nanoseconds
 
@@ -152,7 +151,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             if scale == 0:
                 fraction_of_nanoseconds = 0
             else:
-                fraction_of_nanoseconds = int(value[-scale:] + zero_fill)
+                fraction_of_nanoseconds = int(value[-scale:])
                 if value[0] == '-':
                     fraction_of_nanoseconds = max_fraction - fraction_of_nanoseconds
 
