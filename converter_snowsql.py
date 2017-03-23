@@ -5,7 +5,7 @@
 #
 
 import time
-from datetime import timedelta, date
+from datetime import timedelta, datetime
 from logging import getLogger
 
 from .compat import TO_UNICODE
@@ -17,7 +17,7 @@ from .sfdatetime import (SnowflakeDateTimeFormat, SnowflakeDateTime)
 logger = getLogger(__name__)
 
 
-def _format_sftimestamp(fmt, value, franction_of_nanoseconds):
+def format_sftimestamp(fmt, value, franction_of_nanoseconds):
     sf_datetime = SnowflakeDateTime(value, nanosecond=franction_of_nanoseconds)
     return fmt.format(sf_datetime) if fmt else TO_UNICODE(sf_datetime)
 
@@ -42,6 +42,8 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         fmt = None
         if type_name == u'DATE':
             fmt = self._parameters.get(u'DATE_OUTPUT_FORMAT')
+            if not fmt:
+                fmt = u'YYYY-MM-DD'
         elif type_name == u'TIME':
             fmt = self._parameters.get(u'TIME_OUTPUT_FORMAT')
         elif type_name + u'_OUTPUT_FORMAT' in self._parameters:
@@ -105,23 +107,10 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
 
         No timezone is attached.
         """
-        fmt = ctx['fmt']
 
         def conv(value):
-            try:
-                t = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
-                if fmt:
-                    return fmt.format(SnowflakeDateTime(t, nanosecond=0))
-                return TO_UNICODE(date(t.year, t.month, t.day))
-            except OverflowError:
-                self.logger.debug(
-                    "OverflowError in converting from epoch time to date: "
-                    "%s(s). Falling back to use struct_time.", value)
-                t = time.gmtime(value)
-                if fmt:
-                    return fmt.format(SnowflakeDateTime(t, nanosecond=0))
-                return u'{year:d}-{month:02d}-{day:02d}'.format(
-                    year=t.tm_year, month=t.tm_mon, day=t.tm_mday)
+            t = datetime.utcfromtimestamp(int(value) * 86400).date()
+            return ctx['fmt'].format(SnowflakeDateTime(t, nanosecond=0))
 
         return conv
 
@@ -132,10 +121,18 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         The timezone offset is piggybacked.
         """
 
-        def conv(value):
-            t, fraction_of_nanoseconds = self._pre_TIMESTAMP_TZ_to_python(
-                value, ctx)
-            return _format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+        def conv(encoded_value):
+            scale = ctx['scale']
+            value, tz = encoded_value.split()
+            microseconds = float(
+                value[0:-scale + 6]) if scale > 6 else float(value)
+            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                int(tz) - 1440)
+            t = datetime.fromtimestamp(microseconds, tz=tzinfo)
+            fraction_of_nanoseconds = int(
+                value[-scale:] + '0' * (9 - scale)) if scale > 0 else 0
+
+            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
 
         return conv
 
@@ -143,7 +140,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         def conv(value):
             t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
                 value, ctx)
-            return _format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
 
         return conv
 
@@ -155,43 +152,18 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value):
-            _, microseconds, fraction_of_nanoseconds = \
-                self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
-            if microseconds is None:
-                return None
+            microseconds, fraction_of_nanoseconds = self._extract_timestamp(
+                value, ctx)
             try:
-                t = ZERO_EPOCH + timedelta(
-                    seconds=(microseconds / float(1000000)))
+                t = ZERO_EPOCH + timedelta(seconds=(microseconds))
             except OverflowError:
                 self.logger.debug(
-                    "OverflowError in converting from epoch time to datetime: %s("
-                    "ms). Falling back to use struct_time.",
+                    "OverflowError in converting from epoch time to datetime:"
+                    " %s(ms). Falling back to use struct_time.",
                     microseconds)
-                t = time.gmtime(microseconds / float(1000000))
-            return _format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+                t = time.gmtime(microseconds)
+            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
 
         return conv
 
-    def _TIME_to_python(self, ctx):
-        """
-        TIME to formatted string, SnowflakeDateTime, or datetime.time
-
-        No timezone is attached.
-        """
-
-        def conv(value):
-            microseconds, fraction_of_nanoseconds = \
-                self._extract_time(value, ctx)
-
-            try:
-                t = ZERO_EPOCH + timedelta(
-                    seconds=(microseconds / float(1000000)))
-            except OverflowError:
-                self.logger.debug(
-                    "OverflowError in converting from epoch time to datetime: %s("
-                    "ms). Falling back to use struct_time.",
-                    microseconds)
-                t = time.gmtime(microseconds / float(1000000))
-            return _format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
-
-        return conv
+    _TIME_to_python = _TIMESTAMP_NTZ_to_python

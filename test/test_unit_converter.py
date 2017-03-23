@@ -6,8 +6,8 @@
 
 from logging import getLogger
 
-from snowflake.connector import converter
 from snowflake.connector.compat import TO_UNICODE
+from snowflake.connector.converter import SnowflakeConverter
 
 logger = getLogger(__name__)
 
@@ -17,7 +17,7 @@ def test_is_dst():
     SNOW-6020: Failed to convert to local time during DST is being
     changed
     """
-    conv = converter.SnowflakeConverter()
+    conv = SnowflakeConverter()
     conv.set_parameter('TIMEZONE', 'America/Los_Angeles')
 
     # DST to non-DST
