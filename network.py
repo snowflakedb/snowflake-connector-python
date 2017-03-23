@@ -560,8 +560,8 @@ class SnowflakeRestful(object):
             if ret.get(u'data') and ret[u'data'].get(u'errorMessage'):
                 err += ret[u'data'][u'errorMessage']
                 # no exception is raised
-        except:
-            pass
+        except Exception as e:
+            logger.debug('error in deleting session. ignoring...: %s', e)
 
     def _get_request(self, url, headers, token=None, timeout=None):
         if 'Content-Encoding' in headers:
@@ -588,7 +588,7 @@ class SnowflakeRestful(object):
         return ret
 
     def _post_request(self, url, headers, body, token=None,
-                      timeout=None, _no_results=False):
+                      timeout=None, _no_results=False, is_single_thread=False):
         full_url = u'{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
@@ -596,7 +596,8 @@ class SnowflakeRestful(object):
             url=url,
         )
         ret = self.fetch(u'post', full_url, headers, data=body,
-                         timeout=timeout, token=token)
+                         timeout=timeout, token=token,
+                         is_single_thread=is_single_thread)
         logger.debug(
             u'ret[code] = {code}, after post request'.format(
                 code=(ret.get(u'code', u'N/A'))))
@@ -792,7 +793,7 @@ class SnowflakeRestful(object):
                 _, _ = request_result_queue.get(timeout=request_timeout)
             except:
                 pass
-            return None
+            return {}
 
         retry_cnt = 0
         while True:
