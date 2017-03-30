@@ -9,6 +9,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.15 (March 30, 2017)
+
+    - Refactored data converters in fetch to improve performance
+    - Fixed timestamp format FF to honor the scale of data type
+    - Improved the security of OKTA authentication with hostname verifications
+    - Retry PUT on the error ``OpenSSL.SSL.SysCallError`` 10053 with lower concurrency
+    - Added ``raw_msg`` attribute to ``Error`` class
+    - Refactored session managements
+
 - v1.3.14 (February 24, 2017)
 
     - Improved PUT and GET error handler.
