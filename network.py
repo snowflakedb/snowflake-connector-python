@@ -754,7 +754,9 @@ class SnowflakeRestful(object):
             except (BadStatusLine,
                     SSLError,
                     ProtocolError,
-                    OpenSSL.SSL.SysCallError, ValueError) as err:
+                    OpenSSL.SSL.SysCallError,
+                    ValueError,
+                    RuntimeError) as err:
                 logger.exception('who is hitting error?')
                 logger.debug(err)
                 if not isinstance(err, OpenSSL.SSL.SysCallError) or \
@@ -775,12 +777,6 @@ class SnowflakeRestful(object):
                     msg=u'Failed to connect: {0}'.format(err),
                     errno=ER_FAILED_TO_SERVER,
                     sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-                ), False))
-            except ValueError as err:
-                logger.exception(u'Return value is NOT JSON: %s', err)
-                result_queue.put((InterfaceError(
-                    msg=u"Failed to decode JSON output",
-                    errno=ER_FAILED_TO_REQUEST,
                 ), False))
 
         if is_single_thread:
@@ -1070,14 +1066,17 @@ class SnowflakeRestful(object):
         except IndexError:
             session = self.make_requests_session()
         self._active_sessions.add(session)
-        logger.info("Active requests sessions: %d, idle: %d" % (
-            len(self._active_sessions), len(self._idle_sessions)))
+        logger.info("Active requests sessions: %s, idle: %s",
+                    len(self._active_sessions), len(self._idle_sessions))
         try:
             yield session
         finally:
             self._idle_sessions.appendleft(session)
-            self._active_sessions.remove(session)
-            active = len(self._active_sessions)
-            idle = len(self._idle_sessions)
-            logger.info("Active requests sessions: %d, idle: %d" % (active,
-                                                                    idle))
+            try:
+                self._active_sessions.remove(session)
+            except KeyError:
+                logger.info(
+                    "session doesn't exist in the active session pool. "
+                    "Ignored...")
+            logger.info("Active requests sessions: %s, idle: %s",
+                        len(self._active_sessions), len(self._idle_sessions))
