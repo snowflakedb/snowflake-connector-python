@@ -15,7 +15,7 @@ import sys
 import time
 import uuid
 from io import StringIO, BytesIO
-from threading import Thread
+from threading import (Thread, Lock)
 
 import OpenSSL
 from botocore.vendored import requests
@@ -191,6 +191,7 @@ class SnowflakeRestful(object):
         self._request_timeout = request_timeout or DEFAULT_REQUEST_TIMEOUT
         self._injectClientPause = injectClientPause
         self._connection = connection
+        self._sessions_lock = Lock()
         self._idle_sessions = collections.deque()
         self._active_sessions = set()
         self._request_count = itertools.count()
@@ -224,12 +225,14 @@ class SnowflakeRestful(object):
             del self._token
         if hasattr(self, u'_master_token'):
             del self._master_token
-        sessions = list(self._active_sessions)
-        if sessions:
-            logger.warn("Closing %s active sessions", len(sessions))
-        sessions.extend(self._idle_sessions)
-        self._active_sessions.clear()
-        self._idle_sessions.clear()
+        with self._sessions_lock:
+            sessions = list(self._active_sessions)
+            if sessions:
+                logger.warn("Closing %s active sessions", len(sessions))
+            sessions.extend(self._idle_sessions)
+            self._active_sessions.clear()
+            self._idle_sessions.clear()
+            self._active_sessions = self._idle_sessions = None
         for s in sessions:
             try:
                 s.close()
@@ -662,8 +665,7 @@ class SnowflakeRestful(object):
                                proxies, timeouts, **kwargs)
 
     def _fetch(self, session, method, full_url, headers, data, proxies,
-               timeouts=(DEFAULT_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT,
-                         DEFAULT_REQUEST_TIMEOUT),
+               timeouts,
                token=NO_TOKEN,
                is_raw_text=False,
                catch_okta_unauthorized_error=False,
@@ -677,8 +679,6 @@ class SnowflakeRestful(object):
         request_timeout = timeouts[2]  # total request timeout
         request_exec_timeout = 60  # one request thread timeout
         conn = self._connection
-        proxies = set_proxies(conn.rest._proxy_host, conn.rest._proxy_port,
-                              conn.rest._proxy_user, conn.rest._proxy_password)
 
         def request_exec(result_queue):
             try:
@@ -1058,29 +1058,37 @@ class SnowflakeRestful(object):
 
     @contextlib.contextmanager
     def _use_requests_session(self):
-        """ Session caching context manager.  Note that the session is not
-        closed until close() is called so each session may be used multiple
-        times. """
-        try:
-            session = self._idle_sessions.pop()
-        except IndexError:
-            session = self.make_requests_session()
-            uses = 0
-        else:
-            uses = next(session._reuse_count)
-        self._active_sessions.add(session)
-        logger.debug("Using requests session [%d uses]: active %d, idle: %d",
-                     uses, len(self._active_sessions), len(self._idle_sessions))
+        """ Session caching context manager.  Some trivial garbage collection
+        of idle sessions may happen here but a full cleanup requires calling
+        `close()`. """
+        with self._sessions_lock:
+            try:
+                session = self._idle_sessions.pop()
+            except IndexError:
+                session = self.make_requests_session()
+                uses = 0
+            else:
+                uses = next(session._reuse_count)
+            self._active_sessions.add(session)
+            logger.debug(
+                u'using requests session [%d uses]: active %d, idle: %d',
+                uses, len(self._active_sessions), len(self._idle_sessions))
         try:
             yield session
         finally:
-            self._idle_sessions.appendleft(session)
-            try:
+            with self._sessions_lock:
+                if self._active_sessions is None:  # closed
+                    return
                 self._active_sessions.remove(session)
-            except KeyError:
-                logger.info(
-                    "session doesn't exist in the active session pool. "
-                    "Ignored...")
-            else:
-                logger.debug("Freed requests sessions: active %d, idle: %d",
-                    len(self._active_sessions), len(self._idle_sessions))
+                active = len(self._active_sessions)
+                idle = len(self._idle_sessions)
+                if idle > max(1, active):
+                    logger.debug(
+                        u'closing excess requests sessions: active %d, '
+                        u'idle: %d', active, idle)
+                    session.close()
+                else:
+                    self._idle_sessions.appendleft(session)
+                    logger.debug(
+                        u'freed requests sessions: active %d, idle: %d',
+                        active, idle)
