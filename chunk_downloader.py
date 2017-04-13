@@ -12,6 +12,7 @@ import weakref
 from concurrent import futures
 from logging import getLogger
 
+from .compat import PY2
 from .errorcode import ER_CHUNK_DOWNLOAD_FAILED
 from .errors import (Error, OperationalError)
 
@@ -60,13 +61,14 @@ class SnowflakeChunkDownloader(object):
         self._sched_ticks = 0
         self._sched_pending_fill = 1
         # Improved performance for high thread counts.
-        self._switchinterval_save = sys.getswitchinterval()
-        sys.setswitchinterval(0.200)
+        if not PY2:
+            self._switchinterval_save = sys.getswitchinterval()
+            sys.setswitchinterval(0.200)
 
     def __iter__(self):
         return self
 
-    def __next__(self):
+    def next(self):
         self.assertFixedThread()
         idx = self._consumed
         if idx >= self._total:
@@ -77,8 +79,8 @@ class SnowflakeChunkDownloader(object):
                 self.sched_next()
         for attempt in range(MAX_RETRY_DOWNLOAD + 1):
             if attempt:
-                logger.warn(u'retrying chunk %d download (retry %d/%d)',
-                            idx + 1, attempt, MAX_RETRY_DOWNLOAD)
+                logger.warning(u'retrying chunk %d download (retry %d/%d)',
+                               idx + 1, attempt, MAX_RETRY_DOWNLOAD)
                 self._sched(idx, retry=attempt)
             with self._sched_lock:
                 fut = self._sched_work.pop(idx)
@@ -92,7 +94,7 @@ class SnowflakeChunkDownloader(object):
                 except futures.TimeoutError:
                     elapsed = self.time() - start_ts
                     if elapsed > WAIT_TIME_IN_SECONDS:
-                        logger.warn(
+                        logger.warning(
                             u'chunk %d download timed out after %g second(s)',
                             idx + 1, elapsed)
                         with self._sched_lock:
@@ -116,6 +118,8 @@ class SnowflakeChunkDownloader(object):
                         u'unknown reason.',
                 u'errno': ER_CHUNK_DOWNLOAD_FAILED
             })
+
+    __next__ = next
 
     def get_status(self):
         """ Thread safe access to tuple of (active, ready) chunk counts. """
@@ -151,7 +155,7 @@ class SnowflakeChunkDownloader(object):
         future = futures.Future()
         with self._sched_lock:
             assert idx not in self._sched_work or \
-                self._sched_work[idx].cancelled()
+                   self._sched_work[idx].cancelled()
             self._sched_work[idx] = future
         tname = 'ChunkDownloader_%d' % (idx + 1)
         if retry is not None:
@@ -242,7 +246,8 @@ class SnowflakeChunkDownloader(object):
         """
         Terminates downloading the chunks.
         """
-        sys.setswitchinterval(self._switchinterval_save)
+        if not PY2:
+            sys.setswitchinterval(self._switchinterval_save)
         with self._sched_lock:
             futures = list(self._sched_work.values())
             self._sched_work = None

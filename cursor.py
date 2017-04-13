@@ -120,9 +120,9 @@ class SnowflakeCursor(object):
     def rowcount(self):
         u"""
         The number of records updated or selected.
-        If not clear, -1 is returned
+        If not clear, None is returned
         """
-        return self._total_rowcount
+        return self._total_rowcount if self._total_rowcount >= 0 else None
 
     @property
     def rownumber(self):
