@@ -1,0 +1,135 @@
+from datetime import timedelta, datetime
+
+import pytz
+from dateutil.parser import parse
+
+from snowflake.connector.converter import (SnowflakeConverter)
+
+
+def test_fetch_various_timestamps(conn_cnx):
+    """
+    More coverage of timestamp
+    Currently TIMESTAMP_LTZ is not tested.
+    """
+    PST_TZ = "America/Los_Angeles"
+    epoch_times = [
+        '1325568896',
+        '-2208943503',
+        '0',
+        '-1'
+    ]
+    timezones = [
+        '+07:00',
+        '+00:00',
+        '-01:00',
+        '-09:00'
+    ]
+    fractions = '123456789'
+    data_types = ['TIMESTAMP_TZ', 'TIMESTAMP_NTZ']
+
+    data = []
+    for dt in data_types:
+        for et in epoch_times:
+            if dt == 'TIMESTAMP_TZ':
+                for tz in timezones:
+                    tzdiff = (int(tz[1:3]) * 60 + int(tz[4:6])) * (
+                        -1 if tz[0] == '-' else 1)
+                    tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                        tzdiff)
+                    ts = datetime.fromtimestamp(float(et), tz=tzinfo)
+                    data.append({
+                        'scale': 0,
+                        'dt': dt,
+                        'inp': ts.strftime(
+                            '%Y-%m-%d %H:%M:%S{tz}'.format(tz=tz)),
+                        'out': ts
+                    })
+                    for idx in range(len(fractions)):
+                        scale = idx + 1
+                        if idx + 1 != 6:  # SNOW-28597
+                            ts0 = datetime.fromtimestamp(float(et), tz=tzinfo)
+                            ts0_str = ts0.strftime(
+                                '%Y-%m-%d %H:%M:%S.{ff}{tz}'.format(
+                                    ff=fractions[:idx + 1], tz=tz))
+                            ts1 = parse(ts0_str)
+                            data.append({
+                                'scale': scale,
+                                'dt': dt,
+                                'inp': ts0_str,
+                                'out': ts1
+                            })
+            elif dt == 'TIMESTAMP_LTZ':
+                # WIP. this test work in edge case
+                tzinfo = pytz.timezone(PST_TZ)
+                ts0 = datetime.fromtimestamp(float(et))
+                ts0 = pytz.utc.localize(ts0, is_dst=False).astimezone(tzinfo)
+                ts0_str = ts0.strftime('%Y-%m-%d %H:%M:%S')
+                ts1 = ts0
+                data.append({
+                    'scale': 0,
+                    'dt': dt,
+                    'inp': ts0_str,
+                    'out': ts1
+                })
+                for idx in range(len(fractions)):
+                    ts0 = datetime.fromtimestamp(float(et))
+                    ts0 = pytz.utc.localize(ts0, is_dst=False).astimezone(
+                        tzinfo)
+                    ts0_str = ts0.strftime(
+                        '%Y-%m-%d %H:%M:%S.{ff}'.format(
+                            ff=fractions[:idx + 1]
+                        ))
+                    ts1 = ts0 + timedelta(seconds=float(
+                        '0.{0}'.format(fractions[:idx + 1])))
+                    data.append({
+                        'scale': idx + 1,
+                        'dt': dt,
+                        'inp': ts0_str,
+                        'out': ts1
+                    })
+            else:
+                ts0_str = datetime.fromtimestamp(
+                    float(et)).strftime('%Y-%m-%d %H:%M:%S')
+                ts1 = parse(ts0_str)
+                data.append({
+                    'scale': 0,
+                    'dt': dt,
+                    'inp': ts0_str,
+                    'out': ts1
+                })
+                for idx in range(len(fractions)):
+                    ts0_str = datetime.fromtimestamp(float(et)).strftime(
+                        '%Y-%m-%d %H:%M:%S.{ff}'.format(
+                            ff=fractions[:idx + 1]))
+                    ts1 = parse(ts0_str)
+                    data.append({
+                        'scale': idx + 1,
+                        'dt': dt,
+                        'inp': ts0_str,
+                        'out': ts1
+                    })
+    sql = "SELECT "
+    for d in data:
+        sql += "'{inp}'::{dt}({scale}), ".format(
+            inp=d['inp'],
+            dt=d['dt'],
+            scale=d['scale']
+        )
+    sql += "1"
+    with conn_cnx() as cnx:
+        cur = cnx.cursor()
+        cur.execute("""
+ALTER SESSION SET TIMEZONE='{tz}';
+""".format(tz=PST_TZ))
+        rec = cur.execute(sql).fetchone()
+        for idx, d in enumerate(data):
+            comp, lower, higher = _in_range(d['out'], rec[idx])
+            assert comp, 'data: {d}: target={target}, lower={lower}, higher={' \
+                         'higher}'.format(
+                d=d, target=rec[idx], lower=lower, higher=higher)
+
+
+def _in_range(reference, target):
+    lower = reference - timedelta(microseconds=1)
+    higher = reference + timedelta(microseconds=1)
+    return lower <= target <= higher, lower, higher

@@ -6,6 +6,8 @@
 from datetime import timedelta
 from logging import getLogger
 
+import pytz
+
 from .converter import (SnowflakeConverter, ZERO_EPOCH)
 
 logger = getLogger(__name__)
@@ -21,6 +23,37 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         super(SnowflakeConverterIssue23517, self).__init__(**kwargs)
         logger.info('initialized')
 
+    def _TIMESTAMP_TZ_to_python(self, ctx):
+        """
+        TIMESTAMP TZ to datetime
+
+        The timezone offset is piggybacked.
+        """
+
+        scale = ctx['scale']
+
+        def conv0(encoded_value):
+            value, tz = encoded_value.split()
+            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                int(tz) - 1440)
+            microseconds = float(value)
+            t = ZERO_EPOCH + timedelta(seconds=microseconds)
+            if pytz.utc != tzinfo:
+                t += tzinfo.utcoffset(t, is_dst=False)
+            return t.replace(tzinfo=tzinfo)
+
+        def conv(encoded_value):
+            value, tz = encoded_value.split()
+            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
+                int(tz) - 1440)
+            microseconds = float(value[0:-scale + 6])
+            t = ZERO_EPOCH + timedelta(seconds=microseconds)
+            if pytz.utc != tzinfo:
+                t += tzinfo.utcoffset(t, is_dst=False)
+            return t.replace(tzinfo=tzinfo)
+
+        return conv if scale > 6 else conv0
+
     def _TIMESTAMP_NTZ_to_python(self, ctx):
         """
         TIMESTAMP NTZ to datetime
@@ -28,21 +61,22 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         No timezone info is attached.
         """
 
+        scale = ctx['scale']
+
+        def conv0(value):
+            logger.debug('timestamp_ntz: %s', value)
+            return ZERO_EPOCH + timedelta(seconds=(float(value)))
+
         def conv(value):
-            _, microseconds, _ = self._pre_TIMESTAMP_NTZ_to_python(value, ctx)
-            if microseconds is None:
-                return None
+            logger.debug('timestamp_ntz: %s', value)
+            microseconds = float(value[0:-scale + 6])
+            return ZERO_EPOCH + timedelta(seconds=(microseconds))
 
-            # NOTE: date range must fit into datetime data type or will raise
-            # OverflowError
-            t = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-            return t
-
-        return conv
+        return conv if scale > 6 else conv0
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         def conv(value):
-            t, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
+            t, _, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
             return t
 
         return conv
@@ -54,9 +88,13 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         No timezone is attached.
         """
 
-        def conv(value):
-            microseconds, _ = self._extract_time(value, ctx)
-            ts = ZERO_EPOCH + timedelta(seconds=(microseconds / float(1000000)))
-            return ts.time()
+        scale = ctx['scale']
 
-        return conv
+        conv0 = lambda value: (
+            ZERO_EPOCH + timedelta(seconds=(float(value)))).time()
+
+        def conv(value):
+            microseconds = float(value[0:-scale + 6])
+            return (ZERO_EPOCH + timedelta(seconds=(microseconds))).time()
+
+        return conv if scale > 6 else conv0

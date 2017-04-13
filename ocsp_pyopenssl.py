@@ -36,7 +36,7 @@ from pyasn1.codec.der import encoder as der_encoder
 from pyasn1.type import (univ, tag)
 from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 
-from .compat import (PY2, urlsplit, urlunsplit, OK)
+from .compat import (PY2, urlsplit, OK)
 from .errorcode import (ER_FAILED_TO_GET_OCSP_URI,
                         ER_INVALID_OCSP_RESPONSE,
                         ER_SERVER_CERTIFICATE_REVOKED,
@@ -56,31 +56,26 @@ def _read_ca_bundle(ca_bundle_file):
     Reads a cabundle file including certificates in PEM format
     """
     logger = getLogger(__name__)
-    try:
-        logger.debug('reading cabundle: %s', ca_bundle_file)
-        # cabundle file encoding varies. Tries reading it in utf-8 but ignore
-        # all errors
-        all_certs = codecs.open(
-            ca_bundle_file, 'r', encoding='utf-8', errors='ignore').read()
-        state = 0
-        contents = []
-        for line in all_certs.split('\n'):
-            if state == 0 and line.startswith('-----BEGIN CERTIFICATE-----'):
-                state = 1
-                contents.append(line)
-            elif state == 1:
-                contents.append(line)
-                if line.startswith('-----END CERTIFICATE-----'):
-                    cert = load_certificate(
-                        FILETYPE_PEM,
-                        '\n'.join(contents).encode('utf-8'))
-                    logger.debug('cert: %s', cert.get_subject().der())
-                    ROOT_CERTIFICATES_DICT[cert.get_subject().der()] = cert
-                    state = 0
-                    contents = []
-
-    except Exception as e:
-        logger.error('Failed to read %s: %s', ca_bundle_file, e)
+    logger.debug('reading ca cabundle: %s', ca_bundle_file)
+    # cabundle file encoding varies. Tries reading it in utf-8 but ignore
+    # all errors
+    all_certs = codecs.open(
+        ca_bundle_file, 'r', encoding='utf-8', errors='ignore').read()
+    state = 0
+    contents = []
+    for line in all_certs.split('\n'):
+        if state == 0 and line.startswith('-----BEGIN CERTIFICATE-----'):
+            state = 1
+            contents.append(line)
+        elif state == 1:
+            contents.append(line)
+            if line.startswith('-----END CERTIFICATE-----'):
+                cert = load_certificate(
+                    FILETYPE_PEM,
+                    '\n'.join(contents).encode('utf-8'))
+                ROOT_CERTIFICATES_DICT[cert.get_subject().der()] = cert
+                state = 0
+                contents = []
 
 
 def _lazy_read_ca_bundle():
@@ -96,7 +91,6 @@ def _lazy_read_ca_bundle():
                      os.environ.get('CURL_CA_BUNDLE'))
         if ca_bundle and path.exists(ca_bundle):
             # if the user/application specifies cabundle.
-            logger.debug('reading ca bundle: %s', ca_bundle)
             _read_ca_bundle(ca_bundle)
         else:
             import sys
@@ -108,7 +102,6 @@ def _lazy_read_ca_bundle():
                 # if cacert.pem exists next to certs.py in request pacakage
                 ca_bundle = path.join(
                     path.dirname(certs.__file__), 'cacert.pem')
-                logger.debug('reading ca bundle: %s', ca_bundle)
                 _read_ca_bundle(ca_bundle)
             elif hasattr(sys, '_MEIPASS'):
                 # if pyinstaller includes cacert.pem
@@ -120,17 +113,15 @@ def _lazy_read_ca_bundle():
                 for filename in cabundle_candidates:
                     ca_bundle = path.join(sys._MEIPASS, *filename)
                     if path.exists(ca_bundle):
-                        logger.debug('reading ca bundle: %s', ca_bundle)
                         _read_ca_bundle(ca_bundle)
                         break
                 else:
                     logger.error('No cabundle file is found in _MEIPASS')
             try:
                 import certifi
-                logger.debug('reading ca bundle: %s', certifi.where())
                 _read_ca_bundle(certifi.where())
             except:
-                logger.info('no certifi is installed.')
+                logger.info('no certifi is installed. ignored.')
 
     except Exception as e:
         logger.error('Failed to read ca_bundle: %s', e)
@@ -235,7 +226,7 @@ def _extract_values_from_certificate(cert):
             for line in str(e).split(u"\n"):
                 m = OCSP_RE.match(line)
                 if m:
-                    logger.debug(u'OCSP: %s', m.group(1))
+                    logger.debug(u'OCSP URL: %s', m.group(1))
                     ocsp_uris0.append(m.group(1))
 
     if len(ocsp_uris0) == 1:
@@ -327,7 +318,7 @@ def _verify_signature(
         crypto_verify(cert, value, data_der, algorithm_name)
         return None
     except Exception as e:
-        logger.exception(e)
+        logger.exception("Failed to verify the signature", e)
         return e
 
 
@@ -358,8 +349,7 @@ def process_ocsp_response(response, ocsp_issuer):
         BasicOCSPResponse())
 
     if basic_ocsp_response['certs'] is not None:
-        logger.debug("Certificate is attached in Basic OCSP Response: %s",
-                     basic_ocsp_response['certs'])
+        logger.debug("Certificate is attached in Basic OCSP Response")
         cert_der = der_encoder.encode(basic_ocsp_response['certs'][0])
         ocsp_cert = load_certificate(FILETYPE_ASN1, cert_der)
     else:
@@ -639,7 +629,7 @@ def _encode_ocsp_response_cache(ocsp_response_cache,
     Encodes OCSP response cache to JSON
     """
     logger = getLogger(__name__)
-    logger.debug('>>')
+    logger.debug('encoding OCSP reponse cache to JSON')
     for cert_id_der, (current_time, ocsp_response) in \
             ocsp_response_cache.items():
         k = base64.b64encode(cert_id_der).decode('ascii')
@@ -734,6 +724,7 @@ def write_ocsp_response_cache_file(filename, ocsp_validation_cache):
     Writes OCSP Response Cache
     """
     logger = getLogger(__name__)
+    logger.debug('writing OCSP response cache file')
     file_cache_data = {}
     _encode_ocsp_response_cache(
         ocsp_validation_cache,

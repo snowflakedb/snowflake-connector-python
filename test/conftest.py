@@ -24,7 +24,10 @@ except:
     CONNECTION_PARAMETERS_S3 = {}
 
 import snowflake.connector
-from snowflake.connector.compat import (UTF8, TO_UNICODE)
+from snowflake.connector.compat import (UTF8, TO_UNICODE, PY_ISSUE_23517)
+from snowflake.connector.converter import SnowflakeConverter
+from snowflake.connector.converter_issue23517 import (
+    SnowflakeConverterIssue23517)
 
 logger = getLogger(__name__)
 
@@ -147,13 +150,13 @@ def init_test_schema(request):
                 "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
         if CONNECTION_PARAMETERS_S3:
             with snowflake.connector.connect(
-                user=ret1['user'],
-                password=ret1['password'],
-                host=ret1['host'],
-                port=ret1['port'],
-                database=ret1['database'],
-                account=ret1['account'],
-                protocol=ret1['protocol']
+                    user=ret1['user'],
+                    password=ret1['password'],
+                    host=ret1['host'],
+                    port=ret1['port'],
+                    database=ret1['database'],
+                    account=ret1['account'],
+                    protocol=ret1['protocol']
             ) as con1:
                 con1.cursor().execute(
                     "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
@@ -161,12 +164,16 @@ def init_test_schema(request):
     request.addfinalizer(fin)
 
 
-def create_connection(user=None, password=None, account=None, use_numpy=False):
+def create_connection(user=None, password=None, account=None, use_numpy=False,
+                      converter_class=None):
     """
     Creates a connection using the parameters defined in JDBC connect string
     """
     ret = db_parameters()
 
+    if converter_class is None:
+        converter_class = SnowflakeConverter if not PY_ISSUE_23517 else \
+            SnowflakeConverterIssue23517
     if user is not None:
         ret['user'] = user
     if password is not None:
@@ -184,6 +191,7 @@ def create_connection(user=None, password=None, account=None, use_numpy=False):
         schema=ret['schema'],
         timezone='UTC',
         numpy=use_numpy,
+        converter_class=converter_class,
     )
     return connection
 
@@ -233,9 +241,12 @@ def generate_k_lines_of_n_files(tmpdir, k, n, compress=False):
 
 
 @contextmanager
-def db(user=None, password=None, account=None, use_numpy=False):
-    cnx = create_connection(user=user, password=password,
-                            account=account, use_numpy=use_numpy)
+def db(user=None, password=None, account=None, use_numpy=False,
+       converter_class=None):
+    cnx = create_connection(
+        user=user, password=password,
+        account=account, use_numpy=use_numpy,
+        converter_class=converter_class)
     try:
         yield cnx
     finally:
