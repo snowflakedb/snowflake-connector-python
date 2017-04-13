@@ -3,11 +3,11 @@
 #
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
-import datetime
 import decimal
 import json
 import os
 import time
+from datetime import datetime
 
 import pytest
 import pytz
@@ -179,7 +179,7 @@ def test_insert_timestamp_select(conn, db_parameters):
     """
     PST_TZ = "America/Los_Angeles"
     JST_TZ = "Asia/Tokyo"
-    current_timestamp = datetime.datetime.utcnow()
+    current_timestamp = datetime.utcnow()
     current_timestamp = current_timestamp.replace(tzinfo=pytz.timezone(PST_TZ))
     current_date = current_timestamp.date()
     current_time = current_timestamp.time()
@@ -299,7 +299,7 @@ def test_insert_timestamp_ltz(conn, db_parameters):
         cnx.cursor().execute(
             "alter session set timezone='{tzstr}'".format(tzstr=tzstr))
 
-        current_time = datetime.datetime.now()
+        current_time = datetime.now()
         current_time = current_time.replace(tzinfo=pytz.timezone(tzstr))
 
         c = cnx.cursor()
@@ -486,7 +486,7 @@ created_at timestamp, data variant)
 
     try:
         with conn() as cnx:
-            current_time = datetime.datetime.now()
+            current_time = datetime.now()
             c = cnx.cursor()
             try:
                 fmt = ("insert into {name}(created_at, data) "
