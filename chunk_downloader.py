@@ -4,31 +4,32 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 
-import collections
-import sys
-import threading
-import time
-import weakref
-from concurrent import futures
+from collections import namedtuple
 from logging import getLogger
+from multiprocessing.pool import ThreadPool
+from threading import (Condition)
 
-from .compat import PY2
-from .errorcode import ER_CHUNK_DOWNLOAD_FAILED
+from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
 
 DEFAULT_REQUEST_TIMEOUT = 3600
+DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS = 2
+DEFAULT_CLIENT_RESULT_PREFETCH_THREADS = 1
 
-MAX_RETRY_DOWNLOAD = 3
-WAIT_TIME_IN_SECONDS = 1200
-
-# Scheduling ramp constants.  Use caution if changing these.
-SCHED_MAX_PENDING = 40  # Adjust down to reduce memory usage.
-SCHED_GROWTH_ADJ = 0.25  # Increase to ramp concurrency faster.
-SCHED_SHRINK_ADJ = 0.99  # Adjusts concurrency down when data is ready.
+MAX_RETRY_DOWNLOAD = 10
+MAX_WAIT = 120
+WAIT_TIME_IN_SECONDS = 10
 
 SSE_C_ALGORITHM = u"x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = u"x-amz-server-side-encryption-customer-key"
 SSE_C_AES = u"AES256"
+
+SnowflakeChunk = namedtuple('SnowflakeChunk', [
+    'url',  # S3 bucket URL to download the chunk
+    'row_count',  # number of rows in the chunk
+    'result_data',  # pointer to the generator of the chunk
+    'ready'  # True if ready to consume or False
+])
 
 logger = getLogger(__name__)
 
@@ -38,224 +39,227 @@ class SnowflakeChunkDownloader(object):
     Large Result set chunk downloader class.
     """
 
-    Status = collections.namedtuple('ChunkDownloaderStatus', 'active, ready')
-    time = getattr(time, 'perf_counter', time.time)
-
-    def __init__(self, chunks, connection, cursor, qrmk, chunk_headers,
-                 use_ijson=False):
+    def _pre_init(self, chunks, connection, cursor, qrmk, chunk_headers,
+                  prefetch_slots=DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
+                  prefetch_threads=DEFAULT_CLIENT_RESULT_PREFETCH_THREADS,
+                  use_ijson=False):
         self._use_ijson = use_ijson
+        self._session = None
+
+        self._downloader_error = None
+
         self._connection = connection
         self._cursor = cursor
         self._qrmk = qrmk
-        self._headers = chunk_headers
-        self._manifests = chunks
-        self._total = len(chunks)
-        self._calling_thread = None
-        self._consumed = 0
-        self._sched_lock = threading.RLock()
-        self._sched_work = {}
-        self._sched_cursor = 0
-        self._sched_active = 0
-        self._sched_ready = 0
-        self._sched_backoff_till = 0
-        self._sched_ticks = 0
-        self._sched_pending_fill = 1
-        # Improved performance for high thread counts.
-        if not PY2:
-            self._switchinterval_save = sys.getswitchinterval()
-            sys.setswitchinterval(0.200)
+        self._chunk_headers = chunk_headers
 
-    def __iter__(self):
-        return self
+        self._prefetch_slots = prefetch_slots
+        self._prefetch_threads = prefetch_threads
 
-    def next(self):
-        self.assertFixedThread()
-        idx = self._consumed
-        if idx >= self._total:
-            raise StopIteration()
-        with self._sched_lock:
-            if idx == self._sched_cursor:
-                logger.warning(u'chunk downloader reached starvation')
-                self.sched_next()
-        for attempt in range(MAX_RETRY_DOWNLOAD + 1):
-            if attempt:
-                logger.warning(u'retrying chunk %d download (retry %d/%d)',
-                               idx + 1, attempt, MAX_RETRY_DOWNLOAD)
-                self._sched(idx, retry=attempt)
-            with self._sched_lock:
-                fut = self._sched_work.pop(idx)
-            # Wait for the result with a small inner timeout that is used
-            # to maintain the scheduler (maybe_sched_more).  Otherwise it
-            # might become starved for some network conditions.
-            start_ts = self.time()
-            while True:
-                try:
-                    rows = fut.result(timeout=0.250)
-                except futures.TimeoutError:
-                    elapsed = self.time() - start_ts
-                    if elapsed > WAIT_TIME_IN_SECONDS:
-                        logger.warning(
-                            u'chunk %d download timed out after %g second(s)',
-                            idx + 1, elapsed)
-                        with self._sched_lock:
-                            fut.cancel()
-                            self._sched_active -= 1
-                            break
-                    else:
-                        self._sched_tick()
-                else:
-                    self._consumed += 1
-                    with self._sched_lock:
-                        self._sched_ready -= 1
-                    self._sched_tick()
-                    return rows
-        Error.errorhandler_wrapper(
-            self._connection,
-            self._cursor,
-            OperationalError,
-            {
-                u'msg': u'The result set chunk download fails or hang for '
-                        u'unknown reason.',
-                u'errno': ER_CHUNK_DOWNLOAD_FAILED
-            })
+        self._chunk_size = len(chunks)
+        self._chunks = {}
+        self._chunk_locks = {}
 
-    __next__ = next
+        self._prefetch_threads *= 2
 
-    def get_status(self):
-        """ Thread safe access to tuple of (active, ready) chunk counts. """
-        with self._sched_lock:
-            return self.Status(self._sched_active, self._sched_ready)
+        self._effective_threads = min(self._prefetch_threads, self._chunk_size)
+        if self._effective_threads < 1:
+            self._effective_threads = 1
 
-    def assertFixedThread(self):
+        self._num_chunks_to_prefetch = min(self._prefetch_slots,
+                                           self._chunk_size)
+
+        for idx, chunk in enumerate(chunks):
+            logger.info(u"queued chunk %d: rowCount=%s", idx,
+                        chunk[u'rowCount'])
+            self._chunks[idx] = SnowflakeChunk(
+                url=chunk[u'url'],
+                result_data=None,
+                ready=False,
+                row_count=int(chunk[u'rowCount']))
+
+        logger.debug(u'prefetch slots: %s, '
+                     u'prefetch threads: %s, '
+                     u'number of chunks: %s, '
+                     u'effective threads: %s',
+                     self._prefetch_slots,
+                     self._prefetch_threads,
+                     self._chunk_size,
+                     self._effective_threads)
+
+        self._pool = ThreadPool(self._effective_threads)
+
+        self._total_millis_downloading_chunks = 0
+        self._total_millis_parsing_chunks = 0
+
+        self._next_chunk_to_consume = 0
+
+    def __init__(self, chunks, connection, cursor, qrmk, chunk_headers,
+                 prefetch_slots=DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
+                 prefetch_threads=DEFAULT_CLIENT_RESULT_PREFETCH_THREADS,
+                 use_ijson=False):
+        self._pre_init(chunks, connection, cursor, qrmk, chunk_headers,
+                       prefetch_slots=prefetch_slots,
+                       prefetch_threads=prefetch_threads,
+                       use_ijson=use_ijson)
+        logger.info('Chunk Downloader in memory')
+        for idx in range(self._num_chunks_to_prefetch):
+            self._pool.apply_async(self._download_chunk, [idx])
+            self._chunk_locks[idx] = Condition()
+        self._next_chunk_to_download = self._num_chunks_to_prefetch
+
+    def _download_chunk(self, idx):
         """
-        Ensure threadsafety == 2 is enforced.
-        https://www.python.org/dev/peps/pep-0249/#threadsafety
+        Downloads a chunk asynchronously
         """
-        current = threading.current_thread()
-        if self._calling_thread is None:
-            self._calling_thread = weakref.ref(current)
-        else:
-            expected = self._calling_thread()
-            assert current is expected, '%r is not %r' % (current, expected)
-
-    def sched_next(self):
-        with self._sched_lock:
-            idx = self._sched_cursor
-            if idx >= self._total:
-                return None
-            self._sched_chunk(idx)
-            self._sched_cursor += 1
-            return idx
-
-    def _sched_chunk(self, idx, retry=None):
-        """
-        Schedule a download in a background thread.  Return a Future object
-        that represents the eventual result.
-        """
-        future = futures.Future()
-        with self._sched_lock:
-            assert idx not in self._sched_work or \
-                   self._sched_work[idx].cancelled()
-            self._sched_work[idx] = future
-        tname = 'ChunkDownloader_%d' % (idx + 1)
-        if retry is not None:
-            tname += '_retry_%d' % retry
-        t = threading.Thread(name=tname,
-                             target=self._fetch_chunk_worker_runner,
-                             args=(future, self._manifests[idx]))
-        t.daemon = True
-        with self._sched_lock:
-            self._sched_active += 1
-        t.start()
-        return future
-
-    def _fetch_chunk_worker_runner(self, future, chunk):
-        """
-        Entry point for ChunkDownloader threads.  Thread safety rules apply
-        from here out.
-        """
+        logger.debug(u'downloading chunk %s/%s', idx + 1, self._chunk_size)
+        headers = {}
         try:
-            rows = self._fetch_chunk_worker(chunk)
-        except BaseException as e:
-            exc = e
-        else:
-            exc = None
-        with self._sched_lock:
-            if future.cancelled():
-                if exc is None:
-                    logger.warning("Ignoring good result from cancelled work")
-                return
-            self._sched_active -= 1
-            self._sched_ready += 1
-            if exc is not None:
-                future.set_exception(exc)
-            else:
-                future.set_result(rows)
-        self._sched_tick()
-
-    def _sched_tick(self,
-                    _max_pending=SCHED_MAX_PENDING,
-                    _growth_adj=SCHED_GROWTH_ADJ,
-                    _shrink_adj=SCHED_SHRINK_ADJ):
-        """ Threadsafe scheduler for chunk queue management.  In short this
-        monitors progress, makes any changes to the amount of concurrency
-        requested and may start new chunk downloads. """
-        with self._sched_lock:
-            if self._sched_cursor >= self._total:
-                return
-            self._sched_ticks += 1
-            pending = self._sched_active + self._sched_ready
-            now = self.time()
-            # Only perform ceiling adjustments occasionally and backoff
-            # gradually with each use to stabilize the values.
-            if now > self._sched_backoff_till:
-                self._sched_backoff_till = now + (self._sched_ticks / 100)
-                if pending < _max_pending and self._sched_ready <= 1:
-                    adj = 1 + ((1 - min(pending / _max_pending, 0.99)) *
-                               _growth_adj)
-                else:
-                    adj = _shrink_adj
-                adj_ceiling = min(self._sched_pending_fill * adj, _max_pending)
-                self._sched_pending_fill = max(1, adj_ceiling)
-            if pending < self._sched_pending_fill:
-                # Only launch one per tick to avoid bursts.
-                self.sched_next()
-
-    def _fetch_chunk_worker(self, chunk):
-        """
-        Thread worker to fetch the chunk from S3.
-        """
-        if self._headers is not None:
-            headers = self._headers
-        else:
-            headers = {}
-            if self._qrmk is not None:
+            if self._chunk_headers is not None:
+                headers = self._chunk_headers
+                logger.debug(u'use chunk headers from result')
+            elif self._qrmk is not None:
                 headers[SSE_C_ALGORITHM] = SSE_C_AES
                 headers[SSE_C_KEY] = self._qrmk
-        timeouts = (
-            self._connection._connect_timeout,
-            self._connection._connect_timeout,
-            DEFAULT_REQUEST_TIMEOUT
-        )
-        return self._connection.rest.fetch(
-            u'get', chunk['url'], headers, timeouts=timeouts,
-            is_raw_binary=True, is_raw_binary_iterator=False,
-            use_ijson=self._use_ijson)
+
+            logger.debug(u"started getting the result set %s: %s",
+                         idx + 1, self._chunks[idx].url)
+            result_data = self._fetch_chunk(self._chunks[idx].url, headers)
+            logger.debug(u"finished getting the result set %s: %s",
+                         idx + 1, self._chunks[idx].url)
+
+            with self._chunk_locks[idx]:
+                self._chunks[idx] = self._chunks[idx]._replace(
+                    result_data=result_data,
+                    ready=True)
+                self._chunk_locks[idx].notify()
+                logger.debug(
+                    u'added chunk %s/%s to a chunk list.', idx + 1,
+                    self._chunk_size)
+        except Exception as e:
+            logger.exception(
+                u'Failed to fetch the large result set chunk %s/%s',
+                idx + 1, self._chunk_size)
+            self._downloader_error = e
+
+    def next_chunk(self):
+        """
+        Gets the next chunk if ready
+        """
+        logger.debug(
+            u'next_chunk_to_consume={next_chunk_to_consume}, '
+            u'next_chunk_to_download={next_chunk_to_download}, '
+            u'total_chunks={total_chunks}'.format(
+                next_chunk_to_consume=self._next_chunk_to_consume + 1,
+                next_chunk_to_download=self._next_chunk_to_download + 1,
+                total_chunks=self._chunk_size))
+        if self._next_chunk_to_consume > 0:
+            # clean up the previously fetched data and lock
+            del self._chunks[self._next_chunk_to_consume - 1]
+            del self._chunk_locks[self._next_chunk_to_consume - 1]
+
+            if self._next_chunk_to_download < self._chunk_size:
+                self._chunk_locks[self._next_chunk_to_download] = Condition()
+                self._pool.apply_async(
+                    self._download_chunk,
+                    [self._next_chunk_to_download])
+                self._next_chunk_to_download += 1
+
+        if self._next_chunk_to_consume >= self._chunk_size:
+            Error.errorhandler_wrapper(
+                self._connection, self._cursor,
+                OperationalError,
+                {
+                    u'msg': u"expect a chunk but got None",
+                    u'errno': ER_NO_ADDITIONAL_CHUNK})
+
+        if self._downloader_error is not None:
+            raise self._downloader_error
+
+        for attempt in range(MAX_RETRY_DOWNLOAD):
+            logger.debug(u'waiting for chunk %s/%s'
+                         u' in %s/%s download attempt',
+                         self._next_chunk_to_consume + 1,
+                         self._chunk_size,
+                         attempt + 1,
+                         MAX_RETRY_DOWNLOAD)
+            done = False
+            for wait_counter in range(MAX_WAIT):
+                with self._chunk_locks[self._next_chunk_to_consume]:
+                    if self._downloader_error:
+                        raise self._downloader_error
+                    if self._chunks[self._next_chunk_to_consume].ready or \
+                                    self._downloader_error is not None:
+                        done = True
+                        break
+                    logger.debug(u'chunk %s/%s is NOT ready to consume'
+                                 u' in %s/%s(s)',
+                                 self._next_chunk_to_consume + 1,
+                                 self._chunk_size,
+                                 (wait_counter + 1) * WAIT_TIME_IN_SECONDS,
+                                 MAX_WAIT * WAIT_TIME_IN_SECONDS)
+                    self._chunk_locks[self._next_chunk_to_consume].wait(
+                        WAIT_TIME_IN_SECONDS)
+            else:
+                logger.debug(
+                    u'chunk %s/%s is still NOT ready. Restarting chunk '
+                    u'downloader threads',
+                    self._next_chunk_to_consume + 1,
+                    self._chunk_size)
+                self._pool.terminate()  # terminate the thread pool
+                self._pool = ThreadPool(self._effective_threads)
+                for idx0 in range(self._num_chunks_to_prefetch):
+                    idx = idx0 + self._next_chunk_to_consume
+                    self._pool.apply_async(self._download_chunk, [idx])
+                    self._chunk_locks[idx] = Condition()
+            if done:
+                break
+        else:
+            Error.errorhandler_wrapper(
+                self._connection,
+                self._cursor,
+                OperationalError,
+                {
+                    u'msg': u'The result set chunk download fails or hang for '
+                            u'unknown reason.',
+                    u'errno': ER_CHUNK_DOWNLOAD_FAILED
+                })
+        logger.debug(u'chunk %s/%s is ready to consume',
+                     self._next_chunk_to_consume + 1,
+                     self._chunk_size)
+
+        ret = self._chunks[self._next_chunk_to_consume]
+        self._next_chunk_to_consume += 1
+        return ret
 
     def terminate(self):
         """
         Terminates downloading the chunks.
         """
-        if not PY2:
-            sys.setswitchinterval(self._switchinterval_save)
-        with self._sched_lock:
-            futures = list(self._sched_work.values())
-            self._sched_work = None
-        for f in futures:
-            f.cancel()
+        if hasattr(self, u'_pool') and self._pool is not None:
+            self._pool.close()
+            self._pool.join()
+            self._pool = None
+
+        if self._session is not None:
+            self._session = None
 
     def __del__(self):
         try:
             self.terminate()
         except:
+            # ignore all errors in the destructor
             pass
+
+    def _fetch_chunk(self, url, headers):
+        """
+        Fetch the chunk from S3.
+        """
+        timeouts = (
+            self._connection._connect_timeout,
+            self._connection._connect_timeout,
+            DEFAULT_REQUEST_TIMEOUT
+        )
+        return self._connection.rest.fetch(u'get', url, headers,
+            timeouts=timeouts, is_raw_binary=True,
+            is_raw_binary_iterator=True, use_ijson=self._use_ijson)

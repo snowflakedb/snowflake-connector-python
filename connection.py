@@ -108,7 +108,7 @@ class SnowflakeConnection(object):
             network.SNOWFLAKE_CONNECTOR_VERSION,
             network.PYTHON_VERSION, network.PLATFORM)
 
-        self._rest = None
+        self._con = None
         for name, value in DEFAULT_CONFIGURATION.items():
             setattr(self, u'_' + name, value)
 
@@ -223,7 +223,7 @@ class SnowflakeConnection(object):
         Snowflake REST API object. Internal use only. Maybe removed in the
         later release
         """
-        return self._rest
+        return self._con
 
     @property
     def application(self):
@@ -272,24 +272,28 @@ class SnowflakeConnection(object):
         u"""
         Closes the connection.
         """
-        del self.messages[:]
-        rest = self._rest
-        self._rest = None
-        if rest:
-            rest._delete_session()
-            rest.close()
+        try:
+            if not self._con:
+                return
+
+            self._con._delete_session()
+            self._con.close()
+            self._con = None
+            del self.messages[:]
+        except:
+            pass
 
     def is_closed(self):
         u"""
         Is closed?
         """
-        return self._rest is None
+        return self._con is None
 
     def autocommit(self, mode):
         u"""
         Sets autocommit mode. True/False. Default: True
         """
-        if not self._rest:
+        if not self._con:
             Error.errorhandler_wrapper(
                 self, None, DatabaseError,
                 {
@@ -330,7 +334,7 @@ class SnowflakeConnection(object):
         object.
         """
         self.logger.debug(u'cursor')
-        if not self._rest:
+        if not self._con:
             Error.errorhandler_wrapper(
                 self, None, DatabaseError,
                 {
@@ -413,7 +417,7 @@ class SnowflakeConnection(object):
         u"""
         Opens a new network connection
         """
-        self._rest = network.SnowflakeRestful(
+        self._con = network.SnowflakeRestful(
             host=self._host,
             port=self._port,
             proxy_host=self._proxy_host,
@@ -435,7 +439,7 @@ class SnowflakeConnection(object):
 
         saml_response = None
         if self._authenticator.upper() != network.DEFAULT_AUTHENTICATOR:
-            saml_response = self._rest.authenticate_by_saml(
+            saml_response = self._con.authenticate_by_saml(
                 authenticator=self._authenticator,
                 account=self._account,
                 user=self._user,
@@ -446,7 +450,7 @@ class SnowflakeConnection(object):
         master_token = self._master_token if hasattr(
             self,
             u'_master_token') else None
-        self._rest.authenticate(
+        self._con.authenticate(
             account=self._account,
             user=self._user,
             password=self._password,
@@ -464,8 +468,8 @@ class SnowflakeConnection(object):
             session_parameters=self._session_parameters,
         )
         self._password = None
-        self._token = self._rest.token
-        self._master_token = self._rest.master_token
+        self._token = self._con.token
+        self._master_token = self._con.master_token
 
     def __config(self, **kwargs):
         u"""
@@ -571,7 +575,7 @@ class SnowflakeConnection(object):
         url_parameters = {u'requestId': request_id}
 
         # retry 1000 times/4.5 hours for general queries
-        ret = self._rest.request(
+        ret = self._con.request(
             u'/queries/v1/query-request?' + urlencode(url_parameters),
             data, client=client, _no_results=_no_results)
 
@@ -588,7 +592,7 @@ class SnowflakeConnection(object):
                           sequence_counter)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
-        return self._rest.request(
+        return self._con.request(
             u'/queries/v1/abort-request?' + urlencode(url_parameters), {
                 u'sqlText': sql,
                 u'requestId': TO_UNICODE(request_id),
