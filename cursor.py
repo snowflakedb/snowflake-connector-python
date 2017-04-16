@@ -3,10 +3,6 @@
 #
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
-
-from __future__ import division
-
-import itertools
 import logging
 import re
 import signal
@@ -17,6 +13,8 @@ from threading import (Timer, Lock)
 
 from six import u
 
+from .chunk_downloader import (DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
+                               DEFAULT_CLIENT_RESULT_PREFETCH_THREADS)
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (FIELD_NAME_TO_ID, FIELD_ID_TO_NAME)
 from .errorcode import (ER_UNSUPPORTED_METHOD,
@@ -87,6 +85,10 @@ class SnowflakeCursor(object):
         self._timezone = None
         self._binary_output_format = None
 
+        self._client_result_prefetch_slots = \
+            DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS
+        self._client_result_prefetch_threads = \
+            DEFAULT_CLIENT_RESULT_PREFETCH_THREADS
         self._arraysize = 1  # PEP-0249: defaults to 1
 
         self._lock_canceling = Lock()
@@ -120,7 +122,7 @@ class SnowflakeCursor(object):
     def rowcount(self):
         u"""
         The number of records updated or selected.
-        If not clear, None is returned
+        If not clear, -1 is returned
         """
         return self._total_rowcount if self._total_rowcount >= 0 else None
 
@@ -377,6 +379,10 @@ class SnowflakeCursor(object):
                     self._timezone = kv[u'value']
                 if u'BINARY_OUTPUT_FORMAT' in kv[u'name']:
                     self._binary_output_format = kv[u'value']
+                if u'CLIENT_RESULT_PREFETCH_THREADS' in kv[u'name']:
+                    self._client_result_prefetch_threads = kv[u'value']
+                if u'CLIENT_RESULT_PREFETCH_SLOTS' in kv[u'name']:
+                    self._client_result_prefetch_slots = kv[u'value']
             self._connection.converter.set_parameters(
                 ret[u'data'][u'parameters'])
 
@@ -537,7 +543,16 @@ class SnowflakeCursor(object):
                     column[u'type'].upper(), column))
 
         self._total_row_index = -1  # last fetched number of rows
+
+        self._chunk_index = 0
+        self._chunk_count = 0
+        self._current_chunk_row = iter(data.get(u'rowset'))
+        self._current_chunk_row_count = len(data.get(u'rowset'))
+
         if u'chunks' in data:
+            chunks = data[u'chunks']
+            self._chunk_count = len(chunks)
+            self.logger.debug(u'chunk size=%s', self._chunk_count)
             # prepare the downloader for further fetch
             qrmk = data[u'qrmk'] if u'qrmk' in data else None
             chunk_headers = None
@@ -552,13 +567,11 @@ class SnowflakeCursor(object):
                         header_value)
 
             self.logger.debug(u'qrmk=%s', qrmk)
-            downloader = self._connection._chunk_downloader_class(
-                data['chunks'], self._connection, self, qrmk, chunk_headers,
+            self._chunk_downloader = self._connection._chunk_downloader_class(
+                chunks, self._connection, self, qrmk, chunk_headers,
+                prefetch_slots=self._client_result_prefetch_slots,
+                prefetch_threads=self._client_result_prefetch_threads,
                 use_ijson=use_ijson)
-            self._row_iter = itertools.chain(data[u'rowset'],
-                                             self._chunk_row_gen(downloader))
-        else:
-            self._row_iter = iter(data[u'rowset'])
 
         if is_dml:
             updated_rows = 0
@@ -576,7 +589,7 @@ class SnowflakeCursor(object):
 
     def query_result(self, qid, _use_ijson=False):
         url = ('/queries/{qid}/result').format(qid=qid)
-        ret = self._connection.rest.request(url=url, method='get')
+        ret = self._connection._con.request(url=url, method='get')
         self._sfqid = ret[u'data'][
             u'queryId'] if u'data' in ret and u'queryId' in ret[
             u'data'] else None
@@ -608,7 +621,7 @@ class SnowflakeCursor(object):
 
     def abort_query(self, qid):
         url = '/queries/{qid}/abort-request'.format(qid=qid)
-        ret = self._connection.rest.request(url=url, method='post')
+        ret = self._connection._con.request(url=url, method='post')
         return ret.get(u'success')
 
     def executemany(self, command, seqparams):
@@ -649,23 +662,36 @@ class SnowflakeCursor(object):
         """
         Fetch one row
         """
-        self._total_row_index += 1
         try:
-            return self._row_to_python(next(self._row_iter))
-        except StopIteration:
-            return None
+            row = None
+            self._total_row_index += 1
+            try:
+                row = next(self._current_chunk_row)
+            except StopIteration:
+                if self._chunk_index < self._chunk_count:
+                    self.logger.debug(
+                        u"chunk index: %s, chunk_count: %s",
+                        self._chunk_index, self._chunk_count)
+                    next_chunk = self._chunk_downloader.next_chunk()
+                    self._current_chunk_row_count = next_chunk.row_count
+                    self._current_chunk_row = next_chunk.result_data
+                    self._chunk_index += 1
+                    try:
+                        row = next(self._current_chunk_row)
+                    except StopIteration:
+                        raise IndexError
+                else:
+                    if self._chunk_count > 0 and \
+                                    self._chunk_downloader is not None:
+                        self._chunk_downloader.terminate()
+                    self._chunk_downloader = None
+                    self._chunk_count = 0
+                    self._current_chunk_row = iter(())
+            return self._row_to_python(row) if row is not None else None
 
-    def _chunk_row_gen(self, downloader):
-        u"""
-        Iterate over rows for chunk based datasets.
-        """
-        downloader.sched_next()  # prefetch first page
-        try:
-            for chunk in downloader:
-                for row in chunk:
-                    yield row
-        finally:
-            downloader.terminate()
+        except IndexError:
+            # returns None if the iteration is completed so that iter() stops
+            return None
 
     def fetchmany(self, size=None):
         u"""
@@ -741,6 +767,16 @@ class SnowflakeCursor(object):
         """
         self._total_rowcount = -1  # reset the rowcount
         self._total_row_index = -1  # last fetched number of rows
+        self._current_chunk_row_count = 0
+        self._current_chunk_row = iter(())
+        self._chunk_index = 0
+
+        if hasattr(self, u'_chunk_count') and self._chunk_count > 0 and \
+                        self._chunk_downloader is not None:
+            self._chunk_downloader.terminate()
+
+        self._chunk_count = 0
+        self._chunk_downloader = None
 
     def __iter__(self):
         u"""
