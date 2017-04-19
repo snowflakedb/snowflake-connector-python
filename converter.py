@@ -5,7 +5,7 @@
 #
 import decimal
 import time
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, timedelta, tzinfo, date
 from logging import getLogger
 
 import pytz
@@ -145,7 +145,17 @@ class SnowflakeConverter(object):
 
         No timezone is attached.
         """
-        return lambda x: datetime.utcfromtimestamp(int(x) * 86400).date()
+
+        def conv(value):
+            try:
+                return datetime.utcfromtimestamp(int(value) * 86400).date()
+            except OSError as e:
+                self.logger.debug("Failed to convert: %s", e)
+                ts = ZERO_EPOCH + timedelta(
+                    seconds=int(value) * (24 * 60 * 60))
+                return date(ts.year, ts.month, ts.day)
+
+        return conv
 
     def _DATE_numpy_to_python(self, _):
         """
