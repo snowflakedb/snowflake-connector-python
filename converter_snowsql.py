@@ -5,7 +5,7 @@
 #
 
 import time
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, date
 from logging import getLogger
 
 from .compat import TO_UNICODE
@@ -112,7 +112,13 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value):
-            t = datetime.utcfromtimestamp(int(value) * 86400).date()
+            try:
+                t = datetime.utcfromtimestamp(int(value) * 86400).date()
+            except OSError as e:
+                self.logger.debug("Failed to convert: %s", e)
+                ts = ZERO_EPOCH + timedelta(
+                    seconds=int(value) * (24 * 60 * 60))
+                t = date(ts.year, ts.month, ts.day)
             return ctx['fmt'].format(SnowflakeDateTime(t, nanosecond=0))
 
         return conv
