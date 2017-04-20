@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.16 (April 20, 2017)
+    - Fixed issue in fetching ``DATE`` causing [Error 22] Invalid argument on Windows
+    - Retry on ``RuntimeError`` in requests
+
 - v1.3.15 (March 30, 2017)
 
     - Refactored data converters in fetch to improve performance
