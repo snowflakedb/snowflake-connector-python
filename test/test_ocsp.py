@@ -45,21 +45,10 @@ def test_ocsp_using_pyopenssl():
         'sfc-dev1-regression.s3.amazonaws.com',
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',
-        'testaccount1.snowflakecomputing.com',
     ]
     for url in urls:
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection), \
-            'Failed to validate: {0}'.format(url)
-
-    # This is no longer valid test, though, just sanity check.
-    # We may see a certificate that doesn't have OCSP URI,
-    urls = [
-        'testaccount1.snowflakecomputing.com',
-    ]
-    for url in urls:
-        connection = _openssl_connect(url)
-        assert ocsp.validate(url, connection, ignore_no_ocsp=True), \
             'Failed to validate: {0}'.format(url)
 
 
@@ -74,7 +63,6 @@ def test_ocsp_generate_pair_of_certid_response(tmpdir):
         'sfc-dev1-regression.s3.amazonaws.com',
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',
-        'testaccount1.snowflakecomputing.com',
         'snowflake.okta.com',
     ]
 
@@ -163,7 +151,6 @@ def test_ocsp_response_file_cache(tmpdir):
         'sfc-dev1-regression.s3.amazonaws.com',
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',
-        'testaccount1.snowflakecomputing.com',
         'snowflake.okta.com',
     ]
 
@@ -251,7 +238,6 @@ def test_concurrent_ocsp_requests(tmpdir):
         'sfc-dev1-regression.s3.amazonaws.com',
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',
-        'testaccount1.snowflakecomputing.com',
         'snowflake.okta.com',
     ]
     ocsp_pyopenssl.OCSP_VALIDATION_CACHE = {}  # reset the memory cache
