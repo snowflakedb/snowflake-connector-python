@@ -142,7 +142,7 @@ def test_commit(db_parameters):
         password=db_parameters['password'],
         host=db_parameters['host'],
         port=db_parameters['port'],
-        protocol='http'
+        protocol=db_parameters['protocol'],
     )
     try:
         # Commit must work, even if it doesn't do anything
@@ -251,7 +251,7 @@ def test_close(db_parameters):
         password=db_parameters['password'],
         host=db_parameters['host'],
         port=db_parameters['port'],
-        protocol='http'
+        protocol=db_parameters['protocol'],
     )
     try:
         cur = con.cursor()
@@ -378,7 +378,7 @@ def _populate():
         "insert into {0} values ('{1}')".format(
             TABLE1, s)
         for s in SAMPLES
-        ]
+    ]
     return populate
 
 
@@ -642,7 +642,7 @@ alter session set timestamp_input_format = 'YYYY-MM-DD HH24:MI:SS TZH:TZM'
                 cursor.execute("""
 create or replace table test_description (
 col0 number, col1 decimal(9,4) not null,
-col2 string not null default 'place-holder', col3 date, col4 timestamp,
+col2 string not null default 'place-holder', col3 date, col4 timestamp_ltz,
 col5 variant, col6 timestamp_ltz, col7 timestamp_tz, col8 timestamp_ntz,
 col9 object, col10 array, col12 time)
 """  # col11 binary, col12 time
@@ -672,35 +672,6 @@ parse_json(column11), column12 from VALUES
                     'alter session set timestamp_input_format = default')
 
 
-def test_bigresult(
-        conn_cnx):
-    with conn_cnx() as cnx:
-        cursor = cnx.cursor()
-        cursor.execute(
-            'alter session set RESULT_FIRST_CHUNK_MAX_SIZE = 1024')
-        cursor.execute(
-            'create or replace table dbapi_bigresult (n1 number, n2 number, n3 number)')
-        cursor.execute(
-            'create or replace sequence theseq start with 100')
-        cursor.execute(
-            'insert into dbapi_bigresult select theseq.nextval, theseq.nextval, '
-            'theseq.nextval from table(generator(rowcount => 100000))')
-        cursor.execute(
-            'select count(*) from dbapi_bigresult')
-        r = cursor.fetchone()
-        cursor.arraysize = 10000
-        cursor.execute(
-            'select * from dbapi_bigresult')
-        r = cursor.fetchall()
-        assert len(r) == 100000, (
-            'test_bigresult: number of rows returned not as expected')
-        cursor.execute(
-            'drop table dbapi_bigresult')
-        cursor.execute(
-            'alter session set RESULT_FIRST_CHUNK_MAX_SIZE = default')
-    cursor.close()
-
-
 def test_closecursor(conn_cnx):
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
@@ -710,43 +681,6 @@ def test_closecursor(conn_cnx):
         # objects trying to use the connection.
         # close twice
 
-
-# not supported
-# closing a connection without committing the changes first will cause an implicit rollback to be performed.
-#        cursor = cnx.cursor()
-#        cursor.execute('create or replace table dbapi_closecursor (int a)')
-#        cursor.execute('insert into dbapi_closecursor from (select seq8() seq from table(generator(rowCount => 10)) v)')
-#        cursor.close()
-
-#        cursor = cnx.cursor()
-#        cursor.execute('select count(*) from dbapi_closecursor')
-#        r = cursor.fetchall()
-#        assert len(r)==10),'did not implicitly rollback dml when cursor closed w/o commit')
-
-# explicit commit/rollback
-#        cursor.execute('insert into dbapi_closecursor from (select seq8() seq from table(generator(rowCount => 10)) v)')
-#        cursor.commit()
-#        cursor.execute('insert into dbapi_closecursor from (select seq8() seq from table(generator(rowCount => 10)) v)')
-#        cursor.rollback()
-#        assert len(r)==10),'test_closecursor: explicit cursor.rollback did not rollback')
-#        cursor.close()
-
-# for future use.  not currently supported
-#    def test_multiple_queries(self):
-#        table1 = 'dbapi_multiple_queries_t1'
-#        table2 = table1[:-1] + '2'
-#        cnx = self._create_connection()
-#        cursor = cnx.cursor()
-#        cursor.execute("create or replace table %s (a int)" % TABLE1)
-#        cursor.execute("create or replace table %s (a int, b int)" % TABLE2)
-#        cursor.execute("insert into %s VALUES (100)" % TABLE1)
-#        cursor.execute("insert into %s VALUES (50, 50)" % TABLE2)
-#        cursor.execute("select * from %s; select * from %s" % (TABLE1, TABLE2))
-#        result = cursor.fetchall()
-#        cursor.execute("drop table %s; drop table %s" % (TABLE1, TABLE2))
-#        cursor.close()
-
-#        assert result==[(50, 50)]),'test_multiple_queries: run multiple queries')
 
 def test_None(conn_local):
     with conn_local() as con:

@@ -224,7 +224,7 @@ def test_TIMESTAMP(conn_cnx):
         myzone = pytz.timezone("US/Pacific")
         return (myzone.localize(ret))
 
-    check_data_integrity(conn_cnx, ('col1 TIMESTAMP',), 'TIMESTAMP',
+    check_data_integrity(conn_cnx, ('col1 TIMESTAMP_LTZ',), 'TIMESTAMP',
                          generator)
 
 
@@ -237,8 +237,7 @@ def test_TIMESTAMP_EXPLICIT(conn_cnx):
         return (myzone.localize(ret))
 
     check_data_integrity(conn_cnx, ('col1 TIMESTAMP with local time zone',),
-                         'TIMESTAMP_EXPLICIT',
-                         generator)
+                         'TIMESTAMP_EXPLICIT', generator)
 
 
 def test_TIMESTAMPTZ(conn_cnx):
@@ -286,8 +285,8 @@ def test_fractional_TIMESTAMP(conn_cnx):
         myzone = pytz.timezone("Europe/Paris")
         return (myzone.localize(ret))
 
-    check_data_integrity(conn_cnx, ('col1 TIMESTAMP',), 'TIMESTAMP_fractional',
-                         generator)
+    check_data_integrity(conn_cnx, ('col1 TIMESTAMP_LTZ',),
+                         'TIMESTAMP_fractional', generator)
 
 
 def test_TIME(conn_cnx):

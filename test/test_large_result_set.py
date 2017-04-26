@@ -52,6 +52,7 @@ from table(generator(rowCount=>{number_of_rows}))
                 password=db_parameters['s3_password']) as cnx:
             # set the small first chunk max size to force using the large
             # result set
+            """
             result_first_chunk_max_size = 10
             rows_per_rowset = 8
             cnx.cursor().execute(
@@ -65,7 +66,7 @@ from table(generator(rowCount=>{number_of_rows}))
                     rows_per_rowset=rows_per_rowset))
             cnx.cursor().execute(
                 "alter session set CLIENT_RESULT_PREFETCH_THREADS=2"
-            )
+            )"""
             # large result set fetch in the default mode
             result1 = []
             for rec in cnx.cursor().execute(sql):
@@ -75,7 +76,7 @@ from table(generator(rowCount=>{number_of_rows}))
             result2 = []
             for rec in cnx.cursor().execute(sql, _use_ijson=True):
                 result2.append(rec)
-
+            """
             # reset to the default
             cnx.cursor().execute(
                 "alter session set RESULT_OFFLINE_CHUNKS_DISABLED=default")
@@ -84,7 +85,7 @@ from table(generator(rowCount=>{number_of_rows}))
             cnx.cursor().execute("alter session set ROWS_PER_ROWSET=default")
             cnx.cursor().execute(
                 "alter session set CLIENT_RESULT_PREFETCH_THREADS=default")
-
+            """
             result999 = []
             for rec in cnx.cursor().execute(sql):
                 result999.append(rec)

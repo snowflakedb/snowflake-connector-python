@@ -17,21 +17,6 @@ from snowflake.connector import (constants, errorcode, errors)
 from snowflake.connector.compat import (BASE_EXCEPTION_CLASS, PY2)
 
 
-def _create_warehouse(conn, db_parameters):
-    """
-    Use the test warehouse, database and schema
-    """
-
-    def exe(sql):
-        return conn.cursor().execute(sql)
-
-    exe("create or replace warehouse {0} warehouse_size=small, "
-        "warehouse_type=standard".format(db_parameters['name_wh']))
-    exe("use warehouse {0}".format(db_parameters['name_wh']))
-    exe("use {0}.{1}".format(db_parameters['database'],
-                             db_parameters['schema']))
-
-
 def _drop_warehouse(conn, db_parameters):
     conn.cursor().execute("drop warehouse if exists {0}".format(
         db_parameters['name_wh']
@@ -138,10 +123,9 @@ def test_insert_and_select_by_separate_connection(
         account=db_parameters['account'],
         database=db_parameters['database'],
         schema=db_parameters['schema'],
+        protocol=db_parameters['protocol'],
         timezone='UTC',
-        protocol='http',
     )
-    _create_warehouse(cnx2, db_parameters)
     try:
         c = cnx2.cursor()
         c.execute("select aa from {name}".format(name=db_parameters['name']))
@@ -152,7 +136,6 @@ def test_insert_and_select_by_separate_connection(
         assert results[0] == 1234, 'the first result was wrong'
         assert result.rowcount == 1, 'wrong number of records were selected'
     finally:
-        _drop_warehouse(cnx2, db_parameters)
         cnx2.close()
 
 
@@ -190,12 +173,12 @@ def test_insert_timestamp_select(conn, db_parameters):
         cnx.cursor().execute("alter session set TIMEZONE=%s", (PST_TZ,))
         c = cnx.cursor()
         try:
-            fmt = ("insert into {name}(aa, ts, tstz, tsntz, dt, tm) "
-                   "values(%(value)s,%(ts)s, %(tstz)s, %(tsntz)s, "
+            fmt = ("insert into {name}(aa, tsltz, tstz, tsntz, dt, tm) "
+                   "values(%(value)s,%(tsltz)s, %(tstz)s, %(tsntz)s, "
                    "%(dt)s, %(tm)s)")
             c.execute(fmt.format(name=db_parameters['name']), {
                 'value': 1234,
-                'ts': current_timestamp,
+                'tsltz': current_timestamp,
                 'tstz': other_timestamp,
                 'tsntz': current_timestamp,
                 'dt': current_date,
@@ -217,13 +200,12 @@ def test_insert_timestamp_select(conn, db_parameters):
         account=db_parameters['account'],
         database=db_parameters['database'],
         schema=db_parameters['schema'],
+        protocol=db_parameters['protocol'],
         timezone='UTC',
-        protocol='http'
     )
-    _create_warehouse(cnx2, db_parameters)
     try:
         c = cnx2.cursor()
-        c.execute("select aa, ts, tstz, tsntz, dt, tm from {name}".format(
+        c.execute("select aa, tsltz, tstz, tsntz, dt, tm from {name}".format(
             name=db_parameters['name']))
 
         result_numeric_value = []
@@ -266,7 +248,7 @@ def test_insert_timestamp_select(conn, db_parameters):
         desc = c.description
         assert len(desc) == 6, 'invalid number of column meta data'
         assert desc[0][0].upper() == 'AA', 'invalid column name'
-        assert desc[1][0].upper() == 'TS', 'invalid column name'
+        assert desc[1][0].upper() == 'TSLTZ', 'invalid column name'
         assert desc[2][0].upper() == 'TSTZ', 'invalid column name'
         assert desc[3][0].upper() == 'TSNTZ', 'invalid column name'
         assert desc[4][0].upper() == 'DT', 'invalid column name'
@@ -285,7 +267,6 @@ def test_insert_timestamp_select(conn, db_parameters):
         assert constants.FIELD_ID_TO_NAME[desc[5][1]] == 'TIME', \
             'invalid column name'
     finally:
-        _drop_warehouse(cnx2, db_parameters)
         cnx2.close()
 
 
@@ -408,9 +389,8 @@ def test_insert_binary_select(conn, db_parameters):
         account=db_parameters['account'],
         database=db_parameters['database'],
         schema=db_parameters['schema'],
-        protocol='http'
+        protocol=db_parameters['protocol'],
     )
-    _create_warehouse(cnx2, db_parameters)
     try:
         c = cnx2.cursor()
         c.execute("select b from {name}".format(name=db_parameters['name']))
@@ -424,7 +404,6 @@ def test_insert_binary_select(conn, db_parameters):
         assert constants.FIELD_ID_TO_NAME[desc[0][1]] == 'BINARY', \
             'invalid column name'
     finally:
-        _drop_warehouse(cnx2, db_parameters)
         cnx2.close()
 
 
@@ -453,9 +432,8 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         account=db_parameters['account'],
         database=db_parameters['database'],
         schema=db_parameters['schema'],
-        protocol='http'
+        protocol=db_parameters['protocol'],
     )
-    _create_warehouse(cnx2, db_parameters)
     try:
         c = cnx2.cursor()
         c.execute("select b from {name}".format(name=db_parameters['name']))
@@ -469,7 +447,6 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         assert constants.FIELD_ID_TO_NAME[desc[0][1]] == 'BINARY', \
             'invalid column name'
     finally:
-        _drop_warehouse(cnx2, db_parameters)
         cnx2.close()
 
 
