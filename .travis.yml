@@ -2,29 +2,22 @@ language: python
 python:
 - '2.7'
 - '3.5'
+before_install: openssl aes-256-cbc -k "$super_secret_password" -in parameters.py.enc
+  -out test/parameters.py -d
 install:
-  # deactivate the default python venv
   - deactivate
-  #
-  # http://conda-test.pydata.org/docs/travis.html
-  # 
-  # ensure OS is up to date
   - sudo apt-get update
-  # We do this conditionally because it saves us some downloading if the
-  # version is the same.
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-      wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
+        wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
     else
-      wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
     fi
   - bash miniconda.sh -b -p $HOME/miniconda
   - export PATH=$HOME/miniconda/bin:$PATH
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
-  # Useful for debugging any issues with conda
   - conda info -a
-  # Create Conda enviroment/virtualenv
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pandas pytest pytest-cov
   - source activate test-environment
   - which pip
@@ -33,8 +26,9 @@ install:
 script:
   - set -e
   - ret=0
-  # WIP: - timeout -s SIGUSR1 500s py.test -vvv --cov=snowflake.sqlalchemy test || ret=$?
-  # TIMEOUT or SUCCESS
   - if [ $ret != 124 -a $ret != 0 ]; then
-      exit 1;
+        exit 1;
     fi
+env:
+  global:
+    secure: dFpjLRaP1GcqHB449/6tca+63dZk8iAyD1afM5GK74HiO4dNAwGlONFY0KNnFVIkVDO7XJu0DpbNL/gXZy+EZ2WKis/vcwb2FhkYoiSJ1oZZ6fr/QbwyVZMH1y5L/gxipb5+MlBZyOQGX+9OZNQaGaSRd8kygOX8maBGm3IZFsNhjq6RwbBTLP3Zr8cJ+xrkrj7r413jKy/0xVKVr234gl4VU5IN2k6ovT4KBTyRMhwI5ImWL4ZCiJ7cZbfuLCaOuCdtXTzxU32O0gjbDV1D6ryezVfjtKzdUSLzb+71nT444xXq1OFDWxvODWdE0MBYQEdqHsbhg/Bj/Gp+i1smH4s5wgZ1r7TQMX/oUnsKSkCx0NphS57FKTiYdMGl5o78JuFNf02o2CYux6Zv0LEky/EhsP1o1vclm8LKZiHERZF6fALrOVDTibPw8wKSjHK8NkcglR2d/9X3DOvddxwfN7oJjt/cjIkkDTtYE4WdOZ06EUVzSgUVjaj8JqdlOaWqYBsJRzb0b2uWfU8L5yJ9DJemmWxhhsilEhD7SGPOphuGjHVXa2YivXxl7lO7pJgWWWG37T+XYhbGxIusSP+VwSOcP2LykQbg0S964344dpk2T/CKX0JpeBPYhRoRFvOLBt7HsItT2d9kbSYVJ07xuRkMUMxN7jm4dl+Pxsy3gxs=
