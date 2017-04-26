@@ -18,15 +18,15 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pandas pytest pytest-cov
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pandas pytest pytest-cov pytest-rerunfailures
   - source activate test-environment
   - which pip
   - pip install .
-  - pip list
+  - pip list --format=columns
 script:
   - set -e
   - ret=0
-  - timeout -s SIGUSR1 500s py.test -vvv --cov=snowflake.connector test/test_boolean.py test/test_autocommit.py || ret=$?
+  - timeout -s SIGUSR1 500s py.test -vvv --cov=snowflake.connector test/test_boolean.py test/test_autocommit.py test/test_connection.py test/test_converter.py test/test_converter_more_timestamp.py test/test_cursor.py test/test_cursor_binding.py test/test_cursor_context_manager.py test/test_unit*.py || ret=$?
   # TIMEOUT or SUCCESS
   - if [ $ret != 124 -a $ret != 0 ]; then
       exit 1;

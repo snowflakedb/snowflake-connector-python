@@ -9,6 +9,13 @@ Concurrent test module
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
 
+import pytest
+
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except:
+    CONNECTION_PARAMETERS_ADMIN = {}
+
 logger = getLogger(__name__)
 import snowflake.connector
 from snowflake.connector.compat import TO_UNICODE
@@ -50,6 +57,10 @@ def _concurrent_insert(meta):
     return meta
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="The user needs a privilege of create warehouse."
+)
 def test_concurrent_insert(conn_cnx, db_parameters):
     """
     Concurrent insert tests. Inserts block on the one that's running. 
@@ -124,6 +135,10 @@ def _concurrent_insert_using_connection(meta):
             raise
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="The user needs a privilege of create warehouse."
+)
 def test_concurrent_insert_using_connection(conn_cnx, db_parameters):
     """
     Concurrent insert tests using the same connection

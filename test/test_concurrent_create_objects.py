@@ -8,7 +8,11 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 
 import pytest
-from parameters import (CONNECTION_PARAMETERS_ADMIN)
+
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except:
+    CONNECTION_PARAMETERS_ADMIN ={}
 
 logger = getLogger(__name__)
 
@@ -65,17 +69,13 @@ def _test_snow5871(conn_cnx,
     with conn_cnx(user=db_parameters['sf_user'],
                   password=db_parameters['sf_password'],
                   account=db_parameters['sf_account']) as cnx:
-        cnx.cursor().execute(
-            "alter system set RT_MAX_OUTGOING_RATE={0}".format(
-                rt_max_outgoing_rate))
-        cnx.cursor().execute(
-            "alter system set RT_MAX_BURST_SIZE={0}".format(
-                rt_max_burst_size))
-        cnx.cursor().execute(
-            "alter system set RT_MAX_BORROWING_LIMIT={0}".format(
-                rt_max_borrowing_limt))
-        cnx.cursor().execute(
-            "alter system set RT_RESET_PERIOD={0}".format(rt_reset_period))
+        cnx.cursor().execute("""
+alter system set
+    RT_MAX_OUTGOING_RATE={0},
+    RT_MAX_BURST_SIZE={1},
+    RT_MAX_BORROWING_LIMIT={2},
+    RT_RESET_PERIOD={3}""".format(
+            rt_max_outgoing_rate, rt_max_burst_size, rt_max_borrowing_limt, rt_reset_period))
 
     try:
         with conn_cnx() as cnx:
@@ -106,9 +106,9 @@ def _test_snow5871(conn_cnx,
         with conn_cnx(user=db_parameters['sf_user'],
                       password=db_parameters['sf_password'],
                       account=db_parameters['sf_account']) as cnx:
-            cnx.cursor().execute(
-                "alter system set RT_MAX_OUTGOING_RATE=default")
-            cnx.cursor().execute("alter system set RT_MAX_BURST_SIZE=default")
-            cnx.cursor().execute("alter system set RT_RESET_PERIOD=default")
-            cnx.cursor().execute(
-                "alter system set RT_MAX_BORROWING_LIMIT=default")
+            cnx.cursor().execute("""
+alter system set
+    RT_MAX_OUTGOING_RATE=default,
+    RT_MAX_BURST_SIZE=default,
+    RT_RESET_PERIOD=default,
+    RT_MAX_BORROWING_LIMIT=default""")

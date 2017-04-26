@@ -18,11 +18,9 @@ def test_context_manager(conn_testaccount, db_parameters):
             name_to_idx = {elem[0]: idx for idx, elem in
                            enumerate(cur.description)}
             for row in cur:
-                print(row[name_to_idx['name']])
                 yield row[name_to_idx['name']]
 
     try:
-
         conn_testaccount.cursor().execute(
             'create or replace table {0} (a int)'.format(db_parameters['name']))
         all_tables = [rec for rec in tables(conn_testaccount) \
