@@ -9,10 +9,6 @@ import pytest
 import snowflake.connector
 
 
-@pytest.mark.skipif(True, reason="""
-No commit or rollback is supported as of today until we support the implicit 
-transaction.
-""")
 def test_transaction(conn_cnx, db_parameters):
     u"""
     Transaction API
@@ -93,9 +89,6 @@ DROP TABLE IF EXISTS {name}
 
     try:
         with snowflake.connector.connect(**db_config) as cnx:
-            cnx.cursor().execute("""
-ALTER SESSION SET AUTOCOMMIT_API_SUPPORTED=true
-""".format(name=db_parameters['name']))
             cnx.autocommit(False)
             cnx.cursor().execute("""
 CREATE TABLE {name} (cc1 int)

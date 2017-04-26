@@ -30,7 +30,7 @@ install:
 script:
   - set -e
   - ret=0
-  - timeout -s SIGUSR1 500s py.test -vvv --cov=snowflake.connector test/test_boolean.py test/test_autocommit.py test/test_connection.py test/test_converter.py test/test_converter_more_timestamp.py test/test_cursor.py test/test_cursor_binding.py test/test_cursor_context_manager.py test/test_unit*.py test/test_dataintegrity.py test/test_daylight_savings.py test/test_dbapi.py test/test_errors.py test/test_execute_multi_statements.py test/test_large_put.py test/test_large_result_set.py test/test_network.py test/test_numpy_binding.py test/test_ocsp.py test/test_put_get_medium.py || ret=$?
+  - timeout -s SIGUSR1 500s py.test -vvv --cov=snowflake.connector test || ret=$?
   # TIMEOUT or SUCCESS
   - if [ $ret != 124 -a $ret != 0 ]; then
       exit 1;

@@ -7,7 +7,16 @@ from datetime import datetime
 
 import pytz
 
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except:
+    CONNECTION_PARAMETERS_ADMIN = {}
 
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_binding_security(conn_cnx):
     """
     Binding statement parameters

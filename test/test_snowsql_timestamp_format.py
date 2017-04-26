@@ -5,12 +5,19 @@
 #
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
+# DY, DD MON YYYY HH24:MI:SS TZHTZM
 
 def test_snowsql_timestamp_format(conn_cnx):
     """
     In SnowSQL, OverflowError should not happen
     """
     with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
+        cnx.cursor().execute("""
+ALTER SESSION SET 
+    TIMESTAMP_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM',
+    TIMESTAMP_LTZ_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM';
+""")
         ret = cnx.cursor().execute("""
 SELECT
     '19999-09-30 12:34:56'::timestamp_ltz,
@@ -28,7 +35,9 @@ def test_snowsql_timestamp_negative_epoch(conn_cnx):
         cnx.cursor().execute("""
 ALTER SESSION SET
     TIMEZONE='America/Los_Angeles',
-    TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM';
+    TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM',
+    TIMESTAMP_LTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM';
 """)
         ret = cnx.cursor().execute("""
     SELECT
@@ -44,7 +53,9 @@ ALTER SESSION SET
         cnx.cursor().execute("""
 ALTER SESSION SET
     TIMEZONE='America/Los_Angeles',
-    TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF TZH:TZM';
+    TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF TZH:TZM',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF TZH:TZM',
+    TIMESTAMP_LTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF TZH:TZM';
 """)
         ret = cnx.cursor().execute("""
     SELECT
