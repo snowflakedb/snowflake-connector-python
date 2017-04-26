@@ -14,7 +14,16 @@ import pytest
 from snowflake.connector.constants import UTF8
 from snowflake.connector.s3_util import SnowflakeS3Util
 
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except:
+    CONNECTION_PARAMETERS_ADMIN = {}
 
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
     """
     [s3] Put and Get a small text using AWS S3
@@ -72,6 +81,10 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
         'Output is different from the original file')
 
 
+@pytest.mark.skipif(
+    'AWS_ACCESS_KEY_ID' not in os.environ,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
     """
     [s3] SNOW-6154: Use invalid combination of AWS credential
@@ -136,6 +149,10 @@ def _s3bucket_list(self, s3client, s3bucket):
     return [key for key in s3bucket.objects]
 
 
+@pytest.mark.skipif(
+    'AWS_ACCESS_KEY_ID' not in os.environ,
+    reason="Snowflake admin account is not accessible."
+)
 def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
     """
     [s3] SNOW-6154: pretend to PUT but LIST

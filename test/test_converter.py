@@ -38,7 +38,7 @@ def test_fetch_timestamps(conn_cnx):
     r0 = _compose_tz('1325568896.123456', tzinfo)
     r1 = _compose_tz('1325568896.123456', tzinfo)
     r2 = _compose_tz('1325568896.123456', tzinfo)
-    r3 = 1
+    r3 = _compose_tz('1325568896.123456', tzinfo)
     r4 = _compose_tz('1325568896.12345', tzinfo)
     r5 = _compose_tz('1325568896.1234', tzinfo)
     r6 = _compose_tz('1325568896.123', tzinfo)
@@ -92,8 +92,7 @@ SELECT
     '2012-01-03 12:34:56.123456789+07:00'::timestamp_tz(9),
     '2012-01-03 12:34:56.12345678+07:00'::timestamp_tz(8),
     '2012-01-03 12:34:56.1234567+07:00'::timestamp_tz(7),
-    1,
-    -- '2012-01-03 12:34:56.123456+07:00'::timestamp_tz(6),
+    '2012-01-03 12:34:56.123456+07:00'::timestamp_tz(6),
     '2012-01-03 12:34:56.12345+07:00'::timestamp_tz(5),
     '2012-01-03 12:34:56.1234+07:00'::timestamp_tz(4),
     '2012-01-03 12:34:56.123+07:00'::timestamp_tz(3),
@@ -183,8 +182,7 @@ SELECT
     '2012-01-03 12:34:56.123456789+07:00'::timestamp_tz(9),
     '2012-01-03 12:34:56.12345678+07:00'::timestamp_tz(8),
     '2012-01-03 12:34:56.1234567+07:00'::timestamp_tz(7),
-    1,
-    -- '2012-01-03 12:34:56.123456+07:00'::timestamp_tz(6),
+    '2012-01-03 12:34:56.123456+07:00'::timestamp_tz(6),
     '2012-01-03 12:34:56.12345+07:00'::timestamp_tz(5),
     '2012-01-03 12:34:56.1234+07:00'::timestamp_tz(4),
     '2012-01-03 12:34:56.123+07:00'::timestamp_tz(3),
@@ -230,6 +228,7 @@ ALTER SESSION SET TIMEZONE='{tz}';
         cur.execute("""
 ALTER SESSION SET
     TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM',
     TIME_OUTPUT_FORMAT='HH24:MI:SS.FF9';
         """)
         cur.execute(sql)
@@ -237,7 +236,7 @@ ALTER SESSION SET
         assert ret[0] == '2012-01-03 12:34:56.123456789 +0700'
         assert ret[1] == '2012-01-03 12:34:56.123456780 +0700'
         assert ret[2] == '2012-01-03 12:34:56.123456700 +0700'
-        assert ret[3] == '1'
+        assert ret[3] == '2012-01-03 12:34:56.123456000 +0700'
         assert ret[4] == '2012-01-03 12:34:56.123450000 +0700'
         assert ret[5] == '2012-01-03 12:34:56.123400000 +0700'
         assert ret[6] == '2012-01-03 12:34:56.123000000 +0700'
@@ -278,6 +277,7 @@ ALTER SESSION SET
         cur.execute("""
 ALTER SESSION SET
     TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF6 TZH:TZM',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF6 TZH:TZM',
     TIME_OUTPUT_FORMAT='HH24:MI:SS.FF6';
         """)
         cur.execute(sql)
@@ -285,7 +285,7 @@ ALTER SESSION SET
         assert ret[0] == '2012-01-03 12:34:56.123456 +0700'
         assert ret[1] == '2012-01-03 12:34:56.123456 +0700'
         assert ret[2] == '2012-01-03 12:34:56.123456 +0700'
-        assert ret[3] == '1'
+        assert ret[3] == '2012-01-03 12:34:56.123456 +0700'
         assert ret[4] == '2012-01-03 12:34:56.123450 +0700'
         assert ret[5] == '2012-01-03 12:34:56.123400 +0700'
         assert ret[6] == '2012-01-03 12:34:56.123000 +0700'

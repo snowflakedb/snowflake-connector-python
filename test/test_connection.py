@@ -12,6 +12,10 @@ from snowflake.connector import (
     ProgrammingError, InterfaceError, OperationalError)
 from snowflake.connector.errors import (ForbiddenError)
 
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except:
+    CONNECTION_PARAMETERS_ADMIN = {}
 
 def test_basic(conn_testaccount):
     """
@@ -186,6 +190,10 @@ def test_valid_application(db_parameters):
     cnx.close()
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="The user needs a privilege of create warehouse."
+)
 def test_drop_create_user(conn_cnx, db_parameters):
     """
     Drops and creates user

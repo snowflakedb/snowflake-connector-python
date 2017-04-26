@@ -14,6 +14,10 @@ logger = getLogger(__name__)
 logging.basicConfig(level=logging.CRITICAL)
 from snowflake.connector import errors
 
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except:
+    CONNECTION_PARAMETERS_ADMIN = {}
 
 @pytest.fixture()
 def conn_cnx(request, conn_cnx):
@@ -136,6 +140,10 @@ def _test_helper(conn, expectedCanceled, cancelUser, cancelPass):
     queryRun.join(20)
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_same_user_canceling(conn_cnx):
     """
     Test that the same user CAN cancel his query
@@ -143,6 +151,10 @@ def test_same_user_canceling(conn_cnx):
     _test_helper(conn_cnx, True, 'magicuser1', 'xxx')
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_other_user_canceling(conn_cnx):
     """
     Test that the other user CAN NOT cancel his query

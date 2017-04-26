@@ -9,6 +9,11 @@ from logging import getLogger
 
 import pytest
 
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except:
+    CONNECTION_PARAMETERS_ADMIN = {}
+
 logger = getLogger(__name__)
 
 
@@ -73,6 +78,10 @@ field_delimiter='|' error_on_column_count_mismatch=false
     return ret
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_load_s3(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
@@ -135,6 +144,10 @@ file_format=(
             cur.execute("drop table tweets")
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_local_file(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
@@ -194,6 +207,10 @@ put file://{0}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
             cur.execute("drop table pytest_putget_t1")
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_load_from_user_stage(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
@@ -268,6 +285,10 @@ purge=true
                     stage_name=test_data.stage_name))
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_unload(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
@@ -409,6 +430,10 @@ union
             cur.close()
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_with_auto_compress_false(tmpdir, db_parameters):
     """
     Test PUT command with auto_compress=False

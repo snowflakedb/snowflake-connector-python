@@ -9,7 +9,13 @@ import time
 from getpass import getuser
 from logging import getLogger
 
+import pytest
 
+
+@pytest.mark.skipif(
+    'AWS_ACCESS_KEY_ID' not in os.environ,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_get_small_data_via_user_stage(
         tmpdir, test_files, conn_cnx, db_parameters):
     """
@@ -19,6 +25,10 @@ def test_put_get_small_data_via_user_stage(
                         number_of_files=5, number_of_lines=10)
 
 
+@pytest.mark.skipif(
+    'AWS_ACCESS_KEY_ID' not in os.environ,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_get_large_data_via_user_stage(tmpdir, test_files, conn_cnx,
                                            db_parameters):
     """
@@ -130,6 +140,10 @@ credentials=(
                     name=db_parameters['name']))
 
 
+@pytest.mark.skipif(
+    'AWS_ACCESS_KEY_ID' not in os.environ,
+    reason="Snowflake admin account is not accessible."
+)
 def test_put_get_duplicated_data_user_stage(tmpdir, test_files, conn_cnx,
                                             db_parameters,
                                             number_of_files=5,
@@ -284,6 +298,10 @@ credentials=(
                     name=db_parameters['name']))
 
 
+@pytest.mark.skipif(
+    'AWS_ACCESS_KEY_ID' not in os.environ,
+    reason="Snowflake admin account is not accessible."
+)
 def test_get_data_user_stage(tmpdir, conn_cnx, db_parameters):
     """
     SNOW-20927: get failed with 404 error
