@@ -21,4 +21,31 @@ Find the ``snowflake_connector_python*.whl`` package in the ``./dist`` directory
 Testing
 ================================================================================
 
-WIP
+Create a virtualenv, with ``parameters.py`` in a test directory. 
+
+    .. code-block:: bash
+
+        pyvenv /tmp/test_snowflake_connector_python
+        source /tmp/test_snowflake_connector_python/bin/activate
+        pip install Cython
+        pip install pytest numpy pandas
+        pip install dist/snowflake_connector_python*.whl
+        vim test/parameters.py
+
+In the ``parameters.py`` file, include the connection information in a Python dictionary.
+
+    .. code-block:: python
+
+        CONNECTION_PARAMETERS = {
+            'account':  'testaccount',
+            'user':     'user1',
+            'password': 'testpasswd',
+            'schema':   'testschema',
+            'database': 'testdb',
+        }
+
+Run the test:
+
+    .. code-block:: bash
+
+        py.test test
