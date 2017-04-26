@@ -23,7 +23,7 @@ install:
   - which pip
   - pip install pytest-rerunfailures
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-        pip install mock
+        pip install mock;
     fi
   - pip install .
   - pip list --format=columns
