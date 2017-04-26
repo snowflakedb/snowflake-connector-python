@@ -9,6 +9,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.17 (April 27, 2017)
+    - Timeout OCSP request in 60 seconds and retry
+
 - v1.3.16 (April 20, 2017)
     - Fixed issue in fetching ``DATE`` causing [Error 22] Invalid argument on Windows
     - Retry on ``RuntimeError`` in requests
