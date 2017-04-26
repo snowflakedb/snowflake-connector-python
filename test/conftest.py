@@ -14,14 +14,18 @@ from io import open
 from logging import getLogger
 
 import pytest
-from parameters import (
-    CONNECTION_PARAMETERS,
-    CONNECTION_PARAMETERS_ADMIN)
+
+from parameters import CONNECTION_PARAMETERS
 
 try:
     from parameters import CONNECTION_PARAMETERS_S3
 except:
     CONNECTION_PARAMETERS_S3 = {}
+
+try:
+    from parameters import CONNECTION_PARAMETERS_ADMIN
+except:
+    CONNECTION_PARAMETERS_ADMIN = {}
 
 import snowflake.connector
 from snowflake.connector.compat import (UTF8, TO_UNICODE, PY_ISSUE_23517)
@@ -90,6 +94,9 @@ def db_parameters():
     # snowflake admin account. Not available in TravisCI
     for k, v in CONNECTION_PARAMETERS_ADMIN.items():
         ret['sf_' + k] = v
+
+    if 'host' in ret and ret['host'] == DEFAULT_PARAMETERS['host']:
+        ret['host'] = ret['account'] + '.snowflakecomputing.com'
 
     if 'account' in ret and ret['account'] == DEFAULT_PARAMETERS['account']:
         help()
