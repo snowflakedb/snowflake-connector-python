@@ -549,7 +549,8 @@ def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
                 ocsp_uri,
                 headers=headers,
                 proxies=proxies,
-                data=data)
+                data=data,
+                timeout=60)
             if response.status_code == OK:
                 logger.debug("OCSP response was successfully returned")
                 break
