@@ -7,6 +7,8 @@ from datetime import datetime
 
 import pytz
 
+import pytest
+
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except:
