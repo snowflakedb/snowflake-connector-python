@@ -187,7 +187,8 @@ put file://{file} @%{name}""".format(file=data_file,
                 print(rec)
                 assert rec[-2] == 'UPLOADED'
             for rec in c.execute(
-                    "copy into {name}".format(name=db_parameters['name'])):
+                    "copy into {name} file_format=(compression=zstd)".format(
+                        name=db_parameters['name'])):
                 print(rec)
                 assert rec[1] == 'LOADED'
 
