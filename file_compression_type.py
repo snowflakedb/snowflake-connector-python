@@ -80,6 +80,20 @@ class FileCompressionType():
                 u'mime_subtypes': [u'parquet'],
                 u'is_supported': True,
         },
+        u'ZSTD': {
+            u'name': u'ZSTD',
+            u'file_extention': u'.zst',
+            u'mime_type': u'application',
+            u'mime_subtypes': [u'zstd', u'x-zstd'],
+            u'is_supported': True,
+        },
+        u'BROTLI': {
+            u'name': u'BROTLI',
+            u'file_extention': u'.br',
+            u'mime_type': u'application',
+            u'mime_subtypes': [u'br', u'x-br'],
+            u'is_supported': True,
+        },
     }
 
     subtype_to_meta = {}

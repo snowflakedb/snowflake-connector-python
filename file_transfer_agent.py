@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
+import binascii
 import glob
 import mimetypes
 import os
@@ -825,11 +826,16 @@ class SnowflakeFileTransferAgent(object):
                 mime_type_str, encoding = mimetypes.guess_type(file_name)
 
                 if encoding is None:
+                    test = None
                     with open(file_name, 'rb') as f:
                         test = f.read(4)
-                        if test == b'PAR1':
-                            mime_type_str = 'snowflake/parquet'
-                            encoding = 'parquet'
+                    if file_name.endswith('.br'):
+                        encoding = 'br'
+                    elif test == b'PAR1':
+                        mime_type_str = 'snowflake/parquet'
+                        encoding = 'parquet'
+                    elif test and (int(binascii.hexlify(test), 16) == 0x28B52FFD):
+                        encoding = 'zstd'
 
                 if encoding is not None:
                     self.logger.info(u'detected the encoding %s: file=%s',

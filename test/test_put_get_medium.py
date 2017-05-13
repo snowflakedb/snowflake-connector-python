@@ -145,6 +145,57 @@ put file://{file} @%{name}""".format(file=data_file,
             'drop table if exists {name}'.format(name=db_parameters['name']))
 
 
+def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
+    """
+    Put and Copy brotli compressed files
+    """
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("""
+create or replace table {name} (value string)
+""".format(name=db_parameters['name']))
+        data_file = os.path.join(
+            THIS_DIR, "data", "brotli_sample.txt.br")
+        with cnx.cursor() as c:
+            for rec in c.execute("""
+put file://{file} @%{name}""".format(file=data_file,
+                                     name=db_parameters['name'])):
+                print(rec)
+                assert rec[-2] == 'UPLOADED'
+            for rec in c.execute(
+                    "copy into {name} file_format=(compression='BROTLI')".format(name=db_parameters['name'])):
+                print(rec)
+                assert rec[1] == 'LOADED'
+
+        cnx.cursor().execute(
+            'drop table if exists {name}'.format(name=db_parameters['name']))
+
+
+def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
+    """
+    Put and Copy zstd compressed files
+    """
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("""
+create or replace table {name} (value string)
+""".format(name=db_parameters['name']))
+        data_file = os.path.join(
+            THIS_DIR, "data", "zstd_sample.txt.zst")
+        with cnx.cursor() as c:
+            for rec in c.execute("""
+put file://{file} @%{name}""".format(file=data_file,
+                                     name=db_parameters['name'])):
+                print(rec)
+                assert rec[-2] == 'UPLOADED'
+            for rec in c.execute(
+                    "copy into {name} file_format=(compression=zstd)".format(
+                        name=db_parameters['name'])):
+                print(rec)
+                assert rec[1] == 'LOADED'
+
+        cnx.cursor().execute(
+            'drop table if exists {name}'.format(name=db_parameters['name']))
+
+
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
