@@ -187,7 +187,7 @@ put file://{file} @%{name}""".format(file=data_file,
                 print(rec)
                 assert rec[-2] == 'UPLOADED'
             for rec in c.execute(
-                    "copy into {name} file_format=(compression=zstd)".format(
+                    "copy into {name} file_format=(compression='ZSTD')".format(
                         name=db_parameters['name'])):
                 print(rec)
                 assert rec[1] == 'LOADED'
@@ -381,7 +381,6 @@ ratio number(6,2))
                 user=db_parameters['s3_user'],
                 account=db_parameters['s3_account'],
                 password=db_parameters['s3_password']) as cnx:
-            # cnx.cursor().execute("alter session set xp_tracing=extreme")
             cnx.cursor().execute(
                 "put file://{file} @%{name}".format(file=files,
                                                     name=db_parameters['name']))

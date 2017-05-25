@@ -249,18 +249,6 @@ def test_invalid_account_timeout():
 
 
 @pytest.mark.timeout(15)
-def test_invalid_host():
-    with pytest.raises(InterfaceError):
-        snowflake.connector.connect(
-            account='bogus',
-            user='test',
-            password='test',
-            host='bogus.com',
-            login_timeout=5
-        )
-
-
-@pytest.mark.timeout(15)
 def test_invalid_port(db_parameters):
     with pytest.raises(OperationalError):
         snowflake.connector.connect(
