@@ -70,7 +70,7 @@ DEFAULT_CONFIGURATION = {
 
     u'insecure_mode': False,  # Error security fix requirement
     u'injectClientPause': 0,  # snowflake internal
-    u'session_parameters': None,  # snowflake internal
+    u'session_parameters': {},  # snowflake session parameters
     u'autocommit': None,  # snowflake
     u'numpy': False,  # snowflake
     u'ocsp_response_cache_filename': None,  # snowflake internal
@@ -389,26 +389,6 @@ class SnowflakeConnection(object):
         """
         # load current session info
         self.logger.debug(u'__post connection')
-        """
-        NOTE: abort detached query mode is TRUE by default
-
-        sequence_counter = self._next_sequence_counter()
-        request_id = uuid.uuid4()
-
-        self._cmd_query('alter session set abort_detached_query=False',
-                        sequence_counter=sequence_counter,
-                        request_id=request_id)
-        """
-        if self._autocommit is not None:
-            sequence_counter = self._next_sequence_counter()
-            request_id = uuid.uuid4()
-            self.logger.debug("autocommit: %s", self._autocommit)
-            self._cmd_query('ALTER SESSION SET autocommit={0}'.format(
-                self._autocommit),
-                sequence_counter=sequence_counter,
-                request_id=request_id,
-                is_internal=True)
-
         self.converter = self._converter_class(
             use_sfbinaryformat=False,
             use_numpy=self._numpy)
@@ -445,6 +425,9 @@ class SnowflakeConnection(object):
                 user=self._user,
                 password=self._password,
             )
+
+        if self._autocommit is not None:
+            self._session_parameters['AUTOCOMMIT'] = self._autocommit
 
         token = self._token if hasattr(self, u'_token') else None
         master_token = self._master_token if hasattr(
