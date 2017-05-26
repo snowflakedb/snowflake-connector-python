@@ -1066,7 +1066,7 @@ class SnowflakeRestful(object):
         except IndexError:
             session = self.make_requests_session()
         self._active_sessions.add(session)
-        logger.info("Active requests sessions: %s, idle: %s",
+        logger.debug("Active requests sessions: %s, idle: %s",
                     len(self._active_sessions), len(self._idle_sessions))
         try:
             yield session
@@ -1075,8 +1075,8 @@ class SnowflakeRestful(object):
             try:
                 self._active_sessions.remove(session)
             except KeyError:
-                logger.info(
+                logger.debug(
                     "session doesn't exist in the active session pool. "
                     "Ignored...")
-            logger.info("Active requests sessions: %s, idle: %s",
+            logger.debug("Active requests sessions: %s, idle: %s",
                         len(self._active_sessions), len(self._idle_sessions))

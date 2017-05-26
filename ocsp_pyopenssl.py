@@ -121,7 +121,7 @@ def _lazy_read_ca_bundle():
                 import certifi
                 _read_ca_bundle(certifi.where())
             except:
-                logger.info('no certifi is installed. ignored.')
+                logger.debug('no certifi is installed. ignored.')
 
     except Exception as e:
         logger.error('Failed to read ca_bundle: %s', e)
@@ -367,7 +367,7 @@ def process_ocsp_response(response, ocsp_issuer):
 
     if tbs_response_data['responderID']['byName']:
         # Noop
-        logger.info(
+        logger.debug(
             'Responder Name: %s',
             tbs_response_data['responderID']['byName'])
     elif tbs_response_data['responderID']['byKey']:
@@ -463,7 +463,7 @@ def process_ocsp_response(response, ocsp_issuer):
                     u'verified: err={0}'.format(err),
                 errno=ER_INVALID_OCSP_RESPONSE)
     else:
-        logger.info(
+        logger.debug(
             u'No OCSP validation was made as the certificate '
             u'indicates noCheck')
 
@@ -473,7 +473,7 @@ def process_ocsp_response(response, ocsp_issuer):
         cert_status = single_response['certStatus']
         cert_id_der = der_encoder.encode(cert_id)
         if cert_status['good'] is not None:
-            logger.info('ok')
+            logger.debug('ok')
             this_update = strptime(str(single_response['thisUpdate']),
                                    '%Y%m%d%H%M%SZ')
             next_update = strptime(str(single_response['nextUpdate']),
@@ -711,7 +711,7 @@ def read_ocsp_response_cache_file(filename, ocsp_validation_cache):
                 codecs.open(
                     filename, 'r', encoding='utf-8', errors='ignore')),
             ocsp_validation_cache)
-        logger.info("Read OCSP response cache file: %s", filename)
+        logger.debug("Read OCSP response cache file: %s", filename)
     else:
         logger.info(
             "Failed to locate OCSP response cache file. "
@@ -1025,9 +1025,9 @@ class SnowflakeOCSP(object):
             self._ocsp_response_cache_url = self._ocsp_response_cache_url.replace(
                 '\\', '/')
 
-        self.logger.info("ocsp_response_cache_url: %s",
+        self.logger.debug("ocsp_response_cache_url: %s",
                          self._ocsp_response_cache_url)
-        self.logger.info(
+        self.logger.debug(
             "OCSP_VALIDATION_CACHE size: %s", len(OCSP_VALIDATION_CACHE))
 
         if self._ocsp_response_cache_url is not None and \
@@ -1059,13 +1059,13 @@ class SnowflakeOCSP(object):
         u"""
         Validates the certificate is not revoked using OCSP
         """
-        self.logger.info(u'validating certificate: %s', hostname)
+        self.logger.debug(u'validating certificate: %s', hostname)
         if ignore_no_ocsp:
-            self.logger.info(u'validation was skipped.')
+            self.logger.debug(u'validation was skipped.')
             return True
 
         if hostname in KNOWN_HOSTNAMES:  # skip OCSP validation if known
-            self.logger.info(
+            self.logger.debug(
                 'validation was skipped, because hostname %s is known',
                 hostname)
             return True
@@ -1080,7 +1080,7 @@ class SnowflakeOCSP(object):
                     'ocsp_uri']  # issuer's ocsp uri
                 ocsp_subject = issuer_and_subject['subject']
                 ocsp_issuer = issuer_and_subject['issuer']
-                self.logger.info('ocsp_uri: %s', ocsp_uri)
+                self.logger.debug('ocsp_uri: %s', ocsp_uri)
                 if ocsp_uri:
                     r = pool.apply_async(
                         self.validate_by_direct_connection_simple,
@@ -1110,7 +1110,7 @@ class SnowflakeOCSP(object):
                         u"cert_data={2}".format(hostname, len(results),
                                                 len(cert_data)),
                     errno=ER_INVALID_OCSP_RESPONSE)
-        self.logger.info(u'ok')
+        self.logger.debug(u'ok')
         # any failure must be an exception
         return True
 
@@ -1141,13 +1141,13 @@ class SnowflakeOCSP(object):
             try:
                 if not cache_status:
                     # not cached or invalid
-                    self.logger.info('getting OCSP response from remote')
+                    self.logger.debug('getting OCSP response from remote')
                     ocsp_response = execute_ocsp_request(
                         ocsp_uri, cert_id,
                         proxies=self._proxies,
                         do_retry=do_retry)
                 else:
-                    self.logger.info('using OCSP response cache')
+                    self.logger.debug('using OCSP response cache')
                 single_response_map = process_ocsp_response(
                     ocsp_response, ocsp_issuer)
                 check_ocsp_response_status(
@@ -1181,7 +1181,7 @@ class SnowflakeOCSP(object):
                 'ocsp_uri']  # issuer's ocsp uri
             ocsp_subject = issuer_and_subject['subject']
             ocsp_issuer = issuer_and_subject['issuer']
-            self.logger.info('ocsp_uri: %s', ocsp_uri)
+            self.logger.debug('ocsp_uri: %s', ocsp_uri)
             if ocsp_uri:
                 ret, cert_id, ocsp_response = \
                     self.validate_by_direct_connection(
@@ -1201,7 +1201,7 @@ class SnowflakeOCSP(object):
                         hostname, ocsp_subject),
                     errno=ER_FAILED_TO_GET_OCSP_URI,
                 )
-        self.logger.info(u'ok')
+        self.logger.debug(u'ok')
         return results
 
 
