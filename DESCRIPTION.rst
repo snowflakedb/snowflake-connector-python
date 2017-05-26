@@ -9,8 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
-- v1.3.17 (April 27, 2017)
+- v1.3.17 (June 1, 2017)
     - Timeout OCSP request in 60 seconds and retry
+    - Set autocommit and abort_detached_query session parameters in authentication time if specified
+    - Fixed cross region stage issue. Could not get files in us-west-2 region S3 bucket from us-east-1
 
 - v1.3.16 (April 20, 2017)
     - Fixed issue in fetching ``DATE`` causing [Error 22] Invalid argument on Windows

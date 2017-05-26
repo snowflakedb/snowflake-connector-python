@@ -184,7 +184,7 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'parallel'] = 1
                 small_file_metas.append(meta)
 
-        self.logger.info(u'parallel=[%s]', self._parallel)
+        self.logger.debug(u'parallel=[%s]', self._parallel)
         self._results = []
         if self._command_type == CMD_TYPE_UPLOAD:
             self.upload(large_file_metas, small_file_metas)
@@ -318,7 +318,7 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'real_src_file_name'], upload_size = \
                     SnowflakeS3Util.compress_file_with_gzip(
                         meta[u'src_file_name'], tmp_dir)
-            logger.info(
+            logger.debug(
                 u'getting digest file=%s', meta[u'real_src_file_name'])
             sha256_digest, upload_size = \
                 SnowflakeS3Util.get_digest_and_size_for_file(
@@ -709,6 +709,8 @@ class SnowflakeFileTransferAgent(object):
             u'locationType'].upper()
         self._stage_location = self._ret[u'data'][u'stageInfo'][u'location']
         self._stage_credentials = self._ret[u'data'][u'stageInfo'][u'creds']
+        self._stage_credentials['region'] = self._ret[u'data'][u'stageInfo'][
+            u'region']
         if self._stage_location_type not in (S3_FS, LOCAL_FS):
             Error.errorhandler_wrapper(
                 self._cursor.connection, self._cursor,
