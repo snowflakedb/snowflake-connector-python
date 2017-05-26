@@ -110,6 +110,7 @@ class SnowflakeS3Util(object):
             })
         s3client = boto3.resource(
             u's3',
+            region_name=stage_credentials['region'],
             aws_access_key_id=stage_credentials[u'AWS_ID'],
             aws_secret_access_key=stage_credentials[u'AWS_KEY'],
             aws_session_token=security_token,
@@ -446,7 +447,7 @@ class SnowflakeS3Util(object):
         decoded_key = base64.standard_b64decode(
             encryption_material.query_stage_master_key)
         key_size = len(decoded_key)
-        logger.info(u'key_size = %s', key_size)
+        logger.debug(u'key_size = %s', key_size)
 
         # Generate key for data encryption
         iv_data = SnowflakeS3Util.get_secure_random(AES.block_size)
@@ -530,7 +531,7 @@ class SnowflakeS3Util(object):
         logger = getLogger(__name__)
         base_name = os.path.basename(file_name)
         gzip_file_name = os.path.join(tmp_dir, base_name + u'_c.gz')
-        logger.info(u'gzip file: %s, original file: %s', gzip_file_name,
+        logger.debug(u'gzip file: %s, original file: %s', gzip_file_name,
                     file_name)
         fr = open(file_name, u'rb')
         fw = gzip.GzipFile(gzip_file_name, u'wb')
@@ -576,7 +577,7 @@ class SnowflakeS3Util(object):
         file_size = statinfo.st_size
         digest = base64.standard_b64encode(m.digest()).decode(UTF8)
         logger = getLogger(__name__)
-        logger.info(u'getting digest and size: %s, %s, file=%s', digest,
+        logger.debug(u'getting digest and size: %s, %s, file=%s', digest,
                     file_size, file_name)
         return digest, file_size
 
