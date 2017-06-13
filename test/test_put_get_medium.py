@@ -229,6 +229,10 @@ put file://{file} @%{name}""".format(file=data_file,
 
         cnx.cursor().execute("alter session unset enable_parquet_filetype")
 
+@pytest.mark.skipif(
+    True,
+    reason="ORC support is not enabled in server",
+)
 def test_put_copy_orc_compressed(conn_cnx, db_parameters):
     """
     Put and Copy ORC compressed files
