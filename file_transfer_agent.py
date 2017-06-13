@@ -833,7 +833,10 @@ class SnowflakeFileTransferAgent(object):
                         test = f.read(4)
                     if file_name.endswith('.br'):
                         encoding = 'br'
-                    elif test == b'PAR1':
+                    elif test and test[:3] == b'ORC':
+                        mime_type_str = 'snowflake/orc'
+                        encoding = 'orc'
+                    elif test and test == b'PAR1':
                         mime_type_str = 'snowflake/parquet'
                         encoding = 'parquet'
                     elif test and (int(binascii.hexlify(test), 16) == 0x28B52FFD):

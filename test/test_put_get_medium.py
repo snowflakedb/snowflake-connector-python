@@ -229,6 +229,31 @@ put file://{file} @%{name}""".format(file=data_file,
 
         cnx.cursor().execute("alter session unset enable_parquet_filetype")
 
+def test_put_copy_orc_compressed(conn_cnx, db_parameters):
+    """
+    Put and Copy ORC compressed files
+    """
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("""
+create or replace table {name} (value variant) stage_file_format=(type='orc')
+""".format(name=db_parameters['name']))
+
+        data_file = os.path.join(THIS_DIR, "data", "TestOrcFile.test1.orc")
+        with cnx.cursor() as c:
+            for rec in c.execute("""
+put file://{file} @%{name}""".format(file=data_file,
+                                     name=db_parameters['name'])):
+                print(rec)
+                assert rec[-2] == 'UPLOADED'
+                assert rec[4] == 'ORC'
+                assert rec[5] == 'ORC'
+            for rec in c.execute(
+                    "copy into {name}".format(name=db_parameters['name'])):
+                print(rec)
+                assert rec[1] == 'LOADED'
+
+        cnx.cursor().execute(
+            'drop table if exists {name}'.format(name=db_parameters['name']))
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
