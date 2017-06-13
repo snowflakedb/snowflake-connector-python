@@ -94,6 +94,13 @@ class FileCompressionType():
             u'mime_subtypes': [u'br', u'x-br'],
             u'is_supported': True,
         },
+        u'ORC': {
+            u'name': u'ORC',
+            u'file_extention': u'.orc',
+            u'mime_type': u'snowflake',
+            u'mime_subtypes': [u'orc'],
+            u'is_supported': True,
+        },
     }
 
     subtype_to_meta = {}
