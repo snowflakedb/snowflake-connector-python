@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.3.18 (June 15, 2017)
+
+    - Fixed OCSP response cache file not found issue on Windows. Drive letter was taken off
+    - Added ORC detection in PUT command
+
 - v1.3.17 (June 1, 2017)
 
     - Timeout OCSP request in 60 seconds and retry
