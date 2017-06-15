@@ -12,6 +12,7 @@ Release Notes
 - v1.3.18 (June 15, 2017)
 
     - Fixed OCSP response cache file not found issue on Windows. Drive letter was taken off
+    - Use less restrictive cryptography>=1.7,<1.8
     - Added ORC detection in PUT command
 
 - v1.3.17 (June 1, 2017)
