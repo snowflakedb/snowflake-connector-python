@@ -745,7 +745,7 @@ def update_ocsp_response_cache_file(ocsp_response_cache_url):
         try:
             parsed_url = urlsplit(ocsp_response_cache_url)
             if parsed_url.scheme == 'file':
-                filename = parsed_url.path
+                filename = path.join(parsed_url.netloc, parsed_url.path)
                 lock_file = filename + '.lck'
                 if not path.exists(lock_file):
                     touch(lock_file)
@@ -1037,7 +1037,7 @@ class SnowflakeOCSP(object):
                     parsed_url = urlsplit(self._ocsp_response_cache_url)
                     if parsed_url.scheme == 'file':
                         read_ocsp_response_cache_file(
-                            parsed_url.path,
+                            path.join(parsed_url.netloc, parsed_url.path),
                             OCSP_VALIDATION_CACHE)
                     elif parsed_url.schema in ('http', 'https'):
                         download_ocsp_response_cache(ocsp_response_cache_url)
