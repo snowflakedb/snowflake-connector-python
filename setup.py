@@ -33,14 +33,14 @@ setup(
     use_2to3=False,
 
     install_requires=[
-        'boto3==1.4.4',
-        'botocore==1.5.14',
+        'boto3>=1.4.0,<1.5.0',
+        'botocore>=1.4.0,<1.6.0',
         'future',
         'six',
         'pytz',
         'pycryptodome>=3.2',
-        'pyOpenSSL==16.2.0',
-        'cffi==1.9.1',
+        'pyOpenSSL>=16.2.0',
+        'cffi>=1.9',
         'cryptography>=1.7,<1.8',
         'pyasn1',
         'pyasn1-modules',
