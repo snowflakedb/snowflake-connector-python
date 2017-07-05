@@ -144,11 +144,6 @@ def _validate_urls(urls, must_use_cache=False, ocsp_response_cache_url=None):
         ocsp.validate(url, connection)
 
 
-@pytest.mark.skipif(
-    True,
-    reason="""intermettently fails with cache error. need further
-investigation"""
-)
 def test_ocsp_response_file_cache(tmpdir):
     tmp_dir = str(tmpdir.mkdir('ocsp_response_file_cache'))
 
