@@ -1130,6 +1130,8 @@ class SnowflakeOCSP(object):
         cache_status, cert_id, ocsp_response = is_cert_id_in_cache(
             ocsp_issuer, ocsp_subject, use_cache=use_cache)
 
+        self.logger.debug('must_use_cache: %s, cache_status: %s',
+            self._must_use_cache, cache_status)
         assert not self._must_use_cache or \
                self._must_use_cache and cache_status, 'Test: Must use cache!'
 
