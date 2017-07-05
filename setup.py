@@ -39,7 +39,7 @@ setup(
         'six',
         'pytz',
         'pycryptodome>=3.2',
-        'pyOpenSSL>=16.2.0',
+        'pyOpenSSL>=16.2.0,<17.0.0',
         'cffi>=1.9',
         'cryptography>=1.7.2',
         'pyasn1',
