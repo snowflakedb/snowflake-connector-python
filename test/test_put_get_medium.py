@@ -625,7 +625,8 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             password=db_parameters['s3_password']) as cnx:
         try:
             run(cnx, "PUT file://{files} @~/{dir}")
-            for _ in range(10):
+            # run(cnx, "PUT file://{files} @~/{dir}")  # retry
+            for _ in range(100):
                 all_recs = run(cnx, "LIST @~/{dir}")
                 if len(all_recs) == number_of_files:
                     break
