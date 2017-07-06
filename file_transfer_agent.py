@@ -32,7 +32,8 @@ from .file_compression_type import FileCompressionType
 from .s3_util import (SnowflakeS3FileEncryptionMaterial, SnowflakeS3Util,
                       RESULT_STATUS_COLLISION, RESULT_STATUS_DOWNLOADED,
                       RESULT_STATUS_ERROR, RESULT_STATUS_UPLOADED,
-                      RESULT_STATUS_RENEW_TOKEN)
+                      RESULT_STATUS_RENEW_TOKEN,
+                      RESULT_STATUS_NOT_FOUND_FILE)
 
 S3_FS = u'S3'
 LOCAL_FS = u'LOCAL_FS'
@@ -173,6 +174,7 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'get_callback'] = self._get_callback
                 meta[u'get_callback_output_stream'] = \
                     self._get_callback_output_stream
+                self.logger.debug('size: %s', meta[u'src_file_size'])
                 if meta[
                     u'src_file_size'] > SnowflakeS3Util.DATA_SIZE_THRESHOLD:
                     meta[u'parallel'] = self._parallel
@@ -245,7 +247,7 @@ class SnowflakeFileTransferAgent(object):
                 len_file_metas
 
             self.logger.debug(
-                u'uploading files idx: {0}/{1}'.format(idx+1, end_of_idx))
+                u'uploading files idx: {0}/{1}'.format(idx + 1, end_of_idx))
 
             target_meta = file_metas[idx:end_of_idx]
             while True:
@@ -288,7 +290,7 @@ class SnowflakeFileTransferAgent(object):
         len_file_metas = len(file_metas)
         while idx < len_file_metas:
             self.logger.debug(
-                u'uploading files idx: {0}/{1}'.format(idx+1, len_file_metas))
+                u'uploading files idx: {0}/{1}'.format(idx + 1, len_file_metas))
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
             if result[u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
@@ -332,9 +334,27 @@ class SnowflakeFileTransferAgent(object):
             if meta[u'stage_location_type'] == LOCAL_FS:
                 SnowflakeFileTransferAgent.upload_one_file_to_local(meta)
             else:  # S3
-                SnowflakeS3Util.upload_one_file_to_s3(meta)
+                for _ in range(10):
+                    # retry
+                    SnowflakeS3Util.upload_one_file_to_s3(meta)
+                    if meta[u'result_status'] == RESULT_STATUS_UPLOADED:
+                        for _ in range(10):
+                            if SnowflakeS3Util.exists(
+                                    meta) == RESULT_STATUS_NOT_FOUND_FILE:
+                                sleep(1)  # wait 1 second
+                                logger.debug('not found. double checking...')
+                                continue
+                            break
+                        else:
+                            # not found. retry with the outer loop
+                            logger.debug('not found. gave up. reuploading...')
+                            continue
+                    break
+                else:
+                    raise Exception("file was not uploaded")
             logger.info(
-                u'success: file=%s, real file=%s',
+                u'done: status=%s, file=%s, real file=%s',
+                meta[u'result_status'],
                 meta[u'src_file_name'],
                 meta[u'real_src_file_name'])
         except Exception as e:
@@ -841,7 +861,8 @@ class SnowflakeFileTransferAgent(object):
                     elif test and test == b'PAR1':
                         mime_type_str = 'snowflake/parquet'
                         encoding = 'parquet'
-                    elif test and (int(binascii.hexlify(test), 16) == 0x28B52FFD):
+                    elif test and (
+                        int(binascii.hexlify(test), 16) == 0x28B52FFD):
                         encoding = 'zstd'
 
                 if encoding is not None:
