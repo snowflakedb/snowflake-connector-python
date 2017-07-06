@@ -155,7 +155,7 @@ class SnowflakeS3Util(object):
             # need renew token
             return
         elif akey and meta[u'result_status'] == RESULT_STATUS_UPLOADED and \
-                not meta[u'overwrite']:
+                not meta.get(u'overwrite'):
             logger.info(
                 u'file already exists, checking digest: file=%s', s3path)
             try:
