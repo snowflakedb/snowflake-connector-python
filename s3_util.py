@@ -134,28 +134,7 @@ class SnowflakeS3Util(object):
         logger = getLogger(__name__)
         s3location = SnowflakeS3Util.extract_bucket_name_and_path(
             meta[u'stage_location'])
-        s3client = meta[u's3client']
         s3path = s3location.s3path + meta[u'dst_file_name']
-        logger.debug(
-            u"meta['stage_location']=[%s], "
-            u"s3location.bucket_name=[%s], "
-            u"s3location.s3path=[%s], "
-            u"meta[dst_file_name]=[%s], "
-            u"s3path=[%s], "
-            u"meta['src_file_name']=[%s], "
-            u"meta['src_file_name'].size()=[%s], "
-            u"meta['real src file name']=[%s], "
-            u"meta['real src file name'].size()=[%s]",
-            meta[u'stage_location'],
-            s3location.bucket_name,
-            s3location.s3path,
-            meta[u'dst_file_name'],
-            s3path,
-            meta[u'src_file_name'],
-            os.path.getsize(meta[u'src_file_name']),
-            meta[u'real_src_file_name'],
-            os.path.getsize(meta[u'real_src_file_name'])
-        )
         s3_metadata = {
             u'Content-Type': u'application/octet-stream',
             SFC_DIGEST: meta[SHA256_DIGEST],
@@ -164,58 +143,45 @@ class SnowflakeS3Util(object):
             data_file = SnowflakeS3Util.encrypt_file(
                 s3_metadata, meta[u'encryption_material'],
                 meta[u'real_src_file_name'], tmp_dir=meta[u'tmp_dir'])
-            size = os.path.getsize(data_file)
             logger.debug(
-                u'encrypted data file=%s, size=%s', data_file, size)
+                u'encrypted data file=%s, size=%s', data_file,
+                os.path.getsize(data_file))
         else:
             logger.debug(u'not encrypted data file')
             data_file = meta[u'real_src_file_name']
 
-        if s3path in meta[u'existing_files']:
+        akey = SnowflakeS3Util.get_s3_file_object(meta, meta[u'dst_file_name'])
+        if meta[u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
+            # need renew token
+            return
+        elif akey and meta[u'result_status'] == RESULT_STATUS_UPLOADED and \
+                not meta[u'overwrite']:
             logger.info(
-                u'file already exists, checking digest: file=%s',
-                s3path)
+                u'file already exists, checking digest: file=%s', s3path)
             try:
-                akey = s3client.Object(s3location.bucket_name, s3path)
-            except botocore.exceptions.ClientError as e:
-                if e.response[u'Error'][u'Code'] == u'ExpiredToken':
-                    logger.debug(u"AWS Token expired. Renew and retry")
-                    meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
+                sfc_digest = akey.metadata[SFC_DIGEST]
+                if sfc_digest == meta[SHA256_DIGEST]:
+                    logger.info(u'file digest matched: digest=%s',
+                                sfc_digest)
+                    meta[u'dst_file_size'] = 0
+                    meta[u'error_details'] = \
+                        (u'File with the same destination name '
+                         u'and checksum already exists')
+                    meta[u'result_status'] = RESULT_STATUS_SKIPPED
                     return
-                logger.debug(
-                    u"Failed to get metadata for %s, %s: %s",
-                    s3location.bucket_name, s3path, e)
-                raise e
+                else:
+                    logger.info(
+                        (u"file digest didn't match: "
+                         u"digest_s3=%s, digest_local=%s"),
+                        sfc_digest, meta[SHA256_DIGEST])
+            except botocore.exceptions.ClientError as e:
+                # this could happen in the last minute
+                if e.response[u'Error'][u'Code'] != '404':
+                    raise e
+                logger.debug(u'ignored. file not found: %s, %s',
+                             s3location.bucket_name, s3path)
 
-            if akey:
-                try:
-                    sfc_digest = akey.metadata[SFC_DIGEST]
-                    if sfc_digest == meta[SHA256_DIGEST]:
-                        logger.info(u'file digest matched: digest=%s',
-                                    sfc_digest)
-                        meta[u'dst_file_size'] = 0
-                        meta[u'error_details'] = \
-                            (u'File with the same destination name '
-                             u'and checksum already exists')
-                        meta[u'result_status'] = RESULT_STATUS_SKIPPED
-                        return
-                    else:
-                        logger.info(
-                            (u"file digest didn't match: "
-                             u"digest_s3=%s, digest_local=%s"),
-                            sfc_digest, meta[SHA256_DIGEST])
-                except botocore.exceptions.ClientError as e:
-                    if e.response[u'Error'][u'Code'] != '404':
-                        raise e
-                    logger.debug(u'ignored. file not found: %s, %s',
-                                 s3location.bucket_name, s3path)
-
-            else:
-                logger.debug(u'file has gone. file: file=%s', s3path)
-
-        logger.debug(u'setting a new key: file=%s', s3path)
-
-        logger.debug(u'putting a file')
+        logger.debug(u'putting a file: %s', s3path)
         put_callback = meta[u'put_callback']
         put_callback_output_stream = meta[u'put_callback_output_stream']
 
@@ -224,8 +190,8 @@ class SnowflakeS3Util(object):
         max_retry = DEFAULT_MAX_RETRY
         for retry in range(max_retry):
             try:
-                s3client.meta.client.upload_file(
-                    data_file, s3location.bucket_name, s3path,
+                akey.upload_file(
+                    data_file,
                     Callback=put_callback(
                         data_file,
                         os.path.getsize(data_file),
@@ -314,43 +280,18 @@ class SnowflakeS3Util(object):
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
 
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-            meta[u'stage_location'])
-
-        s3client = meta[u's3client']
-        # NOTE: src_file_name may include '/' in the beginning, e.g.,
-        #       /data1.txt.gz
-        #       but the sub directory name can be included:
-        #       a/data1.txt.gz
-        #       Since s3location.s3path always ends with '/'
-        #       if not empty, extra '/' in the beginning of src_file_name
-        #       must be removed.
-        #       This could be done by GS end as improvement.
-        s3path = s3location.s3path + meta[u'src_file_name'].lstrip('/')
-        logger.debug(
-            u"meta['stage_location']=[%s], "
-            u"s3location.bucket_name=[%s], "
-            u"s3location.s3path=[%s], "
-            u"meta['src_file_name']=[%s], "
-            u"s3path=[%s], "
-            u"full_dst_file_name=[%s]",
-            meta[u'stage_location'],
-            s3location.bucket_name,
-            s3location.s3path,
-            meta[u'src_file_name'],
-            s3path,
-            full_dst_file_name)
-
         get_callback = meta[u'get_callback']
         get_callback_output_stream = meta[u'get_callback_output_stream']
+
+        akey = SnowflakeS3Util.get_s3_file_object(meta, meta[u'src_file_name'])
 
         max_concurrency = meta[u'parallel']
         last_err = None
         max_retry = DEFAULT_MAX_RETRY
         for retry in range(max_retry):
             try:
-                s3client.meta.client.download_file(
-                    s3location.bucket_name, s3path, full_dst_file_name,
+                akey.download_file(
+                    full_dst_file_name,
                     Callback=get_callback(
                         meta[u'src_file_name'],
                         meta[u'src_file_size'],
@@ -415,7 +356,6 @@ class SnowflakeS3Util(object):
                     full_dst_file_name)
 
         if u'encryption_material' in meta:
-            akey = s3client.Object(s3location.bucket_name, s3path)
             logger.debug(
                 u'encrypted data file=%s', full_dst_file_name)
             s3_metadata = {
@@ -630,58 +570,56 @@ class SnowflakeS3Util(object):
         return digest, file_size
 
     @staticmethod
-    def filter_existing_files_s3(s3client, stage_location, file_prefix):
+    def get_s3_file_object(meta, filename):
         """
-        List of target files
-        """
-        existing_files = {}
-        logger = getLogger(__name__)
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-            stage_location)
-        s3bucket = s3client.Bucket(s3location.bucket_name)
-        s3prefix = s3location.s3path + file_prefix
-        logger.debug(u's3path=[%s], file_prefix=[%s], listing=[%s]',
-                     s3location.s3path, file_prefix.lstrip('/'), s3prefix)
-        for obj in s3bucket.objects.filter(Prefix=s3prefix, Delimiter=u'/'):
-            logger.debug(u'object: %s', obj)
-            existing_files[obj.key] = obj.size
-        return existing_files
-
-    @staticmethod
-    def exists(meta):
-        """
-        Checks if the file exists in AWS S3
+        Gets S3 file object
         :param meta: file meta object
-        :return: RESULT_STATUS_UPLOADED if exists, RESULT_STATUS_NOT_FOUND_FILE
-        if not exists, RESULT_STATUS_RENEW_TOKEN if AWS token expires or
-        RESULT_STATUS_ERROR if other errors
+        :return: S3 object if no error, otherwise None. Check meta[
+        u'result_status'] for status.
         """
+        import logging
         logger = getLogger(__name__)
+        s3client = meta[u's3client']
         s3location = SnowflakeS3Util.extract_bucket_name_and_path(
             meta[u'stage_location'])
-        s3client = meta[u's3client']
-        s3path = s3location.s3path + meta[u'dst_file_name']
+        s3path = s3location.s3path + filename.lstrip('/')
+
+        if logger.getEffectiveLevel() == logging.DEBUG:
+            tmp_meta = {}
+            for k, v in meta.items():
+                if k != 'stage_credentials':
+                    tmp_meta[k] = v
+            logger.debug(
+                u"s3location.bucket_name: %s, "
+                u"s3location.s3path: %s, "
+                u"s3fullpath: %s, "
+                u'meta: %s',
+                s3location.bucket_name,
+                s3location.s3path,
+                s3path, tmp_meta)
+
         try:
             # HTTP HEAD request
-            s3client.Object(s3location.bucket_name, s3path).load()
+            akey = s3client.Object(s3location.bucket_name, s3path)
+            akey.load()
         except botocore.exceptions.ClientError as e:
             if e.response[u'Error'][u'Code'] == u'ExpiredToken':
                 logger.debug(u"AWS Token expired. Renew and retry")
                 meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
-                return RESULT_STATUS_RENEW_TOKEN
+                return None
             elif e.response[u'Error'][u'Code'] == u'404':
                 logger.debug(u'not found. bucket: %s, path: %s',
                              s3location.bucket_name, s3path)
                 meta[u'result_status'] = RESULT_STATUS_NOT_FOUND_FILE
-                return RESULT_STATUS_NOT_FOUND_FILE
+                return akey
             logger.debug(
                 u"Failed to get metadata for %s, %s: %s",
                 s3location.bucket_name, s3path, e)
             meta[u'result_status'] = RESULT_STATUS_ERROR
-            return RESULT_STATUS_ERROR
+            return None
 
         meta[u'result_status'] = RESULT_STATUS_UPLOADED
-        return meta[u'result_status']
+        return akey
 
     @staticmethod
     def upload_one_file_to_s3_with_retry(meta):
@@ -695,8 +633,9 @@ class SnowflakeS3Util(object):
             SnowflakeS3Util.upload_one_file_to_s3(meta)
             if meta[u'result_status'] == RESULT_STATUS_UPLOADED:
                 for _ in range(10):
-                    if SnowflakeS3Util.exists(meta) == \
-                            RESULT_STATUS_NOT_FOUND_FILE:
+                    _ = SnowflakeS3Util.get_s3_file_object(
+                        meta, meta[u'dst_file_name'])
+                    if meta[u'result_status'] == RESULT_STATUS_NOT_FOUND_FILE:
                         time.sleep(1)  # wait 1 second
                         logger.debug('not found. double checking...')
                         continue
