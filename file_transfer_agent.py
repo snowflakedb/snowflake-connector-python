@@ -24,16 +24,14 @@ from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
                         ER_LOCAL_PATH_NOT_DIRECTORY,
                         ER_FILE_NOT_EXISTS,
                         ER_COMPRESSION_NOT_SUPPORTED,
-                        ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL,
-                        ER_FAILED_TO_CHECK_EXISTING_FILES)
+                        ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL)
 from .errors import (Error, OperationalError, InternalError, DatabaseError,
                      ProgrammingError)
 from .file_compression_type import FileCompressionType
 from .s3_util import (SnowflakeS3FileEncryptionMaterial, SnowflakeS3Util,
-                      RESULT_STATUS_COLLISION, RESULT_STATUS_DOWNLOADED,
+                      RESULT_STATUS_DOWNLOADED,
                       RESULT_STATUS_ERROR, RESULT_STATUS_UPLOADED,
-                      RESULT_STATUS_RENEW_TOKEN,
-                      RESULT_STATUS_NOT_FOUND_FILE)
+                      RESULT_STATUS_RENEW_TOKEN)
 
 S3_FS = u'S3'
 LOCAL_FS = u'LOCAL_FS'
@@ -137,7 +135,6 @@ class SnowflakeFileTransferAgent(object):
         self._get_callback = get_callback
         self._get_callback_output_stream = get_callback_output_stream
         self.logger = getLogger(__name__)
-        self._existing_files = {}
         self._use_accelerate_endpoint = False
 
     def execute(self):
@@ -150,10 +147,6 @@ class SnowflakeFileTransferAgent(object):
 
         self._transfer_accelerate_config()
 
-        if not self._overwrite:
-            # TODO: optimize this. This won't scale
-            self._filter_existing_files()
-
         if self._command_type == CMD_TYPE_DOWNLOAD:
             if not os.path.isdir(self._local_location):
                 os.makedirs(self._local_location)
@@ -165,7 +158,7 @@ class SnowflakeFileTransferAgent(object):
         small_file_metas = []
         large_file_metas = []
         for meta in self._file_metadata.values():
-            meta[u'existing_files'] = self._existing_files
+            meta[u'overwrite'] = self._overwrite
             meta[u'self'] = self
             if self._stage_location_type == S3_FS:
                 meta[u'put_callback'] = self._put_callback
@@ -174,9 +167,9 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'get_callback'] = self._get_callback
                 meta[u'get_callback_output_stream'] = \
                     self._get_callback_output_stream
-                self.logger.debug('size: %s', meta[u'src_file_size'])
-                if meta[
-                    u'src_file_size'] > SnowflakeS3Util.DATA_SIZE_THRESHOLD:
+                if meta.get(
+                        u'src_file_size',
+                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD:
                     meta[u'parallel'] = self._parallel
                     large_file_metas.append(meta)
                 else:
@@ -708,8 +701,7 @@ class SnowflakeFileTransferAgent(object):
                     })
 
         self._parallel = self._ret[u'data'][u'parallel']
-        self._overwrite = u'overwrite' in self._ret[u'data'] and \
-                          self._ret[u'data'][u'overwrite']
+        self._overwrite = self._ret[u'data'].get(u'overwrite', False)
         self._stage_location_type = self._ret[u'data'][u'stageInfo'][
             u'locationType'].upper()
         self._stage_location = self._ret[u'data'][u'stageInfo'][u'location']
@@ -845,7 +837,7 @@ class SnowflakeFileTransferAgent(object):
                         mime_type_str = 'snowflake/parquet'
                         encoding = 'parquet'
                     elif test and (
-                        int(binascii.hexlify(test), 16) == 0x28B52FFD):
+                                int(binascii.hexlify(test), 16) == 0x28B52FFD):
                         encoding = 'zstd'
 
                 if encoding is not None:
@@ -919,79 +911,3 @@ class SnowflakeFileTransferAgent(object):
             else:
                 break
         return u''.join(ret)
-
-    def _filter_existing_files(self):
-        dst_file_name_to_src_file_name = {}
-
-        for file_name, meta in self._file_metadata.items():
-            if meta[u'dst_file_name'] in dst_file_name_to_src_file_name:
-                prev_src_file = dst_file_name_to_src_file_name[
-                    meta[u'dst_file_name']]
-            else:
-                prev_src_file = None
-            dst_file_name_to_src_file_name[meta[u'dst_file_name']] = file_name
-            if prev_src_file is not None:
-                meta[u'result_status'] = RESULT_STATUS_COLLISION
-                meta[
-                    u'error_details'] = \
-                    u'{prev} has the same name as {cur}'.format(
-                        prev=prev_src_file,
-                        cur=file_name)
-            else:
-                self.logger.debug(u"No dst file name found for %s",
-                                  prev_src_file)
-
-        if len(dst_file_name_to_src_file_name) == 0:
-            return
-
-        logger = getLogger(__name__)
-        logger.info(u'dst files: %s', dst_file_name_to_src_file_name)
-        # determine the greatest common prefix for all stage file names so that
-        # we can call s3 API to list the objects and get thier digest to
-        # compare with local files
-        if self._command_type == CMD_TYPE_UPLOAD:
-            stage_file_names = dst_file_name_to_src_file_name.keys()
-        else:
-            stage_file_names = dst_file_name_to_src_file_name.values()
-
-        stage_file_names = sorted(stage_file_names)
-        self.logger.debug(stage_file_names)
-
-        file_prefix = SnowflakeFileTransferAgent.greatest_common_prefix(
-            stage_file_names[0], stage_file_names[-1])
-        self.logger.info(u'Greatest common prefix: %s', file_prefix)
-
-        if self._stage_location_type == S3_FS:
-            try:
-                s3client = SnowflakeS3Util.create_s3_client(
-                    self._stage_credentials,
-                    use_accelerate_endpoint=self._use_accelerate_endpoint)
-                self._existing_files = \
-                    SnowflakeS3Util.filter_existing_files_s3(
-                        s3client, self._stage_location,
-                        file_prefix)
-                self.logger.info(u"existing files: %s", self._existing_files)
-            except Exception as err:
-                import logging
-                if self.logger.getEffectiveLevel() <= logging.DEBUG:
-                    self.logger.exception('Failed to check the existing files')
-                Error.errorhandler_wrapper(
-                    self._cursor.connection, self._cursor, OperationalError,
-                    {
-                        u'msg': (u'Failed to check the existing '
-                                 u'files: {0}').format(
-                            err),
-                        u'errno': ER_FAILED_TO_CHECK_EXISTING_FILES
-                    }
-                )
-            s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-                self._stage_location
-            )
-            if self._command_type == CMD_TYPE_DOWNLOAD:
-                for file_name, meta in self._file_metadata.items():
-                    s3_full_path = s3location.s3path + file_name
-                    if s3_full_path in self._existing_files:
-                        meta[u'src_file_size'] = self._existing_files[
-                            s3_full_path]
-                    else:
-                        meta[u'src_file_size'] = 1  # safeguard
