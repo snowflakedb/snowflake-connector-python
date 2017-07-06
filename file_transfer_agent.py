@@ -245,7 +245,7 @@ class SnowflakeFileTransferAgent(object):
                 len_file_metas
 
             self.logger.debug(
-                u'uploading files idx: {0} to {1}'.format(idx, end_of_idx))
+                u'uploading files idx: {0}/{1}'.format(idx+1, end_of_idx))
 
             target_meta = file_metas[idx:end_of_idx]
             while True:
@@ -287,6 +287,8 @@ class SnowflakeFileTransferAgent(object):
         idx = 0
         len_file_metas = len(file_metas)
         while idx < len_file_metas:
+            self.logger.debug(
+                u'uploading files idx: {0}/{1}'.format(idx+1, len_file_metas))
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
             if result[u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
