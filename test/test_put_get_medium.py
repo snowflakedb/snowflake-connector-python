@@ -606,7 +606,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     [s3] Put and Get Large files
     """
     number_of_files = 3
-    number_of_lines = 2000000
+    number_of_lines = 200000
     tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
 
     files = os.path.join(tmp_dir, 'file*')
