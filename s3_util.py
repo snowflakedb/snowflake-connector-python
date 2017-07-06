@@ -38,6 +38,7 @@ RESULT_STATUS_DOWNLOADED = u'DOWNLOADED'
 RESULT_STATUS_COLLISION = u'COLLISION'
 RESULT_STATUS_SKIPPED = u'SKIPPED'
 RESULT_STATUS_RENEW_TOKEN = u'RENEW_TOKEN'
+RESULT_STATUS_NOT_FOUND_FILE = u'NOT_FOUND_FILE'
 
 DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
@@ -532,7 +533,7 @@ class SnowflakeS3Util(object):
         base_name = os.path.basename(file_name)
         gzip_file_name = os.path.join(tmp_dir, base_name + u'_c.gz')
         logger.debug(u'gzip file: %s, original file: %s', gzip_file_name,
-                    file_name)
+                     file_name)
         fr = open(file_name, u'rb')
         fw = gzip.GzipFile(gzip_file_name, u'wb')
         shutil.copyfileobj(fr, fw)
@@ -578,7 +579,7 @@ class SnowflakeS3Util(object):
         digest = base64.standard_b64encode(m.digest()).decode(UTF8)
         logger = getLogger(__name__)
         logger.debug(u'getting digest and size: %s, %s, file=%s', digest,
-                    file_size, file_name)
+                     file_size, file_name)
         return digest, file_size
 
     @staticmethod
@@ -598,3 +599,31 @@ class SnowflakeS3Util(object):
             logger.debug(u'object: %s', obj)
             existing_files[obj.key] = obj.size
         return existing_files
+
+    @staticmethod
+    def exists(meta):
+        logger = getLogger(__name__)
+        s3location = SnowflakeS3Util.extract_bucket_name_and_path(
+            meta[u'stage_location'])
+        s3client = meta[u's3client']
+        s3path = s3location.s3path + meta[u'dst_file_name']
+        try:
+            akey = s3client.Object(s3location.bucket_name, s3path)
+        except botocore.exceptions.ClientError as e:
+            if e.response[u'Error'][u'Code'] == u'ExpiredToken':
+                logger.debug(u"AWS Token expired. Renew and retry")
+                meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
+                return RESULT_STATUS_RENEW_TOKEN
+            logger.debug(
+                u"Failed to get metadata for %s, %s: %s",
+                s3location.bucket_name, s3path, e)
+            meta[u'result_status'] = RESULT_STATUS_ERROR
+            return RESULT_STATUS_ERROR
+
+        logger.debug("Bucket: %s, File: %s, exists? :%s",
+                     s3location.bucket_name, s3path, akey is not None)
+        if akey is not None:
+            meta[u'result_status'] = RESULT_STATUS_UPLOADED
+        else:
+            meta[u'result_status'] = RESULT_STATUS_NOT_FOUND_FILE
+        return meta[u'result_status']

@@ -16,6 +16,7 @@ import pytest
 import pytz
 
 from snowflake.connector import ProgrammingError
+from snowflake.connector.cursor import DictCursor
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -37,11 +38,23 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
 
 
-def test_put_copy(conn_cnx, db_parameters):
-    """Put and Copy a file
+def test_put_copy0(conn_cnx, db_parameters):
     """
+    Put and Copy a file
+    """
+    data_file = os.path.join(THIS_DIR, "data", "put_get_1.txt")
+
+    def run(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
+    def run_with_cursor(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        c = cnx.cursor(DictCursor)
+        return c, c.execute(sql).fetchall()
+
     with conn_cnx() as cnx:
-        cnx.cursor().execute("""
+        run(cnx, """
 create table {name} (
 aa int,
 dt date,
@@ -51,81 +64,42 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(5,2))
-""".format(name=db_parameters['name']))
-        data_file = os.path.join(THIS_DIR, "data", "put_get_1.txt")
-        c = cnx.cursor()
-        try:
-            c.execute("""
-put file://{file} @%{name}""".format(file=data_file,
-                                     name=db_parameters['name']))
-            assert c.is_file_transfer, "PUT"
-            colmap = {}
-            for index, item in enumerate(c.description):
-                colmap[item[0]] = index
-            for rec in c:
-                source = rec[colmap['source']]
-                source_size = rec[colmap['source_size']]
+""")
+        c, ret = run_with_cursor(cnx, "put file://{file} @%{name}")
+        assert c.is_file_transfer, "PUT"
+        assert len(ret) == 1 and ret[0]['source'] == os.path.basename(
+            data_file), "File name"
 
-            assert source == os.path.basename(data_file), "File name"
-        finally:
-            c.close()
+        c, ret = run_with_cursor(cnx, "copy into {name}")
+        assert not c.is_file_transfer, "COPY"
+        assert len(ret) == 1 and ret[0]['status'] == "LOADED", \
+            "Failed to load data"
 
-        c = cnx.cursor()
-        try:
-            c.execute("copy into {name}".format(name=db_parameters['name']))
-            assert not c.is_file_transfer, "COPY"
-            cnt = 0
-            for rec in c:
-                cnt += 1
-            assert rec[1] == "LOADED", "Failed to load data"
-
-        finally:
-            c.close()
-
-        cnx.cursor().execute(
-            'drop table if exists {name}'.format(name=db_parameters['name']))
+        run(cnx, 'drop table if exists {name}')
 
 
 def test_put_copy_compressed(conn_cnx, db_parameters):
-    """Put and Copy compressed files
     """
+    Put and Copy compressed files
+    """
+    data_file = os.path.join(THIS_DIR, "data", "gzip_sample.txt.gz")
+
+    def run(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        return cnx.cursor(DictCursor).execute(sql).fetchall()
+
     with conn_cnx() as cnx:
-        cnx.cursor().execute(
-            "create or replace table {name} (value string)".format(
-                name=db_parameters['name']))
-        data_file = os.path.join(THIS_DIR, "data",
-                                 "gzip_sample.txt.gz")
+        run(cnx, "create or replace table {name} (value string)")
         file_size = os.stat(data_file).st_size
-        c = cnx.cursor()
-        try:
-            c.execute("""
-put file://{file} @%{name}""".format(file=data_file,
-                                     name=db_parameters['name']))
-            colmap = {}
-            for index, item in enumerate(c.description):
-                colmap[item[0]] = index
-            for rec in c:
-                source = rec[colmap['source']]
-                source_size = rec[colmap['source_size']]
+        ret = run(cnx, "put file://{file} @%{name}")
+        assert ret[0]['source'] == os.path.basename(data_file), "File name"
+        assert ret[0]['source_size'] == file_size, "File size"
 
-            assert source == os.path.basename(data_file), "File name"
-            assert source_size == file_size, "File size"
-        finally:
-            c.close()
+        ret = run(cnx, "copy into {name}")
+        assert len(ret) == 1 and ret[0]['status'] == "LOADED", \
+            "Failed to load data"
 
-        c = cnx.cursor()
-        try:
-            c.execute("copy into {name}".format(name=db_parameters['name']))
-            cnt = 0
-            for rec in c:
-                cnt += 1
-            assert rec[1] == "LOADED", "Failed to load data"
-
-        finally:
-            c.close()
-
-        cnx.cursor().execute(
-            'drop table if exists {name}'.format(name=db_parameters['name']))
+        run(cnx, 'drop table if exists {name}')
 
 
 @pytest.mark.skipif(
@@ -136,77 +110,68 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
     """
     Put and Copy bz2 compressed files
     """
-    with conn_cnx() as cnx:
-        cnx.cursor().execute("""
-create or replace table {name} (value string)
-""".format(name=db_parameters['name']))
-        data_file = os.path.join(
-            THIS_DIR, "data", "bzip2_sample.txt.bz2")
-        with cnx.cursor() as c:
-            for rec in c.execute("""
-put file://{file} @%{name}""".format(file=data_file,
-                                     name=db_parameters['name'])):
-                print(rec)
-                assert rec[-2] == 'UPLOADED'
-            for rec in c.execute(
-                    "copy into {name}".format(name=db_parameters['name'])):
-                print(rec)
-                assert rec[1] == 'LOADED'
+    data_file = os.path.join(THIS_DIR, "data", "bzip2_sample.txt.bz2")
 
-        cnx.cursor().execute(
-            'drop table if exists {name}'.format(name=db_parameters['name']))
+    def run(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
+    with conn_cnx() as cnx:
+        run(cnx, "create or replace table {name} (value string)")
+        for rec in run(cnx, "put file://{file} @%{name}"):
+            print(rec)
+            assert rec[-2] == 'UPLOADED'
+        for rec in run(cnx, "copy into {name}"):
+            print(rec)
+            assert rec[1] == 'LOADED'
+
+        run(cnx, 'drop table if exists {name}')
 
 
 def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
     """
     Put and Copy brotli compressed files
     """
-    with conn_cnx() as cnx:
-        cnx.cursor().execute("""
-create or replace table {name} (value string)
-""".format(name=db_parameters['name']))
-        data_file = os.path.join(
-            THIS_DIR, "data", "brotli_sample.txt.br")
-        with cnx.cursor() as c:
-            for rec in c.execute("""
-put file://{file} @%{name}""".format(file=data_file,
-                                     name=db_parameters['name'])):
-                print(rec)
-                assert rec[-2] == 'UPLOADED'
-            for rec in c.execute(
-                    "copy into {name} file_format=(compression='BROTLI')".format(
-                        name=db_parameters['name'])):
-                print(rec)
-                assert rec[1] == 'LOADED'
+    data_file = os.path.join(THIS_DIR, "data", "brotli_sample.txt.br")
 
-        cnx.cursor().execute(
-            'drop table if exists {name}'.format(name=db_parameters['name']))
+    def run(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
+    with conn_cnx() as cnx:
+        run(cnx, "create or replace table {name} (value string)")
+        for rec in run(cnx, "put file://{file} @%{name}"):
+            print(rec)
+            assert rec[-2] == 'UPLOADED'
+        for rec in run(
+                cnx, "copy into {name} file_format=(compression='BROTLI')"):
+            print(rec)
+            assert rec[1] == 'LOADED'
+
+        run(cnx, 'drop table if exists {name}')
 
 
 def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
     """
     Put and Copy zstd compressed files
     """
-    with conn_cnx() as cnx:
-        cnx.cursor().execute("""
-create or replace table {name} (value string)
-""".format(name=db_parameters['name']))
-        data_file = os.path.join(
-            THIS_DIR, "data", "zstd_sample.txt.zst")
-        with cnx.cursor() as c:
-            for rec in c.execute("""
-put file://{file} @%{name}""".format(file=data_file,
-                                     name=db_parameters['name'])):
-                print(rec)
-                assert rec[-2] == 'UPLOADED'
-            for rec in c.execute(
-                    "copy into {name} file_format=(compression='ZSTD')".format(
-                        name=db_parameters['name'])):
-                print(rec)
-                assert rec[1] == 'LOADED'
+    data_file = os.path.join(THIS_DIR, "data", "zstd_sample.txt.zst")
 
-        cnx.cursor().execute(
-            'drop table if exists {name}'.format(name=db_parameters['name']))
+    def run(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
+    with conn_cnx() as cnx:
+        run(cnx, "create or replace table {name} (value string)")
+        for rec in run(cnx, "put file://{file} @%{name}"):
+            print(rec)
+            assert rec[-2] == 'UPLOADED'
+        for rec in run(
+                cnx, "copy into {name} file_format=(compression='ZSTD')"):
+            print(rec)
+            assert rec[1] == 'LOADED'
+
+        run(cnx, 'drop table if exists {name}')
 
 
 @pytest.mark.skipif(
@@ -217,61 +182,58 @@ def test_put_copy_parquet_compressed(conn_cnx, db_parameters):
     """
     Put and Copy parquet compressed files
     """
+    data_file = os.path.join(
+        THIS_DIR, "data", "nation.impala.parquet")
+
+    def run(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
     with conn_cnx() as cnx:
-        cnx.cursor().execute("alter session set enable_parquet_filetype=true")
-        cnx.cursor().execute("""
-create or replace table {name} (value variant) stage_file_format=(type='parquet')
-""".format(name=db_parameters['name']))
-        data_file = os.path.join(
-            THIS_DIR, "data", "nation.impala.parquet")
-        with cnx.cursor() as c:
-            for rec in c.execute("""
-put file://{file} @%{name}""".format(file=data_file,
-                                     name=db_parameters['name'])):
-                print(rec)
-                assert rec[-2] == 'UPLOADED'
-                assert rec[4] == 'PARQUET'
-                assert rec[5] == 'PARQUET'
-            for rec in c.execute(
-                    "copy into {name}".format(name=db_parameters['name'])):
-                print(rec)
-                assert rec[1] == 'LOADED'
+        run(cnx, "alter session set enable_parquet_filetype=true")
+        run(cnx, """
+create or replace table {name}
+(value variant)
+stage_file_format=(type='parquet')
+""")
+        for rec in run(cnx, "put file://{file} @%{name}"):
+            print(rec)
+            assert rec[-2] == 'UPLOADED'
+            assert rec[4] == 'PARQUET'
+            assert rec[5] == 'PARQUET'
+        for rec in run(cnx, "copy into {name}"):
+            print(rec)
+            assert rec[1] == 'LOADED'
 
-        cnx.cursor().execute(
-            'drop table if exists {name}'.format(name=db_parameters['name']))
-
-        cnx.cursor().execute("alter session unset enable_parquet_filetype")
+        run(cnx, 'drop table if exists {name}')
+        run(cnx, "alter session unset enable_parquet_filetype")
 
 
-@pytest.mark.skipif(
-    True,
-    reason="ORC support is not enabled in server",
-)
 def test_put_copy_orc_compressed(conn_cnx, db_parameters):
     """
     Put and Copy ORC compressed files
     """
+    data_file = os.path.join(THIS_DIR, "data", "TestOrcFile.test1.orc")
+
+    def run(cnx, sql):
+        sql = sql.format(file=data_file, name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
     with conn_cnx() as cnx:
-        cnx.cursor().execute("""
+        run(cnx, """
 create or replace table {name} (value variant) stage_file_format=(type='orc')
-""".format(name=db_parameters['name']))
+""")
+        for rec in run(cnx, """
+put file://{file} @%{name}"""):
+            print(rec)
+            assert rec[-2] == 'UPLOADED'
+            assert rec[4] == 'ORC'
+            assert rec[5] == 'ORC'
+        for rec in run(cnx, "copy into {name}"):
+            print(rec)
+            assert rec[1] == 'LOADED'
 
-        data_file = os.path.join(THIS_DIR, "data", "TestOrcFile.test1.orc")
-        with cnx.cursor() as c:
-            for rec in c.execute("""
-put file://{file} @%{name}""".format(file=data_file,
-                                     name=db_parameters['name'])):
-                print(rec)
-                assert rec[-2] == 'UPLOADED'
-                assert rec[4] == 'ORC'
-                assert rec[5] == 'ORC'
-            for rec in c.execute(
-                    "copy into {name}".format(name=db_parameters['name'])):
-                print(rec)
-                assert rec[1] == 'LOADED'
-
-        cnx.cursor().execute(
-            'drop table if exists {name}'.format(name=db_parameters['name']))
+        run(cnx, 'drop table if exists {name}')
 
 
 @pytest.mark.skipif(
@@ -284,8 +246,18 @@ def test_copy_get(tmpdir, conn_cnx, db_parameters):
     """
     name_unload = db_parameters['name'] + "_unload"
     tmp_dir = str(tmpdir.mkdir('copy_get_stage'))
+    tmp_dir_user = str(tmpdir.mkdir('user_get'))
+
+    def run(cnx, sql):
+        sql = sql.format(
+            name_unload=name_unload,
+            tmpdir=tmp_dir,
+            tmp_dir_user=tmp_dir_user,
+            name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
     with conn_cnx() as cnx:
-        cnx.cursor().execute("""
+        run(cnx, """
 create or replace table {name} (
 aa int,
 dt date,
@@ -295,16 +267,15 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(5,2))
-""".format(name=db_parameters['name']))
-        cnx.cursor().execute("""
+""")
+        run(cnx, """
 create or replace stage {name_unload}
 url='file://{tmpdir}/'
 file_format = (
 format_name = 'common.public.csv'
 field_delimiter = '|'
 error_on_column_count_mismatch=false);
-""".format(name_unload=name_unload,
-           tmpdir=tmp_dir))
+""")
 
         current_time = datetime.datetime.utcnow()
         current_time = current_time.replace(
@@ -312,45 +283,32 @@ error_on_column_count_mismatch=false);
         current_date = datetime.date.today()
         other_time = current_time.replace(tzinfo=pytz.timezone("Asia/Tokyo"))
 
-        c = cnx.cursor()
-        try:
-            fmt = """
+        fmt = """
 insert into {name}(aa, dt, tstz)
 values(%(value)s,%(dt)s,%(tstz)s)
 """.format(name=db_parameters['name'])
-            c.executemany(fmt, [
-                {'value': 6543, 'dt': current_date, 'tstz': other_time},
-                {'value': 1234, 'dt': current_date, 'tstz': other_time},
-            ])
-        finally:
-            c.close()
+        cnx.cursor().executemany(fmt, [
+            {'value': 6543, 'dt': current_date, 'tstz': other_time},
+            {'value': 1234, 'dt': current_date, 'tstz': other_time},
+        ])
 
-        cnx.cursor().execute("""
+        run(cnx, """
 copy into @{name_unload}/data_
 from {name}
 file_format=(
 format_name='common.public.csv'
 compression='gzip')
 max_file_size=10000000
-""".format(name_unload=name_unload,
-           name=db_parameters['name']))
-
-        tmp_dir_user = str(tmpdir.mkdir('user_get'))
-        cnx.cursor().execute(
-            "get @{name_unload}/ file://{tmp_dir_user}/".format(
-                name_unload=name_unload,
-                tmp_dir_user=tmp_dir_user))
+""")
+        run(cnx, "get @{name_unload}/ file://{tmp_dir_user}/")
 
         cnt = 0
-        for (_, _, _) in os.walk(tmp_dir_user):
+        for _, _, _ in os.walk(tmp_dir_user):
             cnt += 1
-
         assert cnt > 0, 'No file was downloaded'
 
-        cnx.cursor().execute(
-            "drop stage {name_unload}".format(name_unload=name_unload))
-        cnx.cursor().execute(
-            "drop table if exists {table}".format(table=db_parameters['name']))
+        run(cnx, "drop stage {name_unload}")
+        run(cnx, "drop table if exists {name}")
 
 
 def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
@@ -363,8 +321,15 @@ def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
     tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
 
     files = os.path.join(tmp_dir, 'file*')
+
+    def run(cnx, sql):
+        sql = sql.format(
+            files=files,
+            name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
     with conn_cnx() as cnx:
-        cnx.cursor().execute("""
+        run(cnx, """
 create or replace table {name} (
 aa int,
 dt date,
@@ -374,25 +339,15 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(6,2))
-""".format(name=db_parameters['name']))
-        cnx.cursor().execute(
-            "put file://{file} @%{name}".format(file=files,
-                                                name=db_parameters['name']))
-        cnx.cursor().execute(
-            "copy into {name}".format(name=db_parameters['name']))
-        c = cnx.cursor()
-        try:
-            c.execute("select count(*) from {name}".format(
-                name=db_parameters['name']))
-            rows = 0
-            for rec in c:
-                rows += rec[0]
-            assert rows == number_of_files * number_of_lines, 'Number of rows'
-        finally:
-            c.close()
+""")
+        run(cnx, "put file://{files} @%{name}")
+        run(cnx, "copy into {name}")
+        rows = 0
+        for rec in run(cnx, "select count(*) from {name}"):
+            rows += rec[0]
+        assert rows == number_of_files * number_of_lines, 'Number of rows'
 
-        cnx.cursor().execute(
-            "drop table if exists {table}".format(table=db_parameters['name']))
+        run(cnx, "drop table if exists {name}")
 
 
 def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
@@ -405,11 +360,18 @@ def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
 
     files = os.path.join(tmp_dir, 'file*')
+
+    def run(cnx, sql):
+        sql = sql.format(
+            files=files,
+            name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
     with conn_cnx(
             user=db_parameters['s3_user'],
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
-        cnx.cursor().execute("""
+        run(cnx, """
 create or replace table {name} (
 aa int,
 dt date,
@@ -419,36 +381,26 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(6,2))
-""".format(name=db_parameters['name']))
+""")
     try:
         with conn_cnx(
                 user=db_parameters['s3_user'],
                 account=db_parameters['s3_account'],
                 password=db_parameters['s3_password']) as cnx:
-            cnx.cursor().execute(
-                "put file://{file} @%{name}".format(file=files,
-                                                    name=db_parameters['name']))
-            cnx.cursor().execute(
-                "copy into {name}".format(name=db_parameters['name']))
-            c = cnx.cursor()
-            try:
-                c.execute("select count(*) from {name}".format(
-                    name=db_parameters['name']))
-                rows = 0
-                for rec in c:
-                    rows += rec[0]
-                assert rows == number_of_files * number_of_lines, \
-                    'Number of rows'
-            finally:
-                c.close()
+            run(cnx, "put file://{files} @%{name}")
+            run(cnx, "copy into {name}")
+
+            rows = 0
+            for rec in run(cnx, "select count(*) from {name}"):
+                rows += rec[0]
+            assert rows == number_of_files * number_of_lines, \
+                'Number of rows'
     finally:
         with conn_cnx(
                 user=db_parameters['s3_user'],
                 account=db_parameters['s3_account'],
                 password=db_parameters['s3_password']) as cnx:
-            cnx.cursor().execute(
-                "drop table if exists {table}".format(
-                    table=db_parameters['name']))
+            run(cnx, "drop table if exists {name}")
 
 
 def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
@@ -462,11 +414,18 @@ def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
     tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
 
     files = os.path.join(tmp_dir, 'file*')
+
+    def run(cnx, sql):
+        sql = sql.format(
+            files=files,
+            name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
+
     with conn_cnx(
             user=db_parameters['s3_user'],
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
-        cnx.cursor().execute("""
+        run(cnx, """
 create or replace table {name} (
 aa int,
 dt date,
@@ -476,7 +435,8 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(6,2))
-""".format(name=db_parameters['name']))
+""")
+
     try:
         with conn_cnx(
                 user=db_parameters['s3_user'],
@@ -484,73 +444,48 @@ ratio number(6,2))
                 password=db_parameters['s3_password']) as cnx:
             success_cnt = 0
             skipped_cnt = 0
-            c = cnx.cursor()
-            try:
-                for rec in c.execute(
-                        "put file://{file} @%{name}".format(
-                            file=files, name=db_parameters['name'])):
-                    logger.info('rec=%s', rec)
-                    if rec[6] == 'UPLOADED':
-                        success_cnt += 1
-                    elif rec[6] == 'SKIPPED':
-                        skipped_cnt += 1
-            finally:
-                c.close()
+            for rec in run(cnx, "put file://{files} @%{name}"):
+                logger.info('rec=%s', rec)
+                if rec[6] == 'UPLOADED':
+                    success_cnt += 1
+                elif rec[6] == 'SKIPPED':
+                    skipped_cnt += 1
             assert success_cnt == number_of_files, 'uploaded files'
             assert skipped_cnt == 0, 'skipped files'
 
             deleted_cnt = 0
-            cnx.cursor().execute(
-                "rm @%{name}/file0".format(name=db_parameters['name']))
+            run(cnx, "rm @%{name}/file0")
             deleted_cnt += 1
-            cnx.cursor().execute(
-                "rm @%{name}/file1".format(name=db_parameters['name']))
+            run(cnx, "rm @%{name}/file1")
             deleted_cnt += 1
-            cnx.cursor().execute(
-                "rm @%{name}/file2".format(name=db_parameters['name']))
+            run(cnx, "rm @%{name}/file2")
             deleted_cnt += 1
 
             success_cnt = 0
             skipped_cnt = 0
-            c = cnx.cursor()
-            try:
-                for rec in c.execute(
-                        "put file://{file} @%{name}".format(file=files,
-                                                            name=db_parameters[
-                                                                'name'])):
-                    logger.info('rec=%s', rec)
-                    if rec[6] == 'UPLOADED':
-                        success_cnt += 1
-                    elif rec[6] == 'SKIPPED':
-                        skipped_cnt += 1
-                assert success_cnt == deleted_cnt, \
-                    'uploaded files in the second time'
-                assert skipped_cnt == number_of_files - deleted_cnt, \
-                    'skipped files in the second time'
-            finally:
-                c.close()
+            for rec in run(cnx, "put file://{files} @%{name}"):
+                logger.info('rec=%s', rec)
+                if rec[6] == 'UPLOADED':
+                    success_cnt += 1
+                elif rec[6] == 'SKIPPED':
+                    skipped_cnt += 1
+            assert success_cnt == deleted_cnt, \
+                'uploaded files in the second time'
+            assert skipped_cnt == number_of_files - deleted_cnt, \
+                'skipped files in the second time'
 
-            cnx.cursor().execute(
-                "copy into {name}".format(name=db_parameters['name']))
-            c = cnx.cursor()
-            try:
-                rows = 0
-                for rec in c.execute(
-                        "select count(*) from {name}".format(
-                            name=db_parameters['name'])):
-                    rows += rec[0]
-                assert rows == number_of_files * number_of_lines, \
-                    'Number of rows'
-            finally:
-                c.close()
+            run(cnx, "copy into {name}")
+            rows = 0
+            for rec in run(cnx, "select count(*) from {name}"):
+                rows += rec[0]
+            assert rows == number_of_files * number_of_lines, \
+                'Number of rows'
     finally:
         with conn_cnx(
                 user=db_parameters['s3_user'],
                 account=db_parameters['s3_account'],
                 password=db_parameters['s3_password']) as cnx:
-            cnx.cursor().execute(
-                "drop table if exists {table}".format(
-                    table=db_parameters['name']))
+            run(cnx, "drop table if exists {name}")
 
 
 def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
@@ -570,9 +505,7 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
             user=db_parameters['s3_user'],
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
-        cnx.cursor().execute("""
-RM @~/test_put_collision/;
-""")
+        cnx.cursor().execute("RM @~/test_put_collision/")
         try:
             success_cnt = 0
             skipped_cnt = 0
@@ -590,9 +523,7 @@ RM @~/test_put_collision/;
                     user=db_parameters['s3_user'],
                     account=db_parameters['s3_account'],
                     password=db_parameters['s3_password']) as cnx:
-                cnx.cursor().execute("""
-RM @~;
-""")
+                cnx.cursor().execute("RM @~")
 
 
 def _generate_huge_value_json(tmpdir, n=1, value_size=1):
@@ -619,7 +550,7 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
                 table=json_table))
 
         rows = 2
-        size = 20000000
+        size = 2000
         tmp_file = _generate_huge_value_json(tmpdir, n=rows, value_size=size)
         try:
             c = cnx.cursor()
@@ -674,25 +605,29 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     [s3] Put and Get Large files
     """
     number_of_files = 3
-    number_of_lines = 2000000
+    number_of_lines = 200000
     tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
 
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')
     os.makedirs(output_dir)
+
+    def run(cnx, sql):
+        return cnx.cursor().execute(
+            sql.format(
+                files=files,
+                dir=db_parameters['name'],
+                output_dir=output_dir)).fetchall()
+
     with conn_cnx(
             user=db_parameters['s3_user'],
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
         try:
-            cnx.cursor().execute("""
-PUT file://{files} @~/{dir}
-""".format(files=files, dir=db_parameters['name']))
-
+            run(cnx, "PUT file://{files} @~/{dir}")
+            # run(cnx, "PUT file://{files} @~/{dir}")
             for _ in range(10):
-                all_recs = cnx.cursor().execute("""
-LIST @~/{dir}
-""".format(dir=db_parameters['name'])).fetchall()
+                all_recs = run(cnx, "LIST @~/{dir}")
                 if len(all_recs) == number_of_files:
                     break
                 time.sleep(1)
@@ -700,15 +635,11 @@ LIST @~/{dir}
                 pytest.fail(
                     'cannot list all files. Potentially '
                     'PUT command missed uploading Files: {0}'.format(all_recs))
-            all_recs = cnx.cursor().execute("""
-GET @~/{dir} file://{output_dir}
-""".format(dir=db_parameters['name'], output_dir=output_dir)).fetchall()
+            all_recs = run(cnx, "GET @~/{dir} file://{output_dir}");
             assert len(all_recs) == number_of_files
             assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])
         finally:
-            cnx.cursor().execute("""
-RM @~/{dir}
-""".format(dir=db_parameters['name']))
+            run(cnx, "RM @~/{dir}")
 
 
 def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
@@ -717,44 +648,43 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
     """
     tmp_dir = str(tmpdir.mkdir('put_get_with_hint'))
     data_file = os.path.join(THIS_DIR, "data", "put_get_1.txt")
+
+    def run(cnx, sql, _is_put_get=None):
+        return cnx.cursor().execute(
+            sql.format(
+                local_dir=tmp_dir,
+                file=data_file,
+                name=db_parameters['name']), _is_put_get=_is_put_get).fetchone()
+
     with conn_cnx() as cnx:
-        # regular case
-        ret = cnx.cursor().execute("""
-PUT file://{file} @~/{name}
-""".format(file=data_file, name=db_parameters['name'])).fetchone()
+        # regular PUT case
+        ret = run(cnx, "PUT file://{file} @~/{name}")
         assert ret[0] == 'put_get_1.txt', 'PUT filename'
 
-        ret = cnx.cursor().execute("""
-RM @~/{name}
-""".format(name=db_parameters['name'])).fetchone()
+        # clean up a file
+        ret = run(cnx, "RM @~/{name}")
         assert ret[0].endswith('put_get_1.txt.gz'), 'RM filename'
 
         # PUT detection failure
         with pytest.raises(ProgrammingError):
-            cnx.cursor().execute("""
+            run(cnx, """
 -- test comments
-PUT file://{file} @~/{name}
-""".format(file=data_file, name=db_parameters['name']))
+PUT file://{file} @~/{name}""")
 
         # PUT with hint
-        ret = cnx.cursor().execute("""
+        ret = run(cnx, """
 --- test comments
-PUT file://{file} @~/{name}
-        """.format(file=data_file, name=db_parameters['name']),
-                                   _is_put_get=True).fetchone()
+PUT file://{file} @~/{name}""", _is_put_get=True)
         assert ret[0] == 'put_get_1.txt', 'PUT filename'
 
         # GET detection failure
         with pytest.raises(ProgrammingError):
-            ret = cnx.cursor().execute("""
+            run(cnx, """
 --- test comments
-GET @~/{name} file://{dir}
-                """.format(dir=tmp_dir, name=db_parameters['name'])).fetchone()
+GET @~/{name} file://{local_dir}""")
 
         # GET with hint
-        ret = cnx.cursor().execute("""
+        ret = run(cnx, """
 --- test comments
-GET @~/{name} file://{dir}
-        """.format(dir=tmp_dir, name=db_parameters['name']),
-                                   _is_put_get=True).fetchone()
+GET @~/{name} file://{local_dir}""", _is_put_get=True)
         assert ret[0] == 'put_get_1.txt.gz', "GET filename"
