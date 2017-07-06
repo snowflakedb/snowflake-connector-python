@@ -334,24 +334,7 @@ class SnowflakeFileTransferAgent(object):
             if meta[u'stage_location_type'] == LOCAL_FS:
                 SnowflakeFileTransferAgent.upload_one_file_to_local(meta)
             else:  # S3
-                for _ in range(10):
-                    # retry
-                    SnowflakeS3Util.upload_one_file_to_s3(meta)
-                    if meta[u'result_status'] == RESULT_STATUS_UPLOADED:
-                        for _ in range(10):
-                            if SnowflakeS3Util.exists(
-                                    meta) == RESULT_STATUS_NOT_FOUND_FILE:
-                                sleep(1)  # wait 1 second
-                                logger.debug('not found. double checking...')
-                                continue
-                            break
-                        else:
-                            # not found. retry with the outer loop
-                            logger.debug('not found. gave up. reuploading...')
-                            continue
-                    break
-                else:
-                    raise Exception("file was not uploaded")
+                SnowflakeS3Util.upload_one_file_to_s3_with_retry(meta)
             logger.info(
                 u'done: status=%s, file=%s, real file=%s',
                 meta[u'result_status'],

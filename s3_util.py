@@ -99,6 +99,12 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def create_s3_client(stage_credentials, use_accelerate_endpoint=False):
+        """
+        Creates a s3client object with a stage credential
+        :param stage_credentials: a stage credential
+        :param use_accelerate_endpoint: is accelerate endpoint?
+        :return: s3client
+        """
         logger = getLogger(__name__)
         security_token = stage_credentials[
             u'AWS_TOKEN'] if u'AWS_TOKEN' in stage_credentials else None
@@ -121,6 +127,10 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def upload_one_file_to_s3(meta):
+        """
+        Uploads a file to S3
+        :param meta: a file meta
+        """
         logger = getLogger(__name__)
         s3location = SnowflakeS3Util.extract_bucket_name_and_path(
             meta[u'stage_location'])
@@ -201,8 +211,7 @@ class SnowflakeS3Util(object):
                                  s3location.bucket_name, s3path)
 
             else:
-                logger.info(
-                    u'file has gone. file: file=%s', s3path)
+                logger.debug(u'file has gone. file: file=%s', s3path)
 
         logger.debug(u'setting a new key: file=%s', s3path)
 
@@ -291,6 +300,10 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def download_one_file_from_s3(meta):
+        """
+        Downloads a file from S3
+        :param meta: file meta
+        """
         logger = getLogger(__name__)
         full_dst_file_name = os.path.join(
             meta[u'local_location'],
@@ -444,6 +457,15 @@ class SnowflakeS3Util(object):
     @staticmethod
     def encrypt_file(s3_metadata, encryption_material, in_filename,
                      chunk_size=AES.block_size * 4 * 1024, tmp_dir=None):
+        """
+        Encrypts a file
+        :param s3_metadata: S3 metadata output
+        :param encryption_material: encryption material
+        :param in_filename: input file name
+        :param chunk_size: read chunk size
+        :param tmp_dir: temporary directory, optional
+        :return: a encrypted file
+        """
         logger = getLogger(__name__)
         decoded_key = base64.standard_b64decode(
             encryption_material.query_stage_master_key)
@@ -491,6 +513,15 @@ class SnowflakeS3Util(object):
     @staticmethod
     def decrypt_file(s3_metadata, encryption_material, in_filename,
                      chunk_size=AES.block_size * 4 * 1024, tmp_dir=None):
+        """
+        Decrypts a file and stores the output in the temporary directory
+        :param s3_metadata: S3 metadata input
+        :param encryption_material: encryption material
+        :param in_filename: input file name
+        :param chunk_size: read chunk size
+        :param tmp_dir: temporary directory, optional
+        :return: a decrypted file name
+        """
         logger = getLogger(__name__)
         key_base64 = s3_metadata[AMZ_KEY]
         iv_base64 = s3_metadata[AMZ_IV]
@@ -529,6 +560,12 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def compress_file_with_gzip(file_name, tmp_dir):
+        """
+        Compresses a file by GZIP
+        :param file_name: a file name
+        :param tmp_dir: temprary directory where an GZIP file will be created
+        :return: a paif of gzip file name and size
+        """
         logger = getLogger(__name__)
         base_name = os.path.basename(file_name)
         gzip_file_name = os.path.join(tmp_dir, base_name + u'_c.gz')
@@ -546,6 +583,11 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def normalize_gzip_header(gzip_file_name):
+        """
+        Normalize GZIP file header. For consistent file digest, this removes
+        creation timestamp from the header.
+        :param gzip_file_name: gzip file name
+        """
         logger = getLogger(__name__)
         with open(gzip_file_name, u'r+b') as f:
             # reset the timestamp in gzip header
@@ -565,6 +607,11 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def get_digest_and_size_for_file(file_name):
+        """
+        Gets file digest and size
+        :param file_name: a file name
+        :return:
+        """
         CHUNK_SIZE = 16 * 4 * 1024
         f = open(file_name, 'rb')
         m = SHA256.new()
@@ -584,7 +631,7 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def filter_existing_files_s3(s3client, stage_location, file_prefix):
-        u"""
+        """
         List of target files
         """
         existing_files = {}
@@ -602,28 +649,63 @@ class SnowflakeS3Util(object):
 
     @staticmethod
     def exists(meta):
+        """
+        Checks if the file exists in AWS S3
+        :param meta: file meta object
+        :return: RESULT_STATUS_UPLOADED if exists, RESULT_STATUS_NOT_FOUND_FILE
+        if not exists, RESULT_STATUS_RENEW_TOKEN if AWS token expires or
+        RESULT_STATUS_ERROR if other errors
+        """
         logger = getLogger(__name__)
         s3location = SnowflakeS3Util.extract_bucket_name_and_path(
             meta[u'stage_location'])
         s3client = meta[u's3client']
         s3path = s3location.s3path + meta[u'dst_file_name']
         try:
-            akey = s3client.Object(s3location.bucket_name, s3path)
+            # HTTP HEAD request
+            s3client.Object(s3location.bucket_name, s3path).load()
         except botocore.exceptions.ClientError as e:
             if e.response[u'Error'][u'Code'] == u'ExpiredToken':
                 logger.debug(u"AWS Token expired. Renew and retry")
                 meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                 return RESULT_STATUS_RENEW_TOKEN
+            elif e.response[u'Error'][u'Code'] == u'404':
+                logger.debug(u'not found. bucket: %s, path: %s',
+                             s3location.bucket_name, s3path)
+                meta[u'result_status'] = RESULT_STATUS_NOT_FOUND_FILE
+                return RESULT_STATUS_NOT_FOUND_FILE
             logger.debug(
                 u"Failed to get metadata for %s, %s: %s",
                 s3location.bucket_name, s3path, e)
             meta[u'result_status'] = RESULT_STATUS_ERROR
             return RESULT_STATUS_ERROR
 
-        logger.debug("Bucket: %s, File: %s, exists? :%s",
-                     s3location.bucket_name, s3path, akey is not None)
-        if akey is not None:
-            meta[u'result_status'] = RESULT_STATUS_UPLOADED
-        else:
-            meta[u'result_status'] = RESULT_STATUS_NOT_FOUND_FILE
+        meta[u'result_status'] = RESULT_STATUS_UPLOADED
         return meta[u'result_status']
+
+    @staticmethod
+    def upload_one_file_to_s3_with_retry(meta):
+        """
+        Uploads one file to S3 with retry
+        :param meta: a file meta
+        """
+        logger = getLogger(__name__)
+        for _ in range(10):
+            # retry
+            SnowflakeS3Util.upload_one_file_to_s3(meta)
+            if meta[u'result_status'] == RESULT_STATUS_UPLOADED:
+                for _ in range(10):
+                    if SnowflakeS3Util.exists(meta) == \
+                            RESULT_STATUS_NOT_FOUND_FILE:
+                        time.sleep(1)  # wait 1 second
+                        logger.debug('not found. double checking...')
+                        continue
+                    break
+                else:
+                    # not found. retry with the outer loop
+                    logger.debug('not found. gave up. reuploading...')
+                    continue
+            break
+        else:
+            # could not upload a file even after retry
+            meta[u'result_status'] = RESULT_STATUS_ERROR
