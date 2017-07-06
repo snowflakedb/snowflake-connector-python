@@ -9,6 +9,7 @@ import os
 import random
 import shutil
 import string
+import time
 from logging import getLogger
 
 import pytest
@@ -20,6 +21,17 @@ try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
+
+import logging
+
+for logger_name in ['test', 'snowflake.connector', 'botocore']:
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)
+    ch = logging.FileHandler('/tmp/python_connector.log')
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(logging.Formatter(
+        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
+    logger.addHandler(ch)
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
@@ -162,7 +174,8 @@ put file://{file} @%{name}""".format(file=data_file,
                 print(rec)
                 assert rec[-2] == 'UPLOADED'
             for rec in c.execute(
-                    "copy into {name} file_format=(compression='BROTLI')".format(name=db_parameters['name'])):
+                    "copy into {name} file_format=(compression='BROTLI')".format(
+                        name=db_parameters['name'])):
                 print(rec)
                 assert rec[1] == 'LOADED'
 
@@ -229,6 +242,7 @@ put file://{file} @%{name}""".format(file=data_file,
 
         cnx.cursor().execute("alter session unset enable_parquet_filetype")
 
+
 @pytest.mark.skipif(
     True,
     reason="ORC support is not enabled in server",
@@ -258,6 +272,7 @@ put file://{file} @%{name}""".format(file=data_file,
 
         cnx.cursor().execute(
             'drop table if exists {name}'.format(name=db_parameters['name']))
+
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
@@ -659,7 +674,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     [s3] Put and Get Large files
     """
     number_of_files = 3
-    number_of_lines = 200000
+    number_of_lines = 2000000
     tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
 
     files = os.path.join(tmp_dir, 'file*')
@@ -673,6 +688,18 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             cnx.cursor().execute("""
 PUT file://{files} @~/{dir}
 """.format(files=files, dir=db_parameters['name']))
+
+            for _ in range(10):
+                all_recs = cnx.cursor().execute("""
+LIST @~/{dir}
+""".format(dir=db_parameters['name'])).fetchall()
+                if len(all_recs) == number_of_files:
+                    break
+                time.sleep(1)
+            else:
+                pytest.fail(
+                    'cannot list all files. Potentially '
+                    'PUT command missed uploading Files: {0}'.format(all_recs))
             all_recs = cnx.cursor().execute("""
 GET @~/{dir} file://{output_dir}
 """.format(dir=db_parameters['name'], output_dir=output_dir)).fetchall()
