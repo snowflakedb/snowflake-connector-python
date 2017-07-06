@@ -539,7 +539,7 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     return fname
 
 
-def test_huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
+def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
     """
     (WIP) Huge json value data
     """
