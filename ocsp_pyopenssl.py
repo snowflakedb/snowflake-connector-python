@@ -25,7 +25,6 @@ from os import path
 from threading import (Lock)
 from time import gmtime, strftime, strptime
 
-import OpenSSL
 from OpenSSL.crypto import (dump_certificate, FILETYPE_PEM, FILETYPE_ASN1,
                             load_certificate, dump_publickey)
 from OpenSSL.crypto import verify as crypto_verify
@@ -590,7 +589,7 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
             u'issuer name hash algorithm: %s, '
             u'issuer key hash: %s, subject serial number: %s',
             base64_name_hash, ocsp_issuer['name'], ocsp_issuer[u'is_root_ca'],
-            cert_id['hashAlgorithm'], 
+            cert_id['hashAlgorithm'],
             base64.b64encode(octet_string_to_bytearray(
                 cert_id['issuerKeyHash'])),
             cert_id['serialNumber'])
@@ -607,7 +606,7 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
                         key_cert_id['issuerKeyHash'])),
                     key_cert_id['serialNumber']
                 )
-    
+
     return False, cert_id, None
 
 
@@ -642,9 +641,9 @@ def _encode_ocsp_response_cache(ocsp_response_cache,
             key_cert_id, _ = der_decoder.decode(
                 cert_id_der, asn1Spec=CertID())
             logger.debug('name: %s, serial number: %s',
-                b64encode(octet_string_to_bytearray(
-                    key_cert_id['issuerNameHash'])),
-                key_cert_id['serialNumber'])
+                         b64encode(octet_string_to_bytearray(
+                             key_cert_id['issuerNameHash'])),
+                         key_cert_id['serialNumber'])
         k = b64encode(cert_id_der).decode('ascii')
         v = b64encode(ocsp_response).decode('ascii')
         ocsp_response_cache_json[k] = (current_time, v)
@@ -724,7 +723,7 @@ def read_ocsp_response_cache_file(filename, ocsp_validation_cache):
                     filename, 'r', encoding='utf-8', errors='ignore')),
             ocsp_validation_cache)
         logger.debug("Read OCSP response cache file: %s, count=%s",
-            filename, len(OCSP_VALIDATION_CACHE))
+                     filename, len(OCSP_VALIDATION_CACHE))
     else:
         logger.info(
             "Failed to locate OCSP response cache file. "
@@ -1049,7 +1048,7 @@ class SnowflakeOCSP(object):
                 '\\', '/')
 
         self.logger.debug("ocsp_response_cache_url: %s",
-                         self._ocsp_response_cache_url)
+                          self._ocsp_response_cache_url)
         self.logger.debug(
             "OCSP_VALIDATION_CACHE size: %s", len(OCSP_VALIDATION_CACHE))
 
@@ -1131,7 +1130,7 @@ class SnowflakeOCSP(object):
                     update_ocsp_response_cache_file(
                         self._ocsp_response_cache_url)
                 OCSP_VALIDATION_CACHE_UPDATED = False
-                
+
             if len(results) != len(cert_data):
                 raise OperationalError(
                     msg=u"Failed to validate the certificate "
@@ -1161,8 +1160,8 @@ class SnowflakeOCSP(object):
             ocsp_issuer, ocsp_subject, use_cache=use_cache)
 
         self.logger.debug('must_use_cache: %s, cache_status: %s',
-            self._must_use_cache, cache_status)
-        
+                          self._must_use_cache, cache_status)
+
         # Disabled assert. If two distinct certificates are used
         # for the same URL, e.g., AWS S3 endpoint, one cannot hit
         # other in the cache.
