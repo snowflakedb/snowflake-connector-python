@@ -31,8 +31,7 @@ from .file_compression_type import FileCompressionType
 from .s3_util import (SnowflakeS3FileEncryptionMaterial, SnowflakeS3Util,
                       RESULT_STATUS_DOWNLOADED,
                       RESULT_STATUS_ERROR, RESULT_STATUS_UPLOADED,
-                      RESULT_STATUS_RENEW_TOKEN,
-                      RESULT_STATUS_NOT_FOUND_FILE)
+                      RESULT_STATUS_RENEW_TOKEN)
 
 S3_FS = u'S3'
 LOCAL_FS = u'LOCAL_FS'
