@@ -236,7 +236,6 @@ put file://{file} @%{name}"""):
         run(cnx, 'drop table if exists {name}')
 
 
-
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
@@ -278,7 +277,6 @@ format_name = 'common.public.csv'
 field_delimiter = '|'
 error_on_column_count_mismatch=false);
 """)
-        
         current_time = datetime.datetime.utcnow()
         current_time = current_time.replace(
             tzinfo=pytz.timezone("America/Los_Angeles"))
