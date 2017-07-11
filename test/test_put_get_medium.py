@@ -258,6 +258,7 @@ def test_copy_get(tmpdir, conn_cnx, db_parameters):
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
+        run(cnx, "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
         run(cnx, """
 create or replace table {name} (
 aa int,
@@ -277,7 +278,7 @@ format_name = 'common.public.csv'
 field_delimiter = '|'
 error_on_column_count_mismatch=false);
 """)
-
+        
         current_time = datetime.datetime.utcnow()
         current_time = current_time.replace(
             tzinfo=pytz.timezone("America/Los_Angeles"))
