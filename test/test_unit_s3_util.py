@@ -8,6 +8,7 @@ import errno
 import glob
 import os
 import tempfile
+from collections import defaultdict
 from os import path
 
 import OpenSSL
@@ -22,9 +23,9 @@ from snowflake.connector.s3_util import (
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 if PY2:
-    from mock import Mock
+    from mock import Mock, MagicMock
 else:
-    from unittest.mock import Mock
+    from unittest.mock import Mock, MagicMock
 
 
 def test_encrypt_decrypt_file():
@@ -144,9 +145,12 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     Tests Upload one file to S3 with retry on ERRORNO_WSAECONNABORTED.
     The last attempted max_currency should be (initial_parallel/max_retry)
     """
-    upload_file = Mock(side_effect=OpenSSL.SSL.SysCallError(
-        ERRORNO_WSAECONNABORTED, 'mock err. connection aborted'))
-    s3client = Mock(meta=Mock(client=Mock(upload_file=upload_file)))
+    upload_file = MagicMock(
+        side_effect=OpenSSL.SSL.SysCallError(
+            ERRORNO_WSAECONNABORTED, 'mock err. connection aborted'))
+    s3object = MagicMock(metadata=defaultdict(str), upload_file=upload_file)
+    s3client = Mock()
+    s3client.Object.return_value = s3object
     initial_parallel = 100
     upload_meta = {
         u'no_sleeping_time': True,
@@ -154,9 +158,9 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
         u'put_callback': None,
         u'put_callback_output_stream': None,
         u'existing_files': [],
+        u's3client': s3client,
         SHA256_DIGEST: '123456789abcdef',
         u'stage_location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
-        u's3client': s3client,
         u'dst_file_name': 'data1.txt.gz',
         u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
     }
@@ -196,9 +200,12 @@ def test_upload_one_file_to_s3_econnreset():
                        errno.ETIMEDOUT,
                        errno.EPIPE,
                        -1]:
-        upload_file = Mock(side_effect=OpenSSL.SSL.SysCallError(
-            error_code, 'mock err. connection aborted'))
-        s3client = Mock(meta=Mock(client=Mock(upload_file=upload_file)))
+        upload_file = MagicMock(
+            side_effect=OpenSSL.SSL.SysCallError(
+                error_code, 'mock err. connection aborted'))
+        s3object = MagicMock(metadata=defaultdict(str), upload_file=upload_file)
+        s3client = Mock()
+        s3client.Object.return_value = s3object
         initial_parallel = 100
         upload_meta = {
             u'no_sleeping_time': True,
@@ -228,9 +235,13 @@ def test_upload_one_file_to_s3_unknown_openssl_error():
     Tests Upload one file to S3 with unknown OpenSSL error
     """
     for error_code in [123]:
-        upload_file = Mock(side_effect=OpenSSL.SSL.SysCallError(
-            error_code, 'mock err. connection aborted'))
-        s3client = Mock(meta=Mock(client=Mock(upload_file=upload_file)))
+
+        upload_file = MagicMock(
+            side_effect=OpenSSL.SSL.SysCallError(
+                error_code, 'mock err. connection aborted'))
+        s3object = MagicMock(metadata=defaultdict(str), upload_file=upload_file)
+        s3client = Mock()
+        s3client.Object.return_value = s3object
         initial_parallel = 100
         upload_meta = {
             u'no_sleeping_time': True,
