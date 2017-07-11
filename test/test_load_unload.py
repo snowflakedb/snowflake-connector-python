@@ -144,6 +144,7 @@ file_format=(skip_header=1 null_if=('') field_optionally_enclosed_by='"')
 def test_put_local_file(conn_cnx, test_data):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
+            cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute("use warehouse {0}".format(test_data.warehouse_name))
             cur.execute(
                 """use schema {0}.pytesting_schema""".format(
@@ -198,6 +199,7 @@ put file://{0}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
 def test_put_load_from_user_stage(conn_cnx, test_data):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
+            cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute("""
 use warehouse {0}
 """.format(test_data.warehouse_name))

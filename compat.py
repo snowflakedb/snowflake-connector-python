@@ -9,6 +9,8 @@ import sys
 
 from six import string_types, text_type, binary_type, PY2
 
+from snowflake.connector.constants import UTF8
+
 NUM_DATA_TYPES = []
 try:
     import numpy
@@ -18,8 +20,6 @@ try:
                       numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64]
 except:
     numpy = None
-
-from snowflake.connector.constants import UTF8
 
 STR_DATA_TYPE = string_types
 UNICODE_DATA_TYPE = text_type

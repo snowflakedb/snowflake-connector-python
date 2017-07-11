@@ -153,6 +153,7 @@ def test_put_local_file(test_data, conn_cnx):
         with cnx.cursor() as cur:
             cur.execute(
                 """use warehouse {0}""".format(test_data.warehouse_name))
+            cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute("""use schema {0}.pytesting_schema""".format(
                 test_data.database_name))
             cur.execute("""
@@ -214,6 +215,7 @@ put file://{0}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
 def test_put_load_from_user_stage(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
+            cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute(
                 """use warehouse {0}""".format(test_data.warehouse_name))
             cur.execute("""use schema {0}.pytesting_schema""".format(
