@@ -284,6 +284,7 @@ class SnowflakeS3Util(object):
         get_callback_output_stream = meta[u'get_callback_output_stream']
 
         akey = SnowflakeS3Util.get_s3_file_object(meta, meta[u'src_file_name'])
+        meta[u'src_file_size'] = akey.content_length
 
         max_concurrency = meta[u'parallel']
         last_err = None
