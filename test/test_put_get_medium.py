@@ -9,6 +9,7 @@ import os
 import random
 import shutil
 import string
+import sys
 import time
 from logging import getLogger
 
@@ -257,7 +258,8 @@ def test_copy_get(tmpdir, conn_cnx, db_parameters):
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx, "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
+        run(cnx,
+            "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
         run(cnx, """
 create or replace table {name} (
 aa int,
@@ -612,12 +614,23 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     output_dir = os.path.join(tmp_dir, 'output_dir')
     os.makedirs(output_dir)
 
+    class cb(object):
+        def __init__(self, filename, filesize, output_stream=sys.stdout):
+            pass
+
+        def __call__(self, bytes_amount):
+            pass
+
     def run(cnx, sql):
         return cnx.cursor().execute(
             sql.format(
                 files=files,
                 dir=db_parameters['name'],
-                output_dir=output_dir)).fetchall()
+                output_dir=output_dir),
+            _put_callback_output_stream=sys.stdout,
+            _get_callback_output_stream=sys.stdout,
+            _get_callback=cb,
+            _put_callback=cb).fetchall()
 
     with conn_cnx(
             user=db_parameters['s3_user'],
