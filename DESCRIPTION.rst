@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.1 (July 26, 2017)
+
+    - Pinned ``pyasn1`` and ``pyasn1-modules`` versions to 0.2.3 and 0.0.9, respectively
+
 - v1.4.0 (July 6, 2017)
 
     - Relaxed the versions of dependent components ``boto3``, ``botocore``, ``cffi`` and ``cryptography`` and ``pyOpenSSL``
