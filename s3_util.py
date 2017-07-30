@@ -39,6 +39,7 @@ RESULT_STATUS_COLLISION = u'COLLISION'
 RESULT_STATUS_SKIPPED = u'SKIPPED'
 RESULT_STATUS_RENEW_TOKEN = u'RENEW_TOKEN'
 RESULT_STATUS_NOT_FOUND_FILE = u'NOT_FOUND_FILE'
+RESULT_STATUS_BAD_REQUEST = u'BAD_REQUEST'
 
 DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
@@ -612,6 +613,12 @@ class SnowflakeS3Util(object):
                 logger.debug(u'not found. bucket: %s, path: %s',
                              s3location.bucket_name, s3path)
                 meta[u'result_status'] = RESULT_STATUS_NOT_FOUND_FILE
+                return akey
+            elif e.response[u'Error'][u'Code'] == u'400':
+                logger.debug(u'Bad request: %s. bucket: %s, path: %s',
+                             e.response[u'Error'][u'Message'],
+                             s3location.bucket_name, s3path)
+                meta[u'result_status'] = RESULT_STATUS_BAD_REQUEST
                 return akey
             logger.debug(
                 u"Failed to get metadata for %s, %s: %s",
