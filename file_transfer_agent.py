@@ -505,6 +505,7 @@ class SnowflakeFileTransferAgent(object):
         ret = self._cursor._execute_helper(
             self._command)  # rerun the command to get the credential
         stage_credentials = ret[u'data'][u'stageInfo'][u'creds']
+        stage_credentials['region'] = self._ret[u'data'][u'stageInfo'][u'region']
         return SnowflakeS3Util.create_s3_client(
             stage_credentials,
             use_accelerate_endpoint=self._use_accelerate_endpoint)
