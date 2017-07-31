@@ -94,3 +94,4 @@ ENV/
 # others
 generated_version.py
 *coverage.xml
+.idea/
