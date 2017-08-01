@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.2 (August 3, 2017)
+
+    - Fixed retry HTTP 400 in upload file when AWS token expires
+    - Relaxed the version of dependent components ``pyasn1`` and ``pyasn1-modules``
+
 - v1.4.1 (July 26, 2017)
 
     - Pinned ``pyasn1`` and ``pyasn1-modules`` versions to 0.2.3 and 0.0.9, respectively
