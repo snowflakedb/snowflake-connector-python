@@ -12,20 +12,22 @@ from collections import defaultdict
 from os import path
 
 import OpenSSL
+import botocore
 
 from snowflake.connector.compat import PY2
 from snowflake.connector.constants import (SHA256_DIGEST, UTF8)
 from snowflake.connector.s3_util import (
     SnowflakeS3Util,
     SnowflakeS3FileEncryptionMaterial,
-    ERRORNO_WSAECONNABORTED, DEFAULT_MAX_RETRY)
+    ERRORNO_WSAECONNABORTED, DEFAULT_MAX_RETRY,
+    RESULT_STATUS_RENEW_TOKEN)
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 if PY2:
-    from mock import Mock, MagicMock
+    from mock import Mock, MagicMock, PropertyMock
 else:
-    from unittest.mock import Mock, MagicMock
+    from unittest.mock import Mock, MagicMock, PropertyMock
 
 
 def test_encrypt_decrypt_file():
@@ -214,7 +216,7 @@ def test_upload_one_file_to_s3_econnreset():
             u'put_callback_output_stream': None,
             u'existing_files': [],
             SHA256_DIGEST: '123456789abcdef',
-            u'stage_location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+            u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
             u's3client': s3client,
             u'dst_file_name': 'data1.txt.gz',
             u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
@@ -239,9 +241,9 @@ def test_upload_one_file_to_s3_unknown_openssl_error():
         upload_file = MagicMock(
             side_effect=OpenSSL.SSL.SysCallError(
                 error_code, 'mock err. connection aborted'))
-        s3object = MagicMock(metadata=defaultdict(str), upload_file=upload_file)
         s3client = Mock()
-        s3client.Object.return_value = s3object
+        s3client.Object.return_value = MagicMock(
+            metadata=defaultdict(str), upload_file=upload_file)
         initial_parallel = 100
         upload_meta = {
             u'no_sleeping_time': True,
@@ -250,7 +252,7 @@ def test_upload_one_file_to_s3_unknown_openssl_error():
             u'put_callback_output_stream': None,
             u'existing_files': [],
             SHA256_DIGEST: '123456789abcdef',
-            u'stage_location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+            u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
             u's3client': s3client,
             u'dst_file_name': 'data1.txt.gz',
             u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
@@ -263,3 +265,27 @@ def test_upload_one_file_to_s3_unknown_openssl_error():
             raise Exception("Should fail with OpenSSL.SSL.SysCallError")
         except OpenSSL.SSL.SysCallError:
             assert upload_file.call_count == 1
+
+
+def test_get_s3_file_object_http_400_error():
+    """
+    Tests Get S3 file object with HTTP 400 error. Looks like HTTP 400 is
+    returned when AWS token expires and S3.Object.load is called.
+    """
+    load_method = MagicMock(
+        side_effect=botocore.exceptions.ClientError(
+            {'Error': {'Code': u'400', 'Message': 'Bad Request'}},
+            operation_name='mock load'))
+    s3object = MagicMock(load=load_method)
+    s3client = Mock()
+    s3client.Object.return_value = s3object
+    s3client.load.return_value = None
+    type(s3client).s3path = PropertyMock(return_value='s3://testbucket/')
+    meta = {
+        u's3client': s3client,
+        u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
+    }
+    filename = "/path1/file2.txt"
+    akey = SnowflakeS3Util.get_s3_file_object(meta, filename)
+    assert akey is None
+    assert meta['result_status'] == RESULT_STATUS_RENEW_TOKEN

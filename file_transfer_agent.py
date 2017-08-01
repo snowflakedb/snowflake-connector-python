@@ -899,16 +899,3 @@ class SnowflakeFileTransferAgent(object):
                     meta[u'dst_compression_type'] = None
 
             self._file_metadata[file_name] = meta
-
-    @staticmethod
-    def greatest_common_prefix(s1, s2):
-        if s1 is None or s2 is None:
-            return None
-        min_len = min(len(s1), len(s2))
-        ret = []
-        for idx in range(min_len):
-            if s1[idx] == s2[idx]:
-                ret.append(s1[idx])
-            else:
-                break
-        return u''.join(ret)
