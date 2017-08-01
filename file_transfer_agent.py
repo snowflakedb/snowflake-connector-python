@@ -505,6 +505,7 @@ class SnowflakeFileTransferAgent(object):
         ret = self._cursor._execute_helper(
             self._command)  # rerun the command to get the credential
         stage_credentials = ret[u'data'][u'stageInfo'][u'creds']
+        stage_credentials['region'] = self._ret[u'data'][u'stageInfo'][u'region']
         return SnowflakeS3Util.create_s3_client(
             stage_credentials,
             use_accelerate_endpoint=self._use_accelerate_endpoint)
@@ -898,16 +899,3 @@ class SnowflakeFileTransferAgent(object):
                     meta[u'dst_compression_type'] = None
 
             self._file_metadata[file_name] = meta
-
-    @staticmethod
-    def greatest_common_prefix(s1, s2):
-        if s1 is None or s2 is None:
-            return None
-        min_len = min(len(s1), len(s2))
-        ret = []
-        for idx in range(min_len):
-            if s1[idx] == s2[idx]:
-                ret.append(s1[idx])
-            else:
-                break
-        return u''.join(ret)

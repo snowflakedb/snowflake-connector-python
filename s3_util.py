@@ -613,6 +613,13 @@ class SnowflakeS3Util(object):
                              s3location.bucket_name, s3path)
                 meta[u'result_status'] = RESULT_STATUS_NOT_FOUND_FILE
                 return akey
+            elif e.response[u'Error'][u'Code'] == u'400':
+                logger.debug(u'Bad request, token needs to be renewed: %s. '
+                             u'bucket: %s, path: %s',
+                             e.response[u'Error'][u'Message'],
+                             s3location.bucket_name, s3path)
+                meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
+                return None
             logger.debug(
                 u"Failed to get metadata for %s, %s: %s",
                 s3location.bucket_name, s3path, e)
