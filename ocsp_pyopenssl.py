@@ -1064,12 +1064,11 @@ class SnowflakeOCSP(object):
                     elif parsed_url.schema in ('http', 'https'):
                         download_ocsp_response_cache(ocsp_response_cache_url)
             except Exception as e:
-                self.logger.info(
+                self.logger.debug(
                     "Failed to read OCSP response cache file %s: %s, "
                     "No worry. It will validate with OCSP server. "
                     "Ignoring...",
-                    self._ocsp_response_cache_url, e)
-                self.logger.exception(e)
+                    self._ocsp_response_cache_url, e, exc_info=True)
         #
         # load 'charmap' encoding here so that 
         # no load concurrency issue happens later

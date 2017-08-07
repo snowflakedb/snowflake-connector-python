@@ -39,7 +39,6 @@ RESULT_STATUS_COLLISION = u'COLLISION'
 RESULT_STATUS_SKIPPED = u'SKIPPED'
 RESULT_STATUS_RENEW_TOKEN = u'RENEW_TOKEN'
 RESULT_STATUS_NOT_FOUND_FILE = u'NOT_FOUND_FILE'
-RESULT_STATUS_BAD_REQUEST = u'BAD_REQUEST'
 
 DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
@@ -214,9 +213,9 @@ class SnowflakeS3Util(object):
                     logger.debug(u"AWS Token expired. Renew and retry")
                     meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                     return
-                logger.exception(
+                logger.debug(
                     u"Failed to upload a file: %s, err: %s",
-                    data_file, err)
+                    data_file, err, exc_info=True)
                 raise err
             except OpenSSL.SSL.SysCallError as err:
                 last_err = err
@@ -311,9 +310,9 @@ class SnowflakeS3Util(object):
                     logger.debug(u"AWS Token expired. Renew and retry")
                     meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                     return
-                logger.exception(
+                logger.debug(
                     u"Failed to download a file: %s, err: %s",
-                    full_dst_file_name, err)
+                    full_dst_file_name, err, exc_info=True)
                 raise err
             except OpenSSL.SSL.SysCallError as err:
                 last_err = err
