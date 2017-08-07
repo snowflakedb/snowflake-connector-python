@@ -222,7 +222,7 @@ class SnowflakeFileTransferAgent(object):
                     self.logger.debug(e)
                 else:
                     # unknown error
-                    self.logger.exception(e)
+                    self.logger.debug(e, exc_info=True)
 
             self.logger.debug(
                 'use_accelerate_endpoint: %s',

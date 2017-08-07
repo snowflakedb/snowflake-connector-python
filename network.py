@@ -757,8 +757,7 @@ class SnowflakeRestful(object):
                     OpenSSL.SSL.SysCallError,
                     ValueError,
                     RuntimeError) as err:
-                logger.exception('who is hitting error?')
-                logger.debug(err)
+                logger.debug('who is hitting error?', exc_info=True)
                 if not isinstance(err, OpenSSL.SSL.SysCallError) or \
                                 err.args[0] in (
                                 errno.ECONNRESET,
@@ -770,7 +769,7 @@ class SnowflakeRestful(object):
                     # all other OpenSSL errors are not retryable
                     result_queue.put((err, False))
             except ConnectionError as err:
-                logger.exception(u'ConnectionError: %s', err)
+                logger.debug(u'ConnectionError: %s', err, exc_info=True)
                 result_queue.put((OperationalError(
                     # no full_url is required in the message
                     # as err includes all information

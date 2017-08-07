@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.3 (TBD)
+
+    - Changed the log levels for some messages from ERROR to DEBUG to address confusion as real incidents. In fact, they are not real issues but signals for connection retry.
+
 - v1.4.2 (August 3, 2017)
 
     - Fixed retry HTTP 400 in upload file when AWS token expires
