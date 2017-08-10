@@ -12,6 +12,8 @@ Release Notes
 - v1.4.3 (TBD)
 
     - Changed the log levels for some messages from ERROR to DEBUG to address confusion as real incidents. In fact, they are not real issues but signals for connection retry.
+    - Added ``certifi`` to the dependent component list to mitigate CA root certificate out of date issue.
+    - Set the maximum versions of dependent components ``boto3`` and ``botocore``.
 
 - v1.4.2 (August 3, 2017)
 
