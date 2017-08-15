@@ -9,13 +9,14 @@ import pytest
 import snowflake.connector
 from snowflake.connector import (
     DatabaseError,
-    ProgrammingError, InterfaceError, OperationalError)
+    ProgrammingError, OperationalError)
 from snowflake.connector.errors import (ForbiddenError)
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
+
 
 def test_basic(conn_testaccount):
     """
@@ -188,6 +189,82 @@ def test_valid_application(db_parameters):
     )
     assert cnx.application == application, "Must be valid application"
     cnx.close()
+
+
+def test_invalid_default_parameters(db_parameters):
+    """
+    Invalid database, schema, warehouse and role name
+    """
+    cnx = snowflake.connector.connect(
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        account=db_parameters['account'],
+        protocol=db_parameters['protocol'],
+        database='neverexists',
+        schema='neverexists',
+        warehouse='neverexits',
+    )
+    assert cnx, "Must be success"
+
+    with pytest.raises(snowflake.connector.DatabaseError):
+        # must not success
+        snowflake.connector.connect(
+            user=db_parameters['user'],
+            password=db_parameters['password'],
+            host=db_parameters['host'],
+            port=db_parameters['port'],
+            account=db_parameters['account'],
+            protocol=db_parameters['protocol'],
+            database='neverexists',
+            schema='neverexists',
+            validate_default_parameters=True,
+        )
+
+    with pytest.raises(snowflake.connector.DatabaseError):
+        # must not success
+        snowflake.connector.connect(
+            user=db_parameters['user'],
+            password=db_parameters['password'],
+            host=db_parameters['host'],
+            port=db_parameters['port'],
+            account=db_parameters['account'],
+            protocol=db_parameters['protocol'],
+            database=db_parameters['database'],
+            schema='neverexists',
+            validate_default_parameters=True,
+        )
+
+    with pytest.raises(snowflake.connector.DatabaseError):
+        # must not success
+        snowflake.connector.connect(
+            user=db_parameters['user'],
+            password=db_parameters['password'],
+            host=db_parameters['host'],
+            port=db_parameters['port'],
+            account=db_parameters['account'],
+            protocol=db_parameters['protocol'],
+            database=db_parameters['database'],
+            schema=db_parameters['schema'],
+            warehouse='neverexists',
+            validate_default_parameters=True,
+        )
+
+    # Invalid role name is already validated
+    with pytest.raises(snowflake.connector.DatabaseError):
+        # must not success
+        snowflake.connector.connect(
+            user=db_parameters['user'],
+            password=db_parameters['password'],
+            host=db_parameters['host'],
+            port=db_parameters['port'],
+            account=db_parameters['account'],
+            protocol=db_parameters['protocol'],
+            database=db_parameters['database'],
+            schema=db_parameters['schema'],
+            role='neverexists',
+        )
 
 
 @pytest.mark.skipif(

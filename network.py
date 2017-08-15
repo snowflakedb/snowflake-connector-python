@@ -37,7 +37,7 @@ from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
                         ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION,
                         ER_FAILED_TO_SERVER, ER_IDP_CONNECTION_ERROR,
-                        ER_INCORRECT_DESTINATION)
+                        ER_INCORRECT_DESTINATION, ER_INVALID_VALUE)
 from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      GatewayTimeoutError, ServiceUnavailableError,
                      InterfaceError, InternalServerError, ForbiddenError,
@@ -440,14 +440,10 @@ class SnowflakeRestful(object):
                 self._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
                 session_info = ret[u'data'][u'sessionInfo']
-                if u'databaseName' in session_info:
-                    self._connection._database = session_info[u'databaseName']
-                if u'schemaName' in session_info:
-                    self._connection.schema = session_info[u'schemaName']
-                if u'roleName' in session_info:
-                    self._connection._role = session_info[u'roleName']
-                if u'warehouseName' in session_info:
-                    self._connection._warehouse = session_info[u'warehouseName']
+                self._validate_default_database(session_info)
+                self._validate_default_schema(session_info)
+                self._validate_default_role(session_info)
+                self._validate_default_warehouse(session_info)
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
                 _no_results=False):
@@ -1079,3 +1075,47 @@ class SnowflakeRestful(object):
                     "Ignored...")
             logger.debug("Active requests sessions: %s, idle: %s",
                         len(self._active_sessions), len(self._idle_sessions))
+
+    def _validate_default_database(self, session_info):
+        default_value = self._connection.database
+        session_info_value = session_info.get(u'databaseName')
+        self._connection._database = session_info_value
+        self._validate_default_parameter(
+            'database', default_value, session_info_value)
+
+    def _validate_default_schema(self, session_info):
+        default_value = self._connection.schema
+        session_info_value = session_info.get(u'schemaName')
+        self._connection._schema = session_info_value
+        self._validate_default_parameter(
+            'schema', default_value, session_info_value)
+
+    def _validate_default_role(self, session_info):
+        default_value = self._connection.role
+        session_info_value = session_info.get(u'roleName')
+        self._connection._role = session_info_value
+        self._validate_default_parameter(
+            'role', default_value, session_info_value)
+
+    def _validate_default_warehouse(self, session_info):
+        default_value = self._connection.warehouse
+        session_info_value = session_info.get(u'warehouseName')
+        self._connection._warehouse = session_info_value
+        self._validate_default_parameter(
+            'warehouse', default_value, session_info_value)
+
+    def _validate_default_parameter(
+            self, name, default_value, session_info_value):
+        if self._connection.validate_default_parameters and \
+                        default_value is not None and \
+                        session_info_value is None:
+            # validate default parameter
+            Error.errorhandler_wrapper(
+                self._connection, None, DatabaseError,
+                {
+                    u'msg': u'Invalid {0} name: {1}'.format(
+                        name, default_value),
+                    u'errno': ER_INVALID_VALUE,
+                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+
+                })
