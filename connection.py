@@ -77,6 +77,7 @@ DEFAULT_CONFIGURATION = {
     u'converter_class':
         SnowflakeConverter if not PY_ISSUE_23517 else SnowflakeConverterIssue23517,
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
+    u'validate_default_parameters': False,  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -192,6 +193,34 @@ class SnowflakeConnection(object):
         return self._account
 
     @property
+    def database(self):
+        u"""
+        Database name
+        """
+        return self._database
+
+    @property
+    def schema(self):
+        u"""
+        Schema name
+        """
+        return self._schema
+
+    @property
+    def warehouse(self):
+        u"""
+        Schema name
+        """
+        return self._warehouse
+
+    @property
+    def role(self):
+        u"""
+        Role name
+        """
+        return self._role
+
+    @property
     def connect_timeout(self):
         u"""Connection timeout
         """
@@ -252,6 +281,13 @@ class SnowflakeConnection(object):
         if value is None:
             raise ProgrammingError(u'None errorhandler is specified')
         self._errorhandler = value
+
+    @property
+    def validate_default_parameters(self):
+        """
+        Validate default database, schema, role and warehouse?
+        """
+        return self._validate_default_parameters
 
     def connect(self, **kwargs):
         u"""

@@ -9,11 +9,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
-- v1.4.3 (TBD)
+- v1.4.3 (August 17, 2017)
 
     - Changed the log levels for some messages from ERROR to DEBUG to address confusion as real incidents. In fact, they are not real issues but signals for connection retry.
     - Added ``certifi`` to the dependent component list to mitigate CA root certificate out of date issue.
     - Set the maximum versions of dependent components ``boto3`` and ``botocore``.
+    - Updated ``cryptography`` and ``pyOpenSSL`` version dependeny change.
+    - Added a connection parameter ``validate_default_parameters`` to validate the default database, schema and warehouse. If the specified object doesn't exist, it raises an error.
 
 - v1.4.2 (August 3, 2017)
 
