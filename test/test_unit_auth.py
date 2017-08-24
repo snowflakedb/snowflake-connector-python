@@ -1,0 +1,232 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
+#
+import time
+
+from snowflake.connector.auth import Auth
+from snowflake.connector.compat import PY2
+from snowflake.connector.network import (CLIENT_NAME, CLIENT_VERSION)
+
+if PY2:
+    from mock import MagicMock, Mock, PropertyMock
+else:
+    from unittest.mock import MagicMock, Mock, PropertyMock
+
+
+def _mock_auth_mfa_rest_response(
+        url, headers, body, token=None, timeout=None, _no_results=False,
+        is_single_thread=False):
+    """
+    Success case
+    """
+    global mock_cnt
+    _ = url
+    _ = headers
+    _ = body
+    _ = token
+    _ = timeout
+    _ = _no_results
+    _ = is_single_thread
+    if mock_cnt == 0:
+        ret = {
+            u'success': True,
+            u'message': None,
+            u'data': {
+                u'nextAction': u'EXT_AUTHN_DUO_ALL',
+                u'inFlightCtx': u'inFlightCtx',
+            }
+        }
+    elif mock_cnt == 1:
+        ret = {
+            u'success': True,
+            u'message': None,
+            u'data': {
+                u'token': u'TOKEN',
+                u'masterToken': u'MASTER_TOKEN',
+            }
+        }
+
+    mock_cnt += 1
+    return ret
+
+
+def _mock_auth_mfa_rest_response_failure(
+        url, headers, body, token=None, timeout=None, _no_results=False,
+        is_single_thread=False):
+    """
+    Failure case
+    """
+    global mock_cnt
+    _ = url
+    _ = headers
+    _ = body
+    _ = token
+    _ = timeout
+    _ = _no_results
+    _ = is_single_thread
+    if mock_cnt == 0:
+        ret = {
+            u'success': True,
+            u'message': None,
+            u'data': {
+                u'nextAction': u'EXT_AUTHN_DUO_ALL',
+                u'inFlightCtx': u'inFlightCtx',
+            }
+        }
+    elif mock_cnt == 1:
+        ret = {
+            u'success': True,
+            u'message': None,
+            u'data': {
+                u'nextAction': u'BAD',
+                u'inFlightCtx': u'inFlightCtx',
+            }
+        }
+
+    mock_cnt += 1
+    return ret
+
+
+def _mock_auth_mfa_rest_response_timeout(
+        url, headers, body, token=None, timeout=None, _no_results=False,
+        is_single_thread=False):
+    """
+    Timeout case
+    """
+    global mock_cnt
+    _ = url
+    _ = headers
+    _ = body
+    _ = token
+    _ = timeout
+    _ = _no_results
+    _ = is_single_thread
+    if mock_cnt == 0:
+        ret = {
+            u'success': True,
+            u'message': None,
+            u'data': {
+                u'nextAction': u'EXT_AUTHN_DUO_ALL',
+                u'inFlightCtx': u'inFlightCtx',
+            }
+        }
+    elif mock_cnt == 1:
+        time.sleep(10)  # should timeout while here
+        ret = {}
+
+    mock_cnt += 1
+    return ret
+
+
+def _init_rest(application, post_requset):
+    rest = MagicMock()
+    rest._post_request = post_requset
+    rest._connection = MagicMock()
+    rest._connection._login_timeout = 120
+    rest._connection.errorhandler = Mock(return_value=None)
+    type(rest).master_token = PropertyMock(return_value=None)
+    type(rest).token = PropertyMock(return_value=None)
+    type(rest._connection).application = PropertyMock(return_value=application)
+    type(rest._connection)._internal_application_name = PropertyMock(
+        return_value=CLIENT_NAME
+    )
+    type(rest._connection)._internal_application_version = PropertyMock(
+        return_value=CLIENT_VERSION
+    )
+    return rest
+
+
+def test_auth_mfa():
+    """
+    Authentication by MFA
+    """
+    global mock_cnt
+    application = 'testapplication'
+    account = 'testaccount'
+    user = 'testuser'
+    password = 'testpassword'
+
+    # success test case
+    mock_cnt = 0
+    rest = _init_rest(application, _mock_auth_mfa_rest_response)
+    auth = Auth(rest)
+    auth.authenticate(None, account, user, password)
+    assert not rest._connection.errorhandler.called  # not error
+    assert rest._token == 'TOKEN'
+    assert rest._master_token == 'MASTER_TOKEN'
+
+    # failure test case
+    mock_cnt = 0
+    rest = _init_rest(application, _mock_auth_mfa_rest_response_failure)
+    auth = Auth(rest)
+    auth.authenticate(None, account, user, password)
+    assert rest._connection.errorhandler.called  # error
+
+    # timeout 1 second
+    mock_cnt = 0
+    rest = _init_rest(application, _mock_auth_mfa_rest_response_timeout)
+    auth = Auth(rest)
+    auth.authenticate(None, account, user, password, timeout=1)
+    assert rest._connection.errorhandler.called  # error
+
+
+def _mock_auth_password_change_rest_response(
+        url, headers, body, token=None, timeout=None, _no_results=False,
+        is_single_thread=False):
+    """
+    Success case
+    """
+    global mock_cnt
+    _ = url
+    _ = headers
+    _ = body
+    _ = token
+    _ = timeout
+    _ = _no_results
+    _ = is_single_thread
+    if mock_cnt == 0:
+        ret = {
+            u'success': True,
+            u'message': None,
+            u'data': {
+                u'nextAction': u'PWD_CHANGE',
+                u'inFlightCtx': u'inFlightCtx',
+            }
+        }
+    elif mock_cnt == 1:
+        ret = {
+            u'success': True,
+            u'message': None,
+            u'data': {
+                u'token': u'TOKEN',
+                u'masterToken': u'MASTER_TOKEN',
+            }
+        }
+
+    mock_cnt += 1
+    return ret
+
+
+def test_auth_password_change():
+    """
+    Password change
+    """
+    global mock_cnt
+
+    def _password_callback():
+        return "NEW_PASSWORD"
+
+    application = 'testapplication'
+    account = 'testaccount'
+    user = 'testuser'
+    password = 'testpassword'
+
+    # success test case
+    mock_cnt = 0
+    rest = _init_rest(application, _mock_auth_password_change_rest_response)
+    auth = Auth(rest)
+    auth.authenticate(None, account, user, password,
+                      password_callback=_password_callback)
+    assert not rest._connection.errorhandler.called  # not error

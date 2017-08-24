@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
-# X.509 Internet Public Key Infrastructure Online Certificate Status Protocol - OCSP
+# X.509 Internet Public Key Infrastructure Online Certificate Status
+# Protocol - OCSP
 # 
 # ASN.1 source from
 # https://tools.ietf.org/html/rfc6960
@@ -29,34 +30,28 @@ class Request(univ.Sequence):
         namedtype.OptionalNamedType(
             'singleRequestExtensions',
             rfc2459.Extensions().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext,
-                                    tag.tagFormatSimple,
-                                    0))))
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 0))))
 
 
 class TBSRequest(univ.Sequence):
     componentType = namedtype.NamedTypes(
         namedtype.DefaultedNamedType(
             'version', Version(0).subtype(
-                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple,
-                                    0))),
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 0))),
         namedtype.OptionalNamedType(
             'requestorName',
             rfc2459.GeneralName().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext,
-                                    tag.tagFormatSimple,
-                                    1)
-            )),
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 1))),
         namedtype.NamedType('requestList',
                             univ.SequenceOf(componentType=Request())),
         namedtype.OptionalNamedType(
             'requestExtensions',
             rfc2459.Extensions().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext,
-                                    tag.tagFormatSimple,
-                                    2)
-            ))
-    )
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 2))))
 
 
 class Certs(univ.SequenceOf):
@@ -70,10 +65,8 @@ class Signature(univ.Sequence):
         namedtype.NamedType('signature', univ.BitString()),
         namedtype.NamedType(
             'certs', Certs().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)
-            )
-        )
-    )
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 0))))
 
 
 class OCSPRequest(univ.Sequence):
@@ -81,9 +74,8 @@ class OCSPRequest(univ.Sequence):
         namedtype.NamedType('tbsRequest', TBSRequest()),
         namedtype.OptionalNamedType(
             'optionalSignature', Signature().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple,
-                                    0)))
-    )
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 0))))
 
 
 # OCSP Response
@@ -110,9 +102,7 @@ class OCSPResponse(univ.Sequence):
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('responseStatus', OCSPResponseStatus()),
         namedtype.OptionalNamedType('responseBytes', ResponseBytes().subtype(
-            explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)
-        ))
-    )
+            explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0))))
 
 
 KeyHash = univ.OctetString
@@ -125,25 +115,18 @@ class RevokedInfo(univ.Sequence):
         namedtype.OptionalNamedType(
             'revocationReason',
             rfc2459.CRLReason().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext,
-                                    tag.tagFormatSimple,
-                                    0)
-            ))
-    )
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 0))))
 
 
 class CertStatus(univ.Choice):
     componentType = namedtype.NamedTypes(
         namedtype.NamedType('good', univ.Null().subtype(
-            implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)
-        )),
+            implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0))),
         namedtype.NamedType('revoked', RevokedInfo().subtype(
-            implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 1)
-        )),
+            implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 1))),
         namedtype.NamedType('unknown', UnknownInfo().subtype(
-            implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 2)
-        ))
-    )
+            implicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 2))))
 
 
 class SingleResponse(univ.Sequence):
@@ -154,18 +137,13 @@ class SingleResponse(univ.Sequence):
         namedtype.OptionalNamedType(
             'nextUpdate',
             useful.GeneralizedTime().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext,
-                                    tag.tagFormatSimple,
-                                    0)
-            )),
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 0))),
         namedtype.OptionalNamedType(
             'singleExtensions',
             rfc2459.Extensions().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext,
-                                    tag.tagFormatSimple,
-                                    2)
-            ))
-    )
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 1))))
 
 
 class ResponderID(univ.Choice):
@@ -173,8 +151,7 @@ class ResponderID(univ.Choice):
         namedtype.NamedType('byName', rfc2459.Name().subtype(
             explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 1))),
         namedtype.NamedType('byKey', KeyHash().subtype(
-            explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 2))),
-    )
+            explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 2))))
 
 
 class ResponseData(univ.Sequence):
@@ -188,11 +165,8 @@ class ResponseData(univ.Sequence):
         namedtype.OptionalNamedType(
             'responseExtensions',
             rfc2459.Extensions().subtype(
-                explicitTag=tag.Tag(tag.tagClassContext,
-                                    tag.tagFormatSimple,
-                                    1)
-            ))
-    )
+                explicitTag=tag.Tag(
+                    tag.tagClassContext, tag.tagFormatSimple, 1))))
 
 
 class BasicOCSPResponse(univ.Sequence):
@@ -202,7 +176,4 @@ class BasicOCSPResponse(univ.Sequence):
                             rfc2459.AlgorithmIdentifier()),
         namedtype.NamedType('signature', univ.BitString()),
         namedtype.OptionalNamedType('certs', Certs().subtype(
-            explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0)
-        ))
-    )
-
+            explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple, 0))))

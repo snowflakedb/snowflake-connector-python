@@ -4,6 +4,7 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 import os
+from os import path
 from getpass import getuser
 from logging import getLogger
 
@@ -14,6 +15,8 @@ try:
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
+THIS_DIR = path.dirname(path.realpath(__file__))
+
 logger = getLogger(__name__)
 
 
@@ -21,7 +24,6 @@ logger = getLogger(__name__)
 def test_data(request, conn_cnx, db_parameters):
     assert u'AWS_ACCESS_KEY_ID' in os.environ
     assert u'AWS_SECRET_ACCESS_KEY' in os.environ
-    assert u'SF_PROJECT_ROOT' in os.environ
 
     unique_name = db_parameters['name']
     database_name = "{0}_db".format(unique_name)
@@ -41,8 +43,10 @@ def test_data(request, conn_cnx, db_parameters):
                 os.environ[u'AWS_ACCESS_KEY_ID'])
             self.AWS_SECRET_ACCESS_KEY = "'{0}'".format(
                 os.environ[u'AWS_SECRET_ACCESS_KEY'])
-            self.SF_PROJECT_ROOT = "{0}".format(
-                os.environ['SF_PROJECT_ROOT'])
+            self.SF_PROJECT_ROOT = os.getenv('SF_PROJECT_ROOT')
+            if self.SF_PROJECT_ROOT is None:
+                self.SF_PROJECT_ROOT = path.realpath(
+                    path.join(THIS_DIR, '..', '..', '..', '..', ))
             self.stage_name = "{0}_stage".format(unique_name)
             self.warehouse_name = warehouse_name
             self.database_name = database_name
@@ -153,7 +157,8 @@ def test_put_local_file(test_data, conn_cnx):
         with cnx.cursor() as cur:
             cur.execute(
                 """use warehouse {0}""".format(test_data.warehouse_name))
-            cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
+            cur.execute(
+                "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute("""use schema {0}.pytesting_schema""".format(
                 test_data.database_name))
             cur.execute("""
@@ -215,7 +220,8 @@ put file://{0}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
 def test_put_load_from_user_stage(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
+            cur.execute(
+                "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute(
                 """use warehouse {0}""".format(test_data.warehouse_name))
             cur.execute("""use schema {0}.pytesting_schema""".format(

@@ -499,7 +499,7 @@ class SnowflakeCursor(object):
             self.logger.info(u'failed')
             self.logger.debug(ret)
             err = ret[u'message']
-            code = ret[u'code'] if u'code' in ret else None
+            code = ret.get(u'code', -1)
             if u'data' in ret and u'errorMessage' in ret[u'data']:
                 err += ret[u'data'][u'errorMessage']
             errvalue = {
@@ -589,7 +589,7 @@ class SnowflakeCursor(object):
 
     def query_result(self, qid, _use_ijson=False):
         url = ('/queries/{qid}/result').format(qid=qid)
-        ret = self._connection._con.request(url=url, method='get')
+        ret = self._connection.rest.request(url=url, method='get')
         self._sfqid = ret[u'data'][
             u'queryId'] if u'data' in ret and u'queryId' in ret[
             u'data'] else None
@@ -605,7 +605,7 @@ class SnowflakeCursor(object):
             self.logger.info(u'failed')
             self.logger.debug(ret)
             err = ret[u'message']
-            code = ret[u'code'] if u'code' in ret else None
+            code = ret.get(u'code', -1)
             if u'data' in ret and u'errorMessage' in ret[u'data']:
                 err += ret[u'data'][u'errorMessage']
             errvalue = {
@@ -621,7 +621,7 @@ class SnowflakeCursor(object):
 
     def abort_query(self, qid):
         url = '/queries/{qid}/abort-request'.format(qid=qid)
-        ret = self._connection._con.request(url=url, method='post')
+        ret = self._connection.rest.request(url=url, method='post')
         return ret.get(u'success')
 
     def executemany(self, command, seqparams):

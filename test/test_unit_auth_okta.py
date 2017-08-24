@@ -1,0 +1,216 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
+#
+
+from snowflake.connector.auth_okta import AuthByOkta
+from snowflake.connector.compat import PY2
+
+if PY2:
+    from mock import MagicMock, Mock
+else:
+    from unittest.mock import MagicMock, Mock
+
+
+def test_auth_okta():
+    """
+    Authentication by OKTA positive test case
+    """
+    authenticator = 'https://testsso.snowflake.net/'
+    application = 'testapplication'
+    account = 'testaccount'
+    user = 'testuser'
+    password = 'testpassword'
+
+    ref_sso_url = 'https://testsso.snowflake.net/sso'
+    ref_token_url = 'https://testsso.snowflake.net/token'
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(rest, application)
+
+    # step 1
+    headers, sso_url, token_url = auth._step1(authenticator, account)
+    assert not rest._connection.errorhandler.called  # no error
+    assert headers.get('accept') is not None
+    assert headers.get('Content-Type') is not None
+    assert headers.get('User-Agent') is not None
+    assert sso_url == ref_sso_url
+    assert token_url == ref_token_url
+
+    # step 2
+    auth._step2(authenticator, sso_url, token_url)
+    assert not rest._connection.errorhandler.called  # no error
+
+    # step 3
+    ref_one_time_token = '1token1'
+    rest.fetch.return_value = {
+        'cookieToken': ref_one_time_token,
+    }
+    one_time_token = auth._step3(headers, token_url, user, password)
+    assert not rest._connection.errorhandler.called  # no error
+    assert one_time_token == ref_one_time_token
+
+    # step 4
+    ref_response_html = '''
+<html><body>
+<form action="https://testaccount.snowflakecomputing.com/post_back"></form>
+</body></body></html>
+'''
+    rest.fetch.return_value = ref_response_html
+    response_html = auth._step4(one_time_token, sso_url)
+    assert response_html == ref_response_html
+
+    # step 5
+    rest._protocol = 'https'
+    rest._host = '{account}.snowflakecomputing.com'.format(account=account)
+    rest._port = 443
+    auth._step5(ref_response_html)
+    assert not rest._connection.errorhandler.called  # no error
+    assert ref_response_html == auth._saml_response
+
+
+def test_auth_okta_step1_negative():
+    """
+    Authentication by OKTA step1 negative test case
+    """
+    authenticator = 'https://testsso.snowflake.net/'
+    application = 'testapplication'
+    account = 'testaccount'
+
+    # not success status is returned
+    ref_sso_url = 'https://testsso.snowflake.net/sso'
+    ref_token_url = 'https://testsso.snowflake.net/token'
+    rest = _init_rest(
+        ref_sso_url, ref_token_url, success=False, message='error')
+    auth = AuthByOkta(rest, application)
+    # step 1
+    _, _, _ = auth._step1(authenticator, account)
+    assert rest._connection.errorhandler.called  # error should be raised
+
+
+def test_auth_okta_step2_negative():
+    """
+    Authentication by OKTA step2 negative test case
+    """
+    authenticator = 'https://testsso.snowflake.net/'
+    application = 'testapplication'
+    account = 'testaccount'
+
+    # invalid SSO URL
+    ref_sso_url = 'https://testssoinvalid.snowflake.net/sso'
+    ref_token_url = 'https://testsso.snowflake.net/token'
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(rest, application)
+    # step 1
+    headers, sso_url, token_url = auth._step1(authenticator, account)
+    # step 2
+    auth._step2(authenticator, sso_url, token_url)
+    assert rest._connection.errorhandler.called  # error
+
+    # invalid TOKEN URL
+    ref_sso_url = 'https://testsso.snowflake.net/sso'
+    ref_token_url = 'https://testssoinvalid.snowflake.net/token'
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(rest, application)
+    # step 1
+    headers, sso_url, token_url = auth._step1(authenticator, account)
+    # step 2
+    auth._step2(authenticator, sso_url, token_url)
+    assert rest._connection.errorhandler.called  # error
+
+
+def test_auth_okta_step3_negative():
+    """
+    Authentication by OKTA step3 negative test case
+    """
+    authenticator = 'https://testsso.snowflake.net/'
+    application = 'testapplication'
+    account = 'testaccount'
+    user = 'testuser'
+    password = 'testpassword'
+
+    ref_sso_url = 'https://testsso.snowflake.net/sso'
+    ref_token_url = 'https://testsso.snowflake.net/token'
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(rest, application)
+    # step 1
+    headers, sso_url, token_url = auth._step1(authenticator, account)
+    # step 2
+    auth._step2(authenticator, sso_url, token_url)
+    assert not rest._connection.errorhandler.called  # no error
+
+    # step 3: authentication by IdP failed.
+    rest.fetch.return_value = {
+        'failed': 'auth failed',
+    }
+    _ = auth._step3(headers, token_url, user, password)
+    assert rest._connection.errorhandler.called  # authe failure error
+
+
+def test_auth_okta_step5_negative():
+    """
+    Authentication by OKTA step5 negative test case
+    """
+    authenticator = 'https://testsso.snowflake.net/'
+    application = 'testapplication'
+    account = 'testaccount'
+    user = 'testuser'
+    password = 'testpassword'
+
+    ref_sso_url = 'https://testsso.snowflake.net/sso'
+    ref_token_url = 'https://testsso.snowflake.net/token'
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(rest, application)
+    # step 1
+    headers, sso_url, token_url = auth._step1(authenticator, account)
+    assert not rest._connection.errorhandler.called  # no error
+    # step 2
+    auth._step2(authenticator, sso_url, token_url)
+    assert not rest._connection.errorhandler.called  # no error
+    # step 3
+    ref_one_time_token = '1token1'
+    rest.fetch.return_value = {
+        'cookieToken': ref_one_time_token,
+    }
+    one_time_token = auth._step3(headers, token_url, user, password)
+    assert not rest._connection.errorhandler.called  # no error
+
+    # step 4
+    # HTML includes invalid account name
+    ref_response_html = '''
+<html><body>
+<form action="https://invalidtestaccount.snowflakecomputing.com/post_back
+"></form>
+</body></body></html>
+'''
+    rest.fetch.return_value = ref_response_html
+    response_html = auth._step4(one_time_token, sso_url)
+    assert response_html == ref_response_html
+
+    # step 5
+    rest._protocol = 'https'
+    rest._host = '{account}.snowflakecomputing.com'.format(account=account)
+    rest._port = 443
+    auth._step5(ref_response_html)
+    assert rest._connection.errorhandler.called  # error
+
+
+def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
+    rest = MagicMock()
+    rest._post_request.return_value = {
+        'success': success,
+        'message': message,
+        'data': {
+            'ssoUrl': ref_sso_url,
+            'tokenUrl': ref_token_url,
+        }
+    }
+    rest._connection = MagicMock()
+    rest._connection._login_timeout = 120
+    rest._connection.errorhandler = Mock(return_value=None)
+    return rest

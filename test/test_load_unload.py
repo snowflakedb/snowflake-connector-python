@@ -5,6 +5,7 @@
 #
 
 import os
+from os import path
 from getpass import getuser
 from logging import getLogger
 
@@ -15,6 +16,8 @@ try:
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
+THIS_DIR = path.dirname(path.realpath(__file__))
+
 logger = getLogger(__name__)
 
 
@@ -23,7 +26,6 @@ def test_data(request, conn_cnx, db_parameters):
     assert u'AWS_ACCESS_KEY_ID' in os.environ, u'AWS_ACCESS_KEY_ID is missing'
     assert u'AWS_SECRET_ACCESS_KEY' in os.environ, \
         u'AWS_SECRET_ACCESS_KEY is missing'
-    assert u'SF_PROJECT_ROOT' in os.environ, u'SF_PROJECT_ROOT is missing'
 
     unique_name = db_parameters['name']
     database_name = "{0}_db".format(unique_name)
@@ -43,8 +45,10 @@ def test_data(request, conn_cnx, db_parameters):
                 os.environ[u'AWS_ACCESS_KEY_ID'])
             self.AWS_SECRET_ACCESS_KEY = "'{0}'".format(
                 os.environ[u'AWS_SECRET_ACCESS_KEY'])
-            self.SF_PROJECT_ROOT = "{0}".format(
-                os.environ['SF_PROJECT_ROOT'])
+            self.SF_PROJECT_ROOT = os.getenv('SF_PROJECT_ROOT')
+            if self.SF_PROJECT_ROOT is None:
+                self.SF_PROJECT_ROOT = path.realpath(
+                    path.join(THIS_DIR, '..', '..', '..', '..', ))
             self.stage_name = "{0}_stage".format(unique_name)
             self.warehouse_name = warehouse_name
             self.database_name = database_name
@@ -199,7 +203,8 @@ put file://{0}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
 def test_put_load_from_user_stage(conn_cnx, test_data):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
+            cur.execute(
+                "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute("""
 use warehouse {0}
 """.format(test_data.warehouse_name))

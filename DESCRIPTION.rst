@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.4 (August 24, 2017)
+
+    - Fixed Azure blob certificate issue. OCSP response structure bug fix
+    - Added SAML 2.0 compliant service application support. preview feature.
+    - Upgraded SSL wrapper with the latest urllib3 pyopenssl glue module. It uses kqueue, epoll or poll in replacement of select to read data from socket if available.
+
 - v1.4.3 (August 17, 2017)
 
     - Changed the log levels for some messages from ERROR to DEBUG to address confusion as real incidents. In fact, they are not real issues but signals for connection retry.

@@ -12,6 +12,9 @@ from time import strptime
 
 from . import errors
 from . import network
+from .auth import Auth
+from .auth_okta import AuthByOkta
+from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import SnowflakeChunkDownloader
 from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517)
 from .converter import SnowflakeConverter
@@ -109,7 +112,7 @@ class SnowflakeConnection(object):
             network.SNOWFLAKE_CONNECTOR_VERSION,
             network.PYTHON_VERSION, network.PLATFORM)
 
-        self._con = None
+        self._rest = None
         for name, value in DEFAULT_CONFIGURATION.items():
             setattr(self, u'_' + name, value)
 
@@ -252,7 +255,7 @@ class SnowflakeConnection(object):
         Snowflake REST API object. Internal use only. Maybe removed in the
         later release
         """
-        return self._con
+        return self._rest
 
     @property
     def application(self):
@@ -309,12 +312,12 @@ class SnowflakeConnection(object):
         Closes the connection.
         """
         try:
-            if not self._con:
+            if not self._rest:
                 return
 
-            self._con._delete_session()
-            self._con.close()
-            self._con = None
+            self.rest.delete_session()
+            self.rest.close()
+            self._rest = None
             del self.messages[:]
         except:
             pass
@@ -323,13 +326,13 @@ class SnowflakeConnection(object):
         u"""
         Is closed?
         """
-        return self._con is None
+        return self._rest is None
 
     def autocommit(self, mode):
         u"""
         Sets autocommit mode. True/False. Default: True
         """
-        if not self._con:
+        if not self._rest:
             Error.errorhandler_wrapper(
                 self, None, DatabaseError,
                 {
@@ -370,7 +373,7 @@ class SnowflakeConnection(object):
         object.
         """
         self.logger.debug(u'cursor')
-        if not self._con:
+        if not self._rest:
             Error.errorhandler_wrapper(
                 self, None, DatabaseError,
                 {
@@ -433,7 +436,7 @@ class SnowflakeConnection(object):
         u"""
         Opens a new network connection
         """
-        self._con = network.SnowflakeRestful(
+        self._rest = network.SnowflakeRestful(
             host=self._host,
             port=self._port,
             proxy_host=self._proxy_host,
@@ -453,42 +456,39 @@ class SnowflakeConnection(object):
                           self._proxy_port,
                           self._proxy_user)
 
-        saml_response = None
-        if self._authenticator.upper() != network.DEFAULT_AUTHENTICATOR:
-            saml_response = self._con.authenticate_by_saml(
+        auth_instance = None
+        if self._authenticator != network.DEFAULT_AUTHENTICATOR:
+            if self._authenticator == network.EXTERNAL_BROWSER_AUTHENTICATOR:
+                auth_instance = AuthByWebBrowser(self._rest, self.application)
+            else:
+                auth_instance = AuthByOkta(self._rest, self.application)
+            auth_instance.authenticate(
                 authenticator=self._authenticator,
                 account=self._account,
                 user=self._user,
                 password=self._password,
             )
+            self._password = None  # ensure password won't persist
 
         if self._autocommit is not None:
             self._session_parameters['AUTOCOMMIT'] = self._autocommit
 
-        token = self._token if hasattr(self, u'_token') else None
-        master_token = self._master_token if hasattr(
-            self,
-            u'_master_token') else None
-        self._con.authenticate(
+        Auth(self._rest).authenticate(
+            auth_instance=auth_instance,
             account=self._account,
             user=self._user,
             password=self._password,
-            master_token=master_token,
-            token=token,
             database=self._database,
             schema=self._schema,
             warehouse=self._warehouse,
             role=self._role,
             passcode=self._passcode,
             passcode_in_password=self._passcode_in_password,
-            saml_response=saml_response,
             mfa_callback=mfa_callback,
             password_callback=password_callback,
             session_parameters=self._session_parameters,
         )
         self._password = None
-        self._token = self._con.token
-        self._master_token = self._con.master_token
 
     def __config(self, **kwargs):
         u"""
@@ -527,13 +527,20 @@ class SnowflakeConnection(object):
                     u'msg': u"User is empty",
                     u'errno': ER_NO_USER
                 })
-        if not self._password:
-            Error.errorhandler_wrapper(
-                self, None, ProgrammingError,
-                {
-                    u'msg': u"Password is empty",
-                    u'errno': ER_NO_PASSWORD
-                })
+
+        if self._authenticator:
+            self._authenticator = self._authenticator.upper()
+
+        if self._authenticator != network.EXTERNAL_BROWSER_AUTHENTICATOR:
+            # authentication is done by the browser if the authenticator
+            # is externalbrowser
+            if not self._password:
+                Error.errorhandler_wrapper(
+                    self, None, ProgrammingError,
+                    {
+                        u'msg': u"Password is empty",
+                        u'errno': ER_NO_PASSWORD
+                    })
 
         if not self._account:
             Error.errorhandler_wrapper(
@@ -594,7 +601,7 @@ class SnowflakeConnection(object):
         url_parameters = {u'requestId': request_id}
 
         # retry 1000 times/4.5 hours for general queries
-        ret = self._con.request(
+        ret = self.rest.request(
             u'/queries/v1/query-request?' + urlencode(url_parameters),
             data, client=client, _no_results=_no_results)
 
@@ -611,7 +618,7 @@ class SnowflakeConnection(object):
                           sequence_counter)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
-        return self._con.request(
+        return self.rest.request(
             u'/queries/v1/abort-request?' + urlencode(url_parameters), {
                 u'sqlText': sql,
                 u'requestId': TO_UNICODE(request_id),
