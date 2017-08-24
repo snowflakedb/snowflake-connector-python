@@ -3,7 +3,7 @@
 # SSL wrap socket for PyOpenSSL.
 # Mostly copied from 
 #
-# https://github.com/kennethreitz/requests/blob/master/requests/packages/urllib3/contrib/pyopenssl.py
+# https://github.com/shazow/urllib3/blob/master/urllib3/contrib/pyopenssl.py
 #
 # and added OCSP validator on the top.
 #
@@ -18,77 +18,12 @@ OCSP Reponse cache file name
 """
 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 
-"""
-Proxy, shared across all connections
-"""
-PROXY_HOST = None
-PROXY_PORT = None
-PROXY_USER = None
-PROXY_PASSWORD = None
-PREFIX_HTTP = 'http://'
-PREFIX_HTTPS = 'https://'
-
-
-def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
-    """
-    Set proxy dict for requests
-    """
-    proxies = None
-    if proxy_host and proxy_port:
-        if proxy_host.startswith(PREFIX_HTTP):
-            proxy_host = proxy_host[len(PREFIX_HTTP):]
-        elif proxy_host.startswith(PREFIX_HTTPS):
-            proxy_host = proxy_host[len(PREFIX_HTTPS):]
-        if proxy_user or proxy_password:
-            proxy_auth = u'{proxy_user}:{proxy_password}@'.format(
-                proxy_user=proxy_user if proxy_user is not None else '',
-                proxy_password=proxy_password if proxy_password is not
-                                                 None else ''
-            )
-        else:
-            proxy_auth = u''
-        proxies = {
-            u'http': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
-                proxy_host=proxy_host,
-                proxy_port=TO_UNICODE(proxy_port),
-                proxy_auth=proxy_auth,
-            ),
-            u'https': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
-                proxy_host=proxy_host,
-                proxy_port=TO_UNICODE(proxy_port),
-                proxy_auth=proxy_auth,
-            ),
-        }
-    return proxies
-
-
-# imports
-import select
-import socket
+import logging
 import ssl
 import sys
-from logging import getLogger
-from socket import error as SocketError
+from socket import timeout, error as SocketError
 
-import botocore.endpoint
-
-# Monkey patch for all connections for AWS API. This is mainly for PUT
-# and GET commands
-original_get_proxies = botocore.endpoint.EndpointCreator._get_proxies
-
-
-def _get_proxies(self, url):
-    return set_proxies(
-        PROXY_HOST,
-        PROXY_PORT,
-        PROXY_USER,
-        PROXY_PASSWORD) or original_get_proxies(self, url)
-
-
-botocore.endpoint.EndpointCreator._get_proxies = _get_proxies
-
-import OpenSSL
-import idna
+import OpenSSL.SSL
 from botocore.vendored.requests.packages.urllib3 import connection \
     as urllib3_connection
 from botocore.vendored.requests.packages.urllib3 import util \
@@ -97,22 +32,24 @@ from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend
 from cryptography.hazmat.backends.openssl.x509 import _Certificate
 
-from .compat import (TO_UNICODE)
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
 from .ocsp_pyopenssl import SnowflakeOCSP
+from .proxy import (set_proxies, PROXY_HOST, PROXY_PORT, PROXY_USER,
+                    PROXY_PASSWORD)
+from .ssl_wrap_util import wait_for_read, wait_for_write
 
-MAX = 64
-
-# OpenSSL will only write 16K at a time
-SSL_WRITE_BLOCKSIZE = 16384
+try:  # Platform-specific: Python 2
+    from socket import _fileobject
+except ImportError:  # Platform-specific: Python 3
+    _fileobject = None
+    from .backport_makefile import backport_makefile
 
 # Map from urllib3 to PyOpenSSL compatible parameter-values.
 _openssl_versions = {
     ssl.PROTOCOL_SSLv23: OpenSSL.SSL.SSLv23_METHOD,
     ssl.PROTOCOL_TLSv1: OpenSSL.SSL.TLSv1_METHOD,
 }
-
 if hasattr(ssl, 'PROTOCOL_TLSv1_1') and hasattr(OpenSSL.SSL, 'TLSv1_1_METHOD'):
     _openssl_versions[ssl.PROTOCOL_TLSv1_1] = OpenSSL.SSL.TLSv1_1_METHOD
 
@@ -124,19 +61,59 @@ try:
 except AttributeError:
     pass
 
-_openssl_verify = {
+_stdlib_to_openssl_verify = {
     ssl.CERT_NONE: OpenSSL.SSL.VERIFY_NONE,
     ssl.CERT_OPTIONAL: OpenSSL.SSL.VERIFY_PEER,
-    ssl.CERT_REQUIRED: OpenSSL.SSL.VERIFY_PEER
-                       + OpenSSL.SSL.VERIFY_FAIL_IF_NO_PEER_CERT,
+    ssl.CERT_REQUIRED:
+        OpenSSL.SSL.VERIFY_PEER + OpenSSL.SSL.VERIFY_FAIL_IF_NO_PEER_CERT,
 }
+_openssl_to_stdlib_verify = dict(
+    (v, k) for k, v in _stdlib_to_openssl_verify.items()
+)
+
+# OpenSSL will only write 16K at a time
+SSL_WRITE_BLOCKSIZE = 16384
+
+log = logging.getLogger(__name__)
 
 
-def _verify_callback(cnx, x509, err_no, err_depth, return_code):
-    return err_no == 0
+def inject_into_urllib3():
+    """
+    Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP.
+    """
+    log.debug(u'Injecting ssl_wrap_socket_with_ocsp')
+    urllib3_connection.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
 
 
-DEFAULT_SSL_CIPHER_LIST = urllib3_util.ssl_.DEFAULT_CIPHERS
+def _dnsname_to_stdlib(name):
+    """
+    Converts a dNSName SubjectAlternativeName field to the form used by the
+    standard library on the given Python version.
+
+    Cryptography produces a dNSName as a unicode string that was idna-decoded
+    from ASCII bytes. We need to idna-encode that string to get it back, and
+    then on Python 3 we also need to convert to unicode via UTF-8 (the stdlib
+    uses PyUnicode_FromStringAndSize on it, which decodes via UTF-8).
+    """
+
+    def idna_encode(name):
+        """
+        Borrowed wholesale from the Python Cryptography Project. It turns out
+        that we can't just safely call `idna.encode`: it can explode for
+        wildcard names. This avoids that problem.
+        """
+        import idna
+
+        for prefix in [u'*.', u'.']:
+            if name.startswith(prefix):
+                name = name[len(prefix):]
+                return prefix.encode('ascii') + idna.encode(name)
+        return idna.encode(name)
+
+    name = idna_encode(name)
+    if sys.version_info >= (3, 0):
+        name = name.decode('utf-8')
+    return name
 
 
 def get_subj_alt_name(peer_cert):
@@ -144,9 +121,12 @@ def get_subj_alt_name(peer_cert):
     Given an PyOpenSSL certificate, provides all the subject alternative names.
     """
     # Pass the cert to cryptography, which has much better APIs for this.
-    # This is technically using private APIs, but should work across all
-    # relevant versions until PyOpenSSL gets something proper for this.
-    cert = _Certificate(openssl_backend, peer_cert._x509)
+    if hasattr(peer_cert, "to_cryptography"):
+        cert = peer_cert.to_cryptography()
+    else:
+        # This is technically using private APIs, but should work across all
+        # relevant versions before PyOpenSSL got a proper API for this.
+        cert = _Certificate(openssl_backend, peer_cert._x509)
 
     # We want to find the SAN extension. Ask Cryptography to locate it (it's
     # faster than looping in Python)
@@ -161,8 +141,7 @@ def get_subj_alt_name(peer_cert):
             x509.UnsupportedGeneralNameType, UnicodeError) as e:
         # A problem has been found with the quality of the certificate. Assume
         # no SAN field is present.
-        logger = getLogger(__name__)
-        logger.warning(
+        log.warning(
             "A problem was encountered with the certificate that prevented "
             "urllib3 from finding the SubjectAlternativeName field. This can "
             "affect certificate validation. The error was %s",
@@ -179,100 +158,13 @@ def get_subj_alt_name(peer_cert):
     names = [
         ('DNS', _dnsname_to_stdlib(name))
         for name in ext.get_values_for_type(x509.DNSName)
-        ]
+    ]
     names.extend(
         ('IP Address', str(name))
         for name in ext.get_values_for_type(x509.IPAddress)
     )
 
     return names
-
-
-def _dnsname_to_stdlib(name):
-    """
-    Converts a dNSName SubjectAlternativeName field to the form used by the
-    standard library on the given Python version.
-    Cryptography produces a dNSName as a unicode string that was idna-decoded
-    from ASCII bytes. We need to idna-encode that string to get it back, and
-    then on Python 3 we also need to convert to unicode via UTF-8 (the stdlib
-    uses PyUnicode_FromStringAndSize on it, which decodes via UTF-8).
-    """
-
-    def idna_encode(name):
-        """
-        Borrowed wholesale from the Python Cryptography Project. It turns out
-        that we can't just safely call `idna.encode`: it can explode for
-        wildcard names. This avoids that problem.
-        """
-        for prefix in [u'*.', u'.']:
-            if name.startswith(prefix):
-                name = name[len(prefix):]
-                return prefix.encode('ascii') + idna.encode(name)
-        return idna.encode(name)
-
-    name = idna_encode(name)
-    if sys.version_info >= (3, 0):
-        name = name.decode('utf-8')
-    return name
-
-
-class error(Exception):
-    """ Base class for I/O related errors. """
-
-    def __init__(self, *args, **kwargs):  # real signature unknown
-        pass
-
-    @staticmethod  # known case of __new__
-    def __new__(*args, **kwargs):  # real signature unknown
-        """ Create and return a new object.  See help(type) for accurate signature. """
-        pass
-
-    def __reduce__(self, *args, **kwargs):  # real signature unknown
-        pass
-
-    def __str__(self, *args, **kwargs):  # real signature unknown
-        """ Return str(self). """
-        pass
-
-    characters_written = property(lambda self: object(), lambda self, v: None,
-                                  lambda self: None)  # default
-
-    errno = property(lambda self: object(), lambda self, v: None,
-                     lambda self: None)  # default
-    """POSIX exception code"""
-
-    filename = property(lambda self: object(), lambda self, v: None,
-                        lambda self: None)  # default
-    """exception filename"""
-
-    filename2 = property(lambda self: object(), lambda self, v: None,
-                         lambda self: None)  # default
-    """second exception filename"""
-
-    strerror = property(lambda self: object(), lambda self, v: None,
-                        lambda self: None)  # default
-    """exception strerror"""
-
-
-import errno
-
-EBADF = getattr(errno, 'EBADF', 9)
-EINTR = getattr(errno, 'EINTR', 4)
-
-# -*- coding: utf-8 -*-
-"""
-backports.makefile
-~~~~~~~~~~~~~~~~~~
-
-Backports the Python 3 ``socket.makefile`` method for use with anything that
-wants to create a "fake" socket object.
-"""
-
-try:  # Platform-specific: Python 2
-    from socket import _fileobject
-except:
-    _fileobject = None
-    from .backport_makefile import backport_makefile
 
 
 class WrappedSocket(object):
@@ -313,10 +205,9 @@ class WrappedSocket(object):
             else:
                 raise
         except OpenSSL.SSL.WantReadError:
-            rd, wd, ed = select.select(
-                [self.socket], [], [], self.socket.gettimeout())
+            rd = wait_for_read(self.socket, self.socket.gettimeout())
             if not rd:
-                raise socket.timeout('The read operation timed out')
+                raise timeout('The read operation timed out')
             else:
                 return self.recv(*args, **kwargs)
         else:
@@ -336,10 +227,9 @@ class WrappedSocket(object):
             else:
                 raise
         except OpenSSL.SSL.WantReadError:
-            rd, wd, ed = select.select(
-                [self.socket], [], [], self.socket.gettimeout())
+            rd = wait_for_read(self.socket, self.socket.gettimeout())
             if not rd:
-                raise socket.timeout('The read operation timed out')
+                raise timeout('The read operation timed out')
             else:
                 return self.recv_into(*args, **kwargs)
 
@@ -351,11 +241,12 @@ class WrappedSocket(object):
             try:
                 return self.connection.send(data)
             except OpenSSL.SSL.WantWriteError:
-                _, wlist, _ = select.select([], [self.socket], [],
-                                            self.socket.gettimeout())
-                if not wlist:
-                    raise socket.timeout()
+                wr = wait_for_write(self.socket, self.socket.gettimeout())
+                if not wr:
+                    raise timeout()
                 continue
+            except OpenSSL.SSL.SysCallError as e:
+                raise SocketError(str(e))
 
     def sendall(self, data):
         total_sent = 0
@@ -365,6 +256,7 @@ class WrappedSocket(object):
             total_sent += sent
 
     def shutdown(self):
+        # FIXME rethrow compatible exceptions should we ever use this
         self.connection.shutdown()
 
     def close(self):
@@ -405,7 +297,7 @@ class WrappedSocket(object):
             self._makefile_refs -= 1
 
 
-if _fileobject:
+if _fileobject:  # Platform-specific: Python 2
     def makefile(self, mode, bufsize=-1):
         self._makefile_refs += 1
         return _fileobject(self, mode, bufsize, close=True)
@@ -413,6 +305,8 @@ else:  # Platform-specific: Python 3
     makefile = backport_makefile
 
 WrappedSocket.makefile = makefile
+
+DEFAULT_SSL_CIPHER_LIST = urllib3_util.ssl_.DEFAULT_CIPHERS
 
 
 def ssl_wrap_socket(
@@ -426,7 +320,7 @@ def ssl_wrap_socket(
     if keyfile:
         ctx.use_privatekey_file(keyfile)
     if cert_reqs != ssl.CERT_NONE:
-        ctx.set_verify(_openssl_verify[cert_reqs], _verify_callback)
+        ctx.set_verify(_stdlib_to_openssl_verify[cert_reqs], _verify_callback)
     if ca_certs:
         try:
             ctx.load_verify_locations(ca_certs, None)
@@ -435,7 +329,7 @@ def ssl_wrap_socket(
     else:
         ctx.set_default_verify_paths()
 
-    # Disable TLS compression to migitate CRIME attack (issue #309)
+    # Disable TLS compression to mitigate CRIME attack (issue #309)
     OP_NO_COMPRESSION = 0x20000
     ctx.set_options(OP_NO_COMPRESSION)
 
@@ -445,19 +339,26 @@ def ssl_wrap_socket(
     cnx = OpenSSL.SSL.Connection(ctx, sock)
     cnx.set_tlsext_host_name(server_hostname.encode(u'utf-8'))
     cnx.set_connect_state()
+
     while True:
         try:
             cnx.do_handshake()
         except OpenSSL.SSL.WantReadError:
-            rd, _, _ = select.select([sock], [], [], sock.gettimeout())
+            rd = wait_for_read(sock, sock.gettimeout())
             if not rd:
-                raise socket.timeout('select timed out')
+                raise timeout('select timed out')
             continue
         except OpenSSL.SSL.Error as e:
-            raise ssl.SSLError('bad handshake', e)
+            raise ssl.SSLError('bad handshake: %r' % e)
         break
 
     return WrappedSocket(cnx, sock)
+
+
+def _verify_callback(cnx, x509, err_no, err_depth, return_code):
+    # NOTE: this cannot be used to verify certificate revocation status.
+    # because get_cert_peer_chain returns None for some reason.
+    return err_no == 0
 
 
 def ssl_wrap_socket_with_ocsp(
@@ -467,14 +368,13 @@ def ssl_wrap_socket_with_ocsp(
         sock, keyfile=keyfile, certfile=certfile, cert_reqs=cert_reqs,
         ca_certs=ca_certs, server_hostname=server_hostname,
         ssl_version=ssl_version)
-    logger = getLogger(__name__)
-    logger.debug(u'insecure_mode: %s, '
-                 u'OCSP response cache file name: %s, '
-                 u'PROXY_HOST: %s, PROXY_PORT: %s, PROXY_USER: %s '
-                 u'PROXY_PASSWORD: %s',
-                 FEATURE_INSECURE_MODE,
-                 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
-                 PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASSWORD)
+    log.debug(u'insecure_mode: %s, '
+              u'OCSP response cache file name: %s, '
+              u'PROXY_HOST: %s, PROXY_PORT: %s, PROXY_USER: %s '
+              u'PROXY_PASSWORD: %s',
+              FEATURE_INSECURE_MODE,
+              FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+              PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASSWORD)
     if not FEATURE_INSECURE_MODE:
         v = SnowflakeOCSP(
             proxies=set_proxies(PROXY_HOST, PROXY_PORT, PROXY_USER,
@@ -489,18 +389,9 @@ def ssl_wrap_socket_with_ocsp(
                         server_hostname)),
                 errno=ER_SERVER_CERTIFICATE_REVOKED)
     else:
-        logger.info(u'THIS CONNECTION IS IN INSECURE '
-                    u'MODE. IT MEANS THE CERTIFICATE WILL BE '
-                    u'VALIDATED BUT THE CERTIFICATE REVOCATION '
-                    u'STATUS WILL NOT BE CHECKED.')
+        log.info(u'THIS CONNECTION IS IN INSECURE '
+                 u'MODE. IT MEANS THE CERTIFICATE WILL BE '
+                 u'VALIDATED BUT THE CERTIFICATE REVOCATION '
+                 u'STATUS WILL NOT BE CHECKED.')
 
     return ret
-
-
-def inject_into_urllib3():
-    """
-    Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP
-    """
-    logger = getLogger(__name__)
-    logger.info(u'Injecting ssl_wrap_socket_with_ocsp')
-    urllib3_connection.ssl_wrap_socket = ssl_wrap_socket_with_ocsp

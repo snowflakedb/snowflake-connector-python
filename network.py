@@ -5,7 +5,6 @@
 #
 import collections
 import contextlib
-import copy
 import gzip
 import itertools
 import json
@@ -17,7 +16,7 @@ import uuid
 from io import StringIO, BytesIO
 from threading import Thread
 
-import OpenSSL
+import OpenSSL.SSL
 from botocore.vendored import requests
 from botocore.vendored.requests.adapters import HTTPAdapter
 from botocore.vendored.requests.auth import AuthBase
@@ -25,19 +24,18 @@ from botocore.vendored.requests.exceptions import (ConnectionError, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError)
 
+from . import proxy
 from . import ssl_wrap_socket
 from .compat import (
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY,
-    UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine,
-    urlsplit, unescape)
+    UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
 from .compat import (Queue, EmptyQueue)
 from .compat import (TO_UNICODE, urlencode)
 from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
                         ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION,
-                        ER_FAILED_TO_SERVER, ER_IDP_CONNECTION_ERROR,
-                        ER_INCORRECT_DESTINATION, ER_INVALID_VALUE)
+                        ER_FAILED_TO_SERVER)
 from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      GatewayTimeoutError, ServiceUnavailableError,
                      InterfaceError, InternalServerError, ForbiddenError,
@@ -92,6 +90,7 @@ PYTHON_CONNECTOR_USER_AGENT = \
         platform=PLATFORM)
 
 DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
+EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
 NO_TOKEN = u'no-token'
 
 STATUS_TO_EXCEPTION = {
@@ -102,43 +101,6 @@ STATUS_TO_EXCEPTION = {
     BAD_REQUEST: BadRequest,
     BAD_GATEWAY: BadGatewayError,
 }
-
-
-def _is_prefix_equal(url1, url2):
-    """
-    Checks if URL prefixes are identical. The scheme, hostname and port number
-    are compared. If the port number is not specified and the scheme is https,
-    the port number is assumed to be 443.
-    """
-    parsed_url1 = urlsplit(url1)
-    parsed_url2 = urlsplit(url2)
-
-    port1 = parsed_url1.port
-    if not port1 and parsed_url1.scheme == 'https':
-        port1 = '443'
-    port2 = parsed_url1.port
-    if not port2 and parsed_url2.scheme == 'https':
-        port2 = '443'
-
-    return parsed_url1.hostname == parsed_url2.hostname and \
-           port1 == port2 and \
-           parsed_url1.scheme == parsed_url2.scheme
-
-
-def _get_post_back_url_from_html(html):
-    """
-    Gets the post back URL.
-
-    Since the HTML is not well formed, minidom cannot be used to convert to
-    DOM. The first discovered form is assumed to be the form to post back
-    and the URL is taken from action attributes.
-    """
-    logger.debug(html)
-
-    idx = html.find('<form')
-    start_idx = html.find('action="', idx)
-    end_idx = html.find('"', start_idx + 8)
-    return unescape(html[start_idx + 8:end_idx])
 
 
 class RequestRetry(Exception):
@@ -202,10 +164,10 @@ class SnowflakeRestful(object):
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = \
             self._connection and self._connection._ocsp_response_cache_filename
         #
-        ssl_wrap_socket.PROXY_HOST = self._proxy_host
-        ssl_wrap_socket.PROXY_PORT = self._proxy_port
-        ssl_wrap_socket.PROXY_USER = self._proxy_user
-        ssl_wrap_socket.PROXY_PASSWORD = self._proxy_password
+        proxy.PROXY_HOST = self._proxy_host
+        proxy.PROXY_PORT = self._proxy_port
+        proxy.PROXY_USER = self._proxy_user
+        proxy.PROXY_PASSWORD = self._proxy_password
 
         # This is to address the issue where requests hangs
         _ = 'dummy'.encode('idna').decode('utf-8')
@@ -235,215 +197,6 @@ class SnowflakeRestful(object):
                 s.close()
             except Exception as e:
                 logger.warn("Session cleanup failed: %s", e)
-
-    def authenticate(self, account, user, password, master_token=None,
-                     token=None, database=None, schema=None,
-                     warehouse=None, role=None, passcode=None,
-                     passcode_in_password=False, saml_response=None,
-                     mfa_callback=None, password_callback=None,
-                     session_parameters=None):
-        logger.debug(u'authenticate')
-
-        if token and master_token:
-            self._token = token
-            self._master_token = token
-            logger.debug(u'token is given. no authentication was done')
-            return
-
-        application = self._connection.application if \
-            self._connection else CLIENT_NAME
-        internal_application_name = \
-            self._connection._internal_application_name if \
-                self._connection else CLIENT_NAME
-        internal_application_version = \
-            self._connection._internal_application_version if \
-                self._connection else CLIENT_VERSION
-        request_id = TO_UNICODE(uuid.uuid4())
-        headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
-        }
-        url = u"/session/v1/login-request"
-        body_template = {
-            u'data': {
-                u"CLIENT_APP_ID": internal_application_name,
-                u"CLIENT_APP_VERSION": internal_application_version,
-                u"SVN_REVISION": VERSION[3],
-                u"ACCOUNT_NAME": account,
-                u"CLIENT_ENVIRONMENT": {
-                    u"APPLICATION": application,
-                    u"OS_VERSION": PLATFORM,
-                    u"PYTHON_VERSION": PYTHON_VERSION,
-                    u"PYTHON_RUNTIME": IMPLEMENTATION,
-                    u"PYTHON_COMPILER": COMPILER,
-                }
-            },
-        }
-
-        body = copy.deepcopy(body_template)
-        logger.debug(u'saml: %s', saml_response is not None)
-        if saml_response:
-            body[u'data'][u'RAW_SAML_RESPONSE'] = saml_response
-        else:
-            body[u'data'][u"LOGIN_NAME"] = user
-            body[u'data'][u"PASSWORD"] = password
-
-        logger.debug(
-            u'account=%s, user=%s, database=%s, schema=%s, '
-            u'warehouse=%s, role=%s, request_id=%s',
-            account,
-            user,
-            database,
-            schema,
-            warehouse,
-            role,
-            request_id,
-        )
-        url_parameters = {}
-        url_parameters[u'request_id'] = request_id
-        if database is not None:
-            url_parameters[u'databaseName'] = database
-        if schema is not None:
-            url_parameters[u'schemaName'] = schema
-        if warehouse is not None:
-            url_parameters[u'warehouse'] = warehouse
-        if role is not None:
-            url_parameters[u'roleName'] = role
-
-        if len(url_parameters) > 0:
-            url = url + u'?' + urlencode(url_parameters)
-
-        # first auth request
-        if passcode_in_password:
-            body[u'data'][u'EXT_AUTHN_DUO_METHOD'] = u'passcode'
-        elif passcode:
-            body[u'data'][u'EXT_AUTHN_DUO_METHOD'] = u'passcode'
-            body[u'data'][u'PASSCODE'] = passcode
-
-        if session_parameters:
-            body[u'data'][u'SESSION_PARAMETERS'] = session_parameters
-
-        logger.debug(
-            "body['data']: %s",
-            {k: v for (k, v) in body[u'data'].items() if k != u'PASSWORD'})
-
-        try:
-            ret = self._post_request(
-                url, headers, json.dumps(body),
-                timeout=self._connection._login_timeout)
-        except ForbiddenError as err:
-            # HTTP 403
-            raise err.__class__(
-                msg=(u"Failed to connect to DB. "
-                     u"Verify the account name is correct: {host}:{port}, "
-                     u"proxies={proxy_host}:{proxy_port}, "
-                     u"proxy_user={proxy_user}. {message}").format(
-                    host=self._host,
-                    port=self._port,
-                    proxy_host=self._proxy_host,
-                    proxy_port=self._proxy_port,
-                    proxy_user=self._proxy_user,
-                    message=TO_UNICODE(err)
-                ),
-                errno=ER_FAILED_TO_CONNECT_TO_DB,
-                sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
-        except (ServiceUnavailableError, BadGatewayError) as err:
-            # HTTP 502/504
-            raise err.__class__(
-                msg=(u"Failed to connect to DB. "
-                     u"Service is unavailable: {host}:{port}, "
-                     u"proxies={proxy_host}:{proxy_port}, "
-                     u"proxy_user={proxy_user}. {message}").format(
-                    host=self._host,
-                    port=self._port,
-                    proxy_host=self._proxy_host,
-                    proxy_port=self._proxy_port,
-                    proxy_user=self._proxy_user,
-                    message=TO_UNICODE(err)
-                ),
-                errno=ER_FAILED_TO_CONNECT_TO_DB,
-                sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
-
-        # this means we are waiting for MFA authentication
-        if ret[u'data'].get(u'nextAction') and ret[u'data'][
-            u'nextAction'] == u'EXT_AUTHN_DUO_ALL':
-            body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
-            body[u'data'][u'EXT_AUTHN_DUO_METHOD'] = u'push'
-            self.ret = None
-
-            def post_request_wrapper(self, url, headers, body):
-                # get the MFA response
-                self.ret = self._post_request(
-                    url, headers, body,
-                    timeout=self._connection._login_timeout)
-
-            # send new request to wait until MFA is approved
-            t = Thread(target=post_request_wrapper,
-                       args=[self, url, headers, json.dumps(body)])
-            t.daemon = True
-            t.start()
-            if callable(mfa_callback):
-                c = mfa_callback()
-                while not self.ret:
-                    next(c)
-            else:
-                t.join(timeout=120)
-            ret = self.ret
-            if ret[u'data'].get(u'nextAction') and ret[u'data'][
-                u'nextAction'] == u'EXT_AUTHN_SUCCESS':
-                body = copy.deepcopy(body_template)
-                body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
-                # final request to get tokens
-                ret = self._post_request(
-                    url, headers, json.dumps(body),
-                    timeout=self._connection._login_timeout)
-
-        elif ret[u'data'].get(u'nextAction') and ret[u'data'][
-            u'nextAction'] == u'PWD_CHANGE':
-            if callable(password_callback):
-                body = copy.deepcopy(body_template)
-                body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
-                body[u'data'][u"LOGIN_NAME"] = user
-                body[u'data'][u"PASSWORD"] = password
-                body[u'data'][u'CHOSEN_NEW_PASSWORD'] = password_callback()
-                # New Password input
-                ret = self._post_request(
-                    url, headers, json.dumps(body),
-                    timeout=self._connection._login_timeout)
-
-        logger.debug(u'completed authentication')
-        if not ret[u'success']:
-            Error.errorhandler_wrapper(
-                self._connection, None, DatabaseError,
-                {
-                    u'msg': (u"failed to connect to DB: {host}:{port}, "
-                             u"proxies={proxy_host}:{proxy_port}, "
-                             u"proxy_user={proxy_user}, "
-                             u"{message}").format(
-                        host=self._host,
-                        port=self._port,
-                        proxy_host=self._proxy_host,
-                        proxy_port=self._proxy_port,
-                        proxy_user=self._proxy_user,
-                        message=ret[u'message'],
-                    ),
-                    u'errno': ER_FAILED_TO_CONNECT_TO_DB,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                })
-        else:
-            self._token = ret[u'data'][u'token']
-            self._master_token = ret[u'data'][u'masterToken']
-            logger.debug(u'token = %s', self._token)
-            logger.debug(u'master_token = %s', self._master_token)
-            if u'sessionId' in ret[u'data']:
-                self._connection._session_id = ret[u'data'][u'sessionId']
-            if u'sessionInfo' in ret[u'data']:
-                session_info = ret[u'data'][u'sessionInfo']
-                self._validate_default_database(session_info)
-                self._validate_default_schema(session_info)
-                self._validate_default_role(session_info)
-                self._validate_default_warehouse(session_info)
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
                 _no_results=False):
@@ -529,7 +282,7 @@ class SnowflakeRestful(object):
                     u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 })
 
-    def _delete_session(self):
+    def delete_session(self):
         if not hasattr(self, u'_master_token'):
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
@@ -577,7 +330,7 @@ class SnowflakeRestful(object):
             ret = self._renew_session()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
-                    code=(ret[u'code'] if u'code' in ret else u'N/A')))
+                    code=(ret.get(u'code', u'N/A'))))
             if u'success' in ret and ret[u'success']:
                 return self._get_request(url, headers, token=self._token)
 
@@ -602,18 +355,17 @@ class SnowflakeRestful(object):
             ret = self._renew_session()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
-                    code=(ret[u'code'] if u'code' in ret else u'N/A')))
+                    code=(ret.get(u'code'u'N/A'))))
             if u'success' in ret and ret[u'success']:
                 return self._post_request(
                     url, headers, body, token=self._token, timeout=timeout)
 
         is_session_renewed = False
         result_url = None
-        if u'code' in ret and ret[
-            u'code'] == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
+        if ret.get(u'code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
             return ret
 
-        while is_session_renewed or u'code' in ret and ret[u'code'] in \
+        while is_session_renewed or ret.get(u'code') in \
                 (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
             if self._injectClientPause > 0:
                 logger.debug(
@@ -626,15 +378,13 @@ class SnowflakeRestful(object):
             logger.debug(u'ping pong starting...')
             ret = self._get_request(
                 result_url, headers, token=self._token, timeout=timeout)
-            logger.debug(
-                u'ret[code] = %s',
-                ret[u'code'] if u'code' in ret else u'N/A')
+            logger.debug(u'ret[code] = %s', ret.get(u'code', u'N/A'))
             logger.debug(u'ping pong done')
-            if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
+            if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
                 ret = self._renew_session()
                 logger.debug(
                     u'ret[code] = %s after renew_session',
-                    ret[u'code'] if u'code' in ret else u'N/A')
+                    ret.get(u'code', u'N/A'))
                 if u'success' in ret and ret[u'success']:
                     is_session_renewed = True
             else:
@@ -908,149 +658,6 @@ class SnowflakeRestful(object):
         s._reuse_count = itertools.count()
         return s
 
-    def authenticate_by_saml(self, authenticator, account, user, password):
-        u"""
-        SAML Authentication
-        1.  query GS to obtain IDP token and SSO url
-        2.  IMPORTANT Client side validation:
-            validate both token url and sso url contains same prefix
-            (protocol + host + port) as the given authenticator url.
-            Explanation:
-            This provides a way for the user to 'authenticate' the IDP it is
-            sending his/her credentials to.  Without such a check, the user could
-            be coerced to provide credentials to an IDP impersonator.
-        3.  query IDP token url to authenticate and retrieve access token
-        4.  given access token, query IDP URL snowflake app to get SAML response
-        5.  IMPORTANT Client side validation:
-            validate the post back url come back with the SAML response
-            contains the same prefix as the Snowflake's server url, which is the
-            intended destination url to Snowflake.
-        Explanation:
-            This emulates the behavior of IDP initiated login flow in the user
-            browser where the IDP instructs the browser to POST the SAML
-            assertion to the specific SP endpoint.  This is critical in
-            preventing a SAML assertion issued to one SP from being sent to
-            another SP.
-        """
-        logger.info(u'authenticating by SAML')
-        logger.debug(u'step 1: query GS to obtain IDP token and SSO url')
-        headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": CONTENT_TYPE_APPLICATION_JSON,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
-        }
-        url = u"/session/authenticator-request"
-        body = {
-            u'data': {
-                u"CLIENT_APP_ID": CLIENT_NAME,
-                u"CLIENT_APP_VERSION": CLIENT_VERSION,
-                u"SVN_REVISION": VERSION[3],
-                u"ACCOUNT_NAME": account,
-                u"AUTHENTICATOR": authenticator,
-            },
-        }
-
-        logger.debug(
-            u'account=%s, authenticator=%s',
-            account, authenticator,
-        )
-
-        ret = self._post_request(
-            url, headers, json.dumps(body),
-            timeout=self._connection._login_timeout)
-
-        if not ret[u'success']:
-            Error.errorhandler_wrapper(
-                self._connection, None, DatabaseError,
-                {
-                    u'msg': (u"Failed to connect to DB: {host}:{port}, "
-                             u"proxies={proxy_host}:{proxy_port}, "
-                             u"proxy_user={proxy_user}, "
-                             u"{message}").format(
-                        host=self._host,
-                        port=self._port,
-                        proxy_host=self._proxy_host,
-                        proxy_port=self._proxy_port,
-                        proxy_user=self._proxy_user,
-                        message=ret[u'message'],
-                    ),
-                    u'errno': ER_FAILED_TO_CONNECT_TO_DB,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                })
-
-        data = ret[u'data']
-        token_url = data[u'tokenUrl']
-        sso_url = data[u'ssoUrl']
-
-        logger.debug(u'step 2: validate Token and SSO URL has the same prefix '
-                     u'as authenticator')
-        if not _is_prefix_equal(authenticator, token_url) or \
-                not _is_prefix_equal(authenticator, sso_url):
-            Error.errorhandler_wrapper(
-                self._connection, None, DatabaseError,
-                {
-                    u'msg': (u"The specified authenticator is not supported: "
-                             u"{authenticator}, token_url: {token_url}, "
-                             u"sso_url: {sso_url}".format(
-                        authenticator=authenticator,
-                        token_url=token_url,
-                        sso_url=sso_url,
-                    )),
-                    u'errno': ER_IDP_CONNECTION_ERROR,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-                }
-            )
-
-        logger.debug(u'step 3: query IDP token url to authenticate and '
-                     u'retrieve access token')
-        data = {
-            u'username': user,
-            u'password': password,
-        }
-        ret = self.fetch(u'post', token_url, headers, data=json.dumps(data),
-                         timeout=self._connection._login_timeout,
-                         catch_okta_unauthorized_error=True)
-        one_time_token = ret[u'cookieToken']
-
-        logger.debug(u'step 4: query IDP URL snowflake app to get SAML '
-                     u'response')
-        url_parameters = {
-            u'RelayState': u"/some/deep/link",
-            u'onetimetoken': one_time_token,
-        }
-        sso_url = sso_url + u'?' + urlencode(url_parameters)
-
-        headers = {
-            u"Accept": u'*/*',
-        }
-        response_html = self.fetch(u'get', sso_url, headers,
-                                   timeout=self._connection._login_timeout,
-                                   is_raw_text=True)
-
-        logger.debug(u'step 5: validate post_back_url matches Snowflake URL')
-        post_back_url = _get_post_back_url_from_html(response_html)
-        full_url = u'{protocol}://{host}:{port}'.format(
-            protocol=self._protocol,
-            host=self._host,
-            port=self._port,
-        )
-        if not _is_prefix_equal(post_back_url, full_url):
-            Error.errorhandler_wrapper(
-                self._connection, None, DatabaseError,
-                {
-                    u'msg': (u"The specified authenticator and destination "
-                             u"URL in the SAML assertion do not match: "
-                             u"expected: {url}, "
-                             u"post back: {post_back_url}".format(
-                        url=full_url,
-                        post_back_url=post_back_url,
-                    )),
-                    u'errno': ER_INCORRECT_DESTINATION,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-                }
-            )
-        return response_html
-
     @contextlib.contextmanager
     def _use_requests_session(self):
         """ Session caching context manager.  Note that the session is not
@@ -1062,7 +669,7 @@ class SnowflakeRestful(object):
             session = self.make_requests_session()
         self._active_sessions.add(session)
         logger.debug("Active requests sessions: %s, idle: %s",
-                    len(self._active_sessions), len(self._idle_sessions))
+                     len(self._active_sessions), len(self._idle_sessions))
         try:
             yield session
         finally:
@@ -1074,48 +681,4 @@ class SnowflakeRestful(object):
                     "session doesn't exist in the active session pool. "
                     "Ignored...")
             logger.debug("Active requests sessions: %s, idle: %s",
-                        len(self._active_sessions), len(self._idle_sessions))
-
-    def _validate_default_database(self, session_info):
-        default_value = self._connection.database
-        session_info_value = session_info.get(u'databaseName')
-        self._connection._database = session_info_value
-        self._validate_default_parameter(
-            'database', default_value, session_info_value)
-
-    def _validate_default_schema(self, session_info):
-        default_value = self._connection.schema
-        session_info_value = session_info.get(u'schemaName')
-        self._connection._schema = session_info_value
-        self._validate_default_parameter(
-            'schema', default_value, session_info_value)
-
-    def _validate_default_role(self, session_info):
-        default_value = self._connection.role
-        session_info_value = session_info.get(u'roleName')
-        self._connection._role = session_info_value
-        self._validate_default_parameter(
-            'role', default_value, session_info_value)
-
-    def _validate_default_warehouse(self, session_info):
-        default_value = self._connection.warehouse
-        session_info_value = session_info.get(u'warehouseName')
-        self._connection._warehouse = session_info_value
-        self._validate_default_parameter(
-            'warehouse', default_value, session_info_value)
-
-    def _validate_default_parameter(
-            self, name, default_value, session_info_value):
-        if self._connection.validate_default_parameters and \
-                        default_value is not None and \
-                        session_info_value is None:
-            # validate default parameter
-            Error.errorhandler_wrapper(
-                self._connection, None, DatabaseError,
-                {
-                    u'msg': u'Invalid {0} name: {1}'.format(
-                        name, default_value),
-                    u'errno': ER_INVALID_VALUE,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-
-                })
+                         len(self._active_sessions), len(self._idle_sessions))

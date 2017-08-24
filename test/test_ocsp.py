@@ -46,6 +46,7 @@ def test_ocsp_using_pyopenssl():
         'sfc-dev1-regression.s3.amazonaws.com',
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',
+        'sfcdev1.blob.core.windows.net',
     ]
     for url in urls:
         connection = _openssl_connect(url)
@@ -67,6 +68,7 @@ def test_ocsp_generate_pair_of_certid_response(tmpdir):
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',
         'snowflake.okta.com',
+        'sfcdev1.blob.core.windows.net',
     ]
 
     # cache OCSP response
@@ -244,6 +246,7 @@ def test_concurrent_ocsp_requests(tmpdir):
         'sfctest0.snowflakecomputing.com',
         'sfc-ds2-customer-stage.s3.amazonaws.com',
         'snowflake.okta.com',
+        'sfcdev1.blob.core.windows.net',
     ]
     ocsp_pyopenssl.OCSP_VALIDATION_CACHE = {}  # reset the memory cache
     urls = urls + urls + urls + urls + urls + urls

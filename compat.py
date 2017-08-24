@@ -37,6 +37,8 @@ if PY2:
 
     urlsplit = urlparse.urlsplit
     urlunsplit = urlparse.urlunsplit
+    parse_qs = urlparse.parse_qs
+    urlparse = urlparse.urlparse
 
     NUM_DATA_TYPES += [int, float, long, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-ord(v[-1])]
@@ -60,6 +62,12 @@ if PY2:
     EmptyQueue = Queue.Empty
     Queue = Queue.Queue
 
+    # HTTP Server
+    import SimpleHTTPServer as HTTPServer
+    import BaseHTTPServer
+
+    BaseHTTPRequestHandler = BaseHTTPServer.BaseHTTPRequestHandler
+
 else:
     import urllib.parse
     import http.client
@@ -73,6 +81,9 @@ else:
 
     urlsplit = urllib.parse.urlsplit
     urlunsplit = urllib.parse.urlunsplit
+    parse_qs = urllib.parse.parse_qs
+    urlparse = urllib.parse.urlparse
+
     urlencode = urllib.parse.urlencode
     unescape = html.unescape
     NUM_DATA_TYPES += [int, float, decimal.Decimal]
@@ -94,6 +105,12 @@ else:
 
     EmptyQueue = queue.Empty
     Queue = queue.Queue
+
+    # HTTP Server
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    _ = HTTPServer
+    _ = BaseHTTPRequestHandler
 
 IS_BYTES = lambda v: isinstance(v, BYTE_DATA_TYPE)
 IS_STR = lambda v: isinstance(v, STR_DATA_TYPE)

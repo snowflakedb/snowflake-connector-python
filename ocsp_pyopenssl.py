@@ -509,10 +509,8 @@ def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
     # NOTE: This retry is to retry getting HTTP 200.
     headers = {
         'Content-Type': 'application/ocsp-request',
-        'Content-Length': '{0}'.format(
-            len(data)),
-        'Host': parsed_url.hostname.encode(
-            'utf-8'),
+        'Content-Length': '{0}'.format(len(data)),
+        'Host': parsed_url.hostname,
     }
     logger.debug('url: %s, headers: %s, proxies: %s',
                  ocsp_uri, headers, proxies)

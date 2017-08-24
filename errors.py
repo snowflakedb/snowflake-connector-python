@@ -77,7 +77,7 @@ class Error(BASE_EXCEPTION_CLASS):
         Error handler wrapper that calls the errorhandler method
         """
         if errorvalue is None:
-            # no value indicates erroclass is errorobject
+            # no value indicates errorclass is errorobject
             errorobject = errorclass
             errorclass = type(errorobject)
             errorvalue = {
