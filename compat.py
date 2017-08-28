@@ -54,9 +54,10 @@ if PY2:
     INTERNAL_SERVER_ERROR = httplib.INTERNAL_SERVER_ERROR
     OK = httplib.OK
     BadStatusLine = httplib.BadStatusLine
+
     urlencode = urllib.urlencode
     proxy_bypass = urllib.proxy_bypass
-
+    unquote = urllib.unquote
     unescape = HTMLParser().unescape
 
     EmptyQueue = Queue.Empty
@@ -84,8 +85,6 @@ else:
     parse_qs = urllib.parse.parse_qs
     urlparse = urllib.parse.urlparse
 
-    urlencode = urllib.parse.urlencode
-    unescape = html.unescape
     NUM_DATA_TYPES += [int, float, decimal.Decimal]
     PKCS5_UNPAD = lambda v: v[0:-v[-1]]
     PKCS5_OFFSET = lambda v: v[-1]
@@ -101,7 +100,10 @@ else:
     OK = http.client.OK
     BadStatusLine = http.client.BadStatusLine
 
+    urlencode = urllib.parse.urlencode
     proxy_bypass = urllib.request.proxy_bypass
+    unquote = urllib.parse.unquote
+    unescape = html.unescape
 
     EmptyQueue = queue.Empty
     Queue = queue.Queue

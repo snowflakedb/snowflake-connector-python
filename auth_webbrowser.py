@@ -6,25 +6,20 @@
 import json
 import logging
 import socket
-import time
 import webbrowser
-from threading import Thread
 
 from .auth import AuthByExternalService
-from .compat import (BASE_EXCEPTION_CLASS, HTTPServer, BaseHTTPRequestHandler,
-                     parse_qs, urlparse)
-from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB,
-                        ER_UNABLE_TO_OPEN_BROWSER, ER_UNABLE_TO_START_WEBSERVER)
+from .compat import (unquote)
+from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       PYTHON_CONNECTOR_USER_AGENT, CLIENT_NAME, CLIENT_VERSION)
 from .version import VERSION
 
 logger = logging.getLogger(__name__)
 
+
 # global state of web server that receives the SAML assertion from
 # Snowflake server
-force_to_stop = False
-token = None
 
 
 class AuthByWebBrowser(AuthByExternalService):
@@ -34,15 +29,13 @@ class AuthByWebBrowser(AuthByExternalService):
     """
 
     def __init__(self, rest, application,
-                 webbrowser_pkg=None, webserver_handler=None):
+                 webbrowser_pkg=None, socket_pkg=None):
         self._rest = rest
         self._saml_response = None
-        self._webserver_status = None
         self._application = application
         self._proof_key = None
         self._webbrowser = webbrowser if webbrowser_pkg is None else webbrowser_pkg
-        self._webserver = AuthByWebBrowser._run_webserver if webserver_handler is None \
-            else webserver_handler
+        self._socket = socket.socket if socket_pkg is None else socket_pkg
 
     @property
     def assertion_content(self):
@@ -52,123 +45,98 @@ class AuthByWebBrowser(AuthByExternalService):
         body[u'data'][u'SAML_RESPONSE'] = self._saml_response
         body[u'data'][u'PROOF_KEY'] = self._proof_key
 
-    def _run_webserver(self, application, port):
-        class RequestHandler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                global force_to_stop
-                global token
-                # NOTE: any authentication failure must be detected
-                # earlier in the flow, so here it can assume that the user is
-                # authorized to gain access to Snowflake db.
-                logger.debug("USER-AGENT: %s",
-                             self.headers.get('user-agent'))
-                parsed_query = parse_qs(urlparse(self.path).query)
-                token = parsed_query['token'][0]
-                self.send_response(200)
-                self.send_header("Content-type", "text/html")
-                self.end_headers()
-                self.wfile.write('''
-        <!DOCTYPE html><html><head><meta charset="UTF-8"/>
-        <title>SAML Response for Snowflake</title></head>
-        <body>
-        Your identity was confirmed and propagated to Snowflake {0}. You can close 
-        this window now and go back where you started from.
-        </body></html>
-        '''.format(application).encode('utf-8'))
-                force_to_stop = True
-
-            def log_message(self, format, *args):
-                logger.debug(format % args)
-
-        global force_to_stop
-        self._webserver_status = None
-        try:
-            httpd = HTTPServer(('localhost', port), RequestHandler)
-        except BASE_EXCEPTION_CLASS as e:
-            # catch all exceptions as a separate thread cannot propagate it to
-            # the main thread.
-            logger.debug(e, exc_info=True)
-            self._webserver_status = e
-            force_to_stop = True
-            return
-        print("Initiating login request with your identity provider. A "
-              "browser window should have opened for you to complete the "
-              "login. If you can't see it, check existing browser windows, "
-              "or your OS settings. Press CTRL+C to abort and try again...")
-        logger.debug("web browser is opened with port {0} for IDP".format(
-            port))
-        self._webserver_status = True
-        while not force_to_stop:
-            httpd.handle_request()
-
     def authenticate(self, authenticator, account, user, password):
         """
         Web Browser based Authentication.
         """
         logger.info(u'authenticating by Web Browser')
-        logger.debug(u'step 1: query GS to obtain SSO url')
 
         # ignore password. user is still needed by GS to verify
         # the assertion.
         _ = password
 
-        def get_open_port():
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind(('localhost', 0))
-            s.listen(1)
-            port = s.getsockname()[1]
-            s.close()
-            return port
+        socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            socket_connection.bind(('localhost', 0))
+            socket_connection.listen(0)  # no backlog
+            callback_port = socket_connection.getsockname()[1]
 
-        force_to_stop = False
+            print("Initiating login request with your identity provider. A "
+                  "browser window should have opened for you to complete the "
+                  "login. If you can't see it, check existing browser windows, "
+                  "or your OS settings. Press CTRL+C to abort and try again...")
 
-        global force_to_stop
-        global token
-        token = None
-        th = None
-        for _ in range(10):
-            force_to_stop = False
-            callback_port = get_open_port()  # get the open port for callback
+            logger.debug(u'step 1: query GS to obtain SSO url')
+            sso_url = self._get_sso_url(
+                account, authenticator, callback_port, user)
 
-            th = Thread(name="Auth by WebBrowser Web Server",
-                        target=self._webserver,
-                        args=[self, self._application, callback_port])
-            th.daemon = True
-            th.start()
-
-            for _ in range(5):
-                # wait for up to 5 seconds to get the web server status back
-                if self._webserver_status is not None:
-                    break
-                time.sleep(1)
-            if isinstance(self._webserver_status, bool) and \
-                    self._webserver_status:
-                logger.debug('web server started')
-                break
-            th.join(1.0)
-            if isinstance(self._webserver_status, IOError) and \
-                            self._webserver_status.errno == 98:
-                # IOError: Address in Use
-                logger.debug('Failed to get the port %s. Retrying...',
-                             callback_port)
-                time.sleep(1)
-            elif isinstance(self._webserver_status, BASE_EXCEPTION_CLASS):
-                logger.error(self._webserver_status)
+            logger.debug(u'step 2: open a browser')
+            if not self._webbrowser.open_new(sso_url):
+                logger.error(
+                    u'Unable to open a browser in this environment.',
+                    exc_info=True)
                 self.handle_failure({
-                    u'code': ER_UNABLE_TO_START_WEBSERVER,
-                    u'message': str(self._webserver_status)
+                    u'code': ER_UNABLE_TO_OPEN_BROWSER,
+                    u'message': u"Unable to open a browser in this environment."
                 })
                 return  # required for test case
-        else:
-            if th is not None:
-                th.join(1.0)
-            self.handle_failure({
-                u'code': ER_UNABLE_TO_START_WEBSERVER,
-                u'message': (u"Failed to start webserver to communicate "
-                             u"with SSO server.")
-            })
-            return  # required for test case
 
+            logger.debug(u'step 3: accept SAML token')
+            self._receive_saml_token(socket_connection)
+        finally:
+            socket_connection.close()
+
+    def _receive_saml_token(self, socket_connection):
+        """
+        Receives SAML token from web browser
+        """
+        socket_client, _ = socket_connection.accept()
+        try:
+            # Receive the data in small chunks and retransmit it
+            data = socket_client.recv(16384).decode('utf-8').split("\r\n")
+            target_lines = \
+                [line for line in data if line.startswith("GET ")]
+            if len(target_lines) < 1:
+                self.handle_failure({
+                    u'code': ER_IDP_CONNECTION_ERROR,
+                    u'message': u"Invalid HTTP request from web browser. Idp "
+                                u"authentication could have failed."
+                })
+                return  # required for test case
+            target_line = target_lines[0]
+
+            user_agent = [line for line in data if line.lower().startswith(
+                'user-agent')]
+            if len(user_agent) > 0:
+                logger.debug(user_agent[0])
+            else:
+                logger.debug("No User-Agent")
+
+            _, url, _ = target_line.split()
+            self._saml_response = unquote(url[len('/?token='):])
+            msg = """
+<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>SAML Response for Snowflake</title></head>
+<body>
+Your identity was confirmed and propagated to Snowflake {0}. 
+You can close this window now and go back where you started from.
+</body></html>""".format(self._application)
+            content = [
+                "HTTP/1.0 200 OK",
+                "Content-Type: text/html",
+                "Content-Length: {0}".format(len(msg)),
+                "",
+                msg
+            ]
+            socket_client.sendall('\r\n'.join(content).encode('utf-8'))
+        finally:
+            socket_client.shutdown(socket.SHUT_RDWR)
+            socket_client.close()
+
+    def _get_sso_url(self, account, authenticator, callback_port, user):
+        """
+        Gets SSO URL from Snowflake
+        """
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": CONTENT_TYPE_APPLICATION_JSON,
@@ -195,25 +163,7 @@ class AuthByWebBrowser(AuthByExternalService):
             timeout=self._rest._connection._login_timeout)
         if not ret[u'success']:
             self.handle_failure(ret)
-
         data = ret[u'data']
         sso_url = data[u'ssoUrl']
         self._proof_key = data[u'proofKey']
-
-        logger.debug(u'step 2: open a browser')
-        if not self._webbrowser.open_new(sso_url):
-            force_to_stop = True
-            logger.error(
-                u'Unable to open a browser in this environment.', exc_info=True)
-            self.handle_failure({
-                u'code': ER_UNABLE_TO_OPEN_BROWSER,
-                u'message': u"Unable to open a browser in this environment."
-            })
-            return  # required for test case
-
-        while not force_to_stop:
-            time.sleep(1)
-
-        if th is not None:
-            th.join(1.0)
-        self._saml_response = token
+        return sso_url
