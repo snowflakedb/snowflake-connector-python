@@ -89,8 +89,6 @@ PYTHON_CONNECTOR_USER_AGENT = \
         python_version=PYTHON_VERSION,
         platform=PLATFORM)
 
-DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
-EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
 NO_TOKEN = u'no-token'
 
 STATUS_TO_EXCEPTION = {
@@ -140,7 +138,7 @@ class SnowflakeRestful(object):
                  protocol=u'http',
                  connect_timeout=DEFAULT_CONNECT_TIMEOUT,
                  request_timeout=DEFAULT_REQUEST_TIMEOUT,
-                 injectClientPause=0,
+                 inject_client_pause=0,
                  connection=None):
         self._host = host
         self._port = port
@@ -151,7 +149,7 @@ class SnowflakeRestful(object):
         self._protocol = protocol
         self._connect_timeout = connect_timeout or DEFAULT_CONNECT_TIMEOUT
         self._request_timeout = request_timeout or DEFAULT_REQUEST_TIMEOUT
-        self._injectClientPause = injectClientPause
+        self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._idle_sessions = collections.deque()
         self._active_sessions = set()
@@ -188,7 +186,7 @@ class SnowflakeRestful(object):
             del self._master_token
         sessions = list(self._active_sessions)
         if sessions:
-            logger.warn("Closing %s active sessions", len(sessions))
+            logger.warning("Closing %s active sessions", len(sessions))
         sessions.extend(self._idle_sessions)
         self._active_sessions.clear()
         self._idle_sessions.clear()
@@ -196,7 +194,7 @@ class SnowflakeRestful(object):
             try:
                 s.close()
             except Exception as e:
-                logger.warn("Session cleanup failed: %s", e)
+                logger.warning("Session cleanup failed: %s", e)
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
                 _no_results=False):
@@ -262,7 +260,7 @@ class SnowflakeRestful(object):
             url, headers, json.dumps(body),
             token=self._master_token,
             timeout=self._connection._network_timeout)
-        if ret[u'success'] and u'data' in ret \
+        if ret.get(u'success') and u'data' in ret \
                 and u'sessionToken' in ret[u'data']:
             logger.debug(u'success: %s', ret)
             self._token = ret[u'data'][u'sessionToken']
@@ -326,12 +324,12 @@ class SnowflakeRestful(object):
         )
         ret = self.fetch(u'get', full_url, headers, timeout=timeout,
                          token=token)
-        if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
+        if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret.get(u'code', u'N/A'))))
-            if u'success' in ret and ret[u'success']:
+            if ret.get(u'success'):
                 return self._get_request(url, headers, token=self._token)
 
         return ret
@@ -351,12 +349,12 @@ class SnowflakeRestful(object):
             u'ret[code] = {code}, after post request'.format(
                 code=(ret.get(u'code', u'N/A'))))
 
-        if u'code' in ret and ret[u'code'] == SESSION_EXPIRED_GS_CODE:
+        if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret.get(u'code'u'N/A'))))
-            if u'success' in ret and ret[u'success']:
+            if ret.get(u'success'):
                 return self._post_request(
                     url, headers, body, token=self._token, timeout=timeout)
 
@@ -367,11 +365,11 @@ class SnowflakeRestful(object):
 
         while is_session_renewed or ret.get(u'code') in \
                 (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
-            if self._injectClientPause > 0:
+            if self._inject_client_pause > 0:
                 logger.debug(
                     u'waiting for {inject_client_pause}...'.format(
-                        inject_client_pause=self._injectClientPause))
-                time.sleep(self._injectClientPause)
+                        inject_client_pause=self._inject_client_pause))
+                time.sleep(self._inject_client_pause)
             # ping pong
             result_url = ret[u'data'][
                 u'getResultUrl'] if not is_session_renewed else result_url
@@ -385,7 +383,7 @@ class SnowflakeRestful(object):
                 logger.debug(
                     u'ret[code] = %s after renew_session',
                     ret.get(u'code', u'N/A'))
-                if u'success' in ret and ret[u'success']:
+                if ret.get(u'success'):
                     is_session_renewed = True
             else:
                 is_session_renewed = False
@@ -531,7 +529,7 @@ class SnowflakeRestful(object):
             try:
                 # don't care about the return value, because no retry and
                 # no error will show up
-                _, _ = request_result_queue.get(timeout=request_timeout)
+                _, _ = request_result_queue.get(timeout=request_exec_timeout)
             except:
                 pass
             return {}

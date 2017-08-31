@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.5 (August 31, 2017)
+
+    - Fixed regression in #34 by rewriting SAML 2.0 compliant service application support.
+    - Cleaned up logger by moving instance to module.
+
 - v1.4.4 (August 24, 2017)
 
     - Fixed Azure blob certificate issue. OCSP response structure bug fix

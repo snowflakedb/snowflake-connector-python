@@ -52,6 +52,8 @@ MB = 1024.0 * 1024.0
 
 INJECT_WAIT_IN_PUT = 0
 
+logger = getLogger(__name__)
+
 
 def _update_progress(file_name, start_time, total_size, progress,
                      output_stream):
@@ -134,7 +136,6 @@ class SnowflakeFileTransferAgent(object):
         self._put_callback_output_stream = put_callback_output_stream
         self._get_callback = get_callback
         self._get_callback_output_stream = get_callback_output_stream
-        self.logger = getLogger(__name__)
         self._use_accelerate_endpoint = False
 
     def execute(self):
@@ -179,7 +180,7 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'parallel'] = 1
                 small_file_metas.append(meta)
 
-        self.logger.debug(u'parallel=[%s]', self._parallel)
+        logger.debug(u'parallel=[%s]', self._parallel)
         self._results = []
         if self._command_type == CMD_TYPE_UPLOAD:
             self.upload(large_file_metas, small_file_metas)
@@ -219,12 +220,12 @@ class SnowflakeFileTransferAgent(object):
             except botocore.exceptions.ClientError as e:
                 if e.response['Error'].get('Code', 'Unknown') == \
                         'AccessDenied':
-                    self.logger.debug(e)
+                    logger.debug(e)
                 else:
                     # unknown error
-                    self.logger.debug(e, exc_info=True)
+                    logger.debug(e, exc_info=True)
 
-            self.logger.debug(
+            logger.debug(
                 'use_accelerate_endpoint: %s',
                 self._use_accelerate_endpoint)
 
@@ -239,7 +240,7 @@ class SnowflakeFileTransferAgent(object):
                 idx + self._parallel <= len_file_metas else \
                 len_file_metas
 
-            self.logger.debug(
+            logger.debug(
                 u'uploading files idx: {0}/{1}'.format(idx + 1, end_of_idx))
 
             target_meta = file_metas[idx:end_of_idx]
@@ -282,7 +283,7 @@ class SnowflakeFileTransferAgent(object):
         idx = 0
         len_file_metas = len(file_metas)
         while idx < len_file_metas:
-            self.logger.debug(
+            logger.debug(
                 u'uploading files idx: {0}/{1}'.format(idx + 1, len_file_metas))
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
@@ -294,7 +295,7 @@ class SnowflakeFileTransferAgent(object):
             self._results.append(result)
             idx += 1
             if INJECT_WAIT_IN_PUT > 0:
-                self.logger.debug('LONGEVITY TEST: waiting for %s',
+                logger.debug('LONGEVITY TEST: waiting for %s',
                                   INJECT_WAIT_IN_PUT)
                 sleep(INJECT_WAIT_IN_PUT)
 
@@ -374,7 +375,7 @@ class SnowflakeFileTransferAgent(object):
                 idx + self._parallel <= len_file_metas else \
                 len_file_metas
 
-            self.logger.debug(
+            logger.debug(
                 'downloading files idx: {0} to {1}'.format(idx, end_of_idx))
 
             target_meta = file_metas[idx:end_of_idx]
@@ -427,7 +428,7 @@ class SnowflakeFileTransferAgent(object):
             self._results.append(result)
             idx += 1
             if INJECT_WAIT_IN_PUT > 0:
-                self.logger.debug('LONGEVITY TEST: waiting for %s',
+                logger.debug('LONGEVITY TEST: waiting for %s',
                                   INJECT_WAIT_IN_PUT)
                 sleep(INJECT_WAIT_IN_PUT)
 
@@ -612,8 +613,8 @@ class SnowflakeFileTransferAgent(object):
                         u'encryptionMaterial' in self._ret[u'data'] and \
                         self._ret[u'data'][u'encryptionMaterial'] is not None:
             root_node = self._ret[u'data'][u'encryptionMaterial']
-            self.logger.debug(self._command_type)
-            self.logger.debug(u'root_node=%s', root_node)
+            logger.debug(self._command_type)
+            logger.debug(u'root_node=%s', root_node)
 
             if self._command_type == CMD_TYPE_UPLOAD:
                 self._encryption_material.append(
@@ -667,8 +668,8 @@ class SnowflakeFileTransferAgent(object):
             if len(self._ret[u'data'][u'src_locations']) == len(
                     self._encryption_material):
                 for idx, src_location in enumerate(self._src_locations):
-                    self.logger.debug(src_location)
-                    self.logger.debug(self._encryption_material[idx])
+                    logger.debug(src_location)
+                    logger.debug(self._encryption_material[idx])
                     self._src_file_to_encryption_material[src_location] = \
                         self._encryption_material[idx]
             elif len(self._encryption_material) != 0:
@@ -722,7 +723,7 @@ class SnowflakeFileTransferAgent(object):
                 })
 
     def _init_file_metadata(self):
-        self.logger.info(u"command type: %s", self._command_type)
+        logger.info(u"command type: %s", self._command_type)
         self._file_metadata = {}
         if self._command_type == CMD_TYPE_UPLOAD:
             if len(self._src_files) == 0:
@@ -773,7 +774,7 @@ class SnowflakeFileTransferAgent(object):
         elif self._command_type == CMD_TYPE_DOWNLOAD:
             for file_name in self._src_files:
                 if len(file_name) > 0:
-                    self.logger.debug(file_name)
+                    logger.debug(file_name)
                     first_path_sep = file_name.find(u'/')
                     dst_file_name = file_name[first_path_sep + 1:] \
                         if first_path_sep >= 0 else file_name
@@ -842,12 +843,12 @@ class SnowflakeFileTransferAgent(object):
                         encoding = 'zstd'
 
                 if encoding is not None:
-                    self.logger.info(u'detected the encoding %s: file=%s',
+                    logger.info(u'detected the encoding %s: file=%s',
                                      encoding, file_name)
                     current_file_compression_type = \
                         FileCompressionType.lookupByMimeSubType(encoding)
                 else:
-                    self.logger.info(u'no file encoding was detected: file=%s',
+                    logger.info(u'no file encoding was detected: file=%s',
                                      file_name)
 
                 if current_file_compression_type is not None and not \

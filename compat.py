@@ -63,11 +63,6 @@ if PY2:
     EmptyQueue = Queue.Empty
     Queue = Queue.Queue
 
-    # HTTP Server
-    import SimpleHTTPServer as HTTPServer
-    import BaseHTTPServer
-
-    BaseHTTPRequestHandler = BaseHTTPServer.BaseHTTPRequestHandler
 
 else:
     import urllib.parse
@@ -107,12 +102,6 @@ else:
 
     EmptyQueue = queue.Empty
     Queue = queue.Queue
-
-    # HTTP Server
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-
-    _ = HTTPServer
-    _ = BaseHTTPRequestHandler
 
 IS_BYTES = lambda v: isinstance(v, BYTE_DATA_TYPE)
 IS_STR = lambda v: isinstance(v, STR_DATA_TYPE)

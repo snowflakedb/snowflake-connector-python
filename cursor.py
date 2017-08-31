@@ -45,6 +45,8 @@ STATEMENT_TYPE_ID_DML_SET = frozenset(
 DESC_TABLE_RE = re.compile(u(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$'),
                            flags=re.IGNORECASE)
 
+logger = getLogger(__name__)
+
 
 class SnowflakeCursor(object):
     u"""
@@ -92,7 +94,6 @@ class SnowflakeCursor(object):
         self._arraysize = 1  # PEP-0249: defaults to 1
 
         self._lock_canceling = Lock()
-        self.logger = getLogger(__name__)
 
         self.reset()
 
@@ -235,7 +236,7 @@ class SnowflakeCursor(object):
 
     @errorhandler.setter
     def errorhandler(self, value):
-        self.logger.debug(u'setting errorhandler: %s', value)
+        logger.debug(u'setting errorhandler: %s', value)
         if value is None:
             raise ProgrammingError(u'Invalid errorhandler is specified')
         self._errorhandler = value
@@ -297,8 +298,8 @@ class SnowflakeCursor(object):
         self._sequence_counter = self._connection._next_sequence_counter()
         self._request_id = uuid.uuid4()
 
-        if self.logger.getEffectiveLevel() <= logging.DEBUG:
-            self.logger.debug(
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            logger.debug(
                 u'running query [%s]',
                 u' '.join(line.strip() for line in query.split(u'\n')),
             )
@@ -309,8 +310,8 @@ class SnowflakeCursor(object):
             # or detect it.
             self._is_file_transfer = self.PUT_SQL_RE.match(
                 query) or self.GET_SQL_RE.match(query)
-        self.logger.debug(u'is_file_transfer: %s',
-                          self._is_file_transfer is not None)
+        logger.debug(u'is_file_transfer: %s',
+                     self._is_file_transfer is not None)
 
         real_timeout = timeout if timeout and timeout > 0 \
             else self._connection.request_timeout
@@ -319,16 +320,18 @@ class SnowflakeCursor(object):
             self._timebomb = Timer(
                 real_timeout, self.__cancel_query, [query])
             self._timebomb.start()
+            logger.debug(u'started timebomb in %ss', real_timeout)
         else:
             self._timebomb = None
 
         original_sigint = signal.getsignal(signal.SIGINT)
 
-        def abort_exit(signum, frame):
+        def abort_exit(*_):
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             try:
                 if self._timebomb is not None:
                     self._timebomb.cancel()
+                    logger.debug(u'cancelled timebomb in finally')
                     self._timebomb = None
                 self.__cancel_query(query)
             finally:
@@ -338,11 +341,12 @@ class SnowflakeCursor(object):
         try:
             signal.signal(signal.SIGINT, abort_exit)
         except ValueError:
-            self.logger.info(
+            logger.info(
                 u'Failed to set SIGINT handler. '
                 u'Not in main thread. Ignored...')
+        ret = {u'data': {}}
         try:
-            ret = self._connection._cmd_query(
+            ret = self._connection.cmd_query(
                 query,
                 self._sequence_counter,
                 self._request_id,
@@ -354,12 +358,12 @@ class SnowflakeCursor(object):
             try:
                 signal.signal(signal.SIGINT, original_sigint)
             except ValueError:
-                self.logger.info(
+                logger.info(
                     u'Failed to reset SIGINT handler. Not in main '
                     u'thread. Ignored...')
             if self._timebomb is not None:
                 self._timebomb.cancel()
-            self.logger.debug(u'cancelled timebomb in finally')
+                logger.debug(u'cancelled timebomb in finally')
 
         if u'data' in ret and u'parameters' in ret[u'data']:
             for kv in ret[u'data'][u'parameters']:
@@ -403,7 +407,7 @@ class SnowflakeCursor(object):
         u"""
         Executes a command/query
         """
-        self.logger.debug(u'executing SQL/command')
+        logger.debug(u'executing SQL/command')
         if self.is_closed():
             Error.errorhandler_wrapper(
                 self.connection, self,
@@ -415,27 +419,27 @@ class SnowflakeCursor(object):
             self.reset()
         command = command.strip(u' \t\n\r') if command else None
         if not command:
-            self.logger.warning(u'execute: no query is given to execute')
+            logger.warning(u'execute: no query is given to execute')
             return
 
         processed_params = self.__process_params(params)
-        self.logger.debug(u'binding: %s with input=%s, processed=%s',
-                          command,
-                          params, processed_params)
+        logger.debug(u'binding: %s with input=%s, processed=%s',
+                     command,
+                     params, processed_params)
         if len(processed_params) > 0:
             query = command % processed_params
         else:
             query = command
 
-        if self.logger.getEffectiveLevel() <= logging.DEBUG:
-            self.logger.debug(
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            logger.debug(
                 u'query: [%s]',
                 u' '.join(line.strip() for line in query.split(u'\n')))
         m = DESC_TABLE_RE.match(query)
         if m:
             query1 = u'describe table {0}'.format(m.group(1))
-            if self.logger.getEffectiveLevel() <= logging.WARNING:
-                self.logger.warning(
+            if logger.getEffectiveLevel() <= logging.WARNING:
+                logger.warning(
                     u'query was rewritten: org=%s, new=%s',
                     u' '.join(line.strip() for line in query.split(u'\n')),
                     query1
@@ -453,10 +457,10 @@ class SnowflakeCursor(object):
         self._sqlstate = ret[u'data'][
             u'sqlState'] if u'data' in ret and u'sqlState' in ret[
             u'data'] else None
-        self.logger.debug(u'sfqid=%s', self._sfqid)
+        logger.debug(u'sfqid=%s', self._sfqid)
 
         if ret[u'success']:
-            self.logger.debug(u'SUCCESS')
+            logger.debug(u'SUCCESS')
             data = ret[u'data']
             if u'finalDatabaseName' in data:
                 self._connection._database = data[u'finalDatabaseName']
@@ -467,8 +471,8 @@ class SnowflakeCursor(object):
             if u'finalRoleName' in data:
                 self._connection._role = data[u'finalRoleName']
 
-            # self.logger.debug(ret)
-            self.logger.debug(u"PUT OR GET: %s", self.is_file_transfer)
+            # logger.debug(ret)
+            logger.debug(u"PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
                 sf_file_transfer_agent = SnowflakeFileTransferAgent(
                     self, query, ret,
@@ -496,8 +500,8 @@ class SnowflakeCursor(object):
         else:
             self._total_rowcount = ret[u'data'][
                 u'total'] if u'data' in ret and u'total' in ret[u'data'] else -1
-            self.logger.info(u'failed')
-            self.logger.debug(ret)
+            logger.info(u'failed')
+            logger.debug(ret)
             err = ret[u'message']
             code = ret.get(u'code', -1)
             if u'data' in ret and u'errorMessage' in ret[u'data']:
@@ -552,7 +556,7 @@ class SnowflakeCursor(object):
         if u'chunks' in data:
             chunks = data[u'chunks']
             self._chunk_count = len(chunks)
-            self.logger.debug(u'chunk size=%s', self._chunk_count)
+            logger.debug(u'chunk size=%s', self._chunk_count)
             # prepare the downloader for further fetch
             qrmk = data[u'qrmk'] if u'qrmk' in data else None
             chunk_headers = None
@@ -561,12 +565,12 @@ class SnowflakeCursor(object):
                 for header_key, header_value in data[
                     u'chunkHeaders'].items():
                     chunk_headers[header_key] = header_value
-                    self.logger.debug(
+                    logger.debug(
                         u'added chunk header: key=%s, value=%s',
                         header_key,
                         header_value)
 
-            self.logger.debug(u'qrmk=%s', qrmk)
+            logger.debug(u'qrmk=%s', qrmk)
             self._chunk_downloader = self._connection._chunk_downloader_class(
                 chunks, self._connection, self, qrmk, chunk_headers,
                 prefetch_slots=self._client_result_prefetch_slots,
@@ -596,14 +600,14 @@ class SnowflakeCursor(object):
         self._sqlstate = ret[u'data'][
             u'sqlState'] if u'data' in ret and u'sqlState' in ret[
             u'data'] else None
-        self.logger.debug(u'sfqid=%s', self._sfqid)
+        logger.debug(u'sfqid=%s', self._sfqid)
 
         if ret.get(u'success'):
             data = ret.get(u'data')
             self.chunk_info(data, use_ijson=_use_ijson)
         else:
-            self.logger.info(u'failed')
-            self.logger.debug(ret)
+            logger.info(u'failed')
+            logger.debug(ret)
             err = ret[u'message']
             code = ret.get(u'code', -1)
             if u'data' in ret and u'errorMessage' in ret[u'data']:
@@ -628,11 +632,11 @@ class SnowflakeCursor(object):
         u"""
         Executes a command/query with the given set of parameters sequentially.
         """
-        self.logger.info(u'executing many SQLs/commands')
+        logger.info(u'executing many SQLs/commands')
         command = command.strip(u' \t\n\r') if command else None
 
         if self.INSERT_SQL_RE.match(command):
-            self.logger.debug(u'rewriting INSERT query')
+            logger.debug(u'rewriting INSERT query')
             command_wo_comments = re.sub(self.COMMENT_SQL_RE, u'', command)
             m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
             if not m:
@@ -647,7 +651,7 @@ class SnowflakeCursor(object):
             fmt = m.group(1)
             values = []
             for param in seqparams:
-                self.logger.debug(u'parameter: %s', param)
+                logger.debug(u'parameter: %s', param)
                 values.append(fmt % self.__process_params(param))
             command = command.replace(fmt, u','.join(values), 1)
             self.execute(command)
@@ -669,7 +673,7 @@ class SnowflakeCursor(object):
                 row = next(self._current_chunk_row)
             except StopIteration:
                 if self._chunk_index < self._chunk_count:
-                    self.logger.debug(
+                    logger.debug(
                         u"chunk index: %s, chunk_count: %s",
                         self._chunk_index, self._chunk_count)
                     next_chunk = self._chunk_downloader.next_chunk()
@@ -735,22 +739,21 @@ class SnowflakeCursor(object):
         u"""
         Not supporeted
         """
-        self.logger.info(u'nop')
+        logger.info(u'nop')
         return None
 
-    def setinputsizes(self, sizes):
+    def setinputsizes(self, _):
         u"""
         Not supported
         """
-        del sizes
-        self.logger.info(u'nop')
+        logger.info(u'nop')
 
-    def setoutputsize(self, size, column=None):
+    def setoutputsize(self, _, column=None):
         u"""
         Not supported
         """
-        del column, size
-        self.logger.info(u'nop')
+        del column
+        logger.info(u'nop')
 
     def scroll(self, value, mode=u'relative'):
         Error.errorhandler_wrapper(
@@ -786,8 +789,8 @@ class SnowflakeCursor(object):
 
     def __cancel_query(self, query):
         if self._sequence_counter >= 0 and not self.is_closed():
-            self.logger.debug(u'canceled : %s, %s',
-                              query, self._sequence_counter)
+            logger.debug(u'canceled : %s, %s',
+                         query, self._sequence_counter)
             with self._lock_canceling:
                 self._connection._cancel_query(
                     query,
@@ -806,7 +809,7 @@ class SnowflakeCursor(object):
                 c = escape(c)
                 c = quote(c)
                 res[k] = c
-            self.logger.debug(u'parameters: %s', res)
+            logger.debug(u'parameters: %s', res)
             return res
         except Exception as e:
             errorvalue = {
@@ -831,7 +834,7 @@ class SnowflakeCursor(object):
             res = map(self._connection.converter.escape, res)
             res = map(self._connection.converter.quote, res)
             ret = tuple(res)
-            self.logger.debug(u'parameters: %s', ret)
+            logger.debug(u'parameters: %s', ret)
             return ret
         except Exception as e:
             errorvalue = {
@@ -864,7 +867,7 @@ class SnowflakeCursor(object):
                     value=col,
                     error=e
                 )
-                self.logger.exception(msg)
+                logger.exception(msg)
                 Error.errorhandler_wrapper(
                     self.connection, self, InterfaceError, {
                         u'msg': msg,
@@ -902,7 +905,8 @@ class DictCursor(SnowflakeCursor):
             col_name = self._column_idx_to_name[idx]
             conv = self._column_converter[idx]
             try:
-                res[col_name] = col if conv is None or col is None else conv(col)
+                res[col_name] = col if conv is None or col is None else conv(
+                    col)
             except Exception as e:
                 col_desc = self._description[idx]
                 msg = u'Failed to convert: ' \
@@ -913,7 +917,7 @@ class DictCursor(SnowflakeCursor):
                     value=col,
                     error=e
                 )
-                self.logger.exception(msg)
+                logger.exception(msg)
                 Error.errorhandler_wrapper(
                     self.connection, self, InterfaceError, {
                         u'msg': msg,

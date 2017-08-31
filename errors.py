@@ -9,6 +9,8 @@ from logging import getLogger
 from snowflake.connector.constants import UTF8
 from .compat import BASE_EXCEPTION_CLASS, PY2
 
+logger = getLogger(__name__)
+
 
 class Error(BASE_EXCEPTION_CLASS):
     u"""
@@ -17,7 +19,6 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def __init__(self, msg=None, errno=None, sqlstate=None, sfqid=None,
                  done_format_msg=False):
-        self.logger = getLogger(__name__)
         self.msg = msg
         self.raw_msg = msg
         self.errno = errno or -1
@@ -29,7 +30,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
         if self.errno != -1 and not done_format_msg:
             if self.sqlstate != "n/a":
-                if self.logger.getEffectiveLevel() in (logging.INFO,
+                if logger.getEffectiveLevel() in (logging.INFO,
                                                        logging.DEBUG):
                     self.msg = u'{errno:06d} ({sqlstate}): {sfqid}: {msg}'.format(
                         errno=self.errno, msg=self.msg,
@@ -41,7 +42,7 @@ class Error(BASE_EXCEPTION_CLASS):
                         sqlstate=self.sqlstate,
                         msg=self.msg)
             else:
-                if self.logger.getEffectiveLevel() in (logging.INFO,
+                if logger.getEffectiveLevel() in (logging.INFO,
                                                        logging.DEBUG):
                     self.msg = u'{errno:06d}: {sfqid}: {msg}'.format(
                         errno=self.errno, msg=self.msg,
