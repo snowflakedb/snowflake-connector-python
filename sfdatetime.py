@@ -147,7 +147,6 @@ class SnowflakeDateTimeFormat(object):
     def __init__(self, sql_format, datetime_class=datetime):
         self._sql_format = sql_format
         self._fragments = []
-        self.logger = getLogger(__name__)
 
         self._compile()
         if len(self._fragments) != 1:

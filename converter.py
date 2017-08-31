@@ -34,6 +34,8 @@ ZERO_EPOCH = datetime.utcfromtimestamp(0)
 # Tzinfo class cache
 _TZINFO_CLASS_CACHE = {}
 
+logger = getLogger(__name__)
+
 
 class SnowflakeConverter(object):
     def __init__(self, **kwargs):
@@ -41,8 +43,7 @@ class SnowflakeConverter(object):
         self._use_sfbinaryformat = kwargs.get('use_sfbinaryformat', False)
         self._use_numpy = kwargs.get('use_numpy', False) and numpy is not None
 
-        self.logger = getLogger(__name__)
-        self.logger.debug('use_sfbinaryformat: %s, use_numpy: %s',
+        logger.debug('use_sfbinaryformat: %s, use_numpy: %s',
                           self._use_sfbinaryformat,
                           self._use_numpy)
 
@@ -107,7 +108,7 @@ class SnowflakeConverter(object):
                 return getattr(self, conv)(ctx)
             except AttributeError:
                 pass
-        self.logger.warning(
+        logger.warning(
             "No column converter found for type: %s", type_name)
         return None  # Skip conversion
 
@@ -150,7 +151,7 @@ class SnowflakeConverter(object):
             try:
                 return datetime.utcfromtimestamp(int(value) * 86400).date()
             except OSError as e:
-                self.logger.debug("Failed to convert: %s", e)
+                logger.debug("Failed to convert: %s", e)
                 ts = ZERO_EPOCH + timedelta(
                     seconds=int(value) * (24 * 60 * 60))
                 return date(ts.year, ts.month, ts.day)
@@ -252,9 +253,12 @@ class SnowflakeConverter(object):
     def _get_session_tz(self):
         """ Get the session timezone or use the local computer's timezone. """
         try:
-            return pytz.timezone(self.get_parameter(u'TIMEZONE'))
+            tz = self.get_parameter(u'TIMEZONE')
+            if not tz:
+                tz = 'UTC'
+            return pytz.timezone(tz)
         except pytz.exceptions.UnknownTimeZoneError:
-            self.logger.warn('converting to tzinfo failed')
+            logger.warning('converting to tzinfo failed')
             if tzlocal is not None:
                 return tzlocal.get_localzone()
             else:
@@ -279,7 +283,7 @@ class SnowflakeConverter(object):
             t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo_value)
             return t, is_negative, fraction_of_nanoseconds
         except OverflowError:
-            self.logger.debug(
+            logger.debug(
                 "OverflowError in converting from epoch time to "
                 "timestamp_ltz: %s(ms). Falling back to use struct_time."
             )

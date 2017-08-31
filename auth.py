@@ -19,12 +19,15 @@ from .errors import (Error,
                      BadGatewayError)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
-                      PYTHON_CONNECTOR_USER_AGENT, CLIENT_NAME, CLIENT_VERSION,
-                      PLATFORM, PYTHON_VERSION, IMPLEMENTATION, COMPILER)
+                      PYTHON_CONNECTOR_USER_AGENT, PLATFORM, PYTHON_VERSION,
+                      IMPLEMENTATION, COMPILER, CLIENT_NAME, CLIENT_VERSION)
 from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
 from .version import VERSION
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
+EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
 
 
 class AuthByExternalService(object):
@@ -89,14 +92,13 @@ class Auth(object):
                 u'token is already set. no further authentication was done.')
             return
 
-        application = self._rest._connection.application if \
-            self._rest._connection else CLIENT_NAME
+        # connection could be null if REST API is used independently
+        application = self._rest._connection.application
         internal_application_name = \
-            self._rest._connection._internal_application_name if \
-                self._rest._connection else CLIENT_NAME
+            self._rest._connection._internal_application_name
         internal_application_version = \
-            self._rest._connection._internal_application_version if \
-                self._rest._connection else CLIENT_VERSION
+            self._rest._connection._internal_application_version
+
         request_id = TO_UNICODE(uuid.uuid4())
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,

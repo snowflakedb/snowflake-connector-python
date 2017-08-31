@@ -124,7 +124,7 @@ def test_auth_webbrowser_fail_webserver():
 
     mock_socket_client = MagicMock()
     mock_socket_client.recv.return_value = ('\r\n'.join([
-        u"GABAGE",
+        u"GARBAGE",
         u"User-Agent: snowflake-agent"
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)

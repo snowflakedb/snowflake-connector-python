@@ -3,16 +3,18 @@
 #
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
+import logging
 import re
 import sys
 import uuid
 from io import StringIO
+from logging import getLogger
 from threading import Lock
 from time import strptime
 
 from . import errors
 from . import network
-from .auth import Auth
+from .auth import Auth, DEFAULT_AUTHENTICATOR, EXTERNAL_BROWSER_AUTHENTICATOR
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import SnowflakeChunkDownloader
@@ -28,16 +30,6 @@ from .errors import (Error, ProgrammingError, InterfaceError,
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .util_text import split_statements, construct_hostname
-
-try:
-    import snowflake.internal.constants
-
-    TEST_ACCOUNTS = snowflake.internal.constants.TEST_ACCOUNTS
-except ImportError:
-    TEST_ACCOUNTS = frozenset([])
-
-import logging
-from logging import getLogger
 
 # default configs
 DEFAULT_CONFIGURATION = {
@@ -64,7 +56,7 @@ DEFAULT_CONFIGURATION = {
     u'network_timeout': None,  # network timeout (infinite by default)
     u'passcode_in_password': False,  # Snowflake MFA
     u'passcode': None,  # Snowflake MFA
-    u'authenticator': network.DEFAULT_AUTHENTICATOR,
+    u'authenticator': DEFAULT_AUTHENTICATOR,
     u'mfa_callback': None,
     u'password_callback': None,
     u'application': network.CLIENT_NAME,
@@ -72,7 +64,7 @@ DEFAULT_CONFIGURATION = {
     u'internal_application_version': network.CLIENT_VERSION,
 
     u'insecure_mode': False,  # Error security fix requirement
-    u'injectClientPause': 0,  # snowflake internal
+    u'inject_client_pause': 0,  # snowflake internal
     u'session_parameters': {},  # snowflake session parameters
     u'autocommit': None,  # snowflake
     u'numpy': False,  # snowflake
@@ -93,6 +85,8 @@ for m in [method for method in dir(errors) if
 # Workaround for https://bugs.python.org/issue7980
 strptime('20150102030405', '%Y%m%d%H%M%S')
 
+logger = getLogger(__name__)
+
 
 class SnowflakeConnection(object):
     u"""
@@ -105,8 +99,7 @@ class SnowflakeConnection(object):
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
         self.messages = []
-        self.logger = getLogger(__name__)
-        self.logger.info(
+        logger.info(
             u"Snowflake Connector for Python Version: %s, "
             u"Python Version: %s, Platform: %s",
             network.SNOWFLAKE_CONNECTOR_VERSION,
@@ -124,6 +117,15 @@ class SnowflakeConnection(object):
             self.close()
         except:
             pass
+
+    @property
+    def insecure_mode(self):
+        u"""
+        insecure mode. It validates the TLS certificate but doesn't check
+        a revocation status.
+        :return:
+        """
+        return self._insecure_mode
 
     @property
     def session_id(self):
@@ -272,18 +274,18 @@ class SnowflakeConnection(object):
         """
         return self._errorhandler
 
+    @errorhandler.setter
+    def errorhandler(self, value):
+        if value is None:
+            raise ProgrammingError(u'None errorhandler is specified')
+        self._errorhandler = value
+
     @property
     def converter_class(self):
         """
         Converter Class
         """
         return self._converter_class
-
-    @errorhandler.setter
-    def errorhandler(self, value):
-        if value is None:
-            raise ProgrammingError(u'None errorhandler is specified')
-        self._errorhandler = value
 
     @property
     def validate_default_parameters(self):
@@ -296,7 +298,7 @@ class SnowflakeConnection(object):
         u"""
         Connects to the database
         """
-        self.logger.debug(u'connect')
+        logger.debug(u'connect')
         if len(kwargs) > 0:
             self.__config(**kwargs)
 
@@ -312,7 +314,7 @@ class SnowflakeConnection(object):
         Closes the connection.
         """
         try:
-            if not self._rest:
+            if not self.rest:
                 return
 
             self.rest.delete_session()
@@ -326,13 +328,13 @@ class SnowflakeConnection(object):
         u"""
         Is closed?
         """
-        return self._rest is None
+        return self.rest is None
 
     def autocommit(self, mode):
         u"""
         Sets autocommit mode. True/False. Default: True
         """
-        if not self._rest:
+        if not self.rest:
             Error.errorhandler_wrapper(
                 self, None, DatabaseError,
                 {
@@ -353,7 +355,7 @@ class SnowflakeConnection(object):
                 "ALTER SESSION SET autocommit={0}".format(mode))
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
-                self.logger.info(u"Autocommit feature is not enabled for this "
+                logger.info(u"Autocommit feature is not enabled for this "
                                  u"connection. Ignored")
             else:
                 raise e
@@ -372,8 +374,8 @@ class SnowflakeConnection(object):
         u"""Creates a cursor object. Each statement should create a new cursor
         object.
         """
-        self.logger.debug(u'cursor')
-        if not self._rest:
+        logger.debug(u'cursor')
+        if not self.rest:
             Error.errorhandler_wrapper(
                 self, None, DatabaseError,
                 {
@@ -427,7 +429,7 @@ class SnowflakeConnection(object):
         Executes post connection process
         """
         # load current session info
-        self.logger.debug(u'__post connection')
+        logger.debug(u'__post connection')
         self.converter = self._converter_class(
             use_sfbinaryformat=False,
             use_numpy=self._numpy)
@@ -437,35 +439,35 @@ class SnowflakeConnection(object):
         Opens a new network connection
         """
         self._rest = network.SnowflakeRestful(
-            host=self._host,
-            port=self._port,
-            proxy_host=self._proxy_host,
-            proxy_port=self._proxy_port,
-            proxy_user=self._proxy_user,
-            proxy_password=self._proxy_password,
+            host=self.host,
+            port=self.port,
+            proxy_host=self.proxy_host,
+            proxy_port=self.proxy_port,
+            proxy_user=self.proxy_user,
+            proxy_password=self.proxy_password,
             protocol=self._protocol,
             connect_timeout=self._connect_timeout,
             request_timeout=self._request_timeout,
-            injectClientPause=self._injectClientPause,
+            inject_client_pause=self._inject_client_pause,
             connection=self)
-        self.logger.debug(u'REST API object was created: %s:%s, proxy=%s:%s, '
+        logger.debug(u'REST API object was created: %s:%s, proxy=%s:%s, '
                           u'proxy_user=%s',
-                          self._host,
-                          self._port,
-                          self._proxy_host,
-                          self._proxy_port,
-                          self._proxy_user)
+                          self.host,
+                          self.port,
+                          self.proxy_host,
+                          self.proxy_port,
+                          self.proxy_user)
 
         auth_instance = None
-        if self._authenticator != network.DEFAULT_AUTHENTICATOR:
-            if self._authenticator == network.EXTERNAL_BROWSER_AUTHENTICATOR:
-                auth_instance = AuthByWebBrowser(self._rest, self.application)
+        if self._authenticator != DEFAULT_AUTHENTICATOR:
+            if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+                auth_instance = AuthByWebBrowser(self.rest, self.application)
             else:
-                auth_instance = AuthByOkta(self._rest, self.application)
+                auth_instance = AuthByOkta(self.rest, self.application)
             auth_instance.authenticate(
                 authenticator=self._authenticator,
-                account=self._account,
-                user=self._user,
+                account=self.account,
+                user=self.user,
                 password=self._password,
             )
             self._password = None  # ensure password won't persist
@@ -473,15 +475,15 @@ class SnowflakeConnection(object):
         if self._autocommit is not None:
             self._session_parameters['AUTOCOMMIT'] = self._autocommit
 
-        Auth(self._rest).authenticate(
+        Auth(self.rest).authenticate(
             auth_instance=auth_instance,
             account=self._account,
-            user=self._user,
+            user=self.user,
             password=self._password,
-            database=self._database,
-            schema=self._schema,
-            warehouse=self._warehouse,
-            role=self._role,
+            database=self.database,
+            schema=self.schema,
+            warehouse=self.warehouse,
+            role=self.role,
             passcode=self._passcode,
             passcode_in_password=self._passcode_in_password,
             mfa_callback=mfa_callback,
@@ -494,7 +496,7 @@ class SnowflakeConnection(object):
         u"""
         Sets the parameters
         """
-        self.logger.debug(u'__config')
+        logger.debug(u'__config')
         for name, value in kwargs.items():
             if name == u'sequence_counter':
                 self.sequence_counter = value
@@ -510,7 +512,7 @@ class SnowflakeConnection(object):
             else:
                 setattr(self, u'_' + name, value)
 
-        if u'account' in kwargs and kwargs[u'account'] not in TEST_ACCOUNTS:
+        if u'account' in kwargs:
             if u'host' not in kwargs:
                 setattr(self, u'_host',
                         construct_hostname(
@@ -520,7 +522,7 @@ class SnowflakeConnection(object):
             if u'protocol' not in kwargs:
                 setattr(self, u'_protocol', u'https')
 
-        if not self._user:
+        if not self.user:
             Error.errorhandler_wrapper(
                 self, None, ProgrammingError,
                 {
@@ -531,7 +533,7 @@ class SnowflakeConnection(object):
         if self._authenticator:
             self._authenticator = self._authenticator.upper()
 
-        if self._authenticator != network.EXTERNAL_BROWSER_AUTHENTICATOR:
+        if self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
             # authentication is done by the browser if the authenticator
             # is externalbrowser
             if not self._password:
@@ -553,14 +555,13 @@ class SnowflakeConnection(object):
             # remove region subdomain
             self._account = self._account[0:self._account.find(u'.')]
 
-        if self._insecure_mode:
-            self.logger.info(
+        if self.insecure_mode:
+            logger.info(
                 u'THIS CONNECTION IS IN INSECURE MODE. IT '
                 u'MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE '
                 u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
                 u'CHECKED.')
-        if not self._insecure_mode and self._protocol == u'https' and \
-                        self._account not in TEST_ACCOUNTS:
+        elif self._protocol == u'https':
             if IS_OLD_PYTHON():
                 msg = (u"ERROR: The ssl package installed with your Python "
                        u"- version {0} - does not have the security fix. "
@@ -570,13 +571,13 @@ class SnowflakeConnection(object):
                     msg=msg,
                     errno=ER_OLD_PYTHON)
 
-    def _cmd_query(self, sql, sequence_counter, request_id,
+    def cmd_query(self, sql, sequence_counter, request_id,
                    is_file_transfer=False, statement_params=None,
                    is_internal=False, _no_results=False):
         u"""
         Executes a query with a sequence counter.
         """
-        self.logger.debug(u'_cmd_query')
+        logger.debug(u'_cmd_query')
         data = {
             u'sqlText': sql,
             u'asyncExec': _no_results,
@@ -588,8 +589,8 @@ class SnowflakeConnection(object):
             data[u'isInternal'] = is_internal
         client = u'sfsql_file_transfer' if is_file_transfer else u'sfsql'
 
-        if self.logger.getEffectiveLevel() <= logging.DEBUG:
-            self.logger.debug(
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            logger.debug(
                 u'sql=[%s], sequence_id=[%s], is_file_transfer=[%s]',
                 u' '.join(
                     line.strip() for line in
@@ -605,7 +606,9 @@ class SnowflakeConnection(object):
             u'/queries/v1/query-request?' + urlencode(url_parameters),
             data, client=client, _no_results=_no_results)
 
-        if ret is not None and u'data' in ret and ret[u'data'] is None:
+        if ret is None:
+            ret = {u'data': {}}
+        if ret.get(u'data') is None:
             ret[u'data'] = {}
         return ret
 
@@ -614,7 +617,7 @@ class SnowflakeConnection(object):
         Cancels the query by the sequence counter. The sequence counter
         is used to identify the query submitted by the client.
         """
-        self.logger.debug(u'_cancel_query sql=[%s], sequence_id=[%s]', sql,
+        logger.debug(u'_cancel_query sql=[%s], sequence_id=[%s]', sql,
                           sequence_counter)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
@@ -629,7 +632,7 @@ class SnowflakeConnection(object):
         """
         with self._lock_sequence_counter:
             self.sequence_counter += 1
-            self.logger.debug(u'sequence counter: %s', self.sequence_counter)
+            logger.debug(u'sequence counter: %s', self.sequence_counter)
             return self.sequence_counter
 
     def __enter__(self):

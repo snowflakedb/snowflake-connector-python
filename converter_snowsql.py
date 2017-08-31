@@ -77,7 +77,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 return getattr(self, conv)(ctx)
             except AttributeError:
                 pass
-        self.logger.warn("No column converter found for type: %s", type_name)
+        logger.warning("No column converter found for type: %s", type_name)
         return None  # Skip conversion
 
     def _BOOLEAN_to_python(self, ctx):
@@ -115,7 +115,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             try:
                 t = datetime.utcfromtimestamp(int(value) * 86400).date()
             except OSError as e:
-                self.logger.debug("Failed to convert: %s", e)
+                logger.debug("Failed to convert: %s", e)
                 ts = ZERO_EPOCH + timedelta(
                     seconds=int(value) * (24 * 60 * 60))
                 t = date(ts.year, ts.month, ts.day)
@@ -186,7 +186,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             try:
                 t = ZERO_EPOCH + timedelta(seconds=(microseconds))
             except OverflowError:
-                self.logger.debug(
+                logger.debug(
                     "OverflowError in converting from epoch time to datetime:"
                     " %s(ms). Falling back to use struct_time.",
                     microseconds)
