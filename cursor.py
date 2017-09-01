@@ -314,7 +314,7 @@ class SnowflakeCursor(object):
                      self._is_file_transfer is not None)
 
         real_timeout = timeout if timeout and timeout > 0 \
-            else self._connection.request_timeout
+            else self._connection.network_timeout
 
         if real_timeout is not None:
             self._timebomb = Timer(

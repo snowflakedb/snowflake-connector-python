@@ -10,19 +10,20 @@ import itertools
 import json
 import logging
 import platform
+import random
 import sys
 import time
 import uuid
 from io import StringIO, BytesIO
-from threading import Thread
 
 import OpenSSL.SSL
 from botocore.vendored import requests
 from botocore.vendored.requests.adapters import HTTPAdapter
 from botocore.vendored.requests.auth import AuthBase
-from botocore.vendored.requests.exceptions import (ConnectionError, SSLError)
+from botocore.vendored.requests.exceptions import (
+    ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
-    ProtocolError)
+    ProtocolError, ReadTimeoutError)
 
 from . import proxy
 from . import ssl_wrap_socket
@@ -30,7 +31,6 @@ from .compat import (
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
-from .compat import (Queue, EmptyQueue)
 from .compat import (TO_UNICODE, urlencode)
 from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
@@ -55,15 +55,16 @@ Monkey patch for PyOpenSSL Socket wrapper
 """
 ssl_wrap_socket.inject_into_urllib3()
 
-import errno
+# requests parameters
+REQUESTS_RETRY = 1  # requests library builtin retry
+DEFAULT_SOCKET_CONNECT_TIMEOUT = 1 * 60  # don't reduce less than 45 seconds
 
-REQUESTS_RETRY = 5  # requests retry
+# return codes
 QUERY_IN_PROGRESS_CODE = u'333333'  # GS code: the query is in progress
 QUERY_IN_PROGRESS_ASYNC_CODE = u'333334'  # GS code: the query is detached
 SESSION_EXPIRED_GS_CODE = u'390112'  # GS code: session expired. need to renew
-DEFAULT_CONNECT_TIMEOUT = 1 * 60  # 60 seconds
-DEFAULT_REQUEST_TIMEOUT = 2 * 60  # 120 seconds
 
+# other constants
 CONTENT_TYPE_APPLICATION_JSON = u'application/json'
 ACCEPT_TYPE_APPLICATION_SNOWFLAKE = u'application/snowflake'
 
@@ -80,7 +81,7 @@ PLATFORM = platform.platform()
 IMPLEMENTATION = platform.python_implementation()
 COMPILER = platform.python_compiler()
 
-CLIENT_NAME = u"PythonConnector"
+CLIENT_NAME = u"PythonConnector"  # don't change!
 CLIENT_VERSION = u'.'.join([TO_UNICODE(v) for v in VERSION[:3]])
 PYTHON_CONNECTOR_USER_AGENT = \
     u'{name}/{version}/{python_version}/{platform}'.format(
@@ -101,7 +102,10 @@ STATUS_TO_EXCEPTION = {
 }
 
 
-class RequestRetry(Exception):
+class RetryRequest(Exception):
+    """
+    Signal to retry request
+    """
     pass
 
 
@@ -136,8 +140,6 @@ class SnowflakeRestful(object):
                  proxy_user=None,
                  proxy_password=None,
                  protocol=u'http',
-                 connect_timeout=DEFAULT_CONNECT_TIMEOUT,
-                 request_timeout=DEFAULT_REQUEST_TIMEOUT,
                  inject_client_pause=0,
                  connection=None):
         self._host = host
@@ -147,13 +149,10 @@ class SnowflakeRestful(object):
         self._proxy_user = proxy_user
         self._proxy_password = proxy_password
         self._protocol = protocol
-        self._connect_timeout = connect_timeout or DEFAULT_CONNECT_TIMEOUT
-        self._request_timeout = request_timeout or DEFAULT_REQUEST_TIMEOUT
         self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._idle_sessions = collections.deque()
         self._active_sessions = set()
-        self._request_count = itertools.count()
 
         # insecure mode (disabled by default)
         ssl_wrap_socket.FEATURE_INSECURE_MODE = \
@@ -223,11 +222,11 @@ class SnowflakeRestful(object):
             return self._post_request(
                 url, headers, json.dumps(body),
                 token=self._token, _no_results=_no_results,
-                timeout=self._connection._network_timeout)
+                timeout=self._connection.network_timeout)
         else:
             return self._get_request(
                 url, headers, token=self._token,
-                timeout=self._connection._network_timeout)
+                timeout=self._connection.network_timeout)
 
     def _renew_session(self):
         if not hasattr(self, u'_master_token'):
@@ -239,8 +238,7 @@ class SnowflakeRestful(object):
                     u'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
                 })
 
-        logger.debug(u'updating session')
-        logger.debug(u'master_token: %s', self._master_token)
+        logger.debug(u'updating session. master_token: %s', self._master_token)
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": CONTENT_TYPE_APPLICATION_JSON,
@@ -259,7 +257,7 @@ class SnowflakeRestful(object):
         ret = self._post_request(
             url, headers, json.dumps(body),
             token=self._master_token,
-            timeout=self._connection._network_timeout)
+            timeout=self._connection.network_timeout)
         if ret.get(u'success') and u'data' in ret \
                 and u'sessionToken' in ret[u'data']:
             logger.debug(u'success: %s', ret)
@@ -281,6 +279,9 @@ class SnowflakeRestful(object):
                 })
 
     def delete_session(self):
+        """
+        Deletes the session
+        """
         if not hasattr(self, u'_master_token'):
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
@@ -300,7 +301,7 @@ class SnowflakeRestful(object):
         try:
             ret = self._post_request(
                 url, headers, json.dumps(body),
-                token=self._token, timeout=5, is_single_thread=True)
+                token=self._token, timeout=5, no_retry=True)
             if not ret or ret.get(u'success'):
                 return
             err = ret[u'message']
@@ -335,7 +336,7 @@ class SnowflakeRestful(object):
         return ret
 
     def _post_request(self, url, headers, body, token=None,
-                      timeout=None, _no_results=False, is_single_thread=False):
+                      timeout=None, _no_results=False, no_retry=False):
         full_url = u'{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
@@ -344,7 +345,7 @@ class SnowflakeRestful(object):
         )
         ret = self.fetch(u'post', full_url, headers, data=body,
                          timeout=timeout, token=token,
-                         is_single_thread=is_single_thread)
+                         no_retry=no_retry)
         logger.debug(
             u'ret[code] = {code}, after post request'.format(
                 code=(ret.get(u'code', u'N/A'))))
@@ -393,61 +394,184 @@ class SnowflakeRestful(object):
     def fetch(self, method, full_url, headers, data=None, timeout=None,
               **kwargs):
         """ Curried API request with session management. """
-        if timeout is not None and 'timeouts' in kwargs:
-            raise TypeError("Mutually exclusive args: timeout, timeouts")
-        if timeout is None:
-            timeout = self._request_timeout
-        timeouts = kwargs.pop('timeouts', (self._connect_timeout,
-                                           self._connect_timeout, timeout))
+
+        class DecorrelateJitterBackoff(object):
+            # Decorrelate Jitter backoff
+            # see:
+            # https://www.awsarchitectureblog.com/2015/03/backoff.html
+            def __init__(self, base, cap):
+                self._base = base
+                self._cap = cap
+
+            def next_sleep(self, _, sleep):
+                return min(self._cap, random.randint(self._base, sleep * 3))
+
+        class RetryCtx(object):
+            def __init__(self, timeout):
+                self.timeout = timeout
+                self.cnt = 0
+                self.sleeping_time = 1
+                # backoff between 1 and 16 seconds
+                self._backoff = DecorrelateJitterBackoff(1, 16)
+
+            def next_sleep(self):
+                self.sleeping_time = self._backoff.next_sleep(
+                    self.cnt, self.sleeping_time)
+                return self.sleeping_time
+
+        with self._use_requests_session() as session:
+            retry_ctx = RetryCtx(timeout)
+            while True:
+                ret = self._request_exec_wrapper(
+                    session, method, full_url, headers, data, retry_ctx,
+                    **kwargs)
+                if ret is not None:
+                    return ret
+
+    def _request_exec_wrapper(
+            self,
+            session, method, full_url, headers, data, retry_ctx,
+            no_retry=False, token=NO_TOKEN,
+            **kwargs):
+
+        conn = self._connection
         proxies = set_proxies(self._proxy_host, self._proxy_port,
                               self._proxy_user, self._proxy_password)
-        with self._use_requests_session() as session:
-            return self._fetch(session, method, full_url, headers, data,
-                               proxies, timeouts, **kwargs)
+        logger.debug('remaining request timeout: %s, retry cnt: %s',
+                     retry_ctx.timeout, retry_ctx.cnt + 1)
 
-    def _fetch(self, session, method, full_url, headers, data, proxies,
-               timeouts=(DEFAULT_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT,
-                         DEFAULT_REQUEST_TIMEOUT),
-               token=NO_TOKEN,
-               is_raw_text=False,
-               catch_okta_unauthorized_error=False,
-               is_raw_binary=False,
-               is_raw_binary_iterator=True,
-               use_ijson=False, is_single_thread=False):
-        """ This is the lowest level of HTTP handling.  All arguments culminate
-        here and the `requests.request` is issued and monitored from this
-        call using an inline thread for timeout monitoring. """
-        connection_timeout = timeouts[0:2]
-        request_timeout = timeouts[2]  # total request timeout
-        request_exec_timeout = 60  # one request thread timeout
-        conn = self._connection
-        proxies = set_proxies(conn.rest._proxy_host, conn.rest._proxy_port,
-                              conn.rest._proxy_user, conn.rest._proxy_password)
+        start_request_thread = time.time()
+        try:
+            return_object = self._request_exec(
+                session=session,
+                method=method,
+                full_url=full_url,
+                headers=headers,
+                data=data,
+                proxies=proxies,
+                token=token,
+                **kwargs)
+            if return_object is not None:
+                return return_object
+            self._handle_unknown_error(
+                method, full_url, headers, data, conn, proxies)
+            return {}
+        except RetryRequest as e:
+            if no_retry:
+                return {}
+            cause = e.args[0]
+            if retry_ctx.timeout is not None:
+                retry_ctx.timeout -= int(time.time() - start_request_thread)
+                if retry_ctx.timeout <= 0:
+                    if isinstance(cause, Error):
+                        logger.error(cause)
+                        Error.errorhandler_wrapper(conn, None, cause)
+                    else:
+                        logger.error(cause)
+                        Error.errorhandler_wrapper(
+                            conn, None, OperationalError,
+                            {
+                                u'msg': u'Failed to execute request: {0}'.format(
+                                    cause),
+                                u'errno': ER_FAILED_TO_REQUEST,
+                            })
+                    return {}  # required for tests
+            sleeping_time = retry_ctx.next_sleep()
+            logger.debug(
+                u'retrying: errorclass=%s, '
+                u'error=%s, '
+                u'counter=%s, '
+                u'sleeping=%s(s)',
+                type(cause),
+                cause,
+                retry_ctx.cnt + 1,
+                sleeping_time)
+            time.sleep(sleeping_time)
+            if retry_ctx.timeout is not None:
+                retry_ctx.timeout -= sleeping_time
+                retry_ctx.cnt += 1
+            return None  # retry
+        except Exception as e:
+            if not no_retry:
+                raise e
+            logger.debug("Ignored error", exc_info=True)
+            return {}
 
-        def request_exec(result_queue):
+    def _handle_unknown_error(
+            self, method, full_url, headers, data, conn, proxies):
+        """
+        Handle unknown error
+        """
+        if data:
             try:
-                if not catch_okta_unauthorized_error and data and len(data) > 0:
-                    gzdata = BytesIO()
-                    gzip.GzipFile(fileobj=gzdata, mode=u'wb').write(
-                        data.encode(u'utf-8'))
-                    gzdata.seek(0, 0)
-                    headers['Content-Encoding'] = 'gzip'
-                    input_data = gzdata
-                else:
-                    input_data = data
-
-                raw_ret = session.request(
+                decoded_data = json.loads(data)
+                if decoded_data.get(
+                        'data') and decoded_data['data'].get('PASSWORD'):
+                    # masking the password
+                    decoded_data['data']['PASSWORD'] = '********'
+                    data = json.dumps(decoded_data)
+            except:
+                logger.info("data is not JSON")
+        logger.error(
+            u'Failed to get the response. Hanging? '
+            u'method: {method}, url: {url}, headers:{headers}, '
+            u'data: {data}, proxies: {proxies}'.format(
+                method=method,
+                url=full_url,
+                headers=headers,
+                data=data,
+                proxies=proxies
+            )
+        )
+        Error.errorhandler_wrapper(
+            conn, None, OperationalError,
+            {
+                u'msg': u'Failed to get the response. Hanging? '
+                        u'method: {method}, url: {url}, '
+                        u'proxies: {proxies}'.format(
                     method=method,
                     url=full_url,
-                    proxies=proxies,
-                    headers=headers,
-                    data=input_data,
-                    timeout=connection_timeout,
-                    verify=True,
-                    stream=is_raw_binary,
-                    auth=SnowflakeAuth(token),
-                )
+                    proxies=proxies
+                ),
+                u'errno': ER_FAILED_TO_REQUEST,
+            })
 
+    def _request_exec(
+            self,
+            session, method, full_url, headers, data,
+            proxies,
+            token,
+            catch_okta_unauthorized_error=False,
+            is_raw_text=False,
+            is_raw_binary=False,
+            is_raw_binary_iterator=True,
+            use_ijson=False):
+        try:
+            if not catch_okta_unauthorized_error and data and len(data) > 0:
+                gzdata = BytesIO()
+                gzip.GzipFile(fileobj=gzdata, mode=u'wb').write(
+                    data.encode(u'utf-8'))
+                gzdata.seek(0, 0)
+                headers['Content-Encoding'] = 'gzip'
+                input_data = gzdata
+            else:
+                input_data = data
+
+            # socket timeout is constant. You should be able to receive
+            # the response within the time. If not, ConnectReadTimeout or
+            # ReadTimeout is raised.
+            raw_ret = session.request(
+                method=method,
+                url=full_url,
+                proxies=proxies,
+                headers=headers,
+                data=input_data,
+                timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+                verify=True,
+                stream=is_raw_binary,
+                auth=SnowflakeAuth(token),
+            )
+            try:
                 if raw_ret.status_code == OK:
                     logger.debug(u'SUCCESS')
                     if is_raw_text:
@@ -464,190 +588,76 @@ class SnowflakeRestful(object):
                             ret = split_rows_from_stream(StringIO(raw_data))
                     else:
                         ret = raw_ret.json()
-                    result_queue.put((ret, False))
-                elif raw_ret.status_code in STATUS_TO_EXCEPTION:
+                    return ret
+
+                if raw_ret.status_code in STATUS_TO_EXCEPTION:
+                    ex = STATUS_TO_EXCEPTION[raw_ret.status_code]()
+                    logger.debug('%s. Retrying...', ex)
                     # retryable exceptions
-                    result_queue.put(
-                        (STATUS_TO_EXCEPTION[raw_ret.status_code](), True))
+                    raise RetryRequest(ex)
+
                 elif raw_ret.status_code == UNAUTHORIZED and \
                         catch_okta_unauthorized_error:
                     # OKTA Unauthorized errors
-                    result_queue.put(
-                        (DatabaseError(
-                            msg=(u'Failed to get '
-                                 u'authentication by OKTA: '
-                                 u'{status}: {reason}'.format(
+                    Error.errorhandler_wrapper(
+                        self._connection, None, DatabaseError,
+                        {
+                            u'msg': (u'Failed to get authentication by OKTA: '
+                                     u'{status}: {reason}').format(
                                 status=raw_ret.status_code,
-                                reason=raw_ret.reason,
-                            )),
-                            errno=ER_FAILED_TO_CONNECT_TO_DB,
-                            sqlstate=SQLSTATE_CONNECTION_REJECTED),
-                         False))
+                                reason=raw_ret.reason),
+                            u'errno': ER_FAILED_TO_CONNECT_TO_DB,
+                            u'sqlstate': SQLSTATE_CONNECTION_REJECTED
+                        }
+                    )
+                    return None  # required for tests
                 else:
-                    result_queue.put(
-                        (InterfaceError(
-                            msg=(u"{status} {reason}: "
-                                 u"{method} {url}").format(
+                    Error.errorhandler_wrapper(
+                        self._connection, None, InterfaceError,
+                        {
+                            u'msg': (u"{status} {reason}: "
+                                     u"{method} {url}").format(
                                 status=raw_ret.status_code,
                                 reason=raw_ret.reason,
                                 method=method,
                                 url=full_url),
-                            errno=ER_FAILED_TO_REQUEST,
-                            sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-                        ), False))
-            except (BadStatusLine,
-                    SSLError,
-                    ProtocolError,
-                    OpenSSL.SSL.SysCallError,
-                    ValueError,
-                    RuntimeError) as err:
-                logger.debug('who is hitting error?', exc_info=True)
-                if not isinstance(err, OpenSSL.SSL.SysCallError) or \
-                                err.args[0] in (
-                                errno.ECONNRESET,
-                                errno.ETIMEDOUT,
-                                errno.EPIPE,
-                                -1):
-                    result_queue.put((err, True))
-                else:
-                    # all other OpenSSL errors are not retryable
-                    result_queue.put((err, False))
-            except ConnectionError as err:
-                logger.debug(u'ConnectionError: %s', err, exc_info=True)
-                result_queue.put((OperationalError(
-                    # no full_url is required in the message
-                    # as err includes all information
-                    msg=u'Failed to connect: {0}'.format(err),
-                    errno=ER_FAILED_TO_SERVER,
-                    sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-                ), False))
-
-        if is_single_thread:
-            # This is dedicated code for DELETE SESSION when Python exists.
-            request_result_queue = Queue()
-            request_exec(request_result_queue)
-            try:
-                # don't care about the return value, because no retry and
-                # no error will show up
-                _, _ = request_result_queue.get(timeout=request_exec_timeout)
-            except:
-                pass
-            return {}
-
-        retry_cnt = 0
-        while True:
-            return_object = None
-            request_result_queue = Queue()
-            th = Thread(name='RequestExec-%d' % next(self._request_count),
-                        target=request_exec, args=(request_result_queue,))
-            th.daemon = True
-            th.start()
-            try:
-                logger.debug('request thread timeout: %s, '
-                             'rest of request timeout: %s, '
-                             'retry cnt: %s',
-                             request_exec_timeout,
-                             request_timeout,
-                             retry_cnt + 1)
-                start_request_thread = time.time()
-                th.join(timeout=request_exec_timeout)
-                logger.debug('request thread joined')
-                if request_timeout is not None:
-                    request_timeout -= min(
-                        int(time.time() - start_request_thread),
-                        request_timeout)
-                start_get_queue = time.time()
-                return_object, retryable = request_result_queue.get(
-                    timeout=int(request_exec_timeout / 4))
-                if request_timeout is not None:
-                    request_timeout -= min(
-                        int(time.time() - start_get_queue), request_timeout)
-                logger.debug('request thread returned object')
-                if retryable:
-                    raise RequestRetry()
-                elif isinstance(return_object, Error):
-                    Error.errorhandler_wrapper(conn, None, return_object)
-                elif isinstance(return_object, Exception):
-                    Error.errorhandler_wrapper(
-                        conn, None, OperationalError,
-                        {
-                            u'msg': u'Failed to execute request: {0}'.format(
-                                return_object),
                             u'errno': ER_FAILED_TO_REQUEST,
-                        })
-                break
-            except (RequestRetry, AttributeError, EmptyQueue) as e:
-                # RequestRetry is raised in case of retryable error
-                # Empty is raised if the result queue is empty
-                if request_timeout is not None:
-                    sleeping_time = min(2 ** retry_cnt,
-                                        min(request_timeout, 16))
-                else:
-                    sleeping_time = min(2 ** retry_cnt, 16)
-                if sleeping_time <= 0:
-                    # no more sleeping time
-                    break
-                if request_timeout is not None:
-                    request_timeout -= sleeping_time
-                logger.info(
-                    u'retrying: errorclass=%s, '
-                    u'error=%s, '
-                    u'return_object=%s, '
-                    u'counter=%s, '
-                    u'sleeping=%s(s)',
-                    type(e),
-                    e,
-                    return_object,
-                    retry_cnt + 1,
-                    sleeping_time)
-            time.sleep(sleeping_time)
-            retry_cnt += 1
-
-        if return_object is None:
-            if data:
-                try:
-                    decoded_data = json.loads(data)
-                    if decoded_data.get(
-                            'data') and decoded_data['data'].get('PASSWORD'):
-                        # masking the password
-                        decoded_data['data']['PASSWORD'] = '********'
-                        data = json.dumps(decoded_data)
-                except:
-                    logger.info("data is not JSON")
-            logger.error(
-                u'Failed to get the response. Hanging? '
-                u'method: {method}, url: {url}, headers:{headers}, '
-                u'data: {data}, proxies: {proxies}'.format(
-                    method=method,
-                    url=full_url,
-                    headers=headers,
-                    data=data,
-                    proxies=proxies
-                )
+                            u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                        }
+                    )
+                    return None  # required for tests
+            finally:
+                raw_ret.close()  # ensure response is closed
+        except (ConnectTimeout,
+                ReadTimeout,
+                BadStatusLine,
+                SSLError,
+                ProtocolError,  # from urllib3
+                ReadTimeoutError,  # from urllib3
+                OpenSSL.SSL.SysCallError,
+                ValueError,
+                RuntimeError,
+                AttributeError  # json decoding error
+                ) as err:
+            logger.debug(
+                "Hit retryable error. Retrying... Ignore the following error "
+                "stack:0",
+                exc_info=True)
+            raise RetryRequest(err)
+        except ConnectionError as err:
+            logger.debug(u'ConnectionError: %s', err, exc_info=True)
+            # no full_url is required in the message
+            # as err includes all information
+            Error.errorhandler_wrapper(
+                self._connection, None,
+                OperationalError,
+                {
+                    u'msg': u'Failed to connect: {0}'.format(err),
+                    u'errno': ER_FAILED_TO_SERVER,
+                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                }
             )
-            Error.errorhandler_wrapper(
-                conn, None, OperationalError,
-                {
-                    u'msg': u'Failed to get the response. Hanging? '
-                            u'method: {method}, url: {url}, '
-                            u'proxies: {proxies}'.format(
-                        method=method,
-                        url=full_url,
-                        proxies=proxies
-                    ),
-                    u'errno': ER_FAILED_TO_REQUEST,
-                })
-        elif isinstance(return_object, Error):
-            Error.errorhandler_wrapper(conn, None, return_object)
-        elif isinstance(return_object, Exception):
-            Error.errorhandler_wrapper(
-                conn, None, OperationalError,
-                {
-                    u'msg': u'Failed to execute request: {0}'.format(
-                        return_object),
-                    u'errno': ER_FAILED_TO_REQUEST,
-                })
-        return return_object
+            return None  # required for tests
 
     def make_requests_session(self):
         s = requests.Session()

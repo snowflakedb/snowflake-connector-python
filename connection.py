@@ -50,8 +50,6 @@ DEFAULT_CONFIGURATION = {
     u'schema': None,  # snowflake
     u'role': None,  # snowflake
     u'session_id': None,  # snowflake
-    u'connect_timeout': None,  # snowflake internal connection timeout
-    u'request_timeout': None,  # snowflake internal request timeout
     u'login_timeout': 60,  # login timeout
     u'network_timeout': None,  # network timeout (infinite by default)
     u'passcode_in_password': False,  # Snowflake MFA
@@ -226,18 +224,6 @@ class SnowflakeConnection(object):
         return self._role
 
     @property
-    def connect_timeout(self):
-        u"""Connection timeout
-        """
-        return self._connect_timeout
-
-    @property
-    def request_timeout(self):
-        u"""Request timeout for one query
-        """
-        return self._request_timeout
-
-    @property
     def login_timeout(self):
         """
         Login timeout. Used in authentication
@@ -356,7 +342,7 @@ class SnowflakeConnection(object):
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
                 logger.info(u"Autocommit feature is not enabled for this "
-                                 u"connection. Ignored")
+                            u"connection. Ignored")
             else:
                 raise e
 
@@ -446,17 +432,15 @@ class SnowflakeConnection(object):
             proxy_user=self.proxy_user,
             proxy_password=self.proxy_password,
             protocol=self._protocol,
-            connect_timeout=self._connect_timeout,
-            request_timeout=self._request_timeout,
             inject_client_pause=self._inject_client_pause,
             connection=self)
         logger.debug(u'REST API object was created: %s:%s, proxy=%s:%s, '
-                          u'proxy_user=%s',
-                          self.host,
-                          self.port,
-                          self.proxy_host,
-                          self.proxy_port,
-                          self.proxy_user)
+                     u'proxy_user=%s',
+                     self.host,
+                     self.port,
+                     self.proxy_host,
+                     self.proxy_port,
+                     self.proxy_user)
 
         auth_instance = None
         if self._authenticator != DEFAULT_AUTHENTICATOR:
@@ -572,8 +556,8 @@ class SnowflakeConnection(object):
                     errno=ER_OLD_PYTHON)
 
     def cmd_query(self, sql, sequence_counter, request_id,
-                   is_file_transfer=False, statement_params=None,
-                   is_internal=False, _no_results=False):
+                  is_file_transfer=False, statement_params=None,
+                  is_internal=False, _no_results=False):
         u"""
         Executes a query with a sequence counter.
         """
@@ -618,7 +602,7 @@ class SnowflakeConnection(object):
         is used to identify the query submitted by the client.
         """
         logger.debug(u'_cancel_query sql=[%s], sequence_id=[%s]', sql,
-                          sequence_counter)
+                     sequence_counter)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
         return self.rest.request(
