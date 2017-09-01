@@ -15,9 +15,7 @@ else:
     from unittest.mock import MagicMock, Mock, PropertyMock
 
 
-def _mock_auth_mfa_rest_response(
-        url, headers, body, token=None, timeout=None, _no_results=False,
-        is_single_thread=False):
+def _mock_auth_mfa_rest_response(url, headers, body, **kwargs):
     """
     Success case
     """
@@ -25,10 +23,7 @@ def _mock_auth_mfa_rest_response(
     _ = url
     _ = headers
     _ = body
-    _ = token
-    _ = timeout
-    _ = _no_results
-    _ = is_single_thread
+    _ = kwargs.get('dummy')
     if mock_cnt == 0:
         ret = {
             u'success': True,
@@ -52,9 +47,7 @@ def _mock_auth_mfa_rest_response(
     return ret
 
 
-def _mock_auth_mfa_rest_response_failure(
-        url, headers, body, token=None, timeout=None, _no_results=False,
-        is_single_thread=False):
+def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
     """
     Failure case
     """
@@ -62,10 +55,8 @@ def _mock_auth_mfa_rest_response_failure(
     _ = url
     _ = headers
     _ = body
-    _ = token
-    _ = timeout
-    _ = _no_results
-    _ = is_single_thread
+    _ = kwargs.get('dummy')
+
     if mock_cnt == 0:
         ret = {
             u'success': True,
@@ -89,9 +80,7 @@ def _mock_auth_mfa_rest_response_failure(
     return ret
 
 
-def _mock_auth_mfa_rest_response_timeout(
-        url, headers, body, token=None, timeout=None, _no_results=False,
-        is_single_thread=False):
+def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
     """
     Timeout case
     """
@@ -99,10 +88,7 @@ def _mock_auth_mfa_rest_response_timeout(
     _ = url
     _ = headers
     _ = body
-    _ = token
-    _ = timeout
-    _ = _no_results
-    _ = is_single_thread
+    _ = kwargs.get('dummy')
     if mock_cnt == 0:
         ret = {
             u'success': True,
@@ -172,9 +158,7 @@ def test_auth_mfa():
     assert rest._connection.errorhandler.called  # error
 
 
-def _mock_auth_password_change_rest_response(
-        url, headers, body, token=None, timeout=None, _no_results=False,
-        is_single_thread=False):
+def _mock_auth_password_change_rest_response(url, headers, body, **kwargs):
     """
     Success case
     """
@@ -182,10 +166,7 @@ def _mock_auth_password_change_rest_response(
     _ = url
     _ = headers
     _ = body
-    _ = token
-    _ = timeout
-    _ = _no_results
-    _ = is_single_thread
+    _ = kwargs.get('dummy')
     if mock_cnt == 0:
         ret = {
             u'success': True,

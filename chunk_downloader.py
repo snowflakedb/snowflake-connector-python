@@ -13,11 +13,11 @@ from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
 
 DEFAULT_REQUEST_TIMEOUT = 3600
-DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS = 2
-DEFAULT_CLIENT_RESULT_PREFETCH_THREADS = 1
+DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS = 8
+DEFAULT_CLIENT_RESULT_PREFETCH_THREADS = 2
 
 MAX_RETRY_DOWNLOAD = 10
-MAX_WAIT = 120
+MAX_WAIT = 360
 WAIT_TIME_IN_SECONDS = 10
 
 SSE_C_ALGORITHM = u"x-amz-server-side-encryption-customer-algorithm"
@@ -60,7 +60,7 @@ class SnowflakeChunkDownloader(object):
         self._chunks = {}
         self._chunk_locks = {}
 
-        self._prefetch_threads *= 2
+        self._prefetch_threads *= 4
 
         self._effective_threads = min(self._prefetch_threads, self._chunk_size)
         if self._effective_threads < 1:
@@ -255,12 +255,9 @@ class SnowflakeChunkDownloader(object):
         """
         Fetch the chunk from S3.
         """
-        timeouts = (
-            self._connection._connect_timeout,
-            self._connection._connect_timeout,
-            DEFAULT_REQUEST_TIMEOUT
-        )
         return self._connection.rest.fetch(
             u'get', url, headers,
-            timeouts=timeouts, is_raw_binary=True,
-            is_raw_binary_iterator=True, use_ijson=self._use_ijson)
+            timeout=DEFAULT_REQUEST_TIMEOUT,
+            is_raw_binary=True,
+            is_raw_binary_iterator=True,
+            use_ijson=self._use_ijson)
