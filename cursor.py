@@ -327,7 +327,11 @@ class SnowflakeCursor(object):
         original_sigint = signal.getsignal(signal.SIGINT)
 
         def abort_exit(*_):
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            try:
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
+            except (ValueError, TypeError):
+                # ignore failures
+                pass
             try:
                 if self._timebomb is not None:
                     self._timebomb.cancel()
@@ -335,7 +339,12 @@ class SnowflakeCursor(object):
                     self._timebomb = None
                 self.__cancel_query(query)
             finally:
-                signal.signal(signal.SIGINT, original_sigint)
+                if original_sigint:
+                    try:
+                        signal.signal(signal.SIGINT, original_sigint)
+                    except (ValueError, TypeError):
+                        # ignore failures
+                        pass
             raise KeyboardInterrupt
 
         try:
@@ -356,8 +365,9 @@ class SnowflakeCursor(object):
                 _no_results=_no_results)
         finally:
             try:
-                signal.signal(signal.SIGINT, original_sigint)
-            except ValueError:
+                if original_sigint:
+                    signal.signal(signal.SIGINT, original_sigint)
+            except (ValueError, TypeError):
                 logger.debug(
                     u'Failed to reset SIGINT handler. Not in main '
                     u'thread. Ignored...')
