@@ -6,11 +6,13 @@
 
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.compat import PY2
+from snowflake.connector.network import (SnowflakeRestful, CLIENT_NAME,
+                                         CLIENT_VERSION)
 
 if PY2:
-    from mock import MagicMock, Mock
+    from mock import MagicMock, Mock, PropertyMock
 else:
-    from unittest.mock import MagicMock, Mock
+    from unittest.mock import MagicMock, Mock, PropertyMock
 
 
 def mock_webserver(target_instance, application, port):
@@ -140,16 +142,34 @@ def test_auth_webbrowser_fail_webserver():
 
 
 def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
-    rest = MagicMock()
-    rest._post_request.return_value = {
-        'success': success,
-        'message': message,
-        'data': {
-            'ssoUrl': ref_sso_url,
-            'proofKey': ref_proof_key,
+    def post_request(url, headers, body, **kwargs):
+        _ = url
+        _ = headers
+        _ = body
+        _ = kwargs.get('dummy')
+        return {
+            'success': success,
+            'message': message,
+            'data': {
+                'ssoUrl': ref_sso_url,
+                'proofKey': ref_proof_key,
+            }
         }
-    }
-    rest._connection = MagicMock()
-    rest._connection._login_timeout = 120
-    rest._connection.errorhandler = Mock(return_value=None)
+
+    connection = MagicMock()
+    connection._login_timeout = 120
+    connection.errorhandler = Mock(return_value=None)
+    type(connection).application = PropertyMock(return_value=CLIENT_NAME)
+    type(connection)._internal_application_name = PropertyMock(
+        return_value=CLIENT_NAME
+    )
+    type(connection)._internal_application_version = PropertyMock(
+        return_value=CLIENT_VERSION
+    )
+
+    rest = SnowflakeRestful(
+        host='testaccount.snowflakecomputing.com',
+        port=443,
+        connection=connection)
+    rest._post_request = post_request
     return rest

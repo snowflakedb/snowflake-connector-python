@@ -44,7 +44,6 @@ class SnowflakeChunkDownloader(object):
                   prefetch_threads=DEFAULT_CLIENT_RESULT_PREFETCH_THREADS,
                   use_ijson=False):
         self._use_ijson = use_ijson
-        self._session = None
 
         self._downloader_error = None
 
@@ -240,9 +239,6 @@ class SnowflakeChunkDownloader(object):
             self._pool.close()
             self._pool.join()
             self._pool = None
-
-        if self._session is not None:
-            self._session = None
 
     def __del__(self):
         try:

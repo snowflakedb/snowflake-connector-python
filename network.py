@@ -15,6 +15,7 @@ import sys
 import time
 import uuid
 from io import StringIO, BytesIO
+from threading import Lock
 
 import OpenSSL.SSL
 from botocore.vendored import requests
@@ -151,6 +152,7 @@ class SnowflakeRestful(object):
         self._protocol = protocol
         self._inject_client_pause = inject_client_pause
         self._connection = connection
+        self._lock_token = Lock()
         self._idle_sessions = collections.deque()
         self._active_sessions = set()
 
@@ -199,7 +201,7 @@ class SnowflakeRestful(object):
                 _no_results=False):
         if body is None:
             body = {}
-        if not hasattr(self, u'_master_token'):
+        if self.master_token is None:
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
                 {
@@ -228,8 +230,16 @@ class SnowflakeRestful(object):
                 url, headers, token=self._token,
                 timeout=self._connection.network_timeout)
 
+    def update_tokens(self, session_token, master_token):
+        """
+        Update session and master tokens
+        """
+        with self._lock_token:
+            self._token = session_token
+            self._master_token = master_token
+
     def _renew_session(self):
-        if not hasattr(self, u'_master_token'):
+        if self.master_token is None:
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
                 {
@@ -238,7 +248,7 @@ class SnowflakeRestful(object):
                     u'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
                 })
 
-        logger.debug(u'updating session. master_token: %s', self._master_token)
+        logger.debug(u'updating session. master_token: %s', self.master_token)
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": CONTENT_TYPE_APPLICATION_JSON,
@@ -253,22 +263,21 @@ class SnowflakeRestful(object):
             u"oldSessionToken": self._token,
             u"requestType": REQUEST_TYPE_RENEW,
         }
-        self._session = None  # invalidate session object
         ret = self._post_request(
             url, headers, json.dumps(body),
-            token=self._master_token,
+            token=self.master_token,
             timeout=self._connection.network_timeout)
         if ret.get(u'success') and u'data' in ret \
                 and u'sessionToken' in ret[u'data']:
             logger.debug(u'success: %s', ret)
-            self._token = ret[u'data'][u'sessionToken']
-            self._master_token = ret[u'data'][u'masterToken']
+            self.update_tokens(
+                ret[u'data'][u'sessionToken'], ret[u'data'][u'masterToken'])
             logger.debug(u'updating session completed')
             return ret
         else:
             logger.debug(u'failed: %s', ret)
-            err = ret[u'message']
-            if u'data' in ret and u'errorMessage' in ret[u'data']:
+            err = ret.get(u'message')
+            if err is not None and ret.get(u'data'):
                 err += ret[u'data'][u'errorMessage']
             Error.errorhandler_wrapper(
                 self._connection, None, ProgrammingError,
@@ -282,7 +291,7 @@ class SnowflakeRestful(object):
         """
         Deletes the session
         """
-        if not hasattr(self, u'_master_token'):
+        if self.master_token is None:
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
                 {
@@ -304,10 +313,12 @@ class SnowflakeRestful(object):
                 token=self._token, timeout=5, no_retry=True)
             if not ret or ret.get(u'success'):
                 return
-            err = ret[u'message']
-            if ret.get(u'data') and ret[u'data'].get(u'errorMessage'):
+            err = ret.get(u'message')
+            if err is not None and ret.get(u'data') and ret[u'data'].get(
+                    u'errorMessage'):
                 err += ret[u'data'][u'errorMessage']
                 # no exception is raised
+            logger.debug('error in deleting session. ignoring...: %s', err)
         except Exception as e:
             logger.debug('error in deleting session. ignoring...: %s', e)
 
@@ -359,12 +370,10 @@ class SnowflakeRestful(object):
                 return self._post_request(
                     url, headers, body, token=self._token, timeout=timeout)
 
-        is_session_renewed = False
-        result_url = None
         if ret.get(u'code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
             return ret
 
-        while is_session_renewed or ret.get(u'code') in \
+        while ret.get(u'code') in \
                 (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
             if self._inject_client_pause > 0:
                 logger.debug(
@@ -372,22 +381,12 @@ class SnowflakeRestful(object):
                         inject_client_pause=self._inject_client_pause))
                 time.sleep(self._inject_client_pause)
             # ping pong
-            result_url = ret[u'data'][
-                u'getResultUrl'] if not is_session_renewed else result_url
+            result_url = ret[u'data'][u'getResultUrl']
             logger.debug(u'ping pong starting...')
             ret = self._get_request(
                 result_url, headers, token=self._token, timeout=timeout)
             logger.debug(u'ret[code] = %s', ret.get(u'code', u'N/A'))
             logger.debug(u'ping pong done')
-            if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
-                ret = self._renew_session()
-                logger.debug(
-                    u'ret[code] = %s after renew_session',
-                    ret.get(u'code', u'N/A'))
-                if ret.get(u'success'):
-                    is_session_renewed = True
-            else:
-                is_session_renewed = False
 
         return ret
 
