@@ -50,7 +50,7 @@ DEFAULT_CONFIGURATION = {
     u'schema': None,  # snowflake
     u'role': None,  # snowflake
     u'session_id': None,  # snowflake
-    u'login_timeout': 60,  # login timeout
+    u'login_timeout': 120,  # login timeout
     u'network_timeout': None,  # network timeout (infinite by default)
     u'passcode_in_password': False,  # Snowflake MFA
     u'passcode': None,  # Snowflake MFA
