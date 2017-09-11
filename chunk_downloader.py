@@ -69,7 +69,7 @@ class SnowflakeChunkDownloader(object):
                                            self._chunk_size)
 
         for idx, chunk in enumerate(chunks):
-            logger.info(u"queued chunk %d: rowCount=%s", idx,
+            logger.debug(u"queued chunk %d: rowCount=%s", idx,
                         chunk[u'rowCount'])
             self._chunks[idx] = SnowflakeChunk(
                 url=chunk[u'url'],
@@ -101,7 +101,7 @@ class SnowflakeChunkDownloader(object):
                        prefetch_slots=prefetch_slots,
                        prefetch_threads=prefetch_threads,
                        use_ijson=use_ijson)
-        logger.info('Chunk Downloader in memory')
+        logger.debug('Chunk Downloader in memory')
         for idx in range(self._num_chunks_to_prefetch):
             self._pool.apply_async(self._download_chunk, [idx])
             self._chunk_locks[idx] = Condition()

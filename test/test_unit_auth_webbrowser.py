@@ -14,6 +14,14 @@ if PY2:
 else:
     from unittest.mock import MagicMock, Mock, PropertyMock
 
+AUTHENTICATOR = 'https://testsso.snowflake.net/'
+APPLICATION = 'testapplication'
+ACCOUNT = 'testaccount'
+USER = 'testuser'
+PASSWORD = 'testpassword'
+REF_PROOF_KEY = 'MOCK_PROOF_KEY'
+REF_SSO_URL = 'https://testsso.snowflake.net/sso'
+
 
 def mock_webserver(target_instance, application, port):
     _ = application
@@ -25,16 +33,9 @@ def test_auth_webbrowser():
     """
     Authentication by WebBrowser positive test case
     """
-    authenticator = 'https://testsso.snowflake.net/'
-    application = 'testapplication'
-    account = 'testaccount'
-    user = 'testuser'
-    password = 'testpassword'
-    ref_proof_key = 'MOCK_PROOF_KEY'
     ref_token = "MOCK_TOKEN"
 
-    ref_sso_url = 'https://testsso.snowflake.net/sso'
-    rest = _init_rest(ref_sso_url, ref_proof_key)
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -53,30 +54,22 @@ def test_auth_webbrowser():
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, application,
+        rest, APPLICATION,
         webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket)
-    auth.authenticate(authenticator, account, user, password)
+    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
     body = {u'data': {}}
     auth.update_body(body)
     assert body[u'data'][u'SAML_RESPONSE'] == ref_token
-    assert body[u'data'][u'PROOF_KEY'] == ref_proof_key
+    assert body[u'data'][u'PROOF_KEY'] == REF_PROOF_KEY
 
 
 def test_auth_webbrowser_fail_webbrowser():
     """
     Authentication by WebBrowser. fail to start web browser
     """
-    authenticator = 'https://testsso.snowflake.net/'
-    application = 'testapplication'
-    account = 'testaccount'
-    user = 'testuser'
-    password = 'testpassword'
-    ref_proof_key = 'MOCK_PROOF_KEY'
-
-    ref_sso_url = 'https://testsso.snowflake.net/sso'
-    rest = _init_rest(ref_sso_url, ref_proof_key)
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -95,9 +88,9 @@ def test_auth_webbrowser_fail_webbrowser():
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, application, webbrowser_pkg=mock_webbrowser,
+        rest, APPLICATION, webbrowser_pkg=mock_webbrowser,
         socket_pkg=mock_socket)
-    auth.authenticate(authenticator, account, user, password)
+    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
     assert rest._connection.errorhandler.called  # an error
     assert auth.assertion_content is None
 
@@ -106,15 +99,7 @@ def test_auth_webbrowser_fail_webserver():
     """
     Authentication by WebBrowser. fail to start web browser
     """
-    authenticator = 'https://testsso.snowflake.net/'
-    application = 'testapplication'
-    account = 'testaccount'
-    user = 'testuser'
-    password = 'testpassword'
-    ref_proof_key = 'MOCK_PROOF_KEY'
-
-    ref_sso_url = 'https://testsso.snowflake.net/sso'
-    rest = _init_rest(ref_sso_url, ref_proof_key)
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -134,9 +119,9 @@ def test_auth_webbrowser_fail_webserver():
 
     # case 1: invalid HTTP request
     auth = AuthByWebBrowser(
-        rest, application, webbrowser_pkg=mock_webbrowser,
+        rest, APPLICATION, webbrowser_pkg=mock_webbrowser,
         socket_pkg=mock_socket)
-    auth.authenticate(authenticator, account, user, password)
+    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
     assert rest._connection.errorhandler.called  # an error
     assert auth.assertion_content is None
 

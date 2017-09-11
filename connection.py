@@ -71,6 +71,7 @@ DEFAULT_CONFIGURATION = {
         SnowflakeConverter if not PY_ISSUE_23517 else SnowflakeConverterIssue23517,
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
     u'validate_default_parameters': False,  # snowflake
+    u'probe_connection': False,  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')

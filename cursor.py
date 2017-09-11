@@ -341,7 +341,7 @@ class SnowflakeCursor(object):
         try:
             signal.signal(signal.SIGINT, abort_exit)
         except ValueError:
-            logger.info(
+            logger.debug(
                 u'Failed to set SIGINT handler. '
                 u'Not in main thread. Ignored...')
         ret = {u'data': {}}
@@ -358,7 +358,7 @@ class SnowflakeCursor(object):
             try:
                 signal.signal(signal.SIGINT, original_sigint)
             except ValueError:
-                logger.info(
+                logger.debug(
                     u'Failed to reset SIGINT handler. Not in main '
                     u'thread. Ignored...')
             if self._timebomb is not None:
@@ -457,7 +457,7 @@ class SnowflakeCursor(object):
         self._sqlstate = ret[u'data'][
             u'sqlState'] if u'data' in ret and u'sqlState' in ret[
             u'data'] else None
-        logger.debug(u'sfqid=%s', self._sfqid)
+        logger.debug('sfqid: %s', self.sfqid)
 
         if ret[u'success']:
             logger.debug(u'SUCCESS')
@@ -500,7 +500,6 @@ class SnowflakeCursor(object):
         else:
             self._total_rowcount = ret[u'data'][
                 u'total'] if u'data' in ret and u'total' in ret[u'data'] else -1
-            logger.info(u'failed')
             logger.debug(ret)
             err = ret[u'message']
             code = ret.get(u'code', -1)
