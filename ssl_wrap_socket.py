@@ -21,7 +21,7 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 import logging
 import ssl
 import sys
-from socket import timeout, error as SocketError
+from socket import socket, timeout, error as SocketError
 
 import OpenSSL.SSL
 from botocore.vendored.requests.packages.urllib3 import connection \
@@ -32,6 +32,7 @@ from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend
 from cryptography.hazmat.backends.openssl.x509 import _Certificate
 
+from .compat import urlsplit
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
 from .ocsp_pyopenssl import SnowflakeOCSP
@@ -395,3 +396,32 @@ def ssl_wrap_socket_with_ocsp(
                  u'STATUS WILL NOT BE CHECKED.')
 
     return ret
+
+
+def _openssl_connect(hostname, port=443):
+    """
+    OpenSSL connection without validating certificates. This is used to diagnose
+    SSL issues.
+    """
+    client = socket()
+    client.connect((hostname, port))
+    client_ssl = OpenSSL.SSL.Connection(
+        OpenSSL.SSL.Context(OpenSSL.SSL.SSLv23_METHOD), client)
+    client_ssl.set_connect_state()
+    client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
+    client_ssl.do_handshake()
+    return client_ssl
+
+
+def probe_connection(url):
+    certificates = []
+    parsed_url = urlsplit(url)
+    connection = _openssl_connect(parsed_url.hostname, parsed_url.port)
+    for cert in connection.get_peer_cert_chain():
+        certificates.append(
+            {'hash': cert.get_subject().hash(),
+             'name': cert.get_subject(),
+             'issuer': cert.get_issuer(),
+             'serial_number': cert.get_serial_number(),
+             })
+    return {'certificates': certificates}

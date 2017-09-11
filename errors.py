@@ -31,7 +31,7 @@ class Error(BASE_EXCEPTION_CLASS):
         if self.errno != -1 and not done_format_msg:
             if self.sqlstate != "n/a":
                 if logger.getEffectiveLevel() in (logging.INFO,
-                                                       logging.DEBUG):
+                                                  logging.DEBUG):
                     self.msg = u'{errno:06d} ({sqlstate}): {sfqid}: {msg}'.format(
                         errno=self.errno, msg=self.msg,
                         sqlstate=self.sqlstate,
@@ -43,7 +43,7 @@ class Error(BASE_EXCEPTION_CLASS):
                         msg=self.msg)
             else:
                 if logger.getEffectiveLevel() in (logging.INFO,
-                                                       logging.DEBUG):
+                                                  logging.DEBUG):
                     self.msg = u'{errno:06d}: {sfqid}: {msg}'.format(
                         errno=self.errno, msg=self.msg,
                         sfqid=self.sfqid)
@@ -237,3 +237,16 @@ class BadGatewayError(Error):
             errno=kwargs.get('errno'),
             sqlstate=kwargs.get('sqlstate'),
             sfqid=kwargs.get('sfqid'))
+
+
+ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE = (
+    u"Failed to validate SSL certificate. The potential cause is you are "
+    u"behind a SSL proxy that doesn't bypass the certificate. Call "
+    u"snowflake.connector.connect() method with probe_connection option to "
+    u"print out the certificate chain. URL: {}")
+
+ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE_SNOWSQL = (
+    u"Failed to validate SSL certificate. The potential cause is you are "
+    u"behind a SSL proxy that doesn't bypass the certificate. Specify "
+    u"--probe-connection option to print out the certificate chain. "
+    u"URL: {}")

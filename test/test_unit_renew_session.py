@@ -9,9 +9,9 @@ from snowflake.connector.compat import (
 from snowflake.connector.network import SnowflakeRestful
 
 if PY2:
-    from mock import MagicMock, Mock
+    from mock import MagicMock, Mock, PropertyMock
 else:
-    from unittest.mock import MagicMock, Mock
+    from unittest.mock import MagicMock, Mock, PropertyMock
 
 
 def test_renew_session():
@@ -21,6 +21,8 @@ def test_renew_session():
     NEW_MASTER_TOKEN = "new_master_token"
     connection = MagicMock()
     connection.errorhandler = Mock(return_value=None)
+    type(connection)._probe_connection = PropertyMock(
+        return_value=False)
 
     rest = SnowflakeRestful(
         host='testaccount.snowflakecomputing.com',
