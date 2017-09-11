@@ -6,11 +6,13 @@
 
 from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.compat import PY2
+from snowflake.connector.network import (
+    SnowflakeRestful, CLIENT_VERSION, CLIENT_NAME)
 
 if PY2:
-    from mock import MagicMock, Mock
+    from mock import MagicMock, Mock, PropertyMock
 else:
-    from unittest.mock import MagicMock, Mock
+    from unittest.mock import MagicMock, Mock, PropertyMock
 
 
 def test_auth_okta():
@@ -44,9 +46,13 @@ def test_auth_okta():
 
     # step 3
     ref_one_time_token = '1token1'
-    rest.fetch.return_value = {
-        'cookieToken': ref_one_time_token,
-    }
+
+    def fake_fetch(method, full_url, headers, **kwargs):
+        return {
+            'cookieToken': ref_one_time_token,
+        }
+
+    rest.fetch = fake_fetch
     one_time_token = auth._step3(headers, token_url, user, password)
     assert not rest._connection.errorhandler.called  # no error
     assert one_time_token == ref_one_time_token
@@ -57,9 +63,13 @@ def test_auth_okta():
 <form action="https://testaccount.snowflakecomputing.com/post_back"></form>
 </body></body></html>
 '''
-    rest.fetch.return_value = ref_response_html
+
+    def fake_fetch(method, full_url, headers, **kwargs):
+        return ref_response_html
+
+    rest.fetch = fake_fetch
     response_html = auth._step4(one_time_token, sso_url)
-    assert response_html == ref_response_html
+    assert response_html == response_html
 
     # step 5
     rest._protocol = 'https'
@@ -144,11 +154,14 @@ def test_auth_okta_step3_negative():
     assert not rest._connection.errorhandler.called  # no error
 
     # step 3: authentication by IdP failed.
-    rest.fetch.return_value = {
-        'failed': 'auth failed',
-    }
+    def fake_fetch(method, full_url, headers, **kwargs):
+        return {
+            'failed': 'auth failed',
+        }
+
+    rest.fetch = fake_fetch
     _ = auth._step3(headers, token_url, user, password)
-    assert rest._connection.errorhandler.called  # authe failure error
+    assert rest._connection.errorhandler.called  # auth failure error
 
 
 def test_auth_okta_step5_negative():
@@ -174,9 +187,13 @@ def test_auth_okta_step5_negative():
     assert not rest._connection.errorhandler.called  # no error
     # step 3
     ref_one_time_token = '1token1'
-    rest.fetch.return_value = {
-        'cookieToken': ref_one_time_token,
-    }
+
+    def fake_fetch(method, full_url, headers, **kwargs):
+        return {
+            'cookieToken': ref_one_time_token,
+        }
+
+    rest.fetch = fake_fetch
     one_time_token = auth._step3(headers, token_url, user, password)
     assert not rest._connection.errorhandler.called  # no error
 
@@ -188,7 +205,11 @@ def test_auth_okta_step5_negative():
 "></form>
 </body></body></html>
 '''
-    rest.fetch.return_value = ref_response_html
+
+    def fake_fetch(method, full_url, headers, **kwargs):
+        return ref_response_html
+
+    rest.fetch = fake_fetch
     response_html = auth._step4(one_time_token, sso_url)
     assert response_html == ref_response_html
 
@@ -201,16 +222,33 @@ def test_auth_okta_step5_negative():
 
 
 def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
-    rest = MagicMock()
-    rest._post_request.return_value = {
-        'success': success,
-        'message': message,
-        'data': {
-            'ssoUrl': ref_sso_url,
-            'tokenUrl': ref_token_url,
+    def post_request(url, headers, body, **kwargs):
+        _ = url
+        _ = headers
+        _ = body
+        _ = kwargs.get('dummy')
+        return {
+            'success': success,
+            'message': message,
+            'data': {
+                'ssoUrl': ref_sso_url,
+                'tokenUrl': ref_token_url,
+            }
         }
-    }
-    rest._connection = MagicMock()
-    rest._connection._login_timeout = 120
-    rest._connection.errorhandler = Mock(return_value=None)
+
+    connection = MagicMock()
+    connection._login_timeout = 120
+    connection.errorhandler = Mock(return_value=None)
+    type(connection).application = PropertyMock(return_value=CLIENT_NAME)
+    type(connection)._internal_application_name = PropertyMock(
+        return_value=CLIENT_NAME
+    )
+    type(connection)._internal_application_version = PropertyMock(
+        return_value=CLIENT_VERSION
+    )
+
+    rest = SnowflakeRestful(host='testaccount.snowflakecomputing.com',
+                            port=443,
+                            connection=connection)
+    rest._post_request = post_request
     return rest

@@ -7,7 +7,8 @@ import time
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.compat import PY2
-from snowflake.connector.network import (CLIENT_NAME, CLIENT_VERSION)
+from snowflake.connector.network import (
+    CLIENT_NAME, CLIENT_VERSION, SnowflakeRestful)
 
 if PY2:
     from mock import MagicMock, Mock, PropertyMock
@@ -107,20 +108,21 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
 
 
 def _init_rest(application, post_requset):
-    rest = MagicMock()
-    rest._post_request = post_requset
-    rest._connection = MagicMock()
-    rest._connection._login_timeout = 120
-    rest._connection.errorhandler = Mock(return_value=None)
-    type(rest).master_token = PropertyMock(return_value=None)
-    type(rest).token = PropertyMock(return_value=None)
-    type(rest._connection).application = PropertyMock(return_value=application)
-    type(rest._connection)._internal_application_name = PropertyMock(
+    connection = MagicMock()
+    connection._login_timeout = 120
+    connection.errorhandler = Mock(return_value=None)
+    type(connection).application = PropertyMock(return_value=application)
+    type(connection)._internal_application_name = PropertyMock(
         return_value=CLIENT_NAME
     )
-    type(rest._connection)._internal_application_version = PropertyMock(
+    type(connection)._internal_application_version = PropertyMock(
         return_value=CLIENT_VERSION
     )
+
+    rest = SnowflakeRestful(host='testaccount.snowflakecomputing.com',
+                            port=443,
+                            connection=connection)
+    rest._post_request = post_requset
     return rest
 
 
@@ -140,8 +142,8 @@ def test_auth_mfa():
     auth = Auth(rest)
     auth.authenticate(None, account, user, password)
     assert not rest._connection.errorhandler.called  # not error
-    assert rest._token == 'TOKEN'
-    assert rest._master_token == 'MASTER_TOKEN'
+    assert rest.token == 'TOKEN'
+    assert rest.master_token == 'MASTER_TOKEN'
 
     # failure test case
     mock_cnt = 0

@@ -20,7 +20,7 @@ from .errors import (Error,
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
                       PYTHON_CONNECTOR_USER_AGENT, PLATFORM, PYTHON_VERSION,
-                      IMPLEMENTATION, COMPILER, CLIENT_NAME, CLIENT_VERSION)
+                      IMPLEMENTATION, COMPILER)
 from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
 from .version import VERSION
 
@@ -293,10 +293,10 @@ class Auth(object):
                     u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 })
         else:
-            self._rest._token = ret[u'data'][u'token']
-            self._rest._master_token = ret[u'data'][u'masterToken']
-            logger.debug(u'token = %s', self._rest._token)
-            logger.debug(u'master_token = %s', self._rest._master_token)
+            self._rest.update_tokens(
+                ret[u'data'][u'token'], ret[u'data'][u'masterToken'])
+            logger.debug(u'token = %s', self._rest.token)
+            logger.debug(u'master_token = %s', self._rest.master_token)
             if u'sessionId' in ret[u'data']:
                 self._rest._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
