@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.6 (September 14, 2017)
+
+    - Mitigated sigint handler config failure for SQLAlchemy
+    - Improved the message for invalid SSL certificate error
+    - Retry forever for query to mitigate 500 errors
+
 - v1.4.5 (August 31, 2017)
 
     - Fixed regression in #34 by rewriting SAML 2.0 compliant service application support.
