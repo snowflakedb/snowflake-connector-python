@@ -673,6 +673,7 @@ class SnowflakeRestful(object):
         except (ConnectTimeout,
                 ReadTimeout,
                 BadStatusLine,
+                ConnectionError,
                 SSLError,
                 ProtocolError,  # from urllib3
                 ReadTimeoutError,  # from urllib3
@@ -686,20 +687,6 @@ class SnowflakeRestful(object):
                 "stack:0",
                 exc_info=True)
             raise RetryRequest(err)
-        except ConnectionError as err:
-            logger.debug(u'ConnectionError: %s', err, exc_info=True)
-            # no full_url is required in the message
-            # as err includes all information
-            Error.errorhandler_wrapper(
-                self._connection, None,
-                OperationalError,
-                {
-                    u'msg': u'Failed to connect: {0}'.format(err),
-                    u'errno': ER_FAILED_TO_SERVER,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                }
-            )
-            return None  # required for tests
 
     def make_requests_session(self):
         s = requests.Session()
