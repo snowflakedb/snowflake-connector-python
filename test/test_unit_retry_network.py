@@ -25,7 +25,7 @@ from snowflake.connector.compat import (
     UNAUTHORIZED,
     BadStatusLine)
 from snowflake.connector.errors import (
-    InterfaceError, DatabaseError, OperationalError)
+    InterfaceError, DatabaseError)
 from snowflake.connector.network import (
     RetryRequest, SnowflakeRestful, STATUS_TO_EXCEPTION)
 
@@ -116,6 +116,7 @@ def test_request_exec():
         ReadTimeout,
         SSLError,
         ProtocolError,
+        ConnectionError,
         AttributeError
     ]:
         session = MagicMock()
@@ -146,13 +147,6 @@ def test_request_exec():
             pytest.fail('should fail')
         except RetryRequest as e:
             assert e.args[0] == exc, "same error instance"
-
-    # connection error
-    session = MagicMock()
-    session.request = Mock(side_effect=ConnectionError)
-
-    with pytest.raises(OperationalError):
-        rest._request_exec(session=session, **default_parameters)
 
 
 def test_fetch():
