@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.7 (September 20, 2017)
+
+    - Refresh AWS token in PUT command if S3UploadFailedError includes the ExpiredToken error
+    - Retry all of 5xx in connection
+
 - v1.4.6 (September 14, 2017)
 
     - Mitigated sigint handler config failure for SQLAlchemy
