@@ -12,6 +12,11 @@ Release Notes
 - v1.4.8 (October 5, 2017)
 
     - Updated Fed/SSO parameters. The production version of Fed/SSO from Python Connector requires this version.
+    - Refactored for Azure support
+    - Set CLIENT_APP_ID and CLIENT_APP_VERSION in all requests
+    - Support new behaviors of newer version of ``pyasn1``. Relaxed the dependency.
+    - Making socket timeout same as the login time
+    - Fixed the case where no error message is attached.
 
 - v1.4.7 (September 20, 2017)
 
