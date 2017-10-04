@@ -79,34 +79,11 @@ class Auth(object):
     def __init__(self, rest):
         self._rest = rest
 
-    def authenticate(self, auth_instance, account, user, password,
-                     database=None, schema=None,
-                     warehouse=None, role=None, passcode=None,
-                     passcode_in_password=False,
-                     mfa_callback=None, password_callback=None,
-                     session_parameters=None, timeout=120):
-        logger.debug(u'authenticate')
-
-        if self._rest.token and self._rest.master_token:
-            logger.debug(
-                u'token is already set. no further authentication was done.')
-            return
-
-        # connection could be null if REST API is used independently
-        application = self._rest._connection.application
-        internal_application_name = \
-            self._rest._connection._internal_application_name
-        internal_application_version = \
-            self._rest._connection._internal_application_version
-
-        request_id = TO_UNICODE(uuid.uuid4())
-        headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
-        }
-        url = u"/session/v1/login-request"
-        body_template = {
+    @staticmethod
+    def base_auth_data(user, account, application,
+                       internal_application_name,
+                       internal_application_version):
+        return {
             u'data': {
                 u"CLIENT_APP_ID": internal_application_name,
                 u"CLIENT_APP_VERSION": internal_application_version,
@@ -122,6 +99,31 @@ class Auth(object):
                 }
             },
         }
+
+    def authenticate(self, auth_instance, account, user, password,
+                     database=None, schema=None,
+                     warehouse=None, role=None, passcode=None,
+                     passcode_in_password=False,
+                     mfa_callback=None, password_callback=None,
+                     session_parameters=None, timeout=120):
+        logger.debug(u'authenticate')
+
+        if self._rest.token and self._rest.master_token:
+            logger.debug(
+                u'token is already set. no further authentication was done.')
+            return
+
+        request_id = TO_UNICODE(uuid.uuid4())
+        headers = {
+            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
+            u"accept": ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
+            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+        }
+        url = u"/session/v1/login-request"
+        body_template = Auth.base_auth_data(
+            user, account, self._rest._connection.application,
+            self._rest._connection._internal_application_name,
+            self._rest._connection._internal_application_version)
 
         body = copy.deepcopy(body_template)
         if auth_instance is not None:
