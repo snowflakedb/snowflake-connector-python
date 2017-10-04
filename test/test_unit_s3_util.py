@@ -10,9 +10,10 @@ from os import path
 
 import OpenSSL
 import botocore
+from boto3.exceptions import S3UploadFailedError
 
 from snowflake.connector.compat import PY2
-from snowflake.connector.constants import (SHA256_DIGEST, UTF8)
+from snowflake.connector.constants import (SHA256_DIGEST)
 from snowflake.connector.s3_util import (
     SnowflakeS3Util,
     ERRORNO_WSAECONNABORTED, DEFAULT_MAX_RETRY,
@@ -24,6 +25,7 @@ if PY2:
     from mock import Mock, MagicMock, PropertyMock
 else:
     from unittest.mock import Mock, MagicMock, PropertyMock
+
 
 def test_extract_bucket_name_and_path():
     """
@@ -204,3 +206,37 @@ def test_get_s3_file_object_http_400_error():
     akey = SnowflakeS3Util.get_s3_file_object(meta, filename)
     assert akey is None
     assert meta['result_status'] == RESULT_STATUS_RENEW_TOKEN
+
+
+def test_upload_file_with_s3_upload_failed_error():
+    """
+    Tests Upload file with S3UploadFailedError, which could indicate AWS
+    token expires.
+    """
+    upload_file = MagicMock(
+        side_effect=S3UploadFailedError(
+            "An error occurred (ExpiredToken) when calling the "
+            "CreateMultipartUpload operation: The provided token has expired."))
+    client = Mock()
+    client.Object.return_value = MagicMock(
+        metadata=defaultdict(str), upload_file=upload_file)
+    initial_parallel = 100
+    upload_meta = {
+        u'no_sleeping_time': True,
+        u'parallel': initial_parallel,
+        u'put_callback': None,
+        u'put_callback_output_stream': None,
+        u'existing_files': [],
+        SHA256_DIGEST: '123456789abcdef',
+        u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
+        u'client': client,
+        u'dst_file_name': 'data1.txt.gz',
+        u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+    }
+    upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
+    upload_meta[
+        u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+
+    akey = SnowflakeS3Util.upload_one_file_to_s3(upload_meta)
+    assert akey is None
+    assert upload_meta['result_status'] == RESULT_STATUS_RENEW_TOKEN

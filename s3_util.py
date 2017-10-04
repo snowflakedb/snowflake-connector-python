@@ -12,7 +12,6 @@ import shutil
 import time
 from collections import namedtuple
 from logging import getLogger
-from .encryption_util import (SnowflakeEncryptionUtil, EncryptionMetadata)
 
 import OpenSSL
 import boto3
@@ -21,8 +20,10 @@ from boto3.exceptions import RetriesExceededError, S3UploadFailedError
 from boto3.s3.transfer import TransferConfig
 from botocore.client import Config
 
+from .compat import TO_UNICODE
 from .constants import (AMZ_MATDESC, AMZ_KEY, AMZ_IV,
                         SFC_DIGEST, SHA256_DIGEST)
+from .encryption_util import (SnowflakeEncryptionUtil, EncryptionMetadata)
 
 RESULT_STATUS_ERROR = u'ERROR'
 RESULT_STATUS_UPLOADED = u'UPLOADED'
@@ -36,6 +37,8 @@ DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
+EXPIRED_TOKEN = u'ExpiredToken'
+
 """
 S3 Location: S3 bucket name + path
 """
@@ -45,7 +48,6 @@ S3Location = namedtuple(
         "s3path"  # S3 path name
 
     ])
-
 
 """
 Encryption Material
@@ -57,6 +59,7 @@ SnowflakeFileEncryptionMaterial = namedtuple(
         "smk_id"  # SMK id
     ]
 )
+
 
 class SnowflakeS3Util(object):
     """
@@ -182,7 +185,7 @@ class SnowflakeS3Util(object):
                 )
                 break
             except botocore.exceptions.ClientError as err:
-                if err.response[u'Error'][u'Code'] == u'ExpiredToken':
+                if err.response[u'Error'][u'Code'] == EXPIRED_TOKEN:
                     logger.debug(u"AWS Token expired. Renew and retry")
                     meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                     return
@@ -190,6 +193,25 @@ class SnowflakeS3Util(object):
                     u"Failed to upload a file: %s, err: %s",
                     data_file, err, exc_info=True)
                 raise err
+            except S3UploadFailedError as err:
+                if EXPIRED_TOKEN in TO_UNICODE(err):
+                    # Since AWS token expiration error can be encapsulated in
+                    # S3UploadFailedError, the text match is required to
+                    # identify the case.
+                    logger.debug(
+                        'Failed to upload a file: %s, err: %s. Renewing '
+                        'AWS Token and Retrying',
+                        data_file, err)
+                    meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
+                    return
+                last_err = err
+                logger.info(
+                    'Failed to upload a file: %s, err: %s. Retrying',
+                    data_file, err)
+                if 'no_sleeping_time' not in meta:
+                    sleeping_time = min(2 ** retry, 16)
+                    logger.debug(u"sleeping: %s", sleeping_time)
+                    time.sleep(sleeping_time)
             except OpenSSL.SSL.SysCallError as err:
                 last_err = err
                 if err.args[0] not in (
@@ -215,16 +237,6 @@ class SnowflakeS3Util(object):
                     sleeping_time = min(2 ** retry, 16)
                     logger.debug(u"sleeping: %s", sleeping_time)
                     time.sleep(sleeping_time)
-            except S3UploadFailedError as err:
-                last_err = err
-                logger.info(
-                    'Failed to upload a file: %s, err: %s. Retrying',
-                    data_file, err)
-                if 'no_sleeping_time' not in meta:
-                    sleeping_time = min(2 ** retry, 16)
-                    logger.debug(u"sleeping: %s", sleeping_time)
-                    time.sleep(sleeping_time)
-
         else:
             if last_err:
                 raise last_err
@@ -279,7 +291,7 @@ class SnowflakeS3Util(object):
                 )
                 break
             except botocore.exceptions.ClientError as err:
-                if err.response[u'Error'][u'Code'] == u'ExpiredToken':
+                if err.response[u'Error'][u'Code'] == EXPIRED_TOKEN:
                     logger.debug(u"AWS Token expired. Renew and retry")
                     meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                     return
@@ -287,6 +299,15 @@ class SnowflakeS3Util(object):
                     u"Failed to download a file: %s, err: %s",
                     full_dst_file_name, err, exc_info=True)
                 raise err
+            except RetriesExceededError as err:
+                last_err = err
+                logger.debug(
+                    'Failed to download a file: %s, err: %s. Retrying',
+                    full_dst_file_name, err)
+                if 'no_sleeping_time' not in meta:
+                    sleeping_time = min(2 ** retry, 16)
+                    logger.debug(u"sleeping: %s", sleeping_time)
+                    time.sleep(sleeping_time)
             except OpenSSL.SSL.SysCallError as err:
                 last_err = err
                 if err.args[0] not in (
@@ -308,15 +329,6 @@ class SnowflakeS3Util(object):
                     'Failed to download a file: %s, err: %s. Retrying with '
                     'max concurrency: %s',
                     full_dst_file_name, err, max_concurrency)
-                if 'no_sleeping_time' not in meta:
-                    sleeping_time = min(2 ** retry, 16)
-                    logger.debug(u"sleeping: %s", sleeping_time)
-                    time.sleep(sleeping_time)
-            except RetriesExceededError as err:
-                last_err = err
-                logger.info(
-                    'Failed to download a file: %s, err: %s. Retrying',
-                    full_dst_file_name, err)
                 if 'no_sleeping_time' not in meta:
                     sleeping_time = min(2 ** retry, 16)
                     logger.debug(u"sleeping: %s", sleeping_time)
@@ -399,7 +411,7 @@ class SnowflakeS3Util(object):
             akey = client.Object(s3location.bucket_name, s3path)
             akey.load()
         except botocore.exceptions.ClientError as e:
-            if e.response[u'Error'][u'Code'] == u'ExpiredToken':
+            if e.response[u'Error'][u'Code'] == EXPIRED_TOKEN:
                 logger.debug(u"AWS Token expired. Renew and retry")
                 meta[u'result_status'] = RESULT_STATUS_RENEW_TOKEN
                 return None
