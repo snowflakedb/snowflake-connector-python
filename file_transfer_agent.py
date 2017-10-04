@@ -18,7 +18,7 @@ from time import (time, sleep)
 import botocore.exceptions
 
 from .compat import (GET_CWD, TO_UNICODE)
-from .constants import (SHA256_DIGEST)
+from .constants import (SHA256_DIGEST, ResultStatus)
 from .converter_snowsql import SnowflakeConverterSnowSQL
 from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
                         ER_LOCAL_PATH_NOT_DIRECTORY,
@@ -28,10 +28,10 @@ from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
 from .errors import (Error, OperationalError, InternalError, DatabaseError,
                      ProgrammingError)
 from .file_compression_type import FileCompressionType
-from .s3_util import (SnowflakeFileEncryptionMaterial, SnowflakeS3Util,
-                      RESULT_STATUS_DOWNLOADED,
-                      RESULT_STATUS_ERROR, RESULT_STATUS_UPLOADED,
-                      RESULT_STATUS_RENEW_TOKEN)
+from .remote_storage_util import (SnowflakeFileEncryptionMaterial, SnowflakeRemoteStorageUtil,
+                                  )
+from .s3_util import SnowflakeS3Util
+
 from .file_util import SnowflakeFileUtil
 from .local_util import SnowflakeLocalUtil
 
@@ -155,15 +155,15 @@ class SnowflakeFileTransferAgent(object):
                 os.makedirs(self._local_location)
 
         if self._stage_location_type == LOCAL_FS:
-            if not os.path.isdir(self._stage_location):
-                os.makedirs(self._stage_location)
+            if not os.path.isdir(self._stage_info[u'location']):
+                os.makedirs(self._stage_info[u'location'])
 
         small_file_metas = []
         large_file_metas = []
         for meta in self._file_metadata.values():
             meta[u'overwrite'] = self._overwrite
             meta[u'self'] = self
-            if self._stage_location_type == S3_FS:
+            if self._stage_location_type != LOCAL_FS:
                 meta[u'put_callback'] = self._put_callback
                 meta[u'put_callback_output_stream'] = \
                     self._put_callback_output_stream
@@ -172,7 +172,7 @@ class SnowflakeFileTransferAgent(object):
                     self._get_callback_output_stream
                 if meta.get(
                         u'src_file_size',
-                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD:
+                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD: # TODO fli: s3 specific?
                     meta[u'parallel'] = self._parallel
                     large_file_metas.append(meta)
                 else:
@@ -192,7 +192,7 @@ class SnowflakeFileTransferAgent(object):
     def upload(self, large_file_metas, small_file_metas):
         storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
         client = storage_client.create_client(
-            self._stage_credentials,
+            self._stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint
         )
         for meta in small_file_metas:
@@ -207,11 +207,11 @@ class SnowflakeFileTransferAgent(object):
 
     def _transfer_accelerate_config(self):
         if self._stage_location_type == S3_FS:
-            client = SnowflakeS3Util.create_client(
-                self._stage_credentials,
+            client = SnowflakeRemoteStorageUtil.create_client(
+                self._stage_info,
                 use_accelerate_endpoint=False)
             s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-                self._stage_location
+                self._stage_info[u'location']
             )
             try:
                 ret = client.meta.client.get_bucket_accelerate_configuration(
@@ -258,7 +258,7 @@ class SnowflakeFileTransferAgent(object):
                 retry_meta = []
                 for result_meta in results:
                     if result_meta[
-                        u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
+                        u'result_status'] == ResultStatus.RENEW_TOKEN:
                         retry_meta.append(result_meta)
                     else:
                         self._results.append(result_meta)
@@ -289,7 +289,7 @@ class SnowflakeFileTransferAgent(object):
                 u'uploading files idx: {0}/{1}'.format(idx + 1, len_file_metas))
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
-            if result[u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
+            if result[u'result_status'] == ResultStatus.RENEW_TOKEN:
                 client = self.renew_expired_aws_token()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0][u'client'] = client
@@ -303,10 +303,12 @@ class SnowflakeFileTransferAgent(object):
 
     @staticmethod
     def get_storage_client(stage_location_type):
-        return {
-            LOCAL_FS: SnowflakeLocalUtil,
-            S3_FS: SnowflakeS3Util,
-        }.get(stage_location_type, None)
+        if(stage_location_type == LOCAL_FS):
+            return SnowflakeLocalUtil
+        elif(stage_location_type in [S3_FS]):
+            return SnowflakeRemoteStorageUtil
+        else:
+            return None
 
     @staticmethod
     def upload_one_file(meta):
@@ -347,9 +349,10 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'real_src_file_name'])
             meta[u'dst_file_size'] = 0
             if u'result_status' not in meta:
-                meta[u'result_status'] = RESULT_STATUS_ERROR
+                meta[u'result_status'] = ResultStatus.ERROR
             meta[u'error_details'] = TO_UNICODE(e)
         finally:
+            meta[u'result_status'] = meta[u'result_status'].value # turn enum to string, in order to have backward compatible interface
             logger.debug(u'cleaning up tmp dir: %s', tmp_dir)
             shutil.rmtree(tmp_dir)
         return meta
@@ -357,7 +360,7 @@ class SnowflakeFileTransferAgent(object):
     def download(self, large_file_metas, small_file_metas):
         storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
         client = storage_client.create_client(
-            self._stage_credentials,
+            self._stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint
         )
         for meta in small_file_metas:
@@ -397,7 +400,7 @@ class SnowflakeFileTransferAgent(object):
                 retry_meta = []
                 for result_meta in results:
                     if result_meta[
-                        u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
+                        u'result_status'] == ResultStatus.RENEW_TOKEN:
                         retry_meta.append(result_meta)
                     else:
                         self._results.append(result_meta)
@@ -426,7 +429,7 @@ class SnowflakeFileTransferAgent(object):
         while idx < len_file_metas:
             result = SnowflakeFileTransferAgent.download_one_file(
                 file_metas[idx])
-            if result[u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
+            if result[u'result_status'] == ResultStatus.RENEW_TOKEN:
                 client = self.renew_expired_aws_token()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0][u'client'] = client
@@ -450,16 +453,15 @@ class SnowflakeFileTransferAgent(object):
         try:
             storage_client = SnowflakeFileTransferAgent.get_storage_client(meta[u'stage_location_type'])
             storage_client.download_one_file(meta)
-
-            meta[u'result_status'] = RESULT_STATUS_DOWNLOADED
         except Exception as e:
             logger.exception(u'Failed to download a file: %s',
                              meta[u'src_file_name'])
             meta[u'dst_file_size'] = -1
             if u'result_status' not in meta:
-                meta[u'result_status'] = RESULT_STATUS_ERROR
+                meta[u'result_status'] = ResultStatus.ERROR
             meta[u'error_details'] = TO_UNICODE(e)
         finally:
+            meta[u'result_status'] = meta[u'result_status'].value  # turn enum to string, in order to have backward compatible interface
             shutil.rmtree(tmp_dir)
         return meta
 
@@ -468,11 +470,10 @@ class SnowflakeFileTransferAgent(object):
         logger.info(u'renewing expired aws token')
         ret = self._cursor._execute_helper(
             self._command)  # rerun the command to get the credential
-        stage_credentials = ret[u'data'][u'stageInfo'][u'creds']
-        stage_credentials['region'] = self._ret[u'data'][u'stageInfo'][u'region']
+        stage_info = ret[u'data'][u'stageInfo']
         storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
         return storage_client.create_client(
-            stage_credentials,
+            stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint)
 
     def result(self):
@@ -671,10 +672,9 @@ class SnowflakeFileTransferAgent(object):
         self._stage_location_type = self._ret[u'data'][u'stageInfo'][
             u'locationType'].upper()
         self._stage_location = self._ret[u'data'][u'stageInfo'][u'location']
-        self._stage_credentials = self._ret[u'data'][u'stageInfo'][u'creds']
-        self._stage_credentials['region'] = self._ret[u'data'][u'stageInfo'][
-            u'region']
-        if self._stage_location_type not in (S3_FS, LOCAL_FS):
+        self._stage_info = self._ret[u'data'][u'stageInfo']
+
+        if self.get_storage_client(self._stage_location_type) is None:
             Error.errorhandler_wrapper(
                 self._cursor.connection, self._cursor,
                 OperationalError,
@@ -727,10 +727,8 @@ class SnowflakeFileTransferAgent(object):
                     u'name': os.path.basename(file_name),
                     u'src_file_name': file_name,
                     u'src_file_size': statinfo.st_size,
-                    u'stage_location': os.path.expanduser(
-                        self._stage_location),
                     u'stage_location_type': self._stage_location_type,
-                    u'stage_credentials': self._stage_credentials,
+                    u'stage_info': self._stage_info,
                 }
                 if len(self._encryption_material) > 0:
                     self._file_metadata[file_name][u'encryption_material'] = \
@@ -746,10 +744,8 @@ class SnowflakeFileTransferAgent(object):
                         u'name': os.path.basename(file_name),
                         u'src_file_name': file_name,
                         u'dst_file_name': dst_file_name,
-                        u'stage_location': os.path.expanduser(
-                            self._stage_location),
                         u'stage_location_type': self._stage_location_type,
-                        u'stage_credentials': self._stage_credentials,
+                        u'stage_info': self._stage_info,
                         u'local_location': self._local_location,
                     }
                     if file_name in self._src_file_to_encryption_material:

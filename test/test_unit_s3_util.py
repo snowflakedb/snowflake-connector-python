@@ -13,11 +13,10 @@ import botocore
 from boto3.exceptions import S3UploadFailedError
 
 from snowflake.connector.compat import PY2
-from snowflake.connector.constants import (SHA256_DIGEST)
-from snowflake.connector.s3_util import (
-    SnowflakeS3Util,
-    ERRORNO_WSAECONNABORTED, DEFAULT_MAX_RETRY,
-    RESULT_STATUS_RENEW_TOKEN)
+from snowflake.connector.constants import (SHA256_DIGEST, ResultStatus)
+from snowflake.connector.remote_storage_util import (
+    SnowflakeRemoteStorageUtil,DEFAULT_MAX_RETRY)
+from snowflake.connector.s3_util import (SnowflakeS3Util, ERRORNO_WSAECONNABORTED)
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
@@ -31,7 +30,7 @@ def test_extract_bucket_name_and_path():
     """
     Extract bucket name and S3 path
     """
-    s3_util = SnowflakeS3Util()
+    s3_util = SnowflakeS3Util
 
     s3_loc = s3_util.extract_bucket_name_and_path(
         'sfc-dev1-regression/test_sub_dir/')
@@ -79,7 +78,10 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
         u'existing_files': [],
         u'client': client,
         SHA256_DIGEST: '123456789abcdef',
-        u'stage_location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+        u'stage_info': {
+            u'location':'sfc-customer-stage/rwyi-testacco/users/9220/',
+            u'locationType': 'S3',
+        },
         u'dst_file_name': 'data1.txt.gz',
         u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
     }
@@ -87,7 +89,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     upload_meta[u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
     tmp_upload_meta = upload_meta.copy()
     try:
-        SnowflakeS3Util.upload_one_file_to_s3(tmp_upload_meta)
+        SnowflakeRemoteStorageUtil.upload_one_file_to_s3(tmp_upload_meta)
         raise Exception("Should fail with OpenSSL.SSL.SysCallError")
     except OpenSSL.SSL.SysCallError:
         assert upload_file.call_count == DEFAULT_MAX_RETRY
@@ -102,7 +104,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     upload_meta[u'parallel'] = initial_parallel
     tmp_upload_meta = upload_meta.copy()
     try:
-        SnowflakeS3Util.upload_one_file_to_s3(tmp_upload_meta)
+        SnowflakeRemoteStorageUtil.upload_one_file_to_s3(tmp_upload_meta)
         raise Exception("Should fail with OpenSSL.SSL.SysCallError")
     except OpenSSL.SSL.SysCallError:
         assert upload_file.call_count == DEFAULT_MAX_RETRY
@@ -133,7 +135,10 @@ def test_upload_one_file_to_s3_econnreset():
             u'put_callback_output_stream': None,
             u'existing_files': [],
             SHA256_DIGEST: '123456789abcdef',
-            u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
+            u'stage_info': {
+                u'location': 'sfc-teststage/rwyitestacco/users/1234/',
+                u'locationType': 'S3',
+            },
             u'client': client,
             u'dst_file_name': 'data1.txt.gz',
             u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
@@ -142,7 +147,7 @@ def test_upload_one_file_to_s3_econnreset():
         upload_meta[
             u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
         try:
-            SnowflakeS3Util.upload_one_file_to_s3(upload_meta)
+            SnowflakeRemoteStorageUtil.upload_one_file_to_s3(upload_meta)
             raise Exception("Should fail with OpenSSL.SSL.SysCallError")
         except OpenSSL.SSL.SysCallError:
             assert upload_file.call_count == DEFAULT_MAX_RETRY
@@ -169,7 +174,10 @@ def test_upload_one_file_to_s3_unknown_openssl_error():
             u'put_callback_output_stream': None,
             u'existing_files': [],
             SHA256_DIGEST: '123456789abcdef',
-            u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
+            u'stage_info': {
+                u'location': 'sfc-teststage/rwyitestacco/users/1234/',
+                u'locationType': 'S3',
+            },
             u'client': client,
             u'dst_file_name': 'data1.txt.gz',
             u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
@@ -178,7 +186,7 @@ def test_upload_one_file_to_s3_unknown_openssl_error():
         upload_meta[
             u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
         try:
-            SnowflakeS3Util.upload_one_file_to_s3(upload_meta)
+            SnowflakeRemoteStorageUtil.upload_one_file_to_s3(upload_meta)
             raise Exception("Should fail with OpenSSL.SSL.SysCallError")
         except OpenSSL.SSL.SysCallError:
             assert upload_file.call_count == 1
@@ -200,12 +208,15 @@ def test_get_s3_file_object_http_400_error():
     type(client).s3path = PropertyMock(return_value='s3://testbucket/')
     meta = {
         u'client': client,
-        u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
+        u'stage_info': {
+            u'location': 'sfc-teststage/rwyitestacco/users/1234/',
+            u'locationType': 'S3',
+        }
     }
     filename = "/path1/file2.txt"
-    akey = SnowflakeS3Util.get_s3_file_object(meta, filename)
+    akey = SnowflakeS3Util.get_file_header(meta, filename)
     assert akey is None
-    assert meta['result_status'] == RESULT_STATUS_RENEW_TOKEN
+    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
 
 
 def test_upload_file_with_s3_upload_failed_error():
@@ -228,7 +239,10 @@ def test_upload_file_with_s3_upload_failed_error():
         u'put_callback_output_stream': None,
         u'existing_files': [],
         SHA256_DIGEST: '123456789abcdef',
-        u'stage_location': 'sfc-teststage/rwyitestacco/users/1234/',
+        u'stage_info': {
+            u'location': 'sfc-teststage/rwyitestacco/users/1234/',
+            u'locationType': 'S3',
+        },
         u'client': client,
         u'dst_file_name': 'data1.txt.gz',
         u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
@@ -237,6 +251,6 @@ def test_upload_file_with_s3_upload_failed_error():
     upload_meta[
         u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
 
-    akey = SnowflakeS3Util.upload_one_file_to_s3(upload_meta)
+    akey = SnowflakeRemoteStorageUtil.upload_one_file_to_s3(upload_meta)
     assert akey is None
-    assert upload_meta['result_status'] == RESULT_STATUS_RENEW_TOKEN
+    assert upload_meta['result_status'] == ResultStatus.RENEW_TOKEN

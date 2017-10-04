@@ -23,6 +23,11 @@ except:
     CONNECTION_PARAMETERS_S3 = {}
 
 try:
+    from parameters import CONNECTION_PARAMETERS_AZURE
+except:
+    CONNECTION_PARAMETERS_AZURE = {}
+
+try:
     from parameters import CONNECTION_PARAMETERS_ADMIN
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
@@ -91,6 +96,14 @@ def db_parameters():
         for k, v in CONNECTION_PARAMETERS.items():
             ret['s3_' + k] = v
 
+    # azure testaccount connection info. Not available in TravisCI
+    if CONNECTION_PARAMETERS_AZURE:
+        for k, v in CONNECTION_PARAMETERS_AZURE.items():
+            ret['azure_' + k] = v
+    else:
+        for k, v in CONNECTION_PARAMETERS.items():
+            ret['azure_' + k] = v
+
     # snowflake admin account. Not available in TravisCI
     for k, v in CONNECTION_PARAMETERS_ADMIN.items():
         ret['sf_' + k] = v
@@ -138,6 +151,19 @@ def init_test_schema(request):
                 database=ret['s3_database'],
                 account=ret['s3_account'],
                 protocol=ret['s3_protocol']
+        ) as con:
+            con.cursor().execute(
+                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+            
+    if CONNECTION_PARAMETERS_AZURE:
+        with snowflake.connector.connect(
+                user=ret['azure_user'],
+                password=ret['azure_password'],
+                host=ret['azure_host'],
+                port=ret['azure_port'],
+                database=ret['azure_database'],
+                account=ret['azure_account'],
+                protocol=ret['azure_protocol']
         ) as con:
             con.cursor().execute(
                 "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))

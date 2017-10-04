@@ -12,6 +12,7 @@ import boto3
 import pytest
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.remote_storage_util import SnowflakeRemoteStorageUtil
 from snowflake.connector.s3_util import SnowflakeS3Util
 
 try:
@@ -62,6 +63,9 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
                     tmp_dir))
             rec = c.fetchone()
             assert rec[0].startswith('snow9144'), 'A file downloaded by GET'
+            assert rec[1] == 36, 'Return right file size'
+            assert rec[2] == u'DOWNLOADED' , 'Return DOWNLOADED status'
+            assert rec[3] == u'', 'Return no error message'
             cnx.cursor().execute("rm @%snow9144")
             cnx.cursor().execute("rm @~/snow9144")
     finally:

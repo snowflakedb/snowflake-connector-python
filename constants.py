@@ -8,7 +8,7 @@ Various constants
 """
 
 from collections import defaultdict
-
+from enum import Enum
 from six import PY2
 
 DBAPI_TYPE_STRING = 0
@@ -109,3 +109,15 @@ AMZ_KEY = u"x-amz-key"
 AMZ_IV = u"x-amz-iv"
 SFC_DIGEST = u'sfc-digest'
 SHA256_DIGEST = u'sha256_digest'
+
+class ResultStatus(Enum):
+    ERROR = u'ERROR'
+    UPLOADED = u'UPLOADED'
+    DOWNLOADED = u'DOWNLOADED'
+    COLLISION = u'COLLISION'
+    SKIPPED = u'SKIPPED'
+    RENEW_TOKEN = u'RENEW_TOKEN'
+    NOT_FOUND_FILE = u'NOT_FOUND_FILE'
+    NEED_RETRY = u'NEED_RETRY'
+    NEED_RETRY_WITH_LOWER_CONCURRENCY = u'NEED_RETRY_WITH_LOWER_CONCURRENCY'
+
