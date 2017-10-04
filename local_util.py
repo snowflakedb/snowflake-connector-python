@@ -8,12 +8,11 @@ from __future__ import division
 
 import os
 from logging import getLogger
-
-RESULT_STATUS_UPLOADED = u'UPLOADED'
+from .constants import ResultStatus
 
 class SnowflakeLocalUtil(object):
     @staticmethod
-    def create_client(stage_credentials, use_accelerate_endpoint=False):
+    def create_client(stage_info, use_accelerate_endpoint=False):
         return None
 
     @staticmethod
@@ -22,25 +21,25 @@ class SnowflakeLocalUtil(object):
         logger.debug(
             u"src_file_name=[%s], "
             u"real_src_file_name=[%s], "
-            u"stage_location=[%s], "
+            u"stage_info=[%s], "
             u"dst_file_name=[%s]",
             meta[u'src_file_name'],
             meta[u'real_src_file_name'],
-            meta[u'stage_location'],
+            meta[u'stage_info'],
             meta[u'dst_file_name']
         )
         with open(meta[u'real_src_file_name'], u'rb') as frd:
-            with open(os.path.join(meta[u'stage_location'],
+            with open(os.path.join(os.path.expanduser(meta[u'stage_info'][u'location']),
                                    meta[u'dst_file_name']), u'wb') as output:
                 output.writelines(frd)
 
         meta[u'dst_file_size'] = meta[u'upload_size']
-        meta[u'result_status'] = RESULT_STATUS_UPLOADED
+        meta[u'result_status'] = ResultStatus.UPLOADED
 
     @staticmethod
     def download_one_file(meta):
         full_src_file_name = os.path.join(
-            meta[u'stage_location'],
+        os.path.expanduser(meta[u'stage_info'][u'location']),
             meta[u'src_file_name'] if not meta[u'src_file_name'].startswith(
                 os.sep) else
             meta[u'src_file_name'][1:])
@@ -56,3 +55,4 @@ class SnowflakeLocalUtil(object):
                 output.writelines(frd)
         statinfo = os.stat(full_dst_file_name)
         meta[u'dst_file_size'] = statinfo.st_size
+        meta[u'result_status'] = ResultStatus.DOWNLOADED
