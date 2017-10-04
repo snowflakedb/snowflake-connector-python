@@ -45,11 +45,27 @@ from .rfc6960 import (OCSPRequest, OCSPResponse, TBSRequest, CertID, Request,
                       Version, BasicOCSPResponse,
                       OCSPResponseStatus)
 
+PYASN1_VERSION_LOCK = Lock()
+
+PYASN1_VERSION = None  # be init once
+
 ROOT_CERTIFICATES_DICT_LOCK = Lock()
 
 ROOT_CERTIFICATES_DICT = {}  # root certificates
 
 logger = getLogger(__name__)
+
+
+def _get_pyasn1_version():
+    global PYASN1_VERSION_LOCK
+    global PYASN1_VERSION
+    with PYASN1_VERSION_LOCK:
+        if PYASN1_VERSION is None:
+            import pyasn1
+            v = pyasn1.__version__
+            l = [int(x, 10) for x in v.split('.')]
+            l.reverse()
+            PYASN1_VERSION = sum(x * (1000 ** i) for i, x in enumerate(l))
 
 
 def _read_ca_bundle(ca_bundle_file):
@@ -299,6 +315,17 @@ def _verify_signature(
         return e
 
 
+def _has_certs_in_ocsp_response(certs):
+    """
+    Check if the certificate is attached to OCSP response
+    """
+    global PYASN1_VERSION
+    if PYASN1_VERSION <= 3000:
+        return certs is not None
+    else:
+        return certs is not None and certs.hasValue() and certs[0].hasValue()
+
+
 def process_ocsp_response(response, ocsp_issuer):
     """
     process OCSP response
@@ -325,7 +352,7 @@ def process_ocsp_response(response, ocsp_issuer):
         response_bytes['response'],
         BasicOCSPResponse())
 
-    if basic_ocsp_response['certs'] is not None:
+    if _has_certs_in_ocsp_response(basic_ocsp_response['certs']):
         logger.debug("Certificate is attached in Basic OCSP Response")
         cert_der = der_encoder.encode(basic_ocsp_response['certs'][0])
         ocsp_cert = load_certificate(FILETYPE_ASN1, cert_der)
@@ -342,12 +369,7 @@ def process_ocsp_response(response, ocsp_issuer):
                 tbs_response_data['version']),
             errno=ER_INVALID_OCSP_RESPONSE)
 
-    if tbs_response_data['responderID']['byName']:
-        # Noop
-        logger.debug(
-            'Responder Name: %s',
-            tbs_response_data['responderID']['byName'])
-    elif tbs_response_data['responderID']['byKey']:
+    if tbs_response_data['responderID']['byKey']:
         # verify the public key
         # But I don't know how much value of this checking
         # because pubkey must have been known to anybody
@@ -368,6 +390,11 @@ def process_ocsp_response(response, ocsp_issuer):
                 'Responder PublicKey: %s',
                 base64.b64encode(octet_string_to_bytearray(
                     tbs_response_data['responderID']['byKey'])))
+    elif tbs_response_data['responderID']['byName']:
+        # Noop
+        logger.debug(
+            'Responder Name: %s',
+            tbs_response_data['responderID']['byName'])
     else:
         raise OperationalError(
             msg='Invalid Responder ID: {0}'.format(
@@ -1047,7 +1074,7 @@ class SnowflakeOCSP(object):
                 '\\', '/')
 
         logger.debug("ocsp_response_cache_url: %s",
-                          self._ocsp_response_cache_url)
+                     self._ocsp_response_cache_url)
         logger.debug(
             "OCSP_VALIDATION_CACHE size: %s", len(OCSP_VALIDATION_CACHE))
 
@@ -1073,6 +1100,7 @@ class SnowflakeOCSP(object):
         # no load concurrency issue happens later
         #
         'test'.encode("charmap")
+        _get_pyasn1_version()
 
     def validate(self, hostname, connection,
                  ignore_no_ocsp=False):
@@ -1158,7 +1186,7 @@ class SnowflakeOCSP(object):
             ocsp_issuer, ocsp_subject, use_cache=use_cache)
 
         logger.debug('must_use_cache: %s, cache_status: %s',
-                          self._must_use_cache, cache_status)
+                     self._must_use_cache, cache_status)
 
         # Disabled assert. If two distinct certificates are used
         # for the same URL, e.g., AWS S3 endpoint, one cannot hit
