@@ -8,7 +8,7 @@ import logging
 import socket
 import webbrowser
 
-from .auth import AuthByExternalService
+from .auth import AuthByExternalService, EXTERNAL_BROWSER_AUTHENTICATOR
 from .compat import (unquote)
 from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
@@ -16,6 +16,8 @@ from .network import (CONTENT_TYPE_APPLICATION_JSON,
 from .version import VERSION
 
 logger = logging.getLogger(__name__)
+
+BUF_SIZE = 16384
 
 
 # global state of web server that receives the SAML assertion from
@@ -31,7 +33,7 @@ class AuthByWebBrowser(AuthByExternalService):
     def __init__(self, rest, application,
                  webbrowser_pkg=None, socket_pkg=None):
         self._rest = rest
-        self._saml_response = None
+        self._token = None
         self._application = application
         self._proof_key = None
         self._webbrowser = webbrowser if webbrowser_pkg is None else webbrowser_pkg
@@ -39,10 +41,18 @@ class AuthByWebBrowser(AuthByExternalService):
 
     @property
     def assertion_content(self):
-        return self._saml_response
+        """ Returns the token."""
+        return self._token
 
     def update_body(self, body):
-        body[u'data'][u'SAML_RESPONSE'] = self._saml_response
+        """ Used by Auth to update the request that gets sent to
+        /v1/login-request.
+
+        Args:
+            body: existing request dictionary
+        """
+        body[u'data'][u'AUTHENTICATOR'] = EXTERNAL_BROWSER_AUTHENTICATOR
+        body[u'data'][u'TOKEN'] = self._token
         body[u'data'][u'PROOF_KEY'] = self._proof_key
 
     def authenticate(self, authenticator, account, user, password):
@@ -93,7 +103,7 @@ class AuthByWebBrowser(AuthByExternalService):
         socket_client, _ = socket_connection.accept()
         try:
             # Receive the data in small chunks and retransmit it
-            data = socket_client.recv(16384).decode('utf-8').split("\r\n")
+            data = socket_client.recv(BUF_SIZE).decode('utf-8').split("\r\n")
             target_lines = \
                 [line for line in data if line.startswith("GET ")]
             if len(target_lines) < 1:
@@ -113,7 +123,7 @@ class AuthByWebBrowser(AuthByExternalService):
                 logger.debug("No User-Agent")
 
             _, url, _ = target_line.split()
-            self._saml_response = unquote(url[len('/?token='):])
+            self._token = unquote(url[len('/?token='):])
             msg = """
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>SAML Response for Snowflake</title></head>
