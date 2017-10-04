@@ -28,10 +28,12 @@ from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
 from .errors import (Error, OperationalError, InternalError, DatabaseError,
                      ProgrammingError)
 from .file_compression_type import FileCompressionType
-from .s3_util import (SnowflakeS3FileEncryptionMaterial, SnowflakeS3Util,
+from .s3_util import (SnowflakeFileEncryptionMaterial, SnowflakeS3Util,
                       RESULT_STATUS_DOWNLOADED,
                       RESULT_STATUS_ERROR, RESULT_STATUS_UPLOADED,
                       RESULT_STATUS_RENEW_TOKEN)
+from .file_util import SnowflakeFileUtil
+from .local_util import SnowflakeLocalUtil
 
 S3_FS = u'S3'
 LOCAL_FS = u'LOCAL_FS'
@@ -188,15 +190,15 @@ class SnowflakeFileTransferAgent(object):
             self.download(large_file_metas, small_file_metas)
 
     def upload(self, large_file_metas, small_file_metas):
-        if self._stage_location_type == S3_FS:
-            s3client = SnowflakeS3Util.create_s3_client(
-                self._stage_credentials,
-                use_accelerate_endpoint=self._use_accelerate_endpoint
-            )
-            for meta in small_file_metas:
-                meta[u's3client'] = s3client
-            for meta in large_file_metas:
-                meta[u's3client'] = s3client
+        storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
+        client = storage_client.create_client(
+            self._stage_credentials,
+            use_accelerate_endpoint=self._use_accelerate_endpoint
+        )
+        for meta in small_file_metas:
+            meta[u'client'] = client
+        for meta in large_file_metas:
+            meta[u'client'] = client
 
         if len(small_file_metas) > 0:
             self._upload_files_in_parallel(small_file_metas)
@@ -205,14 +207,14 @@ class SnowflakeFileTransferAgent(object):
 
     def _transfer_accelerate_config(self):
         if self._stage_location_type == S3_FS:
-            s3client = SnowflakeS3Util.create_s3_client(
+            client = SnowflakeS3Util.create_client(
                 self._stage_credentials,
                 use_accelerate_endpoint=False)
             s3location = SnowflakeS3Util.extract_bucket_name_and_path(
                 self._stage_location
             )
             try:
-                ret = s3client.meta.client.get_bucket_accelerate_configuration(
+                ret = client.meta.client.get_bucket_accelerate_configuration(
                     Bucket=s3location.bucket_name)
                 self._use_accelerate_endpoint = \
                     ret and 'Status' in ret and \
@@ -264,12 +266,12 @@ class SnowflakeFileTransferAgent(object):
                 if len(retry_meta) == 0:
                     # no new AWS token is required
                     break
-                s3client = self.renew_expired_aws_token()
+                client = self.renew_expired_aws_token()
                 for result_meta in retry_meta:
-                    result_meta[u's3client'] = s3client
+                    result_meta[u'client'] = client
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
-                        file_metas[u's3client'] = s3client
+                        file_metas[u'client'] = client
                 target_meta = retry_meta
 
             if end_of_idx == len_file_metas:
@@ -288,9 +290,9 @@ class SnowflakeFileTransferAgent(object):
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
             if result[u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
-                s3client = self.renew_expired_aws_token()
+                client = self.renew_expired_aws_token()
                 for idx0 in range(idx, len_file_metas):
-                    file_metas[idx0][u's3client'] = s3client
+                    file_metas[idx0][u'client'] = client
                 continue
             self._results.append(result)
             idx += 1
@@ -298,6 +300,13 @@ class SnowflakeFileTransferAgent(object):
                 logger.debug('LONGEVITY TEST: waiting for %s',
                                   INJECT_WAIT_IN_PUT)
                 sleep(INJECT_WAIT_IN_PUT)
+
+    @staticmethod
+    def get_storage_client(stage_location_type):
+        return {
+            LOCAL_FS: SnowflakeLocalUtil,
+            S3_FS: SnowflakeS3Util,
+        }.get(stage_location_type, None)
 
     @staticmethod
     def upload_one_file(meta):
@@ -314,21 +323,18 @@ class SnowflakeFileTransferAgent(object):
             if meta[u'require_compress']:
                 logger.info(u'compressing file=%s', meta[u'src_file_name'])
                 meta[u'real_src_file_name'], upload_size = \
-                    SnowflakeS3Util.compress_file_with_gzip(
+                    SnowflakeFileUtil.compress_file_with_gzip(
                         meta[u'src_file_name'], tmp_dir)
             logger.debug(
                 u'getting digest file=%s', meta[u'real_src_file_name'])
             sha256_digest, upload_size = \
-                SnowflakeS3Util.get_digest_and_size_for_file(
+                SnowflakeFileUtil.get_digest_and_size_for_file(
                     meta[u'real_src_file_name'])
             meta[SHA256_DIGEST] = sha256_digest
             meta[u'upload_size'] = upload_size
-
             logger.info(u'really uploading data')
-            if meta[u'stage_location_type'] == LOCAL_FS:
-                SnowflakeFileTransferAgent.upload_one_file_to_local(meta)
-            else:  # S3
-                SnowflakeS3Util.upload_one_file_to_s3_with_retry(meta)
+            storage_client = SnowflakeFileTransferAgent.get_storage_client(meta[u'stage_location_type'])
+            storage_client.upload_one_file_with_retry(meta)
             logger.info(
                 u'done: status=%s, file=%s, real file=%s',
                 meta[u'result_status'],
@@ -349,15 +355,15 @@ class SnowflakeFileTransferAgent(object):
         return meta
 
     def download(self, large_file_metas, small_file_metas):
-        if self._stage_location_type == S3_FS:
-            s3client = SnowflakeS3Util.create_s3_client(
-                self._stage_credentials,
-                use_accelerate_endpoint=self._use_accelerate_endpoint)
-
-            for meta in small_file_metas:
-                meta[u's3client'] = s3client
-            for meta in large_file_metas:
-                meta[u's3client'] = s3client
+        storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
+        client = storage_client.create_client(
+            self._stage_credentials,
+            use_accelerate_endpoint=self._use_accelerate_endpoint
+        )
+        for meta in small_file_metas:
+            meta[u'client'] = client
+        for meta in large_file_metas:
+            meta[u'client'] = client
 
         if len(small_file_metas) > 0:
             self._download_files_in_parallel(small_file_metas)
@@ -399,12 +405,12 @@ class SnowflakeFileTransferAgent(object):
                 if len(retry_meta) == 0:
                     # no new AWS token is required
                     break
-                s3client = self.renew_expired_aws_token()
+                client = self.renew_expired_aws_token()
                 for result_meta in retry_meta:
-                    result_meta[u's3client'] = s3client
+                    result_meta[u'client'] = client
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
-                        file_metas[u's3client'] = s3client
+                        file_metas[u'client'] = client
                 target_meta = retry_meta
 
             if end_of_idx == len_file_metas:
@@ -421,9 +427,9 @@ class SnowflakeFileTransferAgent(object):
             result = SnowflakeFileTransferAgent.download_one_file(
                 file_metas[idx])
             if result[u'result_status'] == RESULT_STATUS_RENEW_TOKEN:
-                s3client = self.renew_expired_aws_token()
+                client = self.renew_expired_aws_token()
                 for idx0 in range(idx, len_file_metas):
-                    file_metas[idx0][u's3client'] = s3client
+                    file_metas[idx0][u'client'] = client
                 continue
             self._results.append(result)
             idx += 1
@@ -442,10 +448,8 @@ class SnowflakeFileTransferAgent(object):
         tmp_dir = tempfile.mkdtemp()
         meta[u'tmp_dir'] = tmp_dir
         try:
-            if meta[u'stage_location_type'] == LOCAL_FS:
-                SnowflakeFileTransferAgent.download_one_file_from_local(meta)
-            else:  # S3
-                SnowflakeS3Util.download_one_file_from_s3(meta)
+            storage_client = SnowflakeFileTransferAgent.get_storage_client(meta[u'stage_location_type'])
+            storage_client.download_one_file(meta)
 
             meta[u'result_status'] = RESULT_STATUS_DOWNLOADED
         except Exception as e:
@@ -459,47 +463,6 @@ class SnowflakeFileTransferAgent(object):
             shutil.rmtree(tmp_dir)
         return meta
 
-    @staticmethod
-    def download_one_file_from_local(meta):
-        full_src_file_name = os.path.join(
-            meta[u'stage_location'],
-            meta[u'src_file_name'] if not meta[u'src_file_name'].startswith(
-                os.sep) else
-            meta[u'src_file_name'][1:])
-        full_dst_file_name = os.path.join(
-            meta[u'local_location'],
-            os.path.basename(meta[u'dst_file_name']))
-        base_dir = os.path.dirname(full_dst_file_name)
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir)
-
-        with open(full_src_file_name, u'rb') as frd:
-            with open(full_dst_file_name, u'wb+') as output:
-                output.writelines(frd)
-        statinfo = os.stat(full_dst_file_name)
-        meta[u'dst_file_size'] = statinfo.st_size
-
-    @staticmethod
-    def upload_one_file_to_local(meta):
-        logger = getLogger(__name__)
-        logger.debug(
-            u"src_file_name=[%s], "
-            u"real_src_file_name=[%s], "
-            u"stage_location=[%s], "
-            u"dst_file_name=[%s]",
-            meta[u'src_file_name'],
-            meta[u'real_src_file_name'],
-            meta[u'stage_location'],
-            meta[u'dst_file_name']
-        )
-        with open(meta[u'real_src_file_name'], u'rb') as frd:
-            with open(os.path.join(meta[u'stage_location'],
-                                   meta[u'dst_file_name']), u'wb') as output:
-                output.writelines(frd)
-
-        meta[u'dst_file_size'] = meta[u'upload_size']
-        meta[u'result_status'] = RESULT_STATUS_UPLOADED
-
     def renew_expired_aws_token(self):
         logger = getLogger(__name__)
         logger.info(u'renewing expired aws token')
@@ -507,7 +470,8 @@ class SnowflakeFileTransferAgent(object):
             self._command)  # rerun the command to get the credential
         stage_credentials = ret[u'data'][u'stageInfo'][u'creds']
         stage_credentials['region'] = self._ret[u'data'][u'stageInfo'][u'region']
-        return SnowflakeS3Util.create_s3_client(
+        storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
+        return storage_client.create_client(
             stage_credentials,
             use_accelerate_endpoint=self._use_accelerate_endpoint)
 
@@ -618,7 +582,7 @@ class SnowflakeFileTransferAgent(object):
 
             if self._command_type == CMD_TYPE_UPLOAD:
                 self._encryption_material.append(
-                    SnowflakeS3FileEncryptionMaterial(
+                    SnowflakeFileEncryptionMaterial(
                         query_stage_master_key=root_node[
                             u'queryStageMasterKey'],
                         query_id=root_node[u'queryId'],
@@ -627,7 +591,7 @@ class SnowflakeFileTransferAgent(object):
                 for elem in root_node:
                     if elem is not None:
                         self._encryption_material.append(
-                            SnowflakeS3FileEncryptionMaterial(
+                            SnowflakeFileEncryptionMaterial(
                                 query_stage_master_key=elem[
                                     u'queryStageMasterKey'],
                                 query_id=elem[u'queryId'],

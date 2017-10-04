@@ -112,13 +112,13 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
         s3path = s3location.s3path + os.path.basename(fname) + ".gz"
 
         # positive case
-        s3client = boto3.resource(
+        client = boto3.resource(
             's3',
             aws_access_key_id=stage_credentials['AWS_ID'],
             aws_secret_access_key=stage_credentials['AWS_KEY'],
             aws_session_token=stage_credentials['AWS_TOKEN'])
 
-        s3client.meta.client.upload_file(
+        client.meta.client.upload_file(
             fname, s3location.bucket_name, s3path)
 
         # negative: wrong location, attempting to put the file in the
@@ -126,26 +126,26 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
         parent_s3path = os.path.dirname(os.path.dirname(s3path)) + '/'
 
         with pytest.raises(Exception):
-            s3client.meta.client.upload_file(
+            client.meta.client.upload_file(
                 fname, s3location.bucket_name, parent_s3path)
 
         # negative: missing AWS_TOKEN
-        s3client = boto3.resource(
+        client = boto3.resource(
             's3',
             aws_access_key_id=stage_credentials['AWS_ID'],
             aws_secret_access_key=stage_credentials['AWS_KEY'])
         with pytest.raises(Exception):
-            s3client.meta.client.upload_file(
+            client.meta.client.upload_file(
                 fname, s3location.bucket_name, s3path)
 
 
-def _s3bucket_list(self, s3client, s3bucket):
+def _s3bucket_list(self, client, s3bucket):
     """
     Attempts to get the keys from the list.
 
     Must raise an exception
     """
-    s3bucket = s3client.Bucket(s3bucket)
+    s3bucket = client.Bucket(s3bucket)
     return [key for key in s3bucket.objects]
 
 
@@ -178,10 +178,10 @@ def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
             stage_location)
 
         # listing
-        s3client = boto3.resource(
+        client = boto3.resource(
             's3',
             aws_access_key_id=stage_credentials['AWS_ID'],
             aws_secret_access_key=stage_credentials['AWS_KEY'],
             aws_session_token=stage_credentials['AWS_TOKEN'])
         with pytest.raises(Exception):
-            _s3bucket_list(s3client, s3location.bucket_name)
+            _s3bucket_list(client, s3location.bucket_name)

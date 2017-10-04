@@ -76,6 +76,8 @@ ratio number(5,2))
         assert len(ret) == 1 and ret[0]['status'] == "LOADED", \
             "Failed to load data"
 
+        assert ret[0]['rows_loaded'] == 3, "Failed to load 3 rows of data"
+
         run(cnx, 'drop table if exists {name}')
 
 
@@ -95,10 +97,12 @@ def test_put_copy_compressed(conn_cnx, db_parameters):
         ret = run(cnx, "put file://{file} @%{name}")
         assert ret[0]['source'] == os.path.basename(data_file), "File name"
         assert ret[0]['source_size'] == file_size, "File size"
+        assert ret[0]['status'] == 'UPLOADED'
 
         ret = run(cnx, "copy into {name}")
         assert len(ret) == 1 and ret[0]['status'] == "LOADED", \
             "Failed to load data"
+        assert ret[0]['rows_loaded'] == 1, "Failed to load 1 rows of data"
 
         run(cnx, 'drop table if exists {name}')
 
@@ -302,8 +306,9 @@ format_name='common.public.csv'
 compression='gzip')
 max_file_size=10000000
 """)
-        run(cnx, "get @{name_unload}/ file://{tmp_dir_user}/")
+        ret = run(cnx, "get @{name_unload}/ file://{tmp_dir_user}/")
 
+        assert ret[0][2] == 'DOWNLOADED', 'Failed to download'
         cnt = 0
         for _, _, _ in os.walk(tmp_dir_user):
             cnt += 1
