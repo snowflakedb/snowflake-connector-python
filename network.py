@@ -341,7 +341,9 @@ class SnowflakeRestful(object):
         except Exception as e:
             logger.debug('error in deleting session. ignoring...: %s', e)
 
-    def _get_request(self, url, headers, token=None, timeout=None):
+    def _get_request(self, url, headers, token=None,
+                     timeout=None,
+                     socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT):
         if 'Content-Encoding' in headers:
             del headers['Content-Encoding']
         if 'Content-Length' in headers:
@@ -354,7 +356,7 @@ class SnowflakeRestful(object):
             url=url,
         )
         ret = self.fetch(u'get', full_url, headers, timeout=timeout,
-                         token=token)
+                         token=token, socket_timeout=socket_timeout)
         if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
             logger.debug(
@@ -366,7 +368,8 @@ class SnowflakeRestful(object):
         return ret
 
     def _post_request(self, url, headers, body, token=None,
-                      timeout=None, _no_results=False, no_retry=False):
+                      timeout=None, _no_results=False, no_retry=False,
+                      socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT):
         full_url = u'{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
@@ -383,7 +386,7 @@ class SnowflakeRestful(object):
 
         ret = self.fetch(u'post', full_url, headers, data=body,
                          timeout=timeout, token=token,
-                         no_retry=no_retry)
+                         no_retry=no_retry, socket_timeout=socket_timeout)
         logger.debug(
             u'ret[code] = {code}, after post request'.format(
                 code=(ret.get(u'code', u'N/A'))))
@@ -598,7 +601,14 @@ class SnowflakeRestful(object):
             is_raw_text=False,
             is_raw_binary=False,
             is_raw_binary_iterator=True,
-            use_ijson=False):
+            use_ijson=False,
+            socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT):
+        if socket_timeout > DEFAULT_SOCKET_CONNECT_TIMEOUT:
+            # socket timeout should not be more than the default.
+            # A shorter timeout may be specified for login time, but
+            # for query, it should be at least 45 seconds.
+            socket_timeout = DEFAULT_SOCKET_CONNECT_TIMEOUT
+        logger.debug('socket timeout: %s', socket_timeout)
         try:
             if not catch_okta_unauthorized_error and data and len(data) > 0:
                 gzdata = BytesIO()
@@ -619,7 +629,7 @@ class SnowflakeRestful(object):
                 proxies=proxies,
                 headers=headers,
                 data=input_data,
-                timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+                timeout=socket_timeout,
                 verify=True,
                 stream=is_raw_binary,
                 auth=SnowflakeAuth(token),
