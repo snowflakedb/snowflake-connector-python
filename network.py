@@ -298,7 +298,7 @@ class SnowflakeRestful(object):
             logger.debug(u'failed: %s', ret)
             err = ret.get(u'message')
             if err is not None and ret.get(u'data'):
-                err += ret[u'data'][u'errorMessage']
+                err += ret[u'data'].get(u'errorMessage', '')
             Error.errorhandler_wrapper(
                 self._connection, None, ProgrammingError,
                 {
@@ -334,9 +334,8 @@ class SnowflakeRestful(object):
             if not ret or ret.get(u'success'):
                 return
             err = ret.get(u'message')
-            if err is not None and ret.get(u'data') and ret[u'data'].get(
-                    u'errorMessage'):
-                err += ret[u'data'][u'errorMessage']
+            if err is not None and ret.get(u'data'):
+                err += ret[u'data'].get(u'errorMessage', '')
                 # no exception is raised
             logger.debug('error in deleting session. ignoring...: %s', err)
         except Exception as e:

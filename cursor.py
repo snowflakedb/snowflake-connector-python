@@ -513,8 +513,8 @@ class SnowflakeCursor(object):
             logger.debug(ret)
             err = ret[u'message']
             code = ret.get(u'code', -1)
-            if u'data' in ret and u'errorMessage' in ret[u'data']:
-                err += ret[u'data'][u'errorMessage']
+            if u'data' in ret:
+                err += ret[u'data'].get(u'errorMessage', '')
             errvalue = {
                 u'msg': err,
                 u'errno': int(code),
@@ -619,8 +619,8 @@ class SnowflakeCursor(object):
             logger.debug(ret)
             err = ret[u'message']
             code = ret.get(u'code', -1)
-            if u'data' in ret and u'errorMessage' in ret[u'data']:
-                err += ret[u'data'][u'errorMessage']
+            if u'data' in ret:
+                err += ret[u'data'].get(u'errorMessage', '')
             errvalue = {
                 u'msg': err,
                 u'errno': int(code),
