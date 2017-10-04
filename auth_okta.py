@@ -8,7 +8,7 @@ import logging
 
 from .auth import AuthByExternalService
 from .compat import (urlsplit, unescape, urlencode)
-from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_IDP_CONNECTION_ERROR,
+from .errorcode import (ER_IDP_CONNECTION_ERROR,
                         ER_INCORRECT_DESTINATION)
 from .errors import (Error, DatabaseError)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
@@ -127,7 +127,8 @@ class AuthByOkta(AuthByExternalService):
         )
         ret = self._rest._post_request(
             url, headers, json.dumps(body),
-            timeout=self._rest._connection._login_timeout)
+            timeout=self._rest._connection._login_timeout,
+            socket_timeout=self._rest._connection._login_timeout)
 
         if not ret[u'success']:
             self.handle_failure(ret)
@@ -164,10 +165,12 @@ class AuthByOkta(AuthByExternalService):
             u'username': user,
             u'password': password,
         }
-        ret = self._rest.fetch(u'post', token_url, headers,
-                               data=json.dumps(data),
-                               timeout=self._rest._connection._login_timeout,
-                               catch_okta_unauthorized_error=True)
+        ret = self._rest.fetch(
+            u'post', token_url, headers,
+            data=json.dumps(data),
+            timeout=self._rest._connection._login_timeout,
+            socket_timeout=self._rest._connection._login_timeout,
+            catch_okta_unauthorized_error=True)
         one_time_token = ret.get(u'cookieToken')
         if not one_time_token:
             Error.errorhandler_wrapper(
@@ -198,6 +201,7 @@ class AuthByOkta(AuthByExternalService):
         response_html = self._rest.fetch(
             u'get', sso_url, headers,
             timeout=self._rest._connection._login_timeout,
+            socket_timeout=self._rest._connection._login_timeout,
             is_raw_text=True)
         return response_html
 
