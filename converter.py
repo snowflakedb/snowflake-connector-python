@@ -211,7 +211,6 @@ class SnowflakeConverter(object):
 
         scale = ctx['scale']
 
-        raise RuntimeError
         def conv0(encoded_value):
             value, tz = encoded_value.split()
             tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
