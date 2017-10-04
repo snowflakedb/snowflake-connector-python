@@ -25,7 +25,7 @@ from snowflake.connector.compat import (
     UNAUTHORIZED,
     BadStatusLine)
 from snowflake.connector.errors import (
-    InterfaceError, DatabaseError)
+    InterfaceError, DatabaseError, OtherHTTPRetryableError)
 from snowflake.connector.network import (
     RetryRequest, SnowflakeRestful, STATUS_TO_EXCEPTION)
 
@@ -86,6 +86,7 @@ def test_request_exec():
         BAD_GATEWAY,  # 502
         SERVICE_UNAVAILABLE,  # 503
         GATEWAY_TIMEOUT,  # 504
+        555,  # random 5xx error
     ]:
         type(request_mock).status_code = PropertyMock(return_value=errcode)
         try:
@@ -93,8 +94,12 @@ def test_request_exec():
                 session=session, **default_parameters)
             pytest.fail('should fail')
         except RetryRequest as e:
-            assert isinstance(e.args[0], STATUS_TO_EXCEPTION[errcode]), \
-                "must be internal error exception"
+            cls = STATUS_TO_EXCEPTION.get(
+                errcode,
+                OtherHTTPRetryableError)
+            assert isinstance(
+                e.args[0],
+                cls), "must be internal error exception"
 
     # unauthorized
     type(request_mock).status_code = PropertyMock(return_value=UNAUTHORIZED)

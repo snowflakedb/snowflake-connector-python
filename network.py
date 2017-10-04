@@ -33,17 +33,18 @@ from . import proxy
 from . import ssl_wrap_socket
 from .compat import (
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
-    FORBIDDEN, BAD_GATEWAY,
+    FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
 from .compat import (TO_UNICODE, urlencode)
 from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
                         ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION,
-                        ER_FAILED_TO_SERVER, ER_INVALID_CERTIFICATE)
+                        ER_INVALID_CERTIFICATE)
 from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      GatewayTimeoutError, ServiceUnavailableError,
                      InterfaceError, InternalServerError, ForbiddenError,
                      BadGatewayError, BadRequest,
+                     OtherHTTPRetryableError,
                      ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE,
                      ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE_SNOWSQL)
 from .gzip_decoder import decompress_raw_data
@@ -109,6 +110,17 @@ STATUS_TO_EXCEPTION = {
     BAD_REQUEST: BadRequest,
     BAD_GATEWAY: BadGatewayError,
 }
+
+
+def is_retryable_http_code(code):
+    """
+    Is retryable HTTP code?
+    """
+    return code >= 500 and code < 600 or code in (
+        BAD_REQUEST,  # 400
+        FORBIDDEN,  # 403
+        REQUEST_TIMEOUT,  # 408
+    )
 
 
 class RetryRequest(Exception):
@@ -632,11 +644,14 @@ class SnowflakeRestful(object):
                         ret = raw_ret.json()
                     return ret
 
-                if raw_ret.status_code in STATUS_TO_EXCEPTION:
-                    ex = STATUS_TO_EXCEPTION[raw_ret.status_code]()
-                    logger.debug('%s. Retrying...', ex)
-                    # retryable exceptions
-                    raise RetryRequest(ex)
+                if is_retryable_http_code(
+                        raw_ret.status_code):
+                    ex = STATUS_TO_EXCEPTION.get(
+                        raw_ret.status_code, OtherHTTPRetryableError)
+                    exi = ex(code=raw_ret.status_code)
+                    logger.debug('%s. Retrying...', exi)
+                    # retryable server exceptions
+                    raise RetryRequest(exi)
 
                 elif raw_ret.status_code == UNAUTHORIZED and \
                         catch_okta_unauthorized_error:
@@ -683,8 +698,8 @@ class SnowflakeRestful(object):
                 AttributeError  # json decoding error
                 ) as err:
             logger.debug(
-                "Hit retryable error. Retrying... Ignore the following error "
-                "stack:0",
+                "Hit retryable client error. Retrying... Ignore the following "
+                "error stack: %s", err,
                 exc_info=True)
             raise RetryRequest(err)
 

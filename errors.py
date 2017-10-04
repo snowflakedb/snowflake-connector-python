@@ -239,6 +239,20 @@ class BadGatewayError(Error):
             sfqid=kwargs.get('sfqid'))
 
 
+class OtherHTTPRetryableError(Error):
+    """
+    Exception for other HTTP error for retry
+    """
+
+    def __init__(self, **kwargs):
+        code = kwargs.get('code', 'n/a')
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP {0}'.format(code),
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
+
+
 ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE = (
     u"Failed to validate SSL certificate. The potential cause is you are "
     u"behind a SSL proxy that doesn't bypass the certificate. Call "
