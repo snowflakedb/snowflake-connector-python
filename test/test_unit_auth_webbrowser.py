@@ -4,6 +4,7 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 
+from snowflake.connector.auth import EXTERNAL_BROWSER_AUTHENTICATOR
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.compat import PY2
 from snowflake.connector.network import (SnowflakeRestful, CLIENT_NAME,
@@ -61,8 +62,9 @@ def test_auth_webbrowser():
     assert auth.assertion_content == ref_token
     body = {u'data': {}}
     auth.update_body(body)
-    assert body[u'data'][u'SAML_RESPONSE'] == ref_token
+    assert body[u'data'][u'TOKEN'] == ref_token
     assert body[u'data'][u'PROOF_KEY'] == REF_PROOF_KEY
+    assert body[u'data'][u'AUTHENTICATOR'] == EXTERNAL_BROWSER_AUTHENTICATOR
 
 
 def test_auth_webbrowser_fail_webbrowser():
