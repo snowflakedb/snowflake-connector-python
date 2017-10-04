@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.8 (October 5, 2017)
+
+    - Updated Fed/SSO parameters. The production version of Fed/SSO from Python Connector requires this version.
+
 - v1.4.7 (September 20, 2017)
 
     - Refresh AWS token in PUT command if S3UploadFailedError includes the ExpiredToken error
