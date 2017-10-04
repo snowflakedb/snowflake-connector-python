@@ -6,15 +6,14 @@
 import json
 import logging
 
-from .auth import AuthByExternalService
+from .auth import Auth, AuthByExternalService
 from .compat import (urlsplit, unescape, urlencode)
 from .errorcode import (ER_IDP_CONNECTION_ERROR,
                         ER_INCORRECT_DESTINATION)
 from .errors import (Error, DatabaseError)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
-                      PYTHON_CONNECTOR_USER_AGENT, CLIENT_NAME, CLIENT_VERSION)
+                      PYTHON_CONNECTOR_USER_AGENT)
 from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
-from .version import VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -98,29 +97,28 @@ class AuthByOkta(AuthByExternalService):
             another SP.
         """
         logger.info(u'authenticating by SAML')
-        headers, sso_url, token_url = self._step1(account, authenticator)
+        headers, sso_url, token_url = self._step1(account, user, authenticator)
         self._step2(authenticator, sso_url, token_url)
         one_time_token = self._step3(headers, token_url, user, password)
         response_html = self._step4(one_time_token, sso_url)
         self._step5(response_html)
 
-    def _step1(self, account, authenticator):
+    def _step1(self, account, user, authenticator):
         logger.debug(u'step 1: query GS to obtain IDP token and SSO url')
+
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": CONTENT_TYPE_APPLICATION_JSON,
             u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
         }
         url = u"/session/authenticator-request"
-        body = {
-            u'data': {
-                u"CLIENT_APP_ID": CLIENT_NAME,
-                u"CLIENT_APP_VERSION": CLIENT_VERSION,
-                u"SVN_REVISION": VERSION[3],
-                u"ACCOUNT_NAME": account,
-                u"AUTHENTICATOR": authenticator,
-            },
-        }
+        body = Auth.base_auth_data(
+            user, account,
+            self._rest._connection.application,
+            self._rest._connection._internal_application_name,
+            self._rest._connection._internal_application_version)
+
+        body[u"data"][u"AUTHENTICATOR"] = authenticator
         logger.debug(
             u'account=%s, authenticator=%s',
             account, authenticator,

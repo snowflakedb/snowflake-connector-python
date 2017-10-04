@@ -8,12 +8,11 @@ import logging
 import socket
 import webbrowser
 
-from .auth import AuthByExternalService, EXTERNAL_BROWSER_AUTHENTICATOR
+from .auth import Auth, AuthByExternalService, EXTERNAL_BROWSER_AUTHENTICATOR
 from .compat import (unquote)
 from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
-                      PYTHON_CONNECTOR_USER_AGENT, CLIENT_NAME, CLIENT_VERSION)
-from .version import VERSION
+                      PYTHON_CONNECTOR_USER_AGENT)
 
 logger = logging.getLogger(__name__)
 
@@ -153,17 +152,14 @@ You can close this window now and go back where you started from.
             u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
         }
         url = u"/session/authenticator-request"
-        body = {
-            u'data': {
-                u"CLIENT_APP_ID": CLIENT_NAME,
-                u"CLIENT_APP_VERSION": CLIENT_VERSION,
-                u"LOGIN_NAME": user,
-                u"SVN_REVISION": VERSION[3],
-                u"ACCOUNT_NAME": account,
-                u"AUTHENTICATOR": authenticator,
-                u"BROWSER_MODE_REDIRECT_PORT": str(callback_port),
-            },
-        }
+        body = Auth.base_auth_data(
+            user, account,
+            self._rest._connection.application,
+            self._rest._connection._internal_application_name,
+            self._rest._connection._internal_application_version)
+
+        body[u'data'][u'AUTHENTICATOR'] = authenticator
+        body[u'data'][u"BROWSER_MODE_REDIRECT_PORT"] = str(callback_port)
         logger.debug(u'account=%s, authenticator=%s, user=%s',
                      account, authenticator, user)
         ret = self._rest._post_request(

@@ -32,7 +32,7 @@ def test_auth_okta():
     auth = AuthByOkta(rest, application)
 
     # step 1
-    headers, sso_url, token_url = auth._step1(authenticator, account)
+    headers, sso_url, token_url = auth._step1(authenticator, account, user)
     assert not rest._connection.errorhandler.called  # no error
     assert headers.get('accept') is not None
     assert headers.get('Content-Type') is not None
@@ -87,6 +87,7 @@ def test_auth_okta_step1_negative():
     authenticator = 'https://testsso.snowflake.net/'
     application = 'testapplication'
     account = 'testaccount'
+    user = 'testuser'
 
     # not success status is returned
     ref_sso_url = 'https://testsso.snowflake.net/sso'
@@ -95,7 +96,7 @@ def test_auth_okta_step1_negative():
         ref_sso_url, ref_token_url, success=False, message='error')
     auth = AuthByOkta(rest, application)
     # step 1
-    _, _, _ = auth._step1(authenticator, account)
+    _, _, _ = auth._step1(authenticator, account, user)
     assert rest._connection.errorhandler.called  # error should be raised
 
 
@@ -106,6 +107,7 @@ def test_auth_okta_step2_negative():
     authenticator = 'https://testsso.snowflake.net/'
     application = 'testapplication'
     account = 'testaccount'
+    user = 'testuser'
 
     # invalid SSO URL
     ref_sso_url = 'https://testssoinvalid.snowflake.net/sso'
@@ -114,7 +116,7 @@ def test_auth_okta_step2_negative():
 
     auth = AuthByOkta(rest, application)
     # step 1
-    headers, sso_url, token_url = auth._step1(authenticator, account)
+    headers, sso_url, token_url = auth._step1(authenticator, account, user)
     # step 2
     auth._step2(authenticator, sso_url, token_url)
     assert rest._connection.errorhandler.called  # error
@@ -126,7 +128,7 @@ def test_auth_okta_step2_negative():
 
     auth = AuthByOkta(rest, application)
     # step 1
-    headers, sso_url, token_url = auth._step1(authenticator, account)
+    headers, sso_url, token_url = auth._step1(authenticator, account, user)
     # step 2
     auth._step2(authenticator, sso_url, token_url)
     assert rest._connection.errorhandler.called  # error
@@ -148,7 +150,7 @@ def test_auth_okta_step3_negative():
 
     auth = AuthByOkta(rest, application)
     # step 1
-    headers, sso_url, token_url = auth._step1(authenticator, account)
+    headers, sso_url, token_url = auth._step1(authenticator, account, user)
     # step 2
     auth._step2(authenticator, sso_url, token_url)
     assert not rest._connection.errorhandler.called  # no error
@@ -180,7 +182,7 @@ def test_auth_okta_step5_negative():
 
     auth = AuthByOkta(rest, application)
     # step 1
-    headers, sso_url, token_url = auth._step1(authenticator, account)
+    headers, sso_url, token_url = auth._step1(authenticator, account, user)
     assert not rest._connection.errorhandler.called  # no error
     # step 2
     auth._step2(authenticator, sso_url, token_url)
