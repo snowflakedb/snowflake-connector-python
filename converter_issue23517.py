@@ -76,7 +76,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         def conv(value):
-            t, _, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
+            t, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
             return t
 
         return conv

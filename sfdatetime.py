@@ -5,7 +5,6 @@
 #
 import time
 from datetime import datetime, timedelta
-from logging import getLogger
 
 import pytz
 
@@ -117,9 +116,10 @@ class SnowflakeDateTime(UnicodeMixin):
     nanoseconds precision.
     """
 
-    def __init__(self, ts, nanosecond):
+    def __init__(self, ts, nanosecond, scale):
         self._datetime = ts
         self._nanosecond = nanosecond
+        self._scale = scale
 
     @property
     def datetime(self):
@@ -156,9 +156,9 @@ class SnowflakeDateTimeFormat(object):
 
         self._simple_datetime_pattern = self._fragments[0][u'python_format']
 
-        self._nano_str = u'{:d}'
+        self._nano_str = u'{:09d}'
         if self._fractions_pos >= 0 and self._fractions_with_dot:
-            self._nano_str = u'.{:d}'
+            self._nano_str = u'.{:09d}'
 
         self.format = getattr(self, u'_format_{type_name}'.format(
             type_name=datetime_class.__name__))
@@ -173,17 +173,27 @@ class SnowflakeDateTimeFormat(object):
             # if FF is included
             if hasattr(value, 'microsecond'):
                 fraction = value.microsecond
+                self._nano_str = u'{:06d}'
+                if self._fractions_with_dot:
+                    self._nano_str = u'.{:06d}'
             elif hasattr(value, 'nanosecond'):
                 fraction = value.nanosecond
             else:
+                self._nano_str = u'{:01d}'
+                if self._fractions_with_dot:
+                    self._nano_str = u'.{:01d}'
                 fraction = 0  # struct_time. no fraction of second
+
             if self._fractions_len > 0:
                 # truncate up to the specified length of FF
-                nano_value = self._nano_str.format(fraction) + u'000000000'
-                nano_value = nano_value[:self._fractions_len + 1]
+                nano_value = self._nano_str.format(fraction)[
+                             :self._fractions_len + 1]
             else:
                 # no length of FF is specified
                 nano_value = self._nano_str.format(fraction)
+                if hasattr(value, '_scale'):
+                    nano_value = nano_value[:value._scale + 1]
+
             updated_format = \
                 updated_format[:self._fractions_pos] + nano_value + \
                 updated_format[self._fractions_pos:]

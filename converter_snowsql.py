@@ -17,9 +17,11 @@ from .sfdatetime import (SnowflakeDateTimeFormat, SnowflakeDateTime)
 logger = getLogger(__name__)
 
 
-def format_sftimestamp(fmt, value, franction_of_nanoseconds):
-    sf_datetime = SnowflakeDateTime(value, nanosecond=franction_of_nanoseconds)
-    return fmt.format(sf_datetime) if fmt else TO_UNICODE(sf_datetime)
+def format_sftimestamp(ctx, value, franction_of_nanoseconds):
+    sf_datetime = SnowflakeDateTime(
+        value, nanosecond=franction_of_nanoseconds, scale=ctx.get('scale'))
+    return ctx['fmt'].format(sf_datetime) if ctx.get('fmt') else TO_UNICODE(
+        sf_datetime)
 
 
 class SnowflakeConverterSnowSQL(SnowflakeConverter):
@@ -59,7 +61,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     #
     def to_python_method(self, type_name, column):
         ctx = column.copy()
-        if ctx.get('scale'):
+        if ctx.get('scale') is not None:
             ctx['max_fraction'] = int(10 ** ctx['scale'])
             ctx['zero_fill'] = '0' * (9 - ctx['scale'])
         fmt = None
@@ -119,7 +121,8 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 ts = ZERO_EPOCH + timedelta(
                     seconds=int(value) * (24 * 60 * 60))
                 t = date(ts.year, ts.month, ts.day)
-            return ctx['fmt'].format(SnowflakeDateTime(t, nanosecond=0))
+            return ctx['fmt'].format(SnowflakeDateTime(
+                t, nanosecond=0, scale=0))
 
         return conv
 
@@ -139,14 +142,10 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
                 int(tz) - 1440)
             t = datetime.fromtimestamp(microseconds, tz=tzinfo)
-            if scale == 0:
-                fraction_of_nanoseconds = 0
-            else:
-                fraction_of_nanoseconds = int(value[-scale:])
-                if value[0] == '-':
-                    fraction_of_nanoseconds = max_fraction - fraction_of_nanoseconds
+            fraction_of_nanoseconds = SnowflakeConverter._adjust_fraction_of_nanoseconds(
+                value, max_fraction, scale)
 
-            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+            return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         def conv(encoded_value):
             value, tz = encoded_value.split()
@@ -154,22 +153,18 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
                 int(tz) - 1440)
             t = datetime.fromtimestamp(microseconds, tz=tzinfo)
-            if scale == 0:
-                fraction_of_nanoseconds = 0
-            else:
-                fraction_of_nanoseconds = int(value[-scale:])
-                if value[0] == '-':
-                    fraction_of_nanoseconds = max_fraction - fraction_of_nanoseconds
+            fraction_of_nanoseconds = SnowflakeConverter._adjust_fraction_of_nanoseconds(
+                value, max_fraction, scale)
 
-            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+            return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         return conv if scale > 6 else conv0
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         def conv(value):
-            t, _, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
+            t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(
                 value, ctx)
-            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+            return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         return conv
 
@@ -181,7 +176,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value):
-            microseconds, _, fraction_of_nanoseconds = \
+            microseconds, fraction_of_nanoseconds = \
                 self._extract_timestamp(value, ctx)
             try:
                 t = ZERO_EPOCH + timedelta(seconds=(microseconds))
@@ -191,7 +186,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                     " %s(ms). Falling back to use struct_time.",
                     microseconds)
                 t = time.gmtime(microseconds)
-            return format_sftimestamp(ctx['fmt'], t, fraction_of_nanoseconds)
+            return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         return conv
 
