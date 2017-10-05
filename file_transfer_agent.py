@@ -189,6 +189,10 @@ class SnowflakeFileTransferAgent(object):
         else:
             self.download(large_file_metas, small_file_metas)
 
+        # turn enum to string, in order to have backward compatible interface
+        for result in self._results:
+            result[u'result_status'] = result[u'result_status'].value
+
     def upload(self, large_file_metas, small_file_metas):
         storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
         client = storage_client.create_client(
@@ -352,7 +356,6 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'result_status'] = ResultStatus.ERROR
             meta[u'error_details'] = TO_UNICODE(e)
         finally:
-            meta[u'result_status'] = meta[u'result_status'].value # turn enum to string, in order to have backward compatible interface
             logger.debug(u'cleaning up tmp dir: %s', tmp_dir)
             shutil.rmtree(tmp_dir)
         return meta
@@ -461,7 +464,6 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'result_status'] = ResultStatus.ERROR
             meta[u'error_details'] = TO_UNICODE(e)
         finally:
-            meta[u'result_status'] = meta[u'result_status'].value  # turn enum to string, in order to have backward compatible interface
             shutil.rmtree(tmp_dir)
         return meta
 
