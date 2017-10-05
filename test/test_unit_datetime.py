@@ -43,6 +43,15 @@ def test_basic_datetime_format():
     assert formatter.format(value) == u'2014-11-30T12:31:45.987654'
 
 
+def test_datetime_with_smaller_milliseconds():
+    # date time => date time in microseconds with full precision up to
+    # microseconds
+    value = datetime(2014, 11, 30, 12, 31, 45, microsecond=123)
+    formatter = sfdatetime.SnowflakeDateTimeFormat(
+        u'YYYY-MM-DD"T"HH24:MI:SS.FF9')
+    assert formatter.format(value) == u'2014-11-30T12:31:45.000123'
+
+
 def test_datetime_format_negative():
     u"""Datetime format negative"""
     value = datetime(2014, 11, 30, 12, 31, 45, microsecond=987654)
@@ -60,7 +69,8 @@ def test_struct_time_format():
 
     # struct_time encapsulated in SnowflakeDateTime. Mainly used by SnowSQL
     value = sfdatetime.SnowflakeDateTime(
-        time.strptime("30 Sep 01 11:20:30", "%d %b %y %H:%M:%S"), nanosecond=0
+        time.strptime("30 Sep 01 11:20:30", "%d %b %y %H:%M:%S"),
+        nanosecond=0, scale=1
     )
     formatter = sfdatetime.SnowflakeDateTimeFormat(
         u'YYYY-MM-DD"T"HH24:MI:SS.FF',
@@ -75,7 +85,7 @@ def test_struct_time_format():
 
     # extreme large epoch time
     value = sfdatetime.SnowflakeDateTime(
-        time.gmtime(14567890123567), nanosecond=0)
+        time.gmtime(14567890123567), nanosecond=0, scale=1)
     formatter = sfdatetime.SnowflakeDateTimeFormat(
         u'YYYY-MM-DD"T"HH24:MI:SS.FF',
         datetime_class=sfdatetime.SnowflakeDateTime)
