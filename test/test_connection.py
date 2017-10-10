@@ -353,3 +353,16 @@ def test_invalid_proxy(db_parameters):
             proxy_host='localhost',
             proxy_port='3333'
         )
+
+
+@pytest.mark.timeout(15)
+def test_eu_connection():
+    with pytest.raises(ForbiddenError):
+        # must reach Snowflake
+        snowflake.connector.connect(
+            account='testaccount',
+            user='testuser',
+            password='testpassword',
+            region='eu-central-1',
+            login_timeout=5,
+        )
