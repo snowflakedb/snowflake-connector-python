@@ -369,38 +369,6 @@ def process_ocsp_response(response, ocsp_issuer):
                 tbs_response_data['version']),
             errno=ER_INVALID_OCSP_RESPONSE)
 
-    if tbs_response_data['responderID']['byKey']:
-        # verify the public key
-        # But I don't know how much value of this checking
-        # because pubkey must have been known to anybody
-        # MITM can replicate it.
-        sha1_cert = _get_pubickey_sha1_hash(ocsp_cert).digest()
-        sha1_ocsp = tbs_response_data['responderID']['byKey']
-        sha1_ocsp = octet_string_to_bytearray(sha1_ocsp).decode(
-            'latin-1').encode('latin-1')
-
-        if sha1_cert != sha1_ocsp:
-            raise OperationalError(
-                msg=u"The responder id didn't match the public key"
-                    u"of the issuer certificate/leaf certificate",
-                errno=ER_INVALID_OCSP_RESPONSE
-            )
-        if logger.getEffectiveLevel() == logging.DEBUG:
-            logger.debug(
-                'Responder PublicKey: %s',
-                base64.b64encode(octet_string_to_bytearray(
-                    tbs_response_data['responderID']['byKey'])))
-    elif tbs_response_data['responderID']['byName']:
-        # Noop
-        logger.debug(
-            'Responder Name: %s',
-            tbs_response_data['responderID']['byName'])
-    else:
-        raise OperationalError(
-            msg='Invalid Responder ID: {0}'.format(
-                tbs_response_data['responderID']),
-            errno=ER_INVALID_OCSP_RESPONSE)
-
     produced_at = tbs_response_data['producedAt']
     logger.debug('Produced At: %s', produced_at)
 
