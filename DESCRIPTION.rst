@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.9 (October 12, 2017)
+
+    - Fixed a regression caused by ``pyasn1`` upgrade.
+
 - v1.4.8 (October 5, 2017)
 
     - Updated Fed/SSO parameters. The production version of Fed/SSO from Python Connector requires this version.
