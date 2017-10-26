@@ -10,6 +10,7 @@ Various constants
 from collections import defaultdict
 from enum import Enum
 from six import PY2
+from collections import namedtuple
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -103,11 +104,6 @@ LOG_FORMAT = (u'%(asctime)s - %(filename)s:%(lineno)d - '
 
 # String literals
 UTF8 = u'utf-8'
-CONTENT_LENGTH = u'Content-Length'
-AMZ_MATDESC = u"x-amz-matdesc"
-AMZ_KEY = u"x-amz-key"
-AMZ_IV = u"x-amz-iv"
-SFC_DIGEST = u'sfc-digest'
 SHA256_DIGEST = u'sha256_digest'
 
 class ResultStatus(Enum):
@@ -121,3 +117,11 @@ class ResultStatus(Enum):
     NEED_RETRY = u'NEED_RETRY'
     NEED_RETRY_WITH_LOWER_CONCURRENCY = u'NEED_RETRY_WITH_LOWER_CONCURRENCY'
 
+
+FileHeader = namedtuple(
+    "FileReader", [
+        "digest",
+        "content_length",
+        "encryption_metadata"
+    ]
+)
