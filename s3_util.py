@@ -15,10 +15,16 @@ from boto3.s3.transfer import TransferConfig
 from botocore.client import Config
 
 from .compat import TO_UNICODE
-from .constants import (AMZ_MATDESC, AMZ_KEY, AMZ_IV,
-                        SFC_DIGEST, SHA256_DIGEST, ResultStatus)
+
+from .constants import (SHA256_DIGEST, ResultStatus, FileHeader)
 from .encryption_util import (EncryptionMetadata)
 
+
+SFC_DIGEST = u'sfc-digest'
+
+AMZ_MATDESC = u"x-amz-matdesc"
+AMZ_KEY = u"x-amz-key"
+AMZ_IV = u"x-amz-iv"
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = u'ExpiredToken'
@@ -35,13 +41,6 @@ S3Location = namedtuple(
     ])
 
 
-FileHeader = namedtuple(
-    "FileReader", [
-        "digest",
-        "content_length",
-        "encryption_metadata"
-    ]
-)
 
 class SnowflakeS3Util:
 
