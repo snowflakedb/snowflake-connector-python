@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.10 (October 26, 2017)
+
+    - Added Azure support for PUT and GET commands.
+    - Updated ``cryptography``, ``boto3`` and ``botocore`` version dependeny.
+
 - v1.4.9 (October 10, 2017)
 
     - Fixed a regression caused by ``pyasn1`` upgrade.
