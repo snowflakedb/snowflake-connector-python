@@ -13,6 +13,7 @@ from collections import namedtuple
 from logging import getLogger
 
 from .s3_util import SnowflakeS3Util
+from .azure_util import SnowflakeAzureUtil
 
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .encryption_util import (SnowflakeEncryptionUtil)
@@ -38,7 +39,10 @@ class SnowflakeRemoteStorageUtil(object):
 
     @staticmethod
     def getStorageType(type):
-        return SnowflakeS3Util
+        if(type == u'S3'):
+            return SnowflakeS3Util
+        elif(type == u'AZURE'):
+            return SnowflakeAzureUtil
 
     @staticmethod
     def create_client(stage_info, use_accelerate_endpoint=False):

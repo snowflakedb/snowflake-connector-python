@@ -36,6 +36,7 @@ from .file_util import SnowflakeFileUtil
 from .local_util import SnowflakeLocalUtil
 
 S3_FS = u'S3'
+AZURE_FS = u'AZURE'
 LOCAL_FS = u'LOCAL_FS'
 CMD_TYPE_UPLOAD = u'UPLOAD'
 CMD_TYPE_DOWNLOAD = u'DOWNLOAD'
@@ -309,7 +310,7 @@ class SnowflakeFileTransferAgent(object):
     def get_storage_client(stage_location_type):
         if(stage_location_type == LOCAL_FS):
             return SnowflakeLocalUtil
-        elif(stage_location_type in [S3_FS]):
+        elif(stage_location_type in [S3_FS, AZURE_FS]):
             return SnowflakeRemoteStorageUtil
         else:
             return None

@@ -33,8 +33,11 @@ setup(
     use_2to3=False,
 
     install_requires=[
-        'boto3>=1.4.4,<=1.4.6',
-        'botocore>=1.5.0,<1.7.0',
+        'azure-common<2',
+        'azure_nspkg<3',
+        'azure-storage<=0.34.2',
+        'boto3>=1.4.4,<=1.4.7',
+        'botocore>=1.5.0,<1.8.0',
         'certifi',
         'future',
         'six',
@@ -42,7 +45,7 @@ setup(
         'pycryptodome>=3.2',
         'pyOpenSSL>=16.2.0,<18.0.0',
         'cffi>=1.9',
-        'cryptography>=1.7.2,<2.1',
+        'cryptography>=1.7.2,<2.2',
         'pyasn1>=0.2.1,<0.4.0',
         'pyasn1-modules>=0.0.8,<0.2.0',
         'ijson',
