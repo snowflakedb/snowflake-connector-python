@@ -123,7 +123,7 @@ class SnowflakeAzureUtil:
                         u'WrappedContentKey': {
                             u'KeyId': u'symmKey1',
                             u'EncryptedKey': encryption_metadata.key,
-                            u'Algorithm': u'A128KW'
+                            u'Algorithm': u'AES_CBC_256'
                         },
                         u'EncryptionAgent': {
                             u'Protocol': '1.0',
