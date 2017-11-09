@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.11 (November 9, 2017)
+
+    - Fixed Azure PUT command to use AES CBC key encryption
+    - Retry intermittent PyAsn1Error
+
 - v1.4.10 (October 26, 2017)
 
     - Added Azure support for PUT and GET commands.
