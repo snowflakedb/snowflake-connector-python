@@ -1240,6 +1240,48 @@ def cli_ocsp_dump_response():
     """
     Internal Tool: OCSP response dumper
     """
+
+    def help():
+        print(
+            "OCSP Response dumper. This tools dumps key information in OCSP "
+            "response for the given URL and validates the certificate "
+            "revocation status. The output is subject to change.")
+        print("""
+Usage: {0} --url <url>[ --url <url> --url <url>...] --output-filename <output file>
+""".format(path.basename(sys.argv[0])))
+        sys.exit(2)
+
+    import sys
+    if len(sys.argv) < 2:
+        help()
+
+    urls = []
+    output_filename = None
+    mode = None
+    for elem in sys.argv[1:]:
+        if elem in '-h':
+            help()
+        if mode is None and elem == '--output-filename':
+            mode = 'filename'
+            continue
+        elif mode is None and elem == '--url':
+            mode = 'url'
+            continue
+        if mode == 'url':
+            if elem.startswith('https://'):
+                parsed_url = urlsplit(elem)
+                elem = parsed_url.hostname
+                port = int(parsed_url.port or 443)
+            else:
+                port = 443
+            urls.append((elem, port))
+            mode = None
+        elif mode == 'filename':
+            output_filename = elem
+    dump_ocsp_response(urls, output_filename)
+
+
+def dump_ocsp_response(urls, output_filename):
     from OpenSSL.SSL import SSLv23_METHOD, Context, Connection
 
     def _openssl_connect(hostname, port=443):
@@ -1251,111 +1293,105 @@ def cli_ocsp_dump_response():
         client_ssl.do_handshake()
         return client_ssl
 
-    import sys
-    url = len(sys.argv) > 1 and sys.argv[1] or ''
-    if url in ('-h', ''):
-        print(
-            "OCSP Response dumper. This tools dumps key information in OCSP "
-            "response for the given URL and validates the certificate "
-            "revocation status. The output is subject to change.")
-        print("""
-Usage: {0} <url>
-""".format(path.basename(sys.argv[0])))
-        sys.exit(2)
-    elif url.startswith('https://'):
-        parsed_url = urlsplit(url)
-        url = parsed_url.hostname
-        port = int(parsed_url.port or 443)
-    else:
-        port = 443
-
-    ocsp = SnowflakeOCSP()
-    connection = _openssl_connect(url, port)
-    results = ocsp.generate_cert_id_response(url, connection, proxies=None)
-    current_Time = int(time.time())
-    print("Target URL: https://{0}:{1}/".format(url, port))
-    print("Current Time: {0}".format(
-        strftime('%Y%m%d%H%M%SZ', gmtime(current_Time))))
-    for cert_id, (current_time, issuer, subject, ocsp_response) in \
-            results.items():
-        cert_id, _ = der_decoder.decode(cert_id, CertID())
-        ocsp_response, _ = der_decoder.decode(ocsp_response, OCSPResponse())
-        print("------------------------------------------------------------")
-        print("Issuer Name: {0}".format(issuer['cert'].get_subject()))
-        print("Subject Name: {0}".format(subject['cert'].get_subject()))
-        print("OCSP URI: {0}".format(subject['ocsp_uri']))
-        print("Issuer Name Hash: {0}".format(
-            octet_string_to_bytearray(cert_id['issuerNameHash']).decode(
-                'latin-1').encode('latin-1')))
-        print("Issuer Key Hash: {0}".format(
-            octet_string_to_bytearray(cert_id['issuerKeyHash']).decode(
-                'latin-1').encode('latin-1')))
-        print("Serial Number: {0}".format(cert_id['serialNumber']))
-        if ocsp_response['responseStatus'] == OCSPResponseStatus('successful'):
-            status = "successful"
-        elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                'malformedRequest'):
-            status = "malformedRequest"
-        elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                'internalError'):
-            status = "internalError"
-        elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                'tryLater'):
-            status = "tryLater"
-        elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                'sigRequired'):
-            status = "sigRequired"
-        elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                'unauthorized'):
-            status = "unauthorized"
-        else:
-            status = "Unknown"
-        print("Response Status: {0}".format(status))
-        response_bytes = ocsp_response['responseBytes']
-        basic_ocsp_response, _ = der_decoder.decode(
-            response_bytes['response'],
-            BasicOCSPResponse())
-        tbs_response_data = basic_ocsp_response['tbsResponseData']
-        if tbs_response_data['responderID']['byName']:
-            print("Responder Name: {0}".format(
-                tbs_response_data['responderID']['byName']))
-        elif tbs_response_data['responderID']['byKey']:
-            sha1_ocsp = tbs_response_data['responderID']['byKey']
-            sha1_ocsp = octet_string_to_bytearray(sha1_ocsp).decode(
-                'latin-1').encode('latin-1')
-            print("Responder Key: {0}".format(sha1_ocsp))
-        if tbs_response_data['responseExtensions']:
-            print('Response Extensions: %s',
-                  tbs_response_data['responseExtensions'])
-        for single_response in tbs_response_data['responses']:
-            cert_status = single_response['certStatus']
-            if cert_status['good'] is not None:
-                print("This Update: {0}".format(
-                    single_response['thisUpdate']))
-                print("Next Update: {0}".format(
-                    single_response['nextUpdate']))
-                this_update = strptime(str(single_response['thisUpdate']),
-                                       '%Y%m%d%H%M%SZ')
-                next_update = strptime(str(single_response['nextUpdate']),
-                                       '%Y%m%d%H%M%SZ')
-                this_update = calendar.timegm(this_update)
-                next_update = calendar.timegm(next_update)
-                tolerable_validity = _calculate_tolerable_validity(this_update,
-                                                                   next_update)
-                print("Tolerable Update: {0}".format(
-                    strftime('%Y%m%d%H%M%SZ', gmtime(
-                        next_update + tolerable_validity))
-                ))
-                if _is_validaity_range(current_time, this_update, next_update):
-                    print("OK")
-                else:
-                    print(_validity_error_message(
-                        current_time, this_update, next_update))
-            elif cert_status['revoked'] is not None:
-                revocation_time = cert_status['revoked']['revocationTime']
-                revocation_reason = cert_status['revoked']['revocationReason']
-                print("Revoked Time: {0}".format(revocation_time))
-                print("Revoked Reason: {0}".format(revocation_reason))
-                print("Revoked")
+    for url, port in urls:
+        ocsp = SnowflakeOCSP()
+        connection = _openssl_connect(url, port)
+        results = ocsp.generate_cert_id_response(url, connection, proxies=None)
+        current_Time = int(time.time())
+        print("Target URL: https://{0}:{1}/".format(url, port))
+        print("Current Time: {0}".format(
+            strftime('%Y%m%d%H%M%SZ', gmtime(current_Time))))
+        for cert_id, (current_time, issuer, subject, ocsp_response) in \
+                results.items():
+            cert_id, _ = der_decoder.decode(cert_id, CertID())
+            ocsp_response, _ = der_decoder.decode(ocsp_response, OCSPResponse())
+            print(
+                "------------------------------------------------------------")
+            print("Issuer Name: {0}".format(issuer['cert'].get_subject()))
+            print("Subject Name: {0}".format(subject['cert'].get_subject()))
+            print("OCSP URI: {0}".format(subject['ocsp_uri']))
+            print("Issuer Name Hash: {0}".format(
+                octet_string_to_bytearray(cert_id['issuerNameHash']).decode(
+                    'latin-1').encode('latin-1')))
+            print("Issuer Key Hash: {0}".format(
+                octet_string_to_bytearray(cert_id['issuerKeyHash']).decode(
+                    'latin-1').encode('latin-1')))
+            print("Serial Number: {0}".format(cert_id['serialNumber']))
+            if ocsp_response['responseStatus'] == OCSPResponseStatus(
+                    'successful'):
+                status = "successful"
+            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
+                    'malformedRequest'):
+                status = "malformedRequest"
+            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
+                    'internalError'):
+                status = "internalError"
+            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
+                    'tryLater'):
+                status = "tryLater"
+            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
+                    'sigRequired'):
+                status = "sigRequired"
+            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
+                    'unauthorized'):
+                status = "unauthorized"
             else:
-                print("Unknown")
+                status = "Unknown"
+            print("Response Status: {0}".format(status))
+            response_bytes = ocsp_response['responseBytes']
+            basic_ocsp_response, _ = der_decoder.decode(
+                response_bytes['response'],
+                BasicOCSPResponse())
+            tbs_response_data = basic_ocsp_response['tbsResponseData']
+            if tbs_response_data['responderID']['byName']:
+                print("Responder Name: {0}".format(
+                    tbs_response_data['responderID']['byName']))
+            elif tbs_response_data['responderID']['byKey']:
+                sha1_ocsp = tbs_response_data['responderID']['byKey']
+                sha1_ocsp = octet_string_to_bytearray(sha1_ocsp).decode(
+                    'latin-1').encode('latin-1')
+                print("Responder Key: {0}".format(sha1_ocsp))
+            if tbs_response_data['responseExtensions']:
+                print('Response Extensions: %s',
+                      tbs_response_data['responseExtensions'])
+            for single_response in tbs_response_data['responses']:
+                cert_status = single_response['certStatus']
+                if cert_status['good'] is not None:
+                    print("This Update: {0}".format(
+                        single_response['thisUpdate']))
+                    print("Next Update: {0}".format(
+                        single_response['nextUpdate']))
+                    this_update = strptime(str(single_response['thisUpdate']),
+                                           '%Y%m%d%H%M%SZ')
+                    next_update = strptime(str(single_response['nextUpdate']),
+                                           '%Y%m%d%H%M%SZ')
+                    this_update = calendar.timegm(this_update)
+                    next_update = calendar.timegm(next_update)
+                    tolerable_validity = _calculate_tolerable_validity(
+                        this_update,
+                        next_update)
+                    print("Tolerable Update: {0}".format(
+                        strftime('%Y%m%d%H%M%SZ', gmtime(
+                            next_update + tolerable_validity))
+                    ))
+                    if _is_validaity_range(current_time, this_update,
+                                           next_update):
+                        print("OK")
+                    else:
+                        print(_validity_error_message(
+                            current_time, this_update, next_update))
+                elif cert_status['revoked'] is not None:
+                    revocation_time = cert_status['revoked']['revocationTime']
+                    revocation_reason = cert_status['revoked'][
+                        'revocationReason']
+                    print("Revoked Time: {0}".format(revocation_time))
+                    print("Revoked Reason: {0}".format(revocation_reason))
+                    print("Revoked")
+                else:
+                    print("Unknown")
+            print('')
+
+        if output_filename:
+            write_ocsp_response_cache_file(
+                output_filename, OCSP_VALIDATION_CACHE)
+    return OCSP_VALIDATION_CACHE
