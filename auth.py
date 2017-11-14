@@ -310,6 +310,11 @@ class Auth(object):
                 self._validate_default_schema(session_info)
                 self._validate_default_role(session_info)
                 self._validate_default_warehouse(session_info)
+            if u'parameters' in ret[u'data']:
+                with self._rest._connection._lock_converter:
+                    self._rest._connection.converter.set_parameters(
+                        ret[u'data'][u'parameters'])
+
 
     def _validate_default_database(self, session_info):
         default_value = self._rest._connection.database

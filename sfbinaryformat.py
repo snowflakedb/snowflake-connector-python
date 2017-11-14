@@ -5,6 +5,7 @@
 #
 from base64 import (b16encode, standard_b64encode, b16decode)
 
+from .errors import InternalError
 
 # Converts a Snowflake binary value into a "bytes" object.
 binary_to_python = b16decode
@@ -33,8 +34,8 @@ class SnowflakeBinaryFormat(object):
         elif name == u'BASE64':
             self._encode = standard_b64encode
         else:
-            raise errors.InternalError(
-                    u'Unrecognized binary format {}'.format(name))
+            raise InternalError(
+                u'Unrecognized binary format {}'.format(name))
 
     def format(self, binary_value):
         """

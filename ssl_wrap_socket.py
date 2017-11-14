@@ -308,6 +308,8 @@ else:  # Platform-specific: Python 3
 WrappedSocket.makefile = makefile
 
 DEFAULT_SSL_CIPHER_LIST = urllib3_util.ssl_.DEFAULT_CIPHERS
+if isinstance(DEFAULT_SSL_CIPHER_LIST, str):
+    DEFAULT_SSL_CIPHER_LIST = DEFAULT_SSL_CIPHER_LIST.encode('utf-8')
 
 
 def ssl_wrap_socket(

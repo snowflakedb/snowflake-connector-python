@@ -9,6 +9,7 @@
 
 import random
 import time
+from math import fabs
 
 import pytest
 import pytz
@@ -16,7 +17,6 @@ import pytz
 from snowflake.connector.compat import PY2
 from snowflake.connector.dbapi import (
     DateFromTicks, TimestampFromTicks, TimeFromTicks)
-from math import fabs
 
 
 def table_exists(conn_cnx, name):
