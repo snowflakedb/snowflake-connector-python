@@ -15,7 +15,7 @@ from six import u
 
 from .chunk_downloader import (DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
                                DEFAULT_CLIENT_RESULT_PREFETCH_THREADS)
-from .compat import (BASE_EXCEPTION_CLASS)
+from .compat import (BASE_EXCEPTION_CLASS, TO_UNICODE)
 from .constants import (FIELD_NAME_TO_ID, FIELD_ID_TO_NAME)
 from .errorcode import (ER_UNSUPPORTED_METHOD,
                         ER_CURSOR_IS_CLOSED,
@@ -23,7 +23,8 @@ from .errorcode import (ER_UNSUPPORTED_METHOD,
                         ER_NOT_POSITIVE_SIZE,
                         ER_FAILED_PROCESSING_PYFORMAT,
                         ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
-                        ER_INVALID_VALUE)
+                        ER_INVALID_VALUE,
+                        ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE)
 from .errors import (Error, ProgrammingError, NotSupportedError,
                      DatabaseError, InterfaceError)
 from .file_transfer_agent import (SnowflakeFileTransferAgent)
@@ -281,6 +282,7 @@ class SnowflakeCursor(object):
 
     def _execute_helper(
             self, query, timeout=0, statement_params=None,
+            binding_params=None,
             is_internal=False, _no_results=False, _is_put_get=None):
         del self.messages[:]
 
@@ -359,6 +361,7 @@ class SnowflakeCursor(object):
                 query,
                 self._sequence_counter,
                 self._request_id,
+                binding_params=binding_params,
                 is_file_transfer=self._is_file_transfer,
                 statement_params=statement_params,
                 is_internal=is_internal,
@@ -397,8 +400,9 @@ class SnowflakeCursor(object):
                     self._client_result_prefetch_threads = kv[u'value']
                 if u'CLIENT_RESULT_PREFETCH_SLOTS' in kv[u'name']:
                     self._client_result_prefetch_slots = kv[u'value']
-            self._connection.converter.set_parameters(
-                ret[u'data'][u'parameters'])
+            with self._connection._lock_converter:
+                self._connection.converter.set_parameters(
+                    ret[u'data'][u'parameters'])
 
         self._sequence_counter = -1
         return ret
@@ -432,14 +436,23 @@ class SnowflakeCursor(object):
             logger.warning(u'execute: no query is given to execute')
             return
 
-        processed_params = self.__process_params(params)
-        logger.debug(u'binding: %s with input=%s, processed=%s',
-                     command,
-                     params, processed_params)
-        if len(processed_params) > 0:
-            query = command % processed_params
+        if self._connection.is_pyformat:
+            # pyformat/format paramstyle
+            # client side binding
+            processed_params = self.__process_params(params)
+            logger.debug(u'binding: %s with input=%s, processed=%s',
+                         command,
+                         params, processed_params)
+            if len(processed_params) > 0:
+                query = command % processed_params
+            else:
+                query = command
+            processed_params = None  # reset to None
         else:
+            # qmark paramstyle
+            # server side binding
             query = command
+            processed_params = self.__process_params_qmarks(params)
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
@@ -456,11 +469,14 @@ class SnowflakeCursor(object):
                 )
             query = query1
 
-        ret = self._execute_helper(query, timeout=timeout,
-                                   statement_params=_statement_params,
-                                   is_internal=_is_internal,
-                                   _no_results=_no_results,
-                                   _is_put_get=_is_put_get)
+        ret = self._execute_helper(
+            query,
+            timeout=timeout,
+            binding_params=processed_params,
+            statement_params=_statement_params,
+            is_internal=_is_internal,
+            _no_results=_no_results,
+            _is_put_get=_is_put_get)
         self._sfqid = ret[u'data'][
             u'queryId'] if u'data' in ret and u'queryId' in ret[
             u'data'] else None
@@ -853,6 +869,62 @@ class SnowflakeCursor(object):
             Error.errorhandler_wrapper(self.connection, self,
                                        ProgrammingError,
                                        errorvalue)
+
+    def __process_params_qmarks(self, params):
+        if params is None:
+            return None
+        processed_params = {}
+        if not isinstance(params, (list, tuple)):
+            errorvalue = {
+                u'msg': u"Binding parameters must be a list: {0}".format(
+                    params
+                ),
+                u'errno': ER_FAILED_PROCESSING_PYFORMAT
+            }
+            Error.errorhandler_wrapper(self.connection, self,
+                                       ProgrammingError,
+                                       errorvalue)
+            return None
+        for idx, v in enumerate(params):
+            if isinstance(v, (list, tuple)):
+                if len(v) != 2:
+                    Error.errorhandler_wrapper(
+                        self.connection, self,
+                        ProgrammingError,
+                        {
+                            u'msg': u"Binding parameters must be a list "
+                                    u"where one element is a single value or "
+                                    u"a pair of Snowflake datatype and a value",
+                            u'errno': ER_FAILED_PROCESSING_PYFORMAT,
+                        }
+                    )
+                    return None
+                processed_params[TO_UNICODE(idx + 1)] = {
+                    'type': v[0],
+                    'value': self._connection.converter.to_snowflake_bindings(
+                        v[0], v[1])}
+            else:
+                snowflake_type = self._connection.converter.snowflake_type(v)
+                if snowflake_type is None:
+                    Error.errorhandler_wrapper(
+                        self.connection, self,
+                        ProgrammingError,
+                        {
+                            u'msg': u"Python data type [{0}] cannot be "
+                                    u"automatically mapped to Snowflake data "
+                                    u"type. Specify the snowflake data type "
+                                    u"explicitly.".format(
+                                v.__class__.__name__.lower()),
+                            u'errno': ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
+                        }
+                    )
+                    return None
+                processed_params[TO_UNICODE(idx + 1)] = {
+                    'type': snowflake_type,
+                    'value':
+                        self._connection.converter.to_snowflake_bindings(
+                            snowflake_type, v)}
+        return processed_params
 
     def _row_to_python(self, row):
         """

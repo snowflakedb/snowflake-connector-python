@@ -712,11 +712,8 @@ def read_ocsp_response_cache_file(filename, ocsp_validation_cache):
     """
     logger = getLogger(__name__)
     if check_ocsp_response_cache_lock_file(filename) and path.exists(filename):
-        _decode_ocsp_response_cache(
-            json.load(
-                codecs.open(
-                    filename, 'r', encoding='utf-8', errors='ignore')),
-            ocsp_validation_cache)
+        with codecs.open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+            _decode_ocsp_response_cache(json.load(f), ocsp_validation_cache)
         logger.debug("Read OCSP response cache file: %s, count=%s",
                      filename, len(OCSP_VALIDATION_CACHE))
     else:

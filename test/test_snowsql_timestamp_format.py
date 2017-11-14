@@ -12,9 +12,12 @@ def test_snowsql_timestamp_format(conn_cnx):
     """
     In SnowSQL, OverflowError should not happen
     """
-    with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
+    with conn_cnx(
+            converter_class=SnowflakeConverterSnowSQL
+    ) as cnx:
         cnx.cursor().execute("""
 ALTER SESSION SET 
+    TIMEZONE='America/Los_Angeles',
     TIMESTAMP_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM',
     TIMESTAMP_NTZ_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM',
     TIMESTAMP_LTZ_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM';

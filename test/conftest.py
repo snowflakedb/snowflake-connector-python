@@ -14,7 +14,6 @@ from io import open
 from logging import getLogger
 
 import pytest
-
 from parameters import CONNECTION_PARAMETERS
 
 try:
@@ -154,7 +153,7 @@ def init_test_schema(request):
         ) as con:
             con.cursor().execute(
                 "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
-            
+
     if CONNECTION_PARAMETERS_AZURE:
         with snowflake.connector.connect(
                 user=ret['azure_user'],
@@ -198,7 +197,8 @@ def init_test_schema(request):
 
 
 def create_connection(user=None, password=None, account=None, use_numpy=False,
-                      converter_class=None):
+                      converter_class=None, paramstyle=u'pyformat',
+                      timezone=u'UTC'):
     """
     Creates a connection using the parameters defined in JDBC connect string
     """
@@ -222,9 +222,10 @@ def create_connection(user=None, password=None, account=None, use_numpy=False,
         port=ret['port'],
         database=ret['database'],
         schema=ret['schema'],
-        timezone='UTC',
+        timezone=timezone,
         numpy=use_numpy,
         converter_class=converter_class,
+        paramstyle=paramstyle,
     )
     return connection
 
@@ -275,11 +276,12 @@ def generate_k_lines_of_n_files(tmpdir, k, n, compress=False):
 
 @contextmanager
 def db(user=None, password=None, account=None, use_numpy=False,
-       converter_class=None):
+       converter_class=None, paramstyle=u'pyformat', timezone=u'UTC'):
     cnx = create_connection(
         user=user, password=password,
         account=account, use_numpy=use_numpy,
-        converter_class=converter_class)
+        converter_class=converter_class,
+        paramstyle=paramstyle, timezone=timezone)
     try:
         yield cnx
     finally:

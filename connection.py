@@ -72,6 +72,8 @@ DEFAULT_CONFIGURATION = {
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
     u'validate_default_parameters': False,  # snowflake
     u'probe_connection': False,  # snowflake
+    u'paramstyle': u'pyformat',  # standard/snowflake
+    u'timezone': None,  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -97,6 +99,7 @@ class SnowflakeConnection(object):
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
+        self._lock_converter = Lock()
         self.messages = []
         logger.info(
             u"Snowflake Connector for Python Version: %s, "
@@ -281,6 +284,15 @@ class SnowflakeConnection(object):
         """
         return self._validate_default_parameters
 
+    @property
+    def is_pyformat(self):
+        """
+        Is binding parameter style pyformat or format?
+
+        The default value should be True.
+        """
+        return self._paramstyle in (u'pyformat', u'format')
+
     def connect(self, **kwargs):
         u"""
         Connects to the database
@@ -294,7 +306,6 @@ class SnowflakeConnection(object):
         self.__open_connection(mfa_callback=kwargs.get('mfa_callback'),
                                password_callback=kwargs.get(
                                    'password_callback'))
-        self.__post_connection()
 
     def close(self):
         u"""
@@ -411,20 +422,14 @@ class SnowflakeConnection(object):
                   callable(getattr(errors, method))]:
             setattr(self, m, getattr(errors, m))
 
-    def __post_connection(self):
-        """
-        Executes post connection process
-        """
-        # load current session info
-        logger.debug(u'__post connection')
-        self.converter = self._converter_class(
-            use_sfbinaryformat=False,
-            use_numpy=self._numpy)
-
     def __open_connection(self, mfa_callback, password_callback):
         u"""
         Opens a new network connection
         """
+        self.converter = self._converter_class(
+            use_sfbinaryformat=False,
+            use_numpy=self._numpy)
+
         self._rest = network.SnowflakeRestful(
             host=self.host,
             port=self.port,
@@ -459,6 +464,9 @@ class SnowflakeConnection(object):
 
         if self._autocommit is not None:
             self._session_parameters['AUTOCOMMIT'] = self._autocommit
+
+        if self._timezone is not None:
+            self._session_parameters['TIMEZONE'] = self._timezone
 
         Auth(self.rest).authenticate(
             auth_instance=auth_instance,
@@ -557,6 +565,7 @@ class SnowflakeConnection(object):
                     errno=ER_OLD_PYTHON)
 
     def cmd_query(self, sql, sequence_counter, request_id,
+                  binding_params=None,
                   is_file_transfer=False, statement_params=None,
                   is_internal=False, _no_results=False):
         u"""
@@ -572,6 +581,10 @@ class SnowflakeConnection(object):
             data[u'parameters'] = statement_params
         if is_internal:
             data[u'isInternal'] = is_internal
+        if binding_params is not None:
+            # binding parameters. This is for qmarks paramstyle.
+            data[u'bindings'] = binding_params
+
         client = u'sfsql_file_transfer' if is_file_transfer else u'sfsql'
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
