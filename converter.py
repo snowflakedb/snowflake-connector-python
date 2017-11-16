@@ -56,7 +56,7 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
     u'date': u'DATE',
     u'time': u'TIME',
     u'struct_time': u'TIMESTAMP_NTZ',
-    u'timedelta': u'TIMESTAMP_NTZ',
+    u'timedelta': u'TIME',
     u'list': u'TEXT',
     u'tuple': u'TEXT',
     u'int8': u'FIXED',
@@ -446,7 +446,8 @@ class SnowflakeConverter(object):
 
     def to_snowflake_bindings(self, snowflake_type, value):
         """
-        Converts Python data to snowflake data for qmarks style
+        Converts Python data to snowflake data for qmark and numeric
+        parameter style
 
         The output is bound in a query in the server side.
         """

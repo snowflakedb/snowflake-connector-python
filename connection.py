@@ -31,6 +31,12 @@ from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .util_text import split_statements, construct_hostname
 
+SUPPORTED_PARAMSTYLES = {
+    u"qmark",
+    u'numeric',
+    u'format',
+    u'pyformat',
+}
 # default configs
 DEFAULT_CONFIGURATION = {
     u'dsn': None,  # standard
@@ -504,6 +510,12 @@ class SnowflakeConnection(object):
                     setattr(self, u'_' + name, value)
             else:
                 setattr(self, u'_' + name, value)
+
+        if self._paramstyle not in SUPPORTED_PARAMSTYLES:
+            raise ProgrammingError(
+                msg=u'Invalid paramstyle is specified',
+                errno=ER_INVALID_VALUE
+            )
 
         if u'account' in kwargs:
             if u'host' not in kwargs:

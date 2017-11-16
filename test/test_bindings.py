@@ -4,18 +4,51 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 
+import logging
+
+for logger_name in ['snowflake.connector', 'botocore']:
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)
+    ch = logging.FileHandler('/tmp/python_connector.log')
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(logging.Formatter(
+        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
+    logger.addHandler(ch)
+
 import time
 from datetime import datetime, date, timedelta
 from datetime import time as datetime_time
 from decimal import Decimal
 
+import pytest
 import pytz
 
 from snowflake.connector.compat import PY2
 from snowflake.connector.converter import convert_datetime_to_epoch
+from snowflake.connector.errors import ProgrammingError
+
+PST_TZ = "America/Los_Angeles"
+JST_TZ = "Asia/Tokyo"
+
+
+def test_invalid_binding_option(conn_cnx):
+    """
+    Invalid paramstyle parameters
+    """
+    with pytest.raises(ProgrammingError):
+        with conn_cnx(paramstyle=u'hahaha'):
+            pass
+
+    # valid cases
+    for s in [u'format', u'pyformat', u'qmark', u'numeric']:
+        with conn_cnx(paramstyle=s):
+            pass
 
 
 def test_binding(conn_cnx, db_parameters):
+    """
+    Paramstyle qmark basic tests
+    """
     with conn_cnx(paramstyle=u'qmark') as cnx:
         cnx.cursor().execute("""
 create or replace table {name} (
@@ -45,8 +78,6 @@ create or replace table {name} (
     c24 STRING
     )
 """.format(name=db_parameters['name']))
-    PST_TZ = "America/Los_Angeles"
-    JST_TZ = "Asia/Tokyo"
     current_utctime = datetime.utcnow()
     current_localtime = pytz.utc.localize(
         current_utctime,
@@ -71,6 +102,7 @@ insert into {name} values(
                 Decimal("1.2"),
                 'str1',
                 1.2,
+                # Py2 has bytes in str type, so Python Connector
                 bytes(b'abc') if not PY2 else bytearray(b'abc'),
                 bytearray(b'def'),
                 current_utctime,
@@ -139,6 +171,170 @@ select * from {name} where c1=? and c2=?
                                      ret[22].second,
                              microseconds=ret[22].microsecond) == tdelta
             assert ret[23] is None
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+drop table if exists {name}
+""".format(name=db_parameters['name']))
+
+
+def test_binding_with_numeric(conn_cnx, db_parameters):
+    """
+    Paramstyle numeric tests. Both qmark and numeric leverages server side
+    bindings.
+    """
+    with conn_cnx(paramstyle=u'numeric') as cnx:
+        cnx.cursor().execute("""
+create or replace table {name} (c1 integer, c2 string)
+""".format(name=db_parameters['name']))
+
+    try:
+        with conn_cnx(paramstyle=u'numeric') as cnx:
+            cnx.cursor().execute("""
+insert into {name}(c1, c2) values(:2, :1)
+            """.format(name=db_parameters['name']), (
+                u'str1',
+                123
+            ))
+            cnx.cursor().execute("""
+insert into {name}(c1, c2) values(:2, :1)
+            """.format(name=db_parameters['name']), (
+                u'str2',
+                456
+            ))
+            # numeric and qmark can be used in the same session
+            rec = cnx.cursor().execute("""
+select * from {name} where c1=?
+""".format(name=db_parameters['name']), (123,)).fetchall()
+            assert len(rec) == 1
+            assert rec[0][0] == 123
+            assert rec[0][1] == u'str1'
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+drop table if exists {name}
+""".format(name=db_parameters['name']))
+
+
+def test_binding_timestamps(conn_cnx, db_parameters):
+    """
+    Binding datetime object with TIMESTAMP_LTZ. The value is bound
+    as TIMESTAMP_NTZ, but since it is converted to UTC in the backend,
+    the returned value must be
+    """
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("""
+create or replace table {name} (
+    c1 integer,
+    c2 timestamp_ltz)
+""".format(name=db_parameters['name']))
+
+    try:
+        with conn_cnx(paramstyle=u'numeric', timezone=PST_TZ) as cnx:
+            current_localtime = datetime.now()
+            cnx.cursor().execute("""
+insert into {name}(c1, c2) values(:1, :2)
+            """.format(name=db_parameters['name']), (
+                123,
+                ("TIMESTAMP_LTZ", current_localtime)
+            ))
+            rec = cnx.cursor().execute("""
+select * from {name} where c1=?
+            """.format(name=db_parameters['name']), (123,)).fetchall()
+            assert len(rec) == 1
+            assert rec[0][0] == 123
+            assert convert_datetime_to_epoch(rec[0][1]) == \
+                   convert_datetime_to_epoch(current_localtime)
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+drop table if exists {name}
+""".format(name=db_parameters['name']))
+
+
+def test_binding_bulk_insert(conn_cnx, db_parameters):
+    """
+    Bulk insert test.
+    """
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("""
+create or replace table {name} (
+    c1 integer,
+    c2 string
+)
+""".format(name=db_parameters['name']))
+    try:
+        with conn_cnx(paramstyle=u'qmark') as cnx:
+            # short list
+            c = cnx.cursor()
+            fmt = 'insert into {name}(c1,c2) values(?,?)'.format(
+                name=db_parameters['name'])
+            c.executemany(fmt, [
+                (1, 'test1'),
+                (2, 'test2'),
+                (3, 'test3'),
+                (4, 'test4'),
+            ])
+            assert c.rowcount == 4
+
+            # large list
+            num_rows = 100000
+            c = cnx.cursor()
+            c.executemany(fmt, [
+                (idx, 'test{}'.format(idx)) for idx in range(num_rows)
+            ])
+            assert c.rowcount == num_rows
+
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+drop table if exists {name}
+""".format(name=db_parameters['name']))
+
+
+def test_binding_bulk_update(conn_cnx, db_parameters):
+    """
+    Bulk update test.
+
+    NOTE: UPDATE,MERGE and DELETE are not supported for actual bulk operation
+    but executemany accepts the multiple rows and iterate DMLs
+    """
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("""
+create or replace table {name} (
+    c1 integer,
+    c2 string
+)
+""".format(name=db_parameters['name']))
+    try:
+        with conn_cnx(paramstyle=u'qmark') as cnx:
+            # short list
+            c = cnx.cursor()
+            fmt = 'insert into {name}(c1,c2) values(?,?)'.format(
+                name=db_parameters['name'])
+            c.executemany(fmt, [
+                (1, 'test1'),
+                (2, 'test2'),
+                (3, 'test3'),
+                (4, 'test4'),
+            ])
+            assert c.rowcount == 4
+
+            fmt = "update {name} set c2=:2 where c1=:1".format(
+                name=db_parameters['name'])
+            c.executemany(fmt, [
+                (1, 'test5'),
+                (2, 'test6'),
+            ])
+            assert c.rowcount == 2
+
+            fmt = "select * from {name} where c1=?".format(
+                name=db_parameters['name']
+            )
+            rec = cnx.cursor().execute(fmt, (1,)).fetchall()
+            assert rec[0][0] == 1
+            assert rec[0][1] == 'test5'
+
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""

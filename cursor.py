@@ -449,7 +449,7 @@ class SnowflakeCursor(object):
                 query = command
             processed_params = None  # reset to None
         else:
-            # qmark paramstyle
+            # qmark and numeric paramstyle
             # server side binding
             query = command
             processed_params = self.__process_params_qmarks(params)
@@ -660,27 +660,62 @@ class SnowflakeCursor(object):
         logger.info(u'executing many SQLs/commands')
         command = command.strip(u' \t\n\r') if command else None
 
-        if self.INSERT_SQL_RE.match(command):
-            logger.debug(u'rewriting INSERT query')
-            command_wo_comments = re.sub(self.COMMENT_SQL_RE, u'', command)
-            m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
-            if not m:
-                errorvalue = {
-                    u'msg': u"Failed to rewrite multi-row insert",
-                    u'errno': ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT
-                }
-                Error.errorhandler_wrapper(
-                    self.connection, self, InterfaceError, errorvalue
-                )
-
-            fmt = m.group(1)
-            values = []
-            for param in seqparams:
-                logger.debug(u'parameter: %s', param)
-                values.append(fmt % self.__process_params(param))
-            command = command.replace(fmt, u','.join(values), 1)
-            self.execute(command)
+        if len(seqparams) == 0:
+            errorvalue = {
+                u'msg': u"No parameters are specified for the command: "
+                        u"{}".format(command),
+                u'errno': ER_INVALID_VALUE,
+            }
+            Error.errorhandler_wrapper(
+                self.connection, self, InterfaceError, errorvalue
+            )
             return self
+
+        if self.INSERT_SQL_RE.match(command):
+            if self._connection.is_pyformat:
+                logger.debug(u'rewriting INSERT query')
+                command_wo_comments = re.sub(self.COMMENT_SQL_RE, u'', command)
+                m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
+                if not m:
+                    errorvalue = {
+                        u'msg': u"Failed to rewrite multi-row insert",
+                        u'errno': ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT
+                    }
+                    Error.errorhandler_wrapper(
+                        self.connection, self, InterfaceError, errorvalue
+                    )
+
+                fmt = m.group(1)
+                values = []
+                for param in seqparams:
+                    logger.debug(u'parameter: %s', param)
+                    values.append(fmt % self.__process_params(param))
+                command = command.replace(fmt, u','.join(values), 1)
+                self.execute(command)
+                return self
+            else:
+                logger.debug(u'bulk insert')
+                num_params = len(seqparams[0])
+                pivot_param = []
+                for idx in range(num_params):
+                    pivot_param.append([])
+                for row in seqparams:
+                    if len(row) != num_params:
+                        errorvalue = {
+                            u'msg':
+                                u"Bulk data size don't match. expected: {0}, "
+                                u"got: {1}, command: {2}".format(
+                                    num_params, len(row), command),
+                            u'errno': ER_INVALID_VALUE,
+                        }
+                        Error.errorhandler_wrapper(
+                            self.connection, self, InterfaceError, errorvalue
+                        )
+                        return self
+                    for idx, value in enumerate(row):
+                        pivot_param[idx].append(value)
+                self.execute(command, params=pivot_param)
+                return self
 
         self.reset()
         for param in seqparams:
@@ -886,7 +921,7 @@ class SnowflakeCursor(object):
                                        errorvalue)
             return None
         for idx, v in enumerate(params):
-            if isinstance(v, (list, tuple)):
+            if isinstance(v, tuple):
                 if len(v) != 2:
                     Error.errorhandler_wrapper(
                         self.connection, self,
@@ -919,11 +954,18 @@ class SnowflakeCursor(object):
                         }
                     )
                     return None
+                if isinstance(v, list):
+                    vv = [self._connection.converter.to_snowflake_bindings(
+                        snowflake_type, v0) for v0 in v]
+                else:
+                    vv = self._connection.converter.to_snowflake_bindings(
+                        snowflake_type, v)
                 processed_params[TO_UNICODE(idx + 1)] = {
                     'type': snowflake_type,
-                    'value':
-                        self._connection.converter.to_snowflake_bindings(
-                            snowflake_type, v)}
+                    'value': vv}
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            for k, v in processed_params.items():
+                logger.debug("idx: %s, type: %s", k, v.get('type'))
         return processed_params
 
     def _row_to_python(self, row):
