@@ -9,10 +9,16 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.12 (November 16, 2017)
+
+    - Added ``qmark`` and ``numeric`` paramstyle support for server side binding.
+    - Added ``timezone`` session parameter support to connections.
+    - Fixed a file handler leak in OCSP checks.
+
 - v1.4.11 (November 9, 2017)
 
-    - Fixed Azure PUT command to use AES CBC key encryption
-    - Retry intermittent PyAsn1Error
+    - Fixed Azure PUT command to use AES CBC key encryption.
+    - Added retry for intermittent PyAsn1Error.
 
 - v1.4.10 (October 26, 2017)
 
