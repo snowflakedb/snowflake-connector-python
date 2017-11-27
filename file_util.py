@@ -12,6 +12,7 @@ from Crypto.Hash import SHA256
 
 from .constants import UTF8
 
+
 class SnowflakeFileUtil(object):
 
     @staticmethod
@@ -37,7 +38,6 @@ class SnowflakeFileUtil(object):
         statinfo = os.stat(gzip_file_name)
         return gzip_file_name, statinfo.st_size
 
-
     @staticmethod
     def normalize_gzip_header(gzip_file_name):
         """
@@ -45,7 +45,6 @@ class SnowflakeFileUtil(object):
         creation timestamp from the header.
         :param gzip_file_name: gzip file name
         """
-        logger = getLogger(__name__)
         with open(gzip_file_name, u'r+b') as f:
             # reset the timestamp in gzip header
             f.seek(4, 0)

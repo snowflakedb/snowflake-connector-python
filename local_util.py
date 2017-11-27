@@ -8,7 +8,9 @@ from __future__ import division
 
 import os
 from logging import getLogger
+
 from .constants import ResultStatus
+
 
 class SnowflakeLocalUtil(object):
     @staticmethod
@@ -29,8 +31,9 @@ class SnowflakeLocalUtil(object):
             meta[u'dst_file_name']
         )
         with open(meta[u'real_src_file_name'], u'rb') as frd:
-            with open(os.path.join(os.path.expanduser(meta[u'stage_info'][u'location']),
-                                   meta[u'dst_file_name']), u'wb') as output:
+            with open(os.path.join(
+                    os.path.expanduser(meta[u'stage_info'][u'location']),
+                    meta[u'dst_file_name']), u'wb') as output:
                 output.writelines(frd)
 
         meta[u'dst_file_size'] = meta[u'upload_size']
@@ -39,7 +42,7 @@ class SnowflakeLocalUtil(object):
     @staticmethod
     def download_one_file(meta):
         full_src_file_name = os.path.join(
-        os.path.expanduser(meta[u'stage_info'][u'location']),
+            os.path.expanduser(meta[u'stage_info'][u'location']),
             meta[u'src_file_name'] if not meta[u'src_file_name'].startswith(
                 os.sep) else
             meta[u'src_file_name'][1:])

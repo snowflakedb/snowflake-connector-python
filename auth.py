@@ -315,7 +315,6 @@ class Auth(object):
                     self._rest._connection.converter.set_parameters(
                         ret[u'data'][u'parameters'])
 
-
     def _validate_default_database(self, session_info):
         default_value = self._rest._connection.database
         session_info_value = session_info.get(u'databaseName')

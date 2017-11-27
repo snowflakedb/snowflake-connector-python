@@ -41,7 +41,6 @@ S3Location = namedtuple(
     ])
 
 
-
 class SnowflakeS3Util:
 
     """
@@ -77,6 +76,7 @@ class SnowflakeS3Util:
             config=config,
         )
         return client
+
     @staticmethod
     def extract_bucket_name_and_path(stage_location):
         stage_location = os.path.expanduser(stage_location)
@@ -195,8 +195,8 @@ class SnowflakeS3Util:
                 Callback=meta[u'put_callback'](
                     data_file,
                     os.path.getsize(data_file),
-                    output_stream=meta[u'put_callback_output_stream']) if \
-                    meta[u'put_callback'] else None,
+                    output_stream=meta[u'put_callback_output_stream']) if
+                        meta[u'put_callback'] else None,
                 ExtraArgs={
                     u'Metadata': s3_metadata,
                     u'ContentEncoding': u'gzip',
@@ -252,7 +252,6 @@ class SnowflakeS3Util:
             else:
                 meta[u'result_status'] = ResultStatus.NEED_RETRY
 
-
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
         logger = getLogger(__name__)
@@ -263,8 +262,8 @@ class SnowflakeS3Util:
                 Callback=meta[u'get_callback'](
                     meta[u'src_file_name'],
                     meta[u'src_file_size'],
-                    output_stream=meta[u'get_callback_output_stream']) if \
-                    meta[u'get_callback'] else None,
+                    output_stream=meta[u'get_callback_output_stream']) if
+                        meta[u'get_callback'] else None,
                 Config=TransferConfig(
                     multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
                     max_concurrency=max_concurrency,

@@ -16,6 +16,7 @@ from collections import namedtuple
 from .compat import (PKCS5_PAD, PKCS5_UNPAD, PKCS5_OFFSET, TO_UNICODE)
 from .constants import UTF8
 
+
 def matdesc_to_unicode(matdesc):
     """
     Convert Material Descriptor to Unicode String
@@ -51,11 +52,11 @@ EncryptionMetadata = namedtuple(
     ]
 )
 
+
 class SnowflakeEncryptionUtil(object):
     @staticmethod
     def get_secure_random(byte_length):
         return os.urandom(byte_length)
-
 
     @staticmethod
     def encrypt_file(encryption_material, in_filename,
@@ -114,7 +115,6 @@ class SnowflakeEncryptionUtil(object):
             matdesc=matdesc_to_unicode(mat_desc),
         )
         return (metadata, temp_output_file)
-
 
     @staticmethod
     def decrypt_file(metadata, encryption_material, in_filename,

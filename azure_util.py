@@ -22,8 +22,8 @@ AzureLocation = namedtuple(
 
     ])
 
-class SnowflakeAzureUtil:
 
+class SnowflakeAzureUtil(object):
     """
     Azure Utility class
     """
@@ -75,7 +75,7 @@ class SnowflakeAzureUtil:
         try:
             # HTTP HEAD request
             blob = client.get_blob_properties(azure_location.container_name, azure_location.path + filename)
-        except AzureMissingResourceHttpError as e:
+        except AzureMissingResourceHttpError:
             meta[u'result_status'] = ResultStatus.NOT_FOUND_FILE
             return FileHeader(
                 digest=None,
@@ -153,7 +153,7 @@ class SnowflakeAzureUtil:
                 azure_location.container_name,
                 path,
                 data_file,
-                progress_callback=azure_callback if \
+                progress_callback=azure_callback if
                     meta[u'put_callback'] else None,
                 metadata=azure_metadata,
                 max_connections=max_concurrency,
@@ -176,7 +176,6 @@ class SnowflakeAzureUtil:
                 meta[u'result_status'] = ResultStatus.NEED_RETRY
         # Comparing with s3, azure haven't experienced OpenSSL.SSL.SysCallError, so we will add logic to catch it only when it happens
 
-
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
         logger = getLogger(__name__)
@@ -191,13 +190,14 @@ class SnowflakeAzureUtil:
                 meta[u'src_file_size'],
                 output_stream=meta[u'get_callback_output_stream']) if \
                 meta[u'get_callback'] else None
+
             def azure_callback(current, total):
                 callback(current)
             client.get_blob_to_path(
                 azure_location.container_name,
                 path,
                 full_dst_file_name,
-                progress_callback=azure_callback if \
+                progress_callback=azure_callback if
                     meta[u'get_callback'] else None,
                 max_connections=max_concurrency
             )

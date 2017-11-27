@@ -63,9 +63,9 @@ def _get_pyasn1_version():
         if PYASN1_VERSION is None:
             import pyasn1
             v = pyasn1.__version__
-            l = [int(x, 10) for x in v.split('.')]
-            l.reverse()
-            PYASN1_VERSION = sum(x * (1000 ** i) for i, x in enumerate(l))
+            vv = [int(x, 10) for x in v.split('.')]
+            vv.reverse()
+            PYASN1_VERSION = sum(x * (1000 ** i) for i, x in enumerate(vv))
 
 
 def _read_ca_bundle(ca_bundle_file):
@@ -1061,7 +1061,7 @@ class SnowflakeOCSP(object):
                     "Ignoring...",
                     self._ocsp_response_cache_url, e, exc_info=True)
         #
-        # load 'charmap' encoding here so that 
+        # load 'charmap' encoding here so that
         # no load concurrency issue happens later
         #
         'test'.encode("charmap")

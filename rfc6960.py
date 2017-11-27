@@ -2,7 +2,7 @@
 #
 # X.509 Internet Public Key Infrastructure Online Certificate Status
 # Protocol - OCSP
-# 
+#
 # ASN.1 source from
 # https://tools.ietf.org/html/rfc6960
 #

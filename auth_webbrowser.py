@@ -62,7 +62,7 @@ class AuthByWebBrowser(AuthByExternalService):
 
         # ignore password. user is still needed by GS to verify
         # the assertion.
-        _ = password
+        _ = password  # noqa: F841
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -127,7 +127,7 @@ class AuthByWebBrowser(AuthByExternalService):
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>SAML Response for Snowflake</title></head>
 <body>
-Your identity was confirmed and propagated to Snowflake {0}. 
+Your identity was confirmed and propagated to Snowflake {0}.
 You can close this window now and go back where you started from.
 </body></html>""".format(self._application)
             content = [

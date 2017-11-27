@@ -190,7 +190,7 @@ class SnowflakeRestful(object):
         proxy.PROXY_PASSWORD = self._proxy_password
 
         # This is to address the issue where requests hangs
-        _ = 'dummy'.encode('idna').decode('utf-8')
+        _ = 'dummy'.encode('idna').decode('utf-8')  # noqa
         proxy_bypass('www.snowflake.net:443')
 
     @property
@@ -380,9 +380,6 @@ class SnowflakeRestful(object):
         if self._connection._probe_connection:
             from pprint import pprint
             ret = probe_connection(full_url)
-            ret['url'] = full_url
-            print(u"Contact to the support if the following certificates "
-                  u"don't look valid:")
             pprint(ret)
 
         ret = self.fetch(u'post', full_url, headers, data=body,
