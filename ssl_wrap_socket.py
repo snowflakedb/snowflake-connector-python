@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # SSL wrap socket for PyOpenSSL.
-# Mostly copied from 
+# Mostly copied from
 #
 # https://github.com/shazow/urllib3/blob/master/urllib3/contrib/pyopenssl.py
 #
@@ -21,7 +21,8 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 import logging
 import ssl
 import sys
-from socket import socket, timeout, error as SocketError
+from socket import error as SocketError
+from socket import (socket, gaierror, gethostbyname_ex, timeout)
 
 import OpenSSL.SSL
 from botocore.vendored.requests.packages.urllib3 import connection \
@@ -35,7 +36,7 @@ from cryptography.hazmat.backends.openssl.x509 import _Certificate
 from .compat import urlsplit
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
-from .ocsp_pyopenssl import SnowflakeOCSP
+from .ocsp_pyopenssl import SnowflakeOCSP, OCSP_RE
 from .proxy import (set_proxies, PROXY_HOST, PROXY_PORT, PROXY_USER,
                     PROXY_PASSWORD)
 from .ssl_wrap_util import wait_for_read, wait_for_write
@@ -416,14 +417,64 @@ def _openssl_connect(hostname, port=443):
 
 
 def probe_connection(url):
-    certificates = []
     parsed_url = urlsplit(url)
+
+    # DNS lookup
+    try:
+        actual_hostname, aliases, ips = gethostbyname_ex(parsed_url.hostname)
+        ret = {
+            'url': url,
+            'input_hostname': parsed_url.hostname,
+            'actual_hostname': actual_hostname,
+            'aliases': aliases,
+            'ips': ips,
+        }
+    except gaierror as e:
+        return {'err:': e}
     connection = _openssl_connect(parsed_url.hostname, parsed_url.port)
+
+    # certificates
+    certificates = []
     for cert in connection.get_peer_cert_chain():
+        # ocsp uri
+        ocsp_uris0 = []
+        for idx in range(cert.get_extension_count()):
+            e = cert.get_extension(idx)
+            if e.get_short_name() == b'authorityInfoAccess':
+                for line in str(e).split(u"\n"):
+                    m = OCSP_RE.match(line)
+                    if m:
+                        log.debug(u'OCSP URL: %s', m.group(1))
+                        ocsp_uris0.append(m.group(1))
+
+        if len(ocsp_uris0) == 1:
+            parsed_ocsp_url = urlsplit(ocsp_uris0[0])
+
+            # DNS lookup for OCSP server
+            try:
+                actual_hostname, aliases, ips = gethostbyname_ex(
+                    parsed_ocsp_url.hostname)
+                ocsp_status = {
+                    'input_url': ocsp_uris0[0],
+                    'actual_hostname': actual_hostname,
+                    'aliases': aliases,
+                    'ips': ips,
+                }
+            except gaierror as e:
+                ocsp_status = {
+                    'input_url': ocsp_uris0[0],
+                    'error': e,
+                }
+        else:
+            ocsp_status = {}
+
         certificates.append(
             {'hash': cert.get_subject().hash(),
              'name': cert.get_subject(),
              'issuer': cert.get_issuer(),
              'serial_number': cert.get_serial_number(),
+             'ocsp': ocsp_status,
              })
-    return {'certificates': certificates}
+
+    ret['certificates'] = certificates
+    return ret

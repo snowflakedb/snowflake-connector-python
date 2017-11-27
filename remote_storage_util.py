@@ -32,8 +32,10 @@ SnowflakeFileEncryptionMaterial = namedtuple(
     ]
 )
 
+
 class NeedRenewTokenError(Exception):
     pass
+
 
 class SnowflakeRemoteStorageUtil(object):
 
@@ -160,7 +162,6 @@ class SnowflakeRemoteStorageUtil(object):
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
 
-
         util_class = SnowflakeRemoteStorageUtil.getStorageType(meta[u'stage_info'][u'locationType'])
         file_header = util_class.get_file_header(meta, meta[u'src_file_name'])
         meta[u'src_file_size'] = file_header.content_length
@@ -225,7 +226,6 @@ class SnowflakeRemoteStorageUtil(object):
                     "Unknown Error in downloading a file: %s",
                     full_dst_file_name)
 
-
     @staticmethod
     def upload_one_file_with_retry(meta):
         """
@@ -240,7 +240,7 @@ class SnowflakeRemoteStorageUtil(object):
             SnowflakeRemoteStorageUtil.upload_one_file_to_s3(meta)
             if meta[u'result_status'] == ResultStatus.UPLOADED:
                 for _ in range(10):
-                    _ = util_class.get_file_header(
+                    util_class.get_file_header(
                         meta, meta[u'dst_file_name'])
                     if meta[u'result_status'] == ResultStatus.NOT_FOUND_FILE:
                         time.sleep(1)  # wait 1 second
@@ -255,4 +255,3 @@ class SnowflakeRemoteStorageUtil(object):
         else:
             # could not upload a file even after retry
             meta[u'result_status'] = ResultStatus.ERROR
-

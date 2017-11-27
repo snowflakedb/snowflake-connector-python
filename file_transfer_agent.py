@@ -28,12 +28,12 @@ from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
 from .errors import (Error, OperationalError, InternalError, DatabaseError,
                      ProgrammingError)
 from .file_compression_type import FileCompressionType
-from .remote_storage_util import (SnowflakeFileEncryptionMaterial, SnowflakeRemoteStorageUtil,
-                                  )
-from .s3_util import SnowflakeS3Util
-
 from .file_util import SnowflakeFileUtil
 from .local_util import SnowflakeLocalUtil
+from .remote_storage_util import (SnowflakeFileEncryptionMaterial,
+                                  SnowflakeRemoteStorageUtil,
+                                  )
+from .s3_util import SnowflakeS3Util
 
 S3_FS = u'S3'
 AZURE_FS = u'AZURE'
@@ -173,7 +173,7 @@ class SnowflakeFileTransferAgent(object):
                     self._get_callback_output_stream
                 if meta.get(
                         u'src_file_size',
-                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD: # TODO fli: s3 specific?
+                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD:  # TODO fli: s3 specific?
                     meta[u'parallel'] = self._parallel
                     large_file_metas.append(meta)
                 else:
@@ -195,7 +195,8 @@ class SnowflakeFileTransferAgent(object):
             result[u'result_status'] = result[u'result_status'].value
 
     def upload(self, large_file_metas, small_file_metas):
-        storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
+        storage_client = SnowflakeFileTransferAgent.get_storage_client(
+            self._stage_location_type)
         client = storage_client.create_client(
             self._stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint
@@ -303,14 +304,14 @@ class SnowflakeFileTransferAgent(object):
             idx += 1
             if INJECT_WAIT_IN_PUT > 0:
                 logger.debug('LONGEVITY TEST: waiting for %s',
-                                  INJECT_WAIT_IN_PUT)
+                             INJECT_WAIT_IN_PUT)
                 sleep(INJECT_WAIT_IN_PUT)
 
     @staticmethod
     def get_storage_client(stage_location_type):
-        if(stage_location_type == LOCAL_FS):
+        if (stage_location_type == LOCAL_FS):
             return SnowflakeLocalUtil
-        elif(stage_location_type in [S3_FS, AZURE_FS]):
+        elif (stage_location_type in [S3_FS, AZURE_FS]):
             return SnowflakeRemoteStorageUtil
         else:
             return None
@@ -340,7 +341,8 @@ class SnowflakeFileTransferAgent(object):
             meta[SHA256_DIGEST] = sha256_digest
             meta[u'upload_size'] = upload_size
             logger.info(u'really uploading data')
-            storage_client = SnowflakeFileTransferAgent.get_storage_client(meta[u'stage_location_type'])
+            storage_client = SnowflakeFileTransferAgent.get_storage_client(
+                meta[u'stage_location_type'])
             storage_client.upload_one_file_with_retry(meta)
             logger.info(
                 u'done: status=%s, file=%s, real file=%s',
@@ -362,7 +364,8 @@ class SnowflakeFileTransferAgent(object):
         return meta
 
     def download(self, large_file_metas, small_file_metas):
-        storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
+        storage_client = SnowflakeFileTransferAgent.get_storage_client(
+            self._stage_location_type)
         client = storage_client.create_client(
             self._stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint
@@ -442,7 +445,7 @@ class SnowflakeFileTransferAgent(object):
             idx += 1
             if INJECT_WAIT_IN_PUT > 0:
                 logger.debug('LONGEVITY TEST: waiting for %s',
-                                  INJECT_WAIT_IN_PUT)
+                             INJECT_WAIT_IN_PUT)
                 sleep(INJECT_WAIT_IN_PUT)
 
     @staticmethod
@@ -455,7 +458,8 @@ class SnowflakeFileTransferAgent(object):
         tmp_dir = tempfile.mkdtemp()
         meta[u'tmp_dir'] = tmp_dir
         try:
-            storage_client = SnowflakeFileTransferAgent.get_storage_client(meta[u'stage_location_type'])
+            storage_client = SnowflakeFileTransferAgent.get_storage_client(
+                meta[u'stage_location_type'])
             storage_client.download_one_file(meta)
         except Exception as e:
             logger.exception(u'Failed to download a file: %s',
@@ -474,7 +478,8 @@ class SnowflakeFileTransferAgent(object):
         ret = self._cursor._execute_helper(
             self._command)  # rerun the command to get the credential
         stage_info = ret[u'data'][u'stageInfo']
-        storage_client = SnowflakeFileTransferAgent.get_storage_client(self._stage_location_type)
+        storage_client = SnowflakeFileTransferAgent.get_storage_client(
+            self._stage_location_type)
         return storage_client.create_client(
             stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint)
@@ -787,7 +792,7 @@ class SnowflakeFileTransferAgent(object):
             current_file_compression_type = None
             if auto_detect:
                 mimetypes.init()
-                mime_type_str, encoding = mimetypes.guess_type(file_name)
+                _, encoding = mimetypes.guess_type(file_name)
 
                 if encoding is None:
                     test = None
@@ -796,10 +801,8 @@ class SnowflakeFileTransferAgent(object):
                     if file_name.endswith('.br'):
                         encoding = 'br'
                     elif test and test[:3] == b'ORC':
-                        mime_type_str = 'snowflake/orc'
                         encoding = 'orc'
                     elif test and test == b'PAR1':
-                        mime_type_str = 'snowflake/parquet'
                         encoding = 'parquet'
                     elif test and (
                                 int(binascii.hexlify(test), 16) == 0x28B52FFD):
@@ -807,12 +810,12 @@ class SnowflakeFileTransferAgent(object):
 
                 if encoding is not None:
                     logger.info(u'detected the encoding %s: file=%s',
-                                     encoding, file_name)
+                                encoding, file_name)
                     current_file_compression_type = \
                         FileCompressionType.lookupByMimeSubType(encoding)
                 else:
                     logger.info(u'no file encoding was detected: file=%s',
-                                     file_name)
+                                file_name)
 
                 if current_file_compression_type is not None and not \
                         current_file_compression_type[u'is_supported']:

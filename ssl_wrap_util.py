@@ -565,7 +565,7 @@ def _can_allocate(struct):
         else:
             getattr(select, struct)().close()
         return True
-    except (OSError, AttributeError) as e:
+    except (OSError, AttributeError):
         return False
 
 

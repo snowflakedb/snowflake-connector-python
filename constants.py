@@ -35,7 +35,7 @@ FIELD_TYPES = [
 ]
 
 FIELD_NAME_TO_ID = defaultdict(int)
-FIELD_ID_TO_NAME = defaultdict(unicode if PY2 else str)
+FIELD_ID_TO_NAME = defaultdict(unicode if PY2 else str)  # noqa: F821
 
 __binary_types = []
 __binary_type_names = []
@@ -105,6 +105,7 @@ LOG_FORMAT = (u'%(asctime)s - %(filename)s:%(lineno)d - '
 # String literals
 UTF8 = u'utf-8'
 SHA256_DIGEST = u'sha256_digest'
+
 
 class ResultStatus(Enum):
     ERROR = u'ERROR'

@@ -32,15 +32,15 @@ if PY2:
     from HTMLParser import HTMLParser
 
     GET_CWD = os.getcwdu
-    BASE_EXCEPTION_CLASS = StandardError
-    TO_UNICODE = unicode
+    BASE_EXCEPTION_CLASS = StandardError  # noqa: F821
+    TO_UNICODE = unicode  # noqa: F821
 
     urlsplit = urlparse.urlsplit
     urlunsplit = urlparse.urlunsplit
     parse_qs = urlparse.parse_qs
     urlparse = urlparse.urlparse
 
-    NUM_DATA_TYPES += [int, float, long, decimal.Decimal]
+    NUM_DATA_TYPES += [int, float, long, decimal.Decimal]  # noqa: F821
     PKCS5_UNPAD = lambda v: v[0:-ord(v[-1])]
     PKCS5_OFFSET = lambda v: ord(v[-1])
     IS_BINARY = lambda v: isinstance(v, bytearray)
@@ -119,7 +119,7 @@ def PKCS5_PAD(value, block_size):
 
 def PRINT(msg):
     if PY2:
-        if isinstance(msg, unicode):
+        if isinstance(msg, unicode):  # noqa: F821
             print(msg.encode(UTF8))
         else:
             print(msg)
@@ -129,7 +129,7 @@ def PRINT(msg):
 
 def INPUT(prompt):
     if PY2:
-        return raw_input(prompt).decode(UTF8)
+        return raw_input(prompt).decode(UTF8)  # noqa: F821
     else:
         return input(prompt)
 
