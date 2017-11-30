@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.13 (November 30, 2017)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
 - v1.4.12 (November 16, 2017)
 
     - Added ``qmark`` and ``numeric`` paramstyle support for server side binding.
