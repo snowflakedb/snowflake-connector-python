@@ -580,8 +580,8 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
 
     if logger.getEffectiveLevel() == logging.DEBUG:
         logger.debug(
-            u'not hit cache. issuer name hash: %s, issuer name: %s, is subject root: %s, '
-            u'issuer name hash algorithm: %s, '
+            u'not hit cache. issuer name hash: %s, issuer name: %s, is subject '
+            u'root: %s, issuer name hash algorithm: %s, '
             u'issuer key hash: %s, subject serial number: %s',
             base64_name_hash, ocsp_issuer['name'], ocsp_issuer[u'is_root_ca'],
             cert_id['hashAlgorithm'],
@@ -790,24 +790,36 @@ def download_ocsp_response_cache(url):
     """
     Downloads OCSP response cache from Snowflake.
     """
+    logger = getLogger(__name__)
+    ocsp_validation_cache = {}
     import binascii
-    with requests.Session() as session:
-        session.mount('http://', HTTPAdapter(max_retries=5))
-        session.mount('https://', HTTPAdapter(max_retries=5))
-        response = session.get(url)
-    if response.status_code == OK:
-        try:
-            _decode_ocsp_response_cache(response.json(), OCSP_VALIDATION_CACHE)
-        except (ValueError, binascii.Error) as err:
-            logger = getLogger(__name__)
-            logger.info(
-                'Failed to convert OCSP cache server response to '
-                'JSON. The cache was corrupted. No worry. It will'
-                'validate with OCSP server: %s', err)
-    else:
-        logger = getLogger(__name__)
-        logger.info("Failed to get OCSP response cache from %s: %s",
-                    url, response.status_code)
+    try:
+        with requests.Session() as session:
+            session.mount('http://', HTTPAdapter(max_retries=5))
+            session.mount('https://', HTTPAdapter(max_retries=5))
+
+            response = session.request(
+                method=u'get',
+                url=url,
+                timeout=30,  # socket timeout
+                verify=True,  # for HTTPS (future use)
+            )
+        if response.status_code == OK:
+            try:
+                _decode_ocsp_response_cache(response.json(),
+                                            ocsp_validation_cache)
+            except (ValueError, binascii.Error) as err:
+                logger.debug(
+                    'Failed to convert OCSP cache server response to '
+                    'JSON. The cache was corrupted. No worry. It will'
+                    'validate with OCSP server: %s', err)
+        else:
+            logger.debug("Failed to get OCSP response cache from %s: %s",
+                         url, response.status_code)
+    except Exception as e:
+        logger.debug("Failed to get OCSP response cache from %s: %s",
+                     url, e)
+    return ocsp_validation_cache
 
 
 def check_ocsp_response_status(
@@ -994,6 +1006,12 @@ OCSP_RESPONSE_STATUS = {
     6: 'unauthorized'
 }
 
+# OCSP cache server URL where Snowflake provides OCSP response cache for
+# better availability.
+OCSP_VALIDATION_URL = os.getenv(
+    "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
+    "http://ocsp-dev.snowflakecomputing.com/ocsp_response_cache.json")
+
 # Cache directory
 if platform.system() == 'Windows':
     CACHE_DIR = path.join(
@@ -1052,8 +1070,10 @@ class SnowflakeOCSP(object):
                         read_ocsp_response_cache_file(
                             path.join(parsed_url.netloc, parsed_url.path),
                             OCSP_VALIDATION_CACHE)
-                    elif parsed_url.schema in ('http', 'https'):
-                        download_ocsp_response_cache(ocsp_response_cache_url)
+                    else:
+                        raise Exception(
+                            "Unsupported OCSP URI: %s",
+                            self._ocsp_response_cache_url)
             except Exception as e:
                 logger.debug(
                     "Failed to read OCSP response cache file %s: %s, "
@@ -1141,12 +1161,11 @@ class SnowflakeOCSP(object):
         return ret
 
     def validate_by_direct_connection(
-            self, ocsp_uri, ocsp_issuer, ocsp_subject, do_retry=True):
-        u"""
+            self, ocsp_uri, ocsp_issuer, ocsp_subject,
+            do_retry=True, use_cache=True):
+        """
         Validates the certificate using requests package
         """
-        # If we do retry, use cache
-        use_cache = do_retry
         cache_status, cert_id, ocsp_response = is_cert_id_in_cache(
             ocsp_issuer, ocsp_subject, use_cache=use_cache)
 
@@ -1200,7 +1219,7 @@ class SnowflakeOCSP(object):
         return True, cert_id, ocsp_response
 
     def generate_cert_id_response(
-            self, hostname, connection, proxies=None, do_retry=True):
+            self, hostname, connection, do_retry=True):
         current_time = int(time.time())
         cert_data = _extract_certificate_chain(connection)
         results = {}
@@ -1214,7 +1233,7 @@ class SnowflakeOCSP(object):
                 ret, cert_id, ocsp_response = \
                     self.validate_by_direct_connection(
                         ocsp_uri, ocsp_issuer, ocsp_subject,
-                        do_retry=do_retry)
+                        do_retry=do_retry, use_cache=False)
                 if ret and cert_id and ocsp_response:
                     cert_id_der = der_encoder.encode(cert_id)
                     results[cert_id_der] = (
@@ -1278,7 +1297,7 @@ Usage: {0} --url <url>[ --url <url> --url <url>...] --output-filename <output fi
     dump_ocsp_response(urls, output_filename)
 
 
-def dump_ocsp_response(urls, output_filename):
+def dump_ocsp_response(urls, output_filename, previous_output_uri=None):
     from OpenSSL.SSL import SSLv23_METHOD, Context, Connection
 
     def _openssl_connect(hostname, port=443):
@@ -1291,9 +1310,11 @@ def dump_ocsp_response(urls, output_filename):
         return client_ssl
 
     for url, port in urls:
-        ocsp = SnowflakeOCSP()
+        ocsp = SnowflakeOCSP(
+            ocsp_response_cache_url=previous_output_uri)
         connection = _openssl_connect(url, port)
-        results = ocsp.generate_cert_id_response(url, connection, proxies=None)
+        results = ocsp.generate_cert_id_response(
+            url, connection)
         current_Time = int(time.time())
         print("Target URL: https://{0}:{1}/".format(url, port))
         print("Current Time: {0}".format(
