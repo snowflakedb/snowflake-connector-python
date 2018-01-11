@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.14 (December 14, 2017)
+
+    - Improved OCSP response dump util
+
 - v1.4.13 (November 30, 2017)
 
     - Updated ``boto3`` and ``botocore`` version dependeny.
