@@ -9,9 +9,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.4.15 (January 11, 2018)
+
+    - Added OCSP cache server option.
+
 - v1.4.14 (December 14, 2017)
 
-    - Improved OCSP response dump util
+    - Improved OCSP response dump util.
 
 - v1.4.13 (November 30, 2017)
 
