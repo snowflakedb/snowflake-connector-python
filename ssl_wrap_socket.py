@@ -14,7 +14,7 @@ Insecure mode flag. OCSP validation will be skipped if True
 FEATURE_INSECURE_MODE = False
 
 """
-OCSP Reponse cache file name
+OCSP Response cache file name
 """
 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 
@@ -383,7 +383,7 @@ def ssl_wrap_socket_with_ocsp(
         v = SnowflakeOCSP(
             proxies=set_proxies(PROXY_HOST, PROXY_PORT, PROXY_USER,
                                 PROXY_PASSWORD),
-            ocsp_response_cache_url=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+            ocsp_response_cache_url=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
         ).validate(server_hostname, ret.connection)
         if not v:
             raise OperationalError(

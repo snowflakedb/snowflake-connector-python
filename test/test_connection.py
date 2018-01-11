@@ -356,7 +356,9 @@ def test_invalid_proxy(db_parameters):
 
 
 @pytest.mark.timeout(15)
-def test_eu_connection():
+def test_eu_connection(tmpdir):
+    import os
+    os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
     with pytest.raises(ForbiddenError):
         # must reach Snowflake
         snowflake.connector.connect(
@@ -365,4 +367,6 @@ def test_eu_connection():
             password='testpassword',
             region='eu-central-1',
             login_timeout=5,
+            ocsp_response_cache_filename=os.path.join(
+                str(tmpdir), "test_ocsp_cache.txt")
         )
