@@ -1,7 +1,7 @@
 # encoding=utf-8
 # !/usr/bin/env python
 #
-# Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 
 
