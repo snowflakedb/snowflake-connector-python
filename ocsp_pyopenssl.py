@@ -210,7 +210,8 @@ def _extract_values_from_certificate(cert):
     # public key Hash
     data['key_hash'] = _get_pubickey_sha1_hash(cert).hexdigest()
 
-    # ocsp uri
+    # CRL and OCSP
+    data['crl'] = None
     ocsp_uris0 = []
     for idx in range(cert.get_extension_count()):
         e = cert.get_extension(idx)
@@ -220,6 +221,12 @@ def _extract_values_from_certificate(cert):
                 if m:
                     logger.debug(u'OCSP URL: %s', m.group(1))
                     ocsp_uris0.append(m.group(1))
+        elif e.get_short_name() == b'crlDistributionPoints':
+            for line in str(e).split(u"\n"):
+                m = CRL_RE.match(line)
+                if m:
+                    logger.debug(u"CRL: %s", m.group(1))
+                    data['crl'] = m.group(1)
 
     if len(ocsp_uris0) == 1:
         data['ocsp_uri'] = ocsp_uris0[0]
@@ -562,21 +569,43 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
         base64_name_hash = None
 
     with OCSP_VALIDATION_CACHE_LOCK:
-        if use_cache and cert_id_der in OCSP_VALIDATION_CACHE:
-            current_time = int(time.time())
-            ts, cache = OCSP_VALIDATION_CACHE[cert_id_der]
-            if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
-                # cache value is OCSP response
-                logger.debug(
-                    u'hit cache. issuer name hash: %s, issuer name: %s, is subject root: %s',
-                    base64_name_hash, ocsp_issuer['name'],
-                    ocsp_issuer[u'is_root_ca'])
-                return True, cert_id, cache
+        current_time = int(time.time())
+        for idx in range(2):
+            if use_cache and cert_id_der in OCSP_VALIDATION_CACHE:
+                ts, cache = OCSP_VALIDATION_CACHE[cert_id_der]
+                if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
+                    # cache value is OCSP response
+                    logger.debug(
+                        u'hit cache. issuer name hash: %s, issuer name: %s, is '
+                        u'subject root: %s',
+                        base64_name_hash, ocsp_issuer['name'],
+                        ocsp_issuer[u'is_root_ca'])
+                    return True, cert_id, cache
+                else:
+                    # more than 24 hours difference
+                    del OCSP_VALIDATION_CACHE[cert_id_der]
+                    global OCSP_VALIDATION_CACHE_UPDATED
+                    OCSP_VALIDATION_CACHE_UPDATED = True
+
+            if idx == 1:
+                # No second attempt to download the OCSP response cache.
+                break
+            # download OCSP response cache once
+            if OCSP_VALIDATION_URL_ENABLED:
+                downloaded_cache = download_ocsp_response_cache(
+                    OCSP_VALIDATION_URL)
+                logger.debug('downloaded OCSP response cache file from %s',
+                             OCSP_VALIDATION_URL)
+                for k, v in downloaded_cache.items():
+                    ts, cache = v
+                    if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
+                        OCSP_VALIDATION_CACHE[k] = ts, cache
+                        OCSP_VALIDATION_CACHE_UPDATED = True
             else:
-                # more than 24 hours difference
-                del OCSP_VALIDATION_CACHE[cert_id_der]
-                global OCSP_VALIDATION_CACHE_UPDATED
-                OCSP_VALIDATION_CACHE_UPDATED = True
+                logger.debug("OCSP response cache service is not enabled. Set "
+                             "the environment variable "
+                             "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED=true to "
+                             "enable it.")
 
     if logger.getEffectiveLevel() == logging.DEBUG:
         logger.debug(
@@ -801,7 +830,7 @@ def download_ocsp_response_cache(url):
             response = session.request(
                 method=u'get',
                 url=url,
-                timeout=30,  # socket timeout
+                timeout=10,  # socket timeout
                 verify=True,  # for HTTPS (future use)
             )
         if response.status_code == OK:
@@ -847,7 +876,7 @@ def check_ocsp_response_status(
 
 def _calculate_tolerable_validity(this_update, next_update):
     return max(int(TOLERABLE_VALIDITY_RANGE_RATIO * (
-        next_update - this_update)), MAX_CLOCK_SKEW)
+            next_update - this_update)), MAX_CLOCK_SKEW)
 
 
 def _is_validaity_range(current_time, this_update, next_update):
@@ -983,6 +1012,9 @@ KNOWN_HOSTNAMES = {
     '',
 }
 
+# CRL string match
+CRL_RE = re.compile(r'^\s*URI:(.*)$')
+
 # OCSP cache
 OCSP_VALIDATION_CACHE = {}
 
@@ -1010,7 +1042,9 @@ OCSP_RESPONSE_STATUS = {
 # better availability.
 OCSP_VALIDATION_URL = os.getenv(
     "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-    "http://ocsp-dev.snowflakecomputing.com/ocsp_response_cache.json")
+    "http://ocsp.snowflakecomputing.com/ocsp_response_cache.json")
+OCSP_VALIDATION_URL_ENABLED = os.getenv(
+    "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", False)
 
 # Cache directory
 if platform.system() == 'Windows':
@@ -1039,7 +1073,8 @@ class SnowflakeOCSP(object):
     """
 
     def __init__(self, must_use_cache=False,
-                 proxies=None, ocsp_response_cache_url=None):
+                 proxies=None,
+                 ocsp_response_cache_url=None):
         """
         :param must_use_cache: Test purpose. must use cache or raises an error
         :param ocsp_response_cache_url: the location of cache file
@@ -1062,7 +1097,7 @@ class SnowflakeOCSP(object):
             "OCSP_VALIDATION_CACHE size: %s", len(OCSP_VALIDATION_CACHE))
 
         if self._ocsp_response_cache_url is not None and \
-                        len(OCSP_VALIDATION_CACHE) == 0:
+                len(OCSP_VALIDATION_CACHE) == 0:
             try:
                 with OCSP_VALIDATION_CACHE_LOCK:
                     parsed_url = urlsplit(self._ocsp_response_cache_url)
@@ -1327,6 +1362,7 @@ def dump_ocsp_response(urls, output_filename, previous_output_uri=None):
                 "------------------------------------------------------------")
             print("Issuer Name: {0}".format(issuer['cert'].get_subject()))
             print("Subject Name: {0}".format(subject['cert'].get_subject()))
+            print("CRL Distribution Point: {0}".format(subject['crl']))
             print("OCSP URI: {0}".format(subject['ocsp_uri']))
             print("Issuer Name Hash: {0}".format(
                 octet_string_to_bytearray(cert_id['issuerNameHash']).decode(
