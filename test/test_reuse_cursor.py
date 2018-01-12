@@ -25,7 +25,7 @@ def test_reuse_cursor(conn_cnx, db_parameters):
                 u"select * from {name} order by 1".format(
                     name=db_parameters['name']))
             recs = c.fetchall()
-            assert c.description[0][0] == u"C1", u"fisrt column name"
+            assert c.description[0][0] == u"c1", u"fisrt column name"
             assert len(recs) == 3, u"number of records is wrong"
         finally:
             c.execute(u"drop table if exists {name}".format(

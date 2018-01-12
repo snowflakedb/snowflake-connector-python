@@ -96,7 +96,7 @@ def test_insert_select(conn, db_parameters):
                 name=db_parameters['name']))
             results = []
             for rec in c:
-                results.append(rec['AA'])
+                results.append(rec['aa'])
             _check_results(c, results)
 
 
@@ -732,9 +732,9 @@ def test_real_decimal(conn, db_parameters):
                 name=db_parameters['name'])
             c.execute(fmt)
             rec = c.fetchone()
-            assert rec['AA'] == 9876, 'the integer value'
-            assert rec['PCT'] == 12.3, 'the float value'
-            assert rec['RATIO'] == decimal.Decimal('23.4'), 'the decimal value'
+            assert rec['aa'] == 9876, 'the integer value'
+            assert rec['pct'] == 12.3, 'the float value'
+            assert rec['ratio'] == decimal.Decimal('23.4'), 'the decimal value'
 
 
 def test_none_errorhandler(conn_testaccount):
