@@ -558,9 +558,9 @@ class SnowflakeCursor(object):
         self._column_idx_to_name = {}
         self._column_converter = []
         for idx, column in enumerate(data[u'rowtype']):
-            self._column_idx_to_name[idx] = column[u'name']
+            self._column_idx_to_name[idx] = column[u'name'].lower()
             type_value = FIELD_NAME_TO_ID[column[u'type'].upper()]
-            self._description.append((column[u'name'],
+            self._description.append((column[u'name'].lower(),
                                       type_value,
                                       None,
                                       column[u'length'],

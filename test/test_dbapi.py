@@ -605,31 +605,31 @@ def test_description2(conn_local):
             # description fields:  name | type_code | display_size | internal_size | precision | scale | null_ok
             # name and type_code are mandatory, the other five are optional and are set to None if no meaningful values can be provided.
             expected = [
-                ('COL0', 0, None, None, 38, 0, True),
+                ('col0', 0, None, None, 38, 0, True),
                 # number (FIXED)
-                ('COL1', 0, None, None, 9, 4, False),
+                ('col1', 0, None, None, 9, 4, False),
                 # decimal
-                ('COL2', 2, None, 16777216, None, None, False),
+                ('col2', 2, None, 16777216, None, None, False),
                 # string
-                ('COL3', 3, None, None, None, None, True),
+                ('col3', 3, None, None, None, None, True),
                 # date
-                ('COL4', 6, None, None, 0, 9, True),
+                ('col4', 6, None, None, 0, 9, True),
                 # timestamp
-                ('COL5', 5, None, None, None, None, True),
+                ('col5', 5, None, None, None, None, True),
                 # variant
-                ('COL6', 6, None, None, 0, 9, True),
+                ('col6', 6, None, None, 0, 9, True),
                 # timestamp_ltz
-                ('COL7', 7, None, None, 0, 9, True),
+                ('col7', 7, None, None, 0, 9, True),
                 # timestamp_tz
-                ('COL8', 8, None, None, 0, 9, True),
+                ('col8', 8, None, None, 0, 9, True),
                 # timestamp_ntz
-                ('COL9', 9, None, None, None, None, True),
+                ('col9', 9, None, None, None, None, True),
                 # object
-                ('COL10', 10, None, None,
+                ('col10', 10, None, None,
                  None, None, True),
                 # array
                 #                ('col11', 11, ... # binary
-                ('COL12', 12, None, None, 0, 9, True)
+                ('col12', 12, None, None, 0, 9, True)
                 # time
                 #                ('col13', 13, ... # boolean
             ]
