@@ -54,9 +54,11 @@ setup(
     namespace_packages=['snowflake'],
     packages=[
         'snowflake.connector',
+        'snowflake.connector.tool',
     ],
     package_dir={
         'snowflake.connector': '.',
+        'snowflake.connector.tool': 'tool',
     },
     package_data={
         'snowflake.connector': ['*.pem', '*.json', '*.rst', 'LICENSE.txt'],
@@ -64,8 +66,12 @@ setup(
 
     entry_points={
         'console_scripts': [
-            'snowflake-ocsp-dump-response = '
-            'snowflake.connector.ocsp_pyopenssl:cli_ocsp_dump_response',
+            'snowflake-dump-ocsp-response = '
+            'snowflake.connector.tool.dump_ocsp_response:main',
+            'snowflake-dump-ocsp-response-cache = '
+            'snowflake.connector.tool.dump_ocsp_response_cache:main',
+            'snowflake-dump-certs = '
+            'snowflake.connector.tool.dump_certs:main',
         ],
     },
     classifiers=[
