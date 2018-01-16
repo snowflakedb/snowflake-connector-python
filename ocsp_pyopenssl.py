@@ -17,7 +17,6 @@ import logging
 import os
 import platform
 import re
-import socket
 import time
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
@@ -68,12 +67,14 @@ def _get_pyasn1_version():
             PYASN1_VERSION = sum(x * (1000 ** i) for i, x in enumerate(vv))
 
 
-def _read_ca_bundle(ca_bundle_file):
+def read_cert_bundle(ca_bundle_file, storage=None):
     """
-    Reads a cabundle file including certificates in PEM format
+    Reads a certificate file including certificates in PEM format
     """
+    if storage is None:
+        storage = ROOT_CERTIFICATES_DICT
     logger = getLogger(__name__)
-    logger.debug('reading ca cabundle: %s', ca_bundle_file)
+    logger.debug('reading certificate bundle: %s', ca_bundle_file)
     # cabundle file encoding varies. Tries reading it in utf-8 but ignore
     # all errors
     all_certs = codecs.open(
@@ -90,7 +91,7 @@ def _read_ca_bundle(ca_bundle_file):
                 cert = load_certificate(
                     FILETYPE_PEM,
                     '\n'.join(contents).encode('utf-8'))
-                ROOT_CERTIFICATES_DICT[cert.get_subject().der()] = cert
+                storage[cert.get_subject().der()] = cert
                 state = 0
                 contents = []
 
@@ -108,7 +109,7 @@ def _lazy_read_ca_bundle():
                      os.environ.get('CURL_CA_BUNDLE'))
         if ca_bundle and path.exists(ca_bundle):
             # if the user/application specifies cabundle.
-            _read_ca_bundle(ca_bundle)
+            read_cert_bundle(ca_bundle)
         else:
             import sys
             from botocore.vendored.requests import certs
@@ -119,7 +120,7 @@ def _lazy_read_ca_bundle():
                 # if cacert.pem exists next to certs.py in request pacakage
                 ca_bundle = path.join(
                     path.dirname(certs.__file__), 'cacert.pem')
-                _read_ca_bundle(ca_bundle)
+                read_cert_bundle(ca_bundle)
             elif hasattr(sys, '_MEIPASS'):
                 # if pyinstaller includes cacert.pem
                 cabundle_candidates = [
@@ -130,13 +131,13 @@ def _lazy_read_ca_bundle():
                 for filename in cabundle_candidates:
                     ca_bundle = path.join(sys._MEIPASS, *filename)
                     if path.exists(ca_bundle):
-                        _read_ca_bundle(ca_bundle)
+                        read_cert_bundle(ca_bundle)
                         break
                 else:
                     logger.error('No cabundle file is found in _MEIPASS')
             try:
                 import certifi
-                _read_ca_bundle(certifi.where())
+                read_cert_bundle(certifi.where())
             except:
                 logger.debug('no certifi is installed. ignored.')
 
@@ -259,7 +260,10 @@ def _extract_certificate_chain(connection):
         data = _extract_values_from_certificate(cert)
         logger.debug('is_root_ca: %s', data[u'is_root_ca'])
         cert_data[cert.get_subject().der()] = data
+    return _create_pair_issuer_subject(cert_data)
 
+
+def _create_pair_issuer_subject(cert_data):
     issuer_and_subject = []
     for subject_der in cert_data:
         if not cert_data[subject_der][u'is_root_ca']:
@@ -1096,8 +1100,7 @@ class SnowflakeOCSP(object):
         logger.debug(
             "OCSP_VALIDATION_CACHE size: %s", len(OCSP_VALIDATION_CACHE))
 
-        if self._ocsp_response_cache_url is not None and \
-                len(OCSP_VALIDATION_CACHE) == 0:
+        if self._ocsp_response_cache_url is not None:
             try:
                 with OCSP_VALIDATION_CACHE_LOCK:
                     parsed_url = urlsplit(self._ocsp_response_cache_url)
@@ -1255,8 +1258,13 @@ class SnowflakeOCSP(object):
 
     def generate_cert_id_response(
             self, hostname, connection, do_retry=True):
-        current_time = int(time.time())
         cert_data = _extract_certificate_chain(connection)
+        return self.generate_cert_id_response0(
+            hostname, cert_data, do_retry=do_retry, use_cache=False)
+
+    def generate_cert_id_response0(
+            self, hostname, cert_data, do_retry=True, use_cache=False):
+        current_time = int(time.time())
         results = {}
         for issuer_and_subject in cert_data:
             ocsp_uri = issuer_and_subject['subject'][
@@ -1268,7 +1276,7 @@ class SnowflakeOCSP(object):
                 ret, cert_id, ocsp_response = \
                     self.validate_by_direct_connection(
                         ocsp_uri, ocsp_issuer, ocsp_subject,
-                        do_retry=do_retry, use_cache=False)
+                        do_retry=do_retry, use_cache=use_cache)
                 if ret and cert_id and ocsp_response:
                     cert_id_der = der_encoder.encode(cert_id)
                     results[cert_id_der] = (
@@ -1285,167 +1293,3 @@ class SnowflakeOCSP(object):
                 )
         logger.debug(u'ok')
         return results
-
-
-def cli_ocsp_dump_response():
-    """
-    Internal Tool: OCSP response dumper
-    """
-
-    def help():
-        print(
-            "OCSP Response dumper. This tools dumps key information in OCSP "
-            "response for the given URL and validates the certificate "
-            "revocation status. The output is subject to change.")
-        print("""
-Usage: {0} --url <url>[ --url <url> --url <url>...] --output-filename <output file>
-""".format(path.basename(sys.argv[0])))
-        sys.exit(2)
-
-    import sys
-    if len(sys.argv) < 2:
-        help()
-
-    urls = []
-    output_filename = None
-    mode = None
-    for elem in sys.argv[1:]:
-        if elem in '-h':
-            help()
-        if mode is None and elem == '--output-filename':
-            mode = 'filename'
-            continue
-        elif mode is None and elem == '--url':
-            mode = 'url'
-            continue
-        if mode == 'url':
-            if elem.startswith('https://'):
-                parsed_url = urlsplit(elem)
-                elem = parsed_url.hostname
-                port = int(parsed_url.port or 443)
-            else:
-                port = 443
-            urls.append((elem, port))
-            mode = None
-        elif mode == 'filename':
-            output_filename = elem
-    dump_ocsp_response(urls, output_filename)
-
-
-def dump_ocsp_response(urls, output_filename, previous_output_uri=None):
-    from OpenSSL.SSL import SSLv23_METHOD, Context, Connection
-
-    def _openssl_connect(hostname, port=443):
-        client = socket.socket()
-        client.connect((hostname, port))
-        client_ssl = Connection(Context(SSLv23_METHOD), client)
-        client_ssl.set_connect_state()
-        client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
-        client_ssl.do_handshake()
-        return client_ssl
-
-    for url, port in urls:
-        ocsp = SnowflakeOCSP(
-            ocsp_response_cache_url=previous_output_uri)
-        connection = _openssl_connect(url, port)
-        results = ocsp.generate_cert_id_response(
-            url, connection)
-        current_Time = int(time.time())
-        print("Target URL: https://{0}:{1}/".format(url, port))
-        print("Current Time: {0}".format(
-            strftime('%Y%m%d%H%M%SZ', gmtime(current_Time))))
-        for cert_id, (current_time, issuer, subject, ocsp_response) in \
-                results.items():
-            cert_id, _ = der_decoder.decode(cert_id, CertID())
-            ocsp_response, _ = der_decoder.decode(ocsp_response, OCSPResponse())
-            print(
-                "------------------------------------------------------------")
-            print("Issuer Name: {0}".format(issuer['cert'].get_subject()))
-            print("Subject Name: {0}".format(subject['cert'].get_subject()))
-            print("CRL Distribution Point: {0}".format(subject['crl']))
-            print("OCSP URI: {0}".format(subject['ocsp_uri']))
-            print("Issuer Name Hash: {0}".format(
-                octet_string_to_bytearray(cert_id['issuerNameHash']).decode(
-                    'latin-1').encode('latin-1')))
-            print("Issuer Key Hash: {0}".format(
-                octet_string_to_bytearray(cert_id['issuerKeyHash']).decode(
-                    'latin-1').encode('latin-1')))
-            print("Serial Number: {0}".format(cert_id['serialNumber']))
-            if ocsp_response['responseStatus'] == OCSPResponseStatus(
-                    'successful'):
-                status = "successful"
-            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                    'malformedRequest'):
-                status = "malformedRequest"
-            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                    'internalError'):
-                status = "internalError"
-            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                    'tryLater'):
-                status = "tryLater"
-            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                    'sigRequired'):
-                status = "sigRequired"
-            elif ocsp_response['responseStatus'] == OCSPResponseStatus(
-                    'unauthorized'):
-                status = "unauthorized"
-            else:
-                status = "Unknown"
-            print("Response Status: {0}".format(status))
-            response_bytes = ocsp_response['responseBytes']
-            basic_ocsp_response, _ = der_decoder.decode(
-                response_bytes['response'],
-                BasicOCSPResponse())
-            tbs_response_data = basic_ocsp_response['tbsResponseData']
-            if tbs_response_data['responderID']['byName']:
-                print("Responder Name: {0}".format(
-                    tbs_response_data['responderID']['byName']))
-            elif tbs_response_data['responderID']['byKey']:
-                sha1_ocsp = tbs_response_data['responderID']['byKey']
-                sha1_ocsp = octet_string_to_bytearray(sha1_ocsp).decode(
-                    'latin-1').encode('latin-1')
-                print("Responder Key: {0}".format(sha1_ocsp))
-            if tbs_response_data['responseExtensions']:
-                print('Response Extensions: %s',
-                      tbs_response_data['responseExtensions'])
-            for single_response in tbs_response_data['responses']:
-                cert_status = single_response['certStatus']
-                if cert_status['good'] is not None:
-                    print("This Update: {0}".format(
-                        single_response['thisUpdate']))
-                    print("Next Update: {0}".format(
-                        single_response['nextUpdate']))
-                    this_update = strptime(str(single_response['thisUpdate']),
-                                           '%Y%m%d%H%M%SZ')
-                    next_update = strptime(str(single_response['nextUpdate']),
-                                           '%Y%m%d%H%M%SZ')
-                    this_update = calendar.timegm(this_update)
-                    next_update = calendar.timegm(next_update)
-                    tolerable_validity = _calculate_tolerable_validity(
-                        this_update,
-                        next_update)
-                    print("Tolerable Update: {0}".format(
-                        strftime('%Y%m%d%H%M%SZ', gmtime(
-                            next_update + tolerable_validity))
-                    ))
-                    if _is_validaity_range(current_time, this_update,
-                                           next_update):
-                        print("OK")
-                    else:
-                        print(_validity_error_message(
-                            current_time, this_update, next_update))
-                elif cert_status['revoked'] is not None:
-                    revocation_time = cert_status['revoked']['revocationTime']
-                    revocation_reason = cert_status['revoked'][
-                        'revocationReason']
-                    print("Revoked Time: {0}".format(revocation_time))
-                    print("Revoked Reason: {0}".format(revocation_reason))
-                    print("Revoked")
-                else:
-                    print("Unknown")
-            print('')
-
-        if output_filename:
-            write_ocsp_response_cache_file(
-                output_filename, OCSP_VALIDATION_CACHE)
-    return OCSP_VALIDATION_CACHE
