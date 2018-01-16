@@ -148,7 +148,7 @@ def _validate_urls(urls, must_use_cache=False, ocsp_response_cache_url=None):
 
 @pytest.mark.skipif(
     True,
-    reason="""intermettently fails with cache error. need further
+    reason="""intermittently fails with cache error. need further
 investigation"""
 )
 def test_ocsp_response_file_cache(tmpdir):
@@ -167,7 +167,7 @@ def test_ocsp_response_file_cache(tmpdir):
     _validate_urls(urls, ocsp_response_cache_url='file://' + cache_file_name)
 
     # use file cache and not memory cache or OCSP server if no cache
-    # hit. It can happen if multilpe certificates are associated with
+    # hit. It can happen if multiple certificates are associated with
     # the same domain.
     ocsp_pyopenssl.OCSP_VALIDATION_CACHE = {}  # reset the memory cache
     _validate_urls(urls, must_use_cache=True,
