@@ -46,8 +46,8 @@ setup(
         'pyOpenSSL>=16.2.0,<18.0.0',
         'cffi>=1.9',
         'cryptography>=1.7.2,<2.2',
-        'pyasn1>=0.2.1,<0.4.0',
-        'pyasn1-modules>=0.0.8,<0.2.0',
+        'pyasn1>=0.2.1,<0.5.0',
+        'pyasn1-modules>=0.0.8,<0.3.0',
         'ijson',
     ],
 
