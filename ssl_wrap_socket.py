@@ -21,7 +21,6 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 import logging
 import ssl
 import sys
-from os import getenv
 from socket import error as SocketError
 from socket import (socket, timeout)
 
@@ -71,12 +70,6 @@ _stdlib_to_openssl_verify = {
 _openssl_to_stdlib_verify = dict(
     (v, k) for k, v in _stdlib_to_openssl_verify.items()
 )
-
-"""
-Use asn1crypto instead of pyasn1 for OCSP check
-"""
-SF_OCSP_USE_ASN1CRYPTO = getenv(
-    "SF_OCSP_USE_ASN1CRYPTO", False)
 
 # OpenSSL will only write 16K at a time
 SSL_WRITE_BLOCKSIZE = 16384
@@ -379,12 +372,8 @@ def ssl_wrap_socket_with_ocsp(
         ssl_version=ssl_version)
     global FEATURE_INSECURE_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
-    global SF_OCSP_USE_ASN1CRYPTO
 
-    if SF_OCSP_USE_ASN1CRYPTO:
-        from .ocsp_asn1crypto import SnowflakeOCSP
-    else:
-        from .ocsp_pyasn1 import SnowflakeOCSP
+    from .ocsp_asn1crypto import SnowflakeOCSP
 
     log.debug(u'insecure_mode: %s, '
               u'OCSP response cache file name: %s, '

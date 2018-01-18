@@ -28,7 +28,6 @@ from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
 from botocore.vendored.requests.packages.urllib3.exceptions \
     import SSLError as urllib3_SSLError
-from pyasn1.error import PyAsn1Error
 
 from . import proxy
 from . import ssl_wrap_socket
@@ -704,7 +703,6 @@ class SnowflakeRestful(object):
                 ValueError,
                 RuntimeError,
                 AttributeError,  # json decoding error
-                PyAsn1Error  # garbled OCSP response
                 ) as err:
             logger.debug(
                 "Hit retryable client error. Retrying... Ignore the following "
