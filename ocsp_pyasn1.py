@@ -8,7 +8,6 @@
 Use openssl command line to validate the certification revocation status
 using OCSP.
 """
-import base64
 import calendar
 import codecs
 import hashlib
@@ -18,6 +17,7 @@ import os
 import platform
 import re
 import time
+from base64 import b64encode, b64decode
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from os import path
@@ -43,6 +43,8 @@ from .errors import (OperationalError)
 from .rfc6960 import (OCSPRequest, OCSPResponse, TBSRequest, CertID, Request,
                       Version, BasicOCSPResponse,
                       OCSPResponseStatus)
+
+OCSP_RESPONSE_CACHE_FILE_NAME = 'ocsp_response_cache.json'
 
 PYASN1_VERSION_LOCK = Lock()
 
@@ -454,7 +456,7 @@ def process_ocsp_response(response, ocsp_issuer):
     for single_response in tbs_response_data['responses']:
         cert_id = single_response['certID']
         cert_status = single_response['certStatus']
-        cert_id_der = der_encoder.encode(cert_id)
+        hkey = _decode_cert_id_key(cert_id)
         if cert_status['good'] is not None:
             logger.debug('ok')
             this_update = strptime(str(single_response['thisUpdate']),
@@ -463,7 +465,7 @@ def process_ocsp_response(response, ocsp_issuer):
                                    '%Y%m%d%H%M%SZ')
             this_update = calendar.timegm(this_update)
             next_update = calendar.timegm(next_update)
-            single_response_map[cert_id_der] = {
+            single_response_map[hkey] = {
                 'status': 'good',
                 'this_update': this_update,
                 'next_update': next_update,
@@ -473,14 +475,14 @@ def process_ocsp_response(response, ocsp_issuer):
             # revocation
             revocation_time = cert_status['revoked']['revocationTime']
             revocation_reason = cert_status['revoked']['revocationReason']
-            single_response_map[cert_id_der] = {
+            single_response_map[hkey] = {
                 'status': 'revoked',
                 'time': revocation_time,
                 'reason': revocation_reason,
             }
         else:
             logger.info('unknown')
-            single_response_map[cert_id_der] = {
+            single_response_map[hkey] = {
                 'status': 'unknown',
             }
     return single_response_map
@@ -551,6 +553,10 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
     u"""
     checks if cert_id is in the cache
     """
+    global SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED
+    global SF_OCSP_RESPONSE_CACHE_SERVER_URL
+    global OCSP_VALIDATION_CACHE_UPDATED
+
     logger = getLogger(__name__)
     cert_id = CertID()
     cert_id[
@@ -564,10 +570,8 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
     cert_id['serialNumber'] = rfc2459.CertificateSerialNumber(
         ocsp_subject[u'serial_number'])
 
-    cert_id_der = der_encoder.encode(cert_id)
-
     if logger.getEffectiveLevel() == logging.DEBUG:
-        base64_name_hash = base64.b64encode(
+        base64_name_hash = b64encode(
             octet_string_to_bytearray(cert_id['issuerNameHash']))
     else:
         base64_name_hash = None
@@ -575,35 +579,34 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
     with OCSP_VALIDATION_CACHE_LOCK:
         current_time = int(time.time())
         for idx in range(2):
-            if use_cache and cert_id_der in OCSP_VALIDATION_CACHE:
-                ts, cache = OCSP_VALIDATION_CACHE[cert_id_der]
+            hkey = _decode_cert_id_key(cert_id)
+            if use_cache and hkey in OCSP_VALIDATION_CACHE:
+                ts, cache = OCSP_VALIDATION_CACHE[hkey]
                 if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
                     # cache value is OCSP response
                     logger.debug(
-                        u'hit cache. issuer name hash: %s, issuer name: %s, is '
+                        u'hit cache. issuer name: %s, is '
                         u'subject root: %s',
-                        base64_name_hash, ocsp_issuer['name'],
+                        ocsp_issuer['name'],
                         ocsp_issuer[u'is_root_ca'])
                     return True, cert_id, cache
                 else:
                     # more than 24 hours difference
-                    del OCSP_VALIDATION_CACHE[cert_id_der]
-                    global OCSP_VALIDATION_CACHE_UPDATED
+                    del OCSP_VALIDATION_CACHE[hkey]
                     OCSP_VALIDATION_CACHE_UPDATED = True
 
             if idx == 1:
                 # No second attempt to download the OCSP response cache.
                 break
             # download OCSP response cache once
-            if OCSP_VALIDATION_URL_ENABLED:
+            if SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED:
                 downloaded_cache = download_ocsp_response_cache(
-                    OCSP_VALIDATION_URL)
+                    SF_OCSP_RESPONSE_CACHE_SERVER_URL)
                 logger.debug('downloaded OCSP response cache file from %s',
-                             OCSP_VALIDATION_URL)
-                for k, v in downloaded_cache.items():
-                    ts, cache = v
+                             SF_OCSP_RESPONSE_CACHE_SERVER_URL)
+                for hkey, (ts, cache) in downloaded_cache.items():
                     if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
-                        OCSP_VALIDATION_CACHE[k] = ts, cache
+                        OCSP_VALIDATION_CACHE[hkey] = ts, cache
                         OCSP_VALIDATION_CACHE_UPDATED = True
             else:
                 logger.debug("OCSP response cache service is not enabled. Set "
@@ -618,61 +621,57 @@ def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
             u'issuer key hash: %s, subject serial number: %s',
             base64_name_hash, ocsp_issuer['name'], ocsp_issuer[u'is_root_ca'],
             cert_id['hashAlgorithm'],
-            base64.b64encode(octet_string_to_bytearray(
-                cert_id['issuerKeyHash'])),
+            b64encode(octet_string_to_bytearray(cert_id['issuerKeyHash'])),
             cert_id['serialNumber'])
-        with OCSP_VALIDATION_CACHE_LOCK:
-            for k in OCSP_VALIDATION_CACHE:
-                key_cert_id, _ = der_decoder.decode(k, asn1Spec=CertID())
-                logger.debug(
-                    "issuer name hash: %s, issuer name hash algorithm: %s, "
-                    "issuer key hash: %s, subject serial number: %s",
-                    base64.b64encode(octet_string_to_bytearray(
-                        key_cert_id['issuerNameHash'])),
-                    key_cert_id['hashAlgorithm'],
-                    base64.b64encode(octet_string_to_bytearray(
-                        key_cert_id['issuerKeyHash'])),
-                    key_cert_id['serialNumber']
-                )
 
     return False, cert_id, None
 
 
-def _decode_ocsp_response_cache(ocsp_response_cache_json,
-                                ocsp_response_cache):
+def _encode_cert_id_key(hkey):
+    issuer_name_hash, issuer_key_hash, serial_number = hkey
+    issuer_name_hash, _ = der_decoder.decode(issuer_name_hash)
+    issuer_key_hash, _ = der_decoder.decode(issuer_key_hash)
+    serial_number, _ = der_decoder.decode(serial_number)
+    cert_id = CertID()
+    cert_id['hashAlgorithm'] = rfc2459.AlgorithmIdentifier().setComponentByName(
+        'algorithm', rfc2437.id_sha1)
+    cert_id['issuerNameHash'] = issuer_name_hash
+    cert_id['issuerKeyHash'] = issuer_key_hash
+    cert_id['serialNumber'] = serial_number
+    return cert_id
+
+
+def _decode_cert_id_key(cert_id):
+    return (der_encoder.encode(cert_id['issuerNameHash']),
+            der_encoder.encode(cert_id['issuerKeyHash']),
+            der_encoder.encode(cert_id['serialNumber']))
+
+
+def _decode_ocsp_response_cache(ocsp_response_cache_json, ocsp_response_cache):
     """
     Decodes OCSP response cache from JSON
     """
-    from base64 import b64decode
     current_time = int(time.time())
-    for cert_id, (ts, ocsp_response) in ocsp_response_cache_json.items():
-        cert_id_der = b64decode(cert_id)
+    for cert_id_base64, (ts, ocsp_response) in ocsp_response_cache_json.items():
+        cert_id, _ = der_decoder.decode(b64decode(cert_id_base64), CertID())
+        hkey = _decode_cert_id_key(cert_id)
         if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
-            ocsp_response_cache[cert_id_der] = (ts, b64decode(
-                ocsp_response))
-        elif cert_id_der in ocsp_response_cache:
+            ocsp_response_cache[hkey] = (ts, b64decode(ocsp_response))
+        elif hkey in ocsp_response_cache:
             # invalidate the cache if exists
-            del ocsp_response_cache[cert_id_der]
+            del ocsp_response_cache[hkey]
 
 
-def _encode_ocsp_response_cache(ocsp_response_cache,
-                                ocsp_response_cache_json):
+def _encode_ocsp_response_cache(ocsp_response_cache, ocsp_response_cache_json):
     """
     Encodes OCSP response cache to JSON
     """
-    from base64 import b64encode
     logger = getLogger(__name__)
     logger.debug('encoding OCSP reponse cache to JSON')
-    for cert_id_der, (current_time, ocsp_response) in \
+    for hkey, (current_time, ocsp_response) in \
             ocsp_response_cache.items():
-        if logger.getEffectiveLevel() == logging.DEBUG:
-            key_cert_id, _ = der_decoder.decode(
-                cert_id_der, asn1Spec=CertID())
-            logger.debug('name: %s, serial number: %s',
-                         b64encode(octet_string_to_bytearray(
-                             key_cert_id['issuerNameHash'])),
-                         key_cert_id['serialNumber'])
-        k = b64encode(cert_id_der).decode('ascii')
+        k = b64encode(der_encoder.encode(_encode_cert_id_key(hkey))).decode(
+            'ascii')
         v = b64encode(ocsp_response).decode('ascii')
         ocsp_response_cache_json[k] = (current_time, v)
 
@@ -764,23 +763,20 @@ def write_ocsp_response_cache_file(filename, ocsp_validation_cache):
     logger = getLogger(__name__)
     logger.debug('writing OCSP response cache file')
     file_cache_data = {}
-    _encode_ocsp_response_cache(
-        ocsp_validation_cache,
-        file_cache_data
-    )
+    _encode_ocsp_response_cache(ocsp_validation_cache, file_cache_data)
     with codecs.open(filename, 'w', encoding='utf-8', errors='ignore') as f:
         json.dump(file_cache_data, f)
 
 
-def update_ocsp_response_cache_file(ocsp_response_cache_url):
+def update_ocsp_response_cache_file(ocsp_response_cache_uri):
     """
     Updates OCSP Response Cache
     """
     logger = getLogger(__name__)
     lock_file = None
-    if ocsp_response_cache_url is not None:
+    if ocsp_response_cache_uri is not None:
         try:
-            parsed_url = urlsplit(ocsp_response_cache_url)
+            parsed_url = urlsplit(ocsp_response_cache_uri)
             if parsed_url.scheme == 'file':
                 filename = path.join(parsed_url.netloc, parsed_url.path)
                 lock_file = filename + '.lck'
@@ -803,12 +799,12 @@ def update_ocsp_response_cache_file(ocsp_response_cache_url):
                 logger.info(
                     "No OCSP response cache file is written, because the "
                     "given URI is not a file: %s. Ignoring...",
-                    ocsp_response_cache_url)
+                    ocsp_response_cache_uri)
         except Exception as e:
             logger.info(
                 "Failed to write OCSP response cache "
                 "file. file: %s, error: %s, Ignoring...",
-                ocsp_response_cache_url, e, exc_info=True)
+                ocsp_response_cache_uri, e, exc_info=True)
 
     if lock_file is not None and os.path.exists(lock_file):
         try:
@@ -855,22 +851,19 @@ def download_ocsp_response_cache(url):
     return ocsp_validation_cache
 
 
-def check_ocsp_response_status(
-        single_response_map,
-        ocsp_response, ocsp_response_cache_url):
+def check_ocsp_response_status(single_response_map, ocsp_response):
     """
     Checks the OCSP response status
     """
     ret = []
-    for cert_id_der, data in single_response_map.items():
+    for hkey, data in single_response_map.items():
         if data['status'] == 'good':
             ret.append(_process_good_status(
-                cert_id_der, data, ocsp_response,
-                ocsp_response_cache_url))
+                hkey, data, ocsp_response))
         elif data['status'] == 'revoked':  # revoked
-            _process_revoked_status(cert_id_der, data)
+            _process_revoked_status(hkey, data)
         else:  # unknown
-            _process_unknown_status(cert_id_der)
+            _process_unknown_status(hkey)
     if len(ret) != len(single_response_map):
         raise OperationalError(
             msg=u"Not all OCSP Response was returned",
@@ -907,32 +900,19 @@ def _validity_error_message(current_time, this_update, next_update):
             next_update + tolerable_validity))))
 
 
-def _process_good_status(
-        cert_id_der, data, ocsp_response, ocsp_response_cache_url):
+def _process_good_status(hkey, data, ocsp_response):
     """
     Process Good status
     """
-    logger = getLogger(__name__)
     current_time = int(time.time())
     this_update = data['this_update']
     next_update = data['next_update']
     if _is_validaity_range(current_time, this_update, next_update):
         with OCSP_VALIDATION_CACHE_LOCK:
-            if cert_id_der not in OCSP_VALIDATION_CACHE:
-                OCSP_VALIDATION_CACHE[cert_id_der] = (
-                    current_time, ocsp_response)
+            if hkey not in OCSP_VALIDATION_CACHE:
+                OCSP_VALIDATION_CACHE[hkey] = (current_time, ocsp_response)
                 global OCSP_VALIDATION_CACHE_UPDATED
                 OCSP_VALIDATION_CACHE_UPDATED = True
-                if logger.getEffectiveLevel() == logging.DEBUG:
-                    cert_id, _ = der_decoder.decode(
-                        cert_id_der, asn1Spec=CertID())
-                    logger.debug(
-                        u'store cache: %s, this_update: %s, '
-                        u'next_update: %s',
-                        base64.b64encode(
-                            octet_string_to_bytearray(
-                                cert_id['issuerNameHash'])),
-                        this_update, next_update)
         return True
     else:
         raise OperationalError(
@@ -941,15 +921,15 @@ def _process_good_status(
         )
 
 
-def _process_revoked_status(cert_id_der, data):
+def _process_revoked_status(hkey, data):
     """
     Process Revoked status
     """
     with OCSP_VALIDATION_CACHE_LOCK:
-        if cert_id_der in OCSP_VALIDATION_CACHE:
+        if hkey in OCSP_VALIDATION_CACHE:
             global OCSP_VALIDATION_CACHE_UPDATED
             OCSP_VALIDATION_CACHE_UPDATED = True
-            del OCSP_VALIDATION_CACHE[cert_id_der]
+            del OCSP_VALIDATION_CACHE[hkey]
     current_time = int(time.time())
     revocation_time = data['time']
     revocation_reason = data['reason']
@@ -963,15 +943,15 @@ def _process_revoked_status(cert_id_der, data):
     )
 
 
-def _process_unknown_status(cert_id_der):
+def _process_unknown_status(hkey):
     """
     Process Unknown status
     """
     with OCSP_VALIDATION_CACHE_LOCK:
-        if cert_id_der in OCSP_VALIDATION_CACHE:
+        if hkey in OCSP_VALIDATION_CACHE:
             global OCSP_VALIDATION_CACHE_UPDATED
             OCSP_VALIDATION_CACHE_UPDATED = True
-            del OCSP_VALIDATION_CACHE[cert_id_der]
+            del OCSP_VALIDATION_CACHE[hkey]
     raise OperationalError(
         msg=u"The certificate is in UNKNOWN revocation status.",
         errno=ER_SERVER_CERTIFICATE_REVOKED,
@@ -1044,11 +1024,12 @@ OCSP_RESPONSE_STATUS = {
 
 # OCSP cache server URL where Snowflake provides OCSP response cache for
 # better availability.
-OCSP_VALIDATION_URL = os.getenv(
+SF_OCSP_RESPONSE_CACHE_SERVER_URL = os.getenv(
     "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-    "http://ocsp.snowflakecomputing.com/ocsp_response_cache.json")
-OCSP_VALIDATION_URL_ENABLED = os.getenv(
-    "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", False)
+    "http://ocsp.snowflakecomputing.com/{0}".format(
+        OCSP_RESPONSE_CACHE_FILE_NAME))
+SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED = os.getenv(
+    "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "false") != "false"
 
 # Cache directory
 if platform.system() == 'Windows':
@@ -1078,32 +1059,32 @@ class SnowflakeOCSP(object):
 
     def __init__(self, must_use_cache=False,
                  proxies=None,
-                 ocsp_response_cache_url=None):
+                 ocsp_response_cache_uri=None):
         """
         :param must_use_cache: Test purpose. must use cache or raises an error
-        :param ocsp_response_cache_url: the location of cache file
+        :param ocsp_response_cache_uri: the location of cache file
         """
         self._must_use_cache = must_use_cache
         self._proxies = proxies
-        if ocsp_response_cache_url is None and CACHE_DIR is not None:
-            self._ocsp_response_cache_url = 'file://' + path.join(
-                CACHE_DIR, 'ocsp_response_cache')
+        if ocsp_response_cache_uri is None and CACHE_DIR is not None:
+            self._ocsp_response_cache_uri = 'file://' + path.join(
+                CACHE_DIR, OCSP_RESPONSE_CACHE_FILE_NAME)
         else:
-            self._ocsp_response_cache_url = ocsp_response_cache_url
+            self._ocsp_response_cache_uri = ocsp_response_cache_uri
 
-        if self._ocsp_response_cache_url is not None:
-            self._ocsp_response_cache_url = self._ocsp_response_cache_url.replace(
+        if self._ocsp_response_cache_uri is not None:
+            self._ocsp_response_cache_uri = self._ocsp_response_cache_uri.replace(
                 '\\', '/')
 
-        logger.debug("ocsp_response_cache_url: %s",
-                     self._ocsp_response_cache_url)
+        logger.debug("ocsp_response_cache_uri: %s",
+                     self._ocsp_response_cache_uri)
         logger.debug(
             "OCSP_VALIDATION_CACHE size: %s", len(OCSP_VALIDATION_CACHE))
 
-        if self._ocsp_response_cache_url is not None:
+        if self._ocsp_response_cache_uri is not None:
             try:
                 with OCSP_VALIDATION_CACHE_LOCK:
-                    parsed_url = urlsplit(self._ocsp_response_cache_url)
+                    parsed_url = urlsplit(self._ocsp_response_cache_uri)
                     if parsed_url.scheme == 'file':
                         read_ocsp_response_cache_file(
                             path.join(parsed_url.netloc, parsed_url.path),
@@ -1111,13 +1092,13 @@ class SnowflakeOCSP(object):
                     else:
                         raise Exception(
                             "Unsupported OCSP URI: %s",
-                            self._ocsp_response_cache_url)
+                            self._ocsp_response_cache_uri)
             except Exception as e:
                 logger.debug(
                     "Failed to read OCSP response cache file %s: %s, "
                     "No worry. It will validate with OCSP server. "
                     "Ignoring...",
-                    self._ocsp_response_cache_url, e, exc_info=True)
+                    self._ocsp_response_cache_uri, e, exc_info=True)
         #
         # load 'charmap' encoding here so that
         # no load concurrency issue happens later
@@ -1177,7 +1158,7 @@ class SnowflakeOCSP(object):
             with OCSP_VALIDATION_CACHE_LOCK:
                 if OCSP_VALIDATION_CACHE_UPDATED:
                     update_ocsp_response_cache_file(
-                        self._ocsp_response_cache_url)
+                        self._ocsp_response_cache_uri)
                 OCSP_VALIDATION_CACHE_UPDATED = False
 
             if len(results) != len(cert_data):
@@ -1237,8 +1218,7 @@ class SnowflakeOCSP(object):
                     ocsp_response, ocsp_issuer)
                 check_ocsp_response_status(
                     single_response_map,
-                    ocsp_response,
-                    self._ocsp_response_cache_url)
+                    ocsp_response)
                 err = None
                 break
             except Exception as e:

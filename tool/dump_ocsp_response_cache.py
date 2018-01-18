@@ -3,24 +3,18 @@
 #
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
-from os import path
-import os
-import calendar
-import sys
 import logging
-import time
-from time import strptime
-
+import os
+import sys
 from logging import getLogger
+from os import path
+from time import gmtime, strftime
 
-from pyasn1.codec.der import decoder as der_decoder
+from asn1crypto import core, ocsp
 
-from snowflake.connector.rfc6960 import (
-    OCSPResponse, CertID, BasicOCSPResponse)
-
-from snowflake.connector.ocsp_pyopenssl import (
+from snowflake.connector.ocsp_asn1crypto import (
+    OUTPUT_TIMESTAMP_FORMAT,
     read_ocsp_response_cache_file,
-    _extract_values_from_certificate,
     _create_pair_issuer_subject,
     read_cert_bundle)
 
@@ -72,20 +66,18 @@ def dump_ocsp_response_cache(ocsp_response_cache_file, cert_dir):
     Dump OCSP response cache contents. Show the subject name as well if
     the subject is included in the certificate files.
     """
-    s_to_n = serial_to_name(cert_dir)
+    s_to_n = _serial_to_name(cert_dir)
 
     ocsp_validation_cache = {}
     read_ocsp_response_cache_file(ocsp_response_cache_file,
                                   ocsp_validation_cache)
 
     def custom_key(k):
-        k0, _ = der_decoder.decode(k, asn1Spec=CertID())
-        return int(k0['serialNumber'])
+        serial_number = core.Integer.load(k[2])
+        return int(serial_number.native)
 
-    for cert_id in sorted(ocsp_validation_cache, key=custom_key):
-        value = ocsp_validation_cache[cert_id]
-        key_cert_id, _ = der_decoder.decode(cert_id, asn1Spec=CertID())
-        serial_number = key_cert_id['serialNumber']
+    for hkey in sorted(ocsp_validation_cache, key=custom_key):
+        serial_number = core.Integer.load(hkey[2]).native
         if int(serial_number) in s_to_n:
             name = s_to_n[int(serial_number)]
         else:
@@ -93,61 +85,34 @@ def dump_ocsp_response_cache(ocsp_response_cache_file, cert_dir):
         print(
             "serial #: {}, name: {}".format(serial_number, name),
         )
+        value = ocsp_validation_cache[hkey]
         cache = value[1]
-        ocsp_response, _ = der_decoder.decode(cache, OCSPResponse())
+        ocsp_response = ocsp.OCSPResponse.load(cache)
+        basic_ocsp_response = ocsp_response.basic_ocsp_response
 
-        response_bytes = ocsp_response['responseBytes']
-
-        basic_ocsp_response, _ = der_decoder.decode(
-            response_bytes['response'],
-            BasicOCSPResponse())
-
-        tbs_response_data = basic_ocsp_response['tbsResponseData']
-
-        if tbs_response_data['responseExtensions']:
-            print('Response Extensions: {}'.format(
-                tbs_response_data['responseExtensions']))
+        tbs_response_data = basic_ocsp_response['tbs_response_data']
 
         for single_response in tbs_response_data['responses']:
-            produced_at = strptime(str(tbs_response_data['producedAt']),
-                                   '%Y%m%d%H%M%SZ')
-            this_update = strptime(str(single_response['thisUpdate']),
-                                   '%Y%m%d%H%M%SZ')
-            next_update = strptime(str(single_response['nextUpdate']),
-                                   '%Y%m%d%H%M%SZ')
-            produced_at = calendar.timegm(produced_at)
-            this_update = calendar.timegm(this_update)
-            next_update = calendar.timegm(next_update)
-
             print("created on: {}, produced At: {}, this: {}, next: {}".format(
-                time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(value[0])),
-                time.strftime('%Y-%m-%d %H:%M:%S',
-                              time.gmtime(produced_at)),
-                time.strftime('%Y-%m-%d %H:%M:%S',
-                              time.gmtime(this_update)),
-                time.strftime('%Y-%m-%d %H:%M:%S',
-                              time.gmtime(next_update))))
+                strftime(OUTPUT_TIMESTAMP_FORMAT, gmtime(int(value[0]))),
+                tbs_response_data['produced_at'].native,
+                single_response['this_update'].native,
+                single_response['next_update'].native))
 
 
-def serial_to_name(cert_dir):
+def _serial_to_name(cert_dir):
     """
     Create a map table from serial number to name
     """
     map_serial_to_name = {}
     for cert_file in os.listdir(cert_dir):
         cert_file = path.join(cert_dir, cert_file)
-        certificates_in_files = {}
-        read_cert_bundle(cert_file, certificates_in_files)
+        cert_map = {}
+        read_cert_bundle(cert_file, cert_map)
+        cert_data = _create_pair_issuer_subject(cert_map)
 
-        cert_data = {}
-        for cert_id, cert in certificates_in_files.items():
-            data = _extract_values_from_certificate(cert)
-            cert_data[cert.get_subject().der()] = data
-
-        issuer_and_subject = _create_pair_issuer_subject(cert_data)
-        for c in issuer_and_subject:
-            subject = c['subject']
-            map_serial_to_name[subject['serial_number']] = subject['name']
+        for issuer, subject in cert_data:
+            map_serial_to_name[subject.serial_number] = subject.subject.native
 
     return map_serial_to_name
 
