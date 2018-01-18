@@ -21,8 +21,9 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 import logging
 import ssl
 import sys
+from os import getenv
 from socket import error as SocketError
-from socket import (socket, gaierror, gethostbyname_ex, timeout)
+from socket import (socket, timeout)
 
 import OpenSSL.SSL
 from botocore.vendored.requests.packages.urllib3 import connection \
@@ -33,10 +34,8 @@ from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend
 from cryptography.hazmat.backends.openssl.x509 import _Certificate
 
-from .compat import urlsplit
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
-from .ocsp_pyopenssl import SnowflakeOCSP, OCSP_RE
 from .proxy import (set_proxies, PROXY_HOST, PROXY_PORT, PROXY_USER,
                     PROXY_PASSWORD)
 from .ssl_wrap_util import wait_for_read, wait_for_write
@@ -72,6 +71,12 @@ _stdlib_to_openssl_verify = {
 _openssl_to_stdlib_verify = dict(
     (v, k) for k, v in _stdlib_to_openssl_verify.items()
 )
+
+"""
+Use asn1crypto instead of pyasn1 for OCSP check
+"""
+SF_OCSP_USE_ASN1CRYPTO = getenv(
+    "SF_OCSP_USE_ASN1CRYPTO", False)
 
 # OpenSSL will only write 16K at a time
 SSL_WRITE_BLOCKSIZE = 16384
@@ -372,6 +377,15 @@ def ssl_wrap_socket_with_ocsp(
         sock, keyfile=keyfile, certfile=certfile, cert_reqs=cert_reqs,
         ca_certs=ca_certs, server_hostname=server_hostname,
         ssl_version=ssl_version)
+    global FEATURE_INSECURE_MODE
+    global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+    global SF_OCSP_USE_ASN1CRYPTO
+
+    if SF_OCSP_USE_ASN1CRYPTO:
+        from .ocsp_asn1crypto import SnowflakeOCSP
+    else:
+        from .ocsp_pyasn1 import SnowflakeOCSP
+
     log.debug(u'insecure_mode: %s, '
               u'OCSP response cache file name: %s, '
               u'PROXY_HOST: %s, PROXY_PORT: %s, PROXY_USER: %s '
@@ -381,9 +395,9 @@ def ssl_wrap_socket_with_ocsp(
               PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASSWORD)
     if not FEATURE_INSECURE_MODE:
         v = SnowflakeOCSP(
-            proxies=set_proxies(PROXY_HOST, PROXY_PORT, PROXY_USER,
-                                PROXY_PASSWORD),
-            ocsp_response_cache_url=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+            proxies=set_proxies(
+                PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASSWORD),
+            ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
         ).validate(server_hostname, ret.connection)
         if not v:
             raise OperationalError(
@@ -414,67 +428,3 @@ def _openssl_connect(hostname, port=443):
     client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
     client_ssl.do_handshake()
     return client_ssl
-
-
-def probe_connection(url):
-    parsed_url = urlsplit(url)
-
-    # DNS lookup
-    try:
-        actual_hostname, aliases, ips = gethostbyname_ex(parsed_url.hostname)
-        ret = {
-            'url': url,
-            'input_hostname': parsed_url.hostname,
-            'actual_hostname': actual_hostname,
-            'aliases': aliases,
-            'ips': ips,
-        }
-    except gaierror as e:
-        return {'err:': e}
-    connection = _openssl_connect(parsed_url.hostname, parsed_url.port)
-
-    # certificates
-    certificates = []
-    for cert in connection.get_peer_cert_chain():
-        # ocsp uri
-        ocsp_uris0 = []
-        for idx in range(cert.get_extension_count()):
-            e = cert.get_extension(idx)
-            if e.get_short_name() == b'authorityInfoAccess':
-                for line in str(e).split(u"\n"):
-                    m = OCSP_RE.match(line)
-                    if m:
-                        log.debug(u'OCSP URL: %s', m.group(1))
-                        ocsp_uris0.append(m.group(1))
-
-        if len(ocsp_uris0) == 1:
-            parsed_ocsp_url = urlsplit(ocsp_uris0[0])
-
-            # DNS lookup for OCSP server
-            try:
-                actual_hostname, aliases, ips = gethostbyname_ex(
-                    parsed_ocsp_url.hostname)
-                ocsp_status = {
-                    'input_url': ocsp_uris0[0],
-                    'actual_hostname': actual_hostname,
-                    'aliases': aliases,
-                    'ips': ips,
-                }
-            except gaierror as e:
-                ocsp_status = {
-                    'input_url': ocsp_uris0[0],
-                    'error': e,
-                }
-        else:
-            ocsp_status = {}
-
-        certificates.append(
-            {'hash': cert.get_subject().hash(),
-             'name': cert.get_subject(),
-             'issuer': cert.get_issuer(),
-             'serial_number': cert.get_serial_number(),
-             'ocsp': ocsp_status,
-             })
-
-    ret['certificates'] = certificates
-    return ret

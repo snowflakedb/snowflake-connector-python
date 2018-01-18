@@ -15,7 +15,6 @@ from botocore.vendored.requests.exceptions import (
     ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
-from pyasn1.error import PyAsn1Error
 
 from snowflake.connector.compat import (
     PY2, OK, INTERNAL_SERVER_ERROR, FORBIDDEN,
@@ -124,7 +123,6 @@ def test_request_exec():
         ProtocolError,
         ConnectionError,
         AttributeError,
-        PyAsn1Error
     ]:
         session = MagicMock()
         session.request = Mock(side_effect=exc)
