@@ -9,17 +9,9 @@ import sys
 from logging import getLogger
 from os import path
 
-if __name__ != 'snowflake.connector.ocsp_dump_certs':
-    # for debugging on PyCharm
-    from snowflake.connector.ocsp_pyopenssl import (
-        _extract_values_from_certificate,
-        read_cert_bundle,
-        _create_pair_issuer_subject)
-else:
-    from ..ocsp_pyopenssl import (
-        _extract_values_from_certificate,
-        read_cert_bundle,
-        _create_pair_issuer_subject)
+from snowflake.connector.ocsp_asn1crypto import (
+    read_cert_bundle,
+    _create_pair_issuer_subject)
 
 for logger_name in ['__main__', 'snowflake']:
     logger = logging.getLogger(logger_name)
@@ -49,7 +41,6 @@ Usage: {0}  <input file/dir>
 
     if len(sys.argv) < 2:
         help()
-        sys.exit(2)
 
     input_filename = sys.argv[1]
     if path.isdir(input_filename):
@@ -64,22 +55,14 @@ Usage: {0}  <input file/dir>
 
 
 def extract_certificate_file(input_filename):
-    certificates_in_files = {}
+    cert_map = {}
+    read_cert_bundle(input_filename, cert_map)
+    cert_data = _create_pair_issuer_subject(cert_map)
 
-    read_cert_bundle(input_filename, certificates_in_files)
-
-    cert_data = {}
-    for cert_id, cert in certificates_in_files.items():
-        data = _extract_values_from_certificate(cert)
-        cert_data[cert.get_subject().der()] = data
-
-    issuer_and_subject = _create_pair_issuer_subject(cert_data)
-
-    for c in issuer_and_subject:
-        subject = c['subject']
+    for issuer, subject in cert_data:
         print("serial #: {}, name: {}".format(
-            subject['serial_number'],
-            subject['name']))
+            subject.serial_number,
+            subject.subject.native))
 
 
 if __name__ == '__main__':

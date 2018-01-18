@@ -52,7 +52,8 @@ from .gzip_decoder import decompress_raw_data
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                        SQLSTATE_CONNECTION_REJECTED)
-from .ssl_wrap_socket import (set_proxies, probe_connection)
+from .ssl_wrap_socket import (set_proxies)
+from .tool.probe_connection import probe_connection
 from .util_text import split_rows_from_stream
 from .version import VERSION
 
@@ -526,7 +527,7 @@ class SnowflakeRestful(object):
                         cause.args[0].args[0], ssl.SSLError):
                     err = cause.args[0].args[0].args[0]
                     if u'bad handshake' in err and \
-                                    u'certificate verify failed' in err:
+                            u'certificate verify failed' in err:
                         if conn.application == APPLICATION_SNOWSQL:
                             # SnowSQL has an option to probe connection.
                             msg = \
