@@ -93,6 +93,13 @@ DOWNLOADED_OCSP_RESPONSE_CACHE_FROM_SERVER = False
 # end of 2018
 PROXIES = None
 
+# map signature algorithm name to digest class
+SIGNATURE_ALGORITHM_TO_DIGEST_CLASS = {
+    'sha256': SHA256,
+    'sha384': SHA384,
+    'sha512': SHA512,
+}
+
 # Cache directory
 if platform.system() == 'Windows':
     CACHE_DIR = path.join(
@@ -496,6 +503,14 @@ def _process_ocsp_response(issuer, cert_id, ocsp_response):
     if basic_ocsp_response['certs'].native:
         logger.debug("Certificate is attached in Basic OCSP Response")
         ocsp_cert = basic_ocsp_response['certs'][0]
+        logger.debug("Verifying the attached certificate is signed by "
+                     "the issuer")
+        _verify_signature(
+            ocsp_cert.hash_algo,
+            ocsp_cert.signature,
+            issuer,
+            ocsp_cert['tbs_certificate']
+        )
     else:
         logger.debug("Certificate is NOT attached in Basic OCSP Response. "
                      "Using issuer's certificate")
@@ -503,7 +518,12 @@ def _process_ocsp_response(issuer, cert_id, ocsp_response):
 
     tbs_response_data = basic_ocsp_response['tbs_response_data']
 
-    _verify_signature(basic_ocsp_response, ocsp_cert, tbs_response_data)
+    logger.debug("Verifying the OCSP response is signed by the issuer.")
+    _verify_signature(
+        basic_ocsp_response['signature_algorithm'].hash_algo,
+        basic_ocsp_response['signature'].native,
+        ocsp_cert,
+        tbs_response_data)
 
     single_response = tbs_response_data['responses'][0]
     cert_status = single_response['cert_status'].name
@@ -521,22 +541,18 @@ def _process_ocsp_response(issuer, cert_id, ocsp_response):
         )
 
 
-def _verify_signature(basic_ocsp_response, ocsp_cert, tbs_response_data):
-    rsakey = RSA.importKey(ocsp_cert.public_key.unwrap().dump())
+def _verify_signature(signature_algorithm, signature, cert, data):
+    rsakey = RSA.importKey(cert.public_key.unwrap().dump())
     signer = PKCS1_v1_5.new(rsakey)
-    hash_algo = basic_ocsp_response['signature_algorithm'].hash_algo
-    if hash_algo == 'sha256':
-        digest = SHA256.new()
-    elif hash_algo == 'sha384':
-        digest = SHA384.new()
-    elif hash_algo == 'sha512':
-        digest = SHA512.new()
+    if signature_algorithm in SIGNATURE_ALGORITHM_TO_DIGEST_CLASS:
+        digest = SIGNATURE_ALGORITHM_TO_DIGEST_CLASS[signature_algorithm].new()
     else:
+        # the last resort. should not happen.
         digest = SHA1.new()
-    digest.update(tbs_response_data.dump())
-    if not signer.verify(digest, basic_ocsp_response['signature'].native):
+    digest.update(data.dump())
+    if not signer.verify(digest, signature):
         raise OperationalError(
-            msg="Failed to validate the signature",
+            msg="Failed to verify the signature",
             errno=ER_INVALID_OCSP_RESPONSE)
 
 
