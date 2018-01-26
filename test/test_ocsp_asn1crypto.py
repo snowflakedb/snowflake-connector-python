@@ -25,6 +25,8 @@ for logger_name in ['test', 'snowflake.connector', 'botocore']:
     logger.addHandler(ch)
 
 TARGET_HOSTS = [
+    'sfcsupport.us-east-1.snowflakecomputing.com',
+    'sfcsupport.eu-central-1.snowflakecomputing.com',
     'sfc-dev1-regression.s3.amazonaws.com',
     'sfctest0.snowflakecomputing.com',
     'sfc-ds2-customer-stage.s3.amazonaws.com',
