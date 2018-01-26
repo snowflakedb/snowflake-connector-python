@@ -151,11 +151,14 @@ def _decode_ocsp_response_cache(ocsp_response_cache_json, ocsp_response_cache):
     for cert_id_base64, (ts, ocsp_response) in ocsp_response_cache_json.items():
         cert_id = CertId.load(b64decode(cert_id_base64))
         hkey = _decode_cert_id_key(cert_id)
-        if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
+        if current_time - CACHE_EXPIRATION <= ts:
+            # creation time must be new enough
             ocsp_response_cache[hkey] = (ts, b64decode(ocsp_response))
         elif hkey in ocsp_response_cache:
             # invalidate the cache if exists
             del ocsp_response_cache[hkey]
+            global OCSP_VALIDATION_CACHE_UPDATED
+            OCSP_VALIDATION_CACHE_UPDATED = True
 
 
 def _encode_ocsp_response_cache(ocsp_response_cache, ocsp_response_cache_json):
@@ -194,8 +197,8 @@ def check_ocsp_response_cache_lock_dir(filename):
 
     try:
         ts_cache_file = _file_timestamp(filename)
-        if not path.exists(lock_dir) and ts_cache_file >= current_time - \
-                CACHE_EXPIRATION:
+        if not path.exists(lock_dir) and \
+                current_time - CACHE_EXPIRATION <= ts_cache_file:
             # use cache only if no lock directory exists and the cache file
             # was created last 24 hours
             return True
@@ -632,7 +635,7 @@ def is_cert_id_in_cache(issuer, subject):
         current_time = int(time.time())
         if hkey in OCSP_VALIDATION_CACHE:
             ts, cache = OCSP_VALIDATION_CACHE[hkey]
-            if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
+            if current_time - CACHE_EXPIRATION <= ts:
                 logger.debug('hit cache for subject: %s',
                              subject.subject.native)
                 return True, req, cert_id, cache
@@ -790,7 +793,7 @@ def _check_ocsp_response_cacher_ser(cert_data):
                      SF_OCSP_RESPONSE_CACHE_SERVER_URL)
         with OCSP_VALIDATION_CACHE_LOCK:
             for hkey, (ts, cache) in downloaded_cache.items():
-                if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
+                if current_time - CACHE_EXPIRATION <= ts:
                     OCSP_VALIDATION_CACHE[hkey] = ts, cache
                     global OCSP_VALIDATION_CACHE_UPDATED
                     OCSP_VALIDATION_CACHE_UPDATED = True
