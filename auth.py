@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
 EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
+KEY_PAIR_AUTHENTICATOR = u'SNOWFLAKE_JWT'
 
 
 class AuthByExternalService(object):
