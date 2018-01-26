@@ -47,6 +47,7 @@ setup(
         'cffi>=1.9',
         'cryptography>=1.8.2,<2.2',
         'ijson',
+        'pyjwt',
     ],
 
     namespace_packages=['snowflake'],

@@ -14,7 +14,8 @@ from time import strptime
 
 from . import errors
 from . import network
-from .auth import Auth, DEFAULT_AUTHENTICATOR, EXTERNAL_BROWSER_AUTHENTICATOR
+from .auth import Auth, DEFAULT_AUTHENTICATOR, EXTERNAL_BROWSER_AUTHENTICATOR, KEY_PAIR_AUTHENTICATOR
+from .auth_keypair import AuthByKeyPair
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import SnowflakeChunkDownloader
@@ -60,6 +61,7 @@ DEFAULT_CONFIGURATION = {
     u'network_timeout': None,  # network timeout (infinite by default)
     u'passcode_in_password': False,  # Snowflake MFA
     u'passcode': None,  # Snowflake MFA
+    u'private_key': None,
     u'authenticator': DEFAULT_AUTHENTICATOR,
     u'mfa_callback': None,
     u'password_callback': None,
@@ -458,6 +460,8 @@ class SnowflakeConnection(object):
         if self._authenticator != DEFAULT_AUTHENTICATOR:
             if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
                 auth_instance = AuthByWebBrowser(self.rest, self.application)
+            elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+                auth_instance = AuthByKeyPair(self._private_key)
             else:
                 auth_instance = AuthByOkta(self.rest, self.application)
             auth_instance.authenticate(
@@ -535,10 +539,14 @@ class SnowflakeConnection(object):
                     u'errno': ER_NO_USER
                 })
 
+        if self._private_key:
+            self._authenticator = KEY_PAIR_AUTHENTICATOR
+
         if self._authenticator:
             self._authenticator = self._authenticator.upper()
 
-        if self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
+        if self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR and \
+           self._authenticator != KEY_PAIR_AUTHENTICATOR:
             # authentication is done by the browser if the authenticator
             # is externalbrowser
             if not self._password:
