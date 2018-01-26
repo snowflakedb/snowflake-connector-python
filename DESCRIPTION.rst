@@ -9,9 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
-- v1.5.0 (January 25, 2018)
+- v1.5.0 (January 26, 2018)
 
     - Removed ``pyasn1`` and ``pyasn1-modules`` from the dependency.
+    - Prototyped key pair authentication.
+    - Fixed OCSP response cache expiration check.
 
 - v1.4.17 (January 19, 2018)
 
