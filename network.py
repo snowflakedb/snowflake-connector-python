@@ -700,6 +700,7 @@ class SnowflakeRestful(object):
                 ProtocolError,  # from urllib3
                 ReadTimeoutError,  # from urllib3
                 OpenSSL.SSL.SysCallError,
+                KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
                 ValueError,
                 RuntimeError,
                 AttributeError,  # json decoding error
