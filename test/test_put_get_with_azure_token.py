@@ -78,6 +78,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
                 account=db_parameters['azure_account'],
                 password=db_parameters['azure_password']) as cnx:
             cnx.cursor().execute("drop table snow32806")
+            cnx.cursor().execute("rm @~/snow32806")
 
     files = glob.glob(os.path.join(tmp_dir, 'snow32806*'))
     contents = ''

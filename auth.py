@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
 EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
 KEY_PAIR_AUTHENTICATOR = u'SNOWFLAKE_JWT'
+OAUTH_AUTHENTICATOR = u'OAUTH'
 
 
 class AuthByExternalService(object):
@@ -299,10 +300,14 @@ class Auth(object):
                     u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 })
         else:
+            logger.debug(u'token = %s',
+                         '******' if ret[u'data'][u'token'] is not None else
+                         'NULL')
+            logger.debug(u'master_token = %s',
+                         '******' if ret[u'data'][u'masterToken'] is not None else
+                         'NULL')
             self._rest.update_tokens(
                 ret[u'data'][u'token'], ret[u'data'][u'masterToken'])
-            logger.debug(u'token = %s', self._rest.token)
-            logger.debug(u'master_token = %s', self._rest.master_token)
             if u'sessionId' in ret[u'data']:
                 self._rest._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
