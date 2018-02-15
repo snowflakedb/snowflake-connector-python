@@ -87,7 +87,7 @@ DEFAULT_CONFIGURATION = {
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
     u'validate_default_parameters': False,  # snowflake
     u'probe_connection': False,  # snowflake
-    u'paramstyle': u'pyformat',  # standard/snowflake
+    u'paramstyle': None,  # standard/snowflake
     u'timezone': None,  # snowflake
 }
 
@@ -524,7 +524,10 @@ class SnowflakeConnection(object):
             else:
                 setattr(self, u'_' + name, value)
 
-        if self._paramstyle not in SUPPORTED_PARAMSTYLES:
+        if self._paramstyle is None:
+            import snowflake.connector
+            self._paramstyle = snowflake.connector.paramstyle
+        elif self._paramstyle not in SUPPORTED_PARAMSTYLES:
             raise ProgrammingError(
                 msg=u'Invalid paramstyle is specified',
                 errno=ER_INVALID_VALUE

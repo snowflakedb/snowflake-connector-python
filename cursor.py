@@ -906,7 +906,7 @@ class SnowflakeCursor(object):
                                        errorvalue)
 
     def __process_params_qmarks(self, params):
-        if params is None:
+        if not params:
             return None
         processed_params = {}
         if not isinstance(params, (list, tuple)):
