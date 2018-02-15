@@ -436,9 +436,19 @@ def _process_good_status(single_response, cert_id, ocsp_response):
     Process GOOD status
     """
     current_time = int(time.time())
-    this_update = (single_response['this_update'].native.replace(
+    this_update_native = single_response['this_update'].native
+    next_update_native = single_response['next_update'].native
+
+    if this_update_native is None or next_update_native is None:
+        raise OperationalError(
+            msg=u"Either this update or next "
+                u"update is None. this_update: {}, next_update: {}".format(
+                this_update_native, next_update_native),
+            errno=ER_INVALID_OCSP_RESPONSE)
+
+    this_update = (this_update_native.replace(
         tzinfo=None) - ZERO_EPOCH).total_seconds()
-    next_update = (single_response['next_update'].native.replace(
+    next_update = (next_update_native.replace(
         tzinfo=None) - ZERO_EPOCH).total_seconds()
     if not _is_validaity_range(current_time, this_update, next_update):
         raise OperationalError(
