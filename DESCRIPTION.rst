@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.5.1 (February 15, 2018)
+
+    - Prototyped oauth. Won't work without the server change.
+    - Retry OCSP data parse failure
+    - Fixed paramstyle=qmark binding for SQLAlchemy
+
 - v1.5.0 (January 26, 2018)
 
     - Removed ``pyasn1`` and ``pyasn1-modules`` from the dependency.
