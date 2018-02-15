@@ -12,7 +12,7 @@ from snowflake.connector import errors
 
 def test_qmark_paramstyle(conn_cnx, db_parameters):
     """
-    Binding question marks is not supported in Python
+    Binding question marks is not supported by default
     """
     try:
         with conn_cnx() as cnx:
@@ -39,7 +39,7 @@ def test_qmark_paramstyle(conn_cnx, db_parameters):
 
 def test_numeric_paramstyle(conn_cnx, db_parameters):
     """
-    Binding numeric positional style is not supported in Python
+    Binding numeric positional style is not supported
     """
     try:
         with conn_cnx() as cnx:
@@ -57,6 +57,50 @@ def test_numeric_paramstyle(conn_cnx, db_parameters):
                     cnx.cursor().execute(
                         "INSERT INTO {name} VALUES(:1,:2)".format(
                             name=db_parameters['name']))
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(
+                "DROP TABLE IF EXISTS {name}".format(
+                    name=db_parameters['name']))
+
+
+def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
+    """
+    Enable qmark binding
+    """
+    import snowflake.connector
+    snowflake.connector.paramstyle = u'qmark'
+    try:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(
+                "CREATE OR REPLACE TABLE {name} "
+                "(aa STRING, bb STRING)".format(
+                    name=db_parameters['name']))
+            cnx.cursor().execute(
+                "INSERT INTO {name} VALUES(?, ?)".format(
+                    name=db_parameters['name']), ('test11', 'test12'))
+            ret = cnx.cursor().execute("select * from {name}".format(
+                name=db_parameters['name'])).fetchone()
+            assert ret[0] == 'test11'
+            assert ret[1] == 'test12'
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(
+                "DROP TABLE IF EXISTS {name}".format(
+                    name=db_parameters['name']))
+        snowflake.connector.paramstyle = u'pyformat'
+
+    # After changing back to pyformat, binding qmark should fail.
+    try:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(
+                "CREATE OR REPLACE TABLE {name} "
+                "(aa STRING, bb STRING)".format(
+                    name=db_parameters['name']))
+            with pytest.raises(TypeError):
+                cnx.cursor().execute(
+                    "INSERT INTO {name} VALUES(?, ?)".format(
+                        name=db_parameters['name']), ('test11', 'test12'))
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute(

@@ -276,7 +276,7 @@ def generate_k_lines_of_n_files(tmpdir, k, n, compress=False):
 
 @contextmanager
 def db(user=None, password=None, account=None, use_numpy=False,
-       converter_class=None, paramstyle=u'pyformat', timezone=u'UTC'):
+       converter_class=None, paramstyle=None, timezone=u'UTC'):
     cnx = create_connection(
         user=user, password=password,
         account=account, use_numpy=use_numpy,
