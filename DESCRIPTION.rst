@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.5.2 (March 1, 2018)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
 - v1.5.1 (February 15, 2018)
 
     - Prototyped oauth. Won't work without the server change.
