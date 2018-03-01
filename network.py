@@ -490,7 +490,7 @@ class SnowflakeRestful(object):
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= int(time.time() - start_request_thread)
                 if retry_ctx.timeout <= 0:
-                    logger.error(cause)
+                    logger.error(cause, exc_info=True)
                     if isinstance(cause, Error):
                         Error.errorhandler_wrapper(conn, None, cause)
                     else:
