@@ -8,12 +8,14 @@ import codecs
 import json
 import os
 import platform
+import tempfile
 import time
 from base64 import b64encode, b64decode
 from datetime import datetime
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from os import path, environ
+from os.path import expanduser
 from threading import (Lock)
 from time import gmtime, strftime
 
@@ -101,16 +103,13 @@ SIGNATURE_ALGORITHM_TO_DIGEST_CLASS = {
 }
 
 # Cache directory
+HOME_DIR = expanduser("~") or tempfile.gettempdir()
 if platform.system() == 'Windows':
-    CACHE_DIR = path.join(
-        os.getenv('USERPROFILE'), 'AppData', 'Local',
-        'Snowflake', 'Caches')
+    CACHE_DIR = path.join(HOME_DIR, 'AppData', 'Local', 'Snowflake', 'Caches')
 elif platform.system() == 'Darwin':
-    CACHE_DIR = path.join(
-        os.getenv('HOME'), 'Library', 'Caches', 'Snowflake')
+    CACHE_DIR = path.join(HOME_DIR, 'Library', 'Caches', 'Snowflake')
 else:
-    CACHE_DIR = path.join(
-        os.getenv('HOME', '/tmp'), '.cache', 'snowflake')
+    CACHE_DIR = path.join(HOME_DIR, '.cache', 'snowflake')
 
 if not path.exists(CACHE_DIR):
     try:
@@ -119,6 +118,7 @@ if not path.exists(CACHE_DIR):
         logger.warning('cannot create a cache directory: [%s], err=[%s]',
                        CACHE_DIR, ex)
         CACHE_DIR = None
+logger.debug("cache directory: %s", CACHE_DIR)
 
 
 def _encode_cert_id_key(hkey):
