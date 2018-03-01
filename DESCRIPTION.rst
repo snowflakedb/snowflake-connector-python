@@ -11,6 +11,7 @@ Release Notes
 
 - v1.5.2 (March 1, 2018)
 
+    - Fixed failue in case HOME/USERPROFILE is not set.
     - Updated ``boto3`` and ``botocore`` version dependeny.
 
 - v1.5.1 (February 15, 2018)
