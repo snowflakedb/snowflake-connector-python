@@ -32,6 +32,7 @@ from botocore.vendored.requests.packages.urllib3.exceptions \
 from . import proxy
 from . import ssl_wrap_socket
 from .compat import (
+    PY2,
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
@@ -55,6 +56,10 @@ from .ssl_wrap_socket import (set_proxies)
 from .tool.probe_connection import probe_connection
 from .util_text import split_rows_from_stream
 from .version import VERSION
+
+if PY2:
+    from pyasn1.error import PyAsn1Error
+
 
 logger = logging.getLogger(__name__)
 
@@ -710,6 +715,14 @@ class SnowflakeRestful(object):
                 "error stack: %s", err,
                 exc_info=True)
             raise RetryRequest(err)
+        except Exception as err:
+            if PY2 and isinstance(err, PyAsn1Error):
+                logger.debug(
+                    "Hit retryable client error. Retrying... "
+                    "Ignore the following error stack: %s", err,
+                    exc_info=True)
+                raise RetryRequest(err)
+            raise err
 
     def make_requests_session(self):
         s = requests.Session()
