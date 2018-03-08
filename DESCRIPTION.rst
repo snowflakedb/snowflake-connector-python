@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.5.3 (March 9, 2018)
+
+    - Pulled back ``pyasn1`` for OCSP check in Python 2. Python 3 continue using ``asn1crypto`` for better performance.
+
 - v1.5.2 (March 1, 2018)
 
     - Fixed failue in case HOME/USERPROFILE is not set.
