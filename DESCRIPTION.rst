@@ -12,6 +12,7 @@ Release Notes
 - v1.5.3 (March 9, 2018)
 
     - Pulled back ``pyasn1`` for OCSP check in Python 2. Python 3 continue using ``asn1crypto`` for better performance.
+    - Limit the upper bound of ``pycryptodome`` version to less than 3.5.0 for Issue 65.
 
 - v1.5.2 (March 1, 2018)
 
