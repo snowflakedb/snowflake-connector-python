@@ -38,6 +38,7 @@ from .errors import (OperationalError)
 from .proxy import (set_proxies, PROXY_HOST, PROXY_PORT, PROXY_USER,
                     PROXY_PASSWORD)
 from .ssl_wrap_util import wait_for_read, wait_for_write
+from .compat import PY2
 
 try:  # Platform-specific: Python 2
     from socket import _fileobject
@@ -373,7 +374,12 @@ def ssl_wrap_socket_with_ocsp(
     global FEATURE_INSECURE_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 
-    from .ocsp_asn1crypto import SnowflakeOCSP
+    if PY2:
+        # Python 2 uses pyasn1 for workaround. For some reason, asn1crypto
+        # fails to parse OCSP response in Python 2.
+        from .ocsp_pyasn1 import SnowflakeOCSP
+    else:
+        from .ocsp_asn1crypto import SnowflakeOCSP
 
     log.debug(u'insecure_mode: %s, '
               u'OCSP response cache file name: %s, '

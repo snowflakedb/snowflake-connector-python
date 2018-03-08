@@ -48,6 +48,8 @@ setup(
         'cryptography>=1.8.2,<2.2',
         'ijson',
         'pyjwt',
+        'pyasn1',  # added back for Python 2
+        'pyasn1-modules',  # added back Python 2
     ],
 
     namespace_packages=['snowflake'],
