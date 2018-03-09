@@ -607,6 +607,10 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
             os.unlink(tmp_file)
 
 
+@pytest.mark.skipif(
+    os.getenv('TRAVIS') == 'true',
+    reason="Flaky tests. Need further investigation"
+)
 def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     """
     [s3] Put and Get Large files
