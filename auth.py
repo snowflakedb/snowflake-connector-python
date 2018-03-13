@@ -19,7 +19,10 @@ from .errors import (Error,
                      BadGatewayError)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
-                      PYTHON_CONNECTOR_USER_AGENT, PLATFORM, PYTHON_VERSION,
+                      PYTHON_CONNECTOR_USER_AGENT,
+                    OPERATING_SYSTEM,
+                      PLATFORM,
+                      PYTHON_VERSION,
                       IMPLEMENTATION, COMPILER)
 from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
 from .version import VERSION
@@ -94,6 +97,7 @@ class Auth(object):
                 u"LOGIN_NAME": user,
                 u"CLIENT_ENVIRONMENT": {
                     u"APPLICATION": application,
+                    u"OS": OPERATING_SYSTEM,
                     u"OS_VERSION": PLATFORM,
                     u"PYTHON_VERSION": PYTHON_VERSION,
                     u"PYTHON_RUNTIME": IMPLEMENTATION,

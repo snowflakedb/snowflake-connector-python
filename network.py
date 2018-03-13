@@ -93,6 +93,7 @@ HEADER_SNOWFLAKE_TOKEN = u'Snowflake Token="{token}"'
 
 SNOWFLAKE_CONNECTOR_VERSION = u'.'.join(TO_UNICODE(v) for v in VERSION[0:3])
 PYTHON_VERSION = u'.'.join(TO_UNICODE(v) for v in sys.version_info[:3])
+OPERATING_SYSTEM = platform.system()
 PLATFORM = platform.platform()
 IMPLEMENTATION = platform.python_implementation()
 COMPILER = platform.python_compiler()
