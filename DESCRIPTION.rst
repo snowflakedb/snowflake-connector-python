@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.5.4 (March 15, 2018)
+
+    - Tightened ``pyasn`` and ``pyasn1-modules`` version requirements
+    - Added OS and OS_VERSION session info.
+    - Relaxed ``pycryptodome`` version requirements. No 3.5.0 should be used.
+
 - v1.5.3 (March 9, 2018)
 
     - Pulled back ``pyasn1`` for OCSP check in Python 2. Python 3 continue using ``asn1crypto`` for better performance.
