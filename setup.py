@@ -45,7 +45,7 @@ setup(
         'pycryptodome>=3.2,!=3.5.0',
         'pyOpenSSL>=16.2.0,<18.0.0',
         'cffi>=1.9',
-        'cryptography>=1.8.2,<2.2',
+        'cryptography>=1.8.2,<2.3',
         'ijson',
         'pyjwt',
         'pyasn1>=0.2.1,<0.5.0',  # added back for Python 2
