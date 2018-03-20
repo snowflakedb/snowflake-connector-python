@@ -268,7 +268,7 @@ class SnowflakeFileTransferAgent(object):
                     result_meta[u's3client'] = s3client
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
-                        file_metas[u's3client'] = s3client
+                        file_metas[idx0][u's3client'] = s3client
                 target_meta = retry_meta
 
             if end_of_idx == len_file_metas:
