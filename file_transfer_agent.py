@@ -277,7 +277,7 @@ class SnowflakeFileTransferAgent(object):
                     result_meta[u'client'] = client
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
-                        file_metas[u'client'] = client
+                        file_metas[idx0][u'client'] = client
                 target_meta = retry_meta
 
             if end_of_idx == len_file_metas:
@@ -420,7 +420,7 @@ class SnowflakeFileTransferAgent(object):
                     result_meta[u'client'] = client
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
-                        file_metas[u'client'] = client
+                        file_metas[idx0][u'client'] = client
                 target_meta = retry_meta
 
             if end_of_idx == len_file_metas:
