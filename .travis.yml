@@ -22,6 +22,7 @@ install:
   - source activate test-environment
   - curl -O https://bootstrap.pypa.io/get-pip.py
   - python get-pip.py
+  - pip --version
   - pip install pytest-rerunfailures
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
         pip install mock;
