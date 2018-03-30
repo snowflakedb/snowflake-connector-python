@@ -273,12 +273,22 @@ def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
             password=db_parameters['azure_password']) as cnx:
         try:
             run(cnx, "PUT file://{files} @~/{dir}")
-            # run(cnx, "PUT file://{files} @~/{dir}")  # retry
-            for _ in range(100):
-                all_recs = run(cnx, "LIST @~/{dir}")
-                if len(all_recs) == number_of_files:
-                    break
-                time.sleep(1)
+
+            for _ in range(60):
+                for _ in range(100):
+                    all_recs = run(cnx, "LIST @~/{dir}")
+                    if len(all_recs) == number_of_files:
+                        break
+                    # you may not get the files right after PUT command
+                    # due to the nature of Azure blob, which synchronizes
+                    # data eventually.
+                    time.sleep(1)
+                else:
+                    # wait for another second and retry.
+                    # this could happen if the files are partially available
+                    # but not all.
+                    time.sleep(1)
+                break  # success
             else:
                 pytest.fail(
                     'cannot list all files. Potentially '
