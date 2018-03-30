@@ -20,7 +20,8 @@ install:
   - conda info -a
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pandas pytest pytest-cov
   - source activate test-environment
-  - which pip
+  - curl -O https://bootstrap.pypa.io/get-pip.py
+  - python get-pip.py
   - pip install pytest-rerunfailures
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
         pip install mock;
