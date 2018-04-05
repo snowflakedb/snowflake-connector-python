@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.5.6 (April 5, 2018
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
 - v1.5.5 (March 22, 2018)
 
     - Fixed TypeError: list indices must be integers or slices, not str. PR/Issue 75 (@daniel-sali)
