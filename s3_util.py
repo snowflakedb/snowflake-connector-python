@@ -199,7 +199,6 @@ class SnowflakeS3Util:
                         meta[u'put_callback'] else None,
                 ExtraArgs={
                     u'Metadata': s3_metadata,
-                    u'ContentEncoding': u'gzip',
                 },
                 Config=TransferConfig(
                     multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
