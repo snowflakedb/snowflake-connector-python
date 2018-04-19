@@ -9,13 +9,18 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
-- v1.5.6 (April 5, 2018
+- v1.5.7 (April 19, 2018)
+
+    - Fixed object has no attribute errors in Python3 for Azure deployment.
+    - Removed ContentEncoding=gzip from the header for PUT command. This caused COPY failure if autocompress=false.
+
+- v1.5.6 (April 5, 2018)
 
     - Updated ``boto3`` and ``botocore`` version dependeny.
 
 - v1.5.5 (March 22, 2018)
 
-    - Fixed TypeError: list indices must be integers or slices, not str. PR/Issue 75 (@daniel-sali)
+    - Fixed TypeError: list indices must be integers or slices, not str. PR/Issue 75 (@daniel-sali).
     - Updated ``cryptography`` dependency.
 
 - v1.5.4 (March 15, 2018)
