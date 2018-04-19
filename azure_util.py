@@ -83,7 +83,7 @@ class SnowflakeAzureUtil(object):
                 encryption_metadata=None
             )
         except AzureHttpError as err:
-            if(err.status_code == 403 and "Signature not valid in the specified time frame" in err.message):
+            if(err.status_code == 403 and "Signature not valid in the specified time frame" in str(err)):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None
@@ -167,7 +167,7 @@ class SnowflakeAzureUtil(object):
             meta[u'dst_file_size'] = meta[u'upload_size']
             meta[u'result_status'] = ResultStatus.UPLOADED
         except AzureHttpError as err:
-            if (err.status_code == 403 and "Signature not valid in the specified time frame" in err.message):
+            if (err.status_code == 403 and "Signature not valid in the specified time frame" in str(err)):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None
@@ -204,7 +204,7 @@ class SnowflakeAzureUtil(object):
 
             meta[u'result_status'] = ResultStatus.DOWNLOADED
         except AzureHttpError as err:
-            if (err.status_code == 403 and "Signature not valid in the specified time frame" in err.message):
+            if (err.status_code == 403 and "Signature not valid in the specified time frame" in str(err)):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None
