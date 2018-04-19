@@ -18,10 +18,10 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pandas pytest pytest-cov
+  - conda create -n test-environment python=$TRAVIS_PYTHON_VERSION
   - source activate test-environment
-  - curl -O https://bootstrap.pypa.io/get-pip.py
-  - python get-pip.py
+  - conda install pandas
+  - conda install pytest pytest-cov
   - pip --version
   - pip install pytest-rerunfailures
   - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
