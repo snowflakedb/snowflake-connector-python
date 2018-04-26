@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.5.8 (April 26, 2018)
+
+    - Fixed PUT command error 'Server failed to authenticate the request. Make sure the value of Authorization header is formed correctly including the signature.' for Azure deployment.
+
 - v1.5.7 (April 19, 2018)
 
     - Fixed object has no attribute errors in Python3 for Azure deployment.
