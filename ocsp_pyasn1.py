@@ -1031,7 +1031,7 @@ SF_OCSP_RESPONSE_CACHE_SERVER_URL = os.getenv(
     "http://ocsp.snowflakecomputing.com/{0}".format(
         OCSP_RESPONSE_CACHE_FILE_NAME))
 SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED = os.getenv(
-    "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "false") != "false"
+    "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
 
 # Cache directory
 HOME_DIR = expanduser("~") or tempfile.gettempdir()
