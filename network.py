@@ -11,7 +11,6 @@ import json
 import logging
 import platform
 import random
-import ssl
 import sys
 import time
 import uuid
@@ -26,8 +25,6 @@ from botocore.vendored.requests.exceptions import (
     ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
-from botocore.vendored.requests.packages.urllib3.exceptions \
-    import SSLError as urllib3_SSLError
 
 from . import proxy
 from . import ssl_wrap_socket
@@ -39,15 +36,12 @@ from .compat import (
 from .compat import (TO_UNICODE, urlencode)
 from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
-                        ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION,
-                        ER_INVALID_CERTIFICATE)
+                        ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION)
 from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      GatewayTimeoutError, ServiceUnavailableError,
                      InterfaceError, InternalServerError, ForbiddenError,
                      BadGatewayError, BadRequest,
-                     OtherHTTPRetryableError,
-                     ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE,
-                     ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE_SNOWSQL)
+                     OtherHTTPRetryableError)
 from .gzip_decoder import decompress_raw_data
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -59,7 +53,6 @@ from .version import VERSION
 
 if PY2:
     from pyasn1.error import PyAsn1Error
-
 
 logger = logging.getLogger(__name__)
 
@@ -523,29 +516,6 @@ class SnowflakeRestful(object):
             return {}
 
     def handle_invalid_certificate_error(self, conn, full_url, cause):
-        # checking if the cause is SSL certificate error
-        if isinstance(cause, SSLError):
-            if isinstance(cause.args[0], urllib3_SSLError):
-                if isinstance(
-                        cause.args[0].args[0], ssl.SSLError):
-                    err = cause.args[0].args[0].args[0]
-                    if u'bad handshake' in err and \
-                            u'certificate verify failed' in err:
-                        if conn.application == APPLICATION_SNOWSQL:
-                            # SnowSQL has an option to probe connection.
-                            msg = \
-                                ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE_SNOWSQL
-                        else:
-                            msg = ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE
-                        Error.errorhandler_wrapper(
-                            conn, None, OperationalError,
-                            {
-                                u'errno': ER_INVALID_CERTIFICATE,
-                                u'msg': msg.format(full_url),
-                                u'error': ER_FAILED_TO_REQUEST,
-                            }
-                        )
-                        return  # required for tests
         # all other errors raise exception
         Error.errorhandler_wrapper(
             conn, None, OperationalError,
