@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.1 (May 17, 2018)
+
+    - Enable OCSP Dynamic Cache server for privatelink.
+
 - v1.6.0 (May 3, 2018)
 
     - Enable OCSP Cache server by default.
