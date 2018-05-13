@@ -251,16 +251,3 @@ class OtherHTTPRetryableError(Error):
             errno=kwargs.get('errno'),
             sqlstate=kwargs.get('sqlstate'),
             sfqid=kwargs.get('sfqid'))
-
-
-ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE = (
-    u"Failed to validate SSL certificate. The potential cause is you are "
-    u"behind a SSL proxy that doesn't bypass the certificate. Call "
-    u"snowflake.connector.connect() method with probe_connection option to "
-    u"print out the certificate chain. URL: {}")
-
-ER_MSG_FAILED_TO_VALIDATE_SSL_CERTIFICATE_SNOWSQL = (
-    u"Failed to validate SSL certificate. The potential cause is you are "
-    u"behind a SSL proxy that doesn't bypass the certificate. Specify "
-    u"--probe-connection option to print out the certificate chain. "
-    u"URL: {}")
