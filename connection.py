@@ -4,6 +4,7 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 import logging
+import os
 import re
 import sys
 import uuid
@@ -15,11 +16,11 @@ from time import strptime
 from . import errors
 from . import network
 from .auth import (
-        Auth,
-        DEFAULT_AUTHENTICATOR,
-        EXTERNAL_BROWSER_AUTHENTICATOR,
-        KEY_PAIR_AUTHENTICATOR,
-        OAUTH_AUTHENTICATOR)
+    Auth,
+    DEFAULT_AUTHENTICATOR,
+    EXTERNAL_BROWSER_AUTHENTICATOR,
+    KEY_PAIR_AUTHENTICATOR,
+    OAUTH_AUTHENTICATOR)
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
@@ -463,6 +464,16 @@ class SnowflakeConnection(object):
                      self.proxy_port,
                      self.proxy_user)
 
+        if self.host.endswith(u".privatelink.snowflakecomputing.com"):
+            ocsp_cache_server = \
+                u'http://ocsp{}/ocsp_response_cache.json'.format(
+                    self.host[self.host.index('.'):])
+            os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
+            logger.debug(u"OCSP Cache Server is updated: %s", ocsp_cache_server)
+        else:
+            if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' in os.environ:
+                del os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']
+
         auth_instance = None
         if self._authenticator != DEFAULT_AUTHENTICATOR:
             if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
@@ -558,8 +569,8 @@ class SnowflakeConnection(object):
             self._authenticator = self._authenticator.upper()
 
         if self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR and \
-           self._authenticator != OAUTH_AUTHENTICATOR and \
-           self._authenticator != KEY_PAIR_AUTHENTICATOR:
+                self._authenticator != OAUTH_AUTHENTICATOR and \
+                self._authenticator != KEY_PAIR_AUTHENTICATOR:
             # authentication is done by the browser if the authenticator
             # is externalbrowser
             if not self._password:

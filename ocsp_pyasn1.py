@@ -46,6 +46,9 @@ from .rfc6960 import (OCSPRequest, OCSPResponse, TBSRequest, CertID, Request,
                       Version, BasicOCSPResponse,
                       OCSPResponseStatus)
 
+# Default OCSP Response cache server URL
+DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
+
 OCSP_RESPONSE_CACHE_FILE_NAME = 'ocsp_response_cache.json'
 
 PYASN1_VERSION_LOCK = Lock()
@@ -494,6 +497,8 @@ def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
     """
     Executes OCSP request for the given cert id
     """
+    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN
+
     logger = getLogger(__name__)
     request = Request()
     request['reqCert'] = cert_id
@@ -515,26 +520,26 @@ def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
 
     # transform objects into data in requests
     data = der_encoder.encode(ocsp_request)
-    parsed_url = urlsplit(ocsp_uri)
+    b64data = b64encode(data).decode('ascii')
+
+    if SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN:
+        parsed_url = urlsplit(ocsp_uri)
+        target_url = SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN.format(
+            parsed_url.hostname, b64data
+        )
+    else:
+        target_url = u"{0}/{1}".format(ocsp_uri, b64data)
 
     max_retry = 100 if do_retry else 1
     # NOTE: This retry is to retry getting HTTP 200.
-    headers = {
-        'Content-Type': 'application/ocsp-request',
-        'Content-Length': '{0}'.format(len(data)),
-        'Host': parsed_url.hostname,
-    }
-    logger.debug('url: %s, headers: %s, proxies: %s',
-                 ocsp_uri, headers, proxies)
+    logger.debug('url: %s, proxies: %s', target_url, proxies)
     with requests.Session() as session:
         session.mount('http://', HTTPAdapter(max_retries=5))
         session.mount('https://', HTTPAdapter(max_retries=5))
         for attempt in range(max_retry):
-            response = session.post(
-                ocsp_uri,
-                headers=headers,
+            response = session.get(
+                target_url,
                 proxies=proxies,
-                data=data,
                 timeout=60)
             if response.status_code == OK:
                 logger.debug("OCSP response was successfully returned")
@@ -1028,10 +1033,17 @@ OCSP_RESPONSE_STATUS = {
 # better availability.
 SF_OCSP_RESPONSE_CACHE_SERVER_URL = os.getenv(
     "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-    "http://ocsp.snowflakecomputing.com/{0}".format(
+    "{0}/{1}".format(
+        DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL,
         OCSP_RESPONSE_CACHE_FILE_NAME))
 SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED = os.getenv(
     "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
+
+# OCSP dynamic cache server URL pattern lock
+SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK = Lock()
+
+# OCSP dynamic cache server URL pattern
+SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = None
 
 # Cache directory
 HOME_DIR = expanduser("~") or tempfile.gettempdir()
@@ -1049,6 +1061,34 @@ if not path.exists(CACHE_DIR):
         logger = getLogger(__name__)
         logger.warn('cannot create a cache directory: %s', CACHE_DIR)
         CACHE_DIR = None
+
+
+def _reset_ocsp_dynamic_cache_server_url():
+    """
+    Reset OCSP dynamic cache server url pattern.
+
+    This is used only when OCSP cache server is updated.
+    """
+    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN
+    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK
+
+    with SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK:
+        if SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN is None and \
+                not SF_OCSP_RESPONSE_CACHE_SERVER_URL.startswith(
+                    DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL):
+            # only if custom OCSP cache server is used.
+            parsed_url = urlsplit(SF_OCSP_RESPONSE_CACHE_SERVER_URL)
+            if parsed_url.port:
+                SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = \
+                    u"{0}://{1}:{2}/retry/".format(
+                        parsed_url.scheme, parsed_url.hostname,
+                        parsed_url.port) + u"{0}/{1}"
+            else:
+                SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = \
+                    u"{0}://{1}/retry/".format(
+                        parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
+        logger.debug("OCSP dynamic cache server URL pattern: %s",
+                     SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN)
 
 
 class SnowflakeOCSP(object):
@@ -1074,6 +1114,8 @@ class SnowflakeOCSP(object):
         if self._ocsp_response_cache_uri is not None:
             self._ocsp_response_cache_uri = self._ocsp_response_cache_uri.replace(
                 '\\', '/')
+
+        _reset_ocsp_dynamic_cache_server_url()
 
         logger.debug("ocsp_response_cache_uri: %s",
                      self._ocsp_response_cache_uri)
