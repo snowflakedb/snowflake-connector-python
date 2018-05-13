@@ -79,17 +79,24 @@ OUTPUT_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%SZ'
 # OCSP response cache file name
 OCSP_RESPONSE_CACHE_FILE_NAME = 'ocsp_response_cache.json'
 
+# Default OCSP Response cache server URL
+DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
+
 # OCSP cache server URL where Snowflake provides OCSP response cache for
 # better availability.
 SF_OCSP_RESPONSE_CACHE_SERVER_URL = os.getenv(
     "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-    "http://ocsp.snowflakecomputing.com/{0}".format(
+    "{0}/{1}".format(
+        DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL,
         OCSP_RESPONSE_CACHE_FILE_NAME))
 SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED = os.getenv(
     "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
 
-# already downloaded the cache file from server?
-DOWNLOADED_OCSP_RESPONSE_CACHE_FROM_SERVER = False
+# OCSP dynamic cache server URL pattern lock
+SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK = Lock()
+
+# OCSP dynamic cache server URL pattern
+SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = None
 
 # Deprecated. for backward compatibility. Will be dropped around the
 # end of 2018
@@ -358,31 +365,34 @@ def _fetch_ocsp_response(req, cert, do_retry=True):
     """
     Fetch OCSP response using OCSPRequest
     """
-    urls = cert.ocsp_urls
-    parsed_url = urlsplit(urls[0])  # urls is guaranteed to have OCSP URL
-
+    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN
     max_retry = 100 if do_retry else 1
     data = req.dump()  # convert to DER
-    headers = {
-        'Content-Type': 'application/ocsp-request',
-        'Content-Length': '{0}'.format(len(data)),
-        'Host': parsed_url.hostname,
-    }
+    b64data = b64encode(data).decode('ascii')
+
+    urls = cert.ocsp_urls
+    ocsp_url = urls[0]
+    if SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN:
+        parsed_url = urlsplit(ocsp_url)
+        target_url = SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN.format(
+            parsed_url.hostname, b64data
+        )
+    else:
+        target_url = u"{0}/{1}".format(ocsp_url, b64data)
     ret = None
+    logger.debug('url: %s', target_url)
     with requests.Session() as session:
         session.mount('http://', adapters.HTTPAdapter(max_retries=5))
         session.mount('https://', adapters.HTTPAdapter(max_retries=5))
         global PROXIES
         for attempt in range(max_retry):
-            response = session.post(
-                urls[0],
-                headers=headers,
+            response = session.get(
+                target_url,
                 proxies=PROXIES,
-                data=data,
                 timeout=30)
             if response.status_code == OK:
-                logger.debug("OCSP response was successfully returned from "
-                             "OCSP server.")
+                logger.debug(
+                    "OCSP response was successfully returned from OCSP server.")
                 ret = response.content
                 break
             elif max_retry > 1:
@@ -636,6 +646,13 @@ def update_ocsp_response_cache_file(ocsp_response_cache_uri):
 
 
 def is_cert_id_in_cache(issuer, subject):
+    """
+    Is OCSP CertID in cache?
+    :param issuer: issuer certificate
+    :param subject: subject certificate
+    :return: True if in cache otherwise False, followed by OCSP Request,
+    OCSP CertID and the cached OCSP Response
+    """
     global OCSP_VALIDATION_CACHE
     global OCSP_VALIDATION_CACHE_UPDATED
 
@@ -657,6 +674,11 @@ def is_cert_id_in_cache(issuer, subject):
 
 
 def _read_ocsp_response_cache(ocsp_response_cache_uri):
+    """
+    Read OCSP Response cache data from the URI, which is very likely a file.
+
+    :param ocsp_response_cache_uri: OCSP response cache data from URI
+    """
     if ocsp_response_cache_uri is not None:
         try:
             with OCSP_VALIDATION_CACHE_LOCK:
@@ -705,6 +727,11 @@ def validate_by_direct_connection(issuer, subject, do_retry=True):
 
 
 def _download_ocsp_response_cache(url, do_retry=True):
+    """
+    Download OCSP response cache from the cache server
+    :param url: OCSP response cache server
+    :param do_retry: retry if connection fails up to N times
+    """
     global PROXIES
     max_retry = 100 if do_retry else 1
     ocsp_validation_cache = {}
@@ -728,8 +755,6 @@ def _download_ocsp_response_cache(url, do_retry=True):
                     elapsed_time = time.time() - start_time
                     logger.debug("ended downloading OCSP response cache file. "
                                  "elapsed time: %ss", elapsed_time)
-                    global DOWNLOADED_OCSP_RESPONSE_CACHE_FROM_SERVER
-                    DOWNLOADED_OCSP_RESPONSE_CACHE_FROM_SERVER = True
                     break
                 elif max_retry > 1:
                     wait_time = 2 ** attempt
@@ -751,7 +776,7 @@ def _validate_certificates_parallel(cert_data, do_retry=True):
     pool = ThreadPool(len(cert_data))
     results = []
     try:
-        _check_ocsp_response_cacher_ser(cert_data)
+        _check_ocsp_response_cache_server(cert_data)
         for issuer, subject in cert_data:
             r = pool.apply_async(
                 validate_by_direct_connection,
@@ -770,30 +795,34 @@ def _validate_certificates_parallel(cert_data, do_retry=True):
 
 def _validate_certificates_sequential(cert_data, do_retry=True):
     results = []
-    _check_ocsp_response_cacher_ser(cert_data)
+    _check_ocsp_response_cache_server(cert_data)
     for issuer, subject in cert_data:
         r = validate_by_direct_connection(issuer, subject, do_retry)
         results.append(r)
     return results
 
 
-def _check_ocsp_response_cacher_ser(cert_data):
+def _check_ocsp_response_cache_server(cert_data):
+    """
+    Checks if OCSP response is in cache, and if not download the OCSP response
+    cache from the server.
+    :param cert_data: pairs of issuer and subject certificates
+    """
     global OCSP_VALIDATION_CACHE
+    global OCSP_VALIDATION_CACHE_LOCK
     global SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED
-    global DOWNLOADED_OCSP_RESPONSE_CACHE_FROM_SERVER
     global SF_OCSP_RESPONSE_CACHE_SERVER_URL
-    if DOWNLOADED_OCSP_RESPONSE_CACHE_FROM_SERVER:
-        # download cache once per process
-        return
+
     current_time = int(time.time())
     in_cache = True
     for issuer, subject in cert_data:
         # check if OCSP response is in cache
         cert_id, _ = _create_ocsp_request(issuer, subject)
         hkey = _decode_cert_id_key(cert_id)
-        if hkey not in OCSP_VALIDATION_CACHE:
-            in_cache = False
-            break
+        with OCSP_VALIDATION_CACHE_LOCK:
+            if hkey not in OCSP_VALIDATION_CACHE:
+                in_cache = False
+                break
     if not in_cache and SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED:
         # if any of them is not cache, download the cache file from
         # OCSP response cache server.
@@ -877,6 +906,34 @@ def merge_cache(previous_cache_filename, current_cache_filename,
     write_ocsp_response_cache_file(output_filename, previous_cache)
 
 
+def _reset_ocsp_dynamic_cache_server_url():
+    """
+    Reset OCSP dynamic cache server url pattern.
+
+    This is used only when OCSP cache server is updated.
+    """
+    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN
+    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK
+
+    with SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK:
+        if SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN is None and \
+                not SF_OCSP_RESPONSE_CACHE_SERVER_URL.startswith(
+                    DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL):
+            # only if custom OCSP cache server is used.
+            parsed_url = urlsplit(SF_OCSP_RESPONSE_CACHE_SERVER_URL)
+            if parsed_url.port:
+                SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = \
+                    u"{0}://{1}:{2}/retry/".format(
+                        parsed_url.scheme, parsed_url.hostname,
+                        parsed_url.port) + u"{0}/{1}"
+            else:
+                SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = \
+                    u"{0}://{1}/retry/".format(
+                        parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
+        logger.debug("OCSP dynamic cache server URL pattern: %s",
+                     SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN)
+
+
 class SnowflakeOCSP(object):
     """
     OCSP validator using PyOpenSSL and ans1crypto
@@ -907,6 +964,8 @@ class SnowflakeOCSP(object):
         if SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED:
             logger.debug("OCSP response cache server is enabled: %s",
                          SF_OCSP_RESPONSE_CACHE_SERVER_URL)
+
+        _reset_ocsp_dynamic_cache_server_url()
 
         logger.debug("ocsp_response_cache_uri: %s",
                      self._ocsp_response_cache_uri)

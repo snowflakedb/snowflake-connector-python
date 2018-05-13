@@ -4,6 +4,8 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 
+import os
+
 import pytest
 
 import snowflake.connector
@@ -370,3 +372,42 @@ def test_eu_connection(tmpdir):
             ocsp_response_cache_filename=os.path.join(
                 str(tmpdir), "test_ocsp_cache.txt")
         )
+
+
+@pytest.mark.timeout(15)
+def test_privatelink(db_parameters):
+    """
+    Ensure the OCSP cache server URL is overridden if privatelink
+    connection is used.
+    """
+    try:
+        snowflake.connector.connect(
+            account='testaccount',
+            user='testuser',
+            password='testpassword',
+            region='eu-central-1.privatelink',
+            login_timeout=5,
+        )
+        pytest.fail("should not make connection")
+    except OperationalError:
+        ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
+        assert ocsp_url is not None, "OCSP URL should not be None"
+        assert ocsp_url.endswith(
+            'eu-central-1.privatelink.snowflakecomputing.com'
+            '/ocsp_response_cache.json')
+        assert ocsp_url.startswith('http://ocsp')
+
+    cnx = snowflake.connector.connect(
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        account=db_parameters['account'],
+        database=db_parameters['database'],
+        protocol=db_parameters['protocol'],
+        timezone='UTC',
+    )
+    assert cnx, 'invalid cnx'
+
+    ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
+    assert ocsp_url is None, "OCSP URL should be None: {0}".format(ocsp_url)
