@@ -543,7 +543,8 @@ class SnowflakeConnection(object):
             if u'protocol' not in kwargs:
                 setattr(self, u'_protocol', u'https')
 
-        if not self.user:
+        if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
+            # OAuth Authentication does not require a username
             Error.errorhandler_wrapper(
                 self, None, ProgrammingError,
                 {
