@@ -27,8 +27,7 @@ Create a virtualenv, with ``parameters.py`` in a test directory.
 
         pyvenv /tmp/test_snowflake_connector_python
         source /tmp/test_snowflake_connector_python/bin/activate
-        pip install Cython
-        pip install pytest numpy pandas
+        pip install Cython pytest numpy pandas mock
         pip install dist/snowflake_connector_python*.whl
         vim test/parameters.py
 
