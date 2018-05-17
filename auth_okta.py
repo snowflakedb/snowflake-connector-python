@@ -125,8 +125,8 @@ class AuthByOkta(AuthByExternalService):
         )
         ret = self._rest._post_request(
             url, headers, json.dumps(body),
-            timeout=self._rest._connection._login_timeout,
-            socket_timeout=self._rest._connection._login_timeout)
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout)
 
         if not ret[u'success']:
             self.handle_failure(ret)
@@ -166,8 +166,8 @@ class AuthByOkta(AuthByExternalService):
         ret = self._rest.fetch(
             u'post', token_url, headers,
             data=json.dumps(data),
-            timeout=self._rest._connection._login_timeout,
-            socket_timeout=self._rest._connection._login_timeout,
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout,
             catch_okta_unauthorized_error=True)
         one_time_token = ret.get(u'cookieToken')
         if not one_time_token:
@@ -198,8 +198,8 @@ class AuthByOkta(AuthByExternalService):
         }
         response_html = self._rest.fetch(
             u'get', sso_url, headers,
-            timeout=self._rest._connection._login_timeout,
-            socket_timeout=self._rest._connection._login_timeout,
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout,
             is_raw_text=True)
         return response_html
 
