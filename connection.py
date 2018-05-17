@@ -248,14 +248,16 @@ class SnowflakeConnection(object):
         """
         Login timeout. Used in authentication
         """
-        return self._login_timeout
+        return int(self._login_timeout) if self._login_timeout is not None \
+            else None
 
     @property
     def network_timeout(self):
         """
         Network timeout. Used for general purpose
         """
-        return self._network_timeout
+        return int(self._network_timeout) if self._network_timeout is not \
+                                             None else None
 
     @property
     def rest(self):

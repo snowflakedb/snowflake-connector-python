@@ -166,8 +166,8 @@ You can close this window now and go back where you started from.
             url,
             headers,
             json.dumps(body),
-            timeout=self._rest._connection._login_timeout,
-            socket_timeout=self._rest._connection._login_timeout)
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout)
         if not ret[u'success']:
             self.handle_failure(ret)
         data = ret[u'data']

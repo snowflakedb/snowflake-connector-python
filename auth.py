@@ -180,8 +180,8 @@ class Auth(object):
         try:
             ret = self._rest._post_request(
                 url, headers, json.dumps(body),
-                timeout=self._rest._connection._login_timeout,
-                socket_timeout=self._rest._connection._login_timeout)
+                timeout=self._rest._connection.login_timeout,
+                socket_timeout=self._rest._connection.login_timeout)
         except ForbiddenError as err:
             # HTTP 403
             raise err.__class__(
@@ -225,7 +225,7 @@ class Auth(object):
                 # get the MFA response
                 self.ret = self._rest._post_request(
                     url, headers, body,
-                    timeout=self._rest._connection._login_timeout)
+                    timeout=self._rest._connection.login_timeout)
 
             # send new request to wait until MFA is approved
             t = Thread(target=post_request_wrapper,
@@ -246,8 +246,8 @@ class Auth(object):
                 # final request to get tokens
                 ret = self._rest._post_request(
                     url, headers, json.dumps(body),
-                    timeout=self._rest._connection._login_timeout,
-                    socket_timeout=self._rest._connection._login_timeout)
+                    timeout=self._rest._connection.login_timeout,
+                    socket_timeout=self._rest._connection.login_timeout)
             elif not ret or not ret[u'data'].get(u'token'):
                 # not token is returned.
                 Error.errorhandler_wrapper(
@@ -281,8 +281,8 @@ class Auth(object):
                 # New Password input
                 ret = self._rest._post_request(
                     url, headers, json.dumps(body),
-                    timeout=self._rest._connection._login_timeout,
-                    socket_timeout=self._rest._connection._login_timeout)
+                    timeout=self._rest._connection.login_timeout,
+                    socket_timeout=self._rest._connection.login_timeout)
 
         logger.debug(u'completed authentication')
         if not ret[u'success']:
