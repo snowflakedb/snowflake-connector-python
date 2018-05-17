@@ -12,6 +12,7 @@ Release Notes
 - v1.6.1 (May 17, 2018)
 
     - Enable OCSP Dynamic Cache server for privatelink.
+    - Ensure the type of ``login_timeout`` attribute is ``int``.
 
 - v1.6.0 (May 3, 2018)
 
