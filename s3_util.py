@@ -1,11 +1,9 @@
-
 from __future__ import division
 
-import errno
+import logging
 import os
 from collections import namedtuple
 from logging import getLogger
-import logging
 
 import OpenSSL
 import boto3
@@ -15,10 +13,8 @@ from boto3.s3.transfer import TransferConfig
 from botocore.client import Config
 
 from .compat import TO_UNICODE
-
 from .constants import (SHA256_DIGEST, ResultStatus, FileHeader)
 from .encryption_util import (EncryptionMetadata)
-
 
 SFC_DIGEST = u'sfc-digest'
 
@@ -28,7 +24,6 @@ AMZ_IV = u"x-amz-iv"
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = u'ExpiredToken'
-
 
 """
 S3 Location: S3 bucket name + path
@@ -42,7 +37,6 @@ S3Location = namedtuple(
 
 
 class SnowflakeS3Util:
-
     """
     S3 Utility class
     """
@@ -196,7 +190,7 @@ class SnowflakeS3Util:
                     data_file,
                     os.path.getsize(data_file),
                     output_stream=meta[u'put_callback_output_stream']) if
-                        meta[u'put_callback'] else None,
+                meta[u'put_callback'] else None,
                 ExtraArgs={
                     u'Metadata': s3_metadata,
                 },
@@ -234,20 +228,13 @@ class SnowflakeS3Util:
             meta[u'last_error'] = err
             meta[u'result_status'] = ResultStatus.NEED_RETRY
         except OpenSSL.SSL.SysCallError as err:
-            if err.args[0] not in (
-                    ERRORNO_WSAECONNABORTED,
-                    errno.ECONNRESET,
-                    errno.ETIMEDOUT,
-                    errno.EPIPE,
-                    -1):
-                raise err
-
             meta[u'last_error'] = err
             if err.args[0] == ERRORNO_WSAECONNABORTED:
                 # connection was disconnected by S3
                 # because of too many connections. retry with
                 # less concurrency to mitigate it
-                meta[u'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
+                meta[
+                    u'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
             else:
                 meta[u'result_status'] = ResultStatus.NEED_RETRY
 
@@ -262,7 +249,7 @@ class SnowflakeS3Util:
                     meta[u'src_file_name'],
                     meta[u'src_file_size'],
                     output_stream=meta[u'get_callback_output_stream']) if
-                        meta[u'get_callback'] else None,
+                meta[u'get_callback'] else None,
                 Config=TransferConfig(
                     multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
                     max_concurrency=max_concurrency,
@@ -282,19 +269,13 @@ class SnowflakeS3Util:
             meta[u'result_status'] = ResultStatus.NEED_RETRY
             meta[u'last_error'] = err
         except OpenSSL.SSL.SysCallError as err:
-            if err.args[0] not in (
-                    ERRORNO_WSAECONNABORTED,
-                    errno.ECONNRESET,
-                    errno.ETIMEDOUT,
-                    errno.EPIPE,
-                    -1):
-                raise err
             meta[u'last_error'] = err
             if err.args[0] == ERRORNO_WSAECONNABORTED:
                 # connection was disconnected by S3
                 # because of too many connections. retry with
                 # less concurrency to mitigate it
 
-                meta[u'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
+                meta[
+                    u'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
             else:
                 meta[u'result_status'] = ResultStatus.NEED_RETRY

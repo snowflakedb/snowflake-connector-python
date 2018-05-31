@@ -21,6 +21,7 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 import logging
 import ssl
 import sys
+import time
 from socket import error as SocketError
 from socket import (socket, timeout)
 
@@ -33,12 +34,12 @@ from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend
 from cryptography.hazmat.backends.openssl.x509 import _Certificate
 
+from .compat import PY2
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
 from .proxy import (set_proxies, PROXY_HOST, PROXY_PORT, PROXY_USER,
                     PROXY_PASSWORD)
 from .ssl_wrap_util import wait_for_read, wait_for_write
-from .compat import PY2
 
 try:  # Platform-specific: Python 2
     from socket import _fileobject
@@ -415,11 +416,23 @@ def _openssl_connect(hostname, port=443):
     OpenSSL connection without validating certificates. This is used to diagnose
     SSL issues.
     """
-    client = socket()
-    client.connect((hostname, port))
-    client_ssl = OpenSSL.SSL.Connection(
-        OpenSSL.SSL.Context(OpenSSL.SSL.SSLv23_METHOD), client)
-    client_ssl.set_connect_state()
-    client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
-    client_ssl.do_handshake()
-    return client_ssl
+    err = None
+    sleeping_time = 1
+    for retry in range(20):
+        try:
+            client = socket()
+            client.connect((hostname, port))
+            client_ssl = OpenSSL.SSL.Connection(
+                OpenSSL.SSL.Context(OpenSSL.SSL.SSLv23_METHOD), client)
+            client_ssl.set_connect_state()
+            client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
+            client_ssl.do_handshake()
+            return client_ssl
+        except OpenSSL.SSL.SysCallError as ex:
+            err = ex
+            sleeping_time *= 2
+            if sleeping_time > 16:
+                sleeping_time = 16
+            time.sleep(sleeping_time)
+    if err:
+        raise err
