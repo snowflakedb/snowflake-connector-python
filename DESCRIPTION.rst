@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.2 (June 7, 2018)
+
+    - Removes username restriction for OAuth. PR 86(@tjj5036)
+    - Retry OpenSSL.SysError in tests
+    - Updated concurrent insert test as the server improved.
+
 - v1.6.1 (May 17, 2018)
 
     - Enable OCSP Dynamic Cache server for privatelink.
