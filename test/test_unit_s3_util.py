@@ -15,8 +15,9 @@ from boto3.exceptions import S3UploadFailedError
 from snowflake.connector.compat import PY2
 from snowflake.connector.constants import (SHA256_DIGEST, ResultStatus)
 from snowflake.connector.remote_storage_util import (
-    SnowflakeRemoteStorageUtil,DEFAULT_MAX_RETRY)
-from snowflake.connector.s3_util import (SnowflakeS3Util, ERRORNO_WSAECONNABORTED)
+    SnowflakeRemoteStorageUtil, DEFAULT_MAX_RETRY)
+from snowflake.connector.s3_util import (SnowflakeS3Util,
+                                         ERRORNO_WSAECONNABORTED)
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
@@ -79,7 +80,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
         u'client': client,
         SHA256_DIGEST: '123456789abcdef',
         u'stage_info': {
-            u'location':'sfc-customer-stage/rwyi-testacco/users/9220/',
+            u'location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
             u'locationType': 'S3',
         },
         u'dst_file_name': 'data1.txt.gz',
@@ -152,44 +153,6 @@ def test_upload_one_file_to_s3_econnreset():
         except OpenSSL.SSL.SysCallError:
             assert upload_file.call_count == DEFAULT_MAX_RETRY
             assert 'last_max_concurrency' not in upload_meta
-
-
-def test_upload_one_file_to_s3_unknown_openssl_error():
-    """
-    Tests Upload one file to S3 with unknown OpenSSL error
-    """
-    for error_code in [123]:
-
-        upload_file = MagicMock(
-            side_effect=OpenSSL.SSL.SysCallError(
-                error_code, 'mock err. connection aborted'))
-        client = Mock()
-        client.Object.return_value = MagicMock(
-            metadata=defaultdict(str), upload_file=upload_file)
-        initial_parallel = 100
-        upload_meta = {
-            u'no_sleeping_time': True,
-            u'parallel': initial_parallel,
-            u'put_callback': None,
-            u'put_callback_output_stream': None,
-            u'existing_files': [],
-            SHA256_DIGEST: '123456789abcdef',
-            u'stage_info': {
-                u'location': 'sfc-teststage/rwyitestacco/users/1234/',
-                u'locationType': 'S3',
-            },
-            u'client': client,
-            u'dst_file_name': 'data1.txt.gz',
-            u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
-        }
-        upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
-        upload_meta[
-            u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
-        try:
-            SnowflakeRemoteStorageUtil.upload_one_file_to_s3(upload_meta)
-            raise Exception("Should fail with OpenSSL.SSL.SysCallError")
-        except OpenSSL.SSL.SysCallError:
-            assert upload_file.call_count == 1
 
 
 def test_get_s3_file_object_http_400_error():
