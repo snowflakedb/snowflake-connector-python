@@ -65,7 +65,7 @@ def test_concurrent_insert(conn_cnx, db_parameters):
     """
     Concurrent insert tests. Inserts block on the one that's running. 
     """
-    number_of_threads = 10  # change this to increase the concurrency
+    number_of_threads = 22  # change this to increase the concurrency
     expected_success_runs = number_of_threads - 1
     cnx_array = []
 
@@ -102,7 +102,7 @@ create or replace table {name} (c1 integer, c2 string)
             for record in results:
                 success += 1 if record['success'] else 0
 
-            # 9 threads or more
+            # 21 threads or more
             assert success >= expected_success_runs, "Number of success run"
 
             c = cnx.cursor()
