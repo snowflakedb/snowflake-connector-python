@@ -340,3 +340,31 @@ create or replace table {name} (
             cnx.cursor().execute("""
 drop table if exists {name}
 """.format(name=db_parameters['name']))
+
+
+@pytest.mark.skipif(not PY2, reason="Long type test")
+def test_binding_long_value(conn_cnx, db_parameters):
+    """
+    Test binding a long value. The problem was it was bound as '1L' and raised
+    a SQL compilation error.
+    """
+    try:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+create or replace table {name} (
+    c1 integer
+)
+""".format(name=db_parameters['name']))
+            c = cnx.cursor()
+            fmt = "insert into {name}(c1) values(%(v1)s)".format(
+                name=db_parameters['name']
+            )
+            c.execute(fmt, {'v1': long(1)})
+            assert len(cnx.cursor().execute(
+                "select count(*) from {name}".format(
+                    name=db_parameters['name'])).fetchall()) == 1
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+drop table if exists {name}
+""".format(name=db_parameters['name']))
