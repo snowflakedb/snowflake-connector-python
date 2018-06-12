@@ -428,11 +428,15 @@ def _openssl_connect(hostname, port=443):
             client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
             client_ssl.do_handshake()
             return client_ssl
-        except OpenSSL.SSL.SysCallError as ex:
-            err = ex
-            sleeping_time *= 2
-            if sleeping_time > 16:
-                sleeping_time = 16
-            time.sleep(sleeping_time)
+        except Exception as ex:
+            if isinstance(ex, OpenSSL.SSL.SysCallError) or \
+                    ex.__class__.__name__ == 'TimeoutError':
+                err = ex
+                sleeping_time *= 2
+                if sleeping_time > 16:
+                    sleeping_time = 16
+                time.sleep(sleeping_time)
+            else:
+                raise ex
     if err:
         raise err
