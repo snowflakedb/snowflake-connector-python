@@ -28,3 +28,5 @@ where either Python 2.7.9 (or higher) or Python 3.4.3 (or higher) is installed.
 Snowflake Documentation is available at:
 https://docs.snowflake.net/
 
+Feel free to file an issue or submit a PR here for general cases. For official support, contact Snowflake support at:
+https://support.snowflake.net/s/snowflake-support
