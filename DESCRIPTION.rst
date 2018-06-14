@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.3 (June 14, 2018)
+
+    - Fixed binding long value for Python 2.
+
 - v1.6.2 (June 7, 2018)
 
     - Removes username restriction for OAuth. PR 86(@tjj5036)
