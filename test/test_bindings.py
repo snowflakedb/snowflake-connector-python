@@ -378,9 +378,6 @@ def test_binding_identifier(conn_cnx, db_parameters):
         with conn_cnx(paramstyle=u'qmark') as cnx:
             data = u'test'
             cnx.cursor().execute("""
-use role identifier(?)
-""", (u'sysadmin',))
-            cnx.cursor().execute("""
 create or replace table identifier(?) (c1 string)
 """, (db_parameters['name'],))
         with conn_cnx(paramstyle=u'qmark') as cnx:
