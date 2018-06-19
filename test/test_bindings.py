@@ -368,3 +368,32 @@ create or replace table {name} (
             cnx.cursor().execute("""
 drop table if exists {name}
 """.format(name=db_parameters['name']))
+
+
+def test_binding_identifier(conn_cnx, db_parameters):
+    """
+    Binding a table name
+    """
+    try:
+        with conn_cnx(paramstyle=u'qmark') as cnx:
+            data = u'test'
+            cnx.cursor().execute("""
+use role identifier(?)
+""", (u'sysadmin',))
+            cnx.cursor().execute("""
+create or replace table identifier(?) (c1 string)
+""", (db_parameters['name'],))
+        with conn_cnx(paramstyle=u'qmark') as cnx:
+            cnx.cursor().execute("""
+insert into identifier(?) values(?)
+""", (db_parameters['name'], data))
+            ret = cnx.cursor().execute("""
+select * from identifier(?)
+""", (db_parameters['name'],)).fetchall()
+            assert len(ret) == 1
+            assert ret[0][0] == data
+    finally:
+        with conn_cnx(paramstyle=u'qmark') as cnx:
+            cnx.cursor().execute("""
+drop table if exists identifier(?)
+""", (db_parameters['name'],))
