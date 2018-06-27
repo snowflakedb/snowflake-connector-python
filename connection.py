@@ -37,6 +37,8 @@ from .errors import (Error, ProgrammingError, InterfaceError,
                      DatabaseError)
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
+from .telemetry import (TelemetryClient)
+from .time_util import get_time_millis
 from .util_text import split_statements, construct_hostname
 
 SUPPORTED_PARAMSTYLES = {
@@ -129,6 +131,8 @@ class SnowflakeConnection(object):
 
         self.converter = None
         self.connect(**kwargs)
+        self._telemetry = TelemetryClient(self._rest)
+        self._telemetry_enabled = False
 
     def __del__(self):
         try:
@@ -333,6 +337,8 @@ class SnowflakeConnection(object):
             if not self.rest:
                 return
 
+            # close telemetry first, since it needs rest to send remaining data
+            self._telemetry.close()
             self.rest.delete_session()
             self.rest.close()
             self._rest = None
@@ -623,6 +629,7 @@ class SnowflakeConnection(object):
             u'sqlText': sql,
             u'asyncExec': _no_results,
             u'sequenceId': sequence_counter,
+            u'querySubmissionTime': get_time_millis(),
         }
         if statement_params is not None:
             data[u'parameters'] = statement_params
@@ -679,6 +686,19 @@ class SnowflakeConnection(object):
             self.sequence_counter += 1
             logger.debug(u'sequence counter: %s', self.sequence_counter)
             return self.sequence_counter
+
+    def _log_telemetry(self, telemetry_data):
+        u"""
+        Logs data to telemetry
+        """
+        if self._telemetry_enabled:
+            self._telemetry.try_add_log_to_batch(telemetry_data)
+
+    def set_telemetry_enabled(self, enabled):
+        u"""
+        Sets whether to use telemetry
+        """
+        self._telemetry_enabled = enabled
 
     def __enter__(self):
         u"""

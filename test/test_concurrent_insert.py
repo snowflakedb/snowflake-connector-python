@@ -111,7 +111,7 @@ create or replace table {name} (c1 integer, c2 string)
             c.execute(sql)
             for rec in c:
                 logger.debug(rec)
-                c.close()
+            c.close()
 
     finally:
         with conn_cnx() as cnx:

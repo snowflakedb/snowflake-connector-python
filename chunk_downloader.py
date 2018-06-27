@@ -7,8 +7,9 @@
 from collections import namedtuple
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
-from threading import (Condition)
+from threading import (Condition, Lock)
 
+from snowflake.connector.network import ResultIterWithTimings
 from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
 
@@ -88,7 +89,9 @@ class SnowflakeChunkDownloader(object):
 
         self._pool = ThreadPool(self._effective_threads)
 
+        self._downloading_chunks_lock = Lock()
         self._total_millis_downloading_chunks = 0
+        self._parsing_chunks_lock = Lock()
         self._total_millis_parsing_chunks = 0
 
         self._next_chunk_to_consume = 0
@@ -126,6 +129,13 @@ class SnowflakeChunkDownloader(object):
             result_data = self._fetch_chunk(self._chunks[idx].url, headers)
             logger.debug(u"finished getting the result set %s: %s",
                          idx + 1, self._chunks[idx].url)
+
+            if isinstance(result_data, ResultIterWithTimings):
+                metrics = result_data.get_timings()
+                with self._downloading_chunks_lock:
+                    self._total_millis_downloading_chunks += metrics[ResultIterWithTimings.DOWNLOAD]
+                with self._parsing_chunks_lock:
+                    self._total_millis_parsing_chunks += metrics[ResultIterWithTimings.PARSE]
 
             with self._chunk_locks[idx]:
                 self._chunks[idx] = self._chunks[idx]._replace(
@@ -256,4 +266,5 @@ class SnowflakeChunkDownloader(object):
             timeout=DEFAULT_REQUEST_TIMEOUT,
             is_raw_binary=True,
             is_raw_binary_iterator=True,
-            use_ijson=self._use_ijson)
+            use_ijson=self._use_ijson,
+            return_timing_metrics=True)
