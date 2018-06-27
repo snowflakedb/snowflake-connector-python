@@ -29,6 +29,8 @@ from .errors import (Error, ProgrammingError, NotSupportedError,
                      DatabaseError, InterfaceError)
 from .file_transfer_agent import (SnowflakeFileTransferAgent)
 from .sqlstate import (SQLSTATE_FEATURE_NOT_SUPPORTED)
+from .telemetry import (TelemetryData, TelemetryField)
+from .time_util import get_time_millis
 
 STATEMENT_TYPE_ID_DML = 0x3000
 STATEMENT_TYPE_ID_INSERT = STATEMENT_TYPE_ID_DML + 0x100
@@ -95,6 +97,8 @@ class SnowflakeCursor(object):
         self._arraysize = 1  # PEP-0249: defaults to 1
 
         self._lock_canceling = Lock()
+
+        self._first_chunk_time = None
 
         self.reset()
 
@@ -400,6 +404,8 @@ class SnowflakeCursor(object):
                     self._client_result_prefetch_threads = kv[u'value']
                 if u'CLIENT_RESULT_PREFETCH_SLOTS' in kv[u'name']:
                     self._client_result_prefetch_slots = kv[u'value']
+                if u'CLIENT_TELEMETRY_ENABLED' in kv[u'name']:
+                    self._connection.set_telemetry_enabled(kv[u'value'])
             with self._connection._lock_converter:
                 self._connection.converter.set_parameters(
                     ret[u'data'][u'parameters'])
@@ -483,6 +489,12 @@ class SnowflakeCursor(object):
         self._sqlstate = ret[u'data'][
             u'sqlState'] if u'data' in ret and u'sqlState' in ret[
             u'data'] else None
+        self._first_chunk_time = get_time_millis()
+
+        # if server gives a send time, log the time it took to arrive
+        if u'data' in ret and u'sendResultTime' in ret[u'data']:
+            time_consume_first_result = self._first_chunk_time - ret[u'data'][u'sendResultTime']
+            self._log_telemetry_job_data(TelemetryField.TIME_CONSUME_FIRST_RESULT, time_consume_first_result)
         logger.debug('sfqid: %s', self.sfqid)
 
         if ret[u'success']:
@@ -726,6 +738,7 @@ class SnowflakeCursor(object):
         """
         Fetch one row
         """
+        is_done = False
         try:
             row = None
             self._total_row_index += 1
@@ -743,19 +756,30 @@ class SnowflakeCursor(object):
                     try:
                         row = next(self._current_chunk_row)
                     except StopIteration:
+                        is_done = True
                         raise IndexError
                 else:
                     if self._chunk_count > 0 and \
                                     self._chunk_downloader is not None:
                         self._chunk_downloader.terminate()
+                        self._log_telemetry_job_data(TelemetryField.TIME_DOWNLOADING_CHUNKS,
+                                                     self._chunk_downloader._total_millis_downloading_chunks)
+                        self._log_telemetry_job_data(TelemetryField.TIME_PARSING_CHUNKS,
+                                                     self._chunk_downloader._total_millis_parsing_chunks)
                     self._chunk_downloader = None
                     self._chunk_count = 0
                     self._current_chunk_row = iter(())
+                    is_done = True
+
             return self._row_to_python(row) if row is not None else None
 
         except IndexError:
             # returns None if the iteration is completed so that iter() stops
             return None
+        finally:
+            if is_done and self._first_chunk_time:
+                time_consume_last_result = get_time_millis() - self._first_chunk_time
+                self._log_telemetry_job_data(TelemetryField.TIME_CONSUME_LAST_RESULT, time_consume_last_result)
 
     def fetchmany(self, size=None):
         u"""
@@ -998,6 +1022,21 @@ class SnowflakeCursor(object):
                     })
             idx += 1
         return tuple(row)
+
+    def _log_telemetry_job_data(self, telemetry_field, value):
+        u"""
+        Builds an instance of TelemetryData with the given field and logs it
+        """
+        obj = {
+            'type': telemetry_field,
+            'query_id': self._sfqid,
+            'value': int(value)
+        }
+        ts = get_time_millis()
+        try:
+            self._connection._log_telemetry(TelemetryData(obj, ts))
+        except AttributeError:
+            logger.warning("Cursor failed to log to telemetry. Connection object may be None.", exc_info=True)
 
     def __enter__(self):
         """

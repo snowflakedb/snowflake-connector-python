@@ -26,6 +26,7 @@ from botocore.vendored.requests.exceptions import (
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
 
+from snowflake.connector.time_util import get_time_millis
 from . import proxy
 from . import ssl_wrap_socket
 from .compat import (
@@ -146,6 +147,24 @@ class SnowflakeAuth(AuthBase):
                 HEADER_AUTHORIZATION_KEY] = HEADER_SNOWFLAKE_TOKEN.format(
                 token=self.token)
         return r
+
+
+class ResultIterWithTimings(collections.Iterator):
+    DOWNLOAD = u"download"
+    PARSE = u"parse"
+
+    def __init__(self, it, timings):
+        self._it = it
+        self._timings = timings
+
+    def __next__(self):
+        return next(self._it)
+
+    def next(self):
+        return self.__next__()
+
+    def get_timings(self):
+        return self._timings
 
 
 class SnowflakeRestful(object):
@@ -574,7 +593,8 @@ class SnowflakeRestful(object):
             is_raw_binary=False,
             is_raw_binary_iterator=True,
             use_ijson=False,
-            socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT):
+            socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+            return_timing_metrics=False):
         if socket_timeout > DEFAULT_SOCKET_CONNECT_TIMEOUT:
             # socket timeout should not be more than the default.
             # A shorter timeout may be specified for login time, but
@@ -592,6 +612,8 @@ class SnowflakeRestful(object):
             else:
                 input_data = data
 
+            timing_metrics = {}
+            start_time = get_time_millis()
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
@@ -606,12 +628,15 @@ class SnowflakeRestful(object):
                 stream=is_raw_binary,
                 auth=SnowflakeAuth(token),
             )
+            timing_metrics[ResultIterWithTimings.DOWNLOAD] = get_time_millis() - start_time
+
             try:
                 if raw_ret.status_code == OK:
                     logger.debug(u'SUCCESS')
                     if is_raw_text:
                         ret = raw_ret.text
                     elif is_raw_binary:
+                        start_time = get_time_millis()
                         raw_data = decompress_raw_data(
                             raw_ret.raw, add_bracket=True
                         ).decode('utf-8', 'replace')
@@ -621,6 +646,11 @@ class SnowflakeRestful(object):
                             ret = iter(json.loads(raw_data))
                         else:
                             ret = split_rows_from_stream(StringIO(raw_data))
+                        timing_metrics[ResultIterWithTimings.PARSE] = get_time_millis() - start_time
+
+                        # if timings requested, wrap the iterator so the timing info is accessible
+                        if return_timing_metrics:
+                            ret = ResultIterWithTimings(ret, timing_metrics)
                     else:
                         ret = raw_ret.json()
                     return ret

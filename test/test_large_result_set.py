@@ -3,7 +3,13 @@
 #
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
+from snowflake.connector.compat import PY2
+from snowflake.connector.telemetry import TelemetryField
 
+if PY2:
+    from mock import Mock
+else:
+    from unittest.mock import Mock
 
 def test_query_large_result_set(conn_cnx, db_parameters):
     """
@@ -67,6 +73,13 @@ from table(generator(rowCount=>{number_of_rows}))
             cnx.cursor().execute(
                 "alter session set CLIENT_RESULT_PREFETCH_THREADS=2"
             )"""
+            # to test telemetry logging, capture telemetry request bodies
+            telemetry_data = []
+            cnx.cursor().execute("alter session set CLIENT_TELEMETRY_ENABLED=true")
+            add_log_mock = Mock()
+            add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
+            cnx._telemetry.add_log_to_batch = add_log_mock
+
             # large result set fetch in the default mode
             result1 = []
             for rec in cnx.cursor().execute(sql):
@@ -99,6 +112,13 @@ from table(generator(rowCount=>{number_of_rows}))
                 "result length is different: result2, and result999")
             for i, (x, y) in enumerate(zip(result2, result999)):
                 assert x == y, "element {0}".format(i)
+
+            # verify that the expected telemetry metrics were logged
+            expected = [TelemetryField.TIME_CONSUME_FIRST_RESULT, TelemetryField.TIME_CONSUME_LAST_RESULT,
+                        TelemetryField.TIME_PARSING_CHUNKS, TelemetryField.TIME_DOWNLOADING_CHUNKS]
+            for field in expected:
+                assert sum([1 if x.message['type'] == field else 0 for x in telemetry_data]) == 3, \
+                    "Expected three telemetry logs (one per query) for log type {0}".format(field)
 
     finally:
         with conn_cnx(
