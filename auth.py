@@ -321,6 +321,8 @@ class Auth(object):
                 self._validate_default_role(session_info)
                 self._validate_default_warehouse(session_info)
             if u'parameters' in ret[u'data']:
+                if u'CLIENT_TELEMETRY_ENABLED' in ret[u'data']:
+                    self._rest._connection.set_telemetry_enabled(ret[u'data'])
                 with self._rest._connection._lock_converter:
                     self._rest._connection.converter.set_parameters(
                         ret[u'data'][u'parameters'])
