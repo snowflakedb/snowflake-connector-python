@@ -4,10 +4,17 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 
+import codecs
 import copy
 import json
 import logging
+import platform
+import tempfile
+import time
 import uuid
+from os import getenv, path, makedirs, mkdir, rmdir, removedirs, remove
+from os.path import expanduser
+from threading import Lock
 from threading import Thread
 
 from .compat import (TO_UNICODE, urlencode)
@@ -20,7 +27,7 @@ from .errors import (Error,
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
                       PYTHON_CONNECTOR_USER_AGENT,
-                    OPERATING_SYSTEM,
+                      OPERATING_SYSTEM,
                       PLATFORM,
                       PYTHON_VERSION,
                       IMPLEMENTATION, COMPILER)
@@ -31,11 +38,46 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
 EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
+EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR = \
+    u'EXTERNALBROWSER_CACHE_DISABLED'
 KEY_PAIR_AUTHENTICATOR = u'SNOWFLAKE_JWT'
 OAUTH_AUTHENTICATOR = u'OAUTH'
 
+# Cache directory
+CACHE_ROOT_DIR = getenv('SF_TEMPORARY_CREDENTIAL_CACHE_DIR') or \
+                 expanduser("~") or tempfile.gettempdir()
+if platform.system() == 'Windows':
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'AppData', 'Local', 'Snowflake',
+                          'Caches')
+elif platform.system() == 'Darwin':
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'Library', 'Caches', 'Snowflake')
+else:
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, '.cache', 'snowflake')
 
-class AuthByExternalService(object):
+if not path.exists(CACHE_DIR):
+    try:
+        makedirs(CACHE_DIR, mode=0o700)
+    except Exception as ex:
+        logger.warning('cannot create a cache directory: [%s], err=[%s]',
+                       CACHE_DIR, ex)
+        CACHE_DIR = None
+logger.debug("cache directory: %s", CACHE_DIR)
+
+# temporary credential cache
+TEMPORARY_CREDENTIAL = {}
+
+TEMPORARY_CREDENTIAL_LOCK = Lock()
+
+# temporary credential cache file name
+TEMPORARY_CREDENTIAL_FILE = "temporary_credential.json"
+TEMPORARY_CREDENTIAL_FILE = path.join(
+    CACHE_DIR, TEMPORARY_CREDENTIAL_FILE) if CACHE_DIR else ""
+
+# temporary credential cache lock directory name
+TEMPORARY_CREDENTIAL_FILE_LOCK = TEMPORARY_CREDENTIAL_FILE + ".lck"
+
+
+class AuthByPlugin(object):
     """
     External Authenticator interface.
     """
@@ -51,8 +93,7 @@ class AuthByExternalService(object):
         raise NotImplementedError
 
     def handle_failure(self, ret):
-        """ Handles a failure when connecting to Snowflake to
-        get the SSO Url.
+        """ Handles a failure when connecting to Snowflake
 
         Args:
             ret: dictionary returned from Snowflake.
@@ -106,7 +147,7 @@ class Auth(object):
             },
         }
 
-    def authenticate(self, auth_instance, account, user, password,
+    def authenticate(self, auth_instance, account, user,
                      database=None, schema=None,
                      warehouse=None, role=None, passcode=None,
                      passcode_in_password=False,
@@ -114,10 +155,28 @@ class Auth(object):
                      session_parameters=None, timeout=120):
         logger.debug(u'authenticate')
 
+        if session_parameters is None:
+            session_parameters = {}
         if self._rest.token and self._rest.master_token:
             logger.debug(
                 u'token is already set. no further authentication was done.')
-            return
+            return session_parameters, False
+
+        if session_parameters and session_parameters.get(
+                'CLIENT_STORE_TEMPORARY_CREDENTIAL'):
+            read_temporary_credential_file()
+            if TEMPORARY_CREDENTIAL.get(account.upper()) and \
+                    TEMPORARY_CREDENTIAL[account.upper()].get(user.upper()):
+                self._rest.id_token = TEMPORARY_CREDENTIAL[
+                    account.upper()].get(user.upper())
+            if self._rest.id_token:
+                try:
+                    self._rest._id_token_session()
+                    return session_parameters, True
+                except Exception as ex:
+                    # catch token expiration error
+                    logger.debug(
+                        "ID token expired. Reauthenticating...: %s", ex)
 
         request_id = TO_UNICODE(uuid.uuid4())
         headers = {
@@ -132,13 +191,10 @@ class Auth(object):
             self._rest._connection._internal_application_version)
 
         body = copy.deepcopy(body_template)
-        if auth_instance is not None:
-            # external authenticator may update the request body
-            logger.debug(u'assertion content: %s',
-                         auth_instance.assertion_content)
-            auth_instance.update_body(body)
-        elif password:
-            body[u'data'][u"PASSWORD"] = password
+        # updating request body
+        logger.debug(u'assertion content: %s',
+                     auth_instance.assertion_content)
+        auth_instance.update_body(body)
 
         logger.debug(
             u'account=%s, user=%s, database=%s, schema=%s, '
@@ -269,14 +325,16 @@ class Auth(object):
                         u'errno': ER_FAILED_TO_CONNECT_TO_DB,
                         u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     })
-                return  # required for unit test
+                return session_parameters, False  # required for unit test
 
         elif ret[u'data'].get(u'nextAction') == u'PWD_CHANGE':
             if callable(password_callback):
                 body = copy.deepcopy(body_template)
                 body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
                 body[u'data'][u"LOGIN_NAME"] = user
-                body[u'data'][u"PASSWORD"] = password
+                body[u'data'][u"PASSWORD"] = \
+                    auth_instance.password if hasattr(
+                        auth_instance, 'password') else None
                 body[u'data'][u'CHOSEN_NEW_PASSWORD'] = password_callback()
                 # New Password input
                 ret = self._rest._post_request(
@@ -308,10 +366,19 @@ class Auth(object):
                          '******' if ret[u'data'][u'token'] is not None else
                          'NULL')
             logger.debug(u'master_token = %s',
-                         '******' if ret[u'data'][u'masterToken'] is not None else
+                         '******' if ret[u'data'][
+                                         u'masterToken'] is not None else
+                         'NULL')
+            logger.debug(u'id_token = %s',
+                         '******' if ret[u'data'].get(
+                             u'id_token') is not None else
                          'NULL')
             self._rest.update_tokens(
-                ret[u'data'][u'token'], ret[u'data'][u'masterToken'])
+                ret[u'data'][u'token'], ret[u'data'][u'masterToken'],
+                id_token=ret[u'data'].get(u'id_token'),
+                id_token_password=ret[u'data'].get(u'id_token_password'))
+            write_temporary_credential_file(
+                account, user, self._rest.id_token)
             if u'sessionId' in ret[u'data']:
                 self._rest._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
@@ -326,6 +393,9 @@ class Auth(object):
                 with self._rest._connection._lock_converter:
                     self._rest._connection.converter.set_parameters(
                         ret[u'data'][u'parameters'])
+                for kv in ret[u'data'][u'parameters']:
+                    session_parameters[kv['name']] = kv['value']
+        return session_parameters, False
 
     def _validate_default_database(self, session_info):
         default_value = self._rest._connection.database
@@ -358,8 +428,8 @@ class Auth(object):
     def _validate_default_parameter(
             self, name, default_value, session_info_value):
         if self._rest._connection.validate_default_parameters and \
-                        default_value is not None and \
-                        session_info_value is None:
+                default_value is not None and \
+                session_info_value is None:
             # validate default parameter
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
@@ -370,3 +440,106 @@ class Auth(object):
                     u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 
                 })
+
+
+def write_temporary_credential_file(account, user, id_token):
+    if not CACHE_DIR or not id_token:
+        # no cache is enabled or no id_token is given
+        return
+    global TEMPORARY_CREDENTIAL
+    global TEMPORARY_CREDENTIAL_LOCK
+    global TEMPORARY_CREDENTIAL_FILE
+    with TEMPORARY_CREDENTIAL_LOCK:
+        # update the cache
+        account_data = TEMPORARY_CREDENTIAL.get(account.upper(), {})
+        account_data[user.upper()] = id_token
+        TEMPORARY_CREDENTIAL[account.upper()] = account_data
+        for _ in range(10):
+            if lock_temporary_credential_file():
+                break
+            time.sleep(1)
+        else:
+            logger.warning("The lock file still persists. Will ignore and "
+                           "write the temporary credential file: %s",
+                           TEMPORARY_CREDENTIAL_FILE)
+        try:
+            with codecs.open(TEMPORARY_CREDENTIAL_FILE, 'w',
+                             encoding='utf-8', errors='ignore') as f:
+                json.dump(TEMPORARY_CREDENTIAL, f)
+        except Exception as ex:
+            logger.debug("Failed to write a credential file: "
+                         "file=[%s], err=[%s]", TEMPORARY_CREDENTIAL_FILE, ex)
+        finally:
+            unlock_temporary_credential_file()
+
+
+def read_temporary_credential_file():
+    """
+    Read temporary credential file
+    """
+    if not CACHE_DIR:
+        # no cache is enabled
+        return
+
+    global TEMPORARY_CREDENTIAL
+    global TEMPORARY_CREDENTIAL_LOCK
+    global TEMPORARY_CREDENTIAL_FILE
+    with TEMPORARY_CREDENTIAL_LOCK:
+        for _ in range(10):
+            if lock_temporary_credential_file():
+                break
+            time.sleep(1)
+        else:
+            logger.warning("The lock file still persists. Will ignore and "
+                           "write the temporary credential file: %s",
+                           TEMPORARY_CREDENTIAL_FILE)
+        try:
+            with codecs.open(
+                    TEMPORARY_CREDENTIAL_FILE, 'r',
+                    encoding='utf-8', errors='ignore') as f:
+                TEMPORARY_CREDENTIAL = json.load(f)
+            return TEMPORARY_CREDENTIAL
+        except Exception as ex:
+            logger.debug("Failed to read a credential file. The file may not"
+                         "exists: file=[%s], err=[%s]",
+                         TEMPORARY_CREDENTIAL_FILE, ex)
+        finally:
+            unlock_temporary_credential_file()
+    return None
+
+
+def lock_temporary_credential_file():
+    global TEMPORARY_CREDENTIAL_FILE_LOCK
+    try:
+        mkdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
+        return True
+    except OSError:
+        logger.info("Temporary cache file lock already exists. Other "
+                    "process may be updating the temporary ")
+        return False
+
+
+def unlock_temporary_credential_file():
+    global TEMPORARY_CREDENTIAL_FILE_LOCK
+    try:
+        rmdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
+        return True
+    except OSError:
+        logger.debug("Temporary cache file lock no longer exists.")
+        return False
+
+
+def delete_temporary_credential_file():
+    """
+    Delete temporary credential file and its lock file
+    """
+    global TEMPORARY_CREDENTIAL_FILE
+    try:
+        remove(TEMPORARY_CREDENTIAL_FILE)
+    except Exception as ex:
+        logger.debug("Failed to delete a credential file: "
+                     "file=[%s], err=[%s]", TEMPORARY_CREDENTIAL_FILE, ex)
+    try:
+        removedirs(TEMPORARY_CREDENTIAL_FILE_LOCK)
+    except Exception as ex:
+        logger.debug("Failed to delete credential lock file: err=[%s]", ex)

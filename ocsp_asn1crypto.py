@@ -110,13 +110,14 @@ SIGNATURE_ALGORITHM_TO_DIGEST_CLASS = {
 }
 
 # Cache directory
-HOME_DIR = expanduser("~") or tempfile.gettempdir()
+CACHE_ROOT_DIR = os.getenv('SF_OCSP_RESPONSE_CACHE_DIR') or \
+           expanduser("~") or tempfile.gettempdir()
 if platform.system() == 'Windows':
-    CACHE_DIR = path.join(HOME_DIR, 'AppData', 'Local', 'Snowflake', 'Caches')
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'AppData', 'Local', 'Snowflake', 'Caches')
 elif platform.system() == 'Darwin':
-    CACHE_DIR = path.join(HOME_DIR, 'Library', 'Caches', 'Snowflake')
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'Library', 'Caches', 'Snowflake')
 else:
-    CACHE_DIR = path.join(HOME_DIR, '.cache', 'snowflake')
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, '.cache', 'snowflake')
 
 if not path.exists(CACHE_DIR):
     try:
