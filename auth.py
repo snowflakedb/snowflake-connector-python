@@ -23,7 +23,8 @@ from .errors import (Error,
                      DatabaseError,
                      ServiceUnavailableError,
                      ForbiddenError,
-                     BadGatewayError)
+                     BadGatewayError,
+                     ProgrammingError)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
                       PYTHON_CONNECTOR_USER_AGENT,
@@ -160,23 +161,7 @@ class Auth(object):
         if self._rest.token and self._rest.master_token:
             logger.debug(
                 u'token is already set. no further authentication was done.')
-            return session_parameters, False
-
-        if session_parameters and session_parameters.get(
-                'CLIENT_STORE_TEMPORARY_CREDENTIAL'):
-            read_temporary_credential_file()
-            if TEMPORARY_CREDENTIAL.get(account.upper()) and \
-                    TEMPORARY_CREDENTIAL[account.upper()].get(user.upper()):
-                self._rest.id_token = TEMPORARY_CREDENTIAL[
-                    account.upper()].get(user.upper())
-            if self._rest.id_token:
-                try:
-                    self._rest._id_token_session()
-                    return session_parameters, True
-                except Exception as ex:
-                    # catch token expiration error
-                    logger.debug(
-                        "ID token expired. Reauthenticating...: %s", ex)
+            return session_parameters
 
         request_id = TO_UNICODE(uuid.uuid4())
         headers = {
@@ -325,7 +310,7 @@ class Auth(object):
                         u'errno': ER_FAILED_TO_CONNECT_TO_DB,
                         u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     })
-                return session_parameters, False  # required for unit test
+                return session_parameters  # required for unit test
 
         elif ret[u'data'].get(u'nextAction') == u'PWD_CHANGE':
             if callable(password_callback):
@@ -375,8 +360,8 @@ class Auth(object):
                          'NULL')
             self._rest.update_tokens(
                 ret[u'data'][u'token'], ret[u'data'][u'masterToken'],
-                id_token=ret[u'data'].get(u'id_token'),
-                id_token_password=ret[u'data'].get(u'id_token_password'))
+                id_token=ret[u'data'].get(u'idToken'),
+                id_token_password=ret[u'data'].get(u'idTokenPassword'))
             write_temporary_credential_file(
                 account, user, self._rest.id_token)
             if u'sessionId' in ret[u'data']:
@@ -395,7 +380,7 @@ class Auth(object):
                         ret[u'data'][u'parameters'])
                 for kv in ret[u'data'][u'parameters']:
                     session_parameters[kv['name']] = kv['value']
-        return session_parameters, False
+        return session_parameters
 
     def _validate_default_database(self, session_info):
         default_value = self._rest._connection.database
@@ -440,6 +425,23 @@ class Auth(object):
                     u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 
                 })
+
+    def read_temporary_credential(self, account, user, session_parameters):
+        if session_parameters.get('CLIENT_STORE_TEMPORARY_CREDENTIAL'):
+            read_temporary_credential_file()
+            id_token = TEMPORARY_CREDENTIAL.get(
+                account.upper(), {}).get(user.upper())
+            if id_token:
+                self._rest.id_token = id_token
+            if self._rest.id_token:
+                try:
+                    self._rest._id_token_session()
+                    return True
+                except ProgrammingError as ex:
+                    # catch token expiration error
+                    logger.debug(
+                        "ID token expired. Reauthenticating...: %s", ex)
+        return False
 
 
 def write_temporary_credential_file(account, user, id_token):

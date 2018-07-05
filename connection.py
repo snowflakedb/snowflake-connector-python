@@ -21,7 +21,8 @@ from .auth import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
-    OAUTH_AUTHENTICATOR)
+    OAUTH_AUTHENTICATOR
+)
 from .auth_default import AuthByDefault
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
@@ -500,14 +501,8 @@ class SnowflakeConnection(object):
             # okta URL, e.g., https://<account>.okta.com/
             auth_instance = AuthByOkta(self.rest, self.application)
 
-        auth_instance.authenticate(
-            authenticator=self._authenticator,
-            account=self.account,
-            user=self.user,
-            password=self._password,
-        )
-        self._password = None  # ensure password won't persist
-
+        if self._session_parameters is None:
+            self._session_parameters = {}
         if self._autocommit is not None:
             self._session_parameters['AUTOCOMMIT'] = self._autocommit
 
@@ -523,25 +518,36 @@ class SnowflakeConnection(object):
             self._session_parameters[
                 'CLIENT_STORE_TEMPORARY_CREDENTIAL'] = False
 
-        self._session_parameters, used_id_token = Auth(
-            self.rest).authenticate(
-            auth_instance=auth_instance,
-            account=self._account,
-            user=self.user,
-            database=self.database,
-            schema=self.schema,
-            warehouse=self.warehouse,
-            role=self.role,
-            passcode=self._passcode,
-            passcode_in_password=self._passcode_in_password,
-            mfa_callback=mfa_callback,
-            password_callback=password_callback,
-            session_parameters=self._session_parameters,
-        )
-        if used_id_token:
+        auth = Auth(self.rest)
+        if not auth.read_temporary_credential(
+                self.account, self.user, self._session_parameters):
+            auth_instance.authenticate(
+                authenticator=self._authenticator,
+                account=self.account,
+                user=self.user,
+                password=self._password,
+            )
+
+            self._session_parameters = auth.authenticate(
+                auth_instance=auth_instance,
+                account=self.account,
+                user=self.user,
+                database=self.database,
+                schema=self.schema,
+                warehouse=self.warehouse,
+                role=self.role,
+                passcode=self._passcode,
+                passcode_in_password=self._passcode_in_password,
+                mfa_callback=mfa_callback,
+                password_callback=password_callback,
+                session_parameters=self._session_parameters,
+            )
+        else:
             # set the current objects as the session is derived from the id
             # token, and the current objects may be different.
             self._set_current_objects()
+
+        self._password = None  # ensure password won't persist
 
     def __config(self, **kwargs):
         u"""
@@ -705,6 +711,7 @@ class SnowflakeConnection(object):
             cmd(u"USE DATABASE IDENTIFIER(?)", (self._database,))
         if self._schema:
             cmd(u'USE SCHEMA IDENTIFIER(?)', (self._schema,))
+        cmd(u"SELECT 1", ())
 
     def _process_params_qmarks(self, params, cursor=None):
         if not params:
