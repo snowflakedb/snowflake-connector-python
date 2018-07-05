@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.4 (July 5, 2018)
+
+    - Fixed div by zero for Azure PUT command.
+    - Cache id token for SSO. This feature is WIP.
+    - Added telemetry client and job timings by @dsouzam.
+
 - v1.6.3 (June 14, 2018)
 
     - Fixed binding long value for Python 2.
