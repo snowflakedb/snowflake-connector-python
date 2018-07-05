@@ -19,8 +19,10 @@ from .auth import (
     Auth,
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
+    EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR)
+from .auth_default import AuthByDefault
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
@@ -32,7 +34,9 @@ from .converter_issue23517 import SnowflakeConverterIssue23517
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
-                        ER_NO_PASSWORD, ER_INVALID_VALUE)
+                        ER_NO_PASSWORD, ER_INVALID_VALUE,
+                        ER_FAILED_PROCESSING_PYFORMAT,
+                        ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE)
 from .errors import (Error, ProgrammingError, InterfaceError,
                      DatabaseError)
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
@@ -482,23 +486,27 @@ class SnowflakeConnection(object):
             if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' in os.environ:
                 del os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']
 
-        auth_instance = None
-        if self._authenticator != DEFAULT_AUTHENTICATOR:
-            if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
-                auth_instance = AuthByWebBrowser(self.rest, self.application)
-            elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-                auth_instance = AuthByKeyPair(self._private_key)
-            elif self._authenticator == OAUTH_AUTHENTICATOR:
-                auth_instance = AuthByOAuth(self._token)
-            else:
-                auth_instance = AuthByOkta(self.rest, self.application)
-            auth_instance.authenticate(
-                authenticator=self._authenticator,
-                account=self.account,
-                user=self.user,
-                password=self._password,
-            )
-            self._password = None  # ensure password won't persist
+        if self._authenticator == DEFAULT_AUTHENTICATOR:
+            auth_instance = AuthByDefault(self._password)
+        elif self._authenticator in (
+                EXTERNAL_BROWSER_AUTHENTICATOR,
+                EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR):
+            auth_instance = AuthByWebBrowser(self.rest, self.application)
+        elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+            auth_instance = AuthByKeyPair(self._private_key)
+        elif self._authenticator == OAUTH_AUTHENTICATOR:
+            auth_instance = AuthByOAuth(self._token)
+        else:
+            # okta URL, e.g., https://<account>.okta.com/
+            auth_instance = AuthByOkta(self.rest, self.application)
+
+        auth_instance.authenticate(
+            authenticator=self._authenticator,
+            account=self.account,
+            user=self.user,
+            password=self._password,
+        )
+        self._password = None  # ensure password won't persist
 
         if self._autocommit is not None:
             self._session_parameters['AUTOCOMMIT'] = self._autocommit
@@ -506,11 +514,20 @@ class SnowflakeConnection(object):
         if self._timezone is not None:
             self._session_parameters['TIMEZONE'] = self._timezone
 
-        Auth(self.rest).authenticate(
+        if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+            # enable storing temporary credential in a file
+            self._session_parameters['CLIENT_STORE_TEMPORARY_CREDENTIAL'] = True
+        elif self._authenticator == \
+                EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR:
+            # disable storing temporary credential in a file
+            self._session_parameters[
+                'CLIENT_STORE_TEMPORARY_CREDENTIAL'] = False
+
+        self._session_parameters, used_id_token = Auth(
+            self.rest).authenticate(
             auth_instance=auth_instance,
             account=self._account,
             user=self.user,
-            password=self._password,
             database=self.database,
             schema=self.schema,
             warehouse=self.warehouse,
@@ -521,7 +538,10 @@ class SnowflakeConnection(object):
             password_callback=password_callback,
             session_parameters=self._session_parameters,
         )
-        self._password = None
+        if used_id_token:
+            # set the current objects as the session is derived from the id
+            # token, and the current objects may be different.
+            self._set_current_objects()
 
     def __config(self, **kwargs):
         u"""
@@ -663,6 +683,141 @@ class SnowflakeConnection(object):
         if ret.get(u'data') is None:
             ret[u'data'] = {}
         return ret
+
+    def _set_current_objects(self):
+        """
+        Sets the current objects to the specified ones. This is mainly used
+        when a session token is derived from an id token.
+        """
+
+        def cmd(sql, params):
+            processed_params = self._process_params_qmarks(params)
+            sequence_counter = self._next_sequence_counter()
+            request_id = uuid.uuid4()
+            self.cmd_query(sql, sequence_counter, request_id,
+                           binding_params=processed_params, is_internal=True)
+
+        if self._role:
+            cmd(u"USE ROLE IDENTIFIER(?)", (self._role,))
+        if self._warehouse:
+            cmd(u"USE WAREHOUSE IDENTIFIER(?)", (self._warehouse,))
+        if self._database:
+            cmd(u"USE DATABASE IDENTIFIER(?)", (self._database,))
+        if self._schema:
+            cmd(u'USE SCHEMA IDENTIFIER(?)', (self._schema,))
+
+    def _process_params_qmarks(self, params, cursor=None):
+        if not params:
+            return None
+        processed_params = {}
+        if not isinstance(params, (list, tuple)):
+            errorvalue = {
+                u'msg': u"Binding parameters must be a list: {0}".format(
+                    params
+                ),
+                u'errno': ER_FAILED_PROCESSING_PYFORMAT
+            }
+            Error.errorhandler_wrapper(self, cursor,
+                                       ProgrammingError,
+                                       errorvalue)
+            return None
+        for idx, v in enumerate(params):
+            if isinstance(v, tuple):
+                if len(v) != 2:
+                    Error.errorhandler_wrapper(
+                        self, cursor,
+                        ProgrammingError,
+                        {
+                            u'msg': u"Binding parameters must be a list "
+                                    u"where one element is a single value or "
+                                    u"a pair of Snowflake datatype and a value",
+                            u'errno': ER_FAILED_PROCESSING_PYFORMAT,
+                        }
+                    )
+                    return None
+                processed_params[TO_UNICODE(idx + 1)] = {
+                    'type': v[0],
+                    'value': self.converter.to_snowflake_bindings(
+                        v[0], v[1])}
+            else:
+                snowflake_type = self.converter.snowflake_type(
+                    v)
+                if snowflake_type is None:
+                    Error.errorhandler_wrapper(
+                        self, cursor,
+                        ProgrammingError,
+                        {
+                            u'msg': u"Python data type [{0}] cannot be "
+                                    u"automatically mapped to Snowflake data "
+                                    u"type. Specify the snowflake data type "
+                                    u"explicitly.".format(
+                                v.__class__.__name__.lower()),
+                            u'errno': ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
+                        }
+                    )
+                    return None
+                if isinstance(v, list):
+                    vv = [
+                        self.converter.to_snowflake_bindings(
+                            snowflake_type, v0) for v0 in v]
+                else:
+                    vv = self.converter.to_snowflake_bindings(
+                        snowflake_type, v)
+                processed_params[TO_UNICODE(idx + 1)] = {
+                    'type': snowflake_type,
+                    'value': vv}
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            for k, v in processed_params.items():
+                logger.debug("idx: %s, type: %s", k, v.get('type'))
+        return processed_params
+
+    def _process_params(self, params, cursor=None):
+        if params is None:
+            return {}
+        if isinstance(params, dict):
+            return self.__process_params_dict(params)
+
+        if not isinstance(params, (tuple, list)):
+            params = [params, ]
+
+        try:
+            res = params
+            res = map(self.converter.to_snowflake, res)
+            res = map(self.converter.escape, res)
+            res = map(self.converter.quote, res)
+            ret = tuple(res)
+            logger.debug(u'parameters: %s', ret)
+            return ret
+        except Exception as e:
+            errorvalue = {
+                u'msg': u"Failed processing pyformat-parameters; {0}".format(
+                    e),
+                u'errno': ER_FAILED_PROCESSING_PYFORMAT}
+            Error.errorhandler_wrapper(self, cursor,
+                                       ProgrammingError,
+                                       errorvalue)
+
+    def __process_params_dict(self, params, cursor=None):
+        try:
+            to_snowflake = self.converter.to_snowflake
+            escape = self.converter.escape
+            quote = self.converter.quote
+            res = {}
+            for k, v in params.items():
+                c = v
+                c = to_snowflake(c)
+                c = escape(c)
+                c = quote(c)
+                res[k] = c
+            logger.debug(u'parameters: %s', res)
+            return res
+        except Exception as e:
+            errorvalue = {
+                u'msg': u"Failed processing pyformat-parameters; {0}".format(
+                    e),
+                u'errno': ER_FAILED_PROCESSING_PYFORMAT}
+            Error.errorhandler_wrapper(
+                self, cursor, ProgrammingError, errorvalue)
 
     def _cancel_query(self, sql, sequence_counter, request_id):
         u"""

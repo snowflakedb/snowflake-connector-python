@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptography.hazmat.backends import default_backend
 from datetime import datetime, timedelta
 from logging import getLogger
-from .auth import AuthByExternalService
+from .auth import AuthByPlugin
 from .auth import KEY_PAIR_AUTHENTICATOR
 from .errorcode import ER_INVALID_PRIVATE_KEY
 from .errors import ProgrammingError
@@ -22,7 +22,7 @@ import hashlib
 logger = getLogger(__name__)
 
 
-class AuthByKeyPair(AuthByExternalService):
+class AuthByKeyPair(AuthByPlugin):
     """
         Key pair based authentication
     """

@@ -25,6 +25,7 @@ def test_basic(conn_testaccount):
     Basic Connection test
     """
     assert conn_testaccount, 'invalid cnx'
+    conn_testaccount._set_current_objects()
 
 
 def test_connection_without_schema(db_parameters):

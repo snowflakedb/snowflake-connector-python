@@ -5,11 +5,11 @@
 #
 
 from .auth import (
-    AuthByExternalService,
+    AuthByPlugin,
     OAUTH_AUTHENTICATOR)
 
 
-class AuthByOAuth(AuthByExternalService):
+class AuthByOAuth(AuthByPlugin):
     """
     OAuth Based Authentication. Works by accepting an OAuth token and
     using that to authenticate.

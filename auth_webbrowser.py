@@ -8,7 +8,7 @@ import logging
 import socket
 import webbrowser
 
-from .auth import Auth, AuthByExternalService, EXTERNAL_BROWSER_AUTHENTICATOR
+from .auth import Auth, AuthByPlugin, EXTERNAL_BROWSER_AUTHENTICATOR
 from .compat import (unquote)
 from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
@@ -23,7 +23,7 @@ BUF_SIZE = 16384
 # Snowflake server
 
 
-class AuthByWebBrowser(AuthByExternalService):
+class AuthByWebBrowser(AuthByPlugin):
     """
     Authenticate user by web browser. Only used for SAML based
     authentication.
