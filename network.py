@@ -256,7 +256,7 @@ class SnowflakeRestful(object):
                 _no_results=False):
         if body is None:
             body = {}
-        if self.master_token is None:
+        if self.master_token is None and self.token is None:
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
                 {
@@ -361,11 +361,12 @@ class SnowflakeRestful(object):
             err = ret.get(u'message')
             if err is not None and ret.get(u'data'):
                 err += ret[u'data'].get(u'errorMessage', '')
+            errno = ret.get(u'code') or ER_FAILED_TO_RENEW_SESSION
             Error.errorhandler_wrapper(
                 self._connection, None, ProgrammingError,
                 {
                     u'msg': err,
-                    u'errno': ER_FAILED_TO_RENEW_SESSION,
+                    u'errno': int(errno),
                     u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 })
 
