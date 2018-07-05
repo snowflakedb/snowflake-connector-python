@@ -6,7 +6,7 @@
 import json
 import logging
 
-from .auth import Auth, AuthByExternalService
+from .auth import Auth, AuthByPlugin
 from .compat import (urlsplit, unescape, urlencode)
 from .errorcode import (ER_IDP_CONNECTION_ERROR,
                         ER_INCORRECT_DESTINATION)
@@ -55,7 +55,7 @@ def _get_post_back_url_from_html(html):
     return unescape(html[start_idx + 8:end_idx])
 
 
-class AuthByOkta(AuthByExternalService):
+class AuthByOkta(AuthByPlugin):
     """
     Authenticate user by OKTA
     """
