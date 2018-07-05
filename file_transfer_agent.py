@@ -64,6 +64,7 @@ def _update_progress(file_name, start_time, total_size, progress,
     total_size /= MB
     status = ""
     elapsed_time = time() - start_time
+    throughput = (total_size / elapsed_time) if elapsed_time != 0.0 else 0.0
     if isinstance(progress, int):
         progress = float(progress)
     if not isinstance(progress, float):
@@ -76,11 +77,11 @@ def _update_progress(file_name, start_time, total_size, progress,
         progress = 1
         status = "Done ({elapsed_time:.3f}s, {throughput:.2f}MB/s).\r\n".format(
             elapsed_time=elapsed_time,
-            throughput=total_size / elapsed_time)
+            throughput=throughput)
     if status == '':
         status = "({elapsed_time:.3f}s, {throughput:.2f}MB/s)".format(
             elapsed_time=elapsed_time,
-            throughput=total_size / elapsed_time)
+            throughput=throughput)
     block = int(round(barLength * progress))
     text = "\r{file_name}({size:.2f}MB): [{bar}] {percentage:.2f}% {status}".format(
         file_name=file_name,
