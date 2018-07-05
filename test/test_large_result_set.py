@@ -73,9 +73,7 @@ from table(generator(rowCount=>{number_of_rows}))
             cnx.cursor().execute(
                 "alter session set CLIENT_RESULT_PREFETCH_THREADS=2"
             )"""
-            # to test telemetry logging, capture telemetry request bodies
             telemetry_data = []
-            cnx.cursor().execute("alter session set CLIENT_TELEMETRY_ENABLED=true")
             add_log_mock = Mock()
             add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
             cnx._telemetry.add_log_to_batch = add_log_mock
