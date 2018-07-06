@@ -38,10 +38,10 @@ def test_telemetry_simple_flush():
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(TelemetryData({}, 2000))
-    rest_call.assert_not_called()
+    assert rest_call.call_count == 0
 
     client.add_log_to_batch(TelemetryData({}, 3000))
-    rest_call.assert_called_once()
+    assert rest_call.call_count == 1
 
 
 def test_telemetry_close():
@@ -51,10 +51,10 @@ def test_telemetry_close():
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(TelemetryData({}, 2000))
-    rest_call.assert_not_called()
+    assert rest_call.call_count == 0
 
     client.close()
-    rest_call.assert_called_once()
+    assert rest_call.call_count == 1
     assert client.is_closed()
 
 
@@ -65,7 +65,7 @@ def test_telemetry_close_empty():
     client, rest_call = get_client_and_mock()
 
     client.close()
-    rest_call.assert_not_called()
+    assert rest_call.call_count == 0
     assert client.is_closed()
 
 
@@ -76,10 +76,10 @@ def test_telemetry_send_batch():
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(TelemetryData({}, 2000))
-    rest_call.assert_not_called()
+    assert rest_call.call_count == 0
 
     client.send_batch()
-    rest_call.assert_called_once()
+    assert rest_call.call_count == 1
 
 
 def test_telemetry_send_batch_empty():
@@ -89,7 +89,7 @@ def test_telemetry_send_batch_empty():
     client, rest_call = get_client_and_mock()
 
     client.send_batch()
-    rest_call.assert_not_called()
+    assert rest_call.call_count == 0
 
 
 def test_telemetry_send_batch_clear():
@@ -100,13 +100,13 @@ def test_telemetry_send_batch_clear():
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(TelemetryData({}, 2000))
-    rest_call.assert_not_called()
+    assert rest_call.call_count == 0
 
     client.send_batch()
-    rest_call.assert_called_once()
+    assert rest_call.call_count == 1
 
     client.send_batch()
-    rest_call.assert_called_once()
+    assert rest_call.call_count == 1
 
 
 def test_telemetry_auto_disable():
@@ -148,4 +148,4 @@ def test_telemetry_send_batch_disabled():
 
     client.send_batch()
     assert client.buffer_size() == 1
-    rest_call.assert_not_called()
+    assert rest_call.call_count == 0
