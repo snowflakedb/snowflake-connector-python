@@ -55,18 +55,31 @@ def test_connect_externalbrowser(
                     u'sessionToken': u'NEW_TOKEN',
                 }}
         elif mock_cnt == 2:
-            # return from USE DATABASE testdb
+            # return from USE WAREHOUSE TESTWH_NEW
             ret = {
                 u'success': True,
                 u'message': None,
                 u'data': {
+                    u'finalDatabase': 'TESTDB',
+                    u'finalWarehouse': 'TESTWH_NEW',
                 }}
         elif mock_cnt == 3:
+            # return from USE DATABASE TESTDB_NEW
+            ret = {
+                u'success': True,
+                u'message': None,
+                u'data': {
+                    u'finalDatabase': 'TESTDB_NEW',
+                    u'finalWarehouse': 'TESTWH_NEW',
+                }}
+        elif mock_cnt == 4:
             # return from SELECT 1
             ret = {
                 u'success': True,
                 u'message': None,
                 u'data': {
+                    u'finalDatabase': 'TESTDB_NEW',
+                    u'finalWarehouse': 'TESTWH_NEW',
                 }}
         mock_cnt += 1
         return ret
@@ -93,6 +106,8 @@ def test_connect_externalbrowser(
         account=account,
         user=user,
         authenticator=authenticator,
+        database='TESTDB',
+        warehouse='TESTWH',
     )
     assert con._rest.token == u'TOKEN'
     assert con._rest.master_token == u'MASTER_TOKEN'
@@ -104,10 +119,13 @@ def test_connect_externalbrowser(
         account=account,
         user=user,
         authenticator=authenticator,
-        database='testdb'  # override the database
+        database='TESTDB_NEW',  # override the database
+        warehouse='TESTWH_NEW', # override the warehouse
     )
 
     assert con._rest.token == u'NEW_TOKEN'
     assert con._rest.master_token is None
     assert con._rest.id_token is None
     assert con._rest.id_token_password is None
+    assert con.database == 'TESTDB_NEW'
+    assert con.warehouse == 'TESTWH_NEW'

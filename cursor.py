@@ -505,14 +505,6 @@ class SnowflakeCursor(object):
         if ret[u'success']:
             logger.debug(u'SUCCESS')
             data = ret[u'data']
-            if u'finalDatabaseName' in data:
-                self._connection._database = data[u'finalDatabaseName']
-            if u'finalSchemaName' in data:
-                self._connection._schema = data[u'finalSchemaName']
-            if u'finalWarehouseName' in data:
-                self._connection._warehouse = data[u'finalWarehouseName']
-            if u'finalRoleName' in data:
-                self._connection._role = data[u'finalRoleName']
 
             # logger.debug(ret)
             logger.debug(u"PUT OR GET: %s", self.is_file_transfer)
