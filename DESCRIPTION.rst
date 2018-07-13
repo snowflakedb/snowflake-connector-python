@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.5 (July 13, 2018)
+
+    - Fixed the current object cache in the connection for id token use.
+    - Added no OCSP cache server use option.
+
 - v1.6.4 (July 5, 2018)
 
     - Fixed div by zero for Azure PUT command.
