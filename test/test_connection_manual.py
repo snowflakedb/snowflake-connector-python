@@ -30,6 +30,10 @@ def test_connect_externalbrowser():
     CONNECTION_PARAMETERS_SSO['database'] = 'testdb'
     CONNECTION_PARAMETERS_SSO['schema'] = 'testschema'
     cnx = snowflake.connector.connect(**CONNECTION_PARAMETERS_SSO)
+    assert cnx.database == 'TESTDB'
+    assert cnx.schema == 'TESTSCHEMA'
+    assert cnx.role == 'SYSADMIN'
+    assert cnx.warehouse == 'REGRESS'
     ret = cnx.cursor().execute(
         "select current_database(), current_schema(), "
         "current_role(), current_warehouse()").fetchall()
@@ -45,6 +49,10 @@ def test_connect_externalbrowser():
     # the id token and the db and schemas are the default.
     for _ in range(2):
         cnx = snowflake.connector.connect(**CONNECTION_PARAMETERS_SSO)
+        assert cnx.database == 'TESTDB'
+        assert cnx.schema == 'PUBLIC'
+        assert cnx.role == 'SYSADMIN'
+        assert cnx.warehouse == 'REGRESS'
         ret = cnx.cursor().execute(
             "select current_database(), current_schema(), "
             "current_role(), current_warehouse()").fetchall()
@@ -58,6 +66,10 @@ def test_connect_externalbrowser():
     CONNECTION_PARAMETERS_SSO['database'] = 'testdb'
     CONNECTION_PARAMETERS_SSO['schema'] = 'testschema'
     cnx = snowflake.connector.connect(**CONNECTION_PARAMETERS_SSO)
+    assert cnx.database == 'TESTDB'
+    assert cnx.schema == 'TESTSCHEMA'
+    assert cnx.role == 'SYSADMIN'
+    assert cnx.warehouse == 'REGRESS'
     ret = cnx.cursor().execute(
         "select current_database(), current_schema(), "
         "current_role(), current_warehouse()").fetchall()

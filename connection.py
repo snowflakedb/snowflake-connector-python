@@ -646,7 +646,8 @@ class SnowflakeConnection(object):
     def cmd_query(self, sql, sequence_counter, request_id,
                   binding_params=None,
                   is_file_transfer=False, statement_params=None,
-                  is_internal=False, _no_results=False):
+                  is_internal=False, _no_results=False,
+                  _update_current_object=True):
         u"""
         Executes a query with a sequence counter.
         """
@@ -688,6 +689,17 @@ class SnowflakeConnection(object):
             ret = {u'data': {}}
         if ret.get(u'data') is None:
             ret[u'data'] = {}
+        if _update_current_object:
+            data = ret['data']
+            if u'finalDatabaseName' in data:
+                self._database = data[u'finalDatabaseName']
+            if u'finalSchemaName' in data:
+                self._schema = data[u'finalSchemaName']
+            if u'finalWarehouseName' in data:
+                self._warehouse = data[u'finalWarehouseName']
+            if u'finalRoleName' in data:
+                self._role = data[u'finalRoleName']
+
         return ret
 
     def _set_current_objects(self):
@@ -696,12 +708,17 @@ class SnowflakeConnection(object):
         when a session token is derived from an id token.
         """
 
-        def cmd(sql, params):
+        def cmd(sql, params, _update_current_object=False):
             processed_params = self._process_params_qmarks(params)
             sequence_counter = self._next_sequence_counter()
             request_id = uuid.uuid4()
-            self.cmd_query(sql, sequence_counter, request_id,
-                           binding_params=processed_params, is_internal=True)
+            self.cmd_query(
+                sql,
+                sequence_counter,
+                request_id,
+                binding_params=processed_params,
+                is_internal=True,
+                _update_current_object=_update_current_object)
 
         if self._role:
             cmd(u"USE ROLE IDENTIFIER(?)", (self._role,))
@@ -711,7 +728,7 @@ class SnowflakeConnection(object):
             cmd(u"USE DATABASE IDENTIFIER(?)", (self._database,))
         if self._schema:
             cmd(u'USE SCHEMA IDENTIFIER(?)', (self._schema,))
-        cmd(u"SELECT 1", ())
+        cmd(u"SELECT 1", (), _update_current_object=True)
 
     def _process_params_qmarks(self, params, cursor=None):
         if not params:
