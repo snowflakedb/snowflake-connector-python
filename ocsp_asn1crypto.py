@@ -13,7 +13,6 @@ import time
 from base64 import b64encode, b64decode
 from datetime import datetime
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
 from os import path, environ
 from os.path import expanduser
 from threading import (Lock)
@@ -773,27 +772,6 @@ def _download_ocsp_response_cache(url, do_retry=True):
     return ocsp_validation_cache
 
 
-def _validate_certificates_parallel(cert_data, do_retry=True):
-    pool = ThreadPool(len(cert_data))
-    results = []
-    try:
-        _check_ocsp_response_cache_server(cert_data)
-        for issuer, subject in cert_data:
-            r = pool.apply_async(
-                validate_by_direct_connection,
-                [issuer, subject, do_retry])
-            results.append(r)
-    finally:
-        pool.close()
-        pool.join()
-        for r in results:
-            if not r.successful():
-                raise OperationalError(
-                    msg="Failed to validate the certificate "
-                        "revocation status: err={0}".format(r.get()))
-    return results
-
-
 def _validate_certificates_sequential(cert_data, do_retry=True):
     results = []
     _check_ocsp_response_cache_server(cert_data)
@@ -942,7 +920,7 @@ class SnowflakeOCSP(object):
 
     def __init__(self, ocsp_response_cache_uri=None,
                  proxies=None,
-                 use_ocsp_cache_server=False,
+                 use_ocsp_cache_server=None,
                  force_update=False):
         self._force_update = force_update
         global PROXIES
@@ -960,11 +938,14 @@ class SnowflakeOCSP(object):
 
         global SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED
         global SF_OCSP_RESPONSE_CACHE_SERVER_URL
-        if use_ocsp_cache_server:
-            SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED = True
+        if use_ocsp_cache_server is not None:
+            SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED = use_ocsp_cache_server
+
         if SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED:
             logger.debug("OCSP response cache server is enabled: %s",
                          SF_OCSP_RESPONSE_CACHE_SERVER_URL)
+        else:
+            logger.debug("OCSP response cache server is disabled")
 
         _reset_ocsp_dynamic_cache_server_url()
 
@@ -1000,13 +981,9 @@ class SnowflakeOCSP(object):
     def _validate(self, hostname, cert_data, do_retry=True):
         global OCSP_VALIDATION_CACHE_UPDATED
         global OCSP_VALIDATION_CACHE
-        global SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED
 
-        if SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED:
-            # Validate certs sequentially if OCSP response cache server is used
-            results = _validate_certificates_sequential(cert_data, do_retry)
-        else:
-            results = _validate_certificates_parallel(cert_data, do_retry)
+        # Validate certs sequentially if OCSP response cache server is used
+        results = _validate_certificates_sequential(cert_data, do_retry)
 
         with OCSP_VALIDATION_CACHE_LOCK:
             if OCSP_VALIDATION_CACHE_UPDATED:
