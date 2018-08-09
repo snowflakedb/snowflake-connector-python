@@ -455,3 +455,45 @@ select 1;
         )
         with pytest.raises(StopIteration):
             next(itr)
+
+
+def test_comment_in_values():
+    """
+    SNOW-51297: SnowSQL -o remove_comments=True breaks the query
+    """
+    # no space before a comment
+    s = """INSERT INTO foo
+VALUES (/*TIMEOUT*/ 10);"""
+    with StringIO(_to_unicode(s)) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (
+            "INSERT INTO foo\nVALUES ( 10);", False
+        )
+
+    # no space before and after a comment
+    s = """INSERT INTO foo
+VALUES (/*TIMEOUT*/10);"""
+    with StringIO(_to_unicode(s)) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (
+            "INSERT INTO foo\nVALUES (10);", False
+        )
+
+    # workaround
+    s = """INSERT INTO foo
+VALUES ( /*TIMEOUT*/ 10);"""
+    with StringIO(_to_unicode(s)) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (
+            "INSERT INTO foo\nVALUES (  10);", False
+        )
+
+    # a comment start from the beginning of the line
+    s = """INSERT INTO foo VALUES (
+/*TIMEOUT*/
+10);"""
+    with StringIO(_to_unicode(s)) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (
+            "INSERT INTO foo VALUES (\n\n10);", False
+        )
