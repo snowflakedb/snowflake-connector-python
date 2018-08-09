@@ -18,9 +18,9 @@ from os.path import expanduser
 from threading import (Lock)
 from time import gmtime, strftime
 
-from Crypto.Hash import SHA256, SHA384, SHA1, SHA512
-from Crypto.PublicKey import RSA
-from Crypto.Signature import PKCS1_v1_5
+from Cryptodome.Hash import SHA256, SHA384, SHA1, SHA512
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Signature import PKCS1_v1_5
 from asn1crypto.algos import DigestAlgorithm
 from asn1crypto.core import OctetString, Integer
 from asn1crypto.ocsp import CertId, OCSPRequest, TBSRequest, Requests, \
