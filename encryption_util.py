@@ -9,7 +9,7 @@ import base64
 
 from logging import getLogger
 import json
-from Crypto.Cipher import AES
+from Cryptodome.Cipher import AES
 import os
 import tempfile
 from collections import namedtuple
