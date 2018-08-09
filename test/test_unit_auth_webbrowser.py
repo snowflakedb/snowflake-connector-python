@@ -4,7 +4,7 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 
-from snowflake.connector.auth import EXTERNAL_BROWSER_AUTHENTICATOR
+from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.compat import PY2
 from snowflake.connector.network import (SnowflakeRestful, CLIENT_NAME,

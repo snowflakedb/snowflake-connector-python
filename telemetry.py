@@ -93,7 +93,7 @@ class TelemetryClient(object):
         logger.info("Sending %d logs to telemetry.", len(body))
         try:
             ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
-                                     method='post', client=None)
+                                     method='post', client=None, timeout=5)
             if not ret[u'success']:
                 logger.warning(
                     "Non-success response from telemetry server: %s. "

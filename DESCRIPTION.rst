@@ -9,6 +9,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.6 (August 9, 2018)
+
+    - Replaced `pycryptodome` with `pycryptodomex` to avoid namespace conflict with `PyCrypto`.
+    - Fixed hang if the connection is not explicitly closed since 1.6.4.
+    - Reauthenticate for externalbrowser while running a query.
+    - Fixed remove_comments option for SnowSQL.
+
 - v1.6.5 (July 13, 2018)
 
     - Fixed the current object cache in the connection for id token use.

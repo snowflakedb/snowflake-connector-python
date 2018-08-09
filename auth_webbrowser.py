@@ -8,11 +8,13 @@ import logging
 import socket
 import webbrowser
 
-from .auth import Auth, AuthByPlugin, EXTERNAL_BROWSER_AUTHENTICATOR
+from .auth import Auth, AuthByPlugin
 from .compat import (unquote)
 from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
-from .network import (CONTENT_TYPE_APPLICATION_JSON,
-                      PYTHON_CONNECTOR_USER_AGENT)
+from .network import (
+    CONTENT_TYPE_APPLICATION_JSON,
+    PYTHON_CONNECTOR_USER_AGENT,
+    EXTERNAL_BROWSER_AUTHENTICATOR)
 
 logger = logging.getLogger(__name__)
 

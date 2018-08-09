@@ -23,26 +23,19 @@ from .errors import (Error,
                      DatabaseError,
                      ServiceUnavailableError,
                      ForbiddenError,
-                     BadGatewayError,
-                     ProgrammingError)
+                     BadGatewayError)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
                       PYTHON_CONNECTOR_USER_AGENT,
                       OPERATING_SYSTEM,
                       PLATFORM,
                       PYTHON_VERSION,
-                      IMPLEMENTATION, COMPILER)
+                      IMPLEMENTATION, COMPILER,
+                      ReauthenticationRequest)
 from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
 from .version import VERSION
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
-EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
-EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR = \
-    u'EXTERNALBROWSER_CACHE_DISABLED'
-KEY_PAIR_AUTHENTICATOR = u'SNOWFLAKE_JWT'
-OAUTH_AUTHENTICATOR = u'OAUTH'
 
 # Cache directory
 CACHE_ROOT_DIR = getenv('SF_TEMPORARY_CREDENTIAL_CACHE_DIR') or \
@@ -158,10 +151,6 @@ class Auth(object):
 
         if session_parameters is None:
             session_parameters = {}
-        if self._rest.token and self._rest.master_token:
-            logger.debug(
-                u'token is already set. no further authentication was done.')
-            return session_parameters
 
         request_id = TO_UNICODE(uuid.uuid4())
         headers = {
@@ -437,7 +426,7 @@ class Auth(object):
                 try:
                     self._rest._id_token_session()
                     return True
-                except ProgrammingError as ex:
+                except ReauthenticationRequest as ex:
                     # catch token expiration error
                     logger.debug(
                         "ID token expired. Reauthenticating...: %s", ex)
