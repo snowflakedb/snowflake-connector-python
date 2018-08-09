@@ -120,12 +120,12 @@ def test_connect_externalbrowser(
         user=user,
         authenticator=authenticator,
         database='TESTDB_NEW',  # override the database
-        warehouse='TESTWH_NEW', # override the warehouse
+        warehouse='TESTWH_NEW',  # override the warehouse
     )
 
     assert con._rest.token == u'NEW_TOKEN'
     assert con._rest.master_token is None
-    assert con._rest.id_token is None
-    assert con._rest.id_token_password is None
+    assert con._rest.id_token == 'ID_TOKEN'
+    assert con._rest.id_token_password is None  # This is not used yet.
     assert con.database == 'TESTDB_NEW'
     assert con.warehouse == 'TESTWH_NEW'

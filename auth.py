@@ -23,15 +23,15 @@ from .errors import (Error,
                      DatabaseError,
                      ServiceUnavailableError,
                      ForbiddenError,
-                     BadGatewayError,
-                     ProgrammingError)
+                     BadGatewayError)
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
                       PYTHON_CONNECTOR_USER_AGENT,
                       OPERATING_SYSTEM,
                       PLATFORM,
                       PYTHON_VERSION,
-                      IMPLEMENTATION, COMPILER)
+                      IMPLEMENTATION, COMPILER,
+                      ReauthenticateRequest)
 from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
 from .version import VERSION
 
@@ -437,7 +437,7 @@ class Auth(object):
                 try:
                     self._rest._id_token_session()
                     return True
-                except ProgrammingError as ex:
+                except ReauthenticateRequest as ex:
                     # catch token expiration error
                     logger.debug(
                         "ID token expired. Reauthenticating...: %s", ex)

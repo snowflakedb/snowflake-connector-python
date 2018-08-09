@@ -27,6 +27,8 @@ def test_connect_externalbrowser():
     delete_temporary_credential_file()
 
     # change database and schema to non-default one
+    print("[INFO] 1st connection gets id token and stores in the cache file. "
+            "This popup a browser to SSO login")
     CONNECTION_PARAMETERS_SSO['database'] = 'testdb'
     CONNECTION_PARAMETERS_SSO['schema'] = 'testschema'
     cnx = snowflake.connector.connect(**CONNECTION_PARAMETERS_SSO)
@@ -42,6 +44,39 @@ def test_connect_externalbrowser():
     assert ret[0][2] == 'SYSADMIN'
     assert ret[0][3] == 'REGRESS'
     cnx.close()
+
+    print("[INFO] 2nd connection reads the cache file and uses the id token. "
+            "This should not popups a browser.")
+    cnx = snowflake.connector.connect(**CONNECTION_PARAMETERS_SSO)
+    print("[INFO] Running a 60 seconds query. If the session expires in 10 "
+          "seconds, the query should renew the token in the middle, "
+          "and the current objects should be refreshed.")
+    cnx.cursor().execute("select seq8() from table(generator(timelimit=>60))")
+    assert cnx.database == 'TESTDB'
+    assert cnx.schema == 'TESTSCHEMA'
+    assert cnx.role == 'SYSADMIN'
+    assert cnx.warehouse == 'REGRESS'
+    ret = cnx.cursor().execute(
+        "select current_database(), current_schema(), "
+        "current_role(), current_warehouse()").fetchall()
+    assert ret[0][0] == 'TESTDB'
+    assert ret[0][1] == 'TESTSCHEMA'
+    assert ret[0][2] == 'SYSADMIN'
+    assert ret[0][3] == 'REGRESS'
+
+    print("[INFO] Running a 5 seconds query. ")
+    cnx.cursor().execute("select seq8() from table(generator(timelimit=>5))")
+    assert cnx.database == 'TESTDB'
+    assert cnx.schema == 'TESTSCHEMA'
+    assert cnx.role == 'SYSADMIN'
+    assert cnx.warehouse == 'REGRESS'
+    ret = cnx.cursor().execute(
+        "select current_database(), current_schema(), "
+        "current_role(), current_warehouse()").fetchall()
+    assert ret[0][0] == 'TESTDB'
+    assert ret[0][1] == 'TESTSCHEMA'
+    assert ret[0][2] == 'SYSADMIN'
+    assert ret[0][3] == 'REGRESS'
 
     del CONNECTION_PARAMETERS_SSO['database']
     del CONNECTION_PARAMETERS_SSO['schema']
