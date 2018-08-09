@@ -72,7 +72,12 @@ DEFAULT_SOCKET_CONNECT_TIMEOUT = 1 * 60  # don't reduce less than 45 seconds
 # return codes
 QUERY_IN_PROGRESS_CODE = u'333333'  # GS code: the query is in progress
 QUERY_IN_PROGRESS_ASYNC_CODE = u'333334'  # GS code: the query is detached
+
+ID_TOKEN_EXPIRED_GS_CODE = u'390110'
 SESSION_EXPIRED_GS_CODE = u'390112'  # GS code: session expired. need to renew
+MASTER_TOKEN_NOTFOUND_GS_CODE = u'390113'
+MASTER_TOKEN_EXPIRED_GS_CODE = u'390114'
+MASTER_TOKEN_INVALD_GS_CODE = u'390115'
 
 # other constants
 CONTENT_TYPE_APPLICATION_JSON = u'application/json'
@@ -80,6 +85,8 @@ ACCEPT_TYPE_APPLICATION_SNOWFLAKE = u'application/snowflake'
 
 REQUEST_TYPE_RENEW = u'RENEW'
 REQUEST_TYPE_ISSUE = u'ISSUE'
+
+UPDATED_BY_ID_TOKEN = u'updated_by_id_token'
 
 HEADER_AUTHORIZATION_KEY = u"Authorization"
 HEADER_SNOWFLAKE_TOKEN = u'Snowflake Token="{token}"'
@@ -128,6 +135,14 @@ class RetryRequest(Exception):
     Signal to retry request
     """
     pass
+
+
+class ReauthenticateRequest(Exception):
+    """
+    Signal to reauthenticate
+    """
+    def __init__(self, cause):
+        self.cause = cause
 
 
 class SnowflakeAuth(AuthBase):
@@ -300,7 +315,13 @@ class SnowflakeRestful(object):
         """
         Renew a session and master token.
         """
-        return self._token_request(REQUEST_TYPE_RENEW)
+        try:
+            return self._token_request(REQUEST_TYPE_RENEW)
+        except ReauthenticateRequest as ex:
+            if self.id_token:
+                return self._token_request(REQUEST_TYPE_ISSUE)
+            else:
+                raise ex.cause
 
     def _id_token_session(self):
         """
@@ -310,15 +331,6 @@ class SnowflakeRestful(object):
         return self._token_request(REQUEST_TYPE_ISSUE)
 
     def _token_request(self, request_type):
-        if request_type != REQUEST_TYPE_ISSUE and self.master_token is None:
-            Error.errorhandler_wrapper(
-                self._connection, None, DatabaseError,
-                {
-                    u'msg': u"Connection is closed",
-                    u'errno': ER_CONNECTION_IS_CLOSED,
-                    u'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
-                })
-
         logger.debug(
             u'updating session. master_token: %s, id_token: %s',
             u'****' if self.master_token else None,
@@ -353,8 +365,12 @@ class SnowflakeRestful(object):
                 and u'sessionToken' in ret[u'data']:
             logger.debug(u'success: %s', ret)
             self.update_tokens(
-                ret[u'data'][u'sessionToken'], ret[u'data'].get(u'masterToken'))
+                ret[u'data'][u'sessionToken'],
+                ret[u'data'].get(u'masterToken'),
+                self.id_token,
+                self.id_token_password)
             logger.debug(u'updating session completed')
+            ret[UPDATED_BY_ID_TOKEN] = request_type == REQUEST_TYPE_ISSUE
             return ret
         else:
             logger.debug(u'failed: %s', ret)
@@ -362,6 +378,17 @@ class SnowflakeRestful(object):
             if err is not None and ret.get(u'data'):
                 err += ret[u'data'].get(u'errorMessage', '')
             errno = ret.get(u'code') or ER_FAILED_TO_RENEW_SESSION
+            if errno in (
+                    ID_TOKEN_EXPIRED_GS_CODE,
+                    SESSION_EXPIRED_GS_CODE,
+                    MASTER_TOKEN_NOTFOUND_GS_CODE,
+                    MASTER_TOKEN_EXPIRED_GS_CODE,
+                    MASTER_TOKEN_INVALD_GS_CODE):
+                raise ReauthenticateRequest(
+                    ProgrammingError(
+                        msg=err,
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED))
             Error.errorhandler_wrapper(
                 self._connection, None, ProgrammingError,
                 {
@@ -422,6 +449,8 @@ class SnowflakeRestful(object):
                          token=token, socket_timeout=socket_timeout)
         if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
+            if ret.get(UPDATED_BY_ID_TOKEN):
+                self._connection._set_current_objects()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret.get(u'code', u'N/A'))))
@@ -453,9 +482,11 @@ class SnowflakeRestful(object):
 
         if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
             ret = self._renew_session()
+            if ret.get(UPDATED_BY_ID_TOKEN):
+                self._connection._set_current_objects()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
-                    code=(ret.get(u'code'u'N/A'))))
+                    code=(ret.get(u'code', u'N/A'))))
             if ret.get(u'success'):
                 return self._post_request(
                     url, headers, body, token=self.token, timeout=timeout)
@@ -674,7 +705,8 @@ class SnowflakeRestful(object):
                 stream=is_raw_binary,
                 auth=SnowflakeAuth(token),
             )
-            timing_metrics[ResultIterWithTimings.DOWNLOAD] = get_time_millis() - start_time
+            timing_metrics[
+                ResultIterWithTimings.DOWNLOAD] = get_time_millis() - start_time
 
             try:
                 if raw_ret.status_code == OK:
@@ -692,9 +724,11 @@ class SnowflakeRestful(object):
                             ret = iter(json.loads(raw_data))
                         else:
                             ret = split_rows_from_stream(StringIO(raw_data))
-                        timing_metrics[ResultIterWithTimings.PARSE] = get_time_millis() - start_time
+                        timing_metrics[
+                            ResultIterWithTimings.PARSE] = get_time_millis() - start_time
 
-                        # if timings requested, wrap the iterator so the timing info is accessible
+                        # if timings requested, wrap the iterator so the timing
+                        # info is accessible
                         if return_timing_metrics:
                             ret = ResultIterWithTimings(ret, timing_metrics)
                     else:
