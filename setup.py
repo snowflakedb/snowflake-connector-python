@@ -42,7 +42,7 @@ setup(
         'future',
         'six',
         'pytz',
-        'pycryptodome>=3.2,!=3.5.0',
+        'pycryptodomex>=3.2,!=3.5.0',
         'pyOpenSSL>=16.2.0',
         'cffi>=1.9',
         'cryptography>=1.8.2',
