@@ -268,7 +268,7 @@ class SnowflakeRestful(object):
                 logger.warning("Session cleanup failed: %s", e)
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
-                _no_results=False):
+                _no_results=False, timeout=None):
         if body is None:
             body = {}
         if self.master_token is None and self.token is None:
@@ -285,6 +285,9 @@ class SnowflakeRestful(object):
         else:
             accept_type = CONTENT_TYPE_APPLICATION_JSON
 
+        if timeout is None:
+            timeout = self._connection.network_timeout
+
         headers = {
             u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
             u"accept": accept_type,
@@ -294,11 +297,11 @@ class SnowflakeRestful(object):
             return self._post_request(
                 url, headers, json.dumps(body),
                 token=self.token, _no_results=_no_results,
-                timeout=self._connection.network_timeout)
+                timeout=timeout)
         else:
             return self._get_request(
                 url, headers, token=self.token,
-                timeout=self._connection.network_timeout)
+                timeout=timeout)
 
     def update_tokens(self, session_token, master_token, id_token=None,
                       id_token_password=None):
