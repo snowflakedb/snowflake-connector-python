@@ -101,6 +101,8 @@ def split_statements(buf, remove_comments=False):
                         not line[col0:].startswith("file://"):
                     if not remove_comments:
                         statement.append((line[col0:col + 2], False))
+                    else:
+                        statement.append((line[col0:col], False))
                     col += 2
                     col0 = col
                     in_comment = True
