@@ -11,8 +11,11 @@ import sys
 from logging import getLogger
 from os import path
 from time import gmtime, strftime, time
+from datetime import datetime
 
 from asn1crypto import core, ocsp
+
+ZERO_EPOCH = datetime.utcfromtimestamp(0)
 
 from snowflake.connector.ocsp_asn1crypto import (
     OUTPUT_TIMESTAMP_FORMAT,
@@ -122,8 +125,11 @@ def dump_ocsp_response_cache(ocsp_response_cache_file, cert_dir):
                         strftime(
                             OUTPUT_TIMESTAMP_FORMAT, gmtime(created_on))))
 
-            if current_time > int(next_update.strftime('%s')) or \
-                    current_time < int(this_update.strftime('%s')):
+            next_update_utc =  (next_update.replace(tzinfo=None) - ZERO_EPOCH).total_seconds()
+            this_update_utc =  (this_update.replace(tzinfo=None) - ZERO_EPOCH).total_seconds()
+
+            if current_time > next_update_utc or \
+               current_time < this_update_utc:
                 raise Exception("ERROR: OCSP response cache include "
                                 "outdated data: "
                                 "name: {}, serial_number: {}, "
