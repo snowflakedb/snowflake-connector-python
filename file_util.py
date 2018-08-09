@@ -8,7 +8,7 @@ import shutil
 import struct
 from io import open
 from logging import getLogger
-from Crypto.Hash import SHA256
+from Cryptodome.Hash import SHA256
 
 from .constants import UTF8
 
