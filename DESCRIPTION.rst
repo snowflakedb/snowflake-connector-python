@@ -14,6 +14,7 @@ Release Notes
     - Replaced `pycryptodome` with `pycryptodomex` to avoid namespace conflict with `PyCrypto`.
     - Fixed hang if the connection is not explicitly closed since 1.6.4.
     - Reauthenticate for externalbrowser while running a query.
+    - Fixed remove_comments option for SnowSQL.
 
 - v1.6.5 (July 13, 2018)
 
