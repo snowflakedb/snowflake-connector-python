@@ -78,6 +78,7 @@ SESSION_EXPIRED_GS_CODE = u'390112'  # GS code: session expired. need to renew
 MASTER_TOKEN_NOTFOUND_GS_CODE = u'390113'
 MASTER_TOKEN_EXPIRED_GS_CODE = u'390114'
 MASTER_TOKEN_INVALD_GS_CODE = u'390115'
+BAD_REQUEST_GS_CODE = u'390400'
 
 # other constants
 CONTENT_TYPE_APPLICATION_JSON = u'application/json'
@@ -118,12 +119,19 @@ STATUS_TO_EXCEPTION = {
     BAD_GATEWAY: BadGatewayError,
 }
 
+DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
+EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
+EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR = \
+    u'EXTERNALBROWSER_CACHE_DISABLED'
+KEY_PAIR_AUTHENTICATOR = u'SNOWFLAKE_JWT'
+OAUTH_AUTHENTICATOR = u'OAUTH'
+
 
 def is_retryable_http_code(code):
     """
     Is retryable HTTP code?
     """
-    return code >= 500 and code < 600 or code in (
+    return 500 <= code < 600 or code in (
         BAD_REQUEST,  # 400
         FORBIDDEN,  # 403
         REQUEST_TIMEOUT,  # 408
@@ -137,10 +145,11 @@ class RetryRequest(Exception):
     pass
 
 
-class ReauthenticateRequest(Exception):
+class ReauthenticationRequest(Exception):
     """
     Signal to reauthenticate
     """
+
     def __init__(self, cause):
         self.cause = cause
 
@@ -320,11 +329,10 @@ class SnowflakeRestful(object):
         """
         try:
             return self._token_request(REQUEST_TYPE_RENEW)
-        except ReauthenticateRequest as ex:
-            if self.id_token:
-                return self._token_request(REQUEST_TYPE_ISSUE)
-            else:
+        except ReauthenticationRequest as ex:
+            if not self.id_token:
                 raise ex.cause
+            return self._token_request(REQUEST_TYPE_ISSUE)
 
     def _id_token_session(self):
         """
@@ -355,7 +363,9 @@ class SnowflakeRestful(object):
                 u"requestType": REQUEST_TYPE_ISSUE,
             }
         else:
-            header_token = self.master_token
+            # NOTE: ensure an empty key if master token is not set.
+            # This avoids HTTP 400.
+            header_token = self.master_token or ""
             body = {
                 u"oldSessionToken": self.token,
                 u"requestType": request_type,
@@ -364,8 +374,7 @@ class SnowflakeRestful(object):
             url, headers, json.dumps(body),
             token=header_token,
             timeout=self._connection.network_timeout)
-        if ret.get(u'success') and u'data' in ret \
-                and u'sessionToken' in ret[u'data']:
+        if ret.get(u'success') and ret.get(u'data', {}).get(u'sessionToken'):
             logger.debug(u'success: %s', ret)
             self.update_tokens(
                 ret[u'data'][u'sessionToken'],
@@ -386,8 +395,9 @@ class SnowflakeRestful(object):
                     SESSION_EXPIRED_GS_CODE,
                     MASTER_TOKEN_NOTFOUND_GS_CODE,
                     MASTER_TOKEN_EXPIRED_GS_CODE,
-                    MASTER_TOKEN_INVALD_GS_CODE):
-                raise ReauthenticateRequest(
+                    MASTER_TOKEN_INVALD_GS_CODE,
+                    BAD_REQUEST_GS_CODE):
+                raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=err,
                         errno=int(errno),
@@ -451,9 +461,15 @@ class SnowflakeRestful(object):
         ret = self.fetch(u'get', full_url, headers, timeout=timeout,
                          token=token, socket_timeout=socket_timeout)
         if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
-            ret = self._renew_session()
-            if ret.get(UPDATED_BY_ID_TOKEN):
-                self._connection._set_current_objects()
+            try:
+                ret = self._renew_session()
+                if ret.get(UPDATED_BY_ID_TOKEN):
+                    self._connection._set_current_objects()
+            except ReauthenticationRequest as ex:
+                if self._connection._authenticator != \
+                        EXTERNAL_BROWSER_AUTHENTICATOR:
+                    raise ex.cause
+                ret = self._connection._reauthenticate_by_webbrowser()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret.get(u'code', u'N/A'))))
@@ -484,9 +500,15 @@ class SnowflakeRestful(object):
                 code=(ret.get(u'code', u'N/A'))))
 
         if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
-            ret = self._renew_session()
-            if ret.get(UPDATED_BY_ID_TOKEN):
-                self._connection._set_current_objects()
+            try:
+                ret = self._renew_session()
+                if ret.get(UPDATED_BY_ID_TOKEN):
+                    self._connection._set_current_objects()
+            except ReauthenticationRequest as ex:
+                if self._connection._authenticator != \
+                        EXTERNAL_BROWSER_AUTHENTICATOR:
+                    raise ex.cause
+                ret = self._connection._reauthenticate_by_webbrowser()
             logger.debug(
                 u'ret[code] = {code} after renew_session'.format(
                     code=(ret.get(u'code', u'N/A'))))
@@ -501,8 +523,7 @@ class SnowflakeRestful(object):
                 (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
             if self._inject_client_pause > 0:
                 logger.debug(
-                    u'waiting for {inject_client_pause}...'.format(
-                        inject_client_pause=self._inject_client_pause))
+                    u'waiting for %s...', self._inject_client_pause)
                 time.sleep(self._inject_client_pause)
             # ping pong
             result_url = ret[u'data'][u'getResultUrl']

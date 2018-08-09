@@ -14,15 +14,7 @@ from threading import Lock
 from time import strptime
 
 from . import errors
-from . import network
-from .auth import (
-    Auth,
-    DEFAULT_AUTHENTICATOR,
-    EXTERNAL_BROWSER_AUTHENTICATOR,
-    EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR,
-    KEY_PAIR_AUTHENTICATOR,
-    OAUTH_AUTHENTICATOR
-)
+from .auth import Auth
 from .auth_default import AuthByDefault
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
@@ -40,6 +32,19 @@ from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE)
 from .errors import (Error, ProgrammingError, InterfaceError,
                      DatabaseError)
+from .network import (
+    SNOWFLAKE_CONNECTOR_VERSION,
+    PYTHON_VERSION,
+    PLATFORM,
+    CLIENT_NAME,
+    CLIENT_VERSION,
+    DEFAULT_AUTHENTICATOR,
+    EXTERNAL_BROWSER_AUTHENTICATOR,
+    EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR,
+    KEY_PAIR_AUTHENTICATOR,
+    OAUTH_AUTHENTICATOR,
+    SnowflakeRestful,
+)
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryClient)
@@ -80,9 +85,9 @@ DEFAULT_CONFIGURATION = {
     u'authenticator': DEFAULT_AUTHENTICATOR,
     u'mfa_callback': None,
     u'password_callback': None,
-    u'application': network.CLIENT_NAME,
-    u'internal_application_name': network.CLIENT_NAME,
-    u'internal_application_version': network.CLIENT_VERSION,
+    u'application': CLIENT_NAME,
+    u'internal_application_name': CLIENT_NAME,
+    u'internal_application_version': CLIENT_VERSION,
 
     u'insecure_mode': False,  # Error security fix requirement
     u'inject_client_pause': 0,  # snowflake internal
@@ -127,8 +132,8 @@ class SnowflakeConnection(object):
         logger.info(
             u"Snowflake Connector for Python Version: %s, "
             u"Python Version: %s, Platform: %s",
-            network.SNOWFLAKE_CONNECTOR_VERSION,
-            network.PYTHON_VERSION, network.PLATFORM)
+            SNOWFLAKE_CONNECTOR_VERSION,
+            PYTHON_VERSION, PLATFORM)
 
         self._rest = None
         for name, value in DEFAULT_CONFIGURATION.items():
@@ -329,10 +334,7 @@ class SnowflakeConnection(object):
             self.__config(**kwargs)
 
         self.__set_error_attributes()
-
-        self.__open_connection(mfa_callback=kwargs.get('mfa_callback'),
-                               password_callback=kwargs.get(
-                                   'password_callback'))
+        self.__open_connection()
 
     def close(self):
         u"""
@@ -451,7 +453,7 @@ class SnowflakeConnection(object):
                   callable(getattr(errors, method))]:
             setattr(self, m, getattr(errors, m))
 
-    def __open_connection(self, mfa_callback, password_callback):
+    def __open_connection(self):
         u"""
         Opens a new network connection
         """
@@ -459,7 +461,7 @@ class SnowflakeConnection(object):
             use_sfbinaryformat=False,
             use_numpy=self._numpy)
 
-        self._rest = network.SnowflakeRestful(
+        self._rest = SnowflakeRestful(
             host=self.host,
             port=self.port,
             proxy_host=self.proxy_host,
@@ -521,27 +523,7 @@ class SnowflakeConnection(object):
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(
                 self.account, self.user, self._session_parameters):
-            auth_instance.authenticate(
-                authenticator=self._authenticator,
-                account=self.account,
-                user=self.user,
-                password=self._password,
-            )
-
-            self._session_parameters = auth.authenticate(
-                auth_instance=auth_instance,
-                account=self.account,
-                user=self.user,
-                database=self.database,
-                schema=self.schema,
-                warehouse=self.warehouse,
-                role=self.role,
-                passcode=self._passcode,
-                passcode_in_password=self._passcode_in_password,
-                mfa_callback=mfa_callback,
-                password_callback=password_callback,
-                session_parameters=self._session_parameters,
-            )
+            self.__authenticate(auth_instance)
         else:
             # set the current objects as the session is derived from the id
             # token, and the current objects may be different.
@@ -638,7 +620,7 @@ class SnowflakeConnection(object):
                 msg = (u"ERROR: The ssl package installed with your Python "
                        u"- version {0} - does not have the security fix. "
                        u"Upgrade to Python 2.7.9/3.4.3 or higher.\n").format(
-                    network.PYTHON_VERSION)
+                    PYTHON_VERSION)
                 raise InterfaceError(
                     msg=msg,
                     errno=ER_OLD_PYTHON)
@@ -680,7 +662,6 @@ class SnowflakeConnection(object):
 
         url_parameters = {u'requestId': request_id}
 
-        # retry 1000 times/4.5 hours for general queries
         ret = self.rest.request(
             u'/queries/v1/query-request?' + urlencode(url_parameters),
             data, client=client, _no_results=_no_results)
@@ -729,6 +710,35 @@ class SnowflakeConnection(object):
         if self._schema:
             cmd(u'USE SCHEMA IDENTIFIER(?)', (self._schema,))
         cmd(u"SELECT 1", (), _update_current_object=True)
+
+    def _reauthenticate_by_webbrowser(self):
+        auth_instance = AuthByWebBrowser(self.rest, self.application)
+        self.__authenticate(auth_instance)
+        self._set_current_objects()
+        return {u'success': True}
+
+    def __authenticate(self, auth_instance):
+        auth_instance.authenticate(
+            authenticator=self._authenticator,
+            account=self.account,
+            user=self.user,
+            password=self._password,
+        )
+        auth = Auth(self.rest)
+        self._session_parameters = auth.authenticate(
+            auth_instance=auth_instance,
+            account=self.account,
+            user=self.user,
+            database=self.database,
+            schema=self.schema,
+            warehouse=self.warehouse,
+            role=self.role,
+            passcode=self._passcode,
+            passcode_in_password=self._passcode_in_password,
+            mfa_callback=self._mfa_callback,
+            password_callback=self._password_callback,
+            session_parameters=self._session_parameters,
+        )
 
     def _process_params_qmarks(self, params, cursor=None):
         if not params:

@@ -182,13 +182,13 @@ def init_test_schema(request):
                 "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
         if CONNECTION_PARAMETERS_S3:
             with snowflake.connector.connect(
-                    user=ret1['user'],
-                    password=ret1['password'],
-                    host=ret1['host'],
-                    port=ret1['port'],
-                    database=ret1['database'],
-                    account=ret1['account'],
-                    protocol=ret1['protocol']
+                    user=ret1['s3_user'],
+                    password=ret1['s3_password'],
+                    host=ret1['s3_host'],
+                    port=ret1['s3_port'],
+                    database=ret1['s3_database'],
+                    account=ret1['s3_account'],
+                    protocol=ret1['s3_protocol']
             ) as con1:
                 con1.cursor().execute(
                     "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
