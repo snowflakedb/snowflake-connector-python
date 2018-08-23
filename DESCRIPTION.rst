@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.7 (August 22, 2018)
+
+    - Enforce virtual host URL for PUT and GET.
+    - Added retryCount, clientStarTime for query-request for better service.
+    
 - v1.6.6 (August 9, 2018)
 
     - Replaced `pycryptodome` with `pycryptodomex` to avoid namespace conflict with `PyCrypto`.
