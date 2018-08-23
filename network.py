@@ -34,7 +34,7 @@ from .compat import (
     BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
-from .compat import (TO_UNICODE, urlencode)
+from .compat import (TO_UNICODE, urlencode, urlparse)
 from .compat import proxy_bypass
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
                         ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION)
@@ -277,7 +277,7 @@ class SnowflakeRestful(object):
                 logger.warning("Session cleanup failed: %s", e)
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
-                _no_results=False, timeout=None):
+                _no_results=False, timeout=None, _include_retry_params=False):
         if body is None:
             body = {}
         if self.master_token is None and self.token is None:
@@ -306,7 +306,7 @@ class SnowflakeRestful(object):
             return self._post_request(
                 url, headers, json.dumps(body),
                 token=self.token, _no_results=_no_results,
-                timeout=timeout)
+                timeout=timeout, _include_retry_params=_include_retry_params)
         else:
             return self._get_request(
                 url, headers, token=self.token,
@@ -480,7 +480,8 @@ class SnowflakeRestful(object):
 
     def _post_request(self, url, headers, body, token=None,
                       timeout=None, _no_results=False, no_retry=False,
-                      socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT):
+                      socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+                      _include_retry_params=False):
         full_url = u'{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
@@ -494,7 +495,8 @@ class SnowflakeRestful(object):
 
         ret = self.fetch(u'post', full_url, headers, data=body,
                          timeout=timeout, token=token,
-                         no_retry=no_retry, socket_timeout=socket_timeout)
+                         no_retry=no_retry, socket_timeout=socket_timeout,
+                         _include_retry_params=_include_retry_params)
         logger.debug(
             u'ret[code] = {code}, after post request'.format(
                 code=(ret.get(u'code', u'N/A'))))
@@ -551,10 +553,12 @@ class SnowflakeRestful(object):
                 return min(self._cap, random.randint(self._base, sleep * 3))
 
         class RetryCtx(object):
-            def __init__(self, timeout):
+            def __init__(self, timeout, _include_retry_params=False):
                 self.timeout = timeout
                 self.cnt = 0
                 self.sleeping_time = 1
+                self.start_time = get_time_millis()
+                self._include_retry_params = _include_retry_params
                 # backoff between 1 and 16 seconds
                 self._backoff = DecorrelateJitterBackoff(1, 16)
 
@@ -563,8 +567,25 @@ class SnowflakeRestful(object):
                     self.cnt, self.sleeping_time)
                 return self.sleeping_time
 
+            def add_retry_params(self, full_url):
+                if self._include_retry_params and self.cnt > 0:
+                    suffix = urlencode({
+                        'clientStartTime': self.start_time,
+                        'retryCount': self.cnt
+                    })
+                    if urlparse(full_url).query:
+                        # url has query string already, just add fields
+                        return full_url + '&' + suffix
+                    else:
+                        # url doesn't have query string yet
+                        return full_url + '?' + suffix
+                else:
+                    return full_url
+
+        include_retry_params = kwargs.pop('_include_retry_params', False)
+
         with self._use_requests_session() as session:
-            retry_ctx = RetryCtx(timeout)
+            retry_ctx = RetryCtx(timeout, include_retry_params)
             while True:
                 ret = self._request_exec_wrapper(
                     session, method, full_url, headers, data, retry_ctx,
@@ -585,6 +606,7 @@ class SnowflakeRestful(object):
                      retry_ctx.timeout, retry_ctx.cnt + 1)
 
         start_request_thread = time.time()
+        full_url = retry_ctx.add_retry_params(full_url)
         try:
             return_object = self._request_exec(
                 session=session,
@@ -625,9 +647,9 @@ class SnowflakeRestful(object):
                 retry_ctx.cnt + 1,
                 sleeping_time)
             time.sleep(sleeping_time)
+            retry_ctx.cnt += 1
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= sleeping_time
-                retry_ctx.cnt += 1
             return None  # retry
         except Exception as e:
             if not no_retry:
