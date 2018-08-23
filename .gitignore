@@ -95,3 +95,4 @@ ENV/
 generated_version.py
 *coverage.xml
 .idea/
+.pytest_cache/
