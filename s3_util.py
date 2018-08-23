@@ -24,6 +24,7 @@ AMZ_IV = u"x-amz-iv"
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = u'ExpiredToken'
+ADDRESSING_STYLE = u'virtual'  # explicit force to use virtual addressing style
 
 """
 S3 Location: S3 bucket name + path
@@ -60,6 +61,7 @@ class SnowflakeS3Util:
             signature_version=u's3v4',
             s3={
                 'use_accelerate_endpoint': use_accelerate_endpoint,
+                'addressing_style': ADDRESSING_STYLE
             })
         client = boto3.resource(
             u's3',
