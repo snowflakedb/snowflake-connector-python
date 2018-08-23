@@ -664,7 +664,8 @@ class SnowflakeConnection(object):
 
         ret = self.rest.request(
             u'/queries/v1/query-request?' + urlencode(url_parameters),
-            data, client=client, _no_results=_no_results)
+            data, client=client, _no_results=_no_results,
+            _include_retry_params=True)
 
         if ret is None:
             ret = {u'data': {}}
