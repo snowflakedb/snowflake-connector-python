@@ -36,7 +36,7 @@ setup(
         'azure-common<2',
         'azure_nspkg<3',
         'azure-storage>0.34.2,<=0.36.0',
-        'boto3>=1.4.4,<1.8.0',
+        'boto3>=1.4.4,<1.9.0',
         'botocore>=1.5.0,<1.11.0',
         'certifi',
         'future',
