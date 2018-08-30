@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.8 (August 30, 2018)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
 - v1.6.7 (August 22, 2018)
 
     - Enforce virtual host URL for PUT and GET.
@@ -16,7 +20,7 @@ Release Notes
     
 - v1.6.6 (August 9, 2018)
 
-    - Replaced `pycryptodome` with `pycryptodomex` to avoid namespace conflict with `PyCrypto`.
+    - Replaced ``pycryptodome`` with ``pycryptodomex`` to avoid namespace conflict with ``PyCrypto``.
     - Fixed hang if the connection is not explicitly closed since 1.6.4.
     - Reauthenticate for externalbrowser while running a query.
     - Fixed remove_comments option for SnowSQL.
