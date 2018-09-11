@@ -50,14 +50,14 @@ class AuthByKeyPair(AuthByPlugin):
             private_key = load_der_private_key(data=self._private_key, password=None, backend=default_backend())
         except Exception as e:
             raise ProgrammingError(
-                msg=u'Failed to load private key: {}\nPleas provide a valid unencrypted rsa private '
+                msg=u'Failed to load private key: {}\nPlease provide a valid unencrypted rsa private '
                     u'key in DER format as bytes object'.format(str(e)),
                 errno=ER_INVALID_PRIVATE_KEY
             )
 
         if not isinstance(private_key, RSAPrivateKey):
             raise ProgrammingError(
-                msg=u'Private key type ({}) not supported.\nPleas provide a valid rsa private '
+                msg=u'Private key type ({}) not supported.\nPlease provide a valid rsa private '
                     u'key in DER format as bytes object'.format(private_key.__class__.__name__),
                 errno=ER_INVALID_PRIVATE_KEY
             )
