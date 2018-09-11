@@ -4,9 +4,9 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 
-from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.compat import PY2
+from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR
 from snowflake.connector.network import (SnowflakeRestful, CLIENT_NAME,
                                          CLIENT_VERSION)
 
@@ -30,7 +30,7 @@ def mock_webserver(target_instance, application, port):
     target_instance._webserver_status = True
 
 
-def test_auth_webbrowser():
+def test_auth_webbrowser_get():
     """
     Authentication by WebBrowser positive test case
     """
@@ -48,8 +48,48 @@ def test_auth_webbrowser():
 
     mock_socket_client = MagicMock()
     mock_socket_client.recv.return_value = ('\r\n'.join([
-        u"GET /?token=MOCK_TOKEN HTTP/1.1",
+        u"GET /?token={0}&confirm=true HTTP/1.1".format(ref_token),
         u"User-Agent: snowflake-agent"
+    ])).encode('utf-8')
+    mock_socket_instance.accept.return_value = (mock_socket_client, None)
+    mock_socket = Mock(return_value=mock_socket_instance)
+
+    auth = AuthByWebBrowser(
+        rest, APPLICATION,
+        webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket)
+    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
+    assert not rest._connection.errorhandler.called  # no error
+    assert auth.assertion_content == ref_token
+    body = {u'data': {}}
+    auth.update_body(body)
+    assert body[u'data'][u'TOKEN'] == ref_token
+    assert body[u'data'][u'PROOF_KEY'] == REF_PROOF_KEY
+    assert body[u'data'][u'AUTHENTICATOR'] == EXTERNAL_BROWSER_AUTHENTICATOR
+
+
+def test_auth_webbrowser_post():
+    """
+    Authentication by WebBrowser positive test case with POST
+    """
+    ref_token = "MOCK_TOKEN"
+
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
+
+    # mock socket
+    mock_socket_instance = MagicMock()
+    mock_socket_instance.getsockname.return_value = [None, 12345]
+
+    mock_socket_client = MagicMock()
+    mock_socket_client.recv.return_value = ('\r\n'.join([
+        u"POST / HTTP/1.1",
+        u"User-Agent: snowflake-agent",
+        u"Host: localhost:12345",
+        u"",
+        u"token={0}&confirm=true".format(ref_token)
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)
