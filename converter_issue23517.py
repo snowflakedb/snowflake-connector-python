@@ -21,7 +21,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
     def __init__(self, **kwargs):
         super(SnowflakeConverterIssue23517, self).__init__(**kwargs)
-        logger.info('initialized')
+        logger.debug('initialized')
 
     def _TIMESTAMP_TZ_to_python(self, ctx):
         """

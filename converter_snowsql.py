@@ -35,7 +35,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     def __init__(self, **kwargs):
         super(SnowflakeConverterSnowSQL, self).__init__(
             use_sfbinaryformat=True)
-        logger.info('initialized')
+        logger.debug('initialized')
 
     def _get_format(self, type_name):
         """

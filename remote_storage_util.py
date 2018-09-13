@@ -78,12 +78,13 @@ class SnowflakeRemoteStorageUtil(object):
             return
         elif file_header and meta[u'result_status'] == ResultStatus.UPLOADED and \
                 not meta.get(u'overwrite'):
-            logger.info(
-                u'file already exists, checking digest: location="%s", file_name="%s"', meta[u'stage_info'][u'location'], meta[u'dst_file_name'])
+            logger.debug(
+                u'file already exists, checking digest: location="%s", file_name="%s"',
+                meta[u'stage_info'][u'location'], meta[u'dst_file_name'])
             sfc_digest = file_header.digest
             if sfc_digest == meta[SHA256_DIGEST]:
-                logger.info(u'file digest matched: digest=%s',
-                            sfc_digest)
+                logger.debug(u'file digest matched: digest=%s',
+                             sfc_digest)
                 meta[u'dst_file_size'] = 0
                 meta[u'error_details'] = \
                     (u'File with the same destination name '
@@ -91,9 +92,8 @@ class SnowflakeRemoteStorageUtil(object):
                 meta[u'result_status'] = ResultStatus.SKIPPED
                 return
             else:
-                logger.info(
-                    (u"file digest didn't match: "
-                     u"digest_s3=%s, digest_local=%s"),
+                logger.debug(
+                    u"file digest didn't match: digest_s3=%s, digest_local=%s",
                     sfc_digest, meta[SHA256_DIGEST])
 
         logger.debug(u'putting a file: %s, %s', meta[u'stage_info'][u'location'], meta[u'dst_file_name'])
@@ -115,7 +115,7 @@ class SnowflakeRemoteStorageUtil(object):
                 return
             elif(meta[u'result_status'] == ResultStatus.NEED_RETRY):
                 last_err = meta[u'last_error']
-                logger.info(
+                logger.debug(
                     'Failed to upload a file: %s, err: %s. Retrying with '
                     'max concurrency: %s',
                     data_file, last_err, max_concurrency)
@@ -130,7 +130,7 @@ class SnowflakeRemoteStorageUtil(object):
                 max_concurrency = max(DEFAULT_CONCURRENCY, max_concurrency)
                 meta['last_max_concurrency'] = max_concurrency
 
-                logger.info(
+                logger.debug(
                     'Failed to upload a file: %s, err: %s. Retrying with '
                     'max concurrency: %s',
                     data_file, last_err, max_concurrency)

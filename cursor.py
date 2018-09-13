@@ -64,6 +64,8 @@ class SnowflakeCursor(object):
         u(r'alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;'),
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
+    LOG_MAX_QUERY_LENGTH = 80
+
     def __init__(self, connection):
         self._connection = connection
 
@@ -462,10 +464,6 @@ class SnowflakeCursor(object):
             processed_params = self._connection._process_params_qmarks(
                 params, self)
 
-        if logger.getEffectiveLevel() <= logging.DEBUG:
-            logger.debug(
-                u'query: [%s]',
-                u' '.join(line.strip() for line in query.split(u'\n')))
         m = DESC_TABLE_RE.match(query)
         if m:
             query1 = u'describe table {0}'.format(m.group(1))
@@ -477,6 +475,9 @@ class SnowflakeCursor(object):
                 )
             query = query1
 
+        if logger.getEffectiveLevel() <= logging.INFO:
+            logger.info(
+                u'query: [%s]', self._format_query_for_log(query))
         ret = self._execute_helper(
             query,
             timeout=timeout,
@@ -502,6 +503,7 @@ class SnowflakeCursor(object):
                 time_consume_first_result)
         logger.debug('sfqid: %s', self.sfqid)
 
+        logger.info('query execution done')
         if ret[u'success']:
             logger.debug(u'SUCCESS')
             data = ret[u'data']
@@ -550,6 +552,11 @@ class SnowflakeCursor(object):
                                        ProgrammingError,
                                        errvalue)
         return self
+
+    def _format_query_for_log(self, query):
+        ret = u' '.join(line.strip() for line in query.split(u'\n'))
+        return (ret if len(ret) < SnowflakeCursor.LOG_MAX_QUERY_LENGTH
+                else ret[0:SnowflakeCursor.LOG_MAX_QUERY_LENGTH] + '...')
 
     def _is_dml(self, data):
         return u'statementTypeId' in data \
@@ -666,7 +673,7 @@ class SnowflakeCursor(object):
         u"""
         Executes a command/query with the given set of parameters sequentially.
         """
-        logger.info(u'executing many SQLs/commands')
+        logger.debug(u'executing many SQLs/commands')
         command = command.strip(u' \t\n\r') if command else None
 
         if len(seqparams) == 0:
@@ -778,6 +785,7 @@ class SnowflakeCursor(object):
             return None
         finally:
             if is_done and self._first_chunk_time:
+                logger.info("fetching data done")
                 time_consume_last_result = get_time_millis() - self._first_chunk_time
                 self._log_telemetry_job_data(
                     TelemetryField.TIME_CONSUME_LAST_RESULT,
@@ -825,21 +833,21 @@ class SnowflakeCursor(object):
         u"""
         Not supporeted
         """
-        logger.info(u'nop')
+        logger.debug(u'nop')
         return None
 
     def setinputsizes(self, _):
         u"""
         Not supported
         """
-        logger.info(u'nop')
+        logger.debug(u'nop')
 
     def setoutputsize(self, _, column=None):
         u"""
         Not supported
         """
         del column
-        logger.info(u'nop')
+        logger.debug(u'nop')
 
     def scroll(self, value, mode=u'relative'):
         Error.errorhandler_wrapper(

@@ -60,7 +60,7 @@ class AuthByWebBrowser(AuthByPlugin):
         """
         Web Browser based Authentication.
         """
-        logger.info(u'authenticating by Web Browser')
+        logger.debug(u'authenticating by Web Browser')
 
         # ignore password. user is still needed by GS to verify
         # the assertion.

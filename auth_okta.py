@@ -96,7 +96,7 @@ class AuthByOkta(AuthByPlugin):
             preventing a SAML assertion issued to one SP from being sent to
             another SP.
         """
-        logger.info(u'authenticating by SAML')
+        logger.debug(u'authenticating by SAML')
         headers, sso_url, token_url = self._step1(account, user, authenticator)
         self._step2(authenticator, sso_url, token_url)
         one_time_token = self._step3(headers, token_url, user, password)

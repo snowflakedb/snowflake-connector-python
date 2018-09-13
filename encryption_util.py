@@ -146,7 +146,7 @@ class SnowflakeEncryptionUtil(object):
             prefix=os.path.basename(in_filename) + "#")
         total_file_size = 0
         prev_chunk = None
-        logger.info(u'encrypted file: %s, tmp file: %s',
+        logger.debug(u'encrypted file: %s, tmp file: %s',
                     in_filename, temp_output_file)
         with open(in_filename, u'rb') as infile:
             with os.fdopen(temp_output_fd, u'wb') as outfile:

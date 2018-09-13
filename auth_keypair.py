@@ -86,7 +86,7 @@ class AuthByKeyPair(AuthByPlugin):
         sha256hash.update(public_key_der)
 
         public_key_fp = 'SHA256:' + base64.b64encode(sha256hash.digest()).decode('utf-8')
-        logger.info("Public key fingerprint is %s", public_key_fp)
+        logger.debug("Public key fingerprint is %s", public_key_fp)
 
         return public_key_fp
 
