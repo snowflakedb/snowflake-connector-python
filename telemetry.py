@@ -58,7 +58,7 @@ class TelemetryClient(object):
             raise Exception(
                 "Attempted to add log when TelemetryClient is closed")
         elif not self._enabled:
-            logger.info("TelemetryClient disabled. Ignoring log.")
+            logger.debug("TelemetryClient disabled. Ignoring log.")
             return
 
         with self._lock:
@@ -78,7 +78,7 @@ class TelemetryClient(object):
             raise Exception(
                 "Attempted to send batch when TelemetryClient is closed")
         elif not self._enabled:
-            logger.info("TelemetryClient disabled. Not sending logs.")
+            logger.debug("TelemetryClient disabled. Not sending logs.")
             return
 
         with self._lock:
@@ -86,11 +86,11 @@ class TelemetryClient(object):
             self._log_batch = []
 
         if not to_send:
-            logger.info("Nothing to send to telemetry.")
+            logger.debug("Nothing to send to telemetry.")
             return
 
         body = {'logs': [x.to_dict() for x in to_send]}
-        logger.info("Sending %d logs to telemetry.", len(body))
+        logger.debug("Sending %d logs to telemetry.", len(body))
         try:
             ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
                                      method='post', client=None, timeout=5)
@@ -100,17 +100,17 @@ class TelemetryClient(object):
                     "Disabling telemetry.", str(ret))
                 self._enabled = False
             else:
-                logger.info("Successfully uploading metrics to telemetry.")
+                logger.debug("Successfully uploading metrics to telemetry.")
         except Exception:
             self._enabled = False
-            logger.info("Failed to upload metrics to telemetry.", exc_info=True)
+            logger.debug("Failed to upload metrics to telemetry.", exc_info=True)
 
     def is_closed(self):
         return self._is_closed
 
     def close(self):
         if not self._is_closed:
-            logger.info("Closing telemetry client.")
+            logger.debug("Closing telemetry client.")
             self.send_batch()
             self._is_closed = True
 

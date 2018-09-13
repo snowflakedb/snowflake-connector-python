@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.9 (September 13, 2018)
+
+    - Changed most INFO logs to DEBUG. Added INFO for key operations.
+    - Fixed the URL query parser to get multiple values.
+
 - v1.6.8 (August 30, 2018)
 
     - Updated ``boto3`` and ``botocore`` version dependeny.

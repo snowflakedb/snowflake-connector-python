@@ -505,7 +505,7 @@ def lock_temporary_credential_file():
         mkdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
         return True
     except OSError:
-        logger.info("Temporary cache file lock already exists. Other "
+        logger.debug("Temporary cache file lock already exists. Other "
                     "process may be updating the temporary ")
         return False
 

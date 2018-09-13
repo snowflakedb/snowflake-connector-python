@@ -345,6 +345,7 @@ class SnowflakeConnection(object):
                 return
 
             # close telemetry first, since it needs rest to send remaining data
+            logger.info('closed')
             self._telemetry.close()
             self.rest.delete_session()
             self.rest.close()
@@ -384,8 +385,8 @@ class SnowflakeConnection(object):
                 "ALTER SESSION SET autocommit={0}".format(mode))
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
-                logger.info(u"Autocommit feature is not enabled for this "
-                            u"connection. Ignored")
+                logger.debug(u"Autocommit feature is not enabled for this "
+                             u"connection. Ignored")
             else:
                 raise e
 

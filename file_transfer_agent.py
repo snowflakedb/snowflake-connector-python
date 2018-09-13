@@ -324,13 +324,13 @@ class SnowflakeFileTransferAgent(object):
         """
         logger = getLogger(__name__)
 
-        logger.info(u"uploading file=%s", meta[u'src_file_name'])
+        logger.debug(u"uploading file=%s", meta[u'src_file_name'])
         meta[u'real_src_file_name'] = meta[u'src_file_name']
         tmp_dir = tempfile.mkdtemp()
         meta[u'tmp_dir'] = tmp_dir
         try:
             if meta[u'require_compress']:
-                logger.info(u'compressing file=%s', meta[u'src_file_name'])
+                logger.debug(u'compressing file=%s', meta[u'src_file_name'])
                 meta[u'real_src_file_name'], upload_size = \
                     SnowflakeFileUtil.compress_file_with_gzip(
                         meta[u'src_file_name'], tmp_dir)
@@ -341,11 +341,11 @@ class SnowflakeFileTransferAgent(object):
                     meta[u'real_src_file_name'])
             meta[SHA256_DIGEST] = sha256_digest
             meta[u'upload_size'] = upload_size
-            logger.info(u'really uploading data')
+            logger.debug(u'really uploading data')
             storage_client = SnowflakeFileTransferAgent.get_storage_client(
                 meta[u'stage_location_type'])
             storage_client.upload_one_file_with_retry(meta)
-            logger.info(
+            logger.debug(
                 u'done: status=%s, file=%s, real file=%s',
                 meta[u'result_status'],
                 meta[u'src_file_name'],
@@ -475,7 +475,7 @@ class SnowflakeFileTransferAgent(object):
 
     def renew_expired_aws_token(self):
         logger = getLogger(__name__)
-        logger.info(u'renewing expired aws token')
+        logger.debug(u'renewing expired aws token')
         ret = self._cursor._execute_helper(
             self._command)  # rerun the command to get the credential
         stage_info = ret[u'data'][u'stageInfo']
@@ -696,7 +696,7 @@ class SnowflakeFileTransferAgent(object):
                 })
 
     def _init_file_metadata(self):
-        logger.info(u"command type: %s", self._command_type)
+        logger.debug(u"command type: %s", self._command_type)
         self._file_metadata = {}
         if self._command_type == CMD_TYPE_UPLOAD:
             if len(self._src_files) == 0:
@@ -810,13 +810,13 @@ class SnowflakeFileTransferAgent(object):
                         encoding = 'zstd'
 
                 if encoding is not None:
-                    logger.info(u'detected the encoding %s: file=%s',
-                                encoding, file_name)
+                    logger.debug(u'detected the encoding %s: file=%s',
+                                 encoding, file_name)
                     current_file_compression_type = \
                         FileCompressionType.lookupByMimeSubType(encoding)
                 else:
-                    logger.info(u'no file encoding was detected: file=%s',
-                                file_name)
+                    logger.debug(u'no file encoding was detected: file=%s',
+                                 file_name)
 
                 if current_file_compression_type is not None and not \
                         current_file_compression_type[u'is_supported']:
