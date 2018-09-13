@@ -215,22 +215,22 @@ def check_ocsp_response_cache_lock_dir(filename):
             ts_lock_dir = _file_timestamp(lock_dir)
             if ts_lock_dir < current_time - 60:
                 _unlock_cache_file(lock_dir)
-                logger.info(
+                logger.debug(
                     "The lock directory is older than 60 seconds. "
                     "Deleted the lock directory and ignoring the cache: %s",
                     lock_dir
                 )
             else:
-                logger.info(
+                logger.debug(
                     'The lock directory exists. Other process may be updating '
                     'the cache file: %s, %s', filename, lock_dir)
         else:
             os.unlink(filename)
-            logger.info(
+            logger.debug(
                 "The cache is older than 1 day. "
                 "Deleted the cache file: %s", filename)
     except Exception as e:
-        logger.info(
+        logger.debug(
             "Failed to check OCSP response cache file. No worry. It will "
             "validate with OCSP server: file: %s, lock directory: %s, error: "
             "%s", filename, lock_dir, e)
@@ -247,7 +247,7 @@ def read_ocsp_response_cache_file(filename, ocsp_validation_cache):
         logger.debug("Read OCSP response cache file: %s, count=%s",
                      filename, len(OCSP_VALIDATION_CACHE))
     else:
-        logger.info(
+        logger.debug(
             "Failed to locate OCSP response cache file. "
             "No worry. It will validate with OCSP server: %s",
             filename
@@ -626,12 +626,12 @@ def update_ocsp_response_cache_file(ocsp_response_cache_uri):
                     _unlock_cache_file(lock_dir)
                     lock_dir = None
             else:
-                logger.info(
+                logger.debug(
                     "No OCSP response cache file is written, because the "
                     "given URI is not a file: %s. Ignoring...",
                     ocsp_response_cache_uri)
         except Exception as e:
-            logger.info(
+            logger.debug(
                 "Failed to write OCSP response cache "
                 "file. file: %s, error: %s, Ignoring...",
                 ocsp_response_cache_uri, e, exc_info=True)

@@ -476,7 +476,7 @@ def process_ocsp_response(response, ocsp_issuer):
                 'next_update': next_update,
             }
         elif cert_status['revoked'] is not None:
-            logger.info('revoked: %s', cert_status['revoked'])
+            logger.debug('revoked: %s', cert_status['revoked'])
             # revocation
             revocation_time = cert_status['revoked']['revocationTime']
             revocation_reason = cert_status['revoked']['revocationReason']
@@ -486,7 +486,7 @@ def process_ocsp_response(response, ocsp_issuer):
                 'reason': revocation_reason,
             }
         else:
-            logger.info('unknown')
+            logger.debug('unknown')
             single_response_map[hkey] = {
                 'status': 'unknown',
             }
@@ -721,23 +721,23 @@ def check_ocsp_response_cache_lock_file(filename):
             ts_lock_file = file_timestamp(lock_file)
             if ts_lock_file < current_time - 60:
                 os.unlink(lock_file)
-                logger.info(
+                logger.debug(
                     "The lock file is older than 60 seconds. "
                     "Deleted the lock file and ignoring the cache: %s",
                     lock_file
                 )
             else:
-                logger.info(
+                logger.debug(
                     'The lock file exists. Other process may be updating the '
                     'cache file: %s, %s', filename, lock_file)
         else:
             os.unlink(filename)
-            logger.info(
+            logger.debug(
                 "The cache is older than 1 day. "
                 "Deleted the cache file: %s", filename
             )
     except Exception as e:
-        logger.info(
+        logger.debug(
             "Failed to check OCSP response cache file. No worry. It will "
             "validate with OCSP server: file: %s, lock file: %s, error: %s",
             filename, lock_file, e
@@ -756,7 +756,7 @@ def read_ocsp_response_cache_file(filename, ocsp_validation_cache):
         logger.debug("Read OCSP response cache file: %s, count=%s",
                      filename, len(OCSP_VALIDATION_CACHE))
     else:
-        logger.info(
+        logger.debug(
             "Failed to locate OCSP response cache file. "
             "No worry. It will validate with OCSP server: %s",
             filename
@@ -803,12 +803,12 @@ def update_ocsp_response_cache_file(ocsp_response_cache_uri):
                         os.unlink(lock_file)
                         lock_file = None
             else:
-                logger.info(
+                logger.debug(
                     "No OCSP response cache file is written, because the "
                     "given URI is not a file: %s. Ignoring...",
                     ocsp_response_cache_uri)
         except Exception as e:
-            logger.info(
+            logger.debug(
                 "Failed to write OCSP response cache "
                 "file. file: %s, error: %s, Ignoring...",
                 ocsp_response_cache_uri, e, exc_info=True)

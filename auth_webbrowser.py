@@ -9,7 +9,7 @@ import socket
 import webbrowser
 
 from .auth import Auth, AuthByPlugin
-from .compat import (unquote)
+from .compat import (urlparse, parse_qs)
 from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
 from .network import (
     CONTENT_TYPE_APPLICATION_JSON,
@@ -60,7 +60,7 @@ class AuthByWebBrowser(AuthByPlugin):
         """
         Web Browser based Authentication.
         """
-        logger.info(u'authenticating by Web Browser')
+        logger.debug(u'authenticating by Web Browser')
 
         # ignore password. user is still needed by GS to verify
         # the assertion.
@@ -105,26 +105,9 @@ class AuthByWebBrowser(AuthByPlugin):
         try:
             # Receive the data in small chunks and retransmit it
             data = socket_client.recv(BUF_SIZE).decode('utf-8').split("\r\n")
-            target_lines = \
-                [line for line in data if line.startswith("GET ")]
-            if len(target_lines) < 1:
-                self.handle_failure({
-                    u'code': ER_IDP_CONNECTION_ERROR,
-                    u'message': u"Invalid HTTP request from web browser. Idp "
-                                u"authentication could have failed."
-                })
-                return  # required for test case
-            target_line = target_lines[0]
+            if not self._process_get(data) and not self._process_post(data):
+                return  # error
 
-            user_agent = [line for line in data if line.lower().startswith(
-                'user-agent')]
-            if len(user_agent) > 0:
-                logger.debug(user_agent[0])
-            else:
-                logger.debug("No User-Agent")
-
-            _, url, _ = target_line.split()
-            self._token = unquote(url[len('/?token='):])
             msg = """
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>SAML Response for Snowflake</title></head>
@@ -143,6 +126,43 @@ You can close this window now and go back where you started from.
         finally:
             socket_client.shutdown(socket.SHUT_RDWR)
             socket_client.close()
+
+    def _process_get(self, data):
+        for line in data:
+            if line.startswith("GET "):
+                target_line = line
+                break
+        else:
+            return False
+
+        self._get_user_agent(data)
+        _, url, _ = target_line.split()
+        self._token = parse_qs(urlparse(url).query)['token'][0]
+        return True
+
+    def _process_post(self, data):
+        for line in data:
+            if line.startswith("POST "):
+                break
+        else:
+            self.handle_failure({
+                u'code': ER_IDP_CONNECTION_ERROR,
+                u'message': u"Invalid HTTP request from web browser. Idp "
+                            u"authentication could have failed."
+            })
+            return False
+
+        self._get_user_agent(data)
+        self._token = parse_qs(data[-1])['token'][0]
+        return True
+
+    def _get_user_agent(self, data):
+        for line in data:
+            if line.lower().startswith('user-agent'):
+                logger.debug(line)
+                break
+        else:
+            logger.debug("No User-Agent")
 
     def _get_sso_url(self, account, authenticator, callback_port, user):
         """
