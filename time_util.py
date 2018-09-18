@@ -15,7 +15,7 @@ class HourlyTimer(Timer):
     def __init__(self, function, args=None, kwargs={}):
         super(HourlyTimer, self).__init__(
             self, function, args=args, kwargs=kwargs)
-        self.interval = 60.0 * 2  # one hour
+        self.interval = 60.0 * 60  # one hour
 
     def run(self):
         while not self.finished.is_set():
