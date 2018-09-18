@@ -45,6 +45,7 @@ if PY2:
     PKCS5_OFFSET = lambda v: ord(v[-1])
     IS_BINARY = lambda v: isinstance(v, bytearray)
 
+    METHOD_NOT_ALLOWED = httplib.METHOD_NOT_ALLOWED
     BAD_GATEWAY = httplib.BAD_GATEWAY
     BAD_REQUEST = httplib.BAD_REQUEST
     REQUEST_TIMEOUT = httplib.REQUEST_TIMEOUT
@@ -86,6 +87,7 @@ else:
     PKCS5_OFFSET = lambda v: v[-1]
     IS_BINARY = lambda v: isinstance(v, (bytes, bytearray))
 
+    METHOD_NOT_ALLOWED = http.client.METHOD_NOT_ALLOWED
     BAD_GATEWAY = http.client.BAD_GATEWAY
     BAD_REQUEST = http.client.BAD_REQUEST
     REQUEST_TIMEOUT = http.client.REQUEST_TIMEOUT

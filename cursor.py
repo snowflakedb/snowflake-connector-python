@@ -883,13 +883,10 @@ class SnowflakeCursor(object):
 
     def __cancel_query(self, query):
         if self._sequence_counter >= 0 and not self.is_closed():
-            logger.debug(u'canceled : %s, %s',
-                         query, self._sequence_counter)
+            logger.debug(u'canceled. %s, request_id: %s',
+                         query, self._request_id)
             with self._lock_canceling:
-                self._connection._cancel_query(
-                    query,
-                    self._sequence_counter,
-                    self._request_id)
+                self._connection._cancel_query(query, self._request_id)
 
     def _row_to_python(self, row):
         """
