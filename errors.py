@@ -239,6 +239,17 @@ class BadGatewayError(Error):
             sfqid=kwargs.get('sfqid'))
 
 
+class MethodNotAllowed(Error):
+    u"""Exception for 405 HTTP error for retry"""
+
+    def __init__(self, **kwargs):
+        Error.__init__(
+            self, msg=kwargs.get('msg') or u'HTTP 405: Method not allowed',
+            errno=kwargs.get('errno'),
+            sqlstate=kwargs.get('sqlstate'),
+            sfqid=kwargs.get('sfqid'))
+
+
 class OtherHTTPRetryableError(Error):
     """
     Exception for other HTTP error for retry

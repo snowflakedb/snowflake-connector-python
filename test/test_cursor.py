@@ -518,25 +518,13 @@ def test_timeout_query(conn_cnx):
     """Timeout
     """
     with conn_cnx() as cnx:
+        cnx.cursor().execute("select 1")
         c = cnx.cursor()
         try:
             c.execute(
                 'select seq8() as c1 '
-                'from table(generator(rowCount => 100000001))',
-                timeout=1)
-            raise Exception("Must be canceled")
-        except BASE_EXCEPTION_CLASS as err:
-            assert isinstance(err, errors.ProgrammingError), \
-                "Programming Error Exception"
-            assert err.errno == 604, "Invalid error code"
-        finally:
-            c.close()
-        c = cnx.cursor()
-        try:
-            c.execute(
-                'select seq8() as c1 '
-                'from table(generator(rowCount => 100000002))',
-                timeout=1)
+                'from table(generator(timeLimit => 60))',
+                timeout=5)
             raise Exception("Must be canceled")
         except BASE_EXCEPTION_CLASS as err:
             assert isinstance(err, errors.ProgrammingError), \
@@ -791,17 +779,6 @@ def test_execute_after_close(conn_testaccount):
     conn_testaccount.close()
     with pytest.raises(errors.Error):
         cursor.execute('show tables')
-
-
-def test_cancel_query(conn_cnx):
-    with conn_cnx() as cnx:
-        # run one query first to set the client API version to V2
-        sql = "select count(*) from table(generator(timelimit=>1))"
-        cnx.cursor().execute(sql)
-        # cancel the query.
-        sql = "select count(*) from table(generator(timelimit=>1000))"
-        with pytest.raises(errors.ProgrammingError):
-            cnx.cursor().execute(sql, timeout=1)
 
 
 def test_multi_table_insert(conn, db_parameters):
