@@ -31,7 +31,7 @@ from . import proxy
 from . import ssl_wrap_socket
 from .compat import (
     PY2,
-    BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
+    METHOD_NOT_ALLOWED, BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
 from .compat import (TO_UNICODE, urlencode, urlparse)
@@ -41,7 +41,7 @@ from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
 from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      GatewayTimeoutError, ServiceUnavailableError,
                      InterfaceError, InternalServerError, ForbiddenError,
-                     BadGatewayError, BadRequest,
+                     BadGatewayError, BadRequest, MethodNotAllowed,
                      OtherHTTPRetryableError)
 from .gzip_decoder import decompress_raw_data
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
@@ -117,6 +117,7 @@ STATUS_TO_EXCEPTION = {
     GATEWAY_TIMEOUT: GatewayTimeoutError,
     BAD_REQUEST: BadRequest,
     BAD_GATEWAY: BadGatewayError,
+    METHOD_NOT_ALLOWED: MethodNotAllowed,
 }
 
 DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
@@ -134,6 +135,7 @@ def is_retryable_http_code(code):
     return 500 <= code < 600 or code in (
         BAD_REQUEST,  # 400
         FORBIDDEN,  # 403
+        METHOD_NOT_ALLOWED,  # 405
         REQUEST_TIMEOUT,  # 408
     )
 

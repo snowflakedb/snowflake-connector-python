@@ -855,13 +855,12 @@ class SnowflakeConnection(object):
             Error.errorhandler_wrapper(
                 self, cursor, ProgrammingError, errorvalue)
 
-    def _cancel_query(self, sql, sequence_counter, request_id):
+    def _cancel_query(self, sql, request_id):
         u"""
-        Cancels the query by the sequence counter. The sequence counter
-        is used to identify the query submitted by the client.
+        Cancels the query by the query and requestId
         """
-        logger.debug(u'_cancel_query sql=[%s], sequence_id=[%s]', sql,
-                     sequence_counter)
+        logger.debug(u'_cancel_query sql=[%s], request_id=[%s]', sql,
+                     request_id)
         url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
 
         return self.rest.request(
