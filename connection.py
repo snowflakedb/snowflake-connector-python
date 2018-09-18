@@ -909,8 +909,7 @@ class SnowflakeConnection(object):
     def add_heartbeat(self):
         """Add an hourly heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
-            self.heartbeat_thread = HourlyTimer(
-                self.heartbeat_tick)
+            self.heartbeat_thread = HourlyTimer(self.heartbeat_tick)
             self.heartbeat_thread.start()
 
     def cancel_heartbeat(self):
@@ -923,8 +922,7 @@ class SnowflakeConnection(object):
     def heartbeat_tick(self):
         """Execute a hearbeat query if connection isn't closed yet."""
         if not self.is_closed():
-            cursor = self.cursor()
-            cursor.execute('SELECT 1;')
+            self.execute_string("SELECT 1;")
 
     def __enter__(self):
         u"""
