@@ -98,7 +98,32 @@ def test_with_config(db_parameters):
     }
     cnx = snowflake.connector.connect(**config)
     assert cnx, 'invalid cnx'
+
+    assert not cnx.keep_alive  # default is False
+
     cnx.close()
+
+
+def test_keep_alive_true(db_parameters):
+    """
+    Creates a connection with client_session_keep_alive parameter.
+    """
+    config = {
+        'user': db_parameters['user'],
+        'password': db_parameters['password'],
+        'host': db_parameters['host'],
+        'port': db_parameters['port'],
+        'account': db_parameters['account'],
+        'schema': db_parameters['schema'],
+        'database': db_parameters['database'],
+        'protocol': db_parameters['protocol'],
+        'timezone': 'UTC',
+        'client_session_keep_alive': True
+    }
+    cnx = snowflake.connector.connect(**config)
+    assert cnx.keep_alive
+    cnx.close()
+
 
 
 def test_bad_db(db_parameters):
