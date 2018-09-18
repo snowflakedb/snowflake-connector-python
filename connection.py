@@ -48,7 +48,7 @@ from .network import (
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryClient)
-from .time_util import get_time_millis
+from .time_util import HourlyTimer, get_time_millis
 from .util_text import split_statements, construct_hostname
 
 SUPPORTED_PARAMSTYLES = {
@@ -93,6 +93,7 @@ DEFAULT_CONFIGURATION = {
     u'inject_client_pause': 0,  # snowflake internal
     u'session_parameters': {},  # snowflake session parameters
     u'autocommit': None,  # snowflake
+    u'client_session_keep_alive': False,  # snowflake
     u'numpy': False,  # snowflake
     u'ocsp_response_cache_filename': None,  # snowflake internal
     u'converter_class':
@@ -139,6 +140,8 @@ class SnowflakeConnection(object):
         self._rest = None
         for name, value in DEFAULT_CONFIGURATION.items():
             setattr(self, u'_' + name, value)
+
+        self.heartbeat_thread = None
 
         self.converter = None
         self.connect(**kwargs)
@@ -275,6 +278,13 @@ class SnowflakeConnection(object):
                                              None else None
 
     @property
+    def keep_alive(self):
+        u"""
+        Keep connection alive by issuing a hourly heartbeat (SELECT 1;).
+        """
+        return self._client_session_keep_alive
+
+    @property
     def rest(self):
         u"""
         Snowflake REST API object. Internal use only. Maybe removed in the
@@ -351,6 +361,8 @@ class SnowflakeConnection(object):
         try:
             if not self.rest:
                 return
+
+            self.cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
@@ -541,6 +553,9 @@ class SnowflakeConnection(object):
             self._set_current_objects()
 
         self._password = None  # ensure password won't persist
+
+        if self.keep_alive:
+            self.add_heartbeat()
 
     def __config(self, **kwargs):
         u"""
@@ -904,6 +919,26 @@ class SnowflakeConnection(object):
         Sets whether to use telemetry
         """
         self._telemetry_enabled = enabled
+
+    def add_heartbeat(self):
+        """Add an hourly heartbeat query in order to keep connection alive."""
+        if not self.heartbeat_thread:
+            self.heartbeat_thread = HourlyTimer(
+                self.heartbeat_tick)
+            self.heartbeat_thread.start()
+
+    def cancel_heartbeat(self):
+        """Cancel a heartbeat thread."""
+        if self.heartbeat_thread:
+            self.heartbeat_thread.cancel()
+            self.heartbeat_thread.join()
+            self.heartbeat_thread = None
+
+    def heartbeat_tick(self):
+        """Execute a hearbeat query if connection isn't closed yet."""
+        if not self.is_closed():
+            cursor = self.cursor()
+            cursor.execute('SELECT 1;')
 
     def __enter__(self):
         u"""
