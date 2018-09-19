@@ -795,7 +795,7 @@ class SnowflakeConnection(object):
                 if isinstance(v, list):
                     vv = [
                         self.converter.to_snowflake_bindings(
-                            snowflake_type, v0) for v0 in v]
+                            self.converter.snowflake_type(v0), v0) for v0 in v]
                 else:
                     vv = self.converter.to_snowflake_bindings(
                         snowflake_type, v)
