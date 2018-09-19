@@ -497,3 +497,16 @@ VALUES ( /*TIMEOUT*/ 10);"""
         assert next(itr) == (
             "INSERT INTO foo VALUES (\n\n10);", False
         )
+
+def test_multiline_double_dollar_experssion_with_removed_comments():
+    s = """CREATE FUNCTION mean(a FLOAT, b FLOAT)
+  RETURNS FLOAT LANGUAGE JAVASCRIPT AS $$
+  var c = a + b;
+  return(c / 2);
+  $$;"""
+    with StringIO(_to_unicode(s)) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (
+            "CREATE FUNCTION mean(a FLOAT, b FLOAT)\n"
+            "  RETURNS FLOAT LANGUAGE JAVASCRIPT AS $$\n"
+            "  var c = a + b;\n  return(c / 2);\n  $$;", False)

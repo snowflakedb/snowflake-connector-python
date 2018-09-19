@@ -45,7 +45,7 @@ def split_statements(buf, remove_comments=False):
                         if len(statement) == 1 and statement[0][0] == '':
                             statement = []
                         break
-                    elif not in_comment and in_quote:
+                    elif not in_comment and (in_quote or in_double_dollars):
                         statement.append((line[col0:col], True))
                     elif not remove_comments:
                         statement.append((line[col0:col], False))
