@@ -498,6 +498,7 @@ VALUES ( /*TIMEOUT*/ 10);"""
             "INSERT INTO foo VALUES (\n\n10);", False
         )
 
+
 def test_multiline_double_dollar_experssion_with_removed_comments():
     s = """CREATE FUNCTION mean(a FLOAT, b FLOAT)
   RETURNS FLOAT LANGUAGE JAVASCRIPT AS $$
