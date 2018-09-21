@@ -351,8 +351,9 @@ class Auth(object):
                 ret[u'data'][u'token'], ret[u'data'][u'masterToken'],
                 id_token=ret[u'data'].get(u'idToken'),
                 id_token_password=ret[u'data'].get(u'idTokenPassword'))
-            write_temporary_credential_file(
-                account, user, self._rest.id_token)
+            if self._rest._connection.consent_cache_id_token:
+                write_temporary_credential_file(
+                    account, user, self._rest.id_token)
             if u'sessionId' in ret[u'data']:
                 self._rest._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
