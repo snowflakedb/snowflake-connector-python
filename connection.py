@@ -102,6 +102,7 @@ DEFAULT_CONFIGURATION = {
     u'probe_connection': False,  # snowflake
     u'paramstyle': None,  # standard/snowflake
     u'timezone': None,  # snowflake
+    u'consent_cache_id_token': True,  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -325,6 +326,13 @@ class SnowflakeConnection(object):
         """
         return self._paramstyle in (u'pyformat', u'format')
 
+    @property
+    def consent_cache_id_token(self):
+        """
+        Consented cache ID token
+        """
+        return self._consent_cache_id_token
+
     def connect(self, **kwargs):
         u"""
         Connects to the database
@@ -495,7 +503,9 @@ class SnowflakeConnection(object):
         elif self._authenticator in (
                 EXTERNAL_BROWSER_AUTHENTICATOR,
                 EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR):
-            auth_instance = AuthByWebBrowser(self.rest, self.application)
+            auth_instance = AuthByWebBrowser(
+                self.rest, self.application, protocol=self._protocol,
+            host=self.host, port=self.port)
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
             auth_instance = AuthByKeyPair(self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
@@ -714,7 +724,9 @@ class SnowflakeConnection(object):
         cmd(u"SELECT 1", (), _update_current_object=True)
 
     def _reauthenticate_by_webbrowser(self):
-        auth_instance = AuthByWebBrowser(self.rest, self.application)
+        auth_instance = AuthByWebBrowser(
+            self.rest, self.application, protocol=self._protocol,
+            host=self.host, port=self.port)
         self.__authenticate(auth_instance)
         self._set_current_objects()
         return {u'success': True}
@@ -726,6 +738,9 @@ class SnowflakeConnection(object):
             user=self.user,
             password=self._password,
         )
+        self._consent_cache_id_token = getattr(
+            auth_instance, 'consent_cache_id_token', True)
+
         auth = Auth(self.rest)
         self._session_parameters = auth.authenticate(
             auth_instance=auth_instance,
