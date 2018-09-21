@@ -6,10 +6,11 @@
 import json
 import logging
 import socket
+import time
 import webbrowser
 
 from .auth import Auth, AuthByPlugin
-from .compat import (urlparse, parse_qs)
+from .compat import (urlparse, urlsplit, parse_qs)
 from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
 from .network import (
     CONTENT_TYPE_APPLICATION_JSON,
@@ -32,13 +33,23 @@ class AuthByWebBrowser(AuthByPlugin):
     """
 
     def __init__(self, rest, application,
-                 webbrowser_pkg=None, socket_pkg=None):
+                 webbrowser_pkg=None, socket_pkg=None,
+                 protocol=None, host=None, port=None):
         self._rest = rest
         self._token = None
+        self._consent_cache_id_token = True
         self._application = application
         self._proof_key = None
         self._webbrowser = webbrowser if webbrowser_pkg is None else webbrowser_pkg
         self._socket = socket.socket if socket_pkg is None else socket_pkg
+        self._protocol = protocol
+        self._host = host
+        self._port = port
+        self._origin = None
+
+    @property
+    def consent_cache_id_token(self):
+        return self._consent_cache_id_token
 
     @property
     def assertion_content(self):
@@ -101,13 +112,79 @@ class AuthByWebBrowser(AuthByPlugin):
         """
         Receives SAML token from web browser
         """
-        socket_client, _ = socket_connection.accept()
-        try:
-            # Receive the data in small chunks and retransmit it
-            data = socket_client.recv(BUF_SIZE).decode('utf-8').split("\r\n")
-            if not self._process_get(data) and not self._process_post(data):
-                return  # error
+        while True:
+            socket_client, _ = socket_connection.accept()
+            try:
+                # Receive the data in small chunks and retransmit it
+                data = socket_client.recv(BUF_SIZE).decode('utf-8').split(
+                    "\r\n")
 
+                if not self._process_options(data, socket_client):
+                    self._process_receive_saml_token(data, socket_client)
+                    break
+            finally:
+                socket_client.shutdown(socket.SHUT_RDWR)
+                socket_client.close()
+
+    def _process_options(self, data, socket_client):
+        """
+        Allows JS Ajax access to this endpoint
+        """
+        for line in data:
+            if line.startswith("OPTIONS "):
+                break
+        else:
+            return False
+
+        self._get_user_agent(data)
+        requested_headers, requested_origin = self._check_post_requested(data)
+        if not requested_headers:
+            return False
+
+        if not self._validate_origin(requested_origin):
+            # validate Origin and fail if not match with the server.
+            return False
+
+        self._origin = requested_origin
+        content = [
+            "HTTP/1.1 200 OK",
+            "Date: {0}".format(
+                time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())),
+            "Access-Control-Allow-Methods: POST, GET",
+            "Access-Control-Allow-Headers: {0}".format(requested_headers),
+            "Access-Control-Max-Age: 86400",
+            "Access-Control-Allow-Origin: {0}".format(self._origin),
+            "",
+            "",
+        ]
+        socket_client.sendall('\r\n'.join(content).encode('utf-8'))
+        return True
+
+    def _validate_origin(self, requested_origin):
+        ret = urlsplit(requested_origin)
+        netloc = ret.netloc.split(':')
+        host_got = netloc[0]
+        port_got = netloc[1] if len(netloc) > 1 else (
+            443 if self._protocol == u'https' else 80)
+
+        return ret.scheme == self._protocol \
+               and host_got == self._host and port_got == self._port
+
+    def _process_receive_saml_token(self, data, socket_client):
+        if not self._process_get(data) and not self._process_post(data):
+            return  # error
+
+        content = [
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/html",
+        ]
+        if self._origin:
+            data = {'consent': self._consent_cache_id_token}
+            msg = json.dumps(data)
+            content.append("Access-Control-Allow-Origin: {0}".format(
+                self._origin))
+            content.append("Vary: Accept-Encoding, Origin")
+        else:
             msg = """
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>SAML Response for Snowflake</title></head>
@@ -115,17 +192,30 @@ class AuthByWebBrowser(AuthByPlugin):
 Your identity was confirmed and propagated to Snowflake {0}.
 You can close this window now and go back where you started from.
 </body></html>""".format(self._application)
-            content = [
-                "HTTP/1.0 200 OK",
-                "Content-Type: text/html",
-                "Content-Length: {0}".format(len(msg)),
-                "",
-                msg
-            ]
-            socket_client.sendall('\r\n'.join(content).encode('utf-8'))
-        finally:
-            socket_client.shutdown(socket.SHUT_RDWR)
-            socket_client.close()
+        content.append("Content-Length: {0}".format(len(msg)))
+        content.append("")
+        content.append(msg)
+
+        socket_client.sendall('\r\n'.join(content).encode('utf-8'))
+
+    def _check_post_requested(self, data):
+        request_line = None
+        header_line = None
+        origin_line = None
+        for line in data:
+            if line.startswith("Access-Control-Request-Method:"):
+                request_line = line
+            elif line.startswith("Access-Control-Request-Headers:"):
+                header_line = line
+            elif line.startswith("Origin:"):
+                origin_line = line
+
+        if not request_line or not header_line or not origin_line \
+                or request_line.split(':')[1].strip() != 'POST':
+            return None, None
+
+        return (header_line.split(':')[1].strip(),
+                ':'.join(origin_line.split(':')[1:]).strip())
 
     def _process_get(self, data):
         for line in data:
@@ -153,7 +243,14 @@ You can close this window now and go back where you started from.
             return False
 
         self._get_user_agent(data)
-        self._token = parse_qs(data[-1])['token'][0]
+        try:
+            # parse the response as JSON
+            payload = json.loads(data[-1])
+            self._token = payload.get('token')
+            self._consent_cache_id_token = payload.get('consent', True)
+        except Exception:
+            # key=value form.
+            self._token = parse_qs(data[-1])['token'][0]
         return True
 
     def _get_user_agent(self, data):

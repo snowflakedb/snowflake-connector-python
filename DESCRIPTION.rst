@@ -13,6 +13,7 @@ Release Notes
 
     - Fixed multiline double quote expressions PR #117 (@bensowden)
     - Retry HTTP 405 to mitigate Nginx bug.
+    - Accept consent response for id token cache. WIP.
 
 - v1.6.9 (September 13, 2018)
 
