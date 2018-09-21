@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.10 (September 25, 2018)
+
+    - Fixed multiline double quote expressions PR #117 (@bensowden)
+    - Retry HTTP 405 to mitigate Nginx bug.
+
 - v1.6.9 (September 13, 2018)
 
     - Changed most INFO logs to DEBUG. Added INFO for key operations.
