@@ -89,8 +89,6 @@ def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
             cnx.cursor().execute(
                 "DROP TABLE IF EXISTS {name}".format(
                     name=db_parameters['name']))
-        snowflake.connector.paramstyle = u'pyformat'
-
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute(
@@ -110,7 +108,7 @@ def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
             cnx.cursor().execute(
                 "DROP TABLE IF EXISTS {name}".format(
                     name=db_parameters['name']))
-
+        snowflake.connector.paramstyle = u'pyformat'
     # After changing back to pyformat, binding qmark should fail.
     try:
         with conn_cnx() as cnx:
