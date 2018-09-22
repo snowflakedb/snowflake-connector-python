@@ -12,6 +12,7 @@ Release Notes
 - v1.6.10 (September 25, 2018)
 
     - Fixed multiline double quote expressions PR #117 (@bensowden)
+    - Fixed binding ``datetime`` for TIMESTAMP type in ``qmark`` binding mode. PR #118 (@rhlahuja)
     - Retry HTTP 405 to mitigate Nginx bug.
     - Accept consent response for id token cache. WIP.
 
