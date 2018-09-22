@@ -106,3 +106,35 @@ def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
             cnx.cursor().execute(
                 "DROP TABLE IF EXISTS {name}".format(
                     name=db_parameters['name']))
+
+
+def test_binding_datetime_qmark(conn_cnx, db_parameters):
+    """
+    Ensures datetime can bind
+    """
+    import datetime
+    import snowflake.connector
+    snowflake.connector.paramstyle = u'qmark'
+    try:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(
+                "CREATE OR REPLACE TABLE {name} "
+                "(aa TIMESTAMP_NTZ)".format(
+                    name=db_parameters['name']))
+            days = 2
+            inserts = tuple(
+                [(datetime.datetime(2018, 1, i + 1),) for i in range(days)])
+            cnx.cursor().executemany(
+                "INSERT INTO {name} VALUES(?)".format(
+                    name=db_parameters['name']),
+                inserts)
+            ret = cnx.cursor().execute(
+                "SELECT * FROM {name} ORDER BY 1".format(
+                    name=db_parameters['name'])).fetchall()
+            for i in range(days):
+                assert ret[i][0] == inserts[i][0]
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(
+                "DROP TABLE IF EXISTS {name}".format(
+                    name=db_parameters['name']))
