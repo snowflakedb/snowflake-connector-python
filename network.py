@@ -245,6 +245,11 @@ class SnowflakeRestful(object):
         return self._master_token if hasattr(self, u'_master_token') else None
 
     @property
+    def master_validity_in_seconds(self):
+        return self._master_validity_in_seconds if hasattr(
+            self, u'_master_validity_in_seconds') else None
+
+    @property
     def id_token(self):
         return self._id_token if hasattr(self, u'_id_token') else None
 
@@ -314,8 +319,9 @@ class SnowflakeRestful(object):
                 url, headers, token=self.token,
                 timeout=timeout)
 
-    def update_tokens(self, session_token, master_token, id_token=None,
-                      id_token_password=None):
+    def update_tokens(self, session_token, master_token,
+                      master_validity_in_seconds=None,
+                      id_token=None, id_token_password=None):
         """
         Update session and master tokens and optionally temporary credential
         """
@@ -324,6 +330,7 @@ class SnowflakeRestful(object):
             self._master_token = master_token
             self._id_token = id_token
             self._id_token_password = id_token_password
+            self._master_validity_in_seconds = master_validity_in_seconds
 
     def _renew_session(self):
         """
@@ -381,8 +388,10 @@ class SnowflakeRestful(object):
             self.update_tokens(
                 ret[u'data'][u'sessionToken'],
                 ret[u'data'].get(u'masterToken'),
-                self.id_token,
-                self.id_token_password)
+                master_validity_in_seconds=ret[u'data'].get(
+                    u'masterValidityInSeconds'),
+                id_token=self.id_token,
+                id_token_password=self.id_token_password)
             logger.debug(u'updating session completed')
             ret[UPDATED_BY_ID_TOKEN] = request_type == REQUEST_TYPE_ISSUE
             return ret
@@ -411,6 +420,24 @@ class SnowflakeRestful(object):
                     u'errno': int(errno),
                     u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 })
+
+    def _heartbeat(self):
+        headers = {
+            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
+            u"accept": CONTENT_TYPE_APPLICATION_JSON,
+            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+        }
+        request_id = TO_UNICODE(uuid.uuid4())
+        logger.debug(u'request_id: %s', request_id)
+        url = u'/session/heartbeat?' + urlencode({
+            u'requestId': request_id})
+        ret = self._post_request(
+            url, headers, None,
+            token=self.token,
+            timeout=self._connection.network_timeout)
+        if not ret.get(u'success'):
+            logger.error("Failed to heartbeat. code: %s, url: %s",
+                         ret.get(u'code'), url)
 
     def delete_session(self):
         """
