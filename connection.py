@@ -362,6 +362,9 @@ class SnowflakeConnection(object):
             if not self.rest:
                 return
 
+            # will hang if the application doesn't close the connection and
+            # CLIENT_SESSION_KEEP_ALIVE is set, because the heartbeat runs on
+            # a separate thread.
             self._cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
