@@ -11,6 +11,7 @@ Release Notes
 
 - v1.6.10 (September 25, 2018)
 
+    - Added ``CLIENT_SESSION_KEEP_ALIVE`` support.
     - Fixed multiline double quote expressions PR #117 (@bensowden)
     - Fixed binding ``datetime`` for TIMESTAMP type in ``qmark`` binding mode. PR #118 (@rhlahuja)
     - Retry HTTP 405 to mitigate Nginx bug.
