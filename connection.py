@@ -534,6 +534,9 @@ class SnowflakeConnection(object):
         if self._timezone is not None:
             self._session_parameters['TIMEZONE'] = self._timezone
 
+        if self.client_session_keep_alive:
+            self._session_parameters['CLIENT_SESSION_KEEP_ALIVE'] = True
+
         if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
             self._session_parameters['CLIENT_STORE_TEMPORARY_CREDENTIAL'] = True
