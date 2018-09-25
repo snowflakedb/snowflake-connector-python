@@ -349,6 +349,8 @@ class Auth(object):
                          'NULL')
             self._rest.update_tokens(
                 ret[u'data'][u'token'], ret[u'data'][u'masterToken'],
+                master_validity_in_seconds=ret[u'data'].get(
+                    u'masterValidityInSeconds'),
                 id_token=ret[u'data'].get(u'idToken'),
                 id_token_password=ret[u'data'].get(u'idTokenPassword'))
             if self._rest._connection.consent_cache_id_token:

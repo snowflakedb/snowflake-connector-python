@@ -99,7 +99,7 @@ def test_with_config(db_parameters):
     cnx = snowflake.connector.connect(**config)
     assert cnx, 'invalid cnx'
 
-    assert not cnx.keep_alive  # default is False
+    assert not cnx.client_session_keep_alive  # default is False
 
     cnx.close()
 
@@ -121,7 +121,7 @@ def test_keep_alive_true(db_parameters):
         'client_session_keep_alive': True
     }
     cnx = snowflake.connector.connect(**config)
-    assert cnx.keep_alive
+    assert cnx.client_session_keep_alive
     cnx.close()
 
 
