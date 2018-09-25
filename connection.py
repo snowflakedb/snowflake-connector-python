@@ -48,7 +48,7 @@ from .network import (
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryClient)
-from .time_util import HourlyTimer, get_time_millis
+from .time_util import (HeartBeatTimer, get_time_millis)
 from .util_text import split_statements, construct_hostname
 
 SUPPORTED_PARAMSTYLES = {
@@ -278,7 +278,7 @@ class SnowflakeConnection(object):
                                              None else None
 
     @property
-    def keep_alive(self):
+    def client_session_keep_alive(self):
         u"""
         Keep connection alive by issuing a hourly heartbeat (SELECT 1;).
         """
@@ -362,7 +362,7 @@ class SnowflakeConnection(object):
             if not self.rest:
                 return
 
-            self.cancel_heartbeat()
+            self._cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
@@ -517,7 +517,7 @@ class SnowflakeConnection(object):
                 EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR):
             auth_instance = AuthByWebBrowser(
                 self.rest, self.application, protocol=self._protocol,
-            host=self.host, port=self.port)
+                host=self.host, port=self.port)
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
             auth_instance = AuthByKeyPair(self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
@@ -554,8 +554,8 @@ class SnowflakeConnection(object):
 
         self._password = None  # ensure password won't persist
 
-        if self.keep_alive:
-            self.add_heartbeat()
+        if self.client_session_keep_alive:
+            self._add_heartbeat()
 
     def __config(self, **kwargs):
         u"""
@@ -920,23 +920,28 @@ class SnowflakeConnection(object):
         """
         self._telemetry_enabled = enabled
 
-    def add_heartbeat(self):
+    def _add_heartbeat(self):
         """Add an hourly heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
-            self.heartbeat_thread = HourlyTimer(self.heartbeat_tick)
+            self.heartbeat_thread = HeartBeatTimer(
+                self.rest.master_validity_in_seconds,
+                self._heartbeat_tick)
             self.heartbeat_thread.start()
+            logger.debug("started heartbeat")
 
-    def cancel_heartbeat(self):
+    def _cancel_heartbeat(self):
         """Cancel a heartbeat thread."""
         if self.heartbeat_thread:
             self.heartbeat_thread.cancel()
             self.heartbeat_thread.join()
             self.heartbeat_thread = None
+            logger.debug("stopped heartbeat")
 
-    def heartbeat_tick(self):
+    def _heartbeat_tick(self):
         """Execute a hearbeat query if connection isn't closed yet."""
         if not self.is_closed():
-            self.execute_string("SELECT 1;")
+            logger.debug("heartbeating!")
+            self.rest._heartbeat()
 
     def __enter__(self):
         u"""
