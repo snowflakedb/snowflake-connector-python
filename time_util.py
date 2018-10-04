@@ -20,7 +20,7 @@ class HeartBeatTimer(Timer):
     def __init__(self, master_validity_in_seconds, f):
         interval = master_validity_in_seconds / 4 if \
             master_validity_in_seconds else DEFAULT_HEARTBEAT_INTERVAL
-        Timer.__init__(self, interval, f)
+        super(HeartBeatTimer, self).__init__(interval, f)
 
     def run(self):
         while not self.finished.is_set():
