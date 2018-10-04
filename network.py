@@ -92,6 +92,9 @@ UPDATED_BY_ID_TOKEN = u'updated_by_id_token'
 HEADER_AUTHORIZATION_KEY = u"Authorization"
 HEADER_SNOWFLAKE_TOKEN = u'Snowflake Token="{token}"'
 
+REQUEST_ID = u'requestId'
+REQUEST_GUID = u'request_guid'
+
 SNOWFLAKE_CONNECTOR_VERSION = u'.'.join(TO_UNICODE(v) for v in VERSION[0:3])
 PYTHON_VERSION = u'.'.join(TO_UNICODE(v) for v in sys.version_info[:3])
 OPERATING_SYSTEM = platform.system()
@@ -361,7 +364,7 @@ class SnowflakeRestful(object):
         request_id = TO_UNICODE(uuid.uuid4())
         logger.debug(u'request_id: %s', request_id)
         url = u'/session/token-request?' + urlencode({
-            u'requestId': request_id})
+            REQUEST_ID: request_id})
 
         if request_type == REQUEST_TYPE_ISSUE:
             header_token = self.id_token
@@ -428,7 +431,7 @@ class SnowflakeRestful(object):
         request_id = TO_UNICODE(uuid.uuid4())
         logger.debug(u'request_id: %s', request_id)
         url = u'/session/heartbeat?' + urlencode({
-            u'requestId': request_id})
+            REQUEST_ID: request_id})
         ret = self._post_request(
             url, headers, None,
             token=self.token,
@@ -600,12 +603,8 @@ class SnowflakeRestful(object):
                         'clientStartTime': self.start_time,
                         'retryCount': self.cnt
                     })
-                    if urlparse(full_url).query:
-                        # url has query string already, just add fields
-                        return full_url + '&' + suffix
-                    else:
-                        # url doesn't have query string yet
-                        return full_url + '?' + suffix
+                    sep = '&' if urlparse(full_url).query else '?'
+                    return full_url + sep + suffix
                 else:
                     return full_url
 
@@ -619,6 +618,18 @@ class SnowflakeRestful(object):
                     **kwargs)
                 if ret is not None:
                     return ret
+
+    @staticmethod
+    def add_request_guid(full_url):
+        """
+        Add request_guid parameter for HTTP request tracing
+        """
+        suffix = urlencode({
+            REQUEST_GUID: TO_UNICODE(uuid.uuid4())
+        })
+        sep = '&' if urlparse(full_url).query else '?'
+        # url has query string already, just add fields
+        return full_url + sep + suffix
 
     def _request_exec_wrapper(
             self,
@@ -634,6 +645,7 @@ class SnowflakeRestful(object):
 
         start_request_thread = time.time()
         full_url = retry_ctx.add_retry_params(full_url)
+        full_url = SnowflakeRestful.add_request_guid(full_url)
         try:
             return_object = self._request_exec(
                 session=session,

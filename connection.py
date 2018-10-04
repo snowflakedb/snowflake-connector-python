@@ -42,6 +42,7 @@ from .network import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    REQUEST_ID,
     SnowflakeRestful,
 )
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
@@ -684,7 +685,7 @@ class SnowflakeConnection(object):
                 is_file_transfer
             )
 
-        url_parameters = {u'requestId': request_id}
+        url_parameters = {REQUEST_ID: request_id}
 
         ret = self.rest.request(
             u'/queries/v1/query-request?' + urlencode(url_parameters),
@@ -889,12 +890,12 @@ class SnowflakeConnection(object):
         """
         logger.debug(u'_cancel_query sql=[%s], request_id=[%s]', sql,
                      request_id)
-        url_parameters = {u'requestId': TO_UNICODE(uuid.uuid4())}
+        url_parameters = {REQUEST_ID: TO_UNICODE(uuid.uuid4())}
 
         return self.rest.request(
             u'/queries/v1/abort-request?' + urlencode(url_parameters), {
                 u'sqlText': sql,
-                u'requestId': TO_UNICODE(request_id),
+                REQUEST_ID: TO_UNICODE(request_id),
             })
 
     def _next_sequence_counter(self):
