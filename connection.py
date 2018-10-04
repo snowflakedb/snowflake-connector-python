@@ -40,7 +40,6 @@ from .network import (
     CLIENT_VERSION,
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
-    EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     SnowflakeRestful,
@@ -515,9 +514,7 @@ class SnowflakeConnection(object):
 
         if self._authenticator == DEFAULT_AUTHENTICATOR:
             auth_instance = AuthByDefault(self._password)
-        elif self._authenticator in (
-                EXTERNAL_BROWSER_AUTHENTICATOR,
-                EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR):
+        elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             auth_instance = AuthByWebBrowser(
                 self.rest, self.application, protocol=self._protocol,
                 host=self.host, port=self.port)
@@ -543,11 +540,6 @@ class SnowflakeConnection(object):
         if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
             self._session_parameters['CLIENT_STORE_TEMPORARY_CREDENTIAL'] = True
-        elif self._authenticator == \
-                EXTERNAL_BROWSER_CACHE_DISABLED_AUTHENTICATOR:
-            # disable storing temporary credential in a file
-            self._session_parameters[
-                'CLIENT_STORE_TEMPORARY_CREDENTIAL'] = False
 
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(
