@@ -125,7 +125,6 @@ def test_keep_alive_true(db_parameters):
     cnx.close()
 
 
-
 def test_bad_db(db_parameters):
     """
     Attempts to use a bad DB
@@ -166,7 +165,9 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
-            insecure_mode=True)
+            login_timeout=5,
+            insecure_mode=True
+        )
 
     with pytest.raises(DatabaseError):
         snowflake.connector.connect(
@@ -176,6 +177,7 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
+            login_timeout=5,
         )
 
     with pytest.raises(ProgrammingError):
@@ -186,6 +188,7 @@ def test_bogus(db_parameters):
             account='testaccount123',
             host=db_parameters['host'],
             port=db_parameters['port'],
+            login_timeout=5,
         )
 
 
