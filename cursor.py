@@ -426,7 +426,8 @@ class SnowflakeCursor(object):
                 _is_internal=False,
                 _no_results=False,
                 _use_ijson=False,
-                _is_put_get=None):
+                _is_put_get=None,
+                _raise_put_get_error=False):
         u"""
         Executes a command/query
         """
@@ -516,7 +517,8 @@ class SnowflakeCursor(object):
                     put_callback=_put_callback,
                     put_callback_output_stream=_put_callback_output_stream,
                     get_callback=_get_callback,
-                    get_callback_output_stream=_get_callback_output_stream)
+                    get_callback_output_stream=_get_callback_output_stream,
+                    raise_put_get_error=_raise_put_get_error)
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data[u'rowset']) if \

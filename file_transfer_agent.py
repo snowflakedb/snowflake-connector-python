@@ -24,7 +24,9 @@ from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
                         ER_LOCAL_PATH_NOT_DIRECTORY,
                         ER_FILE_NOT_EXISTS,
                         ER_COMPRESSION_NOT_SUPPORTED,
-                        ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL)
+                        ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL,
+                        ER_FAILED_TO_DOWNLOAD_FROM_STAGE,
+                        ER_FAILED_TO_UPLOAD_TO_STAGE)
 from .errors import (Error, OperationalError, InternalError, DatabaseError,
                      ProgrammingError)
 from .file_compression_type import FileCompressionType
@@ -132,7 +134,8 @@ class SnowflakeFileTransferAgent(object):
                  put_callback=None,
                  put_callback_output_stream=sys.stdout,
                  get_callback=None,
-                 get_callback_output_stream=sys.stdout):
+                 get_callback_output_stream=sys.stdout,
+                 raise_put_get_error=False):
         self._cursor = cursor
         self._command = command
         self._ret = ret
@@ -141,6 +144,7 @@ class SnowflakeFileTransferAgent(object):
         self._get_callback = get_callback
         self._get_callback_output_stream = get_callback_output_stream
         self._use_accelerate_endpoint = False
+        self._raise_put_get_error = raise_put_get_error
 
     def execute(self):
         self._parse_command()
@@ -359,6 +363,9 @@ class SnowflakeFileTransferAgent(object):
             if u'result_status' not in meta:
                 meta[u'result_status'] = ResultStatus.ERROR
             meta[u'error_details'] = TO_UNICODE(e)
+            meta[u'error_details'] += \
+                u", file={}, real file={}".format(
+                    meta.get(u'src_file_name'), meta.get(u'real_src_file_name'))
         finally:
             logger.debug(u'cleaning up tmp dir: %s', tmp_dir)
             shutil.rmtree(tmp_dir)
@@ -462,14 +469,21 @@ class SnowflakeFileTransferAgent(object):
             storage_client = SnowflakeFileTransferAgent.get_storage_client(
                 meta[u'stage_location_type'])
             storage_client.download_one_file(meta)
+            logger.debug(
+                u'done: status=%s, file=%s',
+                meta.get(u'result_status'),
+                meta.get(u'dst_file_name'))
         except Exception as e:
             logger.exception(u'Failed to download a file: %s',
-                             meta[u'src_file_name'])
+                             meta[u'dst_file_name'])
             meta[u'dst_file_size'] = -1
             if u'result_status' not in meta:
                 meta[u'result_status'] = ResultStatus.ERROR
             meta[u'error_details'] = TO_UNICODE(e)
+            meta[u'error_details'] += \
+                u', file={}'.format(meta.get(u'dst_file_name'))
         finally:
+            logger.debug(u'cleaning up tmp dir: %s', tmp_dir)
             shutil.rmtree(tmp_dir)
         return meta
 
@@ -503,10 +517,7 @@ class SnowflakeFileTransferAgent(object):
                     else:
                         dst_compression_type = u'NONE'
 
-                    if u'error_details' in meta:
-                        error_details = meta[u'error_details']
-                    else:
-                        error_details = u''
+                    error_details = meta.get(u'error_details', u'')
 
                     src_file_size = meta[u'src_file_size'] \
                         if converter_class != SnowflakeConverterSnowSQL \
@@ -516,6 +527,21 @@ class SnowflakeFileTransferAgent(object):
                         if converter_class != SnowflakeConverterSnowSQL \
                         else TO_UNICODE(meta[u'dst_file_size'])
 
+                    logger.debug("raise_put_get_error: %s, %s, %s, %s, %s",
+                                 self._raise_put_get_error,
+                                 meta[u'result_status'],
+                                 type(meta[u'result_status']),
+                                 ResultStatus.ERROR,
+                                 type(ResultStatus.ERROR))
+                    if self._raise_put_get_error and error_details:
+                        Error.errorhandler_wrapper(
+                            self._cursor.connection, self._cursor,
+                            OperationalError,
+                            {
+                                u'msg': error_details,
+                                u'errno': ER_FAILED_TO_UPLOAD_TO_STAGE,
+                            }
+                        )
                     rowset.append([
                         meta[u'name'],
                         meta[u'dst_file_name'],
@@ -546,10 +572,18 @@ class SnowflakeFileTransferAgent(object):
                         if converter_class != SnowflakeConverterSnowSQL \
                         else TO_UNICODE(meta[u'dst_file_size'])
 
-                    if u'error_details' in meta:
-                        error_details = meta[u'error_details']
-                    else:
-                        error_details = u''
+                    error_details = meta.get(u'error_details', u'')
+
+                    if self._raise_put_get_error and error_details:
+                        Error.errorhandler_wrapper(
+                            self._cursor.connection, self._cursor,
+                            OperationalError,
+                            {
+                                u'msg': error_details,
+                                u'errno': ER_FAILED_TO_DOWNLOAD_FROM_STAGE,
+                            }
+                        )
+
                     rowset.append([
                         meta[u'dst_file_name'],
                         dst_file_size,
@@ -584,8 +618,8 @@ class SnowflakeFileTransferAgent(object):
         self._encryption_material = []
 
         if u'data' in self._ret and \
-                        u'encryptionMaterial' in self._ret[u'data'] and \
-                        self._ret[u'data'][u'encryptionMaterial'] is not None:
+                u'encryptionMaterial' in self._ret[u'data'] and \
+                self._ret[u'data'][u'encryptionMaterial'] is not None:
             root_node = self._ret[u'data'][u'encryptionMaterial']
             logger.debug(self._command_type)
             logger.debug(u'root_node=%s', root_node)
@@ -615,7 +649,7 @@ class SnowflakeFileTransferAgent(object):
 
         self._init_encryption_material()
         if u'data' in self._ret and \
-                        u'src_locations' in self._ret[u'data'] and \
+                u'src_locations' in self._ret[u'data'] and \
                 isinstance(self._ret[u'data'][u'src_locations'], list):
             self._src_locations = self._ret[u'data'][u'src_locations']
         else:
@@ -676,7 +710,7 @@ class SnowflakeFileTransferAgent(object):
                         u'errno': ER_LOCAL_PATH_NOT_DIRECTORY
                     })
 
-        self._parallel = self._ret[u'data'][u'parallel']
+        self._parallel = self._ret[u'data'].get(u'parallel', 1)
         self._overwrite = self._ret[u'data'].get(u'overwrite', False)
         self._stage_location_type = self._ret[u'data'][u'stageInfo'][
             u'locationType'].upper()
@@ -702,7 +736,7 @@ class SnowflakeFileTransferAgent(object):
             if len(self._src_files) == 0:
                 file_name = self._ret[u'data'][u'src_locations'] \
                     if u'data' in self._ret and u'src_locations' in \
-                                                self._ret[u'data'] else u'None'
+                       self._ret[u'data'] else u'None'
                 Error.errorhandler_wrapper(
                     self._cursor.connection, self._cursor,
                     ProgrammingError,
@@ -806,7 +840,7 @@ class SnowflakeFileTransferAgent(object):
                     elif test and test == b'PAR1':
                         encoding = 'parquet'
                     elif test and (
-                                int(binascii.hexlify(test), 16) == 0x28B52FFD):
+                            int(binascii.hexlify(test), 16) == 0x28B52FFD):
                         encoding = 'zstd'
 
                 if encoding is not None:
