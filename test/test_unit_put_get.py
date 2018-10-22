@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
+
+import pytest
+from os import path, chmod
+from snowflake.connector.compat import PY2
+from snowflake.connector.errors import Error
+from snowflake.connector.connection import SnowflakeConnection
+from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+
+if PY2:
+    from mock import MagicMock
+else:
+    from unittest.mock import MagicMock
+
+
+def test_put_error(tmpdir):
+    """
+    Test for raise_put_get_error flag in SnowflakeFileTransferAgent
+    """
+    tmp_dir = str(tmpdir.mkdir('putfiledir'))
+    file1 = path.join(tmp_dir, 'file1')
+    remote_location = path.join(tmp_dir, 'remote_loc')
+    with open(file1, 'w') as f:
+        f.write('test1')
+
+    # nobody can read now.
+    chmod(file1, 0o000)
+
+    con = MagicMock()
+    cursor = con.cursor()
+    cursor.errorhandler = Error.default_errorhandler
+    query = 'PUT something'
+    ret = {
+        'data': {
+            'command': 'UPLOAD',
+            'autoCompress': False,
+            'src_locations': [file1],
+            'sourceCompression': 'none',
+            'stageInfo': {
+                'location': remote_location,
+                'locationType': 'LOCAL_FS',
+                'path': 'remote_loc',
+            }
+        },
+        'success': True,
+    }
+
+    # no error is raised
+    sf_file_transfer_agent = SnowflakeFileTransferAgent(
+        cursor,
+        query,
+        ret,
+        raise_put_get_error=False)
+    sf_file_transfer_agent.execute()
+    sf_file_transfer_agent.result()
+
+    # Permission error should be raised
+    sf_file_transfer_agent = SnowflakeFileTransferAgent(
+        cursor,
+        query,
+        ret,
+        raise_put_get_error=True)
+    sf_file_transfer_agent.execute()
+    with pytest.raises(Exception):
+        sf_file_transfer_agent.result()
+
+    chmod(file1, 0o700)
