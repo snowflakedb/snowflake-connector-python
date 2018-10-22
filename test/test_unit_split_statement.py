@@ -255,19 +255,24 @@ def test_quotes_in_comments():
 
 
 def test_backslash():
-    s = """select 'hello\\', 1; -- test comment
+    """
+    Test backslash in a literal.
+    Note the backslash is escaped in a Python string literal. Double backslashes
+    in a string literal represents a single backslash.
+    """
+    s = """select 'hello\\\\', 1; -- test comment
 select 23,'\nhello"""
 
     with StringIO(_to_unicode(s)) as f:
         itr = split_statements(f)
         assert next(itr) == (
-            "select 'hello\\', 1; -- test comment", False)
+            "select 'hello\\\\', 1; -- test comment", False)
         assert next(itr) == ("select 23,'\nhello", False)
         with pytest.raises(StopIteration):
             next(itr)
     with StringIO(_to_unicode(s)) as f:
         itr = split_statements(f, remove_comments=True)
-        assert next(itr) == ("select 'hello\\', 1;", False)
+        assert next(itr) == ("select 'hello\\\\', 1;", False)
         assert next(itr) == ("select 23,'\nhello", False)
         with pytest.raises(StopIteration):
             next(itr)
@@ -511,3 +516,14 @@ def test_multiline_double_dollar_experssion_with_removed_comments():
             "CREATE FUNCTION mean(a FLOAT, b FLOAT)\n"
             "  RETURNS FLOAT LANGUAGE JAVASCRIPT AS $$\n"
             "  var c = a + b;\n  return(c / 2);\n  $$;", False)
+
+
+def test_backslash_quote_escape():
+    s = """
+SELECT 1 'Snowflake\\'s 1';
+SELECT 2 'Snowflake\\'s 2'    
+"""
+    with StringIO(_to_unicode(s)) as f:
+        itr = split_statements(f)
+        assert next(itr) == ("SELECT 1 'Snowflake\\'s 1';", False)
+        assert next(itr) == ("SELECT 2 'Snowflake\\'s 2'", False)

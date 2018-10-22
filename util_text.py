@@ -68,7 +68,10 @@ def split_statements(buf, remove_comments=False):
                 else:
                     col += 1
             elif in_quote:
-                if line[col] == ch_quote:
+                if line[col] == '\\' and col < len_line - 1 and \
+                        line[col + 1] in (ch_quote, '\\'):
+                    col += 2
+                elif line[col] == ch_quote:
                     if col < len_line - 1 and line[col + 1] != ch_quote or \
                                     col == len_line - 1:
                         # exits quote
