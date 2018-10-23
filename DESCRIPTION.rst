@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.11 (October 23, 2018)
+
+    - Fixed exit_on_error=true didn't work if PUT / GET error occurs
+    - Fixed a backslash followed by a quote in a literal was not taken into account.
+    - Added ``request_guid`` to each HTTP request for tracing.
+
 - v1.6.10 (September 25, 2018)
 
     - Added ``CLIENT_SESSION_KEEP_ALIVE`` support.
