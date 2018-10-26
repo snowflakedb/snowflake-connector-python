@@ -5,11 +5,15 @@
 #
 import decimal
 import os
+import platform
 import sys
 
 from six import string_types, text_type, binary_type, PY2
 
 from snowflake.connector.constants import UTF8
+
+IS_LINUX = platform.system() == 'Linux'
+IS_WINDOWS = platform.system() == 'Windows'
 
 NUM_DATA_TYPES = []
 try:
