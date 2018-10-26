@@ -32,7 +32,7 @@ except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 import snowflake.connector
-from snowflake.connector.compat import (UTF8, TO_UNICODE, PY_ISSUE_23517)
+from snowflake.connector.compat import (UTF8, TO_UNICODE, PY_ISSUE_23517, IS_WINDOWS)
 from snowflake.connector.converter import SnowflakeConverter
 from snowflake.connector.converter_issue23517 import (
     SnowflakeConverterIssue23517)
@@ -77,7 +77,8 @@ def db_parameters():
     """
     ret = {}
     os.environ['TZ'] = 'UTC'
-    time.tzset()
+    if not IS_WINDOWS:
+        time.tzset()
 
     # testaccount connection info
     for k, v in CONNECTION_PARAMETERS.items():
