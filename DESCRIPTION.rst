@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.6.12 (October 30, 2018)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
 - v1.6.11 (October 23, 2018)
 
     - Fixed exit_on_error=true didn't work if PUT / GET error occurs
