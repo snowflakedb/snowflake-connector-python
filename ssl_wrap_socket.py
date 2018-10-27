@@ -411,16 +411,17 @@ def ssl_wrap_socket_with_ocsp(
     return ret
 
 
-def _openssl_connect(hostname, port=443):
+def _openssl_connect(hostname, port=443, max_retry=20):
     """
     OpenSSL connection without validating certificates. This is used to diagnose
     SSL issues.
     """
     err = None
     sleeping_time = 1
-    for retry in range(20):
+    for retry in range(max_retry):
         try:
             client = socket()
+            # client.settimeout(5)
             client.connect((hostname, port))
             client_ssl = OpenSSL.SSL.Connection(
                 OpenSSL.SSL.Context(OpenSSL.SSL.SSLv23_METHOD), client)
