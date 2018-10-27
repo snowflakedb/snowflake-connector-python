@@ -12,6 +12,8 @@ Release Notes
 - v1.6.12 (October 30, 2018)
 
     - Updated ``boto3`` and ``botocore`` version dependeny.
+    - Catch socket.EAI_NONAME for localhost socket and raise a better error message
+    - Added ``client_session_keep_alive_heartbeat_frequency`` to control heartbeat timings for ``client_session_keep_alive``.
 
 - v1.6.11 (October 23, 2018)
 
@@ -21,7 +23,7 @@ Release Notes
 
 - v1.6.10 (September 25, 2018)
 
-    - Added ``CLIENT_SESSION_KEEP_ALIVE`` support.
+    - Added ``client_session_keep_alive`` support.
     - Fixed multiline double quote expressions PR #117 (@bensowden)
     - Fixed binding ``datetime`` for TIMESTAMP type in ``qmark`` binding mode. PR #118 (@rhlahuja)
     - Retry HTTP 405 to mitigate Nginx bug.
