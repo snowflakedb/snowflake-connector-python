@@ -988,15 +988,15 @@ class SnowflakeConnection(object):
         """Validate and return heartbeat frequency in seconds"""
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
-        if self._client_session_keep_alive_heartbeat_frequency > real_max:
+        if self.client_session_keep_alive_heartbeat_frequency > real_max:
             self._client_session_keep_alive_heartbeat_frequency = real_max
-        elif self._client_session_keep_alive_heartbeat_frequency < real_min:
+        elif self.client_session_keep_alive_heartbeat_frequency < real_min:
             self._client_session_keep_alive_heartbeat_frequency = real_min
 
         # ensure the type is integer
         self._client_session_keep_alive_heartbeat_frequency = int(
-            self._client_session_keep_alive_heartbeat_frequency)
-        return self._client_session_keep_alive_heartbeat_frequency
+            self.client_session_keep_alive_heartbeat_frequency)
+        return self.client_session_keep_alive_heartbeat_frequency
 
     def _set_parameters(self, ret, session_parameters):
         """
