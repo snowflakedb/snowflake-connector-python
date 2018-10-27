@@ -97,11 +97,11 @@ def test_with_config(db_parameters):
         'timezone': 'UTC',
     }
     cnx = snowflake.connector.connect(**config)
-    assert cnx, 'invalid cnx'
-
-    assert not cnx.client_session_keep_alive  # default is False
-
-    cnx.close()
+    try:
+        assert cnx, 'invalid cnx'
+        assert not cnx.client_session_keep_alive  # default is False
+    finally:
+        cnx.close()
 
 
 def test_keep_alive_true(db_parameters):
@@ -121,8 +121,60 @@ def test_keep_alive_true(db_parameters):
         'client_session_keep_alive': True
     }
     cnx = snowflake.connector.connect(**config)
-    assert cnx.client_session_keep_alive
-    cnx.close()
+    try:
+        assert cnx.client_session_keep_alive
+    finally:
+        cnx.close()
+
+
+def test_keep_alive_heartbeat_frequency(db_parameters):
+    """
+    Creates a connection with client_session_keep_alive_heartbeat_frequency
+    parameter.
+    """
+    config = {
+        'user': db_parameters['user'],
+        'password': db_parameters['password'],
+        'host': db_parameters['host'],
+        'port': db_parameters['port'],
+        'account': db_parameters['account'],
+        'schema': db_parameters['schema'],
+        'database': db_parameters['database'],
+        'protocol': db_parameters['protocol'],
+        'timezone': 'UTC',
+        'client_session_keep_alive': True,
+        'client_session_keep_alive_heartbeat_frequency': 1000,
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
+        assert cnx.client_session_keep_alive_heartbeat_frequency == 1000
+    finally:
+        cnx.close()
+
+
+def test_keep_alive_heartbeat_frequency_min(db_parameters):
+    """
+    Creates a connection with client_session_keep_alive_heartbeat_frequency
+    parameter and set the minimum frequency
+    """
+    config = {
+        'user': db_parameters['user'],
+        'password': db_parameters['password'],
+        'host': db_parameters['host'],
+        'port': db_parameters['port'],
+        'account': db_parameters['account'],
+        'schema': db_parameters['schema'],
+        'database': db_parameters['database'],
+        'protocol': db_parameters['protocol'],
+        'timezone': 'UTC',
+        'client_session_keep_alive': True,
+        'client_session_keep_alive_heartbeat_frequency': 10,
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
+        assert cnx.client_session_keep_alive_heartbeat_frequency == 900
+    finally:
+        cnx.close()
 
 
 def test_bad_db(db_parameters):

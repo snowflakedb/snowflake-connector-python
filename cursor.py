@@ -16,7 +16,10 @@ from six import u
 from .chunk_downloader import (DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
                                DEFAULT_CLIENT_RESULT_PREFETCH_THREADS)
 from .compat import (BASE_EXCEPTION_CLASS)
-from .constants import (FIELD_NAME_TO_ID, FIELD_ID_TO_NAME)
+from .constants import (
+    FIELD_NAME_TO_ID,
+    FIELD_ID_TO_NAME,
+)
 from .errorcode import (ER_UNSUPPORTED_METHOD,
                         ER_CURSOR_IS_CLOSED,
                         ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
@@ -404,14 +407,8 @@ class SnowflakeCursor(object):
                     self._client_result_prefetch_threads = kv[u'value']
                 if u'CLIENT_RESULT_PREFETCH_SLOTS' in kv[u'name']:
                     self._client_result_prefetch_slots = kv[u'value']
-                if u'CLIENT_TELEMETRY_ENABLED' in kv[u'name']:
-                    self._connection.set_telemetry_enabled(kv[u'value'])
-            with self._connection._lock_converter:
-                self._connection.converter.set_parameters(
-                    ret[u'data'][u'parameters'])
-                for kv in ret[u'data'][u'parameters']:
-                    self._connection._session_parameters[
-                        kv['name']] = kv['value']
+            self._connection._set_parameters(
+                ret, self._connection._session_parameters)
 
         self._sequence_counter = -1
         return ret

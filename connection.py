@@ -22,6 +22,13 @@ from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import SnowflakeChunkDownloader
 from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517)
+from .constants import (
+    PARAMETER_AUTOCOMMIT,
+    PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
+    PARAMETER_CLIENT_SESSION_KEEP_ALIVE,
+    PARAMETER_CLIENT_TELEMETRY_ENABLED,
+    PARAMETER_TIMEZONE,
+)
 from .converter import SnowflakeConverter
 from .converter_issue23517 import SnowflakeConverterIssue23517
 from .cursor import SnowflakeCursor
@@ -48,7 +55,8 @@ from .network import (
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryClient)
-from .time_util import (HeartBeatTimer, get_time_millis)
+from .time_util import (
+    HeartBeatTimer, get_time_millis)
 from .util_text import split_statements, construct_hostname
 
 SUPPORTED_PARAMSTYLES = {
@@ -91,9 +99,10 @@ DEFAULT_CONFIGURATION = {
 
     u'insecure_mode': False,  # Error security fix requirement
     u'inject_client_pause': 0,  # snowflake internal
-    u'session_parameters': {},  # snowflake session parameters
+    u'session_parameters': None,  # snowflake session parameters
     u'autocommit': None,  # snowflake
     u'client_session_keep_alive': False,  # snowflake
+    u'client_session_keep_alive_heartbeat_frequency': None,  # snowflake
     u'numpy': False,  # snowflake
     u'ocsp_response_cache_filename': None,  # snowflake internal
     u'converter_class':
@@ -146,7 +155,7 @@ class SnowflakeConnection(object):
         self.converter = None
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
-        self._telemetry_enabled = False
+        self.telemetry_enabled = False
 
     def __del__(self):
         try:
@@ -280,9 +289,31 @@ class SnowflakeConnection(object):
     @property
     def client_session_keep_alive(self):
         u"""
-        Keep connection alive by issuing a hourly heartbeat (SELECT 1;).
+        Keep connection alive by issuing a heartbeat.
         """
         return self._client_session_keep_alive
+
+    @client_session_keep_alive.setter
+    def client_session_keep_alive(self, value):
+        u"""
+        Keep connection alive by issuing a heartbeat.
+        """
+        self._client_session_keep_alive = True if value else False
+
+    @property
+    def client_session_keep_alive_heartbeat_frequency(self):
+        u"""
+        Heartbeat frequency to keep connection alive in seconds.
+        """
+        return self._client_session_keep_alive_heartbeat_frequency
+
+    @client_session_keep_alive_heartbeat_frequency.setter
+    def client_session_keep_alive_heartbeat_frequency(self, value):
+        u"""
+        Specify the heartbeat frequency to keep connection alive in seconds.
+        """
+        self._client_session_keep_alive_heartbeat_frequency = value
+        self._validate_client_session_keep_alive_heartbeat_frequency()
 
     @property
     def rest(self):
@@ -342,6 +373,14 @@ class SnowflakeConnection(object):
         Consented cache ID token
         """
         return self._consent_cache_id_token
+
+    @property
+    def telemetry_enabled(self):
+        return self._telemetry_enabled
+
+    @telemetry_enabled.setter
+    def telemetry_enabled(self, value):
+        self._telemetry_enabled = True if value else False
 
     def connect(self, **kwargs):
         u"""
@@ -530,13 +569,18 @@ class SnowflakeConnection(object):
         if self._session_parameters is None:
             self._session_parameters = {}
         if self._autocommit is not None:
-            self._session_parameters['AUTOCOMMIT'] = self._autocommit
+            self._session_parameters[PARAMETER_AUTOCOMMIT] = self._autocommit
 
         if self._timezone is not None:
-            self._session_parameters['TIMEZONE'] = self._timezone
+            self._session_parameters[PARAMETER_TIMEZONE] = self._timezone
 
         if self.client_session_keep_alive:
-            self._session_parameters['CLIENT_SESSION_KEEP_ALIVE'] = True
+            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = True
+
+        if self.client_session_keep_alive_heartbeat_frequency:
+            self._session_parameters[
+                PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY] = \
+                self._validate_client_session_keep_alive_heartbeat_frequency()
 
         if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
@@ -910,20 +954,15 @@ class SnowflakeConnection(object):
         u"""
         Logs data to telemetry
         """
-        if self._telemetry_enabled:
+        if self.telemetry_enabled:
             self._telemetry.try_add_log_to_batch(telemetry_data)
-
-    def set_telemetry_enabled(self, enabled):
-        u"""
-        Sets whether to use telemetry
-        """
-        self._telemetry_enabled = enabled
 
     def _add_heartbeat(self):
         """Add an hourly heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
+            self._validate_client_session_keep_alive_heartbeat_frequency()
             self.heartbeat_thread = HeartBeatTimer(
-                self.rest.master_validity_in_seconds,
+                self.client_session_keep_alive_heartbeat_frequency,
                 self._heartbeat_tick)
             self.heartbeat_thread.start()
             logger.debug("started heartbeat")
@@ -937,10 +976,45 @@ class SnowflakeConnection(object):
             logger.debug("stopped heartbeat")
 
     def _heartbeat_tick(self):
-        """Execute a hearbeat query if connection isn't closed yet."""
+        """Execute a hearbeat if connection isn't closed yet."""
         if not self.is_closed():
             logger.debug("heartbeating!")
             self.rest._heartbeat()
+
+    def _validate_client_session_keep_alive_heartbeat_frequency(self):
+        """Validate and return heartbeat frequency in seconds"""
+        real_max = int(self.rest.master_validity_in_seconds / 4)
+        real_min = int(real_max / 4)
+        if self._client_session_keep_alive_heartbeat_frequency > real_max:
+            self._client_session_keep_alive_heartbeat_frequency = real_max
+        elif self._client_session_keep_alive_heartbeat_frequency < real_min:
+            self._client_session_keep_alive_heartbeat_frequency = real_min
+
+        # ensure the type is integer
+        self._client_session_keep_alive_heartbeat_frequency = int(
+            self._client_session_keep_alive_heartbeat_frequency)
+        return self._client_session_keep_alive_heartbeat_frequency
+
+    def _set_parameters(self, ret, session_parameters):
+        """
+        Set session parameters
+        """
+        if u'parameters' not in ret[u'data']:
+            return
+        parameters = ret[u'data'][u'parameters']
+        with self._lock_converter:
+            self.converter.set_parameters(parameters)
+        for kv in parameters:
+            name = kv['name']
+            value = kv['value']
+            session_parameters[name] = value
+            if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
+                self.telemetry_enabled = value
+            elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
+                self.client_session_keep_alive = value
+            elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == \
+                    name:
+                self.client_session_keep_alive_heartbeat_frequency = value
 
     def __enter__(self):
         u"""

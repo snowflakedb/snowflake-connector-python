@@ -48,6 +48,8 @@ from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                        SQLSTATE_CONNECTION_REJECTED)
 from .ssl_wrap_socket import (set_proxies)
+from .time_util import (
+    DEFAULT_MASTER_VALIDITY_IN_SECONDS)
 from .tool.probe_connection import probe_connection
 from .util_text import split_rows_from_stream
 from .version import VERSION
@@ -247,8 +249,15 @@ class SnowflakeRestful(object):
 
     @property
     def master_validity_in_seconds(self):
-        return self._master_validity_in_seconds if hasattr(
-            self, u'_master_validity_in_seconds') else None
+        return self._master_validity_in_seconds \
+            if hasattr(self, u'_master_validity_in_seconds') and \
+               self._master_validity_in_seconds \
+            else DEFAULT_MASTER_VALIDITY_IN_SECONDS
+
+    @master_validity_in_seconds.setter
+    def master_validity_in_seconds(self, value):
+        self._master_validity_in_seconds = value \
+            if value else DEFAULT_MASTER_VALIDITY_IN_SECONDS
 
     @property
     def id_token(self):

@@ -8,9 +8,10 @@ Various constants
 """
 
 from collections import defaultdict
-from enum import Enum
-from six import PY2
 from collections import namedtuple
+from enum import Enum
+
+from six import PY2
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -126,3 +127,9 @@ FileHeader = namedtuple(
         "encryption_metadata"
     ]
 )
+
+PARAMETER_AUTOCOMMIT = u'AUTOCOMMIT'
+PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY = u'CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY'
+PARAMETER_CLIENT_SESSION_KEEP_ALIVE = u'CLIENT_SESSION_KEEP_ALIVE'
+PARAMETER_CLIENT_TELEMETRY_ENABLED = u'CLIENT_TELEMETRY_ENABLED'
+PARAMETER_TIMEZONE = u'TIMEZONE'

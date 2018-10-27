@@ -10,16 +10,17 @@ try:
 except ImportError:
     from threading import Timer
 
-DEFAULT_HEARTBEAT_INTERVAL = 60.0 * 60
+DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 
 
 class HeartBeatTimer(Timer):
-    """A thread which executes a function every 1/4th timing of master token
-    validity."""
+    """
+    A thread which executes a function every
+    client_session_keep_alive_heartbeat_frequency seconds
+    """
 
-    def __init__(self, master_validity_in_seconds, f):
-        interval = master_validity_in_seconds / 4 if \
-            master_validity_in_seconds else DEFAULT_HEARTBEAT_INTERVAL
+    def __init__(self, client_session_keep_alive_heartbeat_frequency, f):
+        interval = client_session_keep_alive_heartbeat_frequency
         super(HeartBeatTimer, self).__init__(interval, f)
 
     def run(self):

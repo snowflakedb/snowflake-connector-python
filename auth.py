@@ -364,14 +364,9 @@ class Auth(object):
                 self._validate_default_schema(session_info)
                 self._validate_default_role(session_info)
                 self._validate_default_warehouse(session_info)
-            if u'parameters' in ret[u'data']:
-                if u'CLIENT_TELEMETRY_ENABLED' in ret[u'data']:
-                    self._rest._connection.set_telemetry_enabled(ret[u'data'])
-                with self._rest._connection._lock_converter:
-                    self._rest._connection.converter.set_parameters(
-                        ret[u'data'][u'parameters'])
-                for kv in ret[u'data'][u'parameters']:
-                    session_parameters[kv['name']] = kv['value']
+
+            self._rest._connection._set_parameters(ret, session_parameters)
+
         return session_parameters
 
     def _validate_default_database(self, session_info):
@@ -509,7 +504,7 @@ def lock_temporary_credential_file():
         return True
     except OSError:
         logger.debug("Temporary cache file lock already exists. Other "
-                    "process may be updating the temporary ")
+                     "process may be updating the temporary ")
         return False
 
 
