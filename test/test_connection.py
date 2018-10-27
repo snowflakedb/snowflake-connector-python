@@ -127,6 +127,10 @@ def test_keep_alive_true(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipif(
+    os.getenv('TRAVIS') == 'true',
+    reason="skip until the parameter is available in the server"
+)
 def test_keep_alive_heartbeat_frequency(db_parameters):
     """
     Creates a connection with client_session_keep_alive_heartbeat_frequency
@@ -152,6 +156,10 @@ def test_keep_alive_heartbeat_frequency(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipif(
+    os.getenv('TRAVIS') == 'true',
+    reason="skip until the parameter is available in the server"
+)
 def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """
     Creates a connection with client_session_keep_alive_heartbeat_frequency
