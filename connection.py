@@ -56,6 +56,7 @@ from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryClient)
 from .time_util import (
+    DEFAULT_MASTER_VALIDITY_IN_SECONDS,
     HeartBeatTimer, get_time_millis)
 from .util_text import split_statements, construct_hostname
 
@@ -305,7 +306,9 @@ class SnowflakeConnection(object):
         u"""
         Heartbeat frequency to keep connection alive in seconds.
         """
-        return self._client_session_keep_alive_heartbeat_frequency
+        return self._client_session_keep_alive_heartbeat_frequency if \
+            self._client_session_keep_alive_heartbeat_frequency else \
+            DEFAULT_MASTER_VALIDITY_IN_SECONDS / 16
 
     @client_session_keep_alive_heartbeat_frequency.setter
     def client_session_keep_alive_heartbeat_frequency(self, value):
