@@ -11,7 +11,10 @@ import webbrowser
 
 from .auth import Auth, AuthByPlugin
 from .compat import (urlparse, urlsplit, parse_qs)
-from .errorcode import (ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR)
+from .errors import (OperationalError)
+from .errorcode import (
+    ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR,
+    ER_NO_HOSTNAME_FOUND)
 from .network import (
     CONTENT_TYPE_APPLICATION_JSON,
     PYTHON_CONNECTOR_USER_AGENT,
@@ -79,7 +82,17 @@ class AuthByWebBrowser(AuthByPlugin):
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            socket_connection.bind(('localhost', 0))
+            try:
+                socket_connection.bind(('localhost', 0))
+            except socket.gaierror as ex:
+                if ex.args[0] == socket.EAI_NONAME:
+                    raise OperationalError(
+                        msg=u'localhost is not found. Ensure /etc/hosts has '
+                            u'localhost entry.',
+                        errno=ER_NO_HOSTNAME_FOUND
+                    )
+                else:
+                    raise ex
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
