@@ -180,6 +180,8 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
     }
     cnx = snowflake.connector.connect(**config)
     try:
+        # The min value of client_session_keep_alive_heartbeat_frequency 
+        # is 1/16 of master token validity, so 14400 / 4 /4 => 900
         assert cnx.client_session_keep_alive_heartbeat_frequency == 900
     finally:
         cnx.close()
