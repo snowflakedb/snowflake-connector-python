@@ -33,11 +33,6 @@ setup(
     use_2to3=False,
 
     install_requires=[
-        'azure-common<2',
-        'azure_nspkg<3',
-        'azure-storage>0.34.2,<=0.36.0',
-        'boto3>=1.4.4,<1.10.0',
-        'botocore>=1.5.0,<1.13.0',
         'certifi',
         'future',
         'six',
@@ -51,6 +46,19 @@ setup(
         'pyasn1>=0.2.1,<0.5.0',  # added back for Python 2
         'pyasn1-modules>=0.0.8,<0.3.0',  # added back for Python 2
     ],
+
+    extras_require={
+        'azure': [
+            'azure-common<2',
+            'azure_nspkg<3',
+            'azure-storage>0.34.2,<=0.36.0',
+        ],
+        'aws': [
+            'boto3>=1.4.4,<1.10.0',
+            'botocore>=1.5.0,<1.13.0',
+        ],
+    },
+
 
     namespace_packages=['snowflake'],
     packages=[
