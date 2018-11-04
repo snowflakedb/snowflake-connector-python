@@ -33,6 +33,7 @@ setup(
     use_2to3=False,
 
     install_requires=[
+        'botocore>=1.5.0,<1.13.0',
         'certifi',
         'future',
         'six',
@@ -55,7 +56,6 @@ setup(
         ],
         'aws': [
             'boto3>=1.4.4,<1.10.0',
-            'botocore>=1.5.0,<1.13.0',
         ],
     },
 

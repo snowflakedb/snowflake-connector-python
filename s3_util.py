@@ -6,11 +6,15 @@ from collections import namedtuple
 from logging import getLogger
 
 import OpenSSL
-import boto3
-import botocore.exceptions
-from boto3.exceptions import RetriesExceededError, S3UploadFailedError
-from boto3.s3.transfer import TransferConfig
-from botocore.client import Config
+try:
+    import boto3
+    import botocore.exceptions
+    from boto3.exceptions import RetriesExceededError, S3UploadFailedError
+    from boto3.s3.transfer import TransferConfig
+    from botocore.client import Config
+except ImportError:
+    from .errors import NotSupportedError
+    raise NotSupportedError('To access PUT/GET on AWS please install with [aws] tag.')
 
 from .compat import TO_UNICODE
 from .constants import (SHA256_DIGEST, ResultStatus, FileHeader)

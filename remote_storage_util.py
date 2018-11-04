@@ -12,9 +12,6 @@ import time
 from collections import namedtuple
 from logging import getLogger
 
-from .s3_util import SnowflakeS3Util
-from .azure_util import SnowflakeAzureUtil
-
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .encryption_util import (SnowflakeEncryptionUtil)
 
@@ -42,8 +39,10 @@ class SnowflakeRemoteStorageUtil(object):
     @staticmethod
     def getStorageType(type):
         if(type == u'S3'):
+            from .s3_util import SnowflakeS3Util
             return SnowflakeS3Util
         elif(type == u'AZURE'):
+            from .azure_util import SnowflakeAzureUtil
             return SnowflakeAzureUtil
 
     @staticmethod

@@ -35,7 +35,6 @@ from .local_util import SnowflakeLocalUtil
 from .remote_storage_util import (SnowflakeFileEncryptionMaterial,
                                   SnowflakeRemoteStorageUtil,
                                   )
-from .s3_util import SnowflakeS3Util
 
 S3_FS = u'S3'
 AZURE_FS = u'AZURE'
@@ -176,6 +175,7 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'get_callback'] = self._get_callback
                 meta[u'get_callback_output_stream'] = \
                     self._get_callback_output_stream
+                from .s3_util import SnowflakeS3Util
                 if meta.get(
                         u'src_file_size',
                         1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD:  # TODO fli: s3 specific?
@@ -221,6 +221,7 @@ class SnowflakeFileTransferAgent(object):
             client = SnowflakeRemoteStorageUtil.create_client(
                 self._stage_info,
                 use_accelerate_endpoint=False)
+            from .s3_util import SnowflakeS3Util
             s3location = SnowflakeS3Util.extract_bucket_name_and_path(
                 self._stage_info[u'location']
             )

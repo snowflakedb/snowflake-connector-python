@@ -5,12 +5,17 @@ import os
 from collections import namedtuple
 from logging import getLogger
 import json
-from azure.storage.blob import BlockBlobService
-from azure.common import (AzureMissingResourceHttpError, AzureHttpError)
-from azure.storage.blob.models import ContentSettings
+
+try:
+    from azure.storage.blob import BlockBlobService
+    from azure.common import (AzureMissingResourceHttpError, AzureHttpError)
+    from azure.storage.blob.models import ContentSettings
+except ImportError:
+    from .errors import NotSupportedError
+    raise NotSupportedError('To access PUT/GET for Azure please install with [azure] tag.')
+
 from .constants import (SHA256_DIGEST, ResultStatus, FileHeader)
 from .encryption_util import (EncryptionMetadata)
-
 
 """
 Azure Location: Azure container name + path
