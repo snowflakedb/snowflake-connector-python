@@ -40,7 +40,8 @@ class AuthByKeyPair(AuthByPlugin):
         self._private_key = private_key
         self._jwt_token = ''
 
-    def authenticate(self, authenticator, account, user, password):
+    def authenticate(
+            self, authenticator, service_name, account, user, password):
         account = account.upper()
         user = user.upper()
 

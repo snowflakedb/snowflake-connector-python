@@ -20,6 +20,7 @@ APPLICATION = 'testapplication'
 ACCOUNT = 'testaccount'
 USER = 'testuser'
 PASSWORD = 'testpassword'
+SERVICE_NAME = ''
 REF_PROOF_KEY = 'MOCK_PROOF_KEY'
 REF_SSO_URL = 'https://testsso.snowflake.net/sso'
 
@@ -57,7 +58,8 @@ def test_auth_webbrowser_get():
     auth = AuthByWebBrowser(
         rest, APPLICATION,
         webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket)
-    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
+    auth.authenticate(
+        AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
     body = {u'data': {}}
@@ -97,7 +99,8 @@ def test_auth_webbrowser_post():
     auth = AuthByWebBrowser(
         rest, APPLICATION,
         webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket)
-    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
+    auth.authenticate(
+        AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
     body = {u'data': {}}
@@ -132,7 +135,8 @@ def test_auth_webbrowser_fail_webbrowser():
     auth = AuthByWebBrowser(
         rest, APPLICATION, webbrowser_pkg=mock_webbrowser,
         socket_pkg=mock_socket)
-    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
+    auth.authenticate(
+        AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
     assert rest._connection.errorhandler.called  # an error
     assert auth.assertion_content is None
 
@@ -163,7 +167,8 @@ def test_auth_webbrowser_fail_webserver():
     auth = AuthByWebBrowser(
         rest, APPLICATION, webbrowser_pkg=mock_webbrowser,
         socket_pkg=mock_socket)
-    auth.authenticate(AUTHENTICATOR, ACCOUNT, USER, PASSWORD)
+    auth.authenticate(
+        AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
     assert rest._connection.errorhandler.called  # an error
     assert auth.assertion_content is None
 
