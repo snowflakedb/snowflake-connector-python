@@ -28,6 +28,7 @@ from .constants import (
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE,
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
     PARAMETER_TIMEZONE,
+    PARAMETER_SERVICE_NAME,
 )
 from .converter import SnowflakeConverter
 from .converter_issue23517 import SnowflakeConverterIssue23517
@@ -114,6 +115,7 @@ DEFAULT_CONFIGURATION = {
     u'paramstyle': None,  # standard/snowflake
     u'timezone': None,  # snowflake
     u'consent_cache_id_token': True,  # snowflake
+    u'service_name': None,  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -384,6 +386,14 @@ class SnowflakeConnection(object):
     @telemetry_enabled.setter
     def telemetry_enabled(self, value):
         self._telemetry_enabled = True if value else False
+
+    @property
+    def service_name(self):
+        return self._service_name
+
+    @service_name.setter
+    def service_name(self, value):
+        self._service_name = value
 
     def connect(self, **kwargs):
         u"""
@@ -795,6 +805,7 @@ class SnowflakeConnection(object):
     def __authenticate(self, auth_instance):
         auth_instance.authenticate(
             authenticator=self._authenticator,
+            service_name=self.service_name,
             account=self.account,
             user=self.user,
             password=self._password,
@@ -1018,6 +1029,8 @@ class SnowflakeConnection(object):
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == \
                     name:
                 self.client_session_keep_alive_heartbeat_frequency = value
+            elif PARAMETER_SERVICE_NAME == name:
+                self.service_name = value
 
     def __enter__(self):
         u"""

@@ -25,7 +25,8 @@ class AuthByOAuth(AuthByPlugin):
         """
         self._oauth_token = oauth_token
 
-    def authenticate(self, authenticator, account, user, password):
+    def authenticate(
+            self, authenticator, service_name, account, user, password):
         """
         Nothing to do here, token should be obtained outside of the driver.
         """

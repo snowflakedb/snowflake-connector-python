@@ -25,7 +25,12 @@ from botocore.vendored.requests.exceptions import (
     ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
-
+from .constants import (
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_ACCEPT,
+    HTTP_HEADER_USER_AGENT,
+    HTTP_HEADER_SERVICE_NAME,
+)
 from snowflake.connector.time_util import get_time_millis
 from . import proxy
 from . import ssl_wrap_socket
@@ -315,10 +320,12 @@ class SnowflakeRestful(object):
             timeout = self._connection.network_timeout
 
         headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": accept_type,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+            HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: accept_type,
+            HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        if self._connection.service_name:
+            headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
         if method == u'post':
             return self._post_request(
                 url, headers, json.dumps(body),
@@ -366,10 +373,12 @@ class SnowflakeRestful(object):
             u'****' if self.master_token else None,
             u'****' if self.id_token else None)
         headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": CONTENT_TYPE_APPLICATION_JSON,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+            HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        if self._connection.service_name:
+            headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
         request_id = TO_UNICODE(uuid.uuid4())
         logger.debug(u'request_id: %s', request_id)
         url = u'/session/token-request?' + urlencode({
@@ -433,10 +442,12 @@ class SnowflakeRestful(object):
 
     def _heartbeat(self):
         headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": CONTENT_TYPE_APPLICATION_JSON,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+            HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        if self._connection.service_name:
+            headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
         request_id = TO_UNICODE(uuid.uuid4())
         logger.debug(u'request_id: %s', request_id)
         url = u'/session/heartbeat?' + urlencode({
@@ -464,10 +475,13 @@ class SnowflakeRestful(object):
 
         url = u'/session?' + urlencode({u'delete': u'true'})
         headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": CONTENT_TYPE_APPLICATION_JSON,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+            HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        if self._connection.service_name:
+            headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
+
         body = {}
         try:
             ret = self._post_request(

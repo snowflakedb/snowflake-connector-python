@@ -1,16 +1,17 @@
-
 from __future__ import division
 
+import json
 import os
 from collections import namedtuple
 from logging import getLogger
-import json
-from azure.storage.blob import BlockBlobService
-from azure.common import (AzureMissingResourceHttpError, AzureHttpError)
-from azure.storage.blob.models import ContentSettings
-from .constants import (SHA256_DIGEST, ResultStatus, FileHeader)
-from .encryption_util import (EncryptionMetadata)
 
+from azure.common import (AzureMissingResourceHttpError, AzureHttpError)
+from azure.storage.blob import BlockBlobService
+from azure.storage.blob.models import ContentSettings
+
+from .constants import (
+    SHA256_DIGEST, ResultStatus, FileHeader, HTTP_HEADER_VALUE_OCTET_STREAM)
+from .encryption_util import (EncryptionMetadata)
 
 """
 Azure Location: Azure container name + path
@@ -40,7 +41,8 @@ class SnowflakeAzureUtil(object):
         sas_token = stage_credentials[u'AZURE_SAS_TOKEN']
         if sas_token and sas_token.startswith(u'?'):
             sas_token = sas_token[1:]
-        client = BlockBlobService(account_name=stage_info[u'storageAccount'], sas_token=sas_token)
+        client = BlockBlobService(account_name=stage_info[u'storageAccount'],
+                                  sas_token=sas_token)
         return client
 
     @staticmethod
@@ -71,10 +73,12 @@ class SnowflakeAzureUtil(object):
 
         logger = getLogger(__name__)
         client = meta[u'client']
-        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(meta[u'stage_info'][u'location'])
+        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
+            meta[u'stage_info'][u'location'])
         try:
             # HTTP HEAD request
-            blob = client.get_blob_properties(azure_location.container_name, azure_location.path + filename)
+            blob = client.get_blob_properties(azure_location.container_name,
+                                              azure_location.path + filename)
         except AzureMissingResourceHttpError:
             meta[u'result_status'] = ResultStatus.NOT_FOUND_FILE
             return FileHeader(
@@ -83,19 +87,23 @@ class SnowflakeAzureUtil(object):
                 encryption_metadata=None
             )
         except AzureHttpError as err:
-            if(err.status_code == 403 and "Signature not valid in the specified time frame" in str(err)):
+            if (
+                    err.status_code == 403 and "Signature not valid in the specified time frame" in str(
+                    err)):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None
             else:
                 logger.debug(u'Unexpected Azure error: %s'
                              u'container: %s, path: %s',
-                             err, azure_location.container_name, azure_location.path)
+                             err, azure_location.container_name,
+                             azure_location.path)
                 meta[u'result_status'] = ResultStatus.ERROR
                 return None
 
         meta[u'result_status'] = ResultStatus.UPLOADED
-        encryptiondata = json.loads(blob.metadata.get(u'encryptiondata', u'null'))
+        encryptiondata = json.loads(
+            blob.metadata.get(u'encryptiondata', u'null'))
 
         encryption_metadata = EncryptionMetadata(
             key=encryptiondata[u'WrappedContentKey'][u'EncryptedKey'],
@@ -142,23 +150,24 @@ class SnowflakeAzureUtil(object):
 
             client = meta[u'client']
             callback = meta[u'put_callback'](
-                    data_file,
-                    os.path.getsize(data_file),
-                    output_stream=meta[u'put_callback_output_stream']) if \
-                    meta[u'put_callback'] else None
+                data_file,
+                os.path.getsize(data_file),
+                output_stream=meta[u'put_callback_output_stream']) if \
+                meta[u'put_callback'] else None
 
             def azure_callback(current, total):
                 callback(current)
+
             client.create_blob_from_path(
                 azure_location.container_name,
                 path,
                 data_file,
                 progress_callback=azure_callback if
-                    meta[u'put_callback'] else None,
+                meta[u'put_callback'] else None,
                 metadata=azure_metadata,
                 max_connections=max_concurrency,
                 content_settings=ContentSettings(
-                    content_type=u'application/octet-stream',
+                    content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
                     content_encoding=u'utf-8',
                 )
             )
@@ -167,7 +176,9 @@ class SnowflakeAzureUtil(object):
             meta[u'dst_file_size'] = meta[u'upload_size']
             meta[u'result_status'] = ResultStatus.UPLOADED
         except AzureHttpError as err:
-            if (err.status_code == 403 and "Signature not valid in the specified time frame" in str(err)):
+            if (
+                    err.status_code == 403 and "Signature not valid in the specified time frame" in str(
+                    err)):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None
@@ -193,18 +204,21 @@ class SnowflakeAzureUtil(object):
 
             def azure_callback(current, total):
                 callback(current)
+
             client.get_blob_to_path(
                 azure_location.container_name,
                 path,
                 full_dst_file_name,
                 progress_callback=azure_callback if
-                    meta[u'get_callback'] else None,
+                meta[u'get_callback'] else None,
                 max_connections=max_concurrency
             )
 
             meta[u'result_status'] = ResultStatus.DOWNLOADED
         except AzureHttpError as err:
-            if (err.status_code == 403 and "Signature not valid in the specified time frame" in str(err)):
+            if (
+                    err.status_code == 403 and "Signature not valid in the specified time frame" in str(
+                    err)):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None

@@ -13,7 +13,10 @@ from boto3.s3.transfer import TransferConfig
 from botocore.client import Config
 
 from .compat import TO_UNICODE
-from .constants import (SHA256_DIGEST, ResultStatus, FileHeader)
+from .constants import (
+    SHA256_DIGEST, ResultStatus, FileHeader,
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_VALUE_OCTET_STREAM)
 from .encryption_util import (EncryptionMetadata)
 
 SFC_DIGEST = u'sfc-digest'
@@ -172,7 +175,7 @@ class SnowflakeS3Util:
         logger = getLogger(__name__)
         try:
             s3_metadata = {
-                u'Content-Type': u'application/octet-stream',
+                HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM,
                 SFC_DIGEST: meta[SHA256_DIGEST],
             }
             if (encryption_metadata):
