@@ -129,3 +129,46 @@ def test_connect_externalbrowser(
     assert con._rest.id_token_password is None  # This is not used yet.
     assert con.database == 'TESTDB_NEW'
     assert con.warehouse == 'TESTWH_NEW'
+
+
+@patch(
+    'snowflake.connector.network.SnowflakeRestful._post_request'
+)
+def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
+    def mock_post_request(url, headers, json_body, **kwargs):
+        global mock_cnt
+        ret = None
+        if mock_cnt == 0:
+            # return from /v1/login-request
+            ret = {
+                u'success': True,
+                u'message': None,
+                u'data': {
+                    u'token': u'TOKEN',
+                    u'masterToken': u'MASTER_TOKEN',
+                    u'idToken': u'ID_TOKEN',
+                    u'idTokenPassword': u'ID_TOKEN_PASSWORD',
+                    u'parameters': [
+                        {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
+                    ],
+                }}
+        return ret
+
+    # POST requests mock
+    mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
+
+    global mock_cnt
+    mock_cnt = 0
+
+    account = 'testaccount'
+    user = 'testuser'
+
+    # connection
+    con = snowflake.connector.connect(
+        account=account,
+        user=user,
+        password='testpassword',
+        database='TESTDB',
+        warehouse='TESTWH',
+    )
+    assert con.service_name == 'FAKE_SERVICE_NAME'

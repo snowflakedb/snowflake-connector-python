@@ -22,7 +22,8 @@ class AuthByDefault(AuthByPlugin):
         """
         self._password = password
 
-    def authenticate(self, authenticator, account, user, password):
+    def authenticate(
+            self, authenticator, service_name, account, user, password):
         """
         NOP.
         """

@@ -11,10 +11,16 @@ import webbrowser
 
 from .auth import Auth, AuthByPlugin
 from .compat import (urlparse, urlsplit, parse_qs)
-from .errors import (OperationalError)
+from .constants import (
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_ACCEPT,
+    HTTP_HEADER_USER_AGENT,
+    HTTP_HEADER_SERVICE_NAME,
+)
 from .errorcode import (
     ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR,
     ER_NO_HOSTNAME_FOUND)
+from .errors import (OperationalError)
 from .network import (
     CONTENT_TYPE_APPLICATION_JSON,
     PYTHON_CONNECTOR_USER_AGENT,
@@ -70,7 +76,8 @@ class AuthByWebBrowser(AuthByPlugin):
         body[u'data'][u'TOKEN'] = self._token
         body[u'data'][u'PROOF_KEY'] = self._proof_key
 
-    def authenticate(self, authenticator, account, user, password):
+    def authenticate(
+            self, authenticator, service_name, account, user, password):
         """
         Web Browser based Authentication.
         """
@@ -103,7 +110,7 @@ class AuthByWebBrowser(AuthByPlugin):
 
             logger.debug(u'step 1: query GS to obtain SSO url')
             sso_url = self._get_sso_url(
-                account, authenticator, callback_port, user)
+                authenticator, service_name, account, callback_port, user)
 
             logger.debug(u'step 2: open a browser')
             if not self._webbrowser.open_new(sso_url):
@@ -274,15 +281,19 @@ You can close this window now and go back where you started from.
         else:
             logger.debug("No User-Agent")
 
-    def _get_sso_url(self, account, authenticator, callback_port, user):
+    def _get_sso_url(
+            self, authenticator, service_name, account, callback_port, user):
         """
         Gets SSO URL from Snowflake
         """
         headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": CONTENT_TYPE_APPLICATION_JSON,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+            HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        if service_name:
+            headers[HTTP_HEADER_SERVICE_NAME] = service_name
+
         url = u"/session/authenticator-request"
         body = Auth.base_auth_data(
             user, account,

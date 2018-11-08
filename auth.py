@@ -18,6 +18,12 @@ from threading import Lock
 from threading import Thread
 
 from .compat import (TO_UNICODE, urlencode)
+from .constants import (
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_ACCEPT,
+    HTTP_HEADER_USER_AGENT,
+    HTTP_HEADER_SERVICE_NAME,
+)
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_INVALID_VALUE)
 from .errors import (Error,
                      DatabaseError,
@@ -83,7 +89,8 @@ class AuthByPlugin(object):
     def update_body(self, body):
         raise NotImplementedError
 
-    def authenticate(self, authenticator, account, user, password):
+    def authenticate(
+            self, authenticator, service_name, account, user, password):
         raise NotImplementedError
 
     def handle_failure(self, ret):
@@ -154,10 +161,13 @@ class Auth(object):
 
         request_id = TO_UNICODE(uuid.uuid4())
         headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+            HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
+            HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        if HTTP_HEADER_SERVICE_NAME in session_parameters:
+            headers[HTTP_HEADER_SERVICE_NAME] = \
+                session_parameters[HTTP_HEADER_SERVICE_NAME]
         url = u"/session/v1/login-request"
         body_template = Auth.base_auth_data(
             user, account, self._rest._connection.application,

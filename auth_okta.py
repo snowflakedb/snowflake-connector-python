@@ -8,6 +8,12 @@ import logging
 
 from .auth import Auth, AuthByPlugin
 from .compat import (urlsplit, unescape, urlencode)
+from .constants import (
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_ACCEPT,
+    HTTP_HEADER_USER_AGENT,
+    HTTP_HEADER_SERVICE_NAME,
+)
 from .errorcode import (ER_IDP_CONNECTION_ERROR,
                         ER_INCORRECT_DESTINATION)
 from .errors import (Error, DatabaseError)
@@ -72,7 +78,8 @@ class AuthByOkta(AuthByPlugin):
     def update_body(self, body):
         body[u'data'][u'RAW_SAML_RESPONSE'] = self._saml_response
 
-    def authenticate(self, authenticator, account, user, password):
+    def authenticate(
+            self, authenticator, service_name, account, user, password):
         """
         SAML Authentication
         1.  query GS to obtain IDP token and SSO url
@@ -97,20 +104,23 @@ class AuthByOkta(AuthByPlugin):
             another SP.
         """
         logger.debug(u'authenticating by SAML')
-        headers, sso_url, token_url = self._step1(account, user, authenticator)
+        headers, sso_url, token_url = self._step1(
+            authenticator, service_name, account, user)
         self._step2(authenticator, sso_url, token_url)
         one_time_token = self._step3(headers, token_url, user, password)
         response_html = self._step4(one_time_token, sso_url)
         self._step5(response_html)
 
-    def _step1(self, account, user, authenticator):
+    def _step1(self, authenticator, service_name, account, user):
         logger.debug(u'step 1: query GS to obtain IDP token and SSO url')
 
         headers = {
-            u'Content-Type': CONTENT_TYPE_APPLICATION_JSON,
-            u"accept": CONTENT_TYPE_APPLICATION_JSON,
-            u"User-Agent": PYTHON_CONNECTOR_USER_AGENT,
+            HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
+            HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        if service_name:
+            headers[HTTP_HEADER_SERVICE_NAME] = service_name
         url = u"/session/authenticator-request"
         body = Auth.base_auth_data(
             user, account,
@@ -194,7 +204,7 @@ class AuthByOkta(AuthByPlugin):
         }
         sso_url = sso_url + u'?' + urlencode(url_parameters)
         headers = {
-            u"Accept": u'*/*',
+            HTTP_HEADER_ACCEPT: u'*/*',
         }
         response_html = self._rest.fetch(
             u'get', sso_url, headers,
