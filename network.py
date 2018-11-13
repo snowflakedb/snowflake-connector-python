@@ -843,8 +843,7 @@ class SnowflakeRestful(object):
                         ret = raw_ret.json()
                     return ret
 
-                if is_retryable_http_code(
-                        raw_ret.status_code):
+                if is_retryable_http_code(raw_ret.status_code):
                     ex = STATUS_TO_EXCEPTION.get(
                         raw_ret.status_code, OtherHTTPRetryableError)
                     exi = ex(code=raw_ret.status_code)
