@@ -26,7 +26,7 @@ from .constants import (
     HTTP_HEADER_USER_AGENT,
     HTTP_HEADER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
-    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL,
+    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL,
 )
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_INVALID_VALUE)
 from .errors import (Error,
@@ -375,7 +375,7 @@ class Auth(object):
                 write_temporary_credential_file(
                     account, user, self._rest.id_token,
                 session_parameters.get(
-                    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL))
+                    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL))
             if u'sessionId' in ret[u'data']:
                 self._rest._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
@@ -436,7 +436,7 @@ class Auth(object):
     def read_temporary_credential(self, account, user, session_parameters):
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL):
             read_temporary_credential_file(
-                session_parameters.get(PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL)
+                session_parameters.get(PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL)
             )
             id_token = TEMPORARY_CREDENTIAL.get(
                 account.upper(), {}).get(user.upper())
