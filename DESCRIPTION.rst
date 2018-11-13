@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.0 (November 13, 2018)
+
+    - Internal change for pending feature.
+
 - v1.6.12 (October 30, 2018)
 
     - Updated ``boto3`` and ``botocore`` version dependeny.
