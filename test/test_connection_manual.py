@@ -68,7 +68,12 @@ def test_connect_externalbrowser(token_validity_test_values):
     should not create popups.
     """
 
-    delete_temporary_credential_file()
+    delete_temporary_credential_file(True)  # delete secure storage
+    delete_temporary_credential_file(False)  # delete file cache
+    CONNECTION_PARAMETERS_SSO['session_parameters'] = \
+        {
+        "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL": True,
+    }
 
     # change database and schema to non-default one
     print("[INFO] 1st connection gets id token and stores in the cache file. "

@@ -17,12 +17,16 @@ from os.path import expanduser
 from threading import Lock
 from threading import Thread
 
-from .compat import (TO_UNICODE, urlencode)
+import keyring
+
+from .compat import (TO_UNICODE, urlencode, IS_LINUX)
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_USER_AGENT,
     HTTP_HEADER_SERVICE_NAME,
+    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
+    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL,
 )
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_INVALID_VALUE)
 from .errors import (Error,
@@ -75,6 +79,10 @@ TEMPORARY_CREDENTIAL_FILE = path.join(
 
 # temporary credential cache lock directory name
 TEMPORARY_CREDENTIAL_FILE_LOCK = TEMPORARY_CREDENTIAL_FILE + ".lck"
+
+# keyring
+KEYRING_SERVICE_NAME = "net.snowflake.temporary_token"
+KEYRING_USER = "temp_token"
 
 
 class AuthByPlugin(object):
@@ -365,7 +373,9 @@ class Auth(object):
                 id_token_password=ret[u'data'].get(u'idTokenPassword'))
             if self._rest._connection.consent_cache_id_token:
                 write_temporary_credential_file(
-                    account, user, self._rest.id_token)
+                    account, user, self._rest.id_token,
+                session_parameters.get(
+                    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL))
             if u'sessionId' in ret[u'data']:
                 self._rest._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
@@ -424,8 +434,10 @@ class Auth(object):
                 })
 
     def read_temporary_credential(self, account, user, session_parameters):
-        if session_parameters.get('CLIENT_STORE_TEMPORARY_CREDENTIAL'):
-            read_temporary_credential_file()
+        if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL):
+            read_temporary_credential_file(
+                session_parameters.get(PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL)
+            )
             id_token = TEMPORARY_CREDENTIAL.get(
                 account.upper(), {}).get(user.upper())
             if id_token:
@@ -441,7 +453,9 @@ class Auth(object):
         return False
 
 
-def write_temporary_credential_file(account, user, id_token):
+def write_temporary_credential_file(
+        account, user, id_token,
+        use_secure_storage_for_temporary_credential=False):
     if not CACHE_DIR or not id_token:
         # no cache is enabled or no id_token is given
         return
@@ -462,9 +476,15 @@ def write_temporary_credential_file(account, user, id_token):
                            "write the temporary credential file: %s",
                            TEMPORARY_CREDENTIAL_FILE)
         try:
-            with codecs.open(TEMPORARY_CREDENTIAL_FILE, 'w',
-                             encoding='utf-8', errors='ignore') as f:
-                json.dump(TEMPORARY_CREDENTIAL, f)
+            if IS_LINUX or not use_secure_storage_for_temporary_credential:
+                with codecs.open(TEMPORARY_CREDENTIAL_FILE, 'w',
+                                 encoding='utf-8', errors='ignore') as f:
+                    json.dump(TEMPORARY_CREDENTIAL, f)
+            else:
+                keyring.set_password(
+                    KEYRING_SERVICE_NAME, KEYRING_USER,
+                    json.dumps(TEMPORARY_CREDENTIAL))
+
         except Exception as ex:
             logger.debug("Failed to write a credential file: "
                          "file=[%s], err=[%s]", TEMPORARY_CREDENTIAL_FILE, ex)
@@ -472,7 +492,8 @@ def write_temporary_credential_file(account, user, id_token):
             unlock_temporary_credential_file()
 
 
-def read_temporary_credential_file():
+def read_temporary_credential_file(
+        use_secure_storage_for_temporary_credential=False):
     """
     Read temporary credential file
     """
@@ -493,10 +514,14 @@ def read_temporary_credential_file():
                            "write the temporary credential file: %s",
                            TEMPORARY_CREDENTIAL_FILE)
         try:
-            with codecs.open(
-                    TEMPORARY_CREDENTIAL_FILE, 'r',
-                    encoding='utf-8', errors='ignore') as f:
-                TEMPORARY_CREDENTIAL = json.load(f)
+            if IS_LINUX or not use_secure_storage_for_temporary_credential:
+                with codecs.open(TEMPORARY_CREDENTIAL_FILE, 'r',
+                                 encoding='utf-8', errors='ignore') as f:
+                    TEMPORARY_CREDENTIAL = json.load(f)
+            else:
+                f = keyring.get_password(
+                    KEYRING_SERVICE_NAME, KEYRING_USER) or "{}"
+                TEMPORARY_CREDENTIAL = json.loads(f)
             return TEMPORARY_CREDENTIAL
         except Exception as ex:
             logger.debug("Failed to read a credential file. The file may not"
@@ -528,16 +553,23 @@ def unlock_temporary_credential_file():
         return False
 
 
-def delete_temporary_credential_file():
+def delete_temporary_credential_file(
+        use_secure_storage_for_temporary_credential=False):
     """
     Delete temporary credential file and its lock file
     """
     global TEMPORARY_CREDENTIAL_FILE
-    try:
-        remove(TEMPORARY_CREDENTIAL_FILE)
-    except Exception as ex:
-        logger.debug("Failed to delete a credential file: "
-                     "file=[%s], err=[%s]", TEMPORARY_CREDENTIAL_FILE, ex)
+    if IS_LINUX or not use_secure_storage_for_temporary_credential:
+        try:
+            remove(TEMPORARY_CREDENTIAL_FILE)
+        except Exception as ex:
+            logger.debug("Failed to delete a credential file: "
+                         "file=[%s], err=[%s]", TEMPORARY_CREDENTIAL_FILE, ex)
+    else:
+        try:
+            keyring.delete_password(KEYRING_SERVICE_NAME, KEYRING_USER)
+        except Exception as ex:
+            logger.debug("Failed to delete credential in the keyring: err=[%s]", ex)
     try:
         removedirs(TEMPORARY_CREDENTIAL_FILE_LOCK)
     except Exception as ex:

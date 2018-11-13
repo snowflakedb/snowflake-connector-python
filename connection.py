@@ -29,6 +29,7 @@ from .constants import (
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
     PARAMETER_TIMEZONE,
     PARAMETER_SERVICE_NAME,
+    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
 )
 from .converter import SnowflakeConverter
 from .converter_issue23517 import SnowflakeConverterIssue23517
@@ -597,7 +598,8 @@ class SnowflakeConnection(object):
 
         if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
-            self._session_parameters['CLIENT_STORE_TEMPORARY_CREDENTIAL'] = True
+            self._session_parameters[
+                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = True
 
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(
