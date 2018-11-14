@@ -70,8 +70,12 @@ CONNECTION_PARAMETERS = {
 """)
 
 
-@pytest.fixture()
+@pytest.fixture(scope='session')
 def db_parameters():
+    return get_db_parameters()
+
+
+def get_db_parameters():
     """
     Sets the db connection parameters
     """
@@ -124,12 +128,12 @@ def db_parameters():
 
 
 @pytest.fixture(scope='session', autouse=True)
-def init_test_schema(request):
+def init_test_schema(request, db_parameters):
     """
     Initializes and Deinitializes the test schema
     This is automatically called per test session.
     """
-    ret = db_parameters()
+    ret = db_parameters
     with snowflake.connector.connect(
             user=ret['user'],
             password=ret['password'],
@@ -169,7 +173,7 @@ def init_test_schema(request):
                 "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
 
     def fin():
-        ret1 = db_parameters()
+        ret1 = db_parameters
         with snowflake.connector.connect(
                 user=ret1['user'],
                 password=ret1['password'],
@@ -203,7 +207,7 @@ def create_connection(user=None, password=None, account=None, use_numpy=False,
     """
     Creates a connection using the parameters defined in JDBC connect string
     """
-    ret = db_parameters()
+    ret = get_db_parameters()
 
     if converter_class is None:
         converter_class = SnowflakeConverter if not PY_ISSUE_23517 else \
