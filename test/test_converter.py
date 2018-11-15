@@ -18,7 +18,7 @@ def _compose_tz(dt, tzinfo):
     return ret.replace(tzinfo=tzinfo)
 
 
-def _componse_ntz(dt):
+def _compose_ntz(dt):
     return ZERO_EPOCH + timedelta(seconds=float(dt))
 
 
@@ -47,16 +47,16 @@ def test_fetch_timestamps(conn_cnx):
     r9 = _compose_tz('1325568896', tzinfo)
 
     # TIMESTAMP_NTZ
-    r10 = _componse_ntz('1325568896.123456')
-    r11 = _componse_ntz('1325568896.123456')
-    r12 = _componse_ntz('1325568896.123456')
-    r13 = _componse_ntz('1325568896.123456')
-    r14 = _componse_ntz('1325568896.12345')
-    r15 = _componse_ntz('1325568896.1234')
-    r16 = _componse_ntz('1325568896.123')
-    r17 = _componse_ntz('1325568896.12')
-    r18 = _componse_ntz('1325568896.1')
-    r19 = _componse_ntz('1325568896')
+    r10 = _compose_ntz('1325568896.123456')
+    r11 = _compose_ntz('1325568896.123456')
+    r12 = _compose_ntz('1325568896.123456')
+    r13 = _compose_ntz('1325568896.123456')
+    r14 = _compose_ntz('1325568896.12345')
+    r15 = _compose_ntz('1325568896.1234')
+    r16 = _compose_ntz('1325568896.123')
+    r17 = _compose_ntz('1325568896.12')
+    r18 = _compose_ntz('1325568896.1')
+    r19 = _compose_ntz('1325568896')
 
     # TIMESTAMP_LTZ
     r20 = _compose_ltz('1325568896.123456', PST_TZ)
@@ -322,3 +322,20 @@ ALTER SESSION SET
         assert ret[37] == '05:07:08.120000'
         assert ret[38] == '05:07:08.100000'
         assert ret[39] == '05:07:08.000000'
+
+def test_fetch_timestamps_negative_epoch(conn_cnx):
+    """
+    Negative epoch
+    """
+    r0 = _compose_ntz('-602594703.876544')
+    r1 = _compose_ntz('1325594096.123456')
+    with conn_cnx() as cnx:
+        cur = cnx.cursor()
+        cur.execute("""
+SELECT
+    '1950-11-27 12:34:56.123456'::timestamp_ntz(6),
+    '2012-01-03 12:34:56.123456'::timestamp_ntz(6)
+""")
+        ret = cur.fetchone()
+        assert ret[0] == r0
+        assert ret[1] == r1

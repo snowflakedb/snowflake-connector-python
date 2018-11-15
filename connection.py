@@ -21,7 +21,8 @@ from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import SnowflakeChunkDownloader
-from .compat import (TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517)
+from .compat import (
+    TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517, IS_WINDOWS)
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
@@ -31,8 +32,6 @@ from .constants import (
     PARAMETER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
 )
-from .converter import SnowflakeConverter
-from .converter_issue23517 import SnowflakeConverterIssue23517
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
@@ -61,6 +60,16 @@ from .time_util import (
     DEFAULT_MASTER_VALIDITY_IN_SECONDS,
     HeartBeatTimer, get_time_millis)
 from .util_text import split_statements, construct_hostname
+
+
+def DefaultConverterClass():
+    if PY_ISSUE_23517 or IS_WINDOWS:
+        from .converter_issue23517 import SnowflakeConverterIssue23517
+        return SnowflakeConverterIssue23517
+    else:
+        from .converter import SnowflakeConverter
+        return SnowflakeConverter
+
 
 SUPPORTED_PARAMSTYLES = {
     u"qmark",
@@ -108,8 +117,7 @@ DEFAULT_CONFIGURATION = {
     u'client_session_keep_alive_heartbeat_frequency': None,  # snowflake
     u'numpy': False,  # snowflake
     u'ocsp_response_cache_filename': None,  # snowflake internal
-    u'converter_class':
-        SnowflakeConverter if not PY_ISSUE_23517 else SnowflakeConverterIssue23517,
+    u'converter_class': DefaultConverterClass(),
     u'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
     u'validate_default_parameters': False,  # snowflake
     u'probe_connection': False,  # snowflake

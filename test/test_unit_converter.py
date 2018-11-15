@@ -6,16 +6,12 @@
 
 from logging import getLogger
 
-from snowflake.connector.compat import (PY_ISSUE_23517, TO_UNICODE)
-from snowflake.connector.converter import SnowflakeConverter
-from snowflake.connector.converter_issue23517 import (
-    SnowflakeConverterIssue23517)
+from snowflake.connector.connection import DefaultConverterClass
+from snowflake.connector.compat import (TO_UNICODE)
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
 logger = getLogger(__name__)
 
-Converter = SnowflakeConverter if not PY_ISSUE_23517 else \
-    SnowflakeConverterIssue23517
 
 ConverterSnowSQL = SnowflakeConverterSnowSQL
 
@@ -26,7 +22,8 @@ def test_is_dst():
     changed
     """
     # DST to non-DST
-    conv = Converter()
+    convClass = DefaultConverterClass()
+    conv = convClass()
     conv.set_parameter('TIMEZONE', 'America/Los_Angeles')
 
     col_meta = {
