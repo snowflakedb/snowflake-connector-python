@@ -32,10 +32,8 @@ except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 import snowflake.connector
-from snowflake.connector.compat import (UTF8, TO_UNICODE, PY_ISSUE_23517, IS_WINDOWS)
-from snowflake.connector.converter import SnowflakeConverter
-from snowflake.connector.converter_issue23517 import (
-    SnowflakeConverterIssue23517)
+from snowflake.connector.connection import DefaultConverterClass
+from snowflake.connector.compat import (UTF8, TO_UNICODE, IS_WINDOWS)
 
 logger = getLogger(__name__)
 
@@ -210,8 +208,7 @@ def create_connection(user=None, password=None, account=None, use_numpy=False,
     ret = get_db_parameters()
 
     if converter_class is None:
-        converter_class = SnowflakeConverter if not PY_ISSUE_23517 else \
-            SnowflakeConverterIssue23517
+        converter_class = DefaultConverterClass()
     if user is not None:
         ret['user'] = user
     if password is not None:
