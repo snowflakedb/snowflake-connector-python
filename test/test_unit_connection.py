@@ -16,7 +16,6 @@ if PY2:
 else:
     from unittest.mock import patch
 
-
 @patch(
     'snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate')
 @patch(
@@ -84,6 +83,7 @@ def test_connect_externalbrowser(
         mock_cnt += 1
         return ret
 
+    global mock_cnt
     mock_cnt = 0
 
     # pre-authentication doesn't matter
@@ -94,7 +94,6 @@ def test_connect_externalbrowser(
 
     delete_temporary_credential_file()
 
-    global mock_cnt
     mock_cnt = 0
 
     account = 'testaccount'

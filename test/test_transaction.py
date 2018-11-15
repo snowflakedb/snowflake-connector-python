@@ -91,7 +91,7 @@ DROP TABLE IF EXISTS {name}
         with snowflake.connector.connect(**db_config) as cnx:
             cnx.autocommit(False)
             cnx.cursor().execute("""
-CREATE TABLE {name} (cc1 int)
+CREATE OR REPLACE TABLE {name} (cc1 int)
 """.format(name=db_parameters['name']))
             cnx.cursor().execute("""
 INSERT INTO {name} VALUES(1),(2),(3)
