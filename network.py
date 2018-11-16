@@ -101,6 +101,7 @@ HEADER_SNOWFLAKE_TOKEN = u'Snowflake Token="{token}"'
 
 REQUEST_ID = u'requestId'
 REQUEST_GUID = u'request_guid'
+SNOWFLAKE_HOST_SUFFIX = u'.snowflakecomputing.com'
 
 SNOWFLAKE_CONNECTOR_VERSION = u'.'.join(TO_UNICODE(v) for v in VERSION[0:3])
 PYTHON_VERSION = u'.'.join(TO_UNICODE(v) for v in sys.version_info[:3])
@@ -647,10 +648,13 @@ class SnowflakeRestful(object):
         """
         Add request_guid parameter for HTTP request tracing
         """
+        parsed_url = urlparse(full_url)
+        if not parsed_url.hostname.endswith(SNOWFLAKE_HOST_SUFFIX):
+            return full_url
         suffix = urlencode({
             REQUEST_GUID: TO_UNICODE(uuid.uuid4())
         })
-        sep = '&' if urlparse(full_url).query else '?'
+        sep = '&' if parsed_url.query else '?'
         # url has query string already, just add fields
         return full_url + sep + suffix
 
