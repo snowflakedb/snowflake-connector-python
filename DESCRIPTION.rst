@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.1 (November 27, 2018)
+
+    - Fixed regex pattern warning in cursor.py
+    - Fixed 403 error for EU deployment
+    - Fixed the epoch time to datetime object converter for Windoww
+
 - v1.7.0 (November 13, 2018)
 
     - Internal change for pending feature.
