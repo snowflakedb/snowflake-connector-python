@@ -60,7 +60,7 @@ class SnowflakeCursor(object):
     PUT_SQL_RE = re.compile(u(r'^(?:/\*.*\*/\s*)*put\s+'), flags=re.IGNORECASE)
     GET_SQL_RE = re.compile(u(r'^(?:/\*.*\*/\s*)*get\s+'), flags=re.IGNORECASE)
     INSERT_SQL_RE = re.compile(u(r'^insert\s+into'), flags=re.IGNORECASE)
-    COMMENT_SQL_RE = re.compile(u"/\*.*\*/")
+    COMMENT_SQL_RE = re.compile(r"/\*.*\*/")
     INSERT_SQL_VALUES_RE = re.compile(u(r'.*VALUES\s*(\(.*\)).*'),
                                       re.IGNORECASE | re.MULTILINE | re.DOTALL)
     ALTER_SESSION_RE = re.compile(
