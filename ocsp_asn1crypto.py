@@ -32,6 +32,7 @@ from botocore.vendored.requests import adapters
 from snowflake.connector.compat import (urlsplit, OK)
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE,
+    ER_SERVER_CERTIFICATE_UNKNOWN,
     ER_SERVER_CERTIFICATE_REVOKED)
 from snowflake.connector.errors import OperationalError
 
@@ -337,7 +338,7 @@ def _lazy_read_ca_bundle():
                      'Set REQUESTS_CA_BUNDLE to the file.')
 
 
-def _create_ocsp_request(issuer, subject):
+def create_ocsp_request(issuer, subject):
     """
     Create CertId and OCSPRequest
     """
@@ -510,7 +511,7 @@ def _process_unknown_status(cert_id):
             del OCSP_VALIDATION_CACHE[hkey]
     raise OperationalError(
         msg=u"The certificate is in UNKNOWN revocation status.",
-        errno=ER_SERVER_CERTIFICATE_REVOKED,
+        errno=ER_SERVER_CERTIFICATE_UNKNOWN,
     )
 
 
@@ -656,7 +657,7 @@ def is_cert_id_in_cache(issuer, subject):
     global OCSP_VALIDATION_CACHE
     global OCSP_VALIDATION_CACHE_UPDATED
 
-    cert_id, req = _create_ocsp_request(issuer, subject)
+    cert_id, req = create_ocsp_request(issuer, subject)
     hkey = _decode_cert_id_key(cert_id)
     with OCSP_VALIDATION_CACHE_LOCK:
         current_time = int(time.time())
@@ -720,10 +721,8 @@ def validate_by_direct_connection(issuer, subject, do_retry=True):
                 "Retrying... %s/%s", ex, retry + 1, max_retry)
             err = ex
             cache_status = False
-    if err:
-        raise err
 
-    return True, cert_id, ocsp_response
+    return err, issuer, subject, cert_id, ocsp_response
 
 
 def _download_ocsp_response_cache(url, do_retry=True):
@@ -776,7 +775,7 @@ def _validate_certificates_sequential(cert_data, do_retry=True):
     results = []
     _check_ocsp_response_cache_server(cert_data)
     for issuer, subject in cert_data:
-        r = validate_by_direct_connection(issuer, subject, do_retry)
+        r = validate_by_direct_connection(issuer, subject, do_retry=do_retry)
         results.append(r)
     return results
 
@@ -796,7 +795,7 @@ def _check_ocsp_response_cache_server(cert_data):
     in_cache = True
     for issuer, subject in cert_data:
         # check if OCSP response is in cache
-        cert_id, _ = _create_ocsp_request(issuer, subject)
+        cert_id, _ = create_ocsp_request(issuer, subject)
         hkey = _decode_cert_id_key(cert_id)
         with OCSP_VALIDATION_CACHE_LOCK:
             if hkey not in OCSP_VALIDATION_CACHE:
@@ -957,16 +956,19 @@ class SnowflakeOCSP(object):
         _read_ocsp_response_cache(self._ocsp_response_cache_uri)
         'test'.encode("charmap")
 
-    def validate_certfile(self, cert_filename):
+    def validate_certfile(self, cert_filename, no_exception=False):
         """
         Validates the certificate is NOT revoked
         """
         cert_map = {}
         read_cert_bundle(cert_filename, cert_map)
         cert_data = _create_pair_issuer_subject(cert_map)
-        return self._validate(None, cert_data, do_retry=False)
+        return self._validate(
+            None, cert_data, do_retry=False, no_exception=no_exception)
 
-    def validate(self, hostname, connection, ignore_no_ocsp=False):
+    def validate(
+            self, hostname, connection,
+            ignore_no_ocsp=False, no_exception=False):
         """
         Validates the certificate is not revoked using OCSP
         """
@@ -976,14 +978,16 @@ class SnowflakeOCSP(object):
             return True
 
         cert_data = _extract_certificate_chain(connection)
-        return self._validate(hostname, cert_data)
+        return self._validate(hostname, cert_data, no_exception=no_exception)
 
-    def _validate(self, hostname, cert_data, do_retry=True):
+    def _validate(
+            self, hostname, cert_data, do_retry=True, no_exception=False):
         global OCSP_VALIDATION_CACHE_UPDATED
         global OCSP_VALIDATION_CACHE
 
         # Validate certs sequentially if OCSP response cache server is used
-        results = _validate_certificates_sequential(cert_data, do_retry)
+        results = _validate_certificates_sequential(
+            cert_data, do_retry=do_retry)
 
         with OCSP_VALIDATION_CACHE_LOCK:
             if OCSP_VALIDATION_CACHE_UPDATED:
@@ -1000,5 +1004,12 @@ class SnowflakeOCSP(object):
                                            len(cert_data)),
                 errno=ER_INVALID_OCSP_RESPONSE
             )
-        logger.debug('ok')
-        return True
+        any_err = False
+        for err, issuer, subject, cert_id, ocsp_response in results:
+            if not no_exception and err is not None:
+                raise err
+            elif err is not None:
+                any_err = True
+
+        logger.debug('ok' if not any_err else 'failed')
+        return results
