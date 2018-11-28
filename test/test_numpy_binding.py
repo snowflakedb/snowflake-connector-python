@@ -13,25 +13,25 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
         'float': '1.79769313486e+308',
         'epoch_time': epoch_time,
         'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('2005-02-25T03:30Z')
+        'specific_date': np.datetime64('2005-02-25T03:30')
     }, {
         'tz': 'Asia/Tokyo',
         'float': '-1.79769313486e+308',
         'epoch_time': epoch_time,
         'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('1970-12-31T05:00:00Z')
+        'specific_date': np.datetime64('1970-12-31T05:00:00')
     }, {
         'tz': 'America/New_York',
         'float': '-1.79769313486e+308',
         'epoch_time': epoch_time,
         'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('1969-12-31T05:00:00Z')
+        'specific_date': np.datetime64('1969-12-31T05:00:00')
     }, {
         'tz': 'UTC',
         'float': '-1.79769313486e+308',
         'epoch_time': epoch_time,
         'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('1968-11-12T07:00:00.123Z')
+        'specific_date': np.datetime64('1968-11-12T07:00:00.123')
     }]
     try:
         with conn_cnx(use_numpy=True) as cnx:
