@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.2 (December 4, 2018)
+
+    - Refactored OCSP checks
+    - Adjusted log level to mitigate confusions
+
 - v1.7.1 (November 27, 2018)
 
     - Fixed regex pattern warning in cursor.py
