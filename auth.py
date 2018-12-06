@@ -62,7 +62,7 @@ if not path.exists(CACHE_DIR):
     try:
         makedirs(CACHE_DIR, mode=0o700)
     except Exception as ex:
-        logger.warning('cannot create a cache directory: [%s], err=[%s]',
+        logger.debug('cannot create a cache directory: [%s], err=[%s]',
                        CACHE_DIR, ex)
         CACHE_DIR = None
 logger.debug("cache directory: %s", CACHE_DIR)
@@ -449,7 +449,7 @@ def write_temporary_credential_file(
                 break
             time.sleep(1)
         else:
-            logger.warning("The lock file still persists. Will ignore and "
+            logger.debug("The lock file still persists. Will ignore and "
                            "write the temporary credential file: %s",
                            TEMPORARY_CREDENTIAL_FILE)
         try:
@@ -487,7 +487,7 @@ def read_temporary_credential_file(
                 break
             time.sleep(1)
         else:
-            logger.warning("The lock file still persists. Will ignore and "
+            logger.debug("The lock file still persists. Will ignore and "
                            "write the temporary credential file: %s",
                            TEMPORARY_CREDENTIAL_FILE)
         try:

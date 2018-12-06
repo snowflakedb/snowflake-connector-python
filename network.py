@@ -275,7 +275,7 @@ class SnowflakeRestful(object):
             del self._id_token_password
         sessions = list(self._active_sessions)
         if sessions:
-            logger.warning("Closing %s active sessions", len(sessions))
+            logger.debug("Closing %s active sessions", len(sessions))
         sessions.extend(self._idle_sessions)
         self._active_sessions.clear()
         self._idle_sessions.clear()
@@ -283,7 +283,7 @@ class SnowflakeRestful(object):
             try:
                 s.close()
             except Exception as e:
-                logger.warning("Session cleanup failed: %s", e)
+                logger.info("Session cleanup failed: %s", e)
 
     def request(self, url, body=None, method=u'post', client=u'sfsql',
                 _no_results=False, timeout=None, _include_retry_params=False):
