@@ -95,7 +95,7 @@ class TelemetryClient(object):
             ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
                                      method='post', client=None, timeout=5)
             if not ret[u'success']:
-                logger.warning(
+                logger.info(
                     "Non-success response from telemetry server: %s. "
                     "Disabling telemetry.", str(ret))
                 self._enabled = False

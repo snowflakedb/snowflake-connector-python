@@ -466,7 +466,7 @@ class SnowflakeCursor(object):
         if m:
             query1 = u'describe table {0}'.format(m.group(1))
             if logger.getEffectiveLevel() <= logging.WARNING:
-                logger.warning(
+                logger.info(
                     u'query was rewritten: org=%s, new=%s',
                     u' '.join(line.strip() for line in query.split(u'\n')),
                     query1
