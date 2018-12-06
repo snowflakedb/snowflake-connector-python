@@ -111,14 +111,9 @@ class AuthByPlugin(object):
             self._rest._connection, None, DatabaseError,
             {
                 u'msg': (u"Failed to connect to DB: {host}:{port}, "
-                         u"proxies={proxy_host}:{proxy_port}, "
-                         u"proxy_user={proxy_user}, "
                          u"{message}").format(
                     host=self._rest._host,
                     port=self._rest._port,
-                    proxy_host=self._rest._proxy_host,
-                    proxy_port=self._rest._proxy_port,
-                    proxy_user=self._rest._proxy_user,
                     message=ret[u'message'],
                 ),
                 u'errno': int(ret.get(u'code', -1)),
@@ -234,14 +229,10 @@ class Auth(object):
             # HTTP 403
             raise err.__class__(
                 msg=(u"Failed to connect to DB. "
-                     u"Verify the account name is correct: {host}:{port}, "
-                     u"proxies={proxy_host}:{proxy_port}, "
-                     u"proxy_user={proxy_user}. {message}").format(
+                     u"Verify the account name is correct: {host}:{port}. "
+                     u"{message}").format(
                     host=self._rest._host,
                     port=self._rest._port,
-                    proxy_host=self._rest._proxy_host,
-                    proxy_port=self._rest._proxy_port,
-                    proxy_user=self._rest._proxy_user,
                     message=TO_UNICODE(err)
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
@@ -250,14 +241,10 @@ class Auth(object):
             # HTTP 502/504
             raise err.__class__(
                 msg=(u"Failed to connect to DB. "
-                     u"Service is unavailable: {host}:{port}, "
-                     u"proxies={proxy_host}:{proxy_port}, "
-                     u"proxy_user={proxy_user}. {message}").format(
+                     u"Service is unavailable: {host}:{port}. "
+                     u"{message}").format(
                     host=self._rest._host,
                     port=self._rest._port,
-                    proxy_host=self._rest._proxy_host,
-                    proxy_port=self._rest._proxy_port,
-                    proxy_user=self._rest._proxy_user,
                     message=TO_UNICODE(err)
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
@@ -303,15 +290,9 @@ class Auth(object):
                     {
                         u'msg': (u"Failed to connect to DB. MFA "
                                  u"authentication failed: {"
-                                 u"host}:{port}, "
-                                 u"proxies={proxy_host}:{proxy_port}, "
-                                 u"proxy_user={proxy_user}, "
-                                 u"{message}").format(
+                                 u"host}:{port}. {message}").format(
                             host=self._rest._host,
                             port=self._rest._port,
-                            proxy_host=self._rest._proxy_host,
-                            proxy_port=self._rest._proxy_port,
-                            proxy_user=self._rest._proxy_user,
                             message=ret[u'message'],
                         ),
                         u'errno': ER_FAILED_TO_CONNECT_TO_DB,
@@ -339,15 +320,10 @@ class Auth(object):
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
                 {
-                    u'msg': (u"Failed to connect to DB: {host}:{port}, "
-                             u"proxies={proxy_host}:{proxy_port}, "
-                             u"proxy_user={proxy_user}, "
+                    u'msg': (u"Failed to connect to DB: {host}:{port}. "
                              u"{message}").format(
                         host=self._rest._host,
                         port=self._rest._port,
-                        proxy_host=self._rest._proxy_host,
-                        proxy_port=self._rest._proxy_port,
-                        proxy_user=self._rest._proxy_user,
                         message=ret[u'message'],
                     ),
                     u'errno': ER_FAILED_TO_CONNECT_TO_DB,
@@ -374,8 +350,8 @@ class Auth(object):
             if self._rest._connection.consent_cache_id_token:
                 write_temporary_credential_file(
                     account, user, self._rest.id_token,
-                session_parameters.get(
-                    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL))
+                    session_parameters.get(
+                        PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL))
             if u'sessionId' in ret[u'data']:
                 self._rest._connection._session_id = ret[u'data'][u'sessionId']
             if u'sessionInfo' in ret[u'data']:
@@ -436,7 +412,8 @@ class Auth(object):
     def read_temporary_credential(self, account, user, session_parameters):
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL):
             read_temporary_credential_file(
-                session_parameters.get(PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL)
+                session_parameters.get(
+                    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL)
             )
             id_token = TEMPORARY_CREDENTIAL.get(
                 account.upper(), {}).get(user.upper())
@@ -569,7 +546,8 @@ def delete_temporary_credential_file(
         try:
             keyring.delete_password(KEYRING_SERVICE_NAME, KEYRING_USER)
         except Exception as ex:
-            logger.debug("Failed to delete credential in the keyring: err=[%s]", ex)
+            logger.debug("Failed to delete credential in the keyring: err=[%s]",
+                         ex)
     try:
         removedirs(TEMPORARY_CREDENTIAL_FILE_LOCK)
     except Exception as ex:

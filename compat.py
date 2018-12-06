@@ -62,7 +62,6 @@ if PY2:
     BadStatusLine = httplib.BadStatusLine
 
     urlencode = urllib.urlencode
-    proxy_bypass = urllib.proxy_bypass
     unquote = urllib.unquote
     unescape = HTMLParser().unescape
 
@@ -104,7 +103,6 @@ else:
     BadStatusLine = http.client.BadStatusLine
 
     urlencode = urllib.parse.urlencode
-    proxy_bypass = urllib.request.proxy_bypass
     unquote = urllib.parse.unquote
     unescape = html.unescape
 

@@ -446,6 +446,9 @@ def test_invalid_proxy(db_parameters):
             proxy_host='localhost',
             proxy_port='3333'
         )
+    # NOTE environment variable is set if the proxy parameter is specified.
+    del os.environ['HTTP_PROXY']
+    del os.environ['HTTPS_PROXY']
 
 
 @pytest.mark.timeout(15)

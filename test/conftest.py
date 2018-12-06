@@ -14,6 +14,7 @@ from io import open
 from logging import getLogger
 
 import pytest
+
 from parameters import CONNECTION_PARAMETERS
 
 try:

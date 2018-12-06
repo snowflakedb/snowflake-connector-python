@@ -3,37 +3,16 @@
 #
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
-import logging
 import time
-from logging import getLogger
 from os import path
 from time import gmtime, strftime
 
-from asn1crypto import ocsp
+from asn1crypto import ocsp as asn1crypto_ocsp
 
 from snowflake.connector.compat import (urlsplit)
-from snowflake.connector.ocsp_asn1crypto import (
-    ZERO_EPOCH,
-    OUTPUT_TIMESTAMP_FORMAT,
-    validate_by_direct_connection,
-    _create_ocsp_request,
-    _extract_certificate_chain,
-    _is_validaity_range,
-    _validity_error_message,
-    _calculate_tolerable_validity,
-    write_ocsp_response_cache_file,
-    OCSP_VALIDATION_CACHE)
+from snowflake.connector.ocsp_asn1crypto \
+    import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
-
-for logger_name in ['__main__', 'snowflake']:
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(ch)
-
-logger = getLogger(__name__)
 
 
 def main():
@@ -43,9 +22,7 @@ def main():
 
     def help():
         print(
-            "Dump OCSP Response for the URL. "
-            "Warning: The output is not stable, don't rely on the output for "
-            "automation.")
+            "Dump OCSP Response for the URL. ")
         print("""
 Usage: {0} <url> [<url> ...]
 """.format(path.basename(sys.argv[0])))
@@ -59,26 +36,63 @@ Usage: {0} <url> [<url> ...]
     dump_ocsp_response(urls, output_filename=None)
 
 
+def dump_good_status(current_time, single_response):
+    print("This Update: {0}".format(single_response['this_update'].native))
+    print("Next Update: {0}".format(single_response['next_update'].native))
+    this_update = (
+            single_response['this_update'].native.replace(tzinfo=None) -
+            SFOCSP.ZERO_EPOCH).total_seconds()
+    next_update = (
+            single_response['next_update'].native.replace(tzinfo=None) -
+            SFOCSP.ZERO_EPOCH).total_seconds()
+
+    tolerable_validity = SFOCSP._calculate_tolerable_validity(
+        this_update,
+        next_update)
+    print("Tolerable Update: {0}".format(
+        strftime('%Y%m%d%H%M%SZ', gmtime(
+            next_update + tolerable_validity))
+    ))
+    if SFOCSP._is_validaity_range(current_time, this_update, next_update):
+        print("OK")
+    else:
+        print(SFOCSP._validity_error_message(
+            current_time, this_update, next_update))
+
+
+def dump_revoked_status(single_response):
+    revoked_info = single_response['cert_status']
+    revocation_time = revoked_info.native['revocation_time']
+    revocation_reason = revoked_info.native['revocation_reason']
+    print("Revoked Time: {0}".format(
+        revocation_time.strftime(
+            SFOCSP.OUTPUT_TIMESTAMP_FORMAT)))
+    print("Revoked Reason: {0}".format(revocation_reason))
+
+
 def dump_ocsp_response(urls, output_filename):
+    ocsp = SFOCSP()
     for url in urls:
+        if not url.startswith('http'):
+            url = 'https://' + url
         parsed_url = urlsplit(url)
         hostname = parsed_url.hostname
         port = parsed_url.port or 443
         connection = _openssl_connect(hostname, port)
-        cert_data = _extract_certificate_chain(connection)
+        cert_data = ocsp.extract_certificate_chain(connection)
         current_time = int(time.time())
         print("Target URL: {0}".format(url))
         print("Current Time: {0}".format(
             strftime('%Y%m%d%H%M%SZ', gmtime(current_time))))
         for issuer, subject in cert_data:
-            cert_id, _ = _create_ocsp_request(issuer, subject)
-            _, cert_id, ocsp_response_der = validate_by_direct_connection(
-                issuer, subject)
-            ocsp_response = ocsp.OCSPResponse.load(ocsp_response_der)
+            cert_id, _ = ocsp.create_ocsp_request(issuer, subject)
+            _, _, _, cert_id, ocsp_response_der = \
+                ocsp.validate_by_direct_connection(issuer, subject)
+            ocsp_response = asn1crypto_ocsp.OCSPResponse.load(ocsp_response_der)
             print(
                 "------------------------------------------------------------")
-            print("Issuer Name: {0}".format(issuer.subject.native))
             print("Subject Name: {0}".format(subject.subject.native))
+            print("Issuer Name: {0}".format(issuer.subject.native))
             print("OCSP URI: {0}".format(subject.ocsp_urls))
             print("CRL URI: {0}".format(
                 subject.crl_distribution_points[0].native))
@@ -95,46 +109,18 @@ def dump_ocsp_response(urls, output_filename):
             for single_response in tbs_response_data['responses']:
                 cert_status = single_response['cert_status'].name
                 if cert_status == 'good':
-                    print("This Update: {0}".format(
-                        single_response['this_update'].native))
-                    print("Next Update: {0}".format(
-                        single_response['next_update'].native))
-                    this_update = (
-                            single_response['this_update'].native.replace(
-                                tzinfo=None) - ZERO_EPOCH).total_seconds()
-                    next_update = (
-                            single_response['next_update'].native.replace(
-                                tzinfo=None) - ZERO_EPOCH).total_seconds()
-
-                    tolerable_validity = _calculate_tolerable_validity(
-                        this_update,
-                        next_update)
-                    print("Tolerable Update: {0}".format(
-                        strftime('%Y%m%d%H%M%SZ', gmtime(
-                            next_update + tolerable_validity))
-                    ))
-                    if _is_validaity_range(current_time, this_update,
-                                           next_update):
-                        print("OK")
-                    else:
-                        print(_validity_error_message(
-                            current_time, this_update, next_update))
+                    dump_good_status(current_time, single_response)
                 elif cert_status == 'revoked':
-                    revoked_info = single_response['cert_status']
-                    revocation_time = revoked_info.native['revocation_time']
-                    revocation_reason = revoked_info.native['revocation_reason']
-                    print("Revoked Time: {0}".format(
-                        revocation_time.strftime(OUTPUT_TIMESTAMP_FORMAT)))
-                    print("Revoked Reason: {0}".format(revocation_reason))
-                    print("Revoked")
+                    dump_revoked_status(single_response)
                 else:
                     print("Unknown")
             print('')
 
         if output_filename:
-            write_ocsp_response_cache_file(
-                output_filename, OCSP_VALIDATION_CACHE)
-    return OCSP_VALIDATION_CACHE
+            SFOCSP.OCSP_CACHE.write_ocsp_response_cache_file(
+                ocsp,
+                output_filename)
+    return SFOCSP.OCSP_CACHE.CACHE
 
 
 if __name__ == '__main__':
