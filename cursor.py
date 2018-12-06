@@ -416,8 +416,10 @@ class SnowflakeCursor(object):
     def execute(self, command, params=None, timeout=None,
                 _do_reset=True,
                 _put_callback=None,
+                _put_azure_callback=None,
                 _put_callback_output_stream=sys.stdout,
                 _get_callback=None,
+                _get_azure_callback=None,
                 _get_callback_output_stream=sys.stdout,
                 _statement_params=None,
                 _is_internal=False,
@@ -512,8 +514,10 @@ class SnowflakeCursor(object):
                 sf_file_transfer_agent = SnowflakeFileTransferAgent(
                     self, query, ret,
                     put_callback=_put_callback,
+                    put_azure_callback=_put_azure_callback,
                     put_callback_output_stream=_put_callback_output_stream,
                     get_callback=_get_callback,
+                    get_azure_callback=_get_azure_callback,
                     get_callback_output_stream=_get_callback_output_stream,
                     raise_put_get_error=_raise_put_get_error)
                 sf_file_transfer_agent.execute()
