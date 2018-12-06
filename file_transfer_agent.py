@@ -114,6 +114,16 @@ class SnowflakeProgressPercentage(object):
         self._lock = threading.Lock()
 
     def __call__(self, bytes_amount):
+        raise NotImplementedError
+
+
+class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
+    def __init__(self, filename, filesize, output_stream=sys.stdout):
+        super(SnowflakeS3ProgressPercentage, self).__init__(
+            filename, filesize, output_stream)
+
+    def __call__(self, bytes_amount):
+        logger.debug("Bytes returned from callback %s", bytes_amount)
         with self._lock:
             if self._output_stream:
                 self._seen_so_far += bytes_amount
@@ -125,23 +135,45 @@ class SnowflakeProgressPercentage(object):
                         output_stream=self._output_stream)
 
 
+class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
+    def __init__(self, filename, filesize, output_stream=sys.stdout):
+        super(SnowflakeAzureProgressPercentage, self).__init__(
+            filename, filesize, output_stream)
+
+    def __call__(self, current):
+        with self._lock:
+            if self._output_stream:
+                self._seen_so_far = current
+                percentage = float(self._seen_so_far / self._size)
+                if not self._done:
+                    self._done = _update_progress(
+                        self._filename, self._start_time,
+                        self._size, percentage,
+                        output_stream=self._output_stream)
+
+
 class SnowflakeFileTransferAgent(object):
     """
-    Snowflake File Transfer Agent
-    """
+    Snowflake File Transfer Agent    """
 
     def __init__(self, cursor, command, ret,
                  put_callback=None,
+                 put_azure_callback=None,
                  put_callback_output_stream=sys.stdout,
                  get_callback=None,
+                 get_azure_callback=None,
                  get_callback_output_stream=sys.stdout,
                  raise_put_get_error=False):
         self._cursor = cursor
         self._command = command
         self._ret = ret
         self._put_callback = put_callback
+        self._put_azure_callback = \
+            put_azure_callback if put_azure_callback else put_callback
         self._put_callback_output_stream = put_callback_output_stream
         self._get_callback = get_callback
+        self._get_azure_callback = \
+            get_azure_callback if get_azure_callback else get_callback
         self._get_callback_output_stream = get_callback_output_stream
         self._use_accelerate_endpoint = False
         self._raise_put_get_error = raise_put_get_error
@@ -171,14 +203,17 @@ class SnowflakeFileTransferAgent(object):
             meta[u'self'] = self
             if self._stage_location_type != LOCAL_FS:
                 meta[u'put_callback'] = self._put_callback
+                meta[u'put_azure_callback'] = self._put_azure_callback
                 meta[u'put_callback_output_stream'] = \
                     self._put_callback_output_stream
                 meta[u'get_callback'] = self._get_callback
+                meta[u'get_azure_callback'] = self._get_azure_callback
                 meta[u'get_callback_output_stream'] = \
                     self._get_callback_output_stream
+                # AWS specific?
                 if meta.get(
                         u'src_file_size',
-                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD:  # TODO fli: s3 specific?
+                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD:
                     meta[u'parallel'] = self._parallel
                     large_file_metas.append(meta)
                 else:

@@ -149,21 +149,25 @@ class SnowflakeAzureUtil(object):
             path = azure_location.path + meta[u'dst_file_name'].lstrip('/')
 
             client = meta[u'client']
-            callback = meta[u'put_callback'](
-                data_file,
-                os.path.getsize(data_file),
-                output_stream=meta[u'put_callback_output_stream']) if \
-                meta[u'put_callback'] else None
+            callback = None
+            if meta[u'put_azure_callback']:
+                callback = meta[u'put_azure_callback'](
+                    data_file,
+                    os.path.getsize(data_file),
+                    output_stream=meta[u'put_callback_output_stream'])
 
             def azure_callback(current, total):
                 callback(current)
+                logger.debug("data transfer progress from sdk callback. "
+                             "current: %s, total: %s",
+                             current, total)
 
             client.create_blob_from_path(
                 azure_location.container_name,
                 path,
                 data_file,
                 progress_callback=azure_callback if
-                meta[u'put_callback'] else None,
+                meta[u'put_azure_callback'] else None,
                 metadata=azure_metadata,
                 max_connections=max_concurrency,
                 content_settings=ContentSettings(
@@ -185,7 +189,8 @@ class SnowflakeAzureUtil(object):
             else:
                 meta[u'last_error'] = err
                 meta[u'result_status'] = ResultStatus.NEED_RETRY
-        # Comparing with s3, azure haven't experienced OpenSSL.SSL.SysCallError, so we will add logic to catch it only when it happens
+        # Comparing with s3, azure haven't experienced OpenSSL.SSL.SysCallError,
+        # so we will add logic to catch it only when it happens
 
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
@@ -196,21 +201,25 @@ class SnowflakeAzureUtil(object):
             path = azure_location.path + meta[u'src_file_name'].lstrip('/')
             client = meta[u'client']
 
-            callback = meta[u'get_callback'](
-                meta[u'src_file_name'],
-                meta[u'src_file_size'],
-                output_stream=meta[u'get_callback_output_stream']) if \
-                meta[u'get_callback'] else None
+            callback = None
+            if meta[u'get_azure_callback']:
+                callback = meta[u'get_azure_callback'](
+                    meta[u'src_file_name'],
+                    meta[u'src_file_size'],
+                    output_stream=meta[u'get_callback_output_stream'])
 
             def azure_callback(current, total):
                 callback(current)
+                logger.debug("data transfer progress from sdk callback. "
+                             "current: %s, total: %s",
+                             current, total)
 
             client.get_blob_to_path(
                 azure_location.container_name,
                 path,
                 full_dst_file_name,
                 progress_callback=azure_callback if
-                meta[u'get_callback'] else None,
+                meta[u'get_azure_callback'] else None,
                 max_connections=max_concurrency
             )
 
@@ -225,4 +234,5 @@ class SnowflakeAzureUtil(object):
             else:
                 meta[u'last_error'] = err
                 meta[u'result_status'] = ResultStatus.NEED_RETRY
-        # Comparing with s3, azure haven't experienced OpenSSL.SSL.SysCallError, so we will add logic to catch it only when it happens
+        # Comparing with s3, azure haven't experienced OpenSSL.SSL.SysCallError,
+        # so we will add logic to catch it only when it happens
