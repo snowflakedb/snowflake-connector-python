@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2018 Snowflake Computing Inc. All right reserved.
 #
+import random
 import time
 
 try:
@@ -35,3 +36,14 @@ def get_time_millis():
     Return the current time in millis
     """
     return int(time.time() * 1000)
+
+
+class DecorrelateJitterBackoff(object):
+    # Decorrelate Jitter backoff
+    # https://www.awsarchitectureblog.com/2015/03/backoff.html
+    def __init__(self, base, cap):
+        self._base = base
+        self._cap = cap
+
+    def next_sleep(self, _, sleep):
+        return min(self._cap, random.randint(self._base, sleep * 3))

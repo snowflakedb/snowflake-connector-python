@@ -10,7 +10,6 @@ import itertools
 import json
 import logging
 import platform
-import random
 import sys
 import time
 import uuid
@@ -25,14 +24,8 @@ from botocore.vendored.requests.exceptions import (
     ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
 from botocore.vendored.requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
-from .constants import (
-    HTTP_HEADER_CONTENT_TYPE,
-    HTTP_HEADER_ACCEPT,
-    HTTP_HEADER_USER_AGENT,
-    HTTP_HEADER_SERVICE_NAME,
-)
+
 from snowflake.connector.time_util import get_time_millis
-from . import proxy
 from . import ssl_wrap_socket
 from .compat import (
     PY2,
@@ -40,7 +33,12 @@ from .compat import (
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
 from .compat import (TO_UNICODE, urlencode, urlparse)
-from .compat import proxy_bypass
+from .constants import (
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_ACCEPT,
+    HTTP_HEADER_USER_AGENT,
+    HTTP_HEADER_SERVICE_NAME,
+)
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
                         ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION)
 from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
@@ -52,9 +50,10 @@ from .gzip_decoder import decompress_raw_data
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                        SQLSTATE_CONNECTION_REJECTED)
-from .ssl_wrap_socket import (set_proxies)
 from .time_util import (
-    DEFAULT_MASTER_VALIDITY_IN_SECONDS)
+    DecorrelateJitterBackoff,
+    DEFAULT_MASTER_VALIDITY_IN_SECONDS
+)
 from .tool.probe_connection import probe_connection
 from .util_text import split_rows_from_stream
 from .version import VERSION
@@ -209,19 +208,11 @@ class SnowflakeRestful(object):
     """
 
     def __init__(self, host=u'127.0.0.1', port=8080,
-                 proxy_host=None,
-                 proxy_port=None,
-                 proxy_user=None,
-                 proxy_password=None,
                  protocol=u'http',
                  inject_client_pause=0,
                  connection=None):
         self._host = host
         self._port = port
-        self._proxy_host = proxy_host
-        self._proxy_port = proxy_port
-        self._proxy_user = proxy_user
-        self._proxy_password = proxy_password
         self._protocol = protocol
         self._inject_client_pause = inject_client_pause
         self._connection = connection
@@ -236,14 +227,9 @@ class SnowflakeRestful(object):
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = \
             self._connection and self._connection._ocsp_response_cache_filename
         #
-        proxy.PROXY_HOST = self._proxy_host
-        proxy.PROXY_PORT = self._proxy_port
-        proxy.PROXY_USER = self._proxy_user
-        proxy.PROXY_PASSWORD = self._proxy_password
 
         # This is to address the issue where requests hangs
         _ = 'dummy'.encode('idna').decode('utf-8')  # noqa
-        proxy_bypass('www.snowflake.net:443')
 
     @property
     def token(self):
@@ -595,17 +581,6 @@ class SnowflakeRestful(object):
               **kwargs):
         """ Curried API request with session management. """
 
-        class DecorrelateJitterBackoff(object):
-            # Decorrelate Jitter backoff
-            # see:
-            # https://www.awsarchitectureblog.com/2015/03/backoff.html
-            def __init__(self, base, cap):
-                self._base = base
-                self._cap = cap
-
-            def next_sleep(self, _, sleep):
-                return min(self._cap, random.randint(self._base, sleep * 3))
-
         class RetryCtx(object):
             def __init__(self, timeout, _include_retry_params=False):
                 self.timeout = timeout
@@ -665,8 +640,6 @@ class SnowflakeRestful(object):
             **kwargs):
 
         conn = self._connection
-        proxies = set_proxies(self._proxy_host, self._proxy_port,
-                              self._proxy_user, self._proxy_password)
         logger.debug('remaining request timeout: %s, retry cnt: %s',
                      retry_ctx.timeout, retry_ctx.cnt + 1)
 
@@ -680,13 +653,12 @@ class SnowflakeRestful(object):
                 full_url=full_url,
                 headers=headers,
                 data=data,
-                proxies=proxies,
                 token=token,
                 **kwargs)
             if return_object is not None:
                 return return_object
             self._handle_unknown_error(
-                method, full_url, headers, data, conn, proxies)
+                method, full_url, headers, data, conn)
             return {}
         except RetryRequest as e:
             if no_retry:
@@ -734,7 +706,7 @@ class SnowflakeRestful(object):
             })
 
     def _handle_unknown_error(
-            self, method, full_url, headers, data, conn, proxies):
+            self, method, full_url, headers, data, conn):
         """
         Handle unknown error
         """
@@ -751,23 +723,20 @@ class SnowflakeRestful(object):
         logger.error(
             u'Failed to get the response. Hanging? '
             u'method: {method}, url: {url}, headers:{headers}, '
-            u'data: {data}, proxies: {proxies}'.format(
+            u'data: {data}'.format(
                 method=method,
                 url=full_url,
                 headers=headers,
                 data=data,
-                proxies=proxies
             )
         )
         Error.errorhandler_wrapper(
             conn, None, OperationalError,
             {
                 u'msg': u'Failed to get the response. Hanging? '
-                        u'method: {method}, url: {url}, '
-                        u'proxies: {proxies}'.format(
+                        u'method: {method}, url: {url}'.format(
                     method=method,
                     url=full_url,
-                    proxies=proxies
                 ),
                 u'errno': ER_FAILED_TO_REQUEST,
             })
@@ -775,7 +744,6 @@ class SnowflakeRestful(object):
     def _request_exec(
             self,
             session, method, full_url, headers, data,
-            proxies,
             token,
             catch_okta_unauthorized_error=False,
             is_raw_text=False,
@@ -809,7 +777,6 @@ class SnowflakeRestful(object):
             raw_ret = session.request(
                 method=method,
                 url=full_url,
-                proxies=proxies,
                 headers=headers,
                 data=input_data,
                 timeout=socket_timeout,

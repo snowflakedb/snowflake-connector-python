@@ -3,36 +3,22 @@
 #
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
-import base64
 import json
-import logging
-import os
 import sys
-from logging import getLogger
+from datetime import datetime
+from glob import glob
 from os import path
 from time import gmtime, strftime, time
-from datetime import datetime
 
+from OpenSSL.crypto import dump_certificate, FILETYPE_ASN1
 from asn1crypto import core, ocsp
+from asn1crypto.x509 import Certificate
+
+from snowflake.connector.ocsp_asn1crypto \
+    import SnowflakeOCSPAsn1Crypto as SFOCSP
+from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 ZERO_EPOCH = datetime.utcfromtimestamp(0)
-
-from snowflake.connector.ocsp_asn1crypto import (
-    OUTPUT_TIMESTAMP_FORMAT,
-    read_ocsp_response_cache_file,
-    _create_pair_issuer_subject,
-    read_cert_bundle,
-    _encode_cert_id_key)
-
-for logger_name in ['__main__', 'snowflake']:
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(ch)
-
-logger = getLogger(__name__)
 
 OCSP_CACHE_SERVER_INTERVAL = 20 * 60 * 60  # seconds
 
@@ -49,11 +35,11 @@ def main():
             "Note the subject name shows up if the certificate exists in "
             "the certs directory.")
         print("""
-Usage: {0}  <ocsp response cache file> <directory including certs>
+Usage: {0}  <ocsp response cache file> <hostname file> <cert file glob pattern>
 """.format(path.basename(sys.argv[0])))
         sys.exit(2)
 
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 4:
         help()
         sys.exit(2)
 
@@ -62,32 +48,66 @@ Usage: {0}  <ocsp response cache file> <directory including certs>
         help()
         sys.exit(2)
 
-    cert_dir = sys.argv[2]
-    if not path.isdir(cert_dir):
-        help()
-        sys.exit(2)
-    dump_ocsp_response_cache(ocsp_response_cache_file, cert_dir)
+    hostname_file = sys.argv[2]
+    cert_glob_pattern = sys.argv[3]
+    dump_ocsp_response_cache(
+        ocsp_response_cache_file, hostname_file, cert_glob_pattern)
 
 
-def dump_ocsp_response_cache(ocsp_response_cache_file, cert_dir):
+def raise_old_cache_exception(current_time, created_on, name, serial_number):
+    raise Exception(
+        "ERROR: OCSP response cache is too old. created_on "
+        "should be newer than {}: "
+        "name: {}, serial_number: {}, "
+        "current_time: {}, created_on: {}".format(
+            strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(
+                current_time - OCSP_CACHE_SERVER_INTERVAL)),
+            name, serial_number,
+            strftime(
+                SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(current_time)),
+            strftime(
+                SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(created_on))))
+
+
+def raise_outdated_validity_exception(
+        current_time, name, serial_number, this_update, next_update):
+    raise Exception("ERROR: OCSP response cache include "
+                    "outdated data: "
+                    "name: {}, serial_number: {}, "
+                    "current_time: {}, this_update: {}, "
+                    "next_update: {}".format(
+        name, serial_number,
+        strftime(
+            SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(current_time)),
+        this_update.strftime(
+            SFOCSP.OUTPUT_TIMESTAMP_FORMAT),
+        next_update.strftime(
+            SFOCSP.OUTPUT_TIMESTAMP_FORMAT)))
+
+
+def dump_ocsp_response_cache(
+        ocsp_response_cache_file, hostname_file, cert_glob_pattern):
     """
     Dump OCSP response cache contents. Show the subject name as well if
     the subject is included in the certificate files.
     """
-    s_to_n = _serial_to_name(cert_dir)
+    sfocsp = SFOCSP()
+    s_to_n = _fetch_certs(hostname_file)
+    s_to_n1 = _serial_to_name(sfocsp, cert_glob_pattern)
+    s_to_n.update(s_to_n1)
 
-    ocsp_validation_cache = {}
-    read_ocsp_response_cache_file(ocsp_response_cache_file,
-                                  ocsp_validation_cache)
+    SFOCSP.OCSP_CACHE.read_ocsp_response_cache_file(
+        sfocsp, ocsp_response_cache_file)
 
     def custom_key(k):
+        # third element is Serial Number for the subject
         serial_number = core.Integer.load(k[2])
         return int(serial_number.native)
 
     output = {}
+    ocsp_validation_cache = SFOCSP.OCSP_CACHE.CACHE
     for hkey in sorted(ocsp_validation_cache, key=custom_key):
-        json_key = base64.b64encode(_encode_cert_id_key(hkey).dump()).decode(
-            'ascii')
+        json_key = sfocsp.encode_cert_id_base64(hkey)
 
         serial_number = core.Integer.load(hkey[2]).native
         if int(serial_number) in s_to_n:
@@ -112,58 +132,58 @@ def dump_ocsp_response_cache(ocsp_response_cache_file, cert_dir):
             this_update = single_response['this_update'].native
             next_update = single_response['next_update'].native
             if current_time - OCSP_CACHE_SERVER_INTERVAL > created_on:
-                raise Exception(
-                    "ERROR: OCSP response cache is too old. created_on "
-                    "should be newer than {}: "
-                    "name: {}, serial_number: {}, "
-                    "current_time: {}, created_on: {}".format(
-                        strftime(OUTPUT_TIMESTAMP_FORMAT, gmtime(
-                            current_time - OCSP_CACHE_SERVER_INTERVAL)),
-                        name, serial_number,
-                        strftime(
-                            OUTPUT_TIMESTAMP_FORMAT, gmtime(current_time)),
-                        strftime(
-                            OUTPUT_TIMESTAMP_FORMAT, gmtime(created_on))))
+                raise_old_cache_exception(current_time, created_on, name,
+                                          serial_number)
 
-            next_update_utc =  (next_update.replace(tzinfo=None) - ZERO_EPOCH).total_seconds()
-            this_update_utc =  (this_update.replace(tzinfo=None) - ZERO_EPOCH).total_seconds()
+            next_update_utc = (
+                    next_update.replace(
+                        tzinfo=None) - ZERO_EPOCH).total_seconds()
+            this_update_utc = (
+                    this_update.replace(
+                        tzinfo=None) - ZERO_EPOCH).total_seconds()
 
             if current_time > next_update_utc or \
-               current_time < this_update_utc:
-                raise Exception("ERROR: OCSP response cache include "
-                                "outdated data: "
-                                "name: {}, serial_number: {}, "
-                                "current_time: {}, this_update: {}, "
-                                "next_update: {}".format(
-                    name, serial_number,
-                    strftime(
-                        OUTPUT_TIMESTAMP_FORMAT, gmtime(current_time)),
-                    this_update.strftime(
-                        OUTPUT_TIMESTAMP_FORMAT),
-                    next_update.strftime(
-                        OUTPUT_TIMESTAMP_FORMAT)))
+                    current_time < this_update_utc:
+                raise_outdated_validity_exception(
+                    current_time, name, serial_number, this_update, next_update)
 
             output[json_key]['created_on'] = strftime(
-                OUTPUT_TIMESTAMP_FORMAT, gmtime(created_on))
+                SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(created_on))
             output[json_key]['produce_at'] = str(produce_at)
             output[json_key]['this_update'] = str(this_update)
             output[json_key]['next_update'] = str(next_update)
     print(json.dumps(output))
 
 
-def _serial_to_name(cert_dir):
+def _serial_to_name(sfocsp, cert_glob_pattern):
     """
     Create a map table from serial number to name
     """
     map_serial_to_name = {}
-    for cert_file in os.listdir(cert_dir):
-        cert_file = path.join(cert_dir, cert_file)
+    for cert_file in glob(cert_glob_pattern):
         cert_map = {}
-        read_cert_bundle(cert_file, cert_map)
-        cert_data = _create_pair_issuer_subject(cert_map)
+        sfocsp.read_cert_bundle(cert_file, cert_map)
+        cert_data = sfocsp.create_pair_issuer_subject(cert_map)
 
         for issuer, subject in cert_data:
             map_serial_to_name[subject.serial_number] = subject.subject.native
+
+    return map_serial_to_name
+
+
+def _fetch_certs(hostname_file):
+    with open(hostname_file) as f:
+        hostnames = f.read().split('\n')
+
+    map_serial_to_name = {}
+    for h in hostnames:
+        if not h:
+            continue
+        connection = _openssl_connect(h, 443)
+        for cert_openssl in connection.get_peer_cert_chain():
+            cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
+            cert = Certificate.load(cert_der)
+            map_serial_to_name[cert.serial_number] = cert.subject.native
 
     return map_serial_to_name
 

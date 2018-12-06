@@ -60,7 +60,6 @@ def test_request_exec():
         'full_url': "https://testaccount.snowflakecomputing.com/",
         'headers': {},
         'data': '{"code": 12345}',
-        'proxies': None,
         'token': None
     }
 
