@@ -90,7 +90,7 @@ class OCSPCache(object):
         try:
             os.makedirs(CACHE_DIR, mode=0o700)
         except Exception as ex:
-            logger.warning('cannot create a cache directory: [%s], err=[%s]',
+            logger.debug('cannot create a cache directory: [%s], err=[%s]',
                            CACHE_DIR, ex)
             CACHE_DIR = None
     logger.debug("cache directory: %s", CACHE_DIR)
@@ -630,7 +630,7 @@ class SnowflakeOCSP(object):
                 err = None
                 break
             except Exception as ex:
-                logger.warning(
+                logger.debug(
                     "Failed to get OCSP response; %s, "
                     "Retrying... %s/%s", ex, retry + 1, max_retry)
                 err = ex
