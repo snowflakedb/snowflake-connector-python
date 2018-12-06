@@ -33,9 +33,8 @@ setup(
     use_2to3=False,
 
     install_requires=[
-        'azure-common<2',
-        'azure_nspkg<3',
-        'azure-storage>0.34.2,<=0.36.0',
+        'azure-common',
+        'azure-storage-blob',
         'boto3>=1.4.4,<1.10.0',
         'botocore>=1.5.0,<1.13.0',
         'certifi',
