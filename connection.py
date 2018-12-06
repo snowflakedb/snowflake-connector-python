@@ -14,6 +14,7 @@ from threading import Lock
 from time import strptime
 
 from . import errors
+from . import proxy
 from .auth import Auth
 from .auth_default import AuthByDefault
 from .auth_keypair import AuthByKeyPair
@@ -546,23 +547,19 @@ class SnowflakeConnection(object):
             use_sfbinaryformat=False,
             use_numpy=self._numpy)
 
+        proxy.set_proxies(
+            self.proxy_host, self.proxy_port, self.proxy_user,
+            self.proxy_password)
+
         self._rest = SnowflakeRestful(
             host=self.host,
             port=self.port,
-            proxy_host=self.proxy_host,
-            proxy_port=self.proxy_port,
-            proxy_user=self.proxy_user,
-            proxy_password=self.proxy_password,
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self)
-        logger.debug(u'REST API object was created: %s:%s, proxy=%s:%s, '
-                     u'proxy_user=%s',
+        logger.debug(u'REST API object was created: %s:%s',
                      self.host,
-                     self.port,
-                     self.proxy_host,
-                     self.proxy_port,
-                     self.proxy_user)
+                     self.port)
 
         if self.host.endswith(u".privatelink.snowflakecomputing.com"):
             ocsp_cache_server = \

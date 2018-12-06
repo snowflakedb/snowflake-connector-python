@@ -4,17 +4,9 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 
-import botocore.endpoint
+import os
 
 from .compat import (TO_UNICODE)
-
-"""
-Proxy, shared across all connections
-"""
-PROXY_HOST = None
-PROXY_PORT = None
-PROXY_USER = None
-PROXY_PASSWORD = None
 
 
 def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
@@ -49,18 +41,6 @@ def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
                 proxy_auth=proxy_auth,
             ),
         }
+        os.environ['HTTP_PROXY'] = proxies[u'http']
+        os.environ['HTTPS_PROXY'] = proxies[u'https']
     return proxies
-
-
-def _get_proxies(self, url):
-    return set_proxies(
-        PROXY_HOST,
-        PROXY_PORT,
-        PROXY_USER,
-        PROXY_PASSWORD) or original_get_proxies(self, url)
-
-
-# Monkey patch for all connections for AWS API. This is mainly for PUT
-# and GET commands
-original_get_proxies = botocore.endpoint.EndpointCreator._get_proxies
-botocore.endpoint.EndpointCreator._get_proxies = _get_proxies

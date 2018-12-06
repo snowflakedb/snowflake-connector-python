@@ -4,1315 +4,466 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 
-"""
-Use openssl command line to validate the certification revocation status
-using OCSP.
-"""
-import calendar
-import codecs
 import hashlib
-import json
-import logging
-import os
-import platform
-import re
-import tempfile
-import time
 from base64 import b64encode, b64decode
+from collections import OrderedDict
+from datetime import datetime
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
-from os import path
-from os.path import expanduser
-from threading import (Lock)
-from time import gmtime, strftime, strptime
+from threading import Lock
 
-from OpenSSL.crypto import (dump_certificate, FILETYPE_PEM, FILETYPE_ASN1,
-                            load_certificate, dump_publickey)
-from OpenSSL.crypto import verify as crypto_verify
-from botocore.vendored import requests
-from botocore.vendored.requests.adapters import HTTPAdapter
+import pyasn1
+from Cryptodome.Hash import SHA256, SHA384, SHA1, SHA512
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Signature import PKCS1_v1_5
+from OpenSSL.crypto import (
+    FILETYPE_PEM,
+    FILETYPE_ASN1,
+    load_certificate, dump_certificate)
 from pyasn1.codec.der import decoder as der_decoder
 from pyasn1.codec.der import encoder as der_encoder
+from pyasn1.codec.native.encoder import encode as nat_encoder
 from pyasn1.type import (univ, tag)
 from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 
-from .compat import (PY2, urlsplit, OK)
-from .errorcode import (ER_FAILED_TO_GET_OCSP_URI,
-                        ER_INVALID_OCSP_RESPONSE,
-                        ER_SERVER_CERTIFICATE_REVOKED,
-                        ER_CA_CERTIFICATE_NOT_FOUND)
+from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
+from .compat import (PY2)
+from .errorcode import (ER_INVALID_OCSP_RESPONSE)
 from .errors import (OperationalError)
-from .rfc6960 import (OCSPRequest, OCSPResponse, TBSRequest, CertID, Request,
-                      Version, BasicOCSPResponse,
-                      OCSPResponseStatus)
-
-# Default OCSP Response cache server URL
-DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
-
-OCSP_RESPONSE_CACHE_FILE_NAME = 'ocsp_response_cache.json'
-
-PYASN1_VERSION_LOCK = Lock()
-
-PYASN1_VERSION = None  # be init once
-
-ROOT_CERTIFICATES_DICT_LOCK = Lock()
-
-ROOT_CERTIFICATES_DICT = {}  # root certificates
+from .rfc6960 import (
+    OCSPRequest,
+    OCSPResponse,
+    TBSRequest,
+    CertID,
+    Request,
+    OCSPResponseStatus,
+    BasicOCSPResponse,
+    Version)
 
 logger = getLogger(__name__)
 
 
-def _get_pyasn1_version():
-    global PYASN1_VERSION_LOCK
-    global PYASN1_VERSION
-    with PYASN1_VERSION_LOCK:
-        if PYASN1_VERSION is None:
-            import pyasn1
+class SnowflakeOCSPPyasn1(SnowflakeOCSP):
+    """
+    OCSP checks by pyasn1
+    """
+
+    PYASN1_VERSION_LOCK = Lock()
+    PYASN1_VERSION = None
+
+    # Signature Hash Algorithm
+    sha1WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.5')
+    sha256WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.11')
+    sha384WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.12')
+    sha512WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.13')
+
+    SIGNATURE_HASH_ALGO_TO_DIGEST_CLASS = {
+        sha1WithRSAEncryption: SHA1,
+        sha256WithRSAEncryption: SHA256,
+        sha384WithRSAEncryption: SHA384,
+        sha512WithRSAEncryption: SHA512,
+    }
+
+    @staticmethod
+    def _get_pyasn1_version():
+        with SnowflakeOCSPPyasn1.PYASN1_VERSION_LOCK:
+            if SnowflakeOCSPPyasn1.PYASN1_VERSION is not None:
+                return SnowflakeOCSPPyasn1.PYASN1_VERSION
+
             v = pyasn1.__version__
             vv = [int(x, 10) for x in v.split('.')]
             vv.reverse()
-            PYASN1_VERSION = sum(x * (1000 ** i) for i, x in enumerate(vv))
+            SnowflakeOCSPPyasn1.PYASN1_VERSION = sum(
+                x * (1000 ** i) for i, x in enumerate(vv))
+            return SnowflakeOCSPPyasn1.PYASN1_VERSION
 
+    def __init__(self, **kwargs):
+        super(SnowflakeOCSPPyasn1, self).__init__(**kwargs)
 
-def read_cert_bundle(ca_bundle_file, storage=None):
-    """
-    Reads a certificate file including certificates in PEM format
-    """
-    if storage is None:
-        storage = ROOT_CERTIFICATES_DICT
-    logger = getLogger(__name__)
-    logger.debug('reading certificate bundle: %s', ca_bundle_file)
-    # cabundle file encoding varies. Tries reading it in utf-8 but ignore
-    # all errors
-    all_certs = codecs.open(
-        ca_bundle_file, 'r', encoding='utf-8', errors='ignore').read()
-    state = 0
-    contents = []
-    for line in all_certs.split('\n'):
-        if state == 0 and line.startswith('-----BEGIN CERTIFICATE-----'):
-            state = 1
-            contents.append(line)
-        elif state == 1:
-            contents.append(line)
-            if line.startswith('-----END CERTIFICATE-----'):
-                cert = load_certificate(
-                    FILETYPE_PEM,
-                    '\n'.join(contents).encode('utf-8'))
-                storage[cert.get_subject().der()] = cert
-                state = 0
-                contents = []
+    def encode_cert_id_key(self, hkey):
+        issuer_name_hash, issuer_key_hash, serial_number = hkey
+        issuer_name_hash, _ = der_decoder.decode(issuer_name_hash)
+        issuer_key_hash, _ = der_decoder.decode(issuer_key_hash)
+        serial_number, _ = der_decoder.decode(serial_number)
+        cert_id = CertID()
+        cert_id.setComponentByName(
+            'hashAlgorithm',
+            rfc2459.AlgorithmIdentifier().setComponentByName(
+                'algorithm', rfc2437.id_sha1))
+        cert_id.setComponentByName('issuerNameHash', issuer_name_hash)
+        cert_id.setComponentByName('issuerKeyHash', issuer_key_hash)
+        cert_id.setComponentByName('serialNumber', serial_number)
+        return cert_id
 
+    def decode_cert_id_key(self, cert_id):
+        return (
+            der_encoder.encode(cert_id.getComponentByName('issuerNameHash')),
+            der_encoder.encode(cert_id.getComponentByName('issuerKeyHash')),
+            der_encoder.encode(cert_id.getComponentByName('serialNumber')))
 
-def _lazy_read_ca_bundle():
-    """
-    Reads the local cabundle file and cache it in memory
-    """
-    if len(ROOT_CERTIFICATES_DICT) > 0:
-        return
+    def encode_cert_id_base64(self, hkey):
+        return b64encode(der_encoder.encode(
+            self.encode_cert_id_key(hkey))).decode('ascii')
 
-    logger = getLogger(__name__)
-    try:
-        ca_bundle = (os.environ.get('REQUESTS_CA_BUNDLE') or
-                     os.environ.get('CURL_CA_BUNDLE'))
-        if ca_bundle and path.exists(ca_bundle):
-            # if the user/application specifies cabundle.
-            read_cert_bundle(ca_bundle)
-        else:
-            import sys
-            from botocore.vendored.requests import certs
-            if hasattr(certs, '__file__') and \
-                    path.exists(certs.__file__) and \
-                    path.exists(path.join(
-                        path.dirname(certs.__file__), 'cacert.pem')):
-                # if cacert.pem exists next to certs.py in request pacakage
-                ca_bundle = path.join(
-                    path.dirname(certs.__file__), 'cacert.pem')
-                read_cert_bundle(ca_bundle)
-            elif hasattr(sys, '_MEIPASS'):
-                # if pyinstaller includes cacert.pem
-                cabundle_candidates = [
-                    ['botocore', 'vendored', 'requests', 'cacert.pem'],
-                    ['requests', 'cacert.pem'],
-                    ['cacert.pem'],
-                ]
-                for filename in cabundle_candidates:
-                    ca_bundle = path.join(sys._MEIPASS, *filename)
-                    if path.exists(ca_bundle):
-                        read_cert_bundle(ca_bundle)
-                        break
-                else:
-                    logger.error('No cabundle file is found in _MEIPASS')
-            try:
-                import certifi
-                read_cert_bundle(certifi.where())
-            except:
-                logger.debug('no certifi is installed. ignored.')
+    def decode_cert_id_base64(self, cert_id_base64):
+        cert_id, _ = der_decoder.decode(b64decode(cert_id_base64), CertID())
+        return cert_id
 
-    except Exception as e:
-        logger.error('Failed to read ca_bundle: %s', e)
+    def read_cert_bundle(self, ca_bundle_file, storage=None):
+        """
+        Reads a certificate file including certificates in PEM format
+        """
+        if storage is None:
+            storage = SnowflakeOCSP.ROOT_CERTIFICATES_DICT
+        logger.debug('reading certificate bundle: %s', ca_bundle_file)
+        all_certs = open(ca_bundle_file, 'rb').read()
 
-    if len(ROOT_CERTIFICATES_DICT) == 0:
-        logger.error('No CA bundle file is found in the system. '
-                     'Set REQUESTS_CA_BUNDLE to the file.')
+        state = 0
+        contents = []
+        for line in all_certs.split(b'\n'):
+            if state == 0 and line.startswith(b'-----BEGIN CERTIFICATE-----'):
+                state = 1
+                contents.append(line)
+            elif state == 1:
+                contents.append(line)
+                if line.startswith(b'-----END CERTIFICATE-----'):
+                    cert_openssl = load_certificate(
+                        FILETYPE_PEM,
+                        b'\n'.join(contents))
+                    cert = self._convert_openssl_to_pyasn1_certificate(
+                        cert_openssl)
+                    storage[self._get_subject_hash(cert)] = cert
+                    state = 0
+                    contents = []
 
+    def _convert_openssl_to_pyasn1_certificate(self, cert_openssl):
+        cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
+        cert = der_decoder.decode(
+            cert_der, asn1Spec=rfc2459.Certificate())[0]
+        return cert
 
-def octet_string_to_bytearray(octet_string):
-    """
-    Converts Octet string to bytearray
-    """
-    ret = []
-    for ch in octet_string:
-        ret.append(ch)
-    return bytearray(ret)
+    def _convert_pyasn1_to_openssl_certificate(self, cert):
+        cert_der = der_encoder.encode(cert)
+        cert_openssl = load_certificate(FILETYPE_ASN1, cert_der)
+        return cert_openssl
 
+    def _get_name_hash(self, cert):
+        sha1_hash = hashlib.sha1()
+        sha1_hash.update(der_encoder.encode(self._get_subject(cert)))
+        return sha1_hash.hexdigest()
 
-def bit_string_to_bytearray(bit_string):
-    """
-    Converts Bitstring to bytearray
-    """
-    ret = []
-    for idx in range(int(len(bit_string) / 8)):
-        v = 0
-        for idx0, bit in enumerate(bit_string[idx * 8:idx * 8 + 8]):
-            v = v | (bit << (7 - idx0))
-        ret.append(v)
-    return bytearray(ret)
+    def _get_key_hash(self, cert):
+        sha1_hash = hashlib.sha1()
+        h = SnowflakeOCSPPyasn1.bit_string_to_bytearray(
+            cert.getComponentByName('tbsCertificate').getComponentByName(
+                'subjectPublicKeyInfo').getComponentByName('subjectPublicKey'))
+        sha1_hash.update(h)
+        return sha1_hash.hexdigest()
 
+    def create_ocsp_request(self, issuer, subject):
+        """
+        Create CertID and OCSPRequest
+        """
+        hashAlgorithm = rfc2459.AlgorithmIdentifier()
+        hashAlgorithm.setComponentByName("algorithm", rfc2437.id_sha1)
+        hashAlgorithm.setComponentByName(
+            "parameters", univ.Any(hexValue='0500'))
 
-def _get_pubickey_sha1_hash(cert):
-    """
-    Gets pubkey sha1 hash
-    """
-    pkey = cert.get_pubkey()
-    pkey_asn1 = dump_publickey(FILETYPE_ASN1, pkey)
-    decoded_pkey, _ = der_decoder.decode(
-        pkey_asn1, rfc2459.SubjectPublicKeyInfo())
-    pubkey = bit_string_to_bytearray(decoded_pkey['subjectPublicKey'])
-    # algorithm = decoded_pkey['algorithm'] # RSA encryption
-    sha1_hash = hashlib.sha1()
-    sha1_hash.update(pubkey)
-    return sha1_hash
+        cert_id = CertID()
+        cert_id.setComponentByName(
+            'hashAlgorithm', hashAlgorithm)
+        cert_id.setComponentByName(
+            'issuerNameHash',
+            univ.OctetString(hexValue=self._get_name_hash(issuer)))
+        cert_id.setComponentByName(
+            'issuerKeyHash',
+            univ.OctetString(hexValue=self._get_key_hash(issuer)))
+        cert_id.setComponentByName(
+            'serialNumber',
+            subject.getComponentByName(
+                'tbsCertificate').getComponentByName('serialNumber'))
 
+        request = Request()
+        request.setComponentByName('reqCert', cert_id)
 
-def _extract_values_from_certificate(cert):
-    """
-    Gets Serial Number, DN and Public Key Hashes. Currently SHA1 is used
-    to generate hashes for DN and Public Key.
-    """
-    logger = getLogger(__name__)
-    # cert and serial number
-    data = {
-        u'cert': cert,
-        u'issuer': cert.get_issuer().der(),
-        u'serial_number': cert.get_serial_number(),
-        u'algorithm': rfc2437.id_sha1,
-        u'algorithm_parameter': univ.Any(hexValue='0500')  # magic number
-    }
-    # DN Hash
-    data[u'name'] = cert.get_subject()
-    cert_der = data[u'name'].der()
-    sha1_hash = hashlib.sha1()
-    sha1_hash.update(cert_der)
-    data[u'name_hash'] = sha1_hash.hexdigest()
+        request_list = univ.SequenceOf(componentType=Request())
+        request_list.setComponentByPosition(0, request)
 
-    # public key Hash
-    data['key_hash'] = _get_pubickey_sha1_hash(cert).hexdigest()
+        tbs_request = TBSRequest()
+        tbs_request.setComponentByName('requestList', request_list)
+        tbs_request.setComponentByName('version', Version(0).subtype(
+            explicitTag=tag.Tag(
+                tag.tagClassContext, tag.tagFormatSimple, 0)))
 
-    # CRL and OCSP
-    data['crl'] = None
-    ocsp_uris0 = []
-    for idx in range(cert.get_extension_count()):
-        e = cert.get_extension(idx)
-        if e.get_short_name() == b'authorityInfoAccess':
-            for line in str(e).split(u"\n"):
-                m = OCSP_RE.match(line)
-                if m:
-                    logger.debug(u'OCSP URL: %s', m.group(1))
-                    ocsp_uris0.append(m.group(1))
-        elif e.get_short_name() == b'crlDistributionPoints':
-            for line in str(e).split(u"\n"):
-                m = CRL_RE.match(line)
-                if m:
-                    logger.debug(u"CRL: %s", m.group(1))
-                    data['crl'] = m.group(1)
+        ocsp_request = OCSPRequest()
+        ocsp_request.setComponentByName('tbsRequest', tbs_request)
 
-    if len(ocsp_uris0) == 1:
-        data['ocsp_uri'] = ocsp_uris0[0]
-    elif len(ocsp_uris0) == 0:
-        data['ocsp_uri'] = u''
-    else:
-        raise OperationalError(
-            msg=u'More than one OCSP URI entries are specified in '
-                u'the certificate',
-            errno=ER_FAILED_TO_GET_OCSP_URI,
-        )
-    data[u'is_root_ca'] = cert.get_subject() == cert.get_issuer()
-    return data
+        return cert_id, ocsp_request
 
-
-def _extract_certificate_chain(connection):
-    """
-    Gets certificate chain and extract the key info from certificate
-    """
-    logger = getLogger(__name__)
-    cert_data = {}
-    logger.debug(
-        "# of certificates: %s",
-        len(connection.get_peer_cert_chain()))
-
-    for cert in connection.get_peer_cert_chain():
+    def extract_certificate_chain(self, connection):
+        """
+        Gets certificate chain and extract the key info from OpenSSL connection
+        """
+        cert_map = OrderedDict()
         logger.debug(
-            u'subject: %s, issuer: %s', cert.get_subject(),
-            cert.get_issuer())
-        data = _extract_values_from_certificate(cert)
-        logger.debug('is_root_ca: %s', data[u'is_root_ca'])
-        cert_data[cert.get_subject().der()] = data
-    return _create_pair_issuer_subject(cert_data)
+            "# of certificates: %s",
+            len(connection.get_peer_cert_chain()))
 
+        for cert_openssl in connection.get_peer_cert_chain():
+            cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
+            cert = der_decoder.decode(
+                cert_der, asn1Spec=rfc2459.Certificate())[0]
+            subject_sha256 = self._get_subject_hash(cert)
+            logger.debug(
+                u'subject: %s, issuer: %s',
+                nat_encoder(self._get_subject(cert)),
+                nat_encoder(self._get_issuer(cert)))
+            cert_map[subject_sha256] = cert
 
-def _create_pair_issuer_subject(cert_data):
-    issuer_and_subject = []
-    for subject_der in cert_data:
-        if not cert_data[subject_der][u'is_root_ca']:
-            # Root certificate will not be validated
-            # but it is used to validate the subject certificate
-            issuer_der = cert_data[subject_der]['issuer']
-            if issuer_der not in cert_data:
+        return self.create_pair_issuer_subject(cert_map)
+
+    def _get_subject(self, cert):
+        return cert.getComponentByName(
+            'tbsCertificate').getComponentByName('subject')
+
+    def _get_issuer(self, cert):
+        return cert.getComponentByName(
+            'tbsCertificate').getComponentByName('issuer')
+
+    def _get_subject_hash(self, cert):
+        sha256_hash = hashlib.sha256()
+        sha256_hash.update(
+            der_encoder.encode(self._get_subject(cert)))
+        return sha256_hash.digest()
+
+    def _get_issuer_hash(self, cert):
+        sha256_hash = hashlib.sha256()
+        sha256_hash.update(
+            der_encoder.encode(self._get_issuer(cert)))
+        return sha256_hash.digest()
+
+    def create_pair_issuer_subject(self, cert_map):
+        """
+        Creates pairs of issuer and subject certificates
+        """
+        issuer_subject = []
+        for subject_der in cert_map:
+            cert = cert_map[subject_der]
+
+            nocheck, is_ca, ocsp_urls = self._extract_extensions(cert)
+            if nocheck or is_ca and not ocsp_urls:
+                # Root certificate will not be validated
+                # but it is used to validate the subject certificate
+                continue
+            issuer_hash = self._get_issuer_hash(cert)
+            if issuer_hash not in cert_map:
                 # IF NO ROOT certificate is attached in the certificate chain
                 # read it from the local disk
-                with ROOT_CERTIFICATES_DICT_LOCK:
-                    _lazy_read_ca_bundle()
-                logger.debug('not found issuer_der: %s', issuer_der)
-                if issuer_der in ROOT_CERTIFICATES_DICT:
-                    issuer = _extract_values_from_certificate(
-                        ROOT_CERTIFICATES_DICT[issuer_der])
-                    issuer[u'is_root_ca'] = True
-                else:
+                self._lazy_read_ca_bundle()
+                logger.debug(
+                    'not found issuer_der: %s', self._get_issuer_hash(cert))
+                if issuer_hash not in SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
                     raise OperationalError(
-                        msg=u"CA certificate is not found in the root "
-                            u"certificate list. Make sure you use the latest "
-                            u"Python Connector package.",
-                        errno=ER_CA_CERTIFICATE_NOT_FOUND,
-                    )
+                        msg="CA certificate is NOT found in the root "
+                            "certificate list. Make sure you use the latest "
+                            "Python Connector package and the URL is valid.")
+                issuer = SnowflakeOCSP.ROOT_CERTIFICATES_DICT[issuer_hash]
             else:
-                issuer = cert_data[issuer_der]
+                issuer = cert_map[issuer_hash]
 
-            issuer_and_subject.append({
-                'subject': cert_data[subject_der],
-                'issuer': issuer,
-            })
-    return issuer_and_subject
+            issuer_subject.append((issuer, cert))
+        return issuer_subject
 
+    def _extract_extensions(self, cert):
+        extensions = cert.getComponentByName(
+            'tbsCertificate').getComponentByName('extensions')
+        is_ca = False
+        ocsp_urls = []
+        nocheck = False
+        for e in extensions:
+            oid = e.getComponentByName('extnID')
+            if oid == rfc2459.id_ce_basicConstraints:
+                constraints = der_decoder.decode(
+                    e.getComponentByName('extnValue'),
+                    asn1Spec=rfc2459.BasicConstraints())[0]
+                is_ca = constraints.getComponentByPosition(0)
+            elif oid == rfc2459.id_pe_authorityInfoAccess:
+                auth_info = der_decoder.decode(
+                    e.getComponentByName('extnValue'),
+                    asn1Spec=rfc2459.AuthorityInfoAccessSyntax())[0]
+                for a in auth_info:
+                    if a.getComponentByName('accessMethod') == \
+                            rfc2560.id_pkix_ocsp:
+                        url = nat_encoder(
+                            a.getComponentByName(
+                                'accessLocation').getComponentByName(
+                                'uniformResourceIdentifier'))
+                        ocsp_urls.append(url)
+            elif oid == rfc2560.id_pkix_ocsp_nocheck:
+                nocheck = True
 
-def _verify_signature(
-        cert, signature_algorithm_seq, signature, data):
-    """
-    Verifies the signature
-    """
-    logger = getLogger(__name__)
-    value = bit_string_to_bytearray(signature)
-    if PY2:
-        value = str(value)
-    else:
-        value = value.decode('latin-1').encode('latin-1')
+        return nocheck, is_ca, ocsp_urls
 
-    algorithm = signature_algorithm_seq[0]
-    if algorithm in SIGNATURE_HASH_ALGO_TO_NAME:
-        algorithm_name = SIGNATURE_HASH_ALGO_TO_NAME[algorithm]
-    else:
-        logger.exception(
-            "Unsupported Signature Algorithm: %s", algorithm)
-        return Exception("Unsupported Signature Algorithm: %s", algorithm)
+    def subject_name(self, cert):
+        return nat_encoder(self._get_subject(cert))
 
-    data_der = der_encoder.encode(data)
-    try:
-        crypto_verify(cert, value, data_der, algorithm_name)
-        return None
-    except Exception as e:
-        logger.exception("Failed to verify the signature", e)
-        return e
+    def extract_ocsp_url(self, cert):
+        _, _, ocsp_urls = self._extract_extensions(cert)
+        return ocsp_urls[0] if ocsp_urls else None
 
+    def decode_ocsp_request(self, ocsp_request):
+        return der_encoder.encode(ocsp_request)
 
-def _has_certs_in_ocsp_response(certs):
-    """
-    Check if the certificate is attached to OCSP response
-    """
-    global PYASN1_VERSION
-    if PYASN1_VERSION <= 3000:
-        return certs is not None
-    else:
-        return certs is not None and certs.hasValue() and certs[0].hasValue()
+    def decode_ocsp_request_b64(self, ocsp_request):
+        data = self.decode_ocsp_request(ocsp_request)
+        b64data = b64encode(data).decode('ascii')
+        return b64data
 
+    def extract_good_status(self, single_response):
+        """
+        Extract GOOD status
+        """
+        this_update_native = \
+            self._convert_generalized_time_to_datetime(
+                single_response.getComponentByName('thisUpdate'))
+        next_update_native = \
+            self._convert_generalized_time_to_datetime(
+                single_response.getComponentByName('nextUpdate'))
+        return this_update_native, next_update_native
 
-def process_ocsp_response(response, ocsp_issuer):
-    """
-    process OCSP response
-    """
-    logger = getLogger(__name__)
-    ocsp_response, _ = der_decoder.decode(response, OCSPResponse())
-    if ocsp_response['responseStatus'] != OCSPResponseStatus(
-            'successful'):
-        raise OperationalError(
-            msg="Invalid Status: {0}".format(
-                OCSP_RESPONSE_STATUS[int(ocsp_response['responseStatus'])]),
-            errno=ER_INVALID_OCSP_RESPONSE)
+    def extract_revoked_status(self, single_response):
+        """
+        Extract REVOKED status
+        """
+        cert_status = single_response.getComponentByName('certStatus')
+        revoked = cert_status.getComponentByName('revoked')
+        revocation_time = \
+            self._convert_generalized_time_to_datetime(
+                revoked.getComponentByName('revocationTime'))
+        revocation_reason = revoked.getComponentByName('revocationReason')
+        try:
+            revocation_reason_str = str(revocation_reason)
+        except:
+            revocation_reason_str = 'n/a'
+        return revocation_time, revocation_reason_str
 
-    response_bytes = ocsp_response['responseBytes']
-    response_type = response_bytes['responseType']
+    def _convert_generalized_time_to_datetime(self, gentime):
+        return datetime.strptime(str(gentime), '%Y%m%d%H%M%SZ')
 
-    if response_type != rfc2560.id_pkix_ocsp_basic:
-        logger.error("Invalid Response Type: %s", response_type)
-        raise OperationalError(
-            msg="Invaid Response Type: {0}".format(response_type),
-            errno=ER_INVALID_OCSP_RESPONSE)
+    def process_ocsp_response(self, issuer, cert_id, ocsp_response):
+        res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
 
-    basic_ocsp_response, _ = der_decoder.decode(
-        response_bytes['response'],
-        BasicOCSPResponse())
-
-    if _has_certs_in_ocsp_response(basic_ocsp_response['certs']):
-        logger.debug("Certificate is attached in Basic OCSP Response")
-        cert_der = der_encoder.encode(basic_ocsp_response['certs'][0])
-        ocsp_cert = load_certificate(FILETYPE_ASN1, cert_der)
-    else:
-        logger.debug("Certificate is NOT attached in Basic OCSP Response. "
-                     "Using issuer's certificate")
-        ocsp_cert = ocsp_issuer['cert']
-
-    tbs_response_data = basic_ocsp_response['tbsResponseData']
-
-    if tbs_response_data['version'] != 0:
-        raise OperationalError(
-            msg='Invalid ResponseData Version: {0}'.format(
-                tbs_response_data['version']),
-            errno=ER_INVALID_OCSP_RESPONSE)
-
-    produced_at = tbs_response_data['producedAt']
-    logger.debug('Produced At: %s', produced_at)
-
-    if tbs_response_data['responseExtensions']:
-        logger.debug('Response Extensions: %s',
-                     tbs_response_data['responseExtensions'])
-
-    ocsp_no_check = False
-    if ocsp_issuer['cert'] != ocsp_cert:
-        if ocsp_issuer['cert'].get_subject() != ocsp_cert.get_issuer():
+        if res.getComponentByName('responseStatus') != OCSPResponseStatus(
+                'successful'):
             raise OperationalError(
-                msg=u"Failed to match the issuer of the certificate "
-                    u"attached in OCSP response with the issuer' "
-                    u"certificate.",
-                errno=ER_INVALID_OCSP_RESPONSE)
-        is_for_ocsp = False
-        for cnt in range(ocsp_cert.get_extension_count()):
-            ex = ocsp_cert.get_extension(cnt)
-            if ex.get_short_name() == b'extendedKeyUsage':
-                # ensure the purpose is OCSP signing
-                der_data, _ = der_decoder.decode(ex.get_data())
-                for idx in range(len(der_data)):
-                    if der_data[idx] == OCSP_SIGNING:
-                        is_for_ocsp = True
-                        break
-            elif ex.get_short_name() == b'noCheck':
-                # check if CA wants to skip ocsp_checking
-                der_data, _ = der_decoder.decode(ex.get_data())
-                if str(der_data) != '':  # non empty value means no check
-                    ocsp_no_check = True
-
-        if not is_for_ocsp:
-            raise OperationalError(
-                msg=u'The certificate attached is not for OCSP signing.',
+                msg="Invalid Status: {0}".format(
+                    res.getComponentByName('response_status')),
                 errno=ER_INVALID_OCSP_RESPONSE)
 
-        ocsp_cert_object, _ = der_decoder.decode(
-            dump_certificate(FILETYPE_ASN1, ocsp_cert),
-            rfc2459.Certificate())
+        response_bytes = res.getComponentByName('responseBytes')
+        basic_ocsp_response = der_decoder.decode(
+            response_bytes.getComponentByName('response'),
+            BasicOCSPResponse())[0]
 
-        err = _verify_signature(
-            ocsp_issuer['cert'],
-            ocsp_cert_object['signatureAlgorithm'],
-            ocsp_cert_object['signatureValue'],
-            ocsp_cert_object['tbsCertificate']
-        )
-        if err:
-            raise OperationalError(
-                msg=u"Signature in the certificate included in the "
-                    u"OCSP response could NOT be verified by the "
-                    u"issuer's certificate: err={0}".format(err),
-                errno=ER_INVALID_OCSP_RESPONSE)
+        attached_certs = basic_ocsp_response.getComponentByName('certs')
+        if self._has_certs_in_ocsp_response(attached_certs):
+            logger.debug("Certificate is attached in Basic OCSP Response")
+            cert_der = der_encoder.encode(attached_certs[0])
+            cert_openssl = load_certificate(FILETYPE_ASN1, cert_der)
+            ocsp_cert = self._convert_openssl_to_pyasn1_certificate(
+                cert_openssl)
 
-    if not ocsp_no_check:
-        err = _verify_signature(
+            self.verify_signature(
+                ocsp_cert.getComponentByName('signatureAlgorithm'),
+                ocsp_cert.getComponentByName('signatureValue'),
+                issuer,
+                ocsp_cert.getComponentByName('tbsCertificate'))
+        else:
+            logger.debug("Certificate is NOT attached in Basic OCSP Response. "
+                         "Using issuer's certificate")
+            ocsp_cert = issuer
+
+        tbs_response_data = basic_ocsp_response.getComponentByName(
+            'tbsResponseData')
+
+        logger.debug("Verifying the OCSP response is signed by the issuer.")
+        self.verify_signature(
+            basic_ocsp_response.getComponentByName('signatureAlgorithm'),
+            basic_ocsp_response.getComponentByName('signature'),
             ocsp_cert,
-            basic_ocsp_response['signatureAlgorithm'],
-            basic_ocsp_response['signature'],
             tbs_response_data
         )
-        if err:
+
+        single_response = tbs_response_data.getComponentByName('responses')[0]
+        cert_status = single_response.getComponentByName('certStatus')
+        if cert_status.getName() == 'good':
+            self._process_good_status(single_response, cert_id, ocsp_response)
+        elif cert_status.getName() == 'revoked':
+            self._process_revoked_status(single_response, cert_id)
+        elif cert_status.getName() == 'unknown':
+            self._process_unknown_status(cert_id)
+        else:
             raise OperationalError(
-                msg=u'Signature in the OCSP response could NOT be '
-                    u'verified: err={0}'.format(err),
+                msg="Unknown revocation status was returned. OCSP response "
+                    "may be malformed: {0}".format(cert_status),
+                errno=ER_INVALID_OCSP_RESPONSE
+            )
+
+    def verify_signature(self, signature_algorithm, signature, cert, data):
+        """
+        Verifies the signature
+        """
+        sig = SnowflakeOCSPPyasn1.bit_string_to_bytearray(signature)
+        if PY2:
+            sig = str(sig)
+        else:
+            sig = sig.decode('latin-1').encode('latin-1')
+
+        pubkey = SnowflakeOCSPPyasn1.bit_string_to_bytearray(
+            cert.getComponentByName(
+                'tbsCertificate').getComponentByName(
+                'subjectPublicKeyInfo').getComponentByName('subjectPublicKey'))
+        if PY2:
+            pubkey = str(pubkey)
+        else:
+            pubkey = pubkey.decode('latin-1').encode('latin-1')
+
+        rsakey = RSA.importKey(pubkey)
+        signer = PKCS1_v1_5.new(rsakey)
+
+        algorithm = signature_algorithm[0]
+        if algorithm in SnowflakeOCSPPyasn1.SIGNATURE_HASH_ALGO_TO_DIGEST_CLASS:
+            digest = SnowflakeOCSPPyasn1.SIGNATURE_HASH_ALGO_TO_DIGEST_CLASS[
+                algorithm].new()
+        else:
+            digest = SHA1.new()
+
+        data = der_encoder.encode(data)
+        digest.update(data)
+        if not signer.verify(digest, sig):
+            raise OperationalError(
+                msg="Failed to verify the signature",
                 errno=ER_INVALID_OCSP_RESPONSE)
-    else:
-        logger.debug(
-            u'No OCSP validation was made as the certificate '
-            u'indicates noCheck')
 
-    single_response_map = {}
-    for single_response in tbs_response_data['responses']:
-        cert_id = single_response['certID']
-        cert_status = single_response['certStatus']
-        hkey = _decode_cert_id_key(cert_id)
-        if cert_status['good'] is not None:
-            logger.debug('ok')
-            this_update = strptime(str(single_response['thisUpdate']),
-                                   '%Y%m%d%H%M%SZ')
-            next_update = strptime(str(single_response['nextUpdate']),
-                                   '%Y%m%d%H%M%SZ')
-            this_update = calendar.timegm(this_update)
-            next_update = calendar.timegm(next_update)
-            single_response_map[hkey] = {
-                'status': 'good',
-                'this_update': this_update,
-                'next_update': next_update,
-            }
-        elif cert_status['revoked'] is not None:
-            logger.debug('revoked: %s', cert_status['revoked'])
-            # revocation
-            revocation_time = cert_status['revoked']['revocationTime']
-            revocation_reason = cert_status['revoked']['revocationReason']
-            single_response_map[hkey] = {
-                'status': 'revoked',
-                'time': revocation_time,
-                'reason': revocation_reason,
-            }
-        else:
-            logger.debug('unknown')
-            single_response_map[hkey] = {
-                'status': 'unknown',
-            }
-    return single_response_map
-
-
-def execute_ocsp_request(ocsp_uri, cert_id, proxies=None, do_retry=True):
-    """
-    Executes OCSP request for the given cert id
-    """
-    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN
-
-    logger = getLogger(__name__)
-    request = Request()
-    request['reqCert'] = cert_id
-
-    request_list = univ.SequenceOf(componentType=Request())
-    request_list[0] = request
-
-    tbs_request = TBSRequest()
-    tbs_request['requestList'] = request_list
-    tbs_request['version'] = Version(0).subtype(
-        explicitTag=tag.Tag(tag.tagClassContext, tag.tagFormatSimple,
-                            0))
-
-    ocsp_request = OCSPRequest()
-    ocsp_request['tbsRequest'] = tbs_request
-
-    # no signature for the client
-    # no nonce is set, because not all OCSP resopnder implements it yet
-
-    # transform objects into data in requests
-    data = der_encoder.encode(ocsp_request)
-    b64data = b64encode(data).decode('ascii')
-
-    if SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN:
-        parsed_url = urlsplit(ocsp_uri)
-        target_url = SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN.format(
-            parsed_url.hostname, b64data
-        )
-    else:
-        target_url = u"{0}/{1}".format(ocsp_uri, b64data)
-
-    max_retry = 100 if do_retry else 1
-    # NOTE: This retry is to retry getting HTTP 200.
-    logger.debug('url: %s, proxies: %s', target_url, proxies)
-    with requests.Session() as session:
-        session.mount('http://', HTTPAdapter(max_retries=5))
-        session.mount('https://', HTTPAdapter(max_retries=5))
-        for attempt in range(max_retry):
-            response = session.get(
-                target_url,
-                proxies=proxies,
-                timeout=60)
-            if response.status_code == OK:
-                logger.debug("OCSP response was successfully returned")
-                break
-            elif max_retry > 1:
-                wait_time = 2 ** attempt
-                wait_time = 16 if wait_time > 16 else wait_time
-                logger.debug("OCSP server returned %s. Retrying in %s(s)",
-                             response.status_code, wait_time)
-                time.sleep(wait_time)
-        else:
-            logger.error("Failed to get OCSP response after %s attempt.",
-                         max_retry)
-    return response.content
-
-
-def is_cert_id_in_cache(ocsp_issuer, ocsp_subject, use_cache=True):
-    u"""
-    checks if cert_id is in the cache
-    """
-    global SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED
-    global SF_OCSP_RESPONSE_CACHE_SERVER_URL
-    global OCSP_VALIDATION_CACHE_UPDATED
-
-    logger = getLogger(__name__)
-    cert_id = CertID()
-    cert_id[
-        'hashAlgorithm'] = rfc2459.AlgorithmIdentifier().setComponentByName(
-        'algorithm', ocsp_issuer[u'algorithm']).setComponentByName(
-        'parameters', ocsp_issuer[u'algorithm_parameter'])
-    cert_id['issuerNameHash'] = univ.OctetString(
-        hexValue=ocsp_issuer[u'name_hash'])
-    cert_id['issuerKeyHash'] = univ.OctetString(
-        hexValue=ocsp_issuer[u'key_hash'])
-    cert_id['serialNumber'] = rfc2459.CertificateSerialNumber(
-        ocsp_subject[u'serial_number'])
-
-    if logger.getEffectiveLevel() == logging.DEBUG:
-        base64_name_hash = b64encode(
-            octet_string_to_bytearray(cert_id['issuerNameHash']))
-    else:
-        base64_name_hash = None
-
-    with OCSP_VALIDATION_CACHE_LOCK:
-        current_time = int(time.time())
-        for idx in range(2):
-            hkey = _decode_cert_id_key(cert_id)
-            if use_cache and hkey in OCSP_VALIDATION_CACHE:
-                ts, cache = OCSP_VALIDATION_CACHE[hkey]
-                if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
-                    # cache value is OCSP response
-                    logger.debug(
-                        u'hit cache. issuer name: %s, is '
-                        u'subject root: %s',
-                        ocsp_issuer['name'],
-                        ocsp_issuer[u'is_root_ca'])
-                    return True, cert_id, cache
-                else:
-                    # more than 24 hours difference
-                    del OCSP_VALIDATION_CACHE[hkey]
-                    OCSP_VALIDATION_CACHE_UPDATED = True
-
-            if idx == 1:
-                # No second attempt to download the OCSP response cache.
-                break
-            # download OCSP response cache once
-            if SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED:
-                downloaded_cache = download_ocsp_response_cache(
-                    SF_OCSP_RESPONSE_CACHE_SERVER_URL)
-                logger.debug('downloaded OCSP response cache file from %s',
-                             SF_OCSP_RESPONSE_CACHE_SERVER_URL)
-                for hkey, (ts, cache) in downloaded_cache.items():
-                    if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
-                        OCSP_VALIDATION_CACHE[hkey] = ts, cache
-                        OCSP_VALIDATION_CACHE_UPDATED = True
-            else:
-                logger.debug("OCSP response cache service is not enabled. Set "
-                             "the environment variable "
-                             "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED=true to "
-                             "enable it.")
-
-    if logger.getEffectiveLevel() == logging.DEBUG:
-        logger.debug(
-            u'not hit cache. issuer name hash: %s, issuer name: %s, is subject '
-            u'root: %s, issuer name hash algorithm: %s, '
-            u'issuer key hash: %s, subject serial number: %s',
-            base64_name_hash, ocsp_issuer['name'], ocsp_issuer[u'is_root_ca'],
-            cert_id['hashAlgorithm'],
-            b64encode(octet_string_to_bytearray(cert_id['issuerKeyHash'])),
-            cert_id['serialNumber'])
-
-    return False, cert_id, None
-
-
-def _encode_cert_id_key(hkey):
-    issuer_name_hash, issuer_key_hash, serial_number = hkey
-    issuer_name_hash, _ = der_decoder.decode(issuer_name_hash)
-    issuer_key_hash, _ = der_decoder.decode(issuer_key_hash)
-    serial_number, _ = der_decoder.decode(serial_number)
-    cert_id = CertID()
-    cert_id['hashAlgorithm'] = rfc2459.AlgorithmIdentifier().setComponentByName(
-        'algorithm', rfc2437.id_sha1)
-    cert_id['issuerNameHash'] = issuer_name_hash
-    cert_id['issuerKeyHash'] = issuer_key_hash
-    cert_id['serialNumber'] = serial_number
-    return cert_id
-
-
-def _decode_cert_id_key(cert_id):
-    return (der_encoder.encode(cert_id['issuerNameHash']),
-            der_encoder.encode(cert_id['issuerKeyHash']),
-            der_encoder.encode(cert_id['serialNumber']))
-
-
-def _decode_ocsp_response_cache(ocsp_response_cache_json, ocsp_response_cache):
-    """
-    Decodes OCSP response cache from JSON
-    """
-    current_time = int(time.time())
-    for cert_id_base64, (ts, ocsp_response) in ocsp_response_cache_json.items():
-        cert_id, _ = der_decoder.decode(b64decode(cert_id_base64), CertID())
-        hkey = _decode_cert_id_key(cert_id)
-        if ts - CACHE_EXPIRATION <= current_time <= ts + CACHE_EXPIRATION:
-            ocsp_response_cache[hkey] = (ts, b64decode(ocsp_response))
-        elif hkey in ocsp_response_cache:
-            # invalidate the cache if exists
-            del ocsp_response_cache[hkey]
-
-
-def _encode_ocsp_response_cache(ocsp_response_cache, ocsp_response_cache_json):
-    """
-    Encodes OCSP response cache to JSON
-    """
-    logger = getLogger(__name__)
-    logger.debug('encoding OCSP reponse cache to JSON')
-    for hkey, (current_time, ocsp_response) in \
-            ocsp_response_cache.items():
-        k = b64encode(der_encoder.encode(_encode_cert_id_key(hkey))).decode(
-            'ascii')
-        v = b64encode(ocsp_response).decode('ascii')
-        ocsp_response_cache_json[k] = (current_time, v)
-
-
-def touch(fname, times=None):
-    """
-    Touch a file
-    """
-    with open(fname, 'a'):
-        os.utime(fname, times)
-
-
-def file_timestamp(filename):
-    if platform.system() == 'Windows':
-        ts = int(path.getctime(filename))
-    else:
-        stat = os.stat(filename)
-        if hasattr(stat, 'st_birthtime'):  # odx
-            ts = int(stat.st_birthtime)
-        else:
-            ts = int(stat.st_mtime)  # linux
-    return ts
-
-
-def check_ocsp_response_cache_lock_file(filename):
-    logger = getLogger(__name__)
-    current_time = int(time.time())
-    lock_file = filename + '.lck'
-
-    try:
-        ts_cache_file = file_timestamp(filename)
-        if not path.exists(lock_file) and ts_cache_file >= current_time - \
-                CACHE_EXPIRATION:
-            # use cache only if no lock file exists and the cache file
-            # was created last 24 hours
-            return True
-
-        if path.exists(lock_file):
-            # delete lock file if older 60 seconds
-            ts_lock_file = file_timestamp(lock_file)
-            if ts_lock_file < current_time - 60:
-                os.unlink(lock_file)
-                logger.debug(
-                    "The lock file is older than 60 seconds. "
-                    "Deleted the lock file and ignoring the cache: %s",
-                    lock_file
-                )
-            else:
-                logger.debug(
-                    'The lock file exists. Other process may be updating the '
-                    'cache file: %s, %s', filename, lock_file)
-        else:
-            os.unlink(filename)
-            logger.debug(
-                "The cache is older than 1 day. "
-                "Deleted the cache file: %s", filename
-            )
-    except Exception as e:
-        logger.debug(
-            "Failed to check OCSP response cache file. No worry. It will "
-            "validate with OCSP server: file: %s, lock file: %s, error: %s",
-            filename, lock_file, e
-        )
-    return False
-
-
-def read_ocsp_response_cache_file(filename, ocsp_validation_cache):
-    """
-    Reads OCSP Response cache
-    """
-    logger = getLogger(__name__)
-    if check_ocsp_response_cache_lock_file(filename) and path.exists(filename):
-        with codecs.open(filename, 'r', encoding='utf-8', errors='ignore') as f:
-            _decode_ocsp_response_cache(json.load(f), ocsp_validation_cache)
-        logger.debug("Read OCSP response cache file: %s, count=%s",
-                     filename, len(OCSP_VALIDATION_CACHE))
-    else:
-        logger.debug(
-            "Failed to locate OCSP response cache file. "
-            "No worry. It will validate with OCSP server: %s",
-            filename
-        )
-
-
-def write_ocsp_response_cache_file(filename, ocsp_validation_cache):
-    """
-    Writes OCSP Response Cache
-    """
-    logger = getLogger(__name__)
-    logger.debug('writing OCSP response cache file')
-    file_cache_data = {}
-    _encode_ocsp_response_cache(ocsp_validation_cache, file_cache_data)
-    with codecs.open(filename, 'w', encoding='utf-8', errors='ignore') as f:
-        json.dump(file_cache_data, f)
-
-
-def update_ocsp_response_cache_file(ocsp_response_cache_uri):
-    """
-    Updates OCSP Response Cache
-    """
-    logger = getLogger(__name__)
-    lock_file = None
-    if ocsp_response_cache_uri is not None:
-        try:
-            parsed_url = urlsplit(ocsp_response_cache_uri)
-            if parsed_url.scheme == 'file':
-                filename = path.join(parsed_url.netloc, parsed_url.path)
-                lock_file = filename + '.lck'
-                for _ in range(100):
-                    # wait until the lck file has been removed
-                    # or up to 1 second (0.01 x 100)
-                    if not path.exists(lock_file):
-                        break
-                    time.sleep(0.01)
-                if not path.exists(lock_file):
-                    touch(lock_file)
-                    try:
-                        write_ocsp_response_cache_file(
-                            filename,
-                            OCSP_VALIDATION_CACHE)
-                    finally:
-                        os.unlink(lock_file)
-                        lock_file = None
-            else:
-                logger.debug(
-                    "No OCSP response cache file is written, because the "
-                    "given URI is not a file: %s. Ignoring...",
-                    ocsp_response_cache_uri)
-        except Exception as e:
-            logger.debug(
-                "Failed to write OCSP response cache "
-                "file. file: %s, error: %s, Ignoring...",
-                ocsp_response_cache_uri, e, exc_info=True)
-
-    if lock_file is not None and os.path.exists(lock_file):
-        try:
-            os.unlink(lock_file)
-        except Exception as e:
-            logger.debug(
-                "Failed to unlink OCS response cache lock file. Ignoring..."
-            )
-
-
-def download_ocsp_response_cache(url):
-    """
-    Downloads OCSP response cache from Snowflake.
-    """
-    logger = getLogger(__name__)
-    ocsp_validation_cache = {}
-    import binascii
-    try:
-        with requests.Session() as session:
-            session.mount('http://', HTTPAdapter(max_retries=5))
-            session.mount('https://', HTTPAdapter(max_retries=5))
-
-            response = session.request(
-                method=u'get',
-                url=url,
-                timeout=10,  # socket timeout
-                verify=True,  # for HTTPS (future use)
-            )
-        if response.status_code == OK:
-            try:
-                _decode_ocsp_response_cache(response.json(),
-                                            ocsp_validation_cache)
-            except (ValueError, binascii.Error) as err:
-                logger.debug(
-                    'Failed to convert OCSP cache server response to '
-                    'JSON. The cache was corrupted. No worry. It will'
-                    'validate with OCSP server: %s', err)
-        else:
-            logger.debug("Failed to get OCSP response cache from %s: %s",
-                         url, response.status_code)
-    except Exception as e:
-        logger.debug("Failed to get OCSP response cache from %s: %s",
-                     url, e)
-    return ocsp_validation_cache
-
-
-def check_ocsp_response_status(single_response_map, ocsp_response):
-    """
-    Checks the OCSP response status
-    """
-    ret = []
-    for hkey, data in single_response_map.items():
-        if data['status'] == 'good':
-            ret.append(_process_good_status(
-                hkey, data, ocsp_response))
-        elif data['status'] == 'revoked':  # revoked
-            _process_revoked_status(hkey, data)
-        else:  # unknown
-            _process_unknown_status(hkey)
-    if len(ret) != len(single_response_map):
-        raise OperationalError(
-            msg=u"Not all OCSP Response was returned",
-            errno=ER_INVALID_OCSP_RESPONSE,
-        )
-
-
-def _calculate_tolerable_validity(this_update, next_update):
-    return max(int(TOLERABLE_VALIDITY_RANGE_RATIO * (
-            next_update - this_update)), MAX_CLOCK_SKEW)
-
-
-def _is_validaity_range(current_time, this_update, next_update):
-    logger = getLogger(__name__)
-    tolerable_validity = _calculate_tolerable_validity(this_update, next_update)
-    logger.debug(u'Tolerable Validity range for OCSP response: +%s(s)',
-                 tolerable_validity)
-    return this_update - MAX_CLOCK_SKEW <= \
-           current_time <= next_update + tolerable_validity
-
-
-def _validity_error_message(current_time, this_update, next_update):
-    tolerable_validity = _calculate_tolerable_validity(this_update, next_update)
-    return (u"Response is unreliable. Its validity "
-            u"date is out of range: current_time={0}, "
-            u"this_update={1}, next_update={2}, "
-            u"tolerable next_update={3}. A potential cause is "
-            u"client clock is skewed, CA fails to update OCSP "
-            u"response in time.".format(
-        strftime('%Y%m%d%H%M%SZ', gmtime(current_time)),
-        strftime('%Y%m%d%H%M%SZ', gmtime(this_update)),
-        strftime('%Y%m%d%H%M%SZ', gmtime(next_update)),
-        strftime('%Y%m%d%H%M%SZ', gmtime(
-            next_update + tolerable_validity))))
-
-
-def _process_good_status(hkey, data, ocsp_response):
-    """
-    Process Good status
-    """
-    current_time = int(time.time())
-    this_update = data['this_update']
-    next_update = data['next_update']
-    if _is_validaity_range(current_time, this_update, next_update):
-        with OCSP_VALIDATION_CACHE_LOCK:
-            if hkey not in OCSP_VALIDATION_CACHE:
-                OCSP_VALIDATION_CACHE[hkey] = (current_time, ocsp_response)
-                global OCSP_VALIDATION_CACHE_UPDATED
-                OCSP_VALIDATION_CACHE_UPDATED = True
-        return True
-    else:
-        raise OperationalError(
-            msg=_validity_error_message(current_time, this_update, next_update),
-            errno=ER_INVALID_OCSP_RESPONSE
-        )
-
-
-def _process_revoked_status(hkey, data):
-    """
-    Process Revoked status
-    """
-    with OCSP_VALIDATION_CACHE_LOCK:
-        if hkey in OCSP_VALIDATION_CACHE:
-            global OCSP_VALIDATION_CACHE_UPDATED
-            OCSP_VALIDATION_CACHE_UPDATED = True
-            del OCSP_VALIDATION_CACHE[hkey]
-    current_time = int(time.time())
-    revocation_time = data['time']
-    revocation_reason = data['reason']
-    raise OperationalError(
-        msg=u"The certificate has been revoked: current_time={0}, "
-            u"time={1}, reason={2}".format(
-            strftime('%Y%m%d%H%M%SZ', gmtime(current_time)),
-            revocation_time,
-            revocation_reason),
-        errno=ER_SERVER_CERTIFICATE_REVOKED,
-    )
-
-
-def _process_unknown_status(hkey):
-    """
-    Process Unknown status
-    """
-    with OCSP_VALIDATION_CACHE_LOCK:
-        if hkey in OCSP_VALIDATION_CACHE:
-            global OCSP_VALIDATION_CACHE_UPDATED
-            OCSP_VALIDATION_CACHE_UPDATED = True
-            del OCSP_VALIDATION_CACHE[hkey]
-    raise OperationalError(
-        msg=u"The certificate is in UNKNOWN revocation status.",
-        errno=ER_SERVER_CERTIFICATE_REVOKED,
-    )
-
-
-# Signature Hash Algorithm
-sha1WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.5')
-sha256WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.11')
-sha384WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.12')
-sha512WithRSAEncryption = univ.ObjectIdentifier('1.2.840.113549.1.1.13')
-
-SIGNATURE_HASH_ALGO_TO_NAME = {
-    sha1WithRSAEncryption: 'sha1',
-    sha256WithRSAEncryption: 'sha256',
-    sha384WithRSAEncryption: 'sha384',
-    sha512WithRSAEncryption: 'sha512',
-}
-
-# OCSP SIGNING flag
-OCSP_SIGNING = univ.ObjectIdentifier('1.3.6.1.5.5.7.3.9')
-
-# Maximum clock skew in seconds (15 minutes) allowed when checking
-# validity of OCSP responses
-MAX_CLOCK_SKEW = 900
-
-# Tolerable validity date range ratio. The OCSP response is valid up
-# to (next update timestap) + (next update timestamp - this update timestap) *
-# TOLERABLE_VALIDITY_RANGE_RATIO. This buffer yields some time for Root CA to
-# update intermediate CA's certificate OCSP response. In fact, they don't
-# update OCSP response in time. In Dec 2016, they left OCSP response expires for
-# 5 hours at least, and it caused the connectivity issues in customers.
-# With this buffer, about 2 days are given for 180 days validity date.
-TOLERABLE_VALIDITY_RANGE_RATIO = 0.01
-
-# Cache Expiration in seconds (24 hours). OCSP validation cache is
-# invalidated every 24 hours
-CACHE_EXPIRATION = 86400
-
-# Known certificates that can skip OCSP validation
-KNOWN_HOSTNAMES = {
-    '',
-}
-
-# CRL string match
-CRL_RE = re.compile(r'^\s*URI:(.*)$')
-
-# OCSP cache
-OCSP_VALIDATION_CACHE = {}
-
-# OCSP cache lock
-OCSP_VALIDATION_CACHE_LOCK = Lock()
-
-# OCSP cache update flag
-OCSP_VALIDATION_CACHE_UPDATED = False
-
-# OCSP string match
-OCSP_RE = re.compile(r'^OCSP\s+\-\s+URI:(.*)$')
-
-# OCSP response mapping
-OCSP_RESPONSE_STATUS = {
-    0: 'successful',
-    1: 'malformedRequest',
-    2: 'internalError',
-    3: 'tryLater',
-    4: 'not used',
-    5: 'sigRequired',
-    6: 'unauthorized'
-}
-
-# OCSP cache server URL where Snowflake provides OCSP response cache for
-# better availability.
-SF_OCSP_RESPONSE_CACHE_SERVER_URL = os.getenv(
-    "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-    "{0}/{1}".format(
-        DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL,
-        OCSP_RESPONSE_CACHE_FILE_NAME))
-SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED = os.getenv(
-    "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
-
-# OCSP dynamic cache server URL pattern lock
-SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK = Lock()
-
-# OCSP dynamic cache server URL pattern
-SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = None
-
-# Cache directory
-CACHE_ROOT_DIR = os.getenv('SF_OCSP_RESPONSE_CACHE_DIR') or \
-           expanduser("~") or tempfile.gettempdir()
-if platform.system() == 'Windows':
-    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'AppData', 'Local', 'Snowflake', 'Caches')
-elif platform.system() == 'Darwin':
-    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'Library', 'Caches', 'Snowflake')
-else:
-    CACHE_DIR = path.join(CACHE_ROOT_DIR, '.cache', 'snowflake')
-
-if not path.exists(CACHE_DIR):
-    try:
-        os.makedirs(CACHE_DIR, mode=0o700)
-    except Exception as ex:
-        logger = getLogger(__name__)
-        logger.warning('cannot create a cache directory: [%s], err=[%s]',
-                       CACHE_DIR, ex)
-        CACHE_DIR = None
-
-
-def _reset_ocsp_dynamic_cache_server_url():
-    """
-    Reset OCSP dynamic cache server url pattern.
-
-    This is used only when OCSP cache server is updated.
-    """
-    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN
-    global SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK
-
-    with SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN_LOCK:
-        if SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN is None and \
-                not SF_OCSP_RESPONSE_CACHE_SERVER_URL.startswith(
-                    DEFAULT_OCSP_RESPONSE_CACHE_SERVER_URL):
-            # only if custom OCSP cache server is used.
-            parsed_url = urlsplit(SF_OCSP_RESPONSE_CACHE_SERVER_URL)
-            if parsed_url.port:
-                SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = \
-                    u"{0}://{1}:{2}/retry/".format(
-                        parsed_url.scheme, parsed_url.hostname,
-                        parsed_url.port) + u"{0}/{1}"
-            else:
-                SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN = \
-                    u"{0}://{1}/retry/".format(
-                        parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
-        logger.debug("OCSP dynamic cache server URL pattern: %s",
-                     SF_OCSP_RESPONSE_CACHE_SERVER_RETRY_URL_PATTERN)
-
-
-class SnowflakeOCSP(object):
-    """
-    OCSP validator using PyOpenSSL.
-    """
-
-    def __init__(self, must_use_cache=False,
-                 proxies=None,
-                 ocsp_response_cache_uri=None):
+    def _has_certs_in_ocsp_response(self, certs):
         """
-        :param must_use_cache: Test purpose. must use cache or raises an error
-        :param ocsp_response_cache_uri: the location of cache file
+        Check if the certificate is attached to OCSP response
         """
-        self._must_use_cache = must_use_cache
-        self._proxies = proxies
-        if ocsp_response_cache_uri is None and CACHE_DIR is not None:
-            self._ocsp_response_cache_uri = 'file://' + path.join(
-                CACHE_DIR, OCSP_RESPONSE_CACHE_FILE_NAME)
+        if SnowflakeOCSPPyasn1._get_pyasn1_version() <= 3000:
+            return certs is not None
         else:
-            self._ocsp_response_cache_uri = ocsp_response_cache_uri
+            # behavior changed.
+            return certs is not None and certs.hasValue() and certs[
+                0].hasValue()
 
-        if self._ocsp_response_cache_uri is not None:
-            self._ocsp_response_cache_uri = self._ocsp_response_cache_uri.replace(
-                '\\', '/')
-
-        _reset_ocsp_dynamic_cache_server_url()
-
-        logger.debug("ocsp_response_cache_uri: %s",
-                     self._ocsp_response_cache_uri)
-        logger.debug(
-            "OCSP_VALIDATION_CACHE size: %s", len(OCSP_VALIDATION_CACHE))
-
-        if self._ocsp_response_cache_uri is not None:
-            try:
-                with OCSP_VALIDATION_CACHE_LOCK:
-                    parsed_url = urlsplit(self._ocsp_response_cache_uri)
-                    if parsed_url.scheme == 'file':
-                        read_ocsp_response_cache_file(
-                            path.join(parsed_url.netloc, parsed_url.path),
-                            OCSP_VALIDATION_CACHE)
-                    else:
-                        raise Exception(
-                            "Unsupported OCSP URI: %s",
-                            self._ocsp_response_cache_uri)
-            except Exception as e:
-                logger.debug(
-                    "Failed to read OCSP response cache file %s: %s, "
-                    "No worry. It will validate with OCSP server. "
-                    "Ignoring...",
-                    self._ocsp_response_cache_uri, e, exc_info=True)
-        #
-        # load 'charmap' encoding here so that
-        # no load concurrency issue happens later
-        #
-        'test'.encode("charmap")
-        _get_pyasn1_version()
-
-    def validate(self, hostname, connection,
-                 ignore_no_ocsp=False):
-        u"""
-        Validates the certificate is not revoked using OCSP
+    @staticmethod
+    def bit_string_to_bytearray(bit_string):
         """
-        global OCSP_VALIDATION_CACHE_UPDATED
-        logger.debug(u'validating certificate: %s', hostname)
-        if ignore_no_ocsp:
-            logger.debug(u'validation was skipped.')
-            return True
-
-        if hostname in KNOWN_HOSTNAMES:  # skip OCSP validation if known
-            logger.debug(
-                'validation was skipped, because hostname %s is known',
-                hostname)
-            return True
-
-        cert_data = _extract_certificate_chain(connection)
-
-        pool = ThreadPool(len(cert_data))
-        results = []
-        try:
-            for issuer_and_subject in cert_data:
-                ocsp_uri = issuer_and_subject['subject'][
-                    'ocsp_uri']  # issuer's ocsp uri
-                ocsp_subject = issuer_and_subject['subject']
-                ocsp_issuer = issuer_and_subject['issuer']
-                logger.debug('ocsp_uri: %s', ocsp_uri)
-                if ocsp_uri:
-                    r = pool.apply_async(
-                        self.validate_by_direct_connection_simple,
-                        [ocsp_uri, ocsp_issuer, ocsp_subject])
-                    results.append(r)
-                else:
-                    raise OperationalError(
-                        msg=(u'NO OCSP URI was found: '
-                             u'hostname={0}, subject={1}').format(
-                            hostname, ocsp_subject),
-                        errno=ER_FAILED_TO_GET_OCSP_URI,
-                    )
-        finally:
-            pool.close()
-            pool.join()
-            for r in results:
-                if not r.successful():
-                    raise OperationalError(
-                        msg=(u'Failed to validate the certificate '
-                             u'revocation status: '
-                             u'hostname={0}, err={1}', hostname, r.get()))
-            with OCSP_VALIDATION_CACHE_LOCK:
-                if OCSP_VALIDATION_CACHE_UPDATED:
-                    update_ocsp_response_cache_file(
-                        self._ocsp_response_cache_uri)
-                OCSP_VALIDATION_CACHE_UPDATED = False
-
-            if len(results) != len(cert_data):
-                raise OperationalError(
-                    msg=u"Failed to validate the certificate "
-                        u"revocation status. The number of validation "
-                        u"didn't match: hostname={0}, retsults={1}, "
-                        u"cert_data={2}".format(hostname, len(results),
-                                                len(cert_data)),
-                    errno=ER_INVALID_OCSP_RESPONSE)
-        logger.debug(u'ok')
-        # any failure must be an exception
-        return True
-
-    def validate_by_direct_connection_simple(
-            self, ocsp_uri, ocsp_issuer, ocsp_subject):
-        ret, _, _ = self.validate_by_direct_connection(
-            ocsp_uri, ocsp_issuer, ocsp_subject)
-        return ret
-
-    def validate_by_direct_connection(
-            self, ocsp_uri, ocsp_issuer, ocsp_subject,
-            do_retry=True, use_cache=True):
+        Converts Bitstring to bytearray
         """
-        Validates the certificate using requests package
-        """
-        cache_status, cert_id, ocsp_response = is_cert_id_in_cache(
-            ocsp_issuer, ocsp_subject, use_cache=use_cache)
-
-        logger.debug('must_use_cache: %s, cache_status: %s',
-                     self._must_use_cache, cache_status)
-
-        # Disabled assert. If two distinct certificates are used
-        # for the same URL, e.g., AWS S3 endpoint, one cannot hit
-        # other in the cache.
-        #
-        # assert not self._must_use_cache or \
-        #       self._must_use_cache and cache_status, \
-        #       'Test: Must use cache! must_use_cache: {0}, '
-        #       'cache_status: {1}'.format(self._must_use_cache, cache_status)
-
-        err = None
-        max_retry = 100 if do_retry else 1
-        # NOTE: this retry is connection error retry
-        for retry in range(max_retry):
-            try:
-                if not cache_status:
-                    # not cached or invalid
-                    logger.debug('getting OCSP response from remote')
-                    ocsp_response = execute_ocsp_request(
-                        ocsp_uri, cert_id,
-                        proxies=self._proxies,
-                        do_retry=do_retry)
-                else:
-                    logger.debug('using OCSP response cache')
-                single_response_map = process_ocsp_response(
-                    ocsp_response, ocsp_issuer)
-                check_ocsp_response_status(
-                    single_response_map,
-                    ocsp_response)
-                err = None
-                break
-            except Exception as e:
-                logger.warning(
-                    'Failed to get OCSP response: %s. '
-                    'Retrying...%s/%s .', e, retry + 1, max_retry)
-                err = e
-                if max_retry == 1:
-                    raise err
-                # if fails, it always attempts to access the OCSP server
-                # to get the fresh status
-                cache_status = False
-        if err:
-            raise err
-
-        return True, cert_id, ocsp_response
-
-    def generate_cert_id_response(
-            self, hostname, connection, do_retry=True):
-        cert_data = _extract_certificate_chain(connection)
-        return self.generate_cert_id_response0(
-            hostname, cert_data, do_retry=do_retry, use_cache=False)
-
-    def generate_cert_id_response0(
-            self, hostname, cert_data, do_retry=True, use_cache=False):
-        current_time = int(time.time())
-        results = {}
-        for issuer_and_subject in cert_data:
-            ocsp_uri = issuer_and_subject['subject'][
-                'ocsp_uri']  # issuer's ocsp uri
-            ocsp_subject = issuer_and_subject['subject']
-            ocsp_issuer = issuer_and_subject['issuer']
-            logger.debug('ocsp_uri: %s', ocsp_uri)
-            if ocsp_uri:
-                ret, cert_id, ocsp_response = \
-                    self.validate_by_direct_connection(
-                        ocsp_uri, ocsp_issuer, ocsp_subject,
-                        do_retry=do_retry, use_cache=use_cache)
-                if ret and cert_id and ocsp_response:
-                    cert_id_der = der_encoder.encode(cert_id)
-                    results[cert_id_der] = (
-                        current_time,
-                        ocsp_issuer,
-                        ocsp_subject,
-                        ocsp_response)
-            else:
-                raise OperationalError(
-                    msg=(u'NO OCSP URI was found: '
-                         u'hostname={0}, subject={1}').format(
-                        hostname, ocsp_subject),
-                    errno=ER_FAILED_TO_GET_OCSP_URI,
-                )
-        logger.debug(u'ok')
-        return results
+        ret = []
+        for idx in range(int(len(bit_string) / 8)):
+            v = 0
+            for idx0, bit in enumerate(bit_string[idx * 8:idx * 8 + 8]):
+                v = v | (bit << (7 - idx0))
+            ret.append(v)
+        return bytearray(ret)
