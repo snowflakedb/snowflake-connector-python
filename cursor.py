@@ -13,8 +13,6 @@ from threading import (Timer, Lock)
 
 from six import u
 
-from .chunk_downloader import (DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
-                               DEFAULT_CLIENT_RESULT_PREFETCH_THREADS)
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (
     FIELD_NAME_TO_ID,
@@ -93,10 +91,6 @@ class SnowflakeCursor(object):
         self._timezone = None
         self._binary_output_format = None
 
-        self._client_result_prefetch_slots = \
-            DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS
-        self._client_result_prefetch_threads = \
-            DEFAULT_CLIENT_RESULT_PREFETCH_THREADS
         self._arraysize = 1  # PEP-0249: defaults to 1
 
         self._lock_canceling = Lock()
@@ -403,10 +397,6 @@ class SnowflakeCursor(object):
                     self._timezone = kv[u'value']
                 if u'BINARY_OUTPUT_FORMAT' in kv[u'name']:
                     self._binary_output_format = kv[u'value']
-                if u'CLIENT_RESULT_PREFETCH_THREADS' in kv[u'name']:
-                    self._client_result_prefetch_threads = kv[u'value']
-                if u'CLIENT_RESULT_PREFETCH_SLOTS' in kv[u'name']:
-                    self._client_result_prefetch_slots = kv[u'value']
             self._connection._set_parameters(
                 ret, self._connection._session_parameters)
 
@@ -619,8 +609,7 @@ class SnowflakeCursor(object):
             logger.debug(u'qrmk=%s', qrmk)
             self._chunk_downloader = self._connection._chunk_downloader_class(
                 chunks, self._connection, self, qrmk, chunk_headers,
-                prefetch_slots=self._client_result_prefetch_slots,
-                prefetch_threads=self._client_result_prefetch_threads,
+                prefetch_threads=self._connection.client_prefetch_threads,
                 use_ijson=use_ijson)
 
         if is_dml:

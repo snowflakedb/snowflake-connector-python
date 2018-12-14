@@ -21,7 +21,10 @@ from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
-from .chunk_downloader import SnowflakeChunkDownloader
+from .chunk_downloader import (
+    SnowflakeChunkDownloader,
+    DEFAULT_CLIENT_PREFETCH_THREADS,
+    MAX_CLIENT_PREFETCH_THREADS)
 from .compat import (
     TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517, IS_WINDOWS)
 from .constants import (
@@ -32,6 +35,7 @@ from .constants import (
     PARAMETER_TIMEZONE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
+    PARAMETER_CLIENT_PREFETCH_THREADS,
 )
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
@@ -116,6 +120,7 @@ DEFAULT_CONFIGURATION = {
     u'autocommit': None,  # snowflake
     u'client_session_keep_alive': False,  # snowflake
     u'client_session_keep_alive_heartbeat_frequency': None,  # snowflake
+    u'client_prefetch_threads': 4,  # snowflake
     u'numpy': False,  # snowflake
     u'ocsp_response_cache_filename': None,  # snowflake internal
     u'converter_class': DefaultConverterClass(),
@@ -329,6 +334,22 @@ class SnowflakeConnection(object):
         """
         self._client_session_keep_alive_heartbeat_frequency = value
         self._validate_client_session_keep_alive_heartbeat_frequency()
+
+    @property
+    def client_prefetch_threads(self):
+        u"""
+        Number of threads to download the result set
+        """
+        return self._client_prefetch_threads if \
+            self._client_prefetch_threads else DEFAULT_CLIENT_PREFETCH_THREADS
+
+    @client_prefetch_threads.setter
+    def client_prefetch_threads(self, value):
+        """
+        Number of threads to download the result set
+        """
+        self._client_prefetch_threads = value
+        self._validate_client_prefetch_threads()
 
     @property
     def rest(self):
@@ -600,6 +621,10 @@ class SnowflakeConnection(object):
             self._session_parameters[
                 PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY] = \
                 self._validate_client_session_keep_alive_heartbeat_frequency()
+
+        if self.client_prefetch_threads:
+            self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = \
+                self._validate_client_prefetch_threads()
 
         if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
@@ -1016,6 +1041,15 @@ class SnowflakeConnection(object):
             self.client_session_keep_alive_heartbeat_frequency)
         return self.client_session_keep_alive_heartbeat_frequency
 
+    def _validate_client_prefetch_threads(self):
+        if self.client_prefetch_threads <= 0:
+            self._client_prefetch_threads = 1
+        elif self.client_prefetch_threads > MAX_CLIENT_PREFETCH_THREADS:
+            self._client_prefetch_threads = MAX_CLIENT_PREFETCH_THREADS
+        self._client_prefetch_threads = int(
+            self.client_prefetch_threads)
+        return self.client_prefetch_threads
+
     def _set_parameters(self, ret, session_parameters):
         """
         Set session parameters
@@ -1038,6 +1072,8 @@ class SnowflakeConnection(object):
                 self.client_session_keep_alive_heartbeat_frequency = value
             elif PARAMETER_SERVICE_NAME == name:
                 self.service_name = value
+            elif PARAMETER_CLIENT_PREFETCH_THREADS == name:
+                self.client_prefetch_threads = value
 
     def __enter__(self):
         u"""

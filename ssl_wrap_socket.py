@@ -239,6 +239,8 @@ class WrappedSocket(object):
     def _send_until_done(self, data):
         while True:
             try:
+                if PY2 and isinstance(data, unicode):
+                    data = data.encode('utf-8')
                 return self.connection.send(data)
             except OpenSSL.SSL.WantWriteError:
                 wr = wait_for_write(self.socket, self.socket.gettimeout())
