@@ -34,7 +34,7 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
         'specific_date': np.datetime64('1968-11-12T07:00:00.123')
     }]
     try:
-        with conn_cnx(use_numpy=True) as cnx:
+        with conn_cnx(numpy=True) as cnx:
             cnx.cursor().execute("""
 CREATE OR REPLACE TABLE {name} (
     c1  integer,       -- int8

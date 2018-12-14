@@ -14,8 +14,9 @@ from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
 
 DEFAULT_REQUEST_TIMEOUT = 3600
-DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS = 8
-DEFAULT_CLIENT_RESULT_PREFETCH_THREADS = 2
+
+DEFAULT_CLIENT_PREFETCH_THREADS = 4
+MAX_CLIENT_PREFETCH_THREADS = 10
 
 MAX_RETRY_DOWNLOAD = 10
 MAX_WAIT = 360
@@ -41,8 +42,7 @@ class SnowflakeChunkDownloader(object):
     """
 
     def _pre_init(self, chunks, connection, cursor, qrmk, chunk_headers,
-                  prefetch_slots=DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
-                  prefetch_threads=DEFAULT_CLIENT_RESULT_PREFETCH_THREADS,
+                  prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
                   use_ijson=False):
         self._use_ijson = use_ijson
 
@@ -53,37 +53,27 @@ class SnowflakeChunkDownloader(object):
         self._qrmk = qrmk
         self._chunk_headers = chunk_headers
 
-        self._prefetch_slots = prefetch_slots
-        self._prefetch_threads = prefetch_threads
-
         self._chunk_size = len(chunks)
         self._chunks = {}
         self._chunk_locks = {}
 
-        self._prefetch_threads *= 4
-
-        self._effective_threads = min(self._prefetch_threads, self._chunk_size)
+        self._effective_threads = min(prefetch_threads, self._chunk_size)
         if self._effective_threads < 1:
             self._effective_threads = 1
 
-        self._num_chunks_to_prefetch = min(self._prefetch_slots,
-                                           self._chunk_size)
-
         for idx, chunk in enumerate(chunks):
             logger.debug(u"queued chunk %d: rowCount=%s", idx,
-                        chunk[u'rowCount'])
+                         chunk[u'rowCount'])
             self._chunks[idx] = SnowflakeChunk(
                 url=chunk[u'url'],
                 result_data=None,
                 ready=False,
                 row_count=int(chunk[u'rowCount']))
 
-        logger.debug(u'prefetch slots: %s, '
-                     u'prefetch threads: %s, '
+        logger.debug(u'prefetch threads: %s, '
                      u'number of chunks: %s, '
                      u'effective threads: %s',
-                     self._prefetch_slots,
-                     self._prefetch_threads,
+                     prefetch_threads,
                      self._chunk_size,
                      self._effective_threads)
 
@@ -97,18 +87,16 @@ class SnowflakeChunkDownloader(object):
         self._next_chunk_to_consume = 0
 
     def __init__(self, chunks, connection, cursor, qrmk, chunk_headers,
-                 prefetch_slots=DEFAULT_CLIENT_RESULT_PREFETCH_SLOTS,
-                 prefetch_threads=DEFAULT_CLIENT_RESULT_PREFETCH_THREADS,
+                 prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
                  use_ijson=False):
         self._pre_init(chunks, connection, cursor, qrmk, chunk_headers,
-                       prefetch_slots=prefetch_slots,
                        prefetch_threads=prefetch_threads,
                        use_ijson=use_ijson)
         logger.debug('Chunk Downloader in memory')
-        for idx in range(self._num_chunks_to_prefetch):
+        for idx in range(self._effective_threads):
             self._pool.apply_async(self._download_chunk, [idx])
             self._chunk_locks[idx] = Condition()
-        self._next_chunk_to_download = self._num_chunks_to_prefetch
+        self._next_chunk_to_download = self._effective_threads
 
     def _download_chunk(self, idx):
         """
@@ -133,9 +121,11 @@ class SnowflakeChunkDownloader(object):
             if isinstance(result_data, ResultIterWithTimings):
                 metrics = result_data.get_timings()
                 with self._downloading_chunks_lock:
-                    self._total_millis_downloading_chunks += metrics[ResultIterWithTimings.DOWNLOAD]
+                    self._total_millis_downloading_chunks += metrics[
+                        ResultIterWithTimings.DOWNLOAD]
                 with self._parsing_chunks_lock:
-                    self._total_millis_parsing_chunks += metrics[ResultIterWithTimings.PARSE]
+                    self._total_millis_parsing_chunks += metrics[
+                        ResultIterWithTimings.PARSE]
 
             with self._chunk_locks[idx]:
                 self._chunks[idx] = self._chunks[idx]._replace(
@@ -198,7 +188,7 @@ class SnowflakeChunkDownloader(object):
                     if self._downloader_error:
                         raise self._downloader_error
                     if self._chunks[self._next_chunk_to_consume].ready or \
-                                    self._downloader_error is not None:
+                            self._downloader_error is not None:
                         done = True
                         break
                     logger.debug(u'chunk %s/%s is NOT ready to consume'
@@ -217,7 +207,7 @@ class SnowflakeChunkDownloader(object):
                     self._chunk_size)
                 self._pool.terminate()  # terminate the thread pool
                 self._pool = ThreadPool(self._effective_threads)
-                for idx0 in range(self._num_chunks_to_prefetch):
+                for idx0 in range(self._effective_threads):
                     idx = idx0 + self._next_chunk_to_consume
                     self._pool.apply_async(self._download_chunk, [idx])
                     self._chunk_locks[idx] = Condition()
