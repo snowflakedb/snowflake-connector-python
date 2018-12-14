@@ -200,36 +200,13 @@ def init_test_schema(request, db_parameters):
     request.addfinalizer(fin)
 
 
-def create_connection(user=None, password=None, account=None, use_numpy=False,
-                      converter_class=None, paramstyle=u'pyformat',
-                      timezone=u'UTC'):
+def create_connection(**kwargs):
     """
     Creates a connection using the parameters defined in JDBC connect string
     """
     ret = get_db_parameters()
-
-    if converter_class is None:
-        converter_class = DefaultConverterClass()
-    if user is not None:
-        ret['user'] = user
-    if password is not None:
-        ret['password'] = password
-    if account is not None:
-        ret['account'] = account
-    connection = snowflake.connector.connect(
-        protocol=ret['protocol'],
-        account=ret['account'],
-        user=ret['user'],
-        password=ret['password'],
-        host=ret['host'],
-        port=ret['port'],
-        database=ret['database'],
-        schema=ret['schema'],
-        timezone=timezone,
-        numpy=use_numpy,
-        converter_class=converter_class,
-        paramstyle=paramstyle,
-    )
+    ret.update(kwargs)
+    connection = snowflake.connector.connect(**ret)
     return connection
 
 
@@ -278,13 +255,12 @@ def generate_k_lines_of_n_files(tmpdir, k, n, compress=False):
 
 
 @contextmanager
-def db(user=None, password=None, account=None, use_numpy=False,
-       converter_class=None, paramstyle=None, timezone=u'UTC'):
-    cnx = create_connection(
-        user=user, password=password,
-        account=account, use_numpy=use_numpy,
-        converter_class=converter_class,
-        paramstyle=paramstyle, timezone=timezone)
+def db(**kwargs):
+    if not kwargs.get(u'timezone'):
+        kwargs[u'timezone'] = u'UTC'
+    if not kwargs.get(u'converter_class'):
+        kwargs[u'converter_class'] = DefaultConverterClass()
+    cnx = create_connection(**kwargs)
     try:
         yield cnx
     finally:
