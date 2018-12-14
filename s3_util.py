@@ -44,7 +44,7 @@ class SnowflakeS3Util:
     """
     S3 Utility class
     """
-    # magic number, given from the AWS error message.
+    # magic number, given from  error message.
     DATA_SIZE_THRESHOLD = 5242880
 
     @staticmethod
@@ -194,7 +194,8 @@ class SnowflakeS3Util:
                 Callback=meta[u'put_callback'](
                     data_file,
                     os.path.getsize(data_file),
-                    output_stream=meta[u'put_callback_output_stream']) if
+                    output_stream=meta[u'put_callback_output_stream'],
+                    show_progress_bar=meta[u'show_progress_bar']) if
                 meta[u'put_callback'] else None,
                 ExtraArgs={
                     u'Metadata': s3_metadata,
@@ -253,7 +254,8 @@ class SnowflakeS3Util:
                 Callback=meta[u'get_callback'](
                     meta[u'src_file_name'],
                     meta[u'src_file_size'],
-                    output_stream=meta[u'get_callback_output_stream']) if
+                    output_stream=meta[u'get_callback_output_stream'],
+                    show_progress_bar=meta[u'show_progress_bar']) if
                 meta[u'get_callback'] else None,
                 Config=TransferConfig(
                     multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
