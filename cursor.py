@@ -421,6 +421,7 @@ class SnowflakeCursor(object):
                 _get_callback=None,
                 _get_azure_callback=None,
                 _get_callback_output_stream=sys.stdout,
+                _show_progress_bar=True,
                 _statement_params=None,
                 _is_internal=False,
                 _no_results=False,
@@ -519,6 +520,7 @@ class SnowflakeCursor(object):
                     get_callback=_get_callback,
                     get_azure_callback=_get_azure_callback,
                     get_callback_output_stream=_get_callback_output_stream,
+                    show_progress_bar=_show_progress_bar,
                     raise_put_get_error=_raise_put_get_error)
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()

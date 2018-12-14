@@ -624,7 +624,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     os.makedirs(output_dir)
 
     class cb(object):
-        def __init__(self, filename, filesize, output_stream=sys.stdout):
+        def __init__(self, filename, filesize, **_):
             pass
 
         def __call__(self, bytes_amount):

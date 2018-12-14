@@ -17,6 +17,7 @@ from time import (time, sleep)
 
 import botocore.exceptions
 
+from .azure_util import SnowflakeAzureUtil
 from .compat import (GET_CWD, TO_UNICODE)
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .converter_snowsql import SnowflakeConverterSnowSQL
@@ -60,8 +61,9 @@ INJECT_WAIT_IN_PUT = 0
 logger = getLogger(__name__)
 
 
-def _update_progress(file_name, start_time, total_size, progress,
-                     output_stream):
+def _update_progress(
+        file_name, start_time, total_size, progress,
+        output_stream=sys.stdout, show_progress_bar=True):
     barLength = 10  # Modify this to change the length of the progress bar
     total_size /= MB
     status = ""
@@ -80,19 +82,23 @@ def _update_progress(file_name, start_time, total_size, progress,
         status = "Done ({elapsed_time:.3f}s, {throughput:.2f}MB/s).\r\n".format(
             elapsed_time=elapsed_time,
             throughput=throughput)
-    if status == '':
+    if not status and show_progress_bar:
         status = "({elapsed_time:.3f}s, {throughput:.2f}MB/s)".format(
             elapsed_time=elapsed_time,
             throughput=throughput)
-    block = int(round(barLength * progress))
-    text = "\r{file_name}({size:.2f}MB): [{bar}] {percentage:.2f}% {status}".format(
-        file_name=file_name,
-        size=total_size,
-        bar="#" * block + "-" * (barLength - block),
-        percentage=progress * 100.0,
-        status=status)
-    output_stream.write(text)
-    output_stream.flush()
+    if status:
+        block = int(round(barLength * progress))
+        text = "\r{file_name}({size:.2f}MB): [{bar}] {percentage:.2f}% {status}".format(
+            file_name=file_name,
+            size=total_size,
+            bar="#" * block + "-" * (barLength - block),
+            percentage=progress * 100.0,
+            status=status)
+        output_stream.write(text)
+        output_stream.flush()
+    logger.debug('filename: %s, start_time: %s, total_size: %s, progress: %s, '
+                 'show_progress_bar: %s',
+                 file_name, start_time, total_size, progress, show_progress_bar)
     return progress == 1.0
 
 
@@ -101,12 +107,16 @@ class SnowflakeProgressPercentage(object):
     Built-in Progress bar for PUT commands.
     """
 
-    def __init__(self, filename, filesize, output_stream=sys.stdout):
+    def __init__(
+            self, filename, filesize,
+            output_stream=sys.stdout,
+            show_progress_bar=True):
         last_pound_char = filename.rfind('#')
         if last_pound_char < 0:
             last_pound_char = len(filename)
         self._filename = os.path.basename(filename[0:last_pound_char])
         self._output_stream = output_stream
+        self._show_progress_bar = show_progress_bar
         self._size = float(filesize)
         self._seen_so_far = 0
         self._done = False
@@ -118,12 +128,17 @@ class SnowflakeProgressPercentage(object):
 
 
 class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
-    def __init__(self, filename, filesize, output_stream=sys.stdout):
+    def __init__(
+            self, filename, filesize,
+            output_stream=sys.stdout,
+            show_progress_bar=True):
         super(SnowflakeS3ProgressPercentage, self).__init__(
-            filename, filesize, output_stream)
+            filename, filesize,
+            output_stream=output_stream,
+            show_progress_bar=show_progress_bar)
 
     def __call__(self, bytes_amount):
-        logger.debug("Bytes returned from callback %s", bytes_amount)
+        # logger.debug("Bytes returned from callback %s", bytes_amount)
         with self._lock:
             if self._output_stream:
                 self._seen_so_far += bytes_amount
@@ -132,13 +147,18 @@ class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
                     self._done = _update_progress(
                         self._filename, self._start_time,
                         self._size, percentage,
-                        output_stream=self._output_stream)
+                        output_stream=self._output_stream,
+                        show_progress_bar=self._show_progress_bar)
 
 
 class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
-    def __init__(self, filename, filesize, output_stream=sys.stdout):
+    def __init__(self, filename, filesize,
+                 output_stream=sys.stdout,
+                 show_progress_bar=True):
         super(SnowflakeAzureProgressPercentage, self).__init__(
-            filename, filesize, output_stream)
+            filename, filesize,
+            output_stream=output_stream,
+            show_progress_bar=show_progress_bar)
 
     def __call__(self, current):
         with self._lock:
@@ -149,7 +169,8 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
                     self._done = _update_progress(
                         self._filename, self._start_time,
                         self._size, percentage,
-                        output_stream=self._output_stream)
+                        output_stream=self._output_stream,
+                        show_progress_bar=self._show_progress_bar)
 
 
 class SnowflakeFileTransferAgent(object):
@@ -163,6 +184,7 @@ class SnowflakeFileTransferAgent(object):
                  get_callback=None,
                  get_azure_callback=None,
                  get_callback_output_stream=sys.stdout,
+                 show_progress_bar=True,
                  raise_put_get_error=False):
         self._cursor = cursor
         self._command = command
@@ -177,6 +199,7 @@ class SnowflakeFileTransferAgent(object):
         self._get_callback_output_stream = get_callback_output_stream
         self._use_accelerate_endpoint = False
         self._raise_put_get_error = raise_put_get_error
+        self._show_progress_bar = show_progress_bar
 
     def execute(self):
         self._parse_command()
@@ -210,10 +233,14 @@ class SnowflakeFileTransferAgent(object):
                 meta[u'get_azure_callback'] = self._get_azure_callback
                 meta[u'get_callback_output_stream'] = \
                     self._get_callback_output_stream
-                # AWS specific?
-                if meta.get(
-                        u'src_file_size',
-                        1) > SnowflakeS3Util.DATA_SIZE_THRESHOLD:
+                meta[u'show_progress_bar'] = self._show_progress_bar
+
+                # multichunk uploader threshold
+                if self._stage_location_type == S3_FS:
+                    size_threshold = SnowflakeS3Util.DATA_SIZE_THRESHOLD
+                else:
+                    size_threshold = SnowflakeAzureUtil.DATA_SIZE_THRESHOLD
+                if meta.get(u'src_file_size', 1) > size_threshold:
                     meta[u'parallel'] = self._parallel
                     large_file_metas.append(meta)
                 else:
