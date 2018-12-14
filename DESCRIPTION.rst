@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.3 (December 11, 2018)
+
+    - Improved the progress bar control for SnowSQL
+    - Fixed PUT/GET progress bar for Azure
+
 - v1.7.2 (December 4, 2018)
 
     - Refactored OCSP checks
