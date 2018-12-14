@@ -28,6 +28,8 @@ class SnowflakeAzureUtil(object):
     """
     Azure Utility class
     """
+    # max_connections works over this size
+    DATA_SIZE_THRESHOLD = 67108864
 
     @staticmethod
     def create_client(stage_info, use_accelerate_endpoint=False):
@@ -154,7 +156,8 @@ class SnowflakeAzureUtil(object):
                 callback = meta[u'put_azure_callback'](
                     data_file,
                     os.path.getsize(data_file),
-                    output_stream=meta[u'put_callback_output_stream'])
+                    output_stream=meta[u'put_callback_output_stream'],
+                    show_progress_bar=meta[u'show_progress_bar'])
 
             def azure_callback(current, total):
                 callback(current)
@@ -206,7 +209,8 @@ class SnowflakeAzureUtil(object):
                 callback = meta[u'get_azure_callback'](
                     meta[u'src_file_name'],
                     meta[u'src_file_size'],
-                    output_stream=meta[u'get_callback_output_stream'])
+                    output_stream=meta[u'get_callback_output_stream'],
+                    show_progress_bar=meta[u'show_progress_bar'])
 
             def azure_callback(current, total):
                 callback(current)
