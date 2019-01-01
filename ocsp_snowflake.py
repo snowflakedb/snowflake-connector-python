@@ -316,6 +316,10 @@ class OCSPCache(object):
         return False
 
     @staticmethod
+    def is_cache_fresh(current_time, ts):
+        return current_time - OCSPCache.CACHE_EXPIRATION <= ts
+
+    @staticmethod
     def find_cache(ocsp, cert_id, subject):
         subject_name = ocsp.subject_name(subject) if subject else None
         current_time = int(time.time())
@@ -323,7 +327,8 @@ class OCSPCache(object):
         with OCSPCache.CACHE_LOCK:
             if hkey in OCSPCache.CACHE:
                 ts, cache = OCSPCache.CACHE[hkey]
-                if current_time - OCSPCache.CACHE_EXPIRATION <= ts:
+                if OCSPCache.is_cache_fresh(current_time, ts) and \
+                    ocsp.is_valid_time(cert_id, cache):
                     if subject_name:
                         logger.debug(
                             'hit cache for subject: %s', subject_name)
@@ -408,12 +413,13 @@ class OCSPCache(object):
 
     @staticmethod
     def update_cache(ocsp, cert_id, ocsp_response):
+        # Every time this is called the in memory cache will
+        # be updated and written to disk.
         current_time = int(time.time())
         with OCSPCache.CACHE_LOCK:
             hkey = ocsp.decode_cert_id_key(cert_id)
-            if hkey not in OCSPCache.CACHE:
-                OCSPCache.CACHE[hkey] = (current_time, ocsp_response)
-                OCSPCache.CACHE_UPDATED = True
+            OCSPCache.CACHE[hkey] = (current_time, ocsp_response)
+            OCSPCache.CACHE_UPDATED = True
 
     @staticmethod
     def delete_cache(ocsp, cert_id):
@@ -558,7 +564,7 @@ class SnowflakeOCSP(object):
             self,
             ocsp_response_cache_uri=None,
             use_ocsp_cache_server=None,
-            use_post_method=False):
+            use_post_method=True):
         self._use_post_method = use_post_method
         SnowflakeOCSP.OCSP_CACHE.reset_ocsp_response_cache_uri(
             ocsp_response_cache_uri, use_ocsp_cache_server)
@@ -874,7 +880,6 @@ class SnowflakeOCSP(object):
                 msg=SnowflakeOCSP._validity_error_message(
                     current_time, this_update, next_update),
                 errno=ER_INVALID_OCSP_RESPONSE)
-        SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
 
     def _process_revoked_status(self, single_response, cert_id):
         """

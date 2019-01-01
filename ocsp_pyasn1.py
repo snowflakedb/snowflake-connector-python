@@ -349,6 +349,35 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
     def _convert_generalized_time_to_datetime(self, gentime):
         return datetime.strptime(str(gentime), '%Y%m%d%H%M%SZ')
 
+    def is_valid_time(self, cert_id, ocsp_response):
+        try:
+            res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
+
+            if res.getComponentByName('responseStatus') != OCSPResponseStatus(
+                    'successful'):
+                raise OperationalError(
+                    msg="Invalid Status: {0}".format(
+                        res.getComponentByName('response_status')),
+                    errno=ER_INVALID_OCSP_RESPONSE)
+
+            response_bytes = res.getComponentByName('responseBytes')
+            basic_ocsp_response = der_decoder.decode(
+                response_bytes.getComponentByName('response'),
+                BasicOCSPResponse())[0]
+
+            tbs_response_data = basic_ocsp_response.getComponentByName(
+                'tbsResponseData')
+
+            single_response = tbs_response_data.getComponentByName('responses')[0]
+            cert_status = single_response.getComponentByName('certStatus')
+            if cert_status.getName() == 'good':
+                self._process_good_status(single_response, cert_id, ocsp_response)
+        except Exception as ex:
+            logger.debug("Failed to validate ocsp response %s", ex)
+            return False
+
+        return True
+
     def process_ocsp_response(self, issuer, cert_id, ocsp_response):
         res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
 
@@ -397,6 +426,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         cert_status = single_response.getComponentByName('certStatus')
         if cert_status.getName() == 'good':
             self._process_good_status(single_response, cert_id, ocsp_response)
+            SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
         elif cert_status.getName() == 'revoked':
             self._process_revoked_status(single_response, cert_id)
         elif cert_status.getName() == 'unknown':

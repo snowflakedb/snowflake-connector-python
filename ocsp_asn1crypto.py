@@ -137,6 +137,29 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         revocation_reason = revoked_info.native['revocation_reason']
         return revocation_time, revocation_reason
 
+    def is_valid_time(self, cert_id, ocsp_response):
+        try:
+            res = OCSPResponse.load(ocsp_response)
+
+            if res['response_status'].native != 'successful':
+                raise OperationalError(
+                    msg="Invalid Status: {0}".format(res['response_status'].native),
+                    errno=ER_INVALID_OCSP_RESPONSE)
+
+            basic_ocsp_response = res.basic_ocsp_response
+            tbs_response_data = basic_ocsp_response['tbs_response_data']
+
+            single_response = tbs_response_data['responses'][0]
+            cert_status = single_response['cert_status'].name
+
+            if cert_status == 'good':
+                self._process_good_status(single_response, cert_id, ocsp_response)
+        except Exception as ex:
+            logger.debug("Failed to validate ocsp response %s", ex)
+            return False
+
+        return True
+
     def process_ocsp_response(self, issuer, cert_id, ocsp_response):
         res = OCSPResponse.load(ocsp_response)
 
@@ -175,6 +198,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         cert_status = single_response['cert_status'].name
         if cert_status == 'good':
             self._process_good_status(single_response, cert_id, ocsp_response)
+            SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
         elif cert_status == 'revoked':
             self._process_revoked_status(single_response, cert_id)
         elif cert_status == 'unknown':
