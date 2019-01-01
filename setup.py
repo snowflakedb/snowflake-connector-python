@@ -46,7 +46,6 @@ setup(
         'cffi>=1.9',
         'cryptography>=1.8.2',
         'ijson',
-        'keyring!=16.1.0',
         'pyjwt',
         'pyasn1>=0.2.1,<0.5.0',  # added back for Python 2
         'pyasn1-modules>=0.0.8,<0.3.0',  # added back for Python 2
@@ -77,6 +76,12 @@ setup(
             'snowflake.connector.tool.export_certs:main',
         ],
     },
+    extras_require={
+        "secure-local-storage": [
+            'keyring!=16.1.0'
+        ],
+    },
+
     classifiers=[
         'Development Status :: 5 - Production/Stable',
 
