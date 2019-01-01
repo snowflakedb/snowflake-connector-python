@@ -74,10 +74,17 @@ class OCSPCache(object):
     # OCSP dynamic cache server URL pattern
     RETRY_URL_PATTERN = None
 
+    # OCSP Retry Default Location
+    DEFAULT_RETRY_URL = "http://ocsp.snowflakecomputing.com/retry"
+
     # Cache directory
     CACHE_ROOT_DIR = os.getenv('SF_OCSP_RESPONSE_CACHE_DIR') or \
                      expanduser("~") or tempfile.gettempdir()
     CACHE_DIR = None
+
+    # Activate server side directive support
+    ACTIVATE_SSD = os.getenv("SF_OCSP_ACTIVATE_SSD", "false").lower() == "true"
+
     if platform.system() == 'Windows':
         CACHE_DIR = path.join(CACHE_ROOT_DIR, 'AppData', 'Local', 'Snowflake',
                               'Caches')
@@ -134,21 +141,24 @@ class OCSPCache(object):
         This is used only when OCSP cache server is updated.
         """
         with OCSPCache.RETRY_URL_PATTERN_LOCK:
-            if OCSPCache.RETRY_URL_PATTERN is None and \
-                    not OCSPCache.CACHE_SERVER_URL.startswith(
+            if OCSPCache.RETRY_URL_PATTERN is None:
+                if not OCSPCache.CACHE_SERVER_URL.startswith(
                         OCSPCache.DEFAULT_CACHE_SERVER_URL):
-                # only if custom OCSP cache server is used.
-                parsed_url = urlsplit(
-                    OCSPCache.CACHE_SERVER_URL)
-                if parsed_url.port:
-                    OCSPCache.RETRY_URL_PATTERN = \
-                        u"{0}://{1}:{2}/retry/".format(
-                            parsed_url.scheme, parsed_url.hostname,
-                            parsed_url.port) + u"{0}/{1}"
-                else:
-                    OCSPCache.RETRY_URL_PATTERN = \
-                        u"{0}://{1}/retry/".format(
-                            parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
+                    # only if custom OCSP cache server is used.
+                    parsed_url = urlsplit(
+                        OCSPCache.CACHE_SERVER_URL)
+                    if parsed_url.port:
+                        OCSPCache.RETRY_URL_PATTERN = \
+                            u"{0}://{1}:{2}/retry/".format(
+                                parsed_url.scheme, parsed_url.hostname,
+                                parsed_url.port) + u"{0}/{1}"
+                    else:
+                        OCSPCache.RETRY_URL_PATTERN = \
+                            u"{0}://{1}/retry/".format(
+                                parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
+                elif OCSPCache.ACTIVATE_SSD:
+                    OCSPCache.RETRY_URL_PATTERN = OCSPCache.DEFAULT_RETRY_URL
+
             logger.debug(
                 "OCSP dynamic cache server URL pattern: %s",
                 OCSPCache.RETRY_URL_PATTERN)
@@ -582,7 +592,7 @@ class SnowflakeOCSP(object):
             self, hostname, cert_data, do_retry=True, no_exception=False):
         # Validate certs sequentially if OCSP response cache server is used
         results = self._validate_certificates_sequential(
-            cert_data, do_retry=do_retry)
+            cert_data, hostname, do_retry=do_retry)
 
         SnowflakeOCSP.OCSP_CACHE.update_file(self)
 
@@ -611,7 +621,7 @@ class SnowflakeOCSP(object):
             self, cert_id, subject)
         return found, req, cert_id, cache
 
-    def validate_by_direct_connection(self, issuer, subject, do_retry=True):
+    def validate_by_direct_connection(self, issuer, subject, hostname=None, do_retry=True):
         cache_status, req, cert_id, ocsp_response = \
             self.is_cert_id_in_cache(issuer, subject)
         err = None
@@ -620,7 +630,7 @@ class SnowflakeOCSP(object):
             try:
                 if not cache_status:
                     logger.debug("getting OCSP response from CA's OCSP server")
-                    ocsp_response = self._fetch_ocsp_response(req, subject)
+                    ocsp_response = self._fetch_ocsp_response(req, subject, cert_id, hostname)
                 else:
                     logger.debug("using OCSP response cache")
                 if not ocsp_response:
@@ -638,12 +648,12 @@ class SnowflakeOCSP(object):
 
         return err, issuer, subject, cert_id, ocsp_response
 
-    def _validate_certificates_sequential(self, cert_data, do_retry=True):
+    def _validate_certificates_sequential(self, cert_data, hostname=None, do_retry=True):
         results = []
         self._check_ocsp_response_cache_server(cert_data)
         for issuer, subject in cert_data:
             r = self.validate_by_direct_connection(
-                issuer, subject, do_retry=do_retry)
+                issuer, subject, hostname, do_retry=do_retry)
             results.append(r)
         return results
 
@@ -766,29 +776,40 @@ class SnowflakeOCSP(object):
     def delete_cache_file():
         SnowflakeOCSP.OCSP_CACHE.delete_cache_file()
 
-    def _fetch_ocsp_response(self, ocsp_request, cert, do_retry=True):
+    def _fetch_ocsp_response(self, ocsp_request, subject, cert_id, hostname=None, do_retry=True):
         """
         Fetch OCSP response using OCSPRequest
         """
-        ocsp_url = self.extract_ocsp_url(cert)
+        ocsp_url = self.extract_ocsp_url(subject)
         if not ocsp_url:
             return None
 
-        actual_method = 'post' if self._use_post_method else 'get'
-        if SnowflakeOCSP.OCSP_CACHE.RETRY_URL_PATTERN:
-            # no POST is supported for Retry URL at the moment.
-            actual_method = 'get'
+        if not self.OCSP_CACHE.ACTIVATE_SSD:
+            actual_method = 'post' if self._use_post_method else 'get'
+            if SnowflakeOCSP.OCSP_CACHE.RETRY_URL_PATTERN:
+                # no POST is supported for Retry URL at the moment.
+                actual_method = 'get'
 
-        if actual_method == 'get':
-            b64data = self.decode_ocsp_request_b64(ocsp_request)
-            target_url = SnowflakeOCSP.OCSP_CACHE.generate_get_url(
-                ocsp_url, b64data)
-            payload = None
-            headers = None
+            if actual_method == 'get':
+                b64data = self.decode_ocsp_request_b64(ocsp_request)
+                target_url = SnowflakeOCSP.OCSP_CACHE.generate_get_url(
+                    ocsp_url, b64data)
+                payload = None
+                headers = None
+            else:
+                target_url = ocsp_url
+                payload = self.decode_ocsp_request(ocsp_request)
+                headers = {'Content-Type': 'application/ocsp-request'}
         else:
-            target_url = ocsp_url
-            payload = self.decode_ocsp_request(ocsp_request)
-            headers = {'Content-Type': 'application/ocsp-request'}
+            actual_method = 'post'
+            target_url = self.OCSP_CACHE.RETRY_URL_PATTERN
+            ocsp_req_enc = self.decode_ocsp_request_b64(ocsp_request)
+            cert_id_enc = self.decode_ocsp_request_b64(cert_id)
+            payload = json.dumps({'hostname': hostname,
+                                  'ocsp_request': ocsp_req_enc,
+                                  'cert_id': cert_id_enc,
+                                  'ocsp_responder_url': ocsp_url})
+            headers = {'Content-Type': 'application/json'}
 
         ret = None
         logger.debug('url: %s', target_url)
