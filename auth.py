@@ -17,8 +17,6 @@ from os.path import expanduser
 from threading import Lock
 from threading import Thread
 
-import keyring
-
 from .compat import (TO_UNICODE, urlencode, IS_LINUX)
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
@@ -458,6 +456,7 @@ def write_temporary_credential_file(
                                  encoding='utf-8', errors='ignore') as f:
                     json.dump(TEMPORARY_CREDENTIAL, f)
             else:
+                import keyring
                 keyring.set_password(
                     KEYRING_SERVICE_NAME, KEYRING_USER,
                     json.dumps(TEMPORARY_CREDENTIAL))
@@ -496,6 +495,7 @@ def read_temporary_credential_file(
                                  encoding='utf-8', errors='ignore') as f:
                     TEMPORARY_CREDENTIAL = json.load(f)
             else:
+                import keyring
                 f = keyring.get_password(
                     KEYRING_SERVICE_NAME, KEYRING_USER) or "{}"
                 TEMPORARY_CREDENTIAL = json.loads(f)
@@ -544,6 +544,7 @@ def delete_temporary_credential_file(
                          "file=[%s], err=[%s]", TEMPORARY_CREDENTIAL_FILE, ex)
     else:
         try:
+            import keyring
             keyring.delete_password(KEYRING_SERVICE_NAME, KEYRING_USER)
         except Exception as ex:
             logger.debug("Failed to delete credential in the keyring: err=[%s]",
