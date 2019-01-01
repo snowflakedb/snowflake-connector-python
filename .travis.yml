@@ -1,6 +1,12 @@
 sudo: required
 dist: xenial
 language: python
+
+matrix:
+  include:
+  - python: "3.6"
+  - python: "3.7"
+
 before_install:
   - sudo apt-get update
   - openssl aes-256-cbc -k "$super_secret_password" -in parameters.py.enc -out test/parameters.py -d
@@ -8,21 +14,12 @@ before_install:
 install:
   - ./scripts/install.sh
 
-matrix:
-  include:
-  - python: "3.6"
-  - python: "3.7"
-
 script:
-  - set -e
-  - ret=0
-  - timeout -s SIGUSR1 3600s py.test -vvv --cov=snowflake.connector test || ret=$?
-  # TIMEOUT or SUCCESS
-  - if [ $ret != 124 -a $ret != 0 ]; then
-      exit 1;
-    fi
+  - ./scripts/run_travis.sh
+
 after_success:
   - bash <(curl -s https://codecov.io/bash)
+
 env:
   global:
     secure: dFpjLRaP1GcqHB449/6tca+63dZk8iAyD1afM5GK74HiO4dNAwGlONFY0KNnFVIkVDO7XJu0DpbNL/gXZy+EZ2WKis/vcwb2FhkYoiSJ1oZZ6fr/QbwyVZMH1y5L/gxipb5+MlBZyOQGX+9OZNQaGaSRd8kygOX8maBGm3IZFsNhjq6RwbBTLP3Zr8cJ+xrkrj7r413jKy/0xVKVr234gl4VU5IN2k6ovT4KBTyRMhwI5ImWL4ZCiJ7cZbfuLCaOuCdtXTzxU32O0gjbDV1D6ryezVfjtKzdUSLzb+71nT444xXq1OFDWxvODWdE0MBYQEdqHsbhg/Bj/Gp+i1smH4s5wgZ1r7TQMX/oUnsKSkCx0NphS57FKTiYdMGl5o78JuFNf02o2CYux6Zv0LEky/EhsP1o1vclm8LKZiHERZF6fALrOVDTibPw8wKSjHK8NkcglR2d/9X3DOvddxwfN7oJjt/cjIkkDTtYE4WdOZ06EUVzSgUVjaj8JqdlOaWqYBsJRzb0b2uWfU8L5yJ9DJemmWxhhsilEhD7SGPOphuGjHVXa2YivXxl7lO7pJgWWWG37T+XYhbGxIusSP+VwSOcP2LykQbg0S964344dpk2T/CKX0JpeBPYhRoRFvOLBt7HsItT2d9kbSYVJ07xuRkMUMxN7jm4dl+Pxsy3gxs=
