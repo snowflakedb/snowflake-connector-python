@@ -115,7 +115,7 @@ def dump_ocsp_response_cache(
         else:
             name = "Unknown"
         output[json_key] = {
-            'serial_number': serial_number,
+            'serial_number': format(serial_number,'d'),
             'name': name,
         }
         value = ocsp_validation_cache[hkey]
