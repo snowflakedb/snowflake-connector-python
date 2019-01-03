@@ -9,6 +9,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.4 (January 3, 2019)
+
+    - Invalidate outdated OCSP response when checking cache hit
+    - Made keyring use optional in Python Connector
+    - Added SnowflakeNullConverter for Python Connector to skip all client side conversions
+    - Honor ``CLIENT_PREFETCH_THREADS`` to download the result set.
+    - Fixed the hang when region=us-west-2 is specified.
+    - Added Python 3.7 tests
+
 - v1.7.3 (December 11, 2018)
 
     - Improved the progress bar control for SnowSQL
