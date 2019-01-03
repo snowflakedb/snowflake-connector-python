@@ -73,7 +73,7 @@ def split_statements(buf, remove_comments=False):
                     col += 2
                 elif line[col] == ch_quote:
                     if col < len_line - 1 and line[col + 1] != ch_quote or \
-                                    col == len_line - 1:
+                            col == len_line - 1:
                         # exits quote
                         in_quote = False
                         statement.append((line[col0:col + 1], True))
@@ -191,6 +191,8 @@ def construct_hostname(region, account):
     """
     Constructs hostname from region and account
     """
+    if region == u'us-west-2':
+        region = ''
     if region:
         if account.find(u'.') > 0:
             account = account[0:account.find(u'.')]
