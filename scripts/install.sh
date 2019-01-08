@@ -11,7 +11,7 @@ pip --version
 pip install -U virtualenv
 python -m virtualenv venv
 source ./venv/bin/activate
-pip install pandas
+pip install numpy
 pip install pytest pytest-cov pytest-rerunfailures
 if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
     pip install mock
