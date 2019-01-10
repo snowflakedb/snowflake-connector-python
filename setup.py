@@ -49,6 +49,7 @@ setup(
         'pyjwt',
         'pyasn1>=0.2.1,<0.5.0',  # added back for Python 2
         'pyasn1-modules>=0.0.8,<0.3.0',  # added back for Python 2
+        'enum34;python_version<"3.4"',
     ],
 
     namespace_packages=['snowflake'],

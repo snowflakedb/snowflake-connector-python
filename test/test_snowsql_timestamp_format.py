@@ -3,11 +3,16 @@
 #
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
+import pytest
+
+from snowflake.connector.compat import (IS_WINDOWS, PY2, PY34_EXACT)
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
 
-# DY, DD MON YYYY HH24:MI:SS TZHTZM
-
+@pytest.mark.skipif(
+    IS_WINDOWS or PY2 or PY34_EXACT,
+    reason="SnowSQL runs on Python 35+. "
+           "Windows doesn't support more than 9999 yeers")
 def test_snowsql_timestamp_format(conn_cnx):
     """
     In SnowSQL, OverflowError should not happen
@@ -29,7 +34,7 @@ SELECT
     '2001-09-30 12:34:56.00123400'::timestamp_ntz(8)
 """).fetchone()
         assert ret[0] == 'Thu, 30 Sep 19999 19:34:56 +0000'
-        assert ret[1] == 'Thu, 30 Sep 19999 12:34:56 +0000'
+        assert ret[1] == 'Thu, 30 Sep 19999 12:34:56 '
 
         # The last space is included as TZHTZM is an empty value if
         # datatype is datetime.
@@ -39,6 +44,7 @@ SELECT
         # what is the range?
 
 
+@pytest.mark.skipif(PY2 or PY34_EXACT, reason="SnowSQL runs on Python35+")
 def test_snowsql_timestamp_negative_epoch(conn_cnx):
     with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
         cnx.cursor().execute("""

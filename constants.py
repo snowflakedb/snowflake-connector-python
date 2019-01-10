@@ -99,6 +99,10 @@ def is_timestamp_type_name(type_name):
     return type_name in __timestamp_type_names
 
 
+def is_date_type_name(type_name):
+    return type_name == u'DATE'
+
+
 # Log format
 LOG_FORMAT = (u'%(asctime)s - %(filename)s:%(lineno)d - '
               u'%(funcName)s() - %(levelname)s - %(message)s')

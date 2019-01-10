@@ -25,7 +25,8 @@ from .errors import (
     NotSupportedError, DataError, IntegrityError, ProgrammingError,
     OperationalError, InternalError)
 from .dbapi import (Timestamp, TimeFromTicks, Time, TimestampFromTicks, Date,
-                    DateFromTicks, DATETIME, ROWID, STRING, NUMBER, Json)
+                    DateFromTicks, Binary, Json,
+                    DATETIME, ROWID, STRING, NUMBER, BINARY)
 
 
 def Connect(**kwargs):

@@ -130,7 +130,8 @@ DEFAULT_CONFIGURATION = {
     u'paramstyle': None,  # standard/snowflake
     u'timezone': None,  # snowflake
     u'consent_cache_id_token': True,  # snowflake
-    u'service_name': None,  # snowflake
+    u'service_name': None,  # snowflake,
+    u'support_negative_year': True  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -565,8 +566,8 @@ class SnowflakeConnection(object):
         Opens a new network connection
         """
         self.converter = self._converter_class(
-            use_sfbinaryformat=False,
-            use_numpy=self._numpy)
+            use_numpy=self._numpy,
+            support_negative_year=self._support_negative_year)
 
         proxy.set_proxies(
             self.proxy_host, self.proxy_port, self.proxy_user,

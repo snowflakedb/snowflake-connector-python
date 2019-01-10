@@ -37,7 +37,8 @@ ratio number(6,2))
                 user=db_parameters['s3_user'],
                 account=db_parameters['s3_account'],
                 password=db_parameters['password']) as cnx:
-            cnx.cursor().execute("put file://{file} @%{name}".format(
+            files = files.replace('\\', '\\\\')
+            cnx.cursor().execute("put 'file://{file}' @%{name}".format(
                 file=files, name=db_parameters['name']))
             c = cnx.cursor()
             try:

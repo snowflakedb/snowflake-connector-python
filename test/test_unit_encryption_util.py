@@ -12,11 +12,10 @@ from os import path
 from snowflake.connector.compat import PY2
 from snowflake.connector.constants import (UTF8)
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
-
+from snowflake.connector.remote_storage_util import \
+    SnowflakeFileEncryptionMaterial
 
 THIS_DIR = path.dirname(path.realpath(__file__))
-
 
 
 def test_encrypt_decrypt_file():
@@ -42,9 +41,9 @@ def test_encrypt_decrypt_file():
             metadata, encryption_material, encrypted_file)
 
         contents = ''
-        fd = codecs.open(decrypted_file, 'r', encoding=UTF8)
-        for line in fd:
-            contents += line
+        with codecs.open(decrypted_file, 'r', encoding=UTF8) as fd:
+            for line in fd:
+                contents += line
         assert data == contents, "encrypted and decrypted contents"
     finally:
         os.close(input_fd)
@@ -81,10 +80,10 @@ def test_encrypt_decrypt_large_file(tmpdir, test_files):
 
         contents = ''
         cnt = 0
-        fd = codecs.open(decrypted_file, 'r', encoding=UTF8)
-        for line in fd:
-            contents += line
-            cnt += 1
+        with codecs.open(decrypted_file, 'r', encoding=UTF8) as fd:
+            for line in fd:
+                contents += line
+                cnt += 1
         assert cnt == number_of_lines, "number of lines"
     finally:
         os.remove(input_file)
@@ -92,4 +91,3 @@ def test_encrypt_decrypt_large_file(tmpdir, test_files):
             os.remove(encrypted_file)
         if decrypted_file:
             os.remove(decrypted_file)
-

@@ -17,8 +17,7 @@ from .errorcode import (
 from .errors import (ProgrammingError)
 from .sfbinaryformat import (binary_to_python,
                              binary_to_snowflake)
-from .sfdatetime import (sfdatetime_total_seconds_from_timedelta,
-                         sfdatetime_to_snowflake)
+from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
 try:
     import numpy
@@ -102,15 +101,25 @@ def _convert_time_to_epoch_nanoseconds(tm):
            "{:06d}".format(tm.microsecond) + u'000'
 
 
+def _extract_timestamp(value, ctx):
+    """
+    Extracts timestamp from a raw data
+    """
+    scale = ctx['scale']
+    microseconds = float(
+        value[0:-scale + 6]) if scale > 6 else float(value)
+    fraction_of_nanoseconds = SnowflakeConverter._adjust_fraction_of_nanoseconds(
+        value, ctx['max_fraction'], scale)
+
+    return microseconds, fraction_of_nanoseconds
+
+
 class SnowflakeConverter(object):
     def __init__(self, **kwargs):
         self._parameters = {}
-        self._use_sfbinaryformat = kwargs.get('use_sfbinaryformat', False)
         self._use_numpy = kwargs.get('use_numpy', False) and numpy is not None
 
-        logger.debug('use_sfbinaryformat: %s, use_numpy: %s',
-                     self._use_sfbinaryformat,
-                     self._use_numpy)
+        logger.debug('use_numpy: %s', self._use_numpy)
 
     def set_parameters(self, parameters):
         self._parameters = {}
@@ -241,18 +250,6 @@ class SnowflakeConverter(object):
         """
         return lambda x: numpy.datetime64(int(x), 'D')
 
-    def _extract_timestamp(self, value, ctx):
-        """
-        Extracts timestamp from a raw data
-        """
-        scale = ctx['scale']
-        microseconds = float(
-            value[0:-scale + 6]) if scale > 6 else float(value)
-        fraction_of_nanoseconds = SnowflakeConverter._adjust_fraction_of_nanoseconds(
-            value, ctx['max_fraction'], scale)
-
-        return microseconds, fraction_of_nanoseconds
-
     def _TIMESTAMP_TZ_to_python(self, ctx):
         """
         TIMESTAMP TZ to datetime
@@ -325,8 +322,7 @@ class SnowflakeConverter(object):
         This takes consideration of the session parameter TIMEZONE if
         available. If not, tzlocal is used
         """
-        microseconds, fraction_of_nanoseconds = \
-            self._extract_timestamp(value, ctx)
+        microseconds, fraction_of_nanoseconds = _extract_timestamp(value, ctx)
         tzinfo_value = self._get_session_tz()
 
         try:
@@ -338,7 +334,7 @@ class SnowflakeConverter(object):
                 "OverflowError in converting from epoch time to "
                 "timestamp_ltz: %s(ms). Falling back to use struct_time."
             )
-            return time.gmtime(microseconds), fraction_of_nanoseconds
+            return time.localtime(microseconds), fraction_of_nanoseconds
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         tzinfo = self._get_session_tz()
@@ -621,9 +617,6 @@ class SnowflakeConverter(object):
                 hour=value.hour, minute=value.minute,
                 second=value.second
             )
-
-    def _sfdatetime_to_snowflake(self, value):
-        return sfdatetime_to_snowflake(value)
 
     def date_to_snowflake(self, value):
         """

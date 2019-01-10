@@ -10,8 +10,10 @@ import random
 import shutil
 import string
 import sys
+import tempfile
 import time
 from logging import getLogger
+from os import path
 
 import pytest
 import pytz
@@ -29,7 +31,8 @@ import logging
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
-    ch = logging.FileHandler('/tmp/python_connector.log')
+    ch = logging.FileHandler(
+        path.join(tempfile.gettempdir(), 'python_connector.log'))
     ch.setLevel(logging.DEBUG)
     ch.setFormatter(logging.Formatter(
         '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
@@ -46,11 +49,15 @@ def test_put_copy0(conn_cnx, db_parameters):
     data_file = os.path.join(THIS_DIR, "data", "put_get_1.txt")
 
     def run(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     def run_with_cursor(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         c = cnx.cursor(DictCursor)
         return c, c.execute(sql).fetchall()
 
@@ -66,7 +73,7 @@ tstz timestamp_tz,
 pct float,
 ratio number(5,2))
 """)
-        c, ret = run_with_cursor(cnx, "put file://{file} @%{name}")
+        c, ret = run_with_cursor(cnx, "put 'file://{file}' @%{name}")
         assert c.is_file_transfer, "PUT"
         assert len(ret) == 1 and ret[0]['source'] == os.path.basename(
             data_file), "File name"
@@ -88,13 +95,15 @@ def test_put_copy_compressed(conn_cnx, db_parameters):
     data_file = os.path.join(THIS_DIR, "data", "gzip_sample.txt.gz")
 
     def run(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         return cnx.cursor(DictCursor).execute(sql).fetchall()
 
     with conn_cnx() as cnx:
         run(cnx, "create or replace table {name} (value string)")
         file_size = os.stat(data_file).st_size
-        ret = run(cnx, "put file://{file} @%{name}")
+        ret = run(cnx, "put 'file://{file}' @%{name}")
         assert ret[0]['source'] == os.path.basename(data_file), "File name"
         assert ret[0]['source_size'] == file_size, "File size"
         assert ret[0]['status'] == 'UPLOADED'
@@ -118,12 +127,14 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
     data_file = os.path.join(THIS_DIR, "data", "bzip2_sample.txt.bz2")
 
     def run(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
         run(cnx, "create or replace table {name} (value string)")
-        for rec in run(cnx, "put file://{file} @%{name}"):
+        for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
             assert rec[-2] == 'UPLOADED'
         for rec in run(cnx, "copy into {name}"):
@@ -140,12 +151,14 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
     data_file = os.path.join(THIS_DIR, "data", "brotli_sample.txt.br")
 
     def run(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
         run(cnx, "create or replace table {name} (value string)")
-        for rec in run(cnx, "put file://{file} @%{name}"):
+        for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
             assert rec[-2] == 'UPLOADED'
         for rec in run(
@@ -163,12 +176,14 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
     data_file = os.path.join(THIS_DIR, "data", "zstd_sample.txt.zst")
 
     def run(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
         run(cnx, "create or replace table {name} (value string)")
-        for rec in run(cnx, "put file://{file} @%{name}"):
+        for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
             assert rec[-2] == 'UPLOADED'
         for rec in run(
@@ -191,7 +206,9 @@ def test_put_copy_parquet_compressed(conn_cnx, db_parameters):
         THIS_DIR, "data", "nation.impala.parquet")
 
     def run(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
@@ -201,7 +218,7 @@ create or replace table {name}
 (value variant)
 stage_file_format=(type='parquet')
 """)
-        for rec in run(cnx, "put file://{file} @%{name}"):
+        for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
             assert rec[-2] == 'UPLOADED'
             assert rec[4] == 'PARQUET'
@@ -221,15 +238,16 @@ def test_put_copy_orc_compressed(conn_cnx, db_parameters):
     data_file = os.path.join(THIS_DIR, "data", "TestOrcFile.test1.orc")
 
     def run(cnx, sql):
-        sql = sql.format(file=data_file, name=db_parameters['name'])
+        sql = sql.format(
+            file=data_file.replace('\\', '\\\\'),
+            name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
         run(cnx, """
 create or replace table {name} (value variant) stage_file_format=(type='orc')
 """)
-        for rec in run(cnx, """
-put file://{file} @%{name}"""):
+        for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
             assert rec[-2] == 'UPLOADED'
             assert rec[4] == 'ORC'
@@ -331,7 +349,7 @@ def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
 
     def run(cnx, sql):
         sql = sql.format(
-            files=files,
+            files=files.replace('\\', '\\\\'),
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
@@ -347,7 +365,7 @@ tstz timestamp_tz,
 pct float,
 ratio number(6,2))
 """)
-        run(cnx, "put file://{files} @%{name}")
+        run(cnx, "put 'file://{files}' @%{name}")
         run(cnx, "copy into {name}")
         rows = 0
         for rec in run(cnx, "select count(*) from {name}"):
@@ -370,7 +388,7 @@ def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
 
     def run(cnx, sql):
         sql = sql.format(
-            files=files,
+            files=files.replace('\\', '\\\\'),
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
@@ -394,7 +412,7 @@ ratio number(6,2))
                 user=db_parameters['s3_user'],
                 account=db_parameters['s3_account'],
                 password=db_parameters['s3_password']) as cnx:
-            run(cnx, "put file://{files} @%{name}")
+            run(cnx, "put 'file://{files}' @%{name}")
             run(cnx, "copy into {name}")
 
             rows = 0
@@ -424,7 +442,7 @@ def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
 
     def run(cnx, sql):
         sql = sql.format(
-            files=files,
+            files=files.replace('\\', '\\\\'),
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
@@ -451,7 +469,7 @@ ratio number(6,2))
                 password=db_parameters['s3_password']) as cnx:
             success_cnt = 0
             skipped_cnt = 0
-            for rec in run(cnx, "put file://{files} @%{name}"):
+            for rec in run(cnx, "put 'file://{files}' @%{name}"):
                 logger.info('rec=%s', rec)
                 if rec[6] == 'UPLOADED':
                     success_cnt += 1
@@ -470,7 +488,7 @@ ratio number(6,2))
 
             success_cnt = 0
             skipped_cnt = 0
-            for rec in run(cnx, "put file://{files} @%{name}"):
+            for rec in run(cnx, "put 'file://{files}' @%{name}"):
                 logger.info('rec=%s', rec)
                 if rec[6] == 'UPLOADED':
                     success_cnt += 1
@@ -508,17 +526,19 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
     files = os.path.join(tmp_dir, 'file*')
     shutil.copy(os.path.join(tmp_dir, 'file0.gz'),
                 os.path.join(tmp_dir, 'file0'))
+    stage_name = "test_put_collision/{0}".format(db_parameters['name'])
     with conn_cnx(
             user=db_parameters['s3_user'],
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
-        cnx.cursor().execute("RM @~/test_put_collision/")
+        cnx.cursor().execute("RM @~/{0}".format(stage_name))
         try:
             success_cnt = 0
             skipped_cnt = 0
             for rec in cnx.cursor().execute(
-                    "PUT file://{file} @~/test_put_collision/".format(
-                        file=files, name=db_parameters['name'])):
+                    "PUT 'file://{file}' @~/{stage_name}".format(
+                        file=files.replace('\\', '\\\\'),
+                        stage_name=stage_name)):
                 logger.info('rec=%s', rec)
                 if rec[6] == 'UPLOADED':
                     success_cnt += 1
@@ -530,7 +550,7 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
                     user=db_parameters['s3_user'],
                     account=db_parameters['s3_account'],
                     password=db_parameters['s3_password']) as cnx:
-                cnx.cursor().execute("RM @~")
+                cnx.cursor().execute("RM @~/{0}".format(stage_name))
 
 
 def _generate_huge_value_json(tmpdir, n=1, value_size=1):
@@ -563,8 +583,9 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
             c = cnx.cursor()
             try:
                 c.execute(
-                    "put file://{tmp_file} @%{name}".format(tmp_file=tmp_file,
-                                                            name=json_table))
+                    "put 'file://{tmp_file}' @%{name}".format(
+                        tmp_file=tmp_file.replace('\\', '\\\\'),
+                        name=json_table))
                 colmap = {}
                 for index, item in enumerate(c.description):
                     colmap[item[0]] = index
@@ -608,7 +629,7 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
 
 
 @pytest.mark.skipif(
-    os.getenv('TRAVIS') == 'true',
+    os.getenv('TRAVIS') == 'true' or os.getenv('APPVEYOR'),
     reason="Flaky tests. Need further investigation"
 )
 def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
@@ -633,9 +654,9 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     def run(cnx, sql):
         return cnx.cursor().execute(
             sql.format(
-                files=files,
+                files=files.replace('\\', '\\\\'),
                 dir=db_parameters['name'],
-                output_dir=output_dir),
+                output_dir=output_dir.replace('\\', '\\\\')),
             _put_callback_output_stream=sys.stdout,
             _get_callback_output_stream=sys.stdout,
             _get_callback=cb,
@@ -646,8 +667,9 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
         try:
-            run(cnx, "PUT file://{files} @~/{dir}")
-            # run(cnx, "PUT file://{files} @~/{dir}")  # retry
+            run(cnx, "PUT 'file://{files}' @~/{dir}")
+            # run(cnx, "PUT 'file://{files}' @~/{dir}")  # retry
+            all_recs = []
             for _ in range(100):
                 all_recs = run(cnx, "LIST @~/{dir}")
                 if len(all_recs) == number_of_files:
@@ -657,7 +679,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
                 pytest.fail(
                     'cannot list all files. Potentially '
                     'PUT command missed uploading Files: {0}'.format(all_recs))
-            all_recs = run(cnx, "GET @~/{dir} file://{output_dir}");
+            all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])
         finally:
@@ -674,13 +696,13 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
     def run(cnx, sql, _is_put_get=None):
         return cnx.cursor().execute(
             sql.format(
-                local_dir=tmp_dir,
-                file=data_file,
+                local_dir=tmp_dir.replace('\\', '\\\\'),
+                file=data_file.replace('\\', '\\\\'),
                 name=db_parameters['name']), _is_put_get=_is_put_get).fetchone()
 
     with conn_cnx() as cnx:
         # regular PUT case
-        ret = run(cnx, "PUT file://{file} @~/{name}")
+        ret = run(cnx, "PUT 'file://{file}' @~/{name}")
         assert ret[0] == 'put_get_1.txt', 'PUT filename'
 
         # clean up a file
@@ -691,12 +713,12 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
         with pytest.raises(ProgrammingError):
             run(cnx, """
 -- test comments
-PUT file://{file} @~/{name}""")
+PUT 'file://{file}' @~/{name}""")
 
         # PUT with hint
         ret = run(cnx, """
 --- test comments
-PUT file://{file} @~/{name}""", _is_put_get=True)
+PUT 'file://{file}' @~/{name}""", _is_put_get=True)
         assert ret[0] == 'put_get_1.txt', 'PUT filename'
 
         # GET detection failure
@@ -708,5 +730,5 @@ GET @~/{name} file://{local_dir}""")
         # GET with hint
         ret = run(cnx, """
 --- test comments
-GET @~/{name} file://{local_dir}""", _is_put_get=True)
+GET @~/{name} 'file://{local_dir}'""", _is_put_get=True)
         assert ret[0] == 'put_get_1.txt.gz', "GET filename"

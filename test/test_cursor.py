@@ -14,7 +14,7 @@ import pytz
 
 import snowflake.connector
 from snowflake.connector import (constants, errorcode, errors)
-from snowflake.connector.compat import (BASE_EXCEPTION_CLASS, PY2)
+from snowflake.connector.compat import (BASE_EXCEPTION_CLASS, PY2, IS_WINDOWS)
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -321,7 +321,8 @@ def test_struct_time(conn, db_parameters):
     """
     tzstr = 'America/New_York'
     os.environ['TZ'] = tzstr
-    time.tzset()
+    if not IS_WINDOWS:
+        time.tzset()
     test_time = time.strptime("30 Sep 01 11:20:30", "%d %b %y %H:%M:%S")
 
     with conn() as cnx:
@@ -338,7 +339,8 @@ def test_struct_time(conn, db_parameters):
         finally:
             c.close()
             os.environ['TZ'] = 'UTC'
-            time.tzset()
+            if not IS_WINDOWS:
+                time.tzset()
         assert cnt == 1, 'wrong number of records were inserted'
 
         try:
@@ -358,7 +360,8 @@ def test_struct_time(conn, db_parameters):
             assert test_time.tm_sec == tsltz.second, "Second didn't match"
         finally:
             os.environ['TZ'] = 'UTC'
-            time.tzset()
+            if not IS_WINDOWS:
+                time.tzset()
 
 
 @pytest.mark.skipif(PY2, reason="""

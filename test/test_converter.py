@@ -6,8 +6,10 @@
 
 from datetime import timedelta, time
 
+import pytest
 import pytz
 
+from snowflake.connector.compat import PY2, IS_WINDOWS
 from snowflake.connector.converter import (SnowflakeConverter, ZERO_EPOCH)
 from snowflake.connector.converter_snowsql import (SnowflakeConverterSnowSQL)
 
@@ -323,6 +325,7 @@ ALTER SESSION SET
         assert ret[38] == '05:07:08.100000'
         assert ret[39] == '05:07:08.000000'
 
+
 def test_fetch_timestamps_negative_epoch(conn_cnx):
     """
     Negative epoch
@@ -339,3 +342,72 @@ SELECT
         ret = cur.fetchone()
         assert ret[0] == r0
         assert ret[1] == r1
+
+
+@pytest.mark.skipif(PY2 or IS_WINDOWS, reason="year out of range error")
+def test_five_or_more_digit_year_date_converter(conn_cnx):
+    """
+    Past and future dates
+    """
+    with conn_cnx(
+            converter_class=SnowflakeConverterSnowSQL,
+            support_negative_year=True) as cnx:
+        cnx.cursor().execute("""
+ALTER SESSION SET
+    DATE_OUTPUT_FORMAT='YYYY-MM-DD'
+""")
+        cur = cnx.cursor()
+        cur.execute("""
+SELECT
+    DATE_FROM_PARTS(10000, 1, 1),
+    DATE_FROM_PARTS(-0001, 2, 5),
+    DATE_FROM_PARTS(56789, 3, 4),
+    DATE_FROM_PARTS(198765, 4, 3),
+    DATE_FROM_PARTS(-234567, 5, 2)
+    ;
+""")
+        ret = cur.fetchone()
+        assert ret[0] == '10000-01-01'
+        assert ret[1] == '-0001-02-05'
+        assert ret[2] == '56789-03-04'
+        assert ret[3] == '198765-04-03'
+        assert ret[4] == '-234567-05-02'
+
+        cnx.cursor().execute("""
+ALTER SESSION SET
+    DATE_OUTPUT_FORMAT='YY-MM-DD'
+""")
+        cur = cnx.cursor()
+        cur.execute("""
+SELECT
+    DATE_FROM_PARTS(10000, 1, 1),
+    DATE_FROM_PARTS(-0001, 2, 5),
+    DATE_FROM_PARTS(56789, 3, 4),
+    DATE_FROM_PARTS(198765, 4, 3),
+    DATE_FROM_PARTS(-234567, 5, 2)
+    ;
+""")
+        ret = cur.fetchone()
+        assert ret[0] == '00-01-01'
+        assert ret[1] == '-01-02-05'
+        assert ret[2] == '89-03-04'
+        assert ret[3] == '65-04-03'
+        assert ret[4] == '-67-05-02'
+
+
+def test_franction_followed_by_year_format(conn_cnx):
+    """
+    Both year and franctions are included but fraction shows up followed by
+    year.
+    """
+    with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
+        cnx.cursor().execute("""
+ALTER SESSION SET
+    TIMESTAMP_OUTPUT_FORMAT='HH24:MI:SS.FF6 MON DD, YYYY',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='HH24:MI:SS.FF6 MON DD, YYYY'
+""")
+        for rec in cnx.cursor().execute("""
+SELECT
+    '2012-01-03 05:34:56.123456'::TIMESTAMP_NTZ(6)
+"""):
+            assert rec[0] == '05:34:56.123456 Jan 03, 2012'
