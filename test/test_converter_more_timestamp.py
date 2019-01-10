@@ -3,7 +3,7 @@ from datetime import timedelta, datetime
 import pytz
 from dateutil.parser import parse
 
-from snowflake.connector.converter import (SnowflakeConverter)
+from snowflake.connector.converter import (SnowflakeConverter, ZERO_EPOCH)
 
 
 def test_fetch_various_timestamps(conn_cnx):
@@ -36,7 +36,13 @@ def test_fetch_various_timestamps(conn_cnx):
                         -1 if tz[0] == '-' else 1)
                     tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
                         tzdiff)
-                    ts = datetime.fromtimestamp(float(et), tz=tzinfo)
+                    try:
+                        ts = datetime.fromtimestamp(float(et), tz=tzinfo)
+                    except OSError:
+                        ts = ZERO_EPOCH + timedelta(seconds=float(et))
+                        if pytz.utc != tzinfo:
+                            ts += tzinfo.utcoffset(ts, is_dst=False)
+                        ts = ts.replace(tzinfo=tzinfo)
                     data.append({
                         'scale': 0,
                         'dt': dt,
@@ -47,7 +53,13 @@ def test_fetch_various_timestamps(conn_cnx):
                     for idx in range(len(fractions)):
                         scale = idx + 1
                         if idx + 1 != 6:  # SNOW-28597
-                            ts0 = datetime.fromtimestamp(float(et), tz=tzinfo)
+                            try:
+                                ts0 = datetime.fromtimestamp(float(et), tz=tzinfo)
+                            except OSError:
+                                ts0 = ZERO_EPOCH + timedelta(seconds=float(et))
+                                if pytz.utc != tzinfo:
+                                    ts0 += tzinfo.utcoffset(ts0, is_dst=False)
+                                ts0 = ts0.replace(tzinfo=tzinfo)
                             ts0_str = ts0.strftime(
                                 '%Y-%m-%d %H:%M:%S.{ff}{tz}'.format(
                                     ff=fractions[:idx + 1], tz=tz))
@@ -88,8 +100,12 @@ def test_fetch_various_timestamps(conn_cnx):
                         'out': ts1
                     })
             else:
-                ts0_str = datetime.fromtimestamp(
-                    float(et)).strftime('%Y-%m-%d %H:%M:%S')
+                # TIMESTAMP_NTZ
+                try:
+                    ts0 = datetime.fromtimestamp(float(et))
+                except OSError:
+                    ts0 = ZERO_EPOCH + timedelta(seconds=(float(et)))
+                ts0_str = ts0.strftime('%Y-%m-%d %H:%M:%S')
                 ts1 = parse(ts0_str)
                 data.append({
                     'scale': 0,
@@ -98,7 +114,11 @@ def test_fetch_various_timestamps(conn_cnx):
                     'out': ts1
                 })
                 for idx in range(len(fractions)):
-                    ts0_str = datetime.fromtimestamp(float(et)).strftime(
+                    try:
+                        ts0 = datetime.fromtimestamp(float(et))
+                    except OSError:
+                        ts0 = ZERO_EPOCH + timedelta(seconds=(float(et)))
+                    ts0_str = ts0.strftime(
                         '%Y-%m-%d %H:%M:%S.{ff}'.format(
                             ff=fractions[:idx + 1]))
                     ts1 = parse(ts0_str)

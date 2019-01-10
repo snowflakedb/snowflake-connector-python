@@ -29,4 +29,4 @@ Snowflake Documentation is available at:
 https://docs.snowflake.net/
 
 Feel free to file an issue or submit a PR here for general cases. For official support, contact Snowflake support at:
-https://support.snowflake.net/s/snowflake-support
+https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge

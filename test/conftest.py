@@ -40,6 +40,8 @@ logger = getLogger(__name__)
 
 if os.getenv('TRAVIS') == 'true':
     TEST_SCHEMA = 'TRAVIS_JOB_{0}'.format(os.getenv('TRAVIS_JOB_ID'))
+elif os.getenv('APPVEYOR') == 'True':
+    TEST_SCHEMA = 'APPVEYOR_JOB_{0}'.format(os.getenv('APPVEYOR_BUILD_ID'))
 else:
     TEST_SCHEMA = 'python_connector_tests_' + TO_UNICODE(uuid.uuid4()).replace(
         '-', '_')
@@ -123,6 +125,23 @@ def get_db_parameters():
     ret['name_wh'] = ret['name'] + 'wh'
 
     ret['schema'] = TEST_SCHEMA
+    ret['a00'] = 'dummy parameter'
+    ret['a01'] = 'dummy parameter'
+    ret['a02'] = 'dummy parameter'
+    ret['a03'] = 'dummy parameter'
+    ret['a04'] = 'dummy parameter'
+    ret['a05'] = 'dummy parameter'
+    ret['a06'] = 'dummy parameter'
+    ret['a07'] = 'dummy parameter'
+    ret['a08'] = 'dummy parameter'
+    ret['a09'] = 'dummy parameter'
+    ret['a10'] = 'dummy parameter'
+    ret['a11'] = 'dummy parameter'
+    ret['a12'] = 'dummy parameter'
+    ret['a13'] = 'dummy parameter'
+    ret['a14'] = 'dummy parameter'
+    ret['a15'] = 'dummy parameter'
+    ret['a16'] = 'dummy parameter'
     return ret
 
 
@@ -221,19 +240,19 @@ def generate_k_lines_of_n_files(tmpdir, k, n, compress=False):
             for j in range(k):
                 num = int(random.random() * 10000.0)
                 tm = time.gmtime(
-                    int(random.random() * 3000000000.0) - 1500000000)
+                    int(random.random() * 30000.0) - 15000)
                 dt = time.strftime('%Y-%m-%d', tm)
                 tm = time.gmtime(
-                    int(random.random() * 3000000000.0) - 1500000000)
+                    int(random.random() * 30000.0) - 15000)
                 ts = time.strftime('%Y-%m-%d %H:%M:%S', tm)
                 tm = time.gmtime(
-                    int(random.random() * 3000000000.0) - 1500000000)
+                    int(random.random() * 30000.0) - 15000)
                 tsltz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
                 tm = time.gmtime(
-                    int(random.random() * 3000000000.0) - 1500000000)
+                    int(random.random() * 30000.0) - 15000)
                 tsntz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
                 tm = time.gmtime(
-                    int(random.random() * 3000000000.0) - 1500000000)
+                    int(random.random() * 30000.0) - 15000)
                 tstz = time.strftime('%Y-%m-%dT%H:%M:%S', tm) + \
                        ('-' if random.random() < 0.5 else '+') + \
                        "{0:02d}:{1:02d}".format(
@@ -247,10 +266,19 @@ def generate_k_lines_of_n_files(tmpdir, k, n, compress=False):
                     ratio)
                 f.write(rec + "\n")
         if compress:
-            subprocess.Popen(
-                ['gzip', os.path.join(tmp_dir, 'file{0}'.format(i))],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE).communicate()
+            if not IS_WINDOWS:
+                subprocess.Popen(
+                    ['gzip', os.path.join(tmp_dir, 'file{0}'.format(i))],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE).communicate()
+            else:
+                import gzip
+                import shutil
+                fname = os.path.join(tmp_dir, 'file{0}'.format(i))
+                with open(fname, 'rb') as f_in, \
+                        gzip.open(fname + '.gz', 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+                os.unlink(fname)
     return tmp_dir
 
 

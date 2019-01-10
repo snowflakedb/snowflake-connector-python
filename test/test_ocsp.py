@@ -6,6 +6,7 @@
 import codecs
 import json
 import logging
+import tempfile
 import time
 from os import path
 
@@ -31,7 +32,8 @@ from snowflake.connector.ssl_wrap_socket import _openssl_connect
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
-    ch = logging.FileHandler('/tmp/python_connector.log')
+    ch = logging.FileHandler(
+        path.join(tempfile.gettempdir(), 'python_connector.log'))
     ch.setLevel(logging.DEBUG)
     ch.setFormatter(logging.Formatter(
         '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - '
