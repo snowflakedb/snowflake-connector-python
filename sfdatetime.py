@@ -4,14 +4,10 @@
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
 import time
-from datetime import datetime, timedelta
+from collections import namedtuple
+from datetime import timedelta, datetime
 
-import pytz
-
-from . import errors
 from .compat import TO_UNICODE
-from .constants import UTF8
-from .mixin import UnicodeMixin
 
 ZERO_TIMEDELTA = timedelta(0)
 
@@ -40,103 +36,84 @@ ElementType = {
 
 def sfdatetime_total_seconds_from_timedelta(td):
     return (td.microseconds + (
-        td.seconds + td.days * 24 * 3600) * 10 ** 6) // 10 ** 6
+            td.seconds + td.days * 24 * 3600) * 10 ** 6) // 10 ** 6
 
 
-def sfdatetime_to_snowflake(value):
-    dt = value.datetime
-    nanosecond = value.nanosecond
+SnowflakeDateTime = namedtuple(
+    'SnowflakeDateTime', 'datetime nanosecond scale')
 
-    if isinstance(dt, time.struct_time):
-        if nanosecond:
-            return (
-                u'{year:d}-{month:02d}-{day:02d} '
-                u'{hour:02d}:{minute:02d}:{second:02d}.'
-                u'{nanosecond:d}').format(
-                year=dt.tm_year, month=dt.tm_mon, day=dt.tm_mday,
-                hour=dt.tm_hour, minute=dt.tm_min, second=dt.tm_sec,
-                nanosecond=nanosecond
-            )
-        return (
-            u'{year:d}-{month:02d}-{day:02d} '
-            u'{hour:02d}:{minute:02d}:{second:02d}').format(
-            year=dt.year, month=dt.month, day=dt.day,
-            hour=dt.hour, minute=dt.minute, second=dt.second
-        )
+
+def _support_negative_year(value, year_len):
+    # if YYYY/YY is included
+    return _build_year_format(value.datetime, year_len)
+
+
+def _support_negative_year_datetime(value, year_len):
+    # if YYYY/YY is included
+    return _build_year_format(value, year_len)
+
+
+def _build_year_format(dt, year_len):
+    if hasattr(dt, 'year'):
+        # datetime
+        year_raw_value = dt.year
     else:
-        tzinfo = dt.tzinfo
-        if tzinfo:
-            if pytz.utc != tzinfo:
-                td = tzinfo.utcoffset(dt, is_dst=False)
-            else:
-                td = ZERO_TIMEDELTA
-            sign = u'+' if td >= ZERO_TIMEDELTA else u'-'
-            td_secs = sfdatetime_total_seconds_from_timedelta(td)
-            h, m = divmod(abs(td_secs // 60), 60)
-            if nanosecond:
-                return (u'{year:d}-{month:02d}-{day:02d} '
-                        u'{hour:02d}:{minute:02d}:{second:02d}.'
-                        u'{nanosecond:d}{sign}{tzh:02d}:{tzm:02d}').format(
-                    year=dt.year, month=dt.month, day=dt.day,
-                    hour=dt.hour, minute=dt.minute, second=dt.second,
-                    nanosecond=nanosecond, sign=sign, tzh=h, tzm=m
-                )
-            return (
-                u'{year:d}-{month:02d}-{day:02d} '
-                u'{hour:02d}:{minute:02d}:{second:02d}'
-                u'{sign}{tzh:02d}:{tzm:02d}').format(
-                year=dt.year, month=dt.month, day=dt.day,
-                hour=dt.hour, minute=dt.minute, second=dt.second, sign=sign,
-                tzh=h,
-                tzm=m
-            )
-        else:
-            if nanosecond:
-                return (
-                    u'{year:d}-{month:02d}-{day:02d} '
-                    u'{hour:02d}:{minute:02d}:{second:02d}.'
-                    u'{nanosecond:d}').format(
-                    year=dt.year, month=dt.month, day=dt.day,
-                    hour=dt.hour, minute=dt.minute, second=dt.second,
-                    nanosecond=nanosecond
-                )
-            return (
-                u'{year:d}-{month:02d}-{day:02d} '
-                u'{hour:02d}:{minute:02d}:{second:02d}').format(
-                year=dt.year, month=dt.month, day=dt.day,
-                hour=dt.hour, minute=dt.minute, second=dt.second
-            )
+        # struct_time
+        year_raw_value = dt.tm_year
+    return _build_raw_year_format(year_raw_value, year_len)
 
 
-class SnowflakeDateTime(UnicodeMixin):
-    """
-    Snowflake DateTime class.
+def _support_negative_year_struct_time(dt, year_len):
+    # struct_time
+    return _build_raw_year_format(dt.tm_year, year_len)
 
-    The differene to the native datetime class is Snowflake supports up to
-    nanoseconds precision.
-    """
 
-    def __init__(self, ts, nanosecond, scale):
-        self._datetime = ts
-        self._nanosecond = nanosecond
-        self._scale = scale
+def _build_raw_year_format(year_raw_value, year_len):
+    sign_char = u''
+    if year_raw_value < 0:
+        sign_char = u'-'
+        year_raw_value *= -1
+    if year_len == 2:
+        year_raw_value %= 100
+    fmt = sign_char + u'{:0' + TO_UNICODE(year_len) + u'd}'
+    return fmt.format(year_raw_value)
 
-    @property
-    def datetime(self):
-        return self._datetime
 
-    @property
-    def nanosecond(self):
-        return self._nanosecond
+def _inject_fraction(value, fraction_len):
+    # if FF is included
+    nano_str = u'{:09d}'
 
-    def __repr__(self):
-        return self.__str__()
+    if hasattr(value, 'microsecond'):
+        nano_str = u'{:06d}'
+        fraction = value.microsecond
+    elif hasattr(value, 'nanosecond'):
+        fraction = value.nanosecond
+    else:
+        nano_str = u'{:01d}'
+        fraction = 0  # struct_time. no fraction of second
 
-    def __unicode__(self):
-        return sfdatetime_to_snowflake(self)
+    if fraction_len > 0:
+        # truncate up to the specified length of FF
+        nano_value = nano_str.format(fraction)[:fraction_len]
+    else:
+        # no length of FF is specified
+        nano_value = nano_str.format(fraction)
+        if hasattr(value, 'scale'):
+            # but scale is specified
+            nano_value = nano_value[:value.scale]
+    return nano_value
 
-    def __bytes__(self):
-        return self.__unicode__().encode(UTF8)
+
+def _inject_others(_, value0):
+    return value0
+
+
+NOT_OTHER_FORMAT = {
+    _support_negative_year,
+    _support_negative_year_datetime,
+    _support_negative_year_struct_time,
+    _inject_fraction
+}
 
 
 class SnowflakeDateTimeFormat(object):
@@ -144,280 +121,232 @@ class SnowflakeDateTimeFormat(object):
     Snowflake DateTime Formatter
     """
 
-    def __init__(self, sql_format, datetime_class=datetime):
+    def __init__(
+            self,
+            sql_format,
+            data_type=u'TIMESTAMP_NTZ',
+            datetime_class=datetime,
+            support_negative_year=True,
+            inject_fraction=True):
         self._sql_format = sql_format
-        self._fragments = []
+        self._ignore_tz = data_type in (u'TIMESTAMP_NTZ', u'DATE')
+        if datetime_class == datetime:
+            self._support_negative_year_method = _support_negative_year_datetime
+        elif datetime_class == time.struct_time:
+            self._support_negative_year_method = _support_negative_year_struct_time
+        else:
+            self._support_negative_year_method = _support_negative_year
 
-        self._compile()
-        if len(self._fragments) != 1:
-            raise errors.InternalError(
-                u'Only one fragment is allowed {0}'.format(
-                    u','.join(self._fragments)))
-
-        self._simple_datetime_pattern = self._fragments[0][u'python_format']
-
-        self._nano_str = u'{:09d}'
-        if self._fractions_pos >= 0 and self._fractions_with_dot:
-            self._nano_str = u'.{:09d}'
-
+        # format method
         self.format = getattr(self, u'_format_{type_name}'.format(
             type_name=datetime_class.__name__))
-
-    def python_format(self):
-        return self._python_format
+        self._compile(
+            support_negative_year=support_negative_year,
+            inject_fraction=inject_fraction)
 
     def _pre_format(self, value):
-        updated_format = self._simple_datetime_pattern
-
-        if self._fractions_pos >= 0:
-            # if FF is included
-            if hasattr(value, 'microsecond'):
-                fraction = value.microsecond
-                self._nano_str = u'{:06d}'
-                if self._fractions_with_dot:
-                    self._nano_str = u'.{:06d}'
-            elif hasattr(value, 'nanosecond'):
-                fraction = value.nanosecond
-            else:
-                self._nano_str = u'{:01d}'
-                if self._fractions_with_dot:
-                    self._nano_str = u'.{:01d}'
-                fraction = 0  # struct_time. no fraction of second
-
-            if self._fractions_len > 0:
-                # truncate up to the specified length of FF
-                nano_value = self._nano_str.format(fraction)[
-                             :self._fractions_len + 1]
-            else:
-                # no length of FF is specified
-                nano_value = self._nano_str.format(fraction)
-                if hasattr(value, '_scale'):
-                    nano_value = nano_value[:value._scale + 1]
-
-            updated_format = \
-                updated_format[:self._fractions_pos] + nano_value + \
-                updated_format[self._fractions_pos:]
-        return updated_format
+        fmt = []
+        for e in self._elements:
+            f = e[0]
+            fmt.append(f(value, e[1]))
+        return u''.join(fmt)
 
     def _format_SnowflakeDateTime(self, value):
         """
         Formats SnowflakeDateTime object
         """
-        updated_format = self._pre_format(value)
-        if isinstance(value.datetime, time.struct_time):
-            return TO_UNICODE(time.strftime(
-                updated_format, value.datetime))
-        if value.datetime.year < 1000:
+        fmt = self._pre_format(value)
+        dt = value.datetime
+        if isinstance(dt, time.struct_time):
+            return TO_UNICODE(time.strftime(fmt, dt))
+        if dt.year < 1000:
             # NOTE: still not supported
-            return value.datetime.isoformat()
-        return value.datetime.strftime(updated_format)
+            return dt.isoformat()
+        return dt.strftime(fmt)
 
     def _format_datetime(self, value):
         """
         Formats datetime object
         """
-        updated_format = self._pre_format(value)
+        fmt = self._pre_format(value)
         if isinstance(value, time.struct_time):
-            return TO_UNICODE(time.strftime(updated_format, value))
+            return TO_UNICODE(time.strftime(fmt, value))
         if value.year < 1000:
             # NOTE: still not supported.
             return value.isoformat()
-        return value.strftime(updated_format)
+        return value.strftime(fmt)
 
-    def _create_new_fragment(self, element_types):
-        self._fragments.append({
-            u'python_format': self._python_format,
-            u'element_types': element_types,
-        })
+    def _match_token(self, sql_fmt, candidates, ignore=False):
+        for c in candidates:
+            if sql_fmt.startswith(c[0]):
+                if not ignore:
+                    self._elements.append((_inject_others, c[1]))
+                return len(c[0])
+        self._add_raw_char(sql_fmt[0])
+        return 1
 
-    def _add_raw_char(self, sql_format, ch):
-        sql_format += u'%%' if ch == u'%' else ch
-        return sql_format
+    def _add_raw_char(self, ch):
+        self._elements.append(
+            (_inject_others, u'%%' if ch == u'%' else ch))
 
-    def _add_element(self, element, element_types):
-        self._python_format += element[1]  # python format
-        element_types.append(element)
-        return len(element[0])  # sql format
-
-    def _compile(self):
-        u"""Converts the date time/timestamp format to Python"""
-        self._python_format = u""
-        self._fractions_with_dot = False
-        self._fractions_pre_formatter = None
-        self._fractions_pos = -1
-        self._fractions_len = -1
-
-        element_types = []
-
+    def _compile(self, support_negative_year=True, inject_fraction=True):
+        self._elements = []
         idx = 0
         u_sql_format = self._sql_format.upper()
 
         while idx < len(u_sql_format):
             ch = u_sql_format[idx]
             if ch == u'A':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'Ante_Meridiem_ElementType'][0]):
-                    idx += self._add_element(
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
                         ElementType[u'Ante_Meridiem_ElementType'],
-                        element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    ])
             elif ch == u'D':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'DayOfMonth_ElementType'][0]):
-                    idx += self._add_element(
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
                         ElementType[u'DayOfMonth_ElementType'],
-                        element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'DayOfWeekAbbrev_ElementType'][0]):
-                    idx += self._add_element(
                         ElementType[u'DayOfWeekAbbrev_ElementType'],
-                        element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    ]
+                )
             elif ch == u'H':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'Hour24_ElementType'][0]):
-                    idx += self._add_element(
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
                         ElementType[u'Hour24_ElementType'],
-                        element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'Hour12_ElementType'][0]):
-                    idx += self._add_element(
                         ElementType[u'Hour12_ElementType'],
-                        element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'Hour_ElementType'][0]):
-                    idx += self._add_element(ElementType[u'Hour_ElementType'],
-                                             element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                        ElementType[u'Hour_ElementType'],
+                    ]
+                )
             elif ch == u'M':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'MonthAbbrev_ElementType'][0]):
-                    idx += self._add_element(
-                        ElementType[
-                            u'MonthAbbrev_ElementType'], element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'Month_ElementType'][0]):
-                    idx += self._add_element(
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
+                        ElementType[u'MonthAbbrev_ElementType'],
                         ElementType[u'Month_ElementType'],
-                        element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'Minute_ElementType'][0]):
-                    idx += self._add_element(
                         ElementType[u'Minute_ElementType'],
-                        element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    ]
+                )
             elif ch == u'P':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'Post_Meridiem_ElementType'][0]):
-                    idx += self._add_element(
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
                         ElementType[u'Post_Meridiem_ElementType'],
-                        element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    ]
+                )
             elif ch == u'S':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'Second_ElementType'][0]):
-                    idx += self._add_element(
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
                         ElementType[u'Second_ElementType'],
-                        element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    ]
+                )
             elif ch == u'T':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'TZOffsetHourColonMin_ElementType'][0]):
-                    idx += self._add_element(
+                # ignore TZ format if data type doesn't have TZ.
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
                         ElementType[u'TZOffsetHourColonMin_ElementType'],
-                        element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'TZOffsetHourMin_ElementType'][0]):
-                    idx += self._add_element(
                         ElementType[u'TZOffsetHourMin_ElementType'],
-                        element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'TZOffsetHourOnly_ElementType'][0]):
-                    idx += self._add_element(
                         ElementType[u'TZOffsetHourOnly_ElementType'],
-                        element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'TZAbbr_ElementType'][0]):
-                    idx += self._add_element(
                         ElementType[u'TZAbbr_ElementType'],
-                        element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    ],
+                    ignore=self._ignore_tz,
+                )
             elif ch == u'Y':
-                if u_sql_format[idx:].startswith(
-                        ElementType[u'Year_ElementType'][0]):
-                    idx += self._add_element(ElementType[u'Year_ElementType'],
-                                             element_types)
-                elif u_sql_format[idx:].startswith(
-                        ElementType[u'Year2digit_ElementType'][0]):
-                    idx += self._add_element(
+                idx += self._match_token(
+                    u_sql_format[idx:],
+                    [
+                        ElementType[u'Year_ElementType'],
                         ElementType[u'Year2digit_ElementType'],
-                        element_types)
-                else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    ]
+                )
+                if support_negative_year:
+                    # Add a special directive to handle YYYY/YY
+                    last_element = self._elements[-1]
+                    if last_element[1] == '%Y':
+                        del self._elements[-1]
+                        self._elements.append(
+                            (self._support_negative_year_method, 4))
+                    elif last_element[1] == '%y':
+                        del self._elements[-1]
+                        self._elements.append(
+                            (self._support_negative_year_method, 2))
+
             elif ch == u'.':
                 if idx + 1 < len(u_sql_format) and \
                         u_sql_format[idx + 1:].startswith(
                             ElementType[u'MilliSecond_ElementType'][0]):
                     # Will be FF, just mark that there's a dot before FF
+                    self._elements.append((_inject_others, u'.'))
                     self._fractions_with_dot = True
-                    idx += 1
                 else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
-                    idx += 1
+                    self._add_raw_char(ch)
+                idx += 1
             elif ch == u'F':
                 if u_sql_format[idx:].startswith(
                         ElementType[u'MilliSecond_ElementType'][0]):
                     idx += len(ElementType[u'MilliSecond_ElementType'][0])
-                    # @TODO Handle multiple occurrences?
-                    # Construct formatter to find fractions position.
-                    self._fractions_pre_formatter = self._python_format
-                    self._fractions_pos = len(self._python_format)
-                    self._fractions_len = -1
-                    if idx < len(u_sql_format) and u_sql_format[idx].isdigit():
-                        self._fractions_len = int(u_sql_format[idx])
-                        idx += 1
+                    if inject_fraction:
+                        # Construct formatter to find fractions position.
+                        fractions_len = -1
+                        if idx < len(u_sql_format) and \
+                                u_sql_format[idx].isdigit():
+                            # followed by a single digit?
+                            fractions_len = int(u_sql_format[idx])
+                            idx += 1
+                        self._elements.append(
+                            (_inject_fraction, fractions_len))
+                    else:
+                        self._elements.append((_inject_others, u'0'))
                 else:
-                    self._python_format = self._add_raw_char(
-                        self._python_format, ch)
+                    self._add_raw_char(ch)
                     idx += 1
             elif ch == u'"':
                 # copy a double quoted string to the python format
                 idx += 1
+                start_idx = idx
                 while idx < len(self._sql_format) and \
-                                self._sql_format[idx] != u'"':
-                    self._python_format += self._sql_format[idx]
+                        self._sql_format[idx] != u'"':
                     idx += 1
+
+                self._elements.append(
+                    (
+                        _inject_others,
+                        self._sql_format[start_idx:idx]
+                    ))
                 if idx < len(self._sql_format):
                     idx += 1
             else:
-                self._python_format = self._add_raw_char(self._python_format,
-                                                         ch)
+                self._add_raw_char(ch)
                 idx += 1
+            self._optimize_elements()
 
-        if len(element_types) > 0 or len(
-                self._python_format) > 0 or self._fractions_len > 0:
-            self._create_new_fragment(element_types)
+    def _optimize_elements(self):
+        if len(self._elements) < 2:
+            return
+        last_element = self._elements[-1]
+        if last_element[0] in NOT_OTHER_FORMAT:
+            return
+        second_last_element = self._elements[-2]
+        if second_last_element[0] in NOT_OTHER_FORMAT:
+            return
+        del self._elements[-1]
+        del self._elements[-1]
+        self._elements.append((
+            _inject_others,
+            second_last_element[1] + last_element[1]))
+
+
+class SnowflakeDateFormat(SnowflakeDateTimeFormat):
+    def __init__(self, sql_format, **kwargs):
+        kwargs['inject_fraction'] = False  # no fraction
+        super(SnowflakeDateFormat, self).__init__(sql_format, **kwargs)
+
+    def _format_struct_time(self, value):
+        """
+        Formats struct_time
+        """
+        fmt = self._pre_format(value)
+        return TO_UNICODE(time.strftime(fmt, value))

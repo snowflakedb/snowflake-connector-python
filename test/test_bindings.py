@@ -5,16 +5,22 @@
 #
 
 import logging
+import tempfile
+from os import path
+
+tempfile.gettempdir()
 
 for logger_name in ['snowflake.connector', 'botocore']:
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
-    ch = logging.FileHandler('/tmp/python_connector.log')
+    ch = logging.FileHandler(
+        path.join(tempfile.gettempdir(), 'python_connector.log'))
     ch.setLevel(logging.DEBUG)
     ch.setFormatter(logging.Formatter(
         '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
     logger.addHandler(ch)
 
+import calendar
 import time
 from datetime import datetime, date, timedelta
 from datetime import time as datetime_time
@@ -166,7 +172,7 @@ select * from {name} where c1=? and c2=?
             assert ret[19] == dt
             assert ret[20] == tm
             assert convert_datetime_to_epoch(
-                ret[21]) == time.mktime(struct_time_v)
+                ret[21]) == calendar.timegm(struct_time_v)
             assert timedelta(seconds=ret[22].hour * 3600 + ret[22].minute * 60 +
                                      ret[22].second,
                              microseconds=ret[22].microsecond) == tdelta

@@ -4,15 +4,19 @@ language: python
 
 matrix:
   include:
-  - python: "2.7"
-  - python: "3.4"
-  - python: "3.5"
-  - python: "3.6"
-  - python: "3.7"
-
-before_install:
-  - sudo apt-get update
-  - openssl aes-256-cbc -k "$super_secret_password" -in parameters.py.enc -out test/parameters.py -d
+  - os: linux
+    python: "2.7"
+  - os: linux
+    python: "3.4"
+  - os: linux
+    python: "3.5"
+  - os: linux
+    python: "3.6"
+  - os: linux
+    python: "3.7"
+  - os: osx
+    language: generic
+    env: PYTHON_VERSION=3.6.7
 
 install:
   - ./scripts/install.sh

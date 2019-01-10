@@ -5,17 +5,21 @@
 #
 
 import os
+
 import pytest
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import dsa
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric import dsa
-from cryptography.hazmat.primitives import serialization
+
+IS_RUNNING_ON_PROD = os.getenv('TRAVIS') == 'true' or \
+                     os.getenv('APPVEYOR') == 'True'
 
 
 @pytest.mark.skipif(
-    os.getenv('TRAVIS') == 'true',
+    IS_RUNNING_ON_PROD,
     reason="Change user's public key requires accountadmin privilege"
 )
 def test_different_key_length(request, conn_cnx, db_parameters):
@@ -59,7 +63,7 @@ def test_different_key_length(request, conn_cnx, db_parameters):
 
 
 @pytest.mark.skipif(
-    os.getenv('TRAVIS') == 'true',
+    IS_RUNNING_ON_PROD,
     reason="Change user's public key requires accountadmin privilege"
 )
 def test_multiple_key_pair(request, conn_cnx, db_parameters):
@@ -97,7 +101,8 @@ def test_multiple_key_pair(request, conn_cnx, db_parameters):
     """)
         cnx.cursor().execute("""
     alter user {user} set rsa_public_key='{public_key}'
-    """.format(user=db_parameters['user'], public_key=public_key_one_der_encoded))
+    """.format(user=db_parameters['user'],
+               public_key=public_key_one_der_encoded))
 
     db_config['private_key'] = private_key_one_der
     snowflake.connector.connect(**db_config)
@@ -110,9 +115,9 @@ def test_multiple_key_pair(request, conn_cnx, db_parameters):
     with pytest.raises(snowflake.connector.errors.DatabaseError) as exec_info:
         snowflake.connector.connect(**db_config)
 
-    assert(exec_info.value.errno == 250001)
-    assert(exec_info.value.sqlstate == '08001')
-    assert("JWT token is invalid" in exec_info.value.msg)
+    assert (exec_info.value.errno == 250001)
+    assert (exec_info.value.sqlstate == '08001')
+    assert ("JWT token is invalid" in exec_info.value.msg)
 
     with conn_cnx() as cnx:
         cnx.cursor().execute("""
@@ -120,7 +125,8 @@ def test_multiple_key_pair(request, conn_cnx, db_parameters):
     """)
         cnx.cursor().execute("""
     alter user {user} set rsa_public_key_2='{public_key}'
-    """.format(user=db_parameters['user'], public_key=public_key_two_der_encoded))
+    """.format(user=db_parameters['user'],
+               public_key=public_key_two_der_encoded))
     snowflake.connector.connect(**db_config)
 
 
@@ -136,7 +142,8 @@ def test_bad_private_key(db_parameters):
         'timezone': 'UTC',
     }
 
-    dsa_private_key = dsa.generate_private_key(key_size=2048, backend=default_backend())
+    dsa_private_key = dsa.generate_private_key(key_size=2048,
+                                               backend=default_backend())
     dsa_private_key_der = dsa_private_key.private_bytes(
         encoding=serialization.Encoding.DER,
         format=serialization.PrivateFormat.PKCS8,
@@ -144,16 +151,19 @@ def test_bad_private_key(db_parameters):
 
     encrypted_rsa_private_key_der = rsa.generate_private_key(key_size=2048,
                                                              public_exponent=65537,
-                                                             backend=default_backend())\
+                                                             backend=default_backend()) \
         .private_bytes(encoding=serialization.Encoding.DER,
                        format=serialization.PrivateFormat.PKCS8,
-                       encryption_algorithm=serialization.BestAvailableEncryption(b'abcd'))
+                       encryption_algorithm=serialization.BestAvailableEncryption(
+                           b'abcd'))
 
-    bad_private_key_test_cases = ["abcd", 1234, b'abcd', dsa_private_key_der, encrypted_rsa_private_key_der]
+    bad_private_key_test_cases = ["abcd", 1234, b'abcd', dsa_private_key_der,
+                                  encrypted_rsa_private_key_der]
 
     for private_key in bad_private_key_test_cases:
         db_config['private_key'] = private_key
-        with pytest.raises(snowflake.connector.errors.ProgrammingError) as exec_info:
+        with pytest.raises(
+                snowflake.connector.errors.ProgrammingError) as exec_info:
             snowflake.connector.connect(**db_config)
         assert (exec_info.value.errno == 251008)
 
@@ -163,12 +173,14 @@ def generate_key_pair(key_length):
                                            public_exponent=65537,
                                            key_size=key_length)
 
-    private_key_der = private_key.private_bytes(encoding=serialization.Encoding.DER,
-                                                format=serialization.PrivateFormat.PKCS8,
-                                                encryption_algorithm=serialization.NoEncryption())
+    private_key_der = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption())
 
-    public_key_pem = private_key.public_key().public_bytes(serialization.Encoding.PEM,
-                                                           serialization.PublicFormat.SubjectPublicKeyInfo) \
+    public_key_pem = private_key.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo) \
         .decode("utf-8")
 
     # strip off header

@@ -6,12 +6,13 @@
 
 from logging import getLogger
 
+import pytest
+
+from snowflake.connector.compat import (TO_UNICODE, PY2, PY34_EXACT)
 from snowflake.connector.connection import DefaultConverterClass
-from snowflake.connector.compat import (TO_UNICODE)
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
 logger = getLogger(__name__)
-
 
 ConverterSnowSQL = SnowflakeConverterSnowSQL
 
@@ -56,14 +57,11 @@ def test_is_dst():
         'Timestamp during from non-DST to DST'
 
 
+@pytest.mark.skipif(PY2 or PY34_EXACT, reason='Snowsql runs on PY35+')
 def test_more_timestamps():
-    col_meta_3 = {
-        'scale': 9
-    }
-
     conv = ConverterSnowSQL()
     conv.set_parameter('TIMESTAMP_NTZ_OUTPUT_FORMAT',
                        'YYYY-MM-DD HH24:MI:SS.FF9')
-    m = conv.to_python_method('TIMESTAMP_NTZ', col_meta_3)
+    m = conv.to_python_method('TIMESTAMP_NTZ', {'scale': 9})
     ret = m('-2208943503.876543211')
     assert ret == '1900-01-01 12:34:56.123456789'

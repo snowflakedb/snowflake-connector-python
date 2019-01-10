@@ -114,6 +114,10 @@ IS_STR = lambda v: isinstance(v, STR_DATA_TYPE)
 IS_UNICODE = lambda v: isinstance(v, UNICODE_DATA_TYPE)
 IS_NUMERIC = lambda v: isinstance(v, tuple(NUM_DATA_TYPES))
 
+# Some tests don't need to run on Python34, because SnowSQL specific.
+# SnowSQL runs on Python 3.5+
+PY34_EXACT = sys.version_info[0:2] == (3, 4)
+
 
 def PKCS5_PAD(value, block_size):
     return b"".join(

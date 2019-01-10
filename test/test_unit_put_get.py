@@ -7,8 +7,8 @@ import pytest
 from os import path, chmod
 from snowflake.connector.compat import PY2
 from snowflake.connector.errors import Error
-from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+from snowflake.connector.compat import IS_WINDOWS
 
 if PY2:
     from mock import MagicMock
@@ -16,6 +16,7 @@ else:
     from unittest.mock import MagicMock
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason='permission model is different')
 def test_put_error(tmpdir):
     """
     Test for raise_put_get_error flag in SnowflakeFileTransferAgent
