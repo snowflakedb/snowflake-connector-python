@@ -343,8 +343,8 @@ class Auth(object):
                 ret[u'data'][u'token'], ret[u'data'][u'masterToken'],
                 master_validity_in_seconds=ret[u'data'].get(
                     u'masterValidityInSeconds'),
-                id_token=ret[u'data'].get(u'idToken'),
-                id_token_password=ret[u'data'].get(u'idTokenPassword'))
+                id_token=ret[u'data'].get(u'idToken')
+            )
             if self._rest._connection.consent_cache_id_token:
                 write_temporary_credential_file(
                     account, user, self._rest.id_token,
