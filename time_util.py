@@ -6,6 +6,10 @@
 import random
 import time
 
+from logging import getLogger
+
+logger = getLogger(__name__)
+
 try:
     from threading import _Timer as Timer
 except ImportError:
@@ -28,7 +32,10 @@ class HeartBeatTimer(Timer):
         while not self.finished.is_set():
             self.finished.wait(self.interval)
             if not self.finished.is_set():
-                self.function()
+                try:
+                    self.function()
+                except Exception as e:
+                    logger.debug('failed to heartbeat: %s', e)
 
 
 def get_time_millis():
