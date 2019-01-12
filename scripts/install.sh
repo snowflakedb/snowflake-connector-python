@@ -23,7 +23,11 @@ else
     pip install -U virtualenv
     python -m virtualenv venv
 fi
-openssl aes-256-cbc -k "$super_secret_password" -in parameters.py.enc -out test/parameters.py -d
+if [[ -n "$SNOWFLAKE_AZURE" ]]; then
+    openssl aes-256-cbc -k "$super_azure_secret_password" -in parameters_az.py.enc -out test/parameters.py -d
+else
+    openssl aes-256-cbc -k "$super_secret_password" -in parameters.py.enc -out test/parameters.py -d
+fi
 
 source ./venv/bin/activate
 pip install numpy
