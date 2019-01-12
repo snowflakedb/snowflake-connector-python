@@ -43,7 +43,6 @@ def test_connect_externalbrowser(
                     u'token': u'TOKEN',
                     u'masterToken': u'MASTER_TOKEN',
                     u'idToken': u'ID_TOKEN',
-                    u'idTokenPassword': u'ID_TOKEN_PASSWORD',
                 }}
         elif mock_cnt == 1:
             # return from /token-request
@@ -111,7 +110,6 @@ def test_connect_externalbrowser(
     assert con._rest.token == u'TOKEN'
     assert con._rest.master_token == u'MASTER_TOKEN'
     assert con._rest.id_token == u'ID_TOKEN'
-    assert con._rest.id_token_password == u'ID_TOKEN_PASSWORD'
 
     # second connection that uses the id token to get the session token
     con = snowflake.connector.connect(
@@ -125,7 +123,6 @@ def test_connect_externalbrowser(
     assert con._rest.token == u'NEW_TOKEN'
     assert con._rest.master_token is None
     assert con._rest.id_token == 'ID_TOKEN'
-    assert con._rest.id_token_password is None  # This is not used yet.
     assert con.database == 'TESTDB_NEW'
     assert con.warehouse == 'TESTWH_NEW'
 
@@ -146,7 +143,6 @@ def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
                     u'token': u'TOKEN',
                     u'masterToken': u'MASTER_TOKEN',
                     u'idToken': u'ID_TOKEN',
-                    u'idTokenPassword': u'ID_TOKEN_PASSWORD',
                     u'parameters': [
                         {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
                     ],

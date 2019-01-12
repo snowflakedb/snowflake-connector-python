@@ -259,11 +259,6 @@ class SnowflakeRestful(object):
     def id_token(self, value):
         self._id_token = value
 
-    @property
-    def id_token_password(self):
-        return self._id_token_password if hasattr(
-            self, u'_id_token_password') else None
-
     def close(self):
         if hasattr(self, u'_token'):
             del self._token
@@ -271,8 +266,6 @@ class SnowflakeRestful(object):
             del self._master_token
         if hasattr(self, u'_id_token'):
             del self._id_token
-        if hasattr(self, u'_id_token_password'):
-            del self._id_token_password
         sessions = list(self._active_sessions)
         if sessions:
             logger.debug("Closing %s active sessions", len(sessions))
@@ -325,7 +318,7 @@ class SnowflakeRestful(object):
 
     def update_tokens(self, session_token, master_token,
                       master_validity_in_seconds=None,
-                      id_token=None, id_token_password=None):
+                      id_token=None):
         """
         Update session and master tokens and optionally temporary credential
         """
@@ -333,7 +326,6 @@ class SnowflakeRestful(object):
             self._token = session_token
             self._master_token = master_token
             self._id_token = id_token
-            self._id_token_password = id_token_password
             self._master_validity_in_seconds = master_validity_in_seconds
 
     def _renew_session(self):
@@ -396,8 +388,7 @@ class SnowflakeRestful(object):
                 ret[u'data'].get(u'masterToken'),
                 master_validity_in_seconds=ret[u'data'].get(
                     u'masterValidityInSeconds'),
-                id_token=self.id_token,
-                id_token_password=self.id_token_password)
+                id_token=self.id_token)
             logger.debug(u'updating session completed')
             ret[UPDATED_BY_ID_TOKEN] = request_type == REQUEST_TYPE_ISSUE
             return ret
