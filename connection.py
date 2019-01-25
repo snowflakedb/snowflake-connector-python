@@ -525,7 +525,8 @@ class SnowflakeConnection(object):
 
     def execute_string(self, sql_text,
                        remove_comments=False,
-                       return_cursors=True):
+                       return_cursors=True,
+                       **kwargs):
         """
         Executes a SQL text including multiple statements.
         This is a non-standard convenient method.
@@ -541,7 +542,7 @@ class SnowflakeConnection(object):
             cur = self.cursor()
             if return_cursors:
                 ret.append(cur)
-            cur.execute(sql, _is_put_get=is_put_or_get)
+            cur.execute(sql, _is_put_get=is_put_or_get, **kwargs)
         return ret
 
     def execute_stream(self, stream,
