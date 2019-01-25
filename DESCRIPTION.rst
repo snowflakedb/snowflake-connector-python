@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.5 (January 25, 2019)
+
+    - Incorporate "kwargs" style group of key-value pairs in connection's "execute_string" function.
+
 - v1.7.4 (January 3, 2019)
 
     - Invalidate outdated OCSP response when checking cache hit
