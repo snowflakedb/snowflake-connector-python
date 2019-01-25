@@ -174,6 +174,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             ocsp_cert = basic_ocsp_response['certs'][0]
             logger.debug("Verifying the attached certificate is signed by "
                          "the issuer")
+            logger.debug(
+                "Valid Not After: %s",
+                 ocsp_cert['tbs_certificate']['validity']['not_after'].native)
             self.verify_signature(
                 ocsp_cert.hash_algo,
                 ocsp_cert.signature,
