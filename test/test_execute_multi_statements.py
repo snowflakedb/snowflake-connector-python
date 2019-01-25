@@ -6,8 +6,13 @@
 
 import codecs
 import os
+from six import PY2
 from io import StringIO, BytesIO
 
+if PY2:
+    from mock import patch
+else:
+    from unittest.mock import patch
 import pytest
 
 from snowflake.connector import ProgrammingError
@@ -68,6 +73,25 @@ SELECT * FROM {tbl2} ORDER BY 1 DESC;
             """.format(
                 tbl1=db_parameters['name'] + '1',
                 tbl2=db_parameters['name'] + '2'), return_cursors=False)
+
+
+def test_execute_string_kwargs(conn_cnx, db_parameters):
+    with conn_cnx() as cnx:
+        with patch('snowflake.connector.cursor.SnowflakeCursor.execute', autospec=True) as mock_execute:
+            cnx.execute_string("""
+CREATE OR REPLACE TABLE {tbl1} (c1 int, c2 string);
+CREATE OR REPLACE TABLE {tbl2} (c1 int, c2 string);
+INSERT INTO {tbl1} VALUES(1,'test123');
+INSERT INTO {tbl1} VALUES(2,'test234');
+INSERT INTO {tbl1} VALUES(3,'test345');
+INSERT INTO {tbl2} VALUES(101,'test123');
+INSERT INTO {tbl2} VALUES(102,'test234');
+INSERT INTO {tbl2} VALUES(103,'test345');
+    """.format(
+                tbl1=db_parameters['name'] + '1',
+                tbl2=db_parameters['name'] + '2'), return_cursors=False, _no_results=True)
+            for call in mock_execute.call_args_list:
+                assert call[1].get('_no_results', False)
 
 
 def test_execute_string_with_error(conn_cnx):
