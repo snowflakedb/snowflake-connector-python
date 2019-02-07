@@ -3,9 +3,10 @@
 #
 # Copyright (c) 2012-2018 Snowflake Computing Inc. All right reserved.
 #
-import time
 from collections import namedtuple
-from datetime import timedelta, datetime
+
+import time
+from datetime import timedelta, datetime, date
 
 from .compat import TO_UNICODE
 
@@ -79,6 +80,11 @@ def _build_raw_year_format(year_raw_value, year_len):
     return fmt.format(year_raw_value)
 
 
+def _support_negative_year_date(value, year_len):
+    # if YYYY/YY is included
+    return _build_year_format(value, year_len)
+
+
 def _inject_fraction(value, fraction_len):
     # if FF is included
     nano_str = u'{:09d}'
@@ -112,6 +118,7 @@ NOT_OTHER_FORMAT = {
     _support_negative_year,
     _support_negative_year_datetime,
     _support_negative_year_struct_time,
+    _support_negative_year_date,
     _inject_fraction
 }
 
@@ -134,6 +141,8 @@ class SnowflakeDateTimeFormat(object):
             self._support_negative_year_method = _support_negative_year_datetime
         elif datetime_class == time.struct_time:
             self._support_negative_year_method = _support_negative_year_struct_time
+        elif datetime_class == date:
+            self._support_negative_year_method = _support_negative_year_date
         else:
             self._support_negative_year_method = _support_negative_year
 
@@ -350,3 +359,7 @@ class SnowflakeDateFormat(SnowflakeDateTimeFormat):
         """
         fmt = self._pre_format(value)
         return TO_UNICODE(time.strftime(fmt, value))
+
+    def _format_date(self, value):
+        fmt = self._pre_format(value)
+        return value.strftime(fmt)
