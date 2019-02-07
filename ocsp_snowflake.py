@@ -178,17 +178,28 @@ class OCSPCache(object):
                     # only if custom OCSP cache server is used.
                     parsed_url = urlsplit(
                         OCSPCache.CACHE_SERVER_URL)
-                    if parsed_url.port:
-                        OCSPCache.RETRY_URL_PATTERN = \
-                            u"{0}://{1}:{2}/retry/".format(
-                                parsed_url.scheme, parsed_url.hostname,
-                                parsed_url.port) + u"{0}/{1}"
+                    if not OCSPCache.ACTIVATE_SSD:
+                        if parsed_url.port:
+                            OCSPCache.RETRY_URL_PATTERN = \
+                                u"{0}://{1}:{2}/retry/".format(
+                                    parsed_url.scheme, parsed_url.hostname,
+                                    parsed_url.port) + u"{0}/{1}"
+                        else:
+                            OCSPCache.RETRY_URL_PATTERN = \
+                                u"{0}://{1}/retry/".format(
+                                    parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
                     else:
-                        OCSPCache.RETRY_URL_PATTERN = \
-                            u"{0}://{1}/retry/".format(
-                                parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
-                elif \
-                        OCSPCache.ACTIVATE_SSD:
+                        if parsed_url.port:
+                            OCSPCache.RETRY_URL_PATTERN = \
+                                u"{0}://{1}:{2}/retry".format(
+                                    parsed_url.scheme, parsed_url.hostname,
+                                    parsed_url.port)
+                        else:
+                            OCSPCache.RETRY_URL_PATTERN = \
+                                u"{0}://{1}/retry".format(
+                                    parsed_url.scheme, parsed_url.hostname)
+
+                elif OCSPCache.ACTIVATE_SSD:
                     OCSPCache.RETRY_URL_PATTERN = OCSPCache.DEFAULT_RETRY_URL
 
             logger.debug(
