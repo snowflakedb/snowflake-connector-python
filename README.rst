@@ -4,6 +4,9 @@ Snowflake Connector for Python
 .. image:: https://travis-ci.org/snowflakedb/snowflake-connector-python.svg?branch=master
     :target: https://travis-ci.org/snowflakedb/snowflake-connector-python
 
+.. image:: https://ci.appveyor.com/api/projects/status/xb70i4jt8mingig0/branch/master?svg=true
+    :target: https://ci.appveyor.com/project/smtakeda/snowflake-connector-python/branch/master
+
 .. image:: https://codecov.io/gh/snowflakedb/snowflake-connector-python/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/snowflakedb/snowflake-connector-python
 
