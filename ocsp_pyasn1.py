@@ -27,7 +27,7 @@ from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
 from .compat import (PY2)
-from .errorcode import (ER_INVALID_OCSP_RESPONSE)
+from .errorcode import (ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE)
 from .errors import (OperationalError)
 from .rfc6960 import (
     OCSPRequest,
@@ -38,6 +38,8 @@ from .rfc6960 import (
     OCSPResponseStatus,
     BasicOCSPResponse,
     Version)
+
+from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
 
 logger = getLogger(__name__)
 
@@ -63,6 +65,8 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         sha512WithRSAEncryption: SHA512,
     }
 
+    WILDCARD_CERTID = None
+
     @staticmethod
     def _get_pyasn1_version():
         with SnowflakeOCSPPyasn1.PYASN1_VERSION_LOCK:
@@ -78,6 +82,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
 
     def __init__(self, **kwargs):
         super(SnowflakeOCSPPyasn1, self).__init__(**kwargs)
+        self.WILDCARD_CERTID = self.encode_cert_id_key(ret_wildcard_hkey())
 
     def encode_cert_id_key(self, hkey):
         issuer_name_hash, issuer_key_hash, serial_number = hkey
@@ -350,26 +355,26 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         return datetime.strptime(str(gentime), '%Y%m%d%H%M%SZ')
 
     def is_valid_time(self, cert_id, ocsp_response):
+        res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
+
+        if res.getComponentByName('responseStatus') != OCSPResponseStatus(
+                'successful'):
+            raise OperationalError(
+                msg="Invalid Status: {0}".format(
+                    res.getComponentByName('response_status')),
+                errno=ER_INVALID_OCSP_RESPONSE)
+
+        response_bytes = res.getComponentByName('responseBytes')
+        basic_ocsp_response = der_decoder.decode(
+            response_bytes.getComponentByName('response'),
+            BasicOCSPResponse())[0]
+
+        tbs_response_data = basic_ocsp_response.getComponentByName(
+            'tbsResponseData')
+
+        single_response = tbs_response_data.getComponentByName('responses')[0]
+        cert_status = single_response.getComponentByName('certStatus')
         try:
-            res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
-
-            if res.getComponentByName('responseStatus') != OCSPResponseStatus(
-                    'successful'):
-                raise OperationalError(
-                    msg="Invalid Status: {0}".format(
-                        res.getComponentByName('response_status')),
-                    errno=ER_INVALID_OCSP_RESPONSE)
-
-            response_bytes = res.getComponentByName('responseBytes')
-            basic_ocsp_response = der_decoder.decode(
-                response_bytes.getComponentByName('response'),
-                BasicOCSPResponse())[0]
-
-            tbs_response_data = basic_ocsp_response.getComponentByName(
-                'tbsResponseData')
-
-            single_response = tbs_response_data.getComponentByName('responses')[0]
-            cert_status = single_response.getComponentByName('certStatus')
             if cert_status.getName() == 'good':
                 self._process_good_status(single_response, cert_id, ocsp_response)
         except Exception as ex:
@@ -379,7 +384,13 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         return True
 
     def process_ocsp_response(self, issuer, cert_id, ocsp_response):
-        res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
+        try:
+            res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
+        except Exception:
+            raise OperationalError(
+                msg='Invalid OCSP Response',
+                errno=ER_INVALID_OCSP_RESPONSE
+            )
 
         if res.getComponentByName('responseStatus') != OCSPResponseStatus(
                 'successful'):
@@ -435,7 +446,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
             raise OperationalError(
                 msg="Unknown revocation status was returned. OCSP response "
                     "may be malformed: {0}".format(cert_status),
-                errno=ER_INVALID_OCSP_RESPONSE
+                errno=ER_INVALID_OCSP_RESPONSE_CODE
             )
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
