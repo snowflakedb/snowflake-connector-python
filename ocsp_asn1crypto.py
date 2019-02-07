@@ -17,10 +17,12 @@ from asn1crypto.ocsp import CertId, OCSPRequest, TBSRequest, Requests, \
 from asn1crypto.x509 import Certificate
 
 from snowflake.connector.errorcode import (
-    ER_INVALID_OCSP_RESPONSE)
+    ER_INVALID_OCSP_RESPONSE,
+    ER_INVALID_OCSP_RESPONSE_CODE)
 from snowflake.connector.errors import OperationalError
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
 from collections import OrderedDict
+from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
 
 logger = getLogger(__name__)
 
@@ -37,8 +39,11 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         'sha512': SHA512,
     }
 
+    WILDCARD_CERTID = None
+
     def __init__(self, **kwargs):
         super(SnowflakeOCSPAsn1Crypto, self).__init__(**kwargs)
+        self.WILDCARD_CERTID = self.encode_cert_id_key(ret_wildcard_hkey())
 
     def encode_cert_id_key(self, hkey):
         issuer_name_hash, issuer_key_hash, serial_number = hkey
@@ -138,20 +143,20 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         return revocation_time, revocation_reason
 
     def is_valid_time(self, cert_id, ocsp_response):
+        res = OCSPResponse.load(ocsp_response)
+
+        if res['response_status'].native != 'successful':
+            raise OperationalError(
+                msg="Invalid Status: {0}".format(res['response_status'].native),
+                errno=ER_INVALID_OCSP_RESPONSE)
+
+        basic_ocsp_response = res.basic_ocsp_response
+        tbs_response_data = basic_ocsp_response['tbs_response_data']
+
+        single_response = tbs_response_data['responses'][0]
+        cert_status = single_response['cert_status'].name
+
         try:
-            res = OCSPResponse.load(ocsp_response)
-
-            if res['response_status'].native != 'successful':
-                raise OperationalError(
-                    msg="Invalid Status: {0}".format(res['response_status'].native),
-                    errno=ER_INVALID_OCSP_RESPONSE)
-
-            basic_ocsp_response = res.basic_ocsp_response
-            tbs_response_data = basic_ocsp_response['tbs_response_data']
-
-            single_response = tbs_response_data['responses'][0]
-            cert_status = single_response['cert_status'].name
-
             if cert_status == 'good':
                 self._process_good_status(single_response, cert_id, ocsp_response)
         except Exception as ex:
@@ -161,8 +166,13 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         return True
 
     def process_ocsp_response(self, issuer, cert_id, ocsp_response):
-        res = OCSPResponse.load(ocsp_response)
-
+        try:
+            res = OCSPResponse.load(ocsp_response)
+        except Exception:
+            raise OperationalError(
+                msg='Invalid OCSP Response',
+                errno=ER_INVALID_OCSP_RESPONSE
+            )
         if res['response_status'].native != 'successful':
             raise OperationalError(
                 msg="Invalid Status: {0}".format(res['response_status'].native),
@@ -210,7 +220,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             raise OperationalError(
                 msg="Unknown revocation status was returned. OCSP response "
                     "may be malformed: {0}".format(cert_status),
-                errno=ER_INVALID_OCSP_RESPONSE
+                errno=ER_INVALID_OCSP_RESPONSE_CODE
             )
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
