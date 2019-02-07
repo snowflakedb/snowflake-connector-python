@@ -5,12 +5,12 @@
 #
 
 import time
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, date
 from logging import getLogger
 
 import pytz
 
-from .compat import TO_UNICODE
+from .compat import TO_UNICODE, IS_WINDOWS
 from .constants import (is_timestamp_type_name, is_date_type_name)
 from .converter import (SnowflakeConverter, ZERO_EPOCH, _extract_timestamp)
 from .sfbinaryformat import (binary_to_python, SnowflakeBinaryFormat)
@@ -72,10 +72,11 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             ctx['zero_fill'] = '0' * (9 - ctx['scale'])
         fmt = None
         if is_date_type_name(type_name):
+            datetime_class = time.struct_time if not IS_WINDOWS else date
             fmt = SnowflakeDateFormat(
                 self._get_format(type_name),
                 support_negative_year=self._support_negative_year,
-                datetime_class=time.struct_time)
+                datetime_class=datetime_class)
         elif is_timestamp_type_name(type_name):
             fmt = SnowflakeDateTimeFormat(
                 self._get_format(type_name),
@@ -121,14 +122,19 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
 
     def _DATE_to_python(self, ctx):
         """
-        DATE to datetime
+        DATE to struct_time/date
 
         No timezone is attached.
         """
+
         def conv(value):
             return ctx['fmt'].format(time.gmtime(int(value) * (24 * 60 * 60)))
 
-        return conv
+        def conv_windows(value):
+            ts = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
+            return ctx['fmt'].format(date(ts.year, ts.month, ts.day))
+
+        return conv if not IS_WINDOWS else conv_windows
 
     def _TIMESTAMP_TZ_to_python(self, ctx):
         """

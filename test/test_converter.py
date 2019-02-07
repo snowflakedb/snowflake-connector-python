@@ -344,6 +344,33 @@ SELECT
         assert ret[1] == r1
 
 
+def test_date_0001_9999(conn_cnx):
+    """
+    Test 0001 and 9999 for all platforms
+    """
+    with conn_cnx(
+            converter_class=SnowflakeConverterSnowSQL,
+            support_negative_year=True) as cnx:
+        cnx.cursor().execute("""
+ALTER SESSION SET
+    DATE_OUTPUT_FORMAT='YYYY-MM-DD'
+""")
+        cur = cnx.cursor()
+        cur.execute("""
+SELECT
+    DATE_FROM_PARTS(1900, 1, 1),
+    DATE_FROM_PARTS(2500, 2, 3),
+    DATE_FROM_PARTS(1, 10, 31),
+    DATE_FROM_PARTS(9999, 3, 20)
+    ;
+""")
+        ret = cur.fetchone()
+        assert ret[0] == '1900-01-01'
+        assert ret[1] == '2500-02-03'
+        assert ret[2] == '0001-10-31'
+        assert ret[3] == '9999-03-20'
+
+
 @pytest.mark.skipif(PY2 or IS_WINDOWS, reason="year out of range error")
 def test_five_or_more_digit_year_date_converter(conn_cnx):
     """
