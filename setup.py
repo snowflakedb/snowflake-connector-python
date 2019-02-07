@@ -32,6 +32,8 @@ setup(
     download_url='https://www.snowflake.net/',
     use_2to3=False,
 
+    python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+
     install_requires=[
         'azure-common',
         'azure-storage-blob',
@@ -47,8 +49,9 @@ setup(
         'cryptography>=1.8.2',
         'ijson',
         'pyjwt',
-        'pyasn1>=0.2.1,<0.5.0',  # added back for Python 2
-        'pyasn1-modules>=0.0.8,<0.3.0',  # added back for Python 2
+        'idna',
+        'pyasn1>=0.2.1,<0.5.0;python_version<"3.0"',
+        'pyasn1-modules>=0.0.8,<0.3.0;python_version<"3.0"',
         'enum34;python_version<"3.4"',
     ],
 
