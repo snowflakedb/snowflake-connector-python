@@ -12,6 +12,7 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
+import pickle
 
 from . import errors
 from . import proxy
@@ -836,7 +837,9 @@ class SnowflakeConnection(object):
         self._set_current_objects()
         return {u'success': True}
 
-    def __authenticate(self, auth_instance):
+    def __authenticate_and_save(self, auth_instance):
+        saved_user = 'cached_user'
+
         auth_instance.authenticate(
             authenticator=self._authenticator,
             service_name=self.service_name,
@@ -844,9 +847,12 @@ class SnowflakeConnection(object):
             user=self.user,
             password=self._password,
         )
-        self._consent_cache_id_token = getattr(
-            auth_instance, 'consent_cache_id_token', True)
 
+        user_auth = open(saved_user, 'wb')
+        pickle.dump(auth_instance, user_auth)
+        user_auth.close()
+
+    def __set_session_parameters(self, auth_instance):
         auth = Auth(self.rest)
         self._session_parameters = auth.authenticate(
             auth_instance=auth_instance,
@@ -862,6 +868,28 @@ class SnowflakeConnection(object):
             password_callback=self._password_callback,
             session_parameters=self._session_parameters,
         )
+
+    def __authenticate(self, auth_instance):
+        saved_user = 'cached_user'
+        saved_session = 'cached_session'
+
+        # this try statement authenticates if the file does not exist
+        # or cannot be opened
+        try:
+            user_auth = open(saved_user, 'rb')
+            auth_instance = pickle.load(user_auth)
+            user_auth.close()
+        except Exception:
+            self.__authenticate_and_save(auth_instance)
+
+        self._consent_cache_id_token = getattr(
+            auth_instance, 'consent_cache_id_token', True)
+
+        try:
+            self.__set_session_parameters(auth_instance)
+        except Exception as e:
+            self.__authenticate_and_save(auth_instance)
+            self.__set_session_parameters(auth_instance)
 
     def _process_params_qmarks(self, params, cursor=None):
         if not params:
