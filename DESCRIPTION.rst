@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.6 (February 08,2019)
+
+    - Adjusted pyasn1 and pyasn1-module requirements for Python Connector
+    - Added idna to setup.py. made pyasn1 optional for Python2
+
 - v1.7.5 (January 25, 2019)
 
     - Incorporate "kwargs" style group of key-value pairs in connection's "execute_string" function.
