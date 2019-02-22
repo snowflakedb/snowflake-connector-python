@@ -417,7 +417,8 @@ class SnowflakeCursor(object):
                 _no_results=False,
                 _use_ijson=False,
                 _is_put_get=None,
-                _raise_put_get_error=False):
+                _raise_put_get_error=False,
+                _force_put_overwrite=False):
         u"""
         Executes a command/query
         """
@@ -511,7 +512,8 @@ class SnowflakeCursor(object):
                     get_azure_callback=_get_azure_callback,
                     get_callback_output_stream=_get_callback_output_stream,
                     show_progress_bar=_show_progress_bar,
-                    raise_put_get_error=_raise_put_get_error)
+                    raise_put_get_error=_raise_put_get_error,
+                    force_put_overwrite=_force_put_overwrite)
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data[u'rowset']) if \

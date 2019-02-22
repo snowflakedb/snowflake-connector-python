@@ -185,7 +185,8 @@ class SnowflakeFileTransferAgent(object):
                  get_azure_callback=None,
                  get_callback_output_stream=sys.stdout,
                  show_progress_bar=True,
-                 raise_put_get_error=False):
+                 raise_put_get_error=False,
+                 force_put_overwrite=True):
         self._cursor = cursor
         self._command = command
         self._ret = ret
@@ -200,6 +201,7 @@ class SnowflakeFileTransferAgent(object):
         self._use_accelerate_endpoint = False
         self._raise_put_get_error = raise_put_get_error
         self._show_progress_bar = show_progress_bar
+        self._force_put_overwrite = force_put_overwrite
 
     def execute(self):
         self._parse_command()
@@ -773,7 +775,8 @@ class SnowflakeFileTransferAgent(object):
                     })
 
         self._parallel = self._ret[u'data'].get(u'parallel', 1)
-        self._overwrite = self._ret[u'data'].get(u'overwrite', False)
+        self._overwrite = self._force_put_overwrite or \
+                          self._ret[u'data'].get(u'overwrite', False)
         self._stage_location_type = self._ret[u'data'][u'stageInfo'][
             u'locationType'].upper()
         self._stage_location = self._ret[u'data'][u'stageInfo'][u'location']
