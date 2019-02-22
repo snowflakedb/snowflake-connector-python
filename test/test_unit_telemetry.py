@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2018 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2018-2019 Snowflake Computing Inc. All right reserved.
 #
 from snowflake.connector.compat import PY2
 from snowflake.connector.telemetry import *
