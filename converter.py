@@ -49,6 +49,7 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
     u'bytes': u'BINARY',
     u'bytearray': u'BINARY',
     u'bool': u'BOOLEAN',
+    u'bool_': u'BOOLEAN', #added support
     u'nonetype': None,
     u'datetime': u'TIMESTAMP_NTZ',
     u'sfdatetime': u'TIMESTAMP_NTZ',
@@ -184,9 +185,11 @@ class SnowflakeConverter(object):
             ctx['max_fraction'] = int(10 ** ctx['scale'])
             ctx['zero_fill'] = '0' * (9 - ctx['scale'])
         converters = [u'_{type_name}_to_python'.format(type_name=type_name)]
+        print(converters)
         if self._use_numpy:
             converters.insert(0, u'_{type_name}_numpy_to_python'.format(
                 type_name=type_name))
+            # print(converters)
         for conv in converters:
             try:
                 return getattr(self, conv)(ctx)
@@ -432,6 +435,9 @@ class SnowflakeConverter(object):
     def _BOOLEAN_to_python(self, ctx):
         return lambda value: value in (u'1', u'TRUE')
 
+    def _BOOLEAN_numpy_to_python(self, ctx):
+        return lambda value: numpy.bool_(value in (u'1', u'TRUE'))
+
     def snowflake_type(self, value):
         """
         Returns Snowflake data type for the value. This is used for qmark
@@ -565,6 +571,9 @@ class SnowflakeConverter(object):
     def _bool_to_snowflake(self, value):
         return value
 
+    def _bool__to_snowflake(self, value): #test
+        return value
+
     def _nonetype_to_snowflake(self, _):
         return None
 
@@ -682,6 +691,7 @@ class SnowflakeConverter(object):
     _float16_to_snowflake = __numpy_to_snowflake
     _float32_to_snowflake = __numpy_to_snowflake
     _float64_to_snowflake = __numpy_to_snowflake
+    _bool__to_snowflake = __numpy_to_snowflake
 
     def _datetime64_to_snowflake(self, value):
         return TO_UNICODE(value)
@@ -734,3 +744,6 @@ class SnowflakeConverter(object):
             return u"X'{0}'".format(value.decode('ascii'))
 
         return u"'{0}'".format(value)
+
+
+
