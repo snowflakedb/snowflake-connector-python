@@ -5,6 +5,7 @@
 #
 
 import hashlib
+import pytz
 from base64 import b64encode, b64decode
 from collections import OrderedDict
 from datetime import datetime
@@ -411,6 +412,23 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
             cert_openssl = load_certificate(FILETYPE_ASN1, cert_der)
             ocsp_cert = self._convert_openssl_to_pyasn1_certificate(
                 cert_openssl)
+
+            cur_time = datetime.utcnow().replace(tzinfo=pytz.utc)
+            tbs_certificate = ocsp_cert.getComponentByName('tbsCertificate')
+            cert_validity = tbs_certificate.getComponentByName('validity')
+            cert_not_after = cert_validity.getComponentByName('notAfter')
+            cert_not_after_utc = cert_not_after.getComponentByName('utcTime').asDateTime
+            cert_not_before = cert_validity.getComponentByName('notBefore')
+            cert_not_before_utc = cert_not_before.getComponentByName('utcTime').asDateTime
+
+            if cur_time > cert_not_after_utc or cur_time < cert_not_before_utc:
+                raise OperationalError(
+                    msg="Certificate attached to OCSP Response is invalid. OCSP response "
+                    "current time - {0} "
+                    "certificate not before time - {1} "
+                    "certificate not after time - {2}".format(cur_time, cert_not_before_utc, cert_not_after_utc),
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE
+                )
 
             self.verify_signature(
                 ocsp_cert.getComponentByName('signatureAlgorithm'),

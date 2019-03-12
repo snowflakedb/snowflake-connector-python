@@ -4,6 +4,8 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
+from datetime import datetime, timezone
+
 from base64 import b64encode, b64decode
 from logging import getLogger
 
@@ -187,6 +189,22 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             logger.debug(
                 "Valid Not After: %s",
                  ocsp_cert['tbs_certificate']['validity']['not_after'].native)
+
+            cur_time = datetime.now(timezone.utc)
+
+            if cur_time > ocsp_cert['tbs_certificate']['validity']['not_after'].native or \
+                    cur_time < ocsp_cert['tbs_certificate']['validity']['not_before'].native:
+                raise OperationalError(
+                    msg="Certificate attached to OCSP response is invalid. OCSP response "
+                    "current time - {0} "
+                    "certificate not before time - {1} "
+                    "certificate not after time - {2}".
+                        format(cur_time,
+                               ocsp_cert['tbs_certificate']['validity']['not_before'].native,
+                               ocsp_cert['tbs_certificate']['validity']['not_after'].native),
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE
+                )
+
             self.verify_signature(
                 ocsp_cert.hash_algo,
                 ocsp_cert.signature,
