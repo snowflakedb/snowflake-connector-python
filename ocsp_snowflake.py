@@ -14,7 +14,7 @@ import time
 import jwt
 from base64 import b64decode, b64encode
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import getLogger
 from os import path, environ
 from os.path import expanduser
@@ -1198,6 +1198,17 @@ class SnowflakeOCSP(object):
         jwt_ssd_header = jwt.get_unverified_header(ssd_dir_enc)
         jwt_ssd_decoded = jwt.decode(ssd_dir_enc, SnowflakeOCSP.SSD.ret_ssd_pub_key(jwt_ssd_header['ssd_iss']),
                                      algorithm='RS512')
+
+        if datetime.fromtimestamp(jwt_ssd_decoded['exp']) - \
+                datetime.fromtimestamp(jwt_ssd_decoded['nbf']) \
+                > timedelta(days=7):
+            logger.debug(" Server Side Directive is invalid. Validity exceeds 7 days start - "
+                         "start {0} end {1} ".
+                         format(datetime.fromtimestamp(jwt_ssd_decoded['nbf']).
+                                strftime("%m/%d/%Y, %H:%M:%S"),
+                                datetime.fromtimestamp(jwt_ssd_decoded['exp']).
+                                strftime("%m/%d/%Y, %H:%M:%S")))
+            return False
 
         # Check if the directive is generic (endpoint = *)
         # or if it is meant for a specific endpoint
