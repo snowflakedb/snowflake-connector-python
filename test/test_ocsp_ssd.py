@@ -19,7 +19,6 @@ from shutil import copy
 
 from snowflake.connector.compat import PY2
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
-from snowflake.connector.ocsp_snowflake import SFSsd
 from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
@@ -77,9 +76,7 @@ def _get_test_priv_key(dep):
 
 def _setup_ssd_test(temp_ocsp_file):
 
-    #ssd_local = SFSsd()
-    #ssd_local.update_pub_key("dep1", 0.1, _get_test_pub_key(1))
-
+    os.environ['SF_OCSP_ACTIVATE_SSD'] = 'True'
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(ocsp_response_cache_uri='file://'+temp_ocsp_file)
     ocsp.SSD.update_pub_key("dep1", 0.1, _get_test_pub_key(1))
@@ -98,6 +95,8 @@ def _teardown_ssd_test_setup():
     if path.exists(key_upd_path):
         remove(key_upd_path)
 
+    if 'SF_OCSP_ACTIVATE_SSD' in os.environ:
+        del os.environ['SF_OCSP_ACTIVATE_SSD']
 
 def _create_host_spec_ocsp_bypass_ssd(ocsp, priv_key, hostname):
 
@@ -156,9 +155,9 @@ def test_host_spec_ocsp_bypass_ssd():
         print("Exception while processing SSD :"+ex)
 
 
-def _create_cert_spec_ocsp_bypass_token(priv_key, cid):
+def _create_cert_spec_ocsp_bypass_token(priv_key, cid, validity_days=1):
 
-    tdelta = timedelta(days=1)
+    tdelta = timedelta(days=validity_days)
     nbf_val = datetime.utcnow()
     exp_val = nbf_val + tdelta
     header = {'ssd_iss': 'dep1'}
@@ -208,6 +207,52 @@ def test_certid_spec_bypass_ssd():
             "Failed to validate {} using Cert specific OCSP Bypass SSD".format(hostname))
 
 
+def test_invalid_certid_spec_bypass_ssd():
+
+    """
+    Clean any skeletons of past tests
+    """
+    _teardown_ssd_test_setup()
+
+    """
+    For convenience we overwrite the local
+    OCSP Cache to have SSD instead of OCSP 
+    responses for all cert id. This reduces
+    the incovenience to find which cert id 
+    corresponds to which URL
+    """
+    js_ssd = {}
+    priv_key = _get_test_priv_key(1)
+    tmp_dir = str(tempfile.gettempdir())
+    temp_ocsp_file_path = path.join(tmp_dir, "ocsp_cache_backup.json")
+    with codecs.open(OCSP_RESPONSE_CACHE_URI, "r", encoding='utf-8', errors='ignore') as f:
+        js = json.load(f)
+        for cid, (ts, ocsp_resp) in js.items():
+            ssd = _create_cert_spec_ocsp_bypass_token(priv_key, cid, 12)
+            js_ssd.update({cid: [ts, b64encode(ssd).decode('ascii')]})
+    with codecs.open(temp_ocsp_file_path, "w", encoding='utf-8', errors='ignore') as f_ssd:
+        json.dump(js_ssd, f_ssd)
+
+    """
+    Setup OCSP instance to use test keys
+    for authenticating SSD
+    """
+    ocsp = _setup_ssd_test(temp_ocsp_file_path)
+    hostname = 'sfcsupport.us-east-1.snowflakecomputing.com'
+
+    exception_occured = False
+
+    connection = _openssl_connect(hostname)
+
+    try:
+        ocsp.validate(hostname, connection)
+    except Exception:
+        exception_occured = True
+
+    assert(exception_occured,
+           "No exception raised for bad Server Side Directive")
+
+
 def test_wildcard_ocsp_bypass_ssd():
 
     """
@@ -233,13 +278,13 @@ def test_wildcard_ocsp_bypass_ssd():
     with codecs.open(OCSP_RESPONSE_CACHE_URI, "r", encoding='utf-8', errors='ignore') as f:
         js = json.load(f)
         js.update({cid: [ts, b64encode(ssd).decode('ascii')]})
-    with codecs.open(temp_ocsp_file_path, "w", encoding='utf-8', errors='ignore') as f_ssd:
-        json.dump(js_ssd, f_ssd)
+        with codecs.open(temp_ocsp_file_path, "w", encoding='utf-8', errors='ignore') as f_ssd:
+            json.dump(js, f_ssd)
 
     ocsp = _setup_ssd_test(temp_ocsp_file_path)
     connection = _openssl_connect(hostname)
     assert (ocsp.validate(hostname, connection),
-            "Failed to validate {} using Wildcard OCSP Bypass SSD".format(hostname))
+            "Failed to validate {0} using Wildcard OCSP Bypass SSD".format(hostname))
 
 
 def test_key_upd_ssd():
