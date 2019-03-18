@@ -43,12 +43,12 @@ class AuthByWebBrowser(AuthByPlugin):
 
     def __init__(self, rest, application,
                  webbrowser_pkg=None, socket_pkg=None,
-                 protocol=None, host=None, port=None):
+                 protocol=None, host=None, port=None, cached_keys={}):
         self._rest = rest
-        self._token = None
+        self._token = cached_keys.get('_token', None)
         self._consent_cache_id_token = True
         self._application = application
-        self._proof_key = None
+        self._proof_key =  cached_keys.get('_proof_key', None)
         self._webbrowser = webbrowser if webbrowser_pkg is None else webbrowser_pkg
         self._socket = socket.socket if socket_pkg is None else socket_pkg
         self._protocol = protocol

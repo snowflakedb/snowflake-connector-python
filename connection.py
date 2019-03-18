@@ -839,6 +839,7 @@ class SnowflakeConnection(object):
 
     def __authenticate_and_save(self, auth_instance):
         saved_user = 'cached_user'
+        keys = {}
 
         auth_instance.authenticate(
             authenticator=self._authenticator,
@@ -848,8 +849,10 @@ class SnowflakeConnection(object):
             password=self._password,
         )
 
+        keys['_token'] = auth_instance.__dict__['_token']
+        keys['_proof_key'] = auth_instance.__dict__['_proof_key']
         user_auth = open(saved_user, 'wb')
-        pickle.dump(auth_instance, user_auth)
+        pickle.dump(keys, user_auth)
         user_auth.close()
 
     def __set_session_parameters(self, auth_instance):
@@ -877,8 +880,11 @@ class SnowflakeConnection(object):
         # or cannot be opened
         try:
             user_auth = open(saved_user, 'rb')
-            auth_instance = pickle.load(user_auth)
+            cached_keys = pickle.load(user_auth)
             user_auth.close()
+            auth_instance = AuthByWebBrowser(
+                self.rest, self.application, protocol=self._protocol,
+                host=self.host, port=self.port, cached_keys=cached_keys)
         except Exception:
             self.__authenticate_and_save(auth_instance)
 
