@@ -111,12 +111,14 @@ def _create_host_spec_ocsp_bypass_ssd(ocsp, priv_key, hostname):
         exp_val = nbf_val+tdelta
         header = {'ssd_iss':'dep1'}
         payload = {}
-        payload.update({'sfcEndpoint': hostname})
+        hname_string = " ".join(hostname)
+        acc_name = ocsp.get_account_from_hostname(hostname[0])
+        payload.update({'sfcEndpoint': hname_string})
         payload.update({'certId': '*'})
         payload.update({'nbf': nbf_val})
         payload.update({'exp': exp_val})
         host_spec_jwt_token = jwt.encode(payload, priv_key, algorithm='RS512', headers=header)
-        host_spec_bypass_ssd = {hostname: host_spec_jwt_token.decode("utf-8")}
+        host_spec_bypass_ssd = {acc_name: host_spec_jwt_token.decode("utf-8")}
         json.dump(host_spec_bypass_ssd, jwt_host_spec_fp)
 
 
@@ -137,7 +139,7 @@ def test_host_spec_ocsp_bypass_ssd():
     ocsp = _setup_ssd_test(temp_ocsp_file_path)
     priv_key = _get_test_priv_key(1)
 
-    hostname = 'sfcsupport.us-east-1.snowflakecomputing.com'
+    hostname = ['sfcsupport.us-east-1.snowflakecomputing.com']
     try:
         _create_host_spec_ocsp_bypass_ssd(ocsp, priv_key, hostname)
     except Exception as ex:
@@ -145,12 +147,91 @@ def test_host_spec_ocsp_bypass_ssd():
 
     ocsp.read_directives()
 
-    cache_status, cur_host_spec_token = ocsp.SSD.find_in_ssd_cache(hostname)
+    acc_name = ocsp.get_account_from_hostname(hostname[0])
+    cache_status, cur_host_spec_token = ocsp.SSD.find_in_ssd_cache(acc_name)
     assert((cur_host_spec_token is not None), "Failed to read host specific directive")
 
     try:
         assert(ocsp.process_ocsp_bypass_directive(cur_host_spec_token, '*', hostname),
                "Failed to process host specific bypass ssd")
+    except Exception as ex:
+        print("Exception while processing SSD :"+ex)
+
+
+def test_host_spec_ocsp_bypass_updated_ssd():
+
+    """
+    Clean any skeletons of past tests
+    """
+    _teardown_ssd_test_setup()
+
+    """
+    Setup OCSP instance to use test keys
+    for authenticating SSD
+    """
+    tmp_dir = str(tempfile.gettempdir())
+    temp_ocsp_file_path = path.join(tmp_dir, "ocsp_cache_backup.json")
+    copy(OCSP_RESPONSE_CACHE_URI, temp_ocsp_file_path)
+    ocsp = _setup_ssd_test(temp_ocsp_file_path)
+    priv_key = _get_test_priv_key(1)
+
+    hostname = ['sfcsupport-test12345.global.us-east-1.snowflakecomputing.com',
+                'sfcsupport-test67890.global.us-east-1.snowflakecomputing.com',
+                'sfcsupport.us-east-1.snowflakecomputing.com',
+                'sfcsupport.us-east-2.snowflakecomputing.com']
+    try:
+        _create_host_spec_ocsp_bypass_ssd(ocsp, priv_key, hostname)
+    except Exception as ex:
+        print("Exception occurred %s" %ex.message)
+
+    ocsp.read_directives()
+
+    acc_name = ocsp.get_account_from_hostname(hostname[0])
+    cache_status, cur_host_spec_token = ocsp.SSD.find_in_ssd_cache(acc_name)
+    assert((cur_host_spec_token is not None), "Failed to read host specific directive")
+
+    try:
+        assert ocsp.process_ocsp_bypass_directive(cur_host_spec_token, '*', hostname[1]),\
+            "Failed to process host specific bypass ssd"
+    except Exception as ex:
+        print("Exception while processing SSD :"+ex)
+
+
+def test_invalid_host_spec_ocsp_bypass_updated_ssd():
+
+    """
+    Clean any skeletons of past tests
+    """
+    _teardown_ssd_test_setup()
+
+    """
+    Setup OCSP instance to use test keys
+    for authenticating SSD
+    """
+    tmp_dir = str(tempfile.gettempdir())
+    temp_ocsp_file_path = path.join(tmp_dir, "ocsp_cache_backup.json")
+    copy(OCSP_RESPONSE_CACHE_URI, temp_ocsp_file_path)
+    ocsp = _setup_ssd_test(temp_ocsp_file_path)
+    priv_key = _get_test_priv_key(1)
+
+    hostname = ['sfcsupport-test12345.global.us-east-1.snowflakecomputing.com',
+                'sfcsupport-test67890.global.us-east-1.snowflakecomputing.com',
+                'sfcsupport.us-east-1.snowflakecomputing.com',
+                'sfcsupport.us-east-2.snowflakecomputing.com']
+    try:
+        _create_host_spec_ocsp_bypass_ssd(ocsp, priv_key, hostname)
+    except Exception as ex:
+        print("Exception occurred %s" %ex.message)
+
+    ocsp.read_directives()
+
+    acc_name = ocsp.get_account_from_hostname(hostname[0])
+    cache_status, cur_host_spec_token = ocsp.SSD.find_in_ssd_cache(acc_name)
+    assert((cur_host_spec_token is not None), "Failed to read host specific directive")
+
+    try:
+        assert ocsp.process_ocsp_bypass_directive(cur_host_spec_token, '*', "sonytv.snowflakecomputing.com") is False,\
+            "SSD should not match hostname specified"
     except Exception as ex:
         print("Exception while processing SSD :"+ex)
 

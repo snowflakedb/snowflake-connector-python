@@ -641,9 +641,9 @@ class SFSsd(object):
             SFSsd.SSD_CACHE = {}
 
     @staticmethod
-    def find_in_ssd_cache(sfc_endpoint):
-        if sfc_endpoint in SFSsd.SSD_CACHE:
-            return True, SFSsd.SSD_CACHE[sfc_endpoint]
+    def find_in_ssd_cache(account_name):
+        if account_name in SFSsd.SSD_CACHE:
+            return True, SFSsd.SSD_CACHE[account_name]
         return False, None
 
     @staticmethod
@@ -801,6 +801,20 @@ class SnowflakeOCSP(object):
             self, cert_id, subject)
         return found, cache
 
+    def get_account_from_hostname(self, hostname):
+        """
+        Extract the account name part
+        from the hostname
+        :param hostname:
+        :return: account name
+        """
+        split_hname = hostname.split('.')
+        if "global" in split_hname:
+            acc_name = split_hname[0].split('-')[0]
+        else:
+            acc_name = split_hname[0]
+        return acc_name
+
     def validate_by_direct_connection(self, issuer, subject, hostname=None, do_retry=True):
         ssd_cache_status = False
         cache_status = False
@@ -809,7 +823,7 @@ class SnowflakeOCSP(object):
 
         cert_id, req = self.create_ocsp_request(issuer, subject)
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
-            ssd_cache_status, ssd = SnowflakeOCSP.SSD.find_in_ssd_cache(hostname)
+            ssd_cache_status, ssd = SnowflakeOCSP.SSD.find_in_ssd_cache(self.get_account_from_hostname(hostname))
 
         if not ssd_cache_status:
             cache_status, ocsp_response = \
@@ -1173,8 +1187,8 @@ class SnowflakeOCSP(object):
             with codecs. open(host_specific_ssd, 'r', encoding='utf-8',
                               errors='ignore') as f:
                 ssd_json = json.load(f)
-                for hostname, ssd in ssd_json.items():
-                    SnowflakeOCSP.SSD.add_to_ssd_persistent_cache(hostname, ssd)
+                for account_name, ssd in ssd_json.items():
+                    SnowflakeOCSP.SSD.add_to_ssd_persistent_cache(account_name, ssd)
 
     def process_ocsp_bypass_directive(self, ssd_dir_enc, sfc_cert_id, sfc_endpoint):
         """
@@ -1211,11 +1225,22 @@ class SnowflakeOCSP(object):
             return False
 
         # Check if the directive is generic (endpoint = *)
-        # or if it is meant for a specific endpoint
+        # or if it is meant for a specific account
         if jwt_ssd_decoded['sfcEndpoint'] != '*':
-                if sfc_endpoint != jwt_ssd_decoded['sfcEndpoint']:
-                    return False
+            """
+            In case there are multiple hostnames
+            associated with the same account,
+            (client failover, different region
+            same account, the sfc_endpoint field
+            would be expected to have a space separated
+            list of all the hostnames that can be
+            associated with the account in question.
+            """
+            split_string = jwt_ssd_decoded['sfcEndpoint'].split()
+            if sfc_endpoint in split_string:
                 return True
+            else:
+                return False
 
         ssd_cert_id_b64 = jwt_ssd_decoded['certId']
         ssd_cert_id = self.decode_cert_id_base64(ssd_cert_id_b64)
