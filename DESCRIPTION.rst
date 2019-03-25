@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.9 (March 25,2019)
+
+    - Python Interim Solution for Custom Cache Server URL
+    - Internal change for pending feature
+
 - v1.7.8 (March 12,2019)
 
     - Add OCSP signing certificate validity check
