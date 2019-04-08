@@ -584,11 +584,24 @@ class SnowflakeConnection(object):
                      self.host,
                      self.port)
 
+        if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' in os.environ:
+            logger.debug(u"Custom OCSP Cache Server URL found in environment - %s", os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'])
+
         if self.host.endswith(u".privatelink.snowflakecomputing.com"):
             ocsp_cache_server = \
                 u'http://ocsp{}/ocsp_response_cache.json'.format(
                     self.host[self.host.index('.'):])
             if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' not in os.environ:
+                os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
+            else:
+                if not os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'].\
+                        startswith("http://"):
+                    ocsp_cache_server = "http://{0}/{1}".format(os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
+                                                                "ocsp_response_cache.json")
+                else:
+                    ocsp_cache_server = "{0}/{1}".format(os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
+                                                         "ocsp_response_cache.json")
+
                 os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
             logger.debug(u"OCSP Cache Server is updated: %s", ocsp_cache_server)
         else:

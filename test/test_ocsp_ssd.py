@@ -98,6 +98,7 @@ def _teardown_ssd_test_setup():
     if 'SF_OCSP_ACTIVATE_SSD' in os.environ:
         del os.environ['SF_OCSP_ACTIVATE_SSD']
 
+
 def _create_host_spec_ocsp_bypass_ssd(ocsp, priv_key, hostname):
 
     """
@@ -149,13 +150,13 @@ def test_host_spec_ocsp_bypass_ssd():
 
     acc_name = ocsp.get_account_from_hostname(hostname[0])
     cache_status, cur_host_spec_token = ocsp.SSD.find_in_ssd_cache(acc_name)
-    assert((cur_host_spec_token is not None), "Failed to read host specific directive")
+    assert cur_host_spec_token is not None, "Failed to read host specific directive"
 
     try:
-        assert(ocsp.process_ocsp_bypass_directive(cur_host_spec_token, '*', hostname),
-               "Failed to process host specific bypass ssd")
+        assert ocsp.process_ocsp_bypass_directive(cur_host_spec_token, '*', hostname[0]), \
+               "Failed to process host specific bypass ssd"
     except Exception as ex:
-        print("Exception while processing SSD :"+ex)
+        print("Exception while processing SSD :"+str(ex))
 
 
 def test_host_spec_ocsp_bypass_updated_ssd():
@@ -188,7 +189,7 @@ def test_host_spec_ocsp_bypass_updated_ssd():
 
     acc_name = ocsp.get_account_from_hostname(hostname[0])
     cache_status, cur_host_spec_token = ocsp.SSD.find_in_ssd_cache(acc_name)
-    assert((cur_host_spec_token is not None), "Failed to read host specific directive")
+    assert cur_host_spec_token is not None, "Failed to read host specific directive"
 
     try:
         assert ocsp.process_ocsp_bypass_directive(cur_host_spec_token, '*', hostname[1]),\
@@ -227,7 +228,7 @@ def test_invalid_host_spec_ocsp_bypass_updated_ssd():
 
     acc_name = ocsp.get_account_from_hostname(hostname[0])
     cache_status, cur_host_spec_token = ocsp.SSD.find_in_ssd_cache(acc_name)
-    assert((cur_host_spec_token is not None), "Failed to read host specific directive")
+    assert cur_host_spec_token is not None, "Failed to read host specific directive"
 
     try:
         assert ocsp.process_ocsp_bypass_directive(cur_host_spec_token, '*', "sonytv.snowflakecomputing.com") is False,\
@@ -284,8 +285,8 @@ def test_certid_spec_bypass_ssd():
     hostname = 'sfcsupport.us-east-1.snowflakecomputing.com'
 
     connection = _openssl_connect(hostname)
-    assert (ocsp.validate(hostname, connection),
-            "Failed to validate {} using Cert specific OCSP Bypass SSD".format(hostname))
+    assert ocsp.validate(hostname, connection), \
+        "Failed to validate {} using Cert specific OCSP Bypass SSD".format(hostname)
 
 
 def test_invalid_certid_spec_bypass_ssd():
@@ -330,8 +331,8 @@ def test_invalid_certid_spec_bypass_ssd():
     except Exception:
         exception_occured = True
 
-    assert(exception_occured,
-           "No exception raised for bad Server Side Directive")
+    assert exception_occured,\
+        "No exception raised for bad Server Side Directive"
 
 
 def test_wildcard_ocsp_bypass_ssd():
@@ -364,8 +365,8 @@ def test_wildcard_ocsp_bypass_ssd():
 
     ocsp = _setup_ssd_test(temp_ocsp_file_path)
     connection = _openssl_connect(hostname)
-    assert (ocsp.validate(hostname, connection),
-            "Failed to validate {0} using Wildcard OCSP Bypass SSD".format(hostname))
+    assert ocsp.validate(hostname, connection), \
+        "Failed to validate {0} using Wildcard OCSP Bypass SSD".format(hostname)
 
 
 def test_key_upd_ssd():
@@ -415,8 +416,8 @@ def test_key_upd_ssd():
         print("Exception occurred : "+str(ex))
 
     ocsp_cur_pub_key = ocsp.SSD.ssd_pub_key_dep1.get_key()
-    assert(pub_key_new == ocsp_cur_pub_key,
-           "Failed to read Key Update Directive")
+    assert pub_key_new == ocsp_cur_pub_key,\
+        "Failed to read Key Update Directive"
 
     _create_host_spec_ocsp_bypass_ssd(ocsp, priv_key, hostname)
 
