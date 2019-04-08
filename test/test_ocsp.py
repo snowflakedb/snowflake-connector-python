@@ -9,6 +9,7 @@ import logging
 import tempfile
 import time
 from os import path
+from os import environ
 
 import pytest
 
@@ -41,6 +42,7 @@ for logger_name in ['test', 'snowflake.connector', 'botocore']:
     logger.addHandler(ch)
 
 TARGET_HOSTS = [
+    'ocspssd.us-east-1.snowflakecomputing.com',
     'sqs.us-west-2.amazonaws.com',
     'sfcsupport.us-east-1.snowflakecomputing.com',
     'sfcsupport.eu-central-1.snowflakecomputing.com',
@@ -66,6 +68,19 @@ def test_ocsp():
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection), \
             'Failed to validate: {0}'.format(url)
+
+
+def test_ocsp_single_endpoint():
+    environ['SF_OCSP_ACTIVATE_NEW_ENDPOINT'] = 'True'
+    SnowflakeOCSP.clear_cache()
+    ocsp = SFOCSP()
+    ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL = \
+        "https://snowflake.preprod2.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
+    connection = _openssl_connect("snowflake.okta.com")
+    assert ocsp.validate("snowflake.okta.com", connection), \
+        'Failed to validate: {0}'.format("snowflake.okta.com")
+
+    del environ['SF_OCSP_ACTIVATE_NEW_ENDPOINT']
 
 
 def test_ocsp_by_post_method():
@@ -102,6 +117,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
     """
     Attempt to use bogus OCSP response data
     """
+
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
     ocsp = SFOCSP(

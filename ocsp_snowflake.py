@@ -21,8 +21,7 @@ from os.path import expanduser
 from threading import (Lock)
 from time import gmtime, strftime
 
-from botocore.vendored import requests
-from botocore.vendored.requests import adapters
+import requests as generic_requests
 
 from snowflake.connector.compat import (urlsplit, OK)
 from snowflake.connector.errorcode import (
@@ -61,9 +60,179 @@ class SSDPubKey(object):
         return self._key
 
 
-class OCSPCache(object):
+class OCSPServer(object):
 
-    # OCSP cache
+    def __init__(self):
+        self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
+        '''
+        The following will change to something like
+        http://ocspssd.snowflakecomputing.com/ocsp/
+        once the endpoint is up in the backend
+        '''
+        self.NEW_DEFAULT_CACHE_SERVER_BASE_URL = "https://ocspssd.snowflakecomputing.com/ocsp/"
+        if not OCSPServer.is_enabled_new_ocsp_endpoint():
+            self.CACHE_SERVER_URL = os.getenv(
+                "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
+                "{0}/{1}".format(
+                    self.DEFAULT_CACHE_SERVER_URL,
+                    OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME))
+        else:
+            self.CACHE_SERVER_URL = os.getenv(
+                "SF_OCSP_RESPONSE_CACHE_SERVER_URL")
+
+        self.CACHE_SERVER_ENABLED = os.getenv(
+            "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
+        # OCSP dynamic cache server URL pattern
+        self.OCSP_RETRY_URL = None
+
+    @staticmethod
+    def is_enabled_new_ocsp_endpoint():
+        """
+        Check if new OCSP Endpoint has been
+        enabled
+        :return: True or False
+        """
+        return os.getenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "false").lower() == "true"
+
+    def reset_ocsp_endpoint(self, hname):
+
+        """
+        Update current object members
+        CACHE_SERVER_URL and RETRY_URL_PATTERN
+        to point to new OCSP Fetch and Retry endpoints
+        respectively
+
+        The new OCSP Endpoint address is based on the
+        hostname the customer is trying to connect to.
+        The deployment or in case of client failover,
+        the replication ID is copied from the hostname.
+
+        :param hname:  hostname customer is trying to connect
+                       to
+        """
+        if hname.endswith("privatelink.snwoflakecomputing.com"):
+            temp_ocsp_endpoint = "".join(["https://ocspssd.", hname, "/ocsp/"])
+        elif hname.endswith("global.snowflakecomputing.com"):
+            rep_id_begin = hname[hname.find("-"):]
+            temp_ocsp_endpoint = "".join(["https://ocspssd", rep_id_begin, "/ocsp/"])
+        elif not hname.endswith("snowflakecomputing.com"):
+            temp_ocsp_endpoint = self.NEW_DEFAULT_CACHE_SERVER_BASE_URL
+        else:
+            hname_wo_acc = hname[hname.find("."):]
+            temp_ocsp_endpoint = "".join(["https://ocspssd", hname_wo_acc, "/ocsp/"])
+
+        self.CACHE_SERVER_URL = "".join([temp_ocsp_endpoint, "fetch"])
+        self.OCSP_RETRY_URL = "".join([temp_ocsp_endpoint, "retry"])
+
+    def reset_ocsp_dynamic_cache_server_url(self, use_ocsp_cache_server):
+        """
+        Reset OCSP dynamic cache server url pattern.
+
+        This is used only when OCSP cache server is updated.
+        """
+
+        if use_ocsp_cache_server is not None:
+            self.CACHE_SERVER_ENABLED = use_ocsp_cache_server
+
+        if self.CACHE_SERVER_ENABLED:
+            logger.debug("OCSP response cache server is enabled: %s",
+                         self.CACHE_SERVER_URL)
+        else:
+            logger.debug("OCSP response cache server is disabled")
+
+        if self.OCSP_RETRY_URL is None:
+            if self.CACHE_SERVER_URL is not None and \
+                    (not self.CACHE_SERVER_URL.startswith(
+                        self.DEFAULT_CACHE_SERVER_URL)):
+                # only if custom OCSP cache server is used.
+                parsed_url = urlsplit(
+                    self.CACHE_SERVER_URL)
+                if not OCSPCache.ACTIVATE_SSD:
+                    if parsed_url.port:
+                        self.OCSP_RETRY_URL = \
+                            u"{0}://{1}:{2}/retry/".format(
+                                parsed_url.scheme, parsed_url.hostname,
+                                parsed_url.port) + u"{0}/{1}"
+                    else:
+                        self.OCSP_RETRY_URL = \
+                            u"{0}://{1}/retry/".format(
+                                parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
+                else:
+                    if parsed_url.port:
+                        self.OCSP_RETRY_URL = \
+                            u"{0}://{1}:{2}/retry".format(
+                                parsed_url.scheme, parsed_url.hostname,
+                                parsed_url.port)
+                    else:
+                        self.OCSP_RETRY_URL = \
+                            u"{0}://{1}/retry".format(
+                                parsed_url.scheme, parsed_url.hostname)
+        logger.debug(
+            "OCSP dynamic cache server RETRY URL: %s",
+            self.OCSP_RETRY_URL)
+
+    def download_cache_from_server(self, ocsp):
+        if self.CACHE_SERVER_ENABLED:
+            # if any of them is not cache, download the cache file from
+            # OCSP response cache server.
+            OCSPServer._download_ocsp_response_cache(ocsp, self.CACHE_SERVER_URL)
+            logger.debug("downloaded OCSP response cache file from %s",
+                         self.CACHE_SERVER_URL)
+            logger.debug("# of certificates: %s", len(OCSPCache.CACHE))
+
+    @staticmethod
+    def _download_ocsp_response_cache(ocsp, url, do_retry=True):
+        """
+        Download OCSP response cache from the cache server
+        :param url: OCSP response cache server
+        :param do_retry: retry if connection fails up to N times
+        """
+        try:
+            start_time = time.time()
+            logger.debug("started downloading OCSP response cache file")
+            with generic_requests.Session() as session:
+                max_retry = 30 if do_retry else 1
+                sleep_time = 1
+                backoff = DecorrelateJitterBackoff(sleep_time, 16)
+                for attempt in range(max_retry):
+                    response = session.get(
+                        url,
+                        timeout=10,  # socket timeout
+                    )
+                    if response.status_code == OK:
+                        ocsp.decode_ocsp_response_cache(response.json())
+                        elapsed_time = time.time() - start_time
+                        logger.debug(
+                            "ended downloading OCSP response cache file. "
+                            "elapsed time: %ss", elapsed_time)
+                        break
+                    elif max_retry > 1:
+                        sleep_time = backoff.next_sleep(1, sleep_time)
+                        logger.debug(
+                            "OCSP server returned %s. Retrying in %s(s)",
+                            response.status_code, sleep_time)
+                    time.sleep(sleep_time)
+                else:
+                    logger.error(
+                        "Failed to get OCSP response after %s attempt.",
+                        max_retry)
+
+        except Exception as e:
+            logger.debug("Failed to get OCSP response cache from %s: %s", url,
+                         e)
+
+    def generate_get_url(self, ocsp_url, b64data):
+        parsed_url = urlsplit(ocsp_url)
+        if self.OCSP_RETRY_URL is None:
+            target_url = "{0}/{1}".format(ocsp_url, b64data)
+        else:
+            target_url = self.OCSP_RETRY_URL.format(
+                parsed_url.hostname, b64data)
+
+        return target_url
+
+
+class OCSPCache(object):
     CACHE = {}
 
     # OCSP cache lock
@@ -81,28 +250,6 @@ class OCSPCache(object):
 
     # OCSP response cache file name
     OCSP_RESPONSE_CACHE_FILE_NAME = 'ocsp_response_cache.json'
-
-    # Default OCSP Response cache server URL
-    DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
-
-    # OCSP cache server URL where Snowflake provides OCSP response cache for
-    # better availability.
-    CACHE_SERVER_URL = os.getenv(
-        "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-        "{0}/{1}".format(
-            DEFAULT_CACHE_SERVER_URL,
-            OCSP_RESPONSE_CACHE_FILE_NAME))
-    CACHE_SERVER_ENABLED = os.getenv(
-        "SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
-
-    # OCSP dynamic cache server URL pattern lock
-    RETRY_URL_PATTERN_LOCK = Lock()
-
-    # OCSP dynamic cache server URL pattern
-    RETRY_URL_PATTERN = None
-
-    # OCSP Retry Default Location
-    DEFAULT_RETRY_URL = "http://ocsp.snowflakecomputing.com/retry"
 
     # Cache directory
     CACHE_ROOT_DIR = os.getenv('SF_OCSP_RESPONSE_CACHE_DIR') or \
@@ -135,7 +282,7 @@ class OCSPCache(object):
 
     @staticmethod
     def reset_ocsp_response_cache_uri(
-            ocsp_response_cache_uri, use_ocsp_cache_server):
+            ocsp_response_cache_uri):
         if ocsp_response_cache_uri is None and OCSPCache.CACHE_DIR is not None:
             OCSPCache.OCSP_RESPONSE_CACHE_URI = 'file://' + path.join(
                 OCSPCache.CACHE_DIR,
@@ -147,75 +294,11 @@ class OCSPCache(object):
             # normalize URI for Windows
             OCSPCache.OCSP_RESPONSE_CACHE_URI = \
                 OCSPCache.OCSP_RESPONSE_CACHE_URI.replace('\\', '/')
-        if use_ocsp_cache_server is not None:
-            OCSPCache.CACHE_SERVER_ENABLED = \
-                use_ocsp_cache_server
-
-        if OCSPCache.CACHE_SERVER_ENABLED:
-            logger.debug("OCSP response cache server is enabled: %s",
-                         OCSPCache.CACHE_SERVER_URL)
-        else:
-            logger.debug("OCSP response cache server is disabled")
 
         logger.debug("ocsp_response_cache_uri: %s",
                      OCSPCache.OCSP_RESPONSE_CACHE_URI)
         logger.debug(
             "OCSP_VALIDATION_CACHE size: %s", len(OCSPCache.CACHE))
-
-        OCSPCache._reset_ocsp_dynamic_cache_server_url()
-
-    @staticmethod
-    def _reset_ocsp_dynamic_cache_server_url():
-        """
-        Reset OCSP dynamic cache server url pattern.
-
-        This is used only when OCSP cache server is updated.
-        """
-        with OCSPCache.RETRY_URL_PATTERN_LOCK:
-            if OCSPCache.RETRY_URL_PATTERN is None:
-                if not OCSPCache.CACHE_SERVER_URL.startswith(
-                        OCSPCache.DEFAULT_CACHE_SERVER_URL):
-                    # only if custom OCSP cache server is used.
-                    parsed_url = urlsplit(
-                        OCSPCache.CACHE_SERVER_URL)
-                    if not OCSPCache.ACTIVATE_SSD:
-                        if parsed_url.port:
-                            OCSPCache.RETRY_URL_PATTERN = \
-                                u"{0}://{1}:{2}/retry/".format(
-                                    parsed_url.scheme, parsed_url.hostname,
-                                    parsed_url.port) + u"{0}/{1}"
-                        else:
-                            OCSPCache.RETRY_URL_PATTERN = \
-                                u"{0}://{1}/retry/".format(
-                                    parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
-                    else:
-                        if parsed_url.port:
-                            OCSPCache.RETRY_URL_PATTERN = \
-                                u"{0}://{1}:{2}/retry".format(
-                                    parsed_url.scheme, parsed_url.hostname,
-                                    parsed_url.port)
-                        else:
-                            OCSPCache.RETRY_URL_PATTERN = \
-                                u"{0}://{1}/retry".format(
-                                    parsed_url.scheme, parsed_url.hostname)
-
-                elif OCSPCache.ACTIVATE_SSD:
-                    OCSPCache.RETRY_URL_PATTERN = OCSPCache.DEFAULT_RETRY_URL
-
-            logger.debug(
-                "OCSP dynamic cache server URL pattern: %s",
-                OCSPCache.RETRY_URL_PATTERN)
-
-    @staticmethod
-    def generate_get_url(ocsp_url, b64data):
-        if OCSPCache.RETRY_URL_PATTERN:
-            parsed_url = urlsplit(ocsp_url)
-            target_url = OCSPCache.RETRY_URL_PATTERN.format(
-                parsed_url.hostname, b64data
-            )
-        else:
-            target_url = u"{0}/{1}".format(ocsp_url, b64data)
-        return target_url
 
     @staticmethod
     def read_file(ocsp):
@@ -403,61 +486,6 @@ class OCSPCache(object):
         if subject_name:
             logger.debug('not hit cache for subject: %s', subject_name)
         return False, None
-
-    @staticmethod
-    def download_cache_from_server(ocsp):
-        if OCSPCache.CACHE_SERVER_ENABLED:
-            # if any of them is not cache, download the cache file from
-            # OCSP response cache server.
-            OCSPCache._download_ocsp_response_cache(
-                ocsp,
-                OCSPCache.CACHE_SERVER_URL)
-            logger.debug("downloaded OCSP response cache file from %s",
-                         OCSPCache.CACHE_SERVER_URL)
-            logger.debug("# of certificates: %s", len(OCSPCache.CACHE))
-
-    @staticmethod
-    def _download_ocsp_response_cache(ocsp, url, do_retry=True):
-        """
-        Download OCSP response cache from the cache server
-        :param url: OCSP response cache server
-        :param do_retry: retry if connection fails up to N times
-        """
-        try:
-            start_time = time.time()
-            logger.debug("started downloading OCSP response cache file")
-            with requests.Session() as session:
-                session.mount('http://', adapters.HTTPAdapter(max_retries=5))
-                session.mount('https://', adapters.HTTPAdapter(max_retries=5))
-                max_retry = 30 if do_retry else 1
-                sleep_time = 1
-                backoff = DecorrelateJitterBackoff(sleep_time, 16)
-                for attempt in range(max_retry):
-                    response = session.get(
-                        url,
-                        timeout=10,  # socket timeout
-                    )
-                    if response.status_code == OK:
-                        ocsp.decode_ocsp_response_cache(response.json())
-                        elapsed_time = time.time() - start_time
-                        logger.debug(
-                            "ended downloading OCSP response cache file. "
-                            "elapsed time: %ss", elapsed_time)
-                        break
-                    elif max_retry > 1:
-                        sleep_time = backoff.next_sleep(1, sleep_time)
-                        logger.debug(
-                            "OCSP server returned %s. Retrying in %s(s)",
-                            response.status_code, sleep_time)
-                    time.sleep(sleep_time)
-                else:
-                    logger.error(
-                        "Failed to get OCSP response after %s attempt.",
-                        max_retry)
-
-        except Exception as e:
-            logger.debug("Failed to get OCSP response cache from %s: %s", url,
-                         e)
 
     @staticmethod
     def update_or_delete_cache(ocsp, cert_id, ocsp_response, ts):
@@ -735,6 +763,7 @@ class SnowflakeOCSP(object):
 
         self._use_post_method = use_post_method
         SnowflakeOCSP.SSD.check_ssd_support()
+        self.OCSP_CACHE_SERVER = OCSPServer()
 
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
             SnowflakeOCSP.OCSP_CACHE.set_ssd_status(SnowflakeOCSP.SSD.ACTIVATE_SSD)
@@ -742,7 +771,11 @@ class SnowflakeOCSP(object):
             SnowflakeOCSP.read_directives()
 
         SnowflakeOCSP.OCSP_CACHE.reset_ocsp_response_cache_uri(
-            ocsp_response_cache_uri, use_ocsp_cache_server)
+            ocsp_response_cache_uri)
+
+        if not OCSPServer.is_enabled_new_ocsp_endpoint():
+            self.OCSP_CACHE_SERVER.reset_ocsp_dynamic_cache_server_url(
+                use_ocsp_cache_server)
 
         SnowflakeOCSP.OCSP_CACHE.read_file(self)
 
@@ -761,10 +794,14 @@ class SnowflakeOCSP(object):
         Validates the certificate is not revoked using OCSP
         """
         logger.debug(u'validating certificate: %s', hostname)
+
         m = not SnowflakeOCSP.OCSP_WHITELIST.match(hostname)
-        if m:
+        if m or hostname.startswith("ocspssd"):
             logger.debug(u'skipping OCSP check: %s', hostname)
             return [None, None, None, None, None]
+
+        if OCSPServer.is_enabled_new_ocsp_endpoint():
+            self.OCSP_CACHE_SERVER.reset_ocsp_endpoint(hostname)
 
         cert_data = self.extract_certificate_chain(connection)
         return self._validate(hostname, cert_data, no_exception=no_exception)
@@ -917,7 +954,7 @@ class SnowflakeOCSP(object):
                 break
 
         if not in_cache:
-            SnowflakeOCSP.OCSP_CACHE.download_cache_from_server(self)
+            self.OCSP_CACHE_SERVER.download_cache_from_server(self)
 
     def _lazy_read_ca_bundle(self):
         """
@@ -1024,18 +1061,20 @@ class SnowflakeOCSP(object):
         Fetch OCSP response using OCSPRequest
         """
         ocsp_url = self.extract_ocsp_url(subject)
+        cert_id_enc = self.encode_cert_id_base64(self.decode_cert_id_key(cert_id))
         if not ocsp_url:
             return None
 
-        if not SnowflakeOCSP.SSD.ACTIVATE_SSD:
+        if not SnowflakeOCSP.SSD.ACTIVATE_SSD and \
+                not OCSPServer.is_enabled_new_ocsp_endpoint():
             actual_method = 'post' if self._use_post_method else 'get'
-            if SnowflakeOCSP.OCSP_CACHE.RETRY_URL_PATTERN:
+            if self.OCSP_CACHE_SERVER.OCSP_RETRY_URL:
                 # no POST is supported for Retry URL at the moment.
                 actual_method = 'get'
 
             if actual_method == 'get':
                 b64data = self.decode_ocsp_request_b64(ocsp_request)
-                target_url = SnowflakeOCSP.OCSP_CACHE.generate_get_url(
+                target_url = self.OCSP_CACHE_SERVER.generate_get_url(
                     ocsp_url, b64data)
                 payload = None
                 headers = None
@@ -1045,9 +1084,8 @@ class SnowflakeOCSP(object):
                 headers = {'Content-Type': 'application/ocsp-request'}
         else:
             actual_method = 'post'
-            target_url = SnowflakeOCSP.OCSP_CACHE.RETRY_URL_PATTERN
+            target_url = self.OCSP_CACHE_SERVER.OCSP_RETRY_URL
             ocsp_req_enc = self.decode_ocsp_request_b64(ocsp_request)
-            cert_id_enc = self.encode_cert_id_base64(self.decode_cert_id_key(cert_id))
             payload = json.dumps({'hostname': hostname,
                                   'ocsp_request': ocsp_req_enc,
                                   'cert_id': cert_id_enc,
@@ -1056,9 +1094,7 @@ class SnowflakeOCSP(object):
 
         ret = None
         logger.debug('url: %s', target_url)
-        with requests.Session() as session:
-            session.mount('http://', adapters.HTTPAdapter(max_retries=5))
-            session.mount('https://', adapters.HTTPAdapter(max_retries=5))
+        with generic_requests.Session() as session:
             max_retry = 30 if do_retry else 1
             sleep_time = 1
             backoff = DecorrelateJitterBackoff(sleep_time, 16)
