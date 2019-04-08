@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.10 (April 8, 2019)
+
+    - Fix the incorrect custom Server URL in Python Driver for Privatelink
+
 - v1.7.9 (March 25,2019)
 
     - Python Interim Solution for Custom Cache Server URL
