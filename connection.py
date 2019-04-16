@@ -36,6 +36,7 @@ from .constants import (
     PARAMETER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_PREFETCH_THREADS,
+    PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
 )
 from .cursor import SnowflakeCursor
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
@@ -646,6 +647,11 @@ class SnowflakeConnection(object):
             # enable storing temporary credential in a file
             self._session_parameters[
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = True
+
+        if self._validate_default_parameters:
+            # Snowflake will validate the requested database, schema, and warehouse
+            self._session_parameters[
+                PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = True
 
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(
