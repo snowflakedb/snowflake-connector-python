@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.7.11 (April 22, 2019)
+
+    - numpy timestamp with timezone support
+    - qmark not binding None
+ 
 - v1.7.10 (April 8, 2019)
 
     - Fix the incorrect custom Server URL in Python Driver for Privatelink
