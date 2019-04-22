@@ -194,16 +194,17 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
             if cur_time > ocsp_cert['tbs_certificate']['validity']['not_after'].native or \
                     cur_time < ocsp_cert['tbs_certificate']['validity']['not_before'].native:
+                debug_msg = "Certificate attached to OCSP response is invalid. OCSP response " \
+                            "current time - {0} certificate not before time - {1} certificate " \
+                            "not after time - {2}. Consider running curl -o ocsp.der {3}".\
+                    format(cur_time,
+                           ocsp_cert['tbs_certificate']['validity']['not_before'].native,
+                           ocsp_cert['tbs_certificate']['validity']['not_after'].native,
+                           super(SnowflakeOCSPAsn1Crypto, self).debug_ocsp_failure_url)
+
                 raise OperationalError(
-                    msg="Certificate attached to OCSP response is invalid. OCSP response "
-                    "current time - {0} "
-                    "certificate not before time - {1} "
-                    "certificate not after time - {2}".
-                        format(cur_time,
-                               ocsp_cert['tbs_certificate']['validity']['not_before'].native,
-                               ocsp_cert['tbs_certificate']['validity']['not_after'].native),
-                    errno=ER_INVALID_OCSP_RESPONSE_CODE
-                )
+                    msg=debug_msg,
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE)
 
             self.verify_signature(
                 ocsp_cert.hash_algo,
@@ -227,19 +228,27 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         single_response = tbs_response_data['responses'][0]
         cert_status = single_response['cert_status'].name
-        if cert_status == 'good':
-            self._process_good_status(single_response, cert_id, ocsp_response)
-            SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
-        elif cert_status == 'revoked':
-            self._process_revoked_status(single_response, cert_id)
-        elif cert_status == 'unknown':
-            self._process_unknown_status(cert_id)
-        else:
-            raise OperationalError(
-                msg="Unknown revocation status was returned. OCSP response "
-                    "may be malformed: {0}".format(cert_status),
-                errno=ER_INVALID_OCSP_RESPONSE_CODE
-            )
+        try:
+            if cert_status == 'good':
+                self._process_good_status(single_response, cert_id, ocsp_response)
+                SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
+            elif cert_status == 'revoked':
+                self._process_revoked_status(single_response, cert_id)
+            elif cert_status == 'unknown':
+                self._process_unknown_status(cert_id)
+            else:
+                debug_msg = "Unknown revocation status was returned." \
+                            "OCSP response may be malformed: {0}.".\
+                    format(cert_status)
+                raise OperationalError(
+                    msg=debug_msg,
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE
+                )
+        except OperationalError as op_er:
+            debug_msg = "{0} Consider running curl -o ocsp.der {1}".\
+                format(op_er.msg,
+                           self.debug_ocsp_failure_url)
+            raise OperationalError(msg=debug_msg, errno=op_er.errno)
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
         pubkey = cert.public_key.unwrap().dump()
