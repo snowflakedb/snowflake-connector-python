@@ -49,7 +49,7 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
     u'bytes': u'BINARY',
     u'bytearray': u'BINARY',
     u'bool': u'BOOLEAN',
-    u'nonetype': None,
+    u'nonetype': u'ANY',
     u'datetime': u'TIMESTAMP_NTZ',
     u'sfdatetime': u'TIMESTAMP_NTZ',
     u'date': u'DATE',
