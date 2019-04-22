@@ -422,11 +422,12 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
             cert_not_before_utc = cert_not_before.getComponentByName('utcTime').asDateTime
 
             if cur_time > cert_not_after_utc or cur_time < cert_not_before_utc:
+                debug_msg = "Certificate attached to OCSP Response is invalid. " \
+                            "OCSP response current time - {0} certificate not " \
+                            "before time - {1} certificate not after time - {2}. ".\
+                    format(cur_time, cert_not_before_utc, cert_not_after_utc)
                 raise OperationalError(
-                    msg="Certificate attached to OCSP Response is invalid. OCSP response "
-                    "current time - {0} "
-                    "certificate not before time - {1} "
-                    "certificate not after time - {2}".format(cur_time, cert_not_before_utc, cert_not_after_utc),
+                    msg=debug_msg,
                     errno=ER_INVALID_OCSP_RESPONSE_CODE
                 )
 
@@ -453,19 +454,31 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
 
         single_response = tbs_response_data.getComponentByName('responses')[0]
         cert_status = single_response.getComponentByName('certStatus')
-        if cert_status.getName() == 'good':
-            self._process_good_status(single_response, cert_id, ocsp_response)
-            SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
-        elif cert_status.getName() == 'revoked':
-            self._process_revoked_status(single_response, cert_id)
-        elif cert_status.getName() == 'unknown':
-            self._process_unknown_status(cert_id)
-        else:
+        try:
+            if cert_status.getName() == 'good':
+                self._process_good_status(single_response, cert_id, ocsp_response)
+                SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
+            elif cert_status.getName() == 'revoked':
+                self._process_revoked_status(single_response, cert_id)
+            elif cert_status.getName() == 'unknown':
+                self._process_unknown_status(cert_id)
+            else:
+                debug_msg = "Unknown revocation status was returned. " \
+                            "OCSP response may be malformed: {0}. ".format(cert_status)
+                raise OperationalError(
+                    msg=debug_msg,
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE
+                )
+        except OperationalError as op_er:
+            if not self.debug_ocsp_failure_url:
+                debug_msg = op_er.msg
+            else:
+                debug_msg = "{0} Consider running curl -o ocsp.der {1}".\
+                    format(op_er.msg,
+                           self.debug_ocsp_failure_url)
             raise OperationalError(
-                msg="Unknown revocation status was returned. OCSP response "
-                    "may be malformed: {0}".format(cert_status),
-                errno=ER_INVALID_OCSP_RESPONSE_CODE
-            )
+                msg=debug_msg,
+                errno=op_er.errno)
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
         """

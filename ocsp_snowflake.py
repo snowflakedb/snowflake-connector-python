@@ -765,6 +765,8 @@ class SnowflakeOCSP(object):
         SnowflakeOCSP.SSD.check_ssd_support()
         self.OCSP_CACHE_SERVER = OCSPServer()
 
+        self.debug_ocsp_failure_url = None
+
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
             SnowflakeOCSP.OCSP_CACHE.set_ssd_status(SnowflakeOCSP.SSD.ACTIVATE_SSD)
             SnowflakeOCSP.SSD.clear_ssd_cache()
@@ -900,6 +902,8 @@ class SnowflakeOCSP(object):
                 logger.debug("getting OCSP response from CA's OCSP server")
                 ocsp_response = self._fetch_ocsp_response(req, subject, cert_id, hostname)
             else:
+                ocsp_url = self.extract_ocsp_url(subject)
+                self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(self, req, ocsp_url)
                 logger.debug("using OCSP response cache")
 
             if not ocsp_response:
@@ -1056,6 +1060,12 @@ class SnowflakeOCSP(object):
     def delete_cache_file():
         SnowflakeOCSP.OCSP_CACHE.delete_cache_file()
 
+    @staticmethod
+    def create_ocsp_debug_info(ocsp, ocsp_request, ocsp_url):
+        b64data = ocsp.decode_ocsp_request_b64(ocsp_request)
+        target_url = "{0}/{1}".format(ocsp_url, b64data)
+        return target_url
+
     def _fetch_ocsp_response(self, ocsp_request, subject, cert_id, hostname=None, do_retry=True):
         """
         Fetch OCSP response using OCSPRequest
@@ -1092,6 +1102,8 @@ class SnowflakeOCSP(object):
                                   'ocsp_responder_url': ocsp_url})
             headers = {'Content-Type': 'application/json'}
 
+        self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(self, ocsp_request, ocsp_url)
+
         ret = None
         logger.debug('url: %s', target_url)
         with generic_requests.Session() as session:
@@ -1099,24 +1111,33 @@ class SnowflakeOCSP(object):
             sleep_time = 1
             backoff = DecorrelateJitterBackoff(sleep_time, 16)
             for attempt in range(max_retry):
-                response = session.request(
-                    headers=headers,
-                    method=actual_method,
-                    url=target_url,
-                    timeout=30,
-                    data=payload,
-                )
-                if response.status_code == OK:
-                    logger.debug(
-                        "OCSP response was successfully returned from OCSP "
-                        "server.")
-                    ret = response.content
-                    break
-                elif max_retry > 1:
-                    sleep_time = backoff.next_sleep(1, sleep_time)
-                    logger.debug("OCSP server returned %s. Retrying in %s(s)",
-                                 response.status_code, sleep_time)
-                time.sleep(sleep_time)
+                try:
+                    response = session.request(
+                        headers=headers,
+                        method=actual_method,
+                        url=target_url,
+                        timeout=30,
+                        data=payload,
+                    )
+                    if response.status_code == OK:
+                        logger.debug(
+                            "OCSP response was successfully returned from OCSP "
+                            "server.")
+                        ret = response.content
+                        break
+                    elif max_retry > 1:
+                        sleep_time = backoff.next_sleep(1, sleep_time)
+                        logger.debug("OCSP server returned %s. Retrying in %s(s)",
+                                     response.status_code, sleep_time)
+                    time.sleep(sleep_time)
+                except Exception as ex:
+                    if max_retry > 1:
+                        sleep_time = backoff.next_sleep(1, sleep_time)
+                        logger.debug("Could not fetch OCSP Response from server"
+                                     "Retrying in %s(s)", sleep_time)
+                        time.sleep(sleep_time)
+                    else:
+                        raise ex
             else:
                 logger.error(
                     "Failed to get OCSP response after %s attempt.", max_retry)
