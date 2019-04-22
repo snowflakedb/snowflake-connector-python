@@ -138,3 +138,16 @@ def test_binding_datetime_qmark(conn_cnx, db_parameters):
             cnx.cursor().execute(
                 "DROP TABLE IF EXISTS {name}".format(
                     name=db_parameters['name']))
+
+
+def test_binding_none(conn_cnx):
+    import snowflake.connector
+    snowflake.connector.paramstyle = 'qmark'
+
+    with conn_cnx() as con:
+        try:
+            table_name = 'foo'
+            con.cursor().execute('CREATE TABLE {table}(bar text)'.format(table=table_name))
+            con.cursor().execute('INSERT INTO {table} VALUES (?)'.format(table=table_name), [None])
+        finally:
+            con.cursor().execute('DROP TABLE {table}'.format(table=table_name))
