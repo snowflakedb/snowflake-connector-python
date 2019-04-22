@@ -49,6 +49,8 @@ DESC_TABLE_RE = re.compile(u(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$'),
 
 logger = getLogger(__name__)
 
+LOG_MAX_QUERY_LENGTH = 80
+
 
 class SnowflakeCursor(object):
     u"""
@@ -64,8 +66,6 @@ class SnowflakeCursor(object):
     ALTER_SESSION_RE = re.compile(
         u(r'alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;'),
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
-
-    LOG_MAX_QUERY_LENGTH = 80
 
     def __init__(self, connection):
         self._connection = connection
@@ -96,6 +96,8 @@ class SnowflakeCursor(object):
         self._lock_canceling = Lock()
 
         self._first_chunk_time = None
+
+        self._log_max_query_length = connection.log_max_query_length
 
         self.reset()
 
@@ -303,9 +305,7 @@ class SnowflakeCursor(object):
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
-                u'running query [%s]',
-                u' '.join(line.strip() for line in query.split(u'\n')),
-            )
+                u'running query [%s]', self._format_query_for_log(query))
         if _is_put_get is not None:
             # if told the query is PUT or GET, use the information
             self._is_file_transfer = _is_put_get
@@ -441,9 +441,10 @@ class SnowflakeCursor(object):
             # pyformat/format paramstyle
             # client side binding
             processed_params = self._connection._process_params(params, self)
-            logger.debug(u'binding: %s with input=%s, processed=%s',
-                         command,
-                         params, processed_params)
+            if logger.getEffectiveLevel() <= logging.DEBUG:
+                logger.debug(u'binding: [%s] with input=[%s], processed=[%s]',
+                             self._format_query_for_log(command),
+                             params, processed_params)
             if len(processed_params) > 0:
                 query = command % processed_params
             else:
@@ -551,9 +552,7 @@ class SnowflakeCursor(object):
         return self
 
     def _format_query_for_log(self, query):
-        ret = u' '.join(line.strip() for line in query.split(u'\n'))
-        return (ret if len(ret) < SnowflakeCursor.LOG_MAX_QUERY_LENGTH
-                else ret[0:SnowflakeCursor.LOG_MAX_QUERY_LENGTH] + '...')
+        return self._connection._format_query_for_log(query)
 
     def _is_dml(self, data):
         return u'statementTypeId' in data \
