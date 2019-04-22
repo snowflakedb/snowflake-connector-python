@@ -168,7 +168,8 @@ class SnowflakeConverter(object):
                 utcoffset=lambda self0, dt, is_dst=False: timedelta(
                     minutes=tzoffset_minutes),
                 tzname=lambda self0, dt: name,
-                dst=lambda self0, dt: ZERO_TIMEDELTA
+                dst=lambda self0, dt: ZERO_TIMEDELTA,
+                __repr__=lambda _: name
             )
         )
         tzinfo_cls = tzinfo_class_type()
@@ -201,7 +202,7 @@ class SnowflakeConverter(object):
 
     def _FIXED_numpy_to_python(self, ctx):
         if ctx['scale']:
-            return decimal.Decimal
+            return numpy.float64
         else:
 
             def conv(value):
@@ -274,30 +275,6 @@ class SnowflakeConverter(object):
 
         return conv if scale > 6 else conv0
 
-    def _TIMESTAMP_TZ_numpy_to_python(self, ctx):
-        """TIMESTAMP TZ to datetime
-
-        The timezone offset is piggybacked.
-        """
-        scale = ctx['scale']
-        zero_fill = ctx['zero_fill']
-
-        def conv0(encoded_value):
-            value, tz = encoded_value.split()
-            ts = 60 * (int(tz) - 1440) + int(value)
-            return numpy.datetime64(ts, 's')
-
-        def conv(encoded_value):
-            value, tz = encoded_value.split()
-            ts = (60 * (int(tz) - 1440) + int(value[0:-scale - 1])
-                  ) * 1000000000
-            if scale > 0:
-                ts += (-1 if value[0] == u'-' else 1) * int(
-                    value[-scale:] + zero_fill)
-            return numpy.datetime64(ts, 'ns')
-
-        return conv if scale > 0 else conv0
-
     def _get_session_tz(self):
         """ Get the session timezone or use the local computer's timezone. """
         try:
@@ -347,29 +324,6 @@ class SnowflakeConverter(object):
             return datetime.fromtimestamp(microseconds, tz=tzinfo)
 
         return conv if scale > 6 else conv0
-
-    def _TIMESTAMP_LTZ_numpy_to_python(self, ctx):
-        tzinfo = self._get_session_tz()
-        scale = ctx['scale']
-
-        def conv(value):
-            zero_fill = ctx['zero_fill']
-            seconds = int(value[0:-scale - 1]) if scale > 0 else int(value)
-            # construct datetime object to get utcoffset
-            dt = ZERO_EPOCH + timedelta(seconds=seconds)
-            offset = tzinfo.utcoffset(dt)
-            if offset.days < 0:
-                ts = (int(value[0:-scale - 1]) + (offset.seconds - 86400)
-                      ) * 1000000000
-            else:
-                ts = (int(value[0:-scale - 1]) + offset.seconds
-                      ) * 1000000000
-            if scale > 0:
-                ts += (-1 if value[0] == u'-' else 1) * int(
-                    value[-scale:] + zero_fill)
-            return numpy.datetime64(ts, 'ns')
-
-        return conv
 
     _TIMESTAMP_to_python = _TIMESTAMP_LTZ_to_python
 
@@ -684,7 +638,7 @@ class SnowflakeConverter(object):
     _float64_to_snowflake = __numpy_to_snowflake
 
     def _datetime64_to_snowflake(self, value):
-        return TO_UNICODE(value)
+        return TO_UNICODE(value) + u'+00:00'
 
     def _quoted_name_to_snowflake(self, value):
         return TO_UNICODE(value)
