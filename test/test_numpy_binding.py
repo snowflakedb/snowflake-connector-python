@@ -1,5 +1,5 @@
 import time
-
+import datetime
 import numpy as np
 
 
@@ -7,31 +7,37 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
     """
     Tests numpy data type binding
     """
-    epoch_time = int(time.time()) * 1000000000 + 123456789
+    epoch_time = time.time()
+    current_datetime = datetime.datetime.fromtimestamp(epoch_time)
+    current_datetime64 = np.datetime64(current_datetime)
     all_data = [{
         'tz': 'America/Los_Angeles',
         'float': '1.79769313486e+308',
         'epoch_time': epoch_time,
-        'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('2005-02-25T03:30')
+        'current_time': current_datetime64,
+        'specific_date': np.datetime64('2005-02-25T03:30'),
+        'expected_specific_date': np.datetime64('2005-02-25T03:30').astype(datetime.datetime)
     }, {
         'tz': 'Asia/Tokyo',
         'float': '-1.79769313486e+308',
         'epoch_time': epoch_time,
-        'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('1970-12-31T05:00:00')
+        'current_time': current_datetime64,
+        'specific_date': np.datetime64('1970-12-31T05:00:00'),
+        'expected_specific_date': np.datetime64('1970-12-31T05:00:00').astype(datetime.datetime)
     }, {
         'tz': 'America/New_York',
         'float': '-1.79769313486e+308',
         'epoch_time': epoch_time,
-        'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('1969-12-31T05:00:00')
+        'current_time': current_datetime64,
+        'specific_date': np.datetime64('1969-12-31T05:00:00'),
+        'expected_specific_date': np.datetime64('1969-12-31T05:00:00').astype(datetime.datetime)
     }, {
         'tz': 'UTC',
         'float': '-1.79769313486e+308',
         'epoch_time': epoch_time,
-        'current_time': np.datetime64(epoch_time, 'ns'),
-        'specific_date': np.datetime64('1968-11-12T07:00:00.123')
+        'current_time': current_datetime64,
+        'specific_date': np.datetime64('1968-11-12T07:00:00.123'),
+        'expected_specific_date': np.datetime64('1968-11-12T07:00:00.123').astype(datetime.datetime)
     }]
     try:
         with conn_cnx(numpy=True) as cnx:
@@ -115,8 +121,8 @@ SELECT
                 assert rec[6] == np.float64(data['float'])
                 assert rec[7] == data['current_time']
                 assert str(rec[8]) == str(data['current_time'])[0:10]
-                assert rec[9] == data['current_time']
-                assert rec[10] == data['specific_date']
+                assert rec[9] == datetime.datetime.fromtimestamp(epoch_time, rec[9].tzinfo)
+                assert rec[10] == data['expected_specific_date'].replace(tzinfo=rec[10].tzinfo)
                 cnx.cursor().execute("""
 DELETE FROM {name}""".format(name=db_parameters['name']))
     finally:
