@@ -37,7 +37,7 @@ from .constants import (
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_PREFETCH_THREADS,
 )
-from .cursor import SnowflakeCursor
+from .cursor import SnowflakeCursor, LOG_MAX_QUERY_LENGTH
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
                         ER_NO_PASSWORD, ER_INVALID_VALUE,
@@ -131,7 +131,8 @@ DEFAULT_CONFIGURATION = {
     u'timezone': None,  # snowflake
     u'consent_cache_id_token': True,  # snowflake
     u'service_name': None,  # snowflake,
-    u'support_negative_year': True  # snowflake
+    u'support_negative_year': True,  # snowflake
+    u'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -427,6 +428,10 @@ class SnowflakeConnection(object):
     def service_name(self, value):
         self._service_name = value
 
+    @property
+    def log_max_query_length(self):
+        return self._log_max_query_length
+
     def connect(self, **kwargs):
         u"""
         Connects to the database
@@ -585,24 +590,30 @@ class SnowflakeConnection(object):
                      self.port)
 
         if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' in os.environ:
-            logger.debug(u"Custom OCSP Cache Server URL found in environment - %s", os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'])
+            logger.debug(
+                u"Custom OCSP Cache Server URL found in environment - %s",
+                os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'])
 
         if self.host.endswith(u".privatelink.snowflakecomputing.com"):
             ocsp_cache_server = \
                 u'http://ocsp{}/ocsp_response_cache.json'.format(
                     self.host[self.host.index('.'):])
             if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' not in os.environ:
-                os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
+                os.environ[
+                    'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
             else:
-                if not os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'].\
+                if not os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']. \
                         startswith("http://"):
-                    ocsp_cache_server = "http://{0}/{1}".format(os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
-                                                                "ocsp_response_cache.json")
+                    ocsp_cache_server = "http://{0}/{1}".format(
+                        os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
+                        "ocsp_response_cache.json")
                 else:
-                    ocsp_cache_server = "{0}/{1}".format(os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
-                                                         "ocsp_response_cache.json")
+                    ocsp_cache_server = "{0}/{1}".format(
+                        os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
+                        "ocsp_response_cache.json")
 
-                os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
+                os.environ[
+                    'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
             logger.debug(u"OCSP Cache Server is updated: %s", ocsp_cache_server)
         else:
             if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' in os.environ:
@@ -783,9 +794,7 @@ class SnowflakeConnection(object):
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
                 u'sql=[%s], sequence_id=[%s], is_file_transfer=[%s]',
-                u' '.join(
-                    line.strip() for line in
-                    data[u'sqlText'].split(u'\n')),
+                self._format_query_for_log(data[u'sqlText']),
                 data[u'sequenceId'],
                 is_file_transfer
             )
@@ -1090,6 +1099,11 @@ class SnowflakeConnection(object):
                 self.service_name = value
             elif PARAMETER_CLIENT_PREFETCH_THREADS == name:
                 self.client_prefetch_threads = value
+
+    def _format_query_for_log(self, query):
+        ret = u' '.join(line.strip() for line in query.split(u'\n'))
+        return (ret if len(ret) < self.log_max_query_length
+                else ret[0:self.log_max_query_length] + '...')
 
     def __enter__(self):
         u"""
