@@ -13,6 +13,7 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
     all_data = [{
         'tz': 'America/Los_Angeles',
         'float': '1.79769313486e+308',
+        'numpy_bool': np.True_,
         'epoch_time': epoch_time,
         'current_time': current_datetime64,
         'specific_date': np.datetime64('2005-02-25T03:30'),
@@ -20,6 +21,7 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
     }, {
         'tz': 'Asia/Tokyo',
         'float': '-1.79769313486e+308',
+        'numpy_bool': np.False_,
         'epoch_time': epoch_time,
         'current_time': current_datetime64,
         'specific_date': np.datetime64('1970-12-31T05:00:00'),
@@ -27,6 +29,7 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
     }, {
         'tz': 'America/New_York',
         'float': '-1.79769313486e+308',
+        'numpy_bool': np.True_,
         'epoch_time': epoch_time,
         'current_time': current_datetime64,
         'specific_date': np.datetime64('1969-12-31T05:00:00'),
@@ -34,6 +37,7 @@ def test_numpy_datatype_binding(conn_cnx, db_parameters):
     }, {
         'tz': 'UTC',
         'float': '-1.79769313486e+308',
+        'numpy_bool': np.False_,
         'epoch_time': epoch_time,
         'current_time': current_datetime64,
         'specific_date': np.datetime64('1968-11-12T07:00:00.123'),
@@ -53,7 +57,8 @@ CREATE OR REPLACE TABLE {name} (
     c8  timestamp_ntz, -- datetime64
     c9  date,          -- datetime64
     c10 timestamp_ltz, -- datetime64,
-    c11 timestamp_tz)  -- datetime64
+    c11 timestamp_tz,  -- datetime64
+    c12 boolean)       -- numpy.bool_
             """.format(name=db_parameters['name']))
             for data in all_data:
                 cnx.cursor().execute("""
@@ -70,9 +75,11 @@ INSERT INTO {name}(
     c8,
     c9,
     c10,
-    c11
+    c11,
+    c12
 )
 VALUES(
+    %s,
     %s,
     %s,
     %s,
@@ -96,6 +103,7 @@ VALUES(
                     data['current_time'],
                     data['current_time'],
                     data['specific_date'],
+                    data['numpy_bool']
                 ))
                 rec = cnx.cursor().execute("""
 SELECT
@@ -109,7 +117,8 @@ SELECT
        c8,
        c9,
        c10,
-       c11
+       c11,
+       c12
   FROM {name}""".format(
                     name=db_parameters['name'])).fetchone()
                 assert np.int8(rec[0]) == np.iinfo(np.int8).max
@@ -123,6 +132,7 @@ SELECT
                 assert str(rec[8]) == str(data['current_time'])[0:10]
                 assert rec[9] == datetime.datetime.fromtimestamp(epoch_time, rec[9].tzinfo)
                 assert rec[10] == data['expected_specific_date'].replace(tzinfo=rec[10].tzinfo)
+                assert isinstance(rec[11], bool) and rec[11] == data['numpy_bool'] and np.bool_(rec[11]) == data['numpy_bool']
                 cnx.cursor().execute("""
 DELETE FROM {name}""".format(name=db_parameters['name']))
     finally:

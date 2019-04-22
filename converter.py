@@ -49,6 +49,7 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
     u'bytes': u'BINARY',
     u'bytearray': u'BINARY',
     u'bool': u'BOOLEAN',
+    u'bool_': u'BOOLEAN',
     u'nonetype': u'ANY',
     u'datetime': u'TIMESTAMP_NTZ',
     u'sfdatetime': u'TIMESTAMP_NTZ',
@@ -518,6 +519,9 @@ class SnowflakeConverter(object):
 
     def _bool_to_snowflake(self, value):
         return value
+
+    def _bool__to_snowflake(self, value):
+        return bool(value)
 
     def _nonetype_to_snowflake(self, _):
         return None
