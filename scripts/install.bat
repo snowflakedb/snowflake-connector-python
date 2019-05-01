@@ -9,4 +9,5 @@ pip install numpy
 pip install pytest pytest-cov pytest-rerunfailures
 pip install .
 pip install .[azure]
+pip install .[aws]
 pip list --format=columns
