@@ -52,12 +52,6 @@ setup(
         'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
         'enum34;python_version<"3.4"',
     ],
-    extras_require=dict(
-        azure=[
-            'azure-common',
-            'azure-storage-blob',
-        ]
-    ),
     namespace_packages=['snowflake'],
     packages=[
         'snowflake.connector',
@@ -87,6 +81,10 @@ setup(
         "secure-local-storage": [
             'keyring!=16.1.0'
         ],
+        "azure": [
+            'azure-common',
+            'azure-storage-blob',
+        ]
     },
 
     classifiers=[
