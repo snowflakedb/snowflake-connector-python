@@ -36,4 +36,5 @@ if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]] || [[ $PYTHON_VERSION == "2.7"* ]]; t
     pip install mock
 fi
 pip install .
+pip install .[azure]
 pip list --format=columns

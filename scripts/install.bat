@@ -8,4 +8,5 @@ python -m pip install --upgrade pip
 pip install numpy
 pip install pytest pytest-cov pytest-rerunfailures
 pip install .
+pip install .[azure]
 pip list --format=columns
