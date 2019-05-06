@@ -375,6 +375,9 @@ class SnowflakeCursor(object):
                 logger.debug(
                     u'Failed to reset SIGINT handler. Not in main '
                     u'thread. Ignored...')
+            except Exception:
+                self.connection.incident.report_incident()
+                raise
             if self._timebomb is not None:
                 self._timebomb.cancel()
                 logger.debug(u'cancelled timebomb in finally')
@@ -437,25 +440,29 @@ class SnowflakeCursor(object):
             logger.warning(u'execute: no query is given to execute')
             return
 
-        if self._connection.is_pyformat:
-            # pyformat/format paramstyle
-            # client side binding
-            processed_params = self._connection._process_params(params, self)
-            if logger.getEffectiveLevel() <= logging.DEBUG:
-                logger.debug(u'binding: [%s] with input=[%s], processed=[%s]',
-                             self._format_query_for_log(command),
-                             params, processed_params)
-            if len(processed_params) > 0:
-                query = command % processed_params
+        try:
+            if self._connection.is_pyformat:
+                # pyformat/format paramstyle
+                # client side binding
+                processed_params = self._connection._process_params(params, self)
+                if logger.getEffectiveLevel() <= logging.DEBUG:
+                    logger.debug(u'binding: [%s] with input=[%s], processed=[%s]',
+                                 self._format_query_for_log(command),
+                                 params, processed_params)
+                if len(processed_params) > 0:
+                    query = command % processed_params
+                else:
+                    query = command
+                processed_params = None  # reset to None
             else:
+                # qmark and numeric paramstyle
+                # server side binding
                 query = command
-            processed_params = None  # reset to None
-        else:
-            # qmark and numeric paramstyle
-            # server side binding
-            query = command
-            processed_params = self._connection._process_params_qmarks(
-                params, self)
+                processed_params = self._connection._process_params_qmarks(
+                    params, self)
+        except Exception:
+            self.connection.incident.report_incident()
+            raise
 
         m = DESC_TABLE_RE.match(query)
         if m:

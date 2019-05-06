@@ -295,6 +295,20 @@ def db(**kwargs):
         cnx.close()
 
 
+@contextmanager
+def negative_db(**kwargs):
+    if not kwargs.get(u'timezone'):
+        kwargs[u'timezone'] = u'UTC'
+    if not kwargs.get(u'converter_class'):
+        kwargs[u'converter_class'] = DefaultConverterClass()
+    cnx = create_connection(**kwargs)
+    cnx.cursor().execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
+    try:
+        yield cnx
+    finally:
+        cnx.close()
+
+
 @pytest.fixture()
 def conn_testaccount(request):
     connection = create_connection()
@@ -309,6 +323,12 @@ def conn_testaccount(request):
 @pytest.fixture()
 def conn_cnx():
     return db
+
+
+@pytest.fixture()
+def negative_conn_cnx():
+    """Use this if an incident is expected and we don't want GS to create a dump file about the incident"""
+    return negative_db
 
 
 @pytest.fixture()
