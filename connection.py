@@ -37,6 +37,7 @@ from .constants import (
     PARAMETER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_PREFETCH_THREADS,
+    OCSPMode
 )
 from .cursor import SnowflakeCursor, LOG_MAX_QUERY_LENGTH
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
@@ -116,7 +117,7 @@ DEFAULT_CONFIGURATION = {
     u'internal_application_version': CLIENT_VERSION,
 
     u'insecure_mode': False,  # Error security fix requirement
-    u'ocsp_softfail_mode': True,  # softfail on ocsp issues, default true
+    u'ocsp_fail_open': True,  # fail open on ocsp issues, default true
     u'inject_client_pause': 0,  # snowflake internal
     u'session_parameters': None,  # snowflake session parameters
     u'autocommit': None,  # snowflake
@@ -197,13 +198,23 @@ class SnowflakeConnection(object):
         return self._insecure_mode
 
     @property
-    def ocsp_softfail_mode(self):
+    def ocsp_fail_open(self):
         u"""
-        softfail mode. TLS cerificates continue to be validated. Revoked
+        fail open mode. TLS cerificates continue to be validated. Revoked
         certificates are blocked. Any other exceptions are disregarded.
         :return:
         """
-        return self._ocsp_softfail_mode
+        return self._ocsp_fail_open
+
+    def _ocsp_mode(self):
+        """
+        OCSP mode. INSECURE, FAIL_OPEN or FAIL_CLOSED
+        :return:
+        """
+        if self.insecure_mode:
+            return OCSPMode.INSECURE
+        return OCSPMode.FAIL_OPEN \
+            if self.ocsp_fail_open else OCSPMode.FAIL_CLOSED
 
     @property
     def session_id(self):
@@ -771,12 +782,12 @@ class SnowflakeConnection(object):
             # remove region subdomain
             self._account = self._account[0:self._account.find(u'.')]
 
-        if self.ocsp_softfail_mode:
+        if self.ocsp_fail_open:
             logger.info(
-                u'This connection is in OCSP Soft Fail Mode.'
-                u'TLS Certificates would be checked for validity'
-                u'and revocation status. Any other Certificate'
-                u'Revocation related exceptions or OCSP Responder'
+                u'This connection is in OCSP Fail Open Mode. '
+                u'TLS Certificates would be checked for validity '
+                u'and revocation status. Any other Certificate '
+                u'Revocation related exceptions or OCSP Responder '
                 u'failures would be disregarded in favor of '
                 u'connectivity.')
 

@@ -75,11 +75,11 @@ def _get_test_priv_key(dep):
     return open(key_dir, "r").read()
 
 
-def _setup_ssd_test(temp_ocsp_file, softfail=False):
+def _setup_ssd_test(temp_ocsp_file, fail_open=False):
 
     os.environ['SF_OCSP_ACTIVATE_SSD'] = 'True'
     SnowflakeOCSP.clear_cache()
-    ocsp = SFOCSP(ocsp_response_cache_uri='file://'+temp_ocsp_file, use_softfail=softfail)
+    ocsp = SFOCSP(ocsp_response_cache_uri='file://'+temp_ocsp_file, use_fail_open=fail_open)
     ocsp.SSD.update_pub_key("dep1", 0.1, _get_test_pub_key(1))
 
     return ocsp
@@ -363,9 +363,9 @@ def test_invalid_certid_spec_bypass_ssd_fail_open():
         json.dump(js_ssd, f_ssd)
 
     """
-    Softfail via Environment Variable
+    OCSP Fail Open mode via Environment Variable
     """
-    os.environ["SF_OCSP_SOFTFAIL_MODE"] = "true"
+    os.environ["SF_OCSP_FAIL_OPEN"] = "true"
     ocsp = _setup_ssd_test(temp_ocsp_file_path)
     hostname = 'sfcsupport.us-east-1.snowflakecomputing.com'
 
@@ -373,12 +373,12 @@ def test_invalid_certid_spec_bypass_ssd_fail_open():
 
     assert ocsp.validate(hostname, connection), \
         "validation should have succeeded with soft fail enabled\n"
-    del os.environ["SF_OCSP_SOFTFAIL_MODE"]
+    del os.environ["SF_OCSP_FAIL_OPEN"]
 
     """
-    Softfail via parameter passed to SnowflakeOCSP constructor
+    OCSP Fail Open via parameter passed to SnowflakeOCSP constructor
     """
-    ocsp = _setup_ssd_test(temp_ocsp_file_path, softfail=True)
+    ocsp = _setup_ssd_test(temp_ocsp_file_path, fail_open=True)
     assert ocsp.validate(hostname, connection), \
         "validation should have succeeded with soft fail enabled\n"
 
