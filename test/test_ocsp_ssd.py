@@ -365,7 +365,7 @@ def test_invalid_certid_spec_bypass_ssd_fail_open():
     """
     Softfail via Environment Variable
     """
-    os.environ["SF_OCSP_SOFT_FAIL"] = "true"
+    os.environ["SF_OCSP_SOFTFAIL_MODE"] = "true"
     ocsp = _setup_ssd_test(temp_ocsp_file_path)
     hostname = 'sfcsupport.us-east-1.snowflakecomputing.com'
 
@@ -373,7 +373,7 @@ def test_invalid_certid_spec_bypass_ssd_fail_open():
 
     assert ocsp.validate(hostname, connection), \
         "validation should have succeeded with soft fail enabled\n"
-    del os.environ["SF_OCSP_SOFT_FAIL"]
+    del os.environ["SF_OCSP_SOFTFAIL_MODE"]
 
     """
     Softfail via parameter passed to SnowflakeOCSP constructor
