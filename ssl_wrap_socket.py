@@ -14,6 +14,11 @@ Insecure mode flag. OCSP validation will be skipped if True
 FEATURE_INSECURE_MODE = False
 
 """
+SOFTFAIL Flag. True by default
+"""
+FEATURE_SOFTFAIL_MODE = True
+
+"""
 OCSP Response cache file name
 """
 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
@@ -374,6 +379,7 @@ def ssl_wrap_socket_with_ocsp(
         ssl_version=ssl_version)
     global FEATURE_INSECURE_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+    global FEATURE_SOFTFAIL_MODE
 
     if PY2:
         # Python 2 uses pyasn1 for workaround. For some reason, asn1crypto
@@ -383,12 +389,15 @@ def ssl_wrap_socket_with_ocsp(
         from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 
     log.debug(u'insecure_mode: %s, '
+              u'softfail_mode: %s, '
               u'OCSP response cache file name: %s',
               FEATURE_INSECURE_MODE,
+              FEATURE_SOFTFAIL_MODE,
               FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME)
     if not FEATURE_INSECURE_MODE:
         v = SFOCSP(
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+            use_softfail=FEATURE_SOFTFAIL_MODE
         ).validate(server_hostname, ret.connection)
         if not v:
             raise OperationalError(

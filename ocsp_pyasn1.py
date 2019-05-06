@@ -29,7 +29,7 @@ from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
 from .compat import (PY2)
 from .errorcode import (ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE)
-from .errors import (OperationalError)
+from .errors import (RevocationCheckError)
 from .rfc6960 import (
     OCSPRequest,
     OCSPResponse,
@@ -268,7 +268,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
                 logger.debug(
                     'not found issuer_der: %s', self._get_issuer_hash(cert))
                 if issuer_hash not in SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
-                    raise OperationalError(
+                    raise RevocationCheckError(
                         msg="CA certificate is NOT found in the root "
                             "certificate list. Make sure you use the latest "
                             "Python Connector package and the URL is valid.")
@@ -360,7 +360,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
 
         if res.getComponentByName('responseStatus') != OCSPResponseStatus(
                 'successful'):
-            raise OperationalError(
+            raise RevocationCheckError(
                 msg="Invalid Status: {0}".format(
                     res.getComponentByName('response_status')),
                 errno=ER_INVALID_OCSP_RESPONSE)
@@ -388,14 +388,14 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         try:
             res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
         except Exception:
-            raise OperationalError(
+            raise RevocationCheckError(
                 msg='Invalid OCSP Response',
                 errno=ER_INVALID_OCSP_RESPONSE
             )
 
         if res.getComponentByName('responseStatus') != OCSPResponseStatus(
                 'successful'):
-            raise OperationalError(
+            raise RevocationCheckError(
                 msg="Invalid Status: {0}".format(
                     res.getComponentByName('response_status')),
                 errno=ER_INVALID_OCSP_RESPONSE)
@@ -426,7 +426,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
                             "OCSP response current time - {0} certificate not " \
                             "before time - {1} certificate not after time - {2}. ".\
                     format(cur_time, cert_not_before_utc, cert_not_after_utc)
-                raise OperationalError(
+                raise RevocationCheckError(
                     msg=debug_msg,
                     errno=ER_INVALID_OCSP_RESPONSE_CODE
                 )
@@ -465,18 +465,18 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
             else:
                 debug_msg = "Unknown revocation status was returned. " \
                             "OCSP response may be malformed: {0}. ".format(cert_status)
-                raise OperationalError(
+                raise RevocationCheckError(
                     msg=debug_msg,
                     errno=ER_INVALID_OCSP_RESPONSE_CODE
                 )
-        except OperationalError as op_er:
+        except RevocationCheckError as op_er:
             if not self.debug_ocsp_failure_url:
                 debug_msg = op_er.msg
             else:
                 debug_msg = "{0} Consider running curl -o ocsp.der {1}".\
                     format(op_er.msg,
                            self.debug_ocsp_failure_url)
-            raise OperationalError(
+            raise RevocationCheckError(
                 msg=debug_msg,
                 errno=op_er.errno)
 
@@ -512,7 +512,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         data = der_encoder.encode(data)
         digest.update(data)
         if not signer.verify(digest, sig):
-            raise OperationalError(
+            raise RevocationCheckError(
                 msg="Failed to verify the signature",
                 errno=ER_INVALID_OCSP_RESPONSE)
 

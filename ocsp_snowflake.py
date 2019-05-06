@@ -30,8 +30,9 @@ from snowflake.connector.errorcode import (
     ER_INVALID_SSD,
     ER_SERVER_CERTIFICATE_UNKNOWN,
     ER_SERVER_CERTIFICATE_REVOKED,
+    ER_OCSP_FAILED_TO_CONNECT_HOST,
 )
-from snowflake.connector.errors import OperationalError
+from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.time_util import DecorrelateJitterBackoff
 from snowflake.connector.ssd_internal_keys import (
     ocsp_internal_ssd_pub_dep1,
@@ -175,10 +176,15 @@ class OCSPServer(object):
         if self.CACHE_SERVER_ENABLED:
             # if any of them is not cache, download the cache file from
             # OCSP response cache server.
-            OCSPServer._download_ocsp_response_cache(ocsp, self.CACHE_SERVER_URL)
-            logger.debug("downloaded OCSP response cache file from %s",
-                         self.CACHE_SERVER_URL)
-            logger.debug("# of certificates: %s", len(OCSPCache.CACHE))
+            try:
+                OCSPServer._download_ocsp_response_cache(ocsp, self.CACHE_SERVER_URL)
+                logger.debug("downloaded OCSP response cache file from %s",
+                             self.CACHE_SERVER_URL)
+                logger.debug("# of certificates: %s", len(OCSPCache.CACHE))
+            except RevocationCheckError as rce:
+                logger.debug("OCSP Response cache download failed. The client"
+                             "will reach out to the OCSP Responder directly for"
+                             "any missing OCSP responses %s\n" % rce.msg)
 
     @staticmethod
     def _download_ocsp_response_cache(ocsp, url, do_retry=True):
@@ -220,6 +226,10 @@ class OCSPServer(object):
         except Exception as e:
             logger.debug("Failed to get OCSP response cache from %s: %s", url,
                          e)
+            raise RevocationCheckError(
+                msg="Failed to get OCSP Response Cache from {0}: {1}".format(url,
+                                                                             e),
+                errno=ER_OCSP_FAILED_TO_CONNECT_HOST)
 
     def generate_get_url(self, ocsp_url, b64data):
         parsed_url = urlsplit(ocsp_url)
@@ -759,13 +769,16 @@ class SnowflakeOCSP(object):
             self,
             ocsp_response_cache_uri=None,
             use_ocsp_cache_server=None,
-            use_post_method=True):
+            use_post_method=True,
+            use_softfail=True):
 
         self._use_post_method = use_post_method
         SnowflakeOCSP.SSD.check_ssd_support()
         self.OCSP_CACHE_SERVER = OCSPServer()
 
         self.debug_ocsp_failure_url = None
+
+        self.SOFT_FAIL_ENABLED = use_softfail or os.getenv("SF_OCSP_SOFT_FAIL", "false").lower() == "true"
 
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
             SnowflakeOCSP.OCSP_CACHE.set_ssd_status(SnowflakeOCSP.SSD.ACTIVATE_SSD)
@@ -818,7 +831,7 @@ class SnowflakeOCSP(object):
 
         any_err = False
         for err, issuer, subject, cert_id, ocsp_response in results:
-            if isinstance(err, OperationalError):
+            if isinstance(err, RevocationCheckError):
                 err.msg += u' for {}'.format(hostname)
             if not no_exception and err is not None:
                 raise err
@@ -854,6 +867,9 @@ class SnowflakeOCSP(object):
             acc_name = split_hname[0]
         return acc_name
 
+    def is_enabled_soft_fail(self):
+        return self.SOFT_FAIL_ENABLED
+
     def validate_by_direct_connection(self, issuer, subject, hostname=None, do_retry=True):
         ssd_cache_status = False
         cache_status = False
@@ -877,7 +893,7 @@ class SnowflakeOCSP(object):
                         return None, issuer, subject, cert_id, ssd
                     else:
                         SnowflakeOCSP.SSD.remove_from_ssd_persistent_cache(hostname)
-                        raise OperationalError(
+                        raise RevocationCheckError(
                             msg="The account specific SSD being used is invalid. "
                                 "Please contact Snowflake support",
                             errno=ER_INVALID_SSD,
@@ -913,7 +929,7 @@ class SnowflakeOCSP(object):
             try:
                 self.process_ocsp_response(issuer, cert_id, ocsp_response)
                 err = None
-            except OperationalError as op_er:
+            except RevocationCheckError as op_er:
                 if SnowflakeOCSP.SSD.ACTIVATE_SSD and op_er.errno == ER_INVALID_OCSP_RESPONSE:
                     logger.debug("Potentially the response is a server side directive")
                     if self.process_ocsp_bypass_directive(ocsp_response, cert_id, hostname):
@@ -923,12 +939,27 @@ class SnowflakeOCSP(object):
                         raise op_er
                 else:
                     raise op_er
-        except Exception as ex:
+
+        except RevocationCheckError as rce:
             logger.debug(
-                "Failed to get OCSP response; %s," % ex)
+                "Failed to get OCSP response: %s," % rce.msg)
+            if self.is_enabled_soft_fail():
+                if rce.errno is not ER_SERVER_CERTIFICATE_REVOKED:
+                    err = None
+                else:
+                    err = rce
+            else:
+                err = rce
+                cache_status = False
             SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
-            err = ex
-            cache_status = False
+
+        except Exception as ex:
+            logger.debug("OCSP Validation failed %s", ex.message)
+            if self.is_enabled_soft_fail():
+                err = None
+            else:
+                err = ex
+            SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
 
         return err, issuer, subject, cert_id, ocsp_response
 
@@ -1137,14 +1168,17 @@ class SnowflakeOCSP(object):
                                      "Retrying in %s(s)", sleep_time)
                         time.sleep(sleep_time)
                     else:
-                        raise ex
+                        raise RevocationCheckError(
+                            msg="Could not fetch OCSP Response from server. Consider"
+                                "checking your whitelists : Exception - {}".format(ex.message),
+                            errno=ER_OCSP_FAILED_TO_CONNECT_HOST)
             else:
                 logger.error(
-                    "Failed to get OCSP response after %s attempt.", max_retry)
-                raise OperationalError(
+                    "Failed to get OCSP response after {0} attempt. Consider checking "
+                    "for OCSP URLs being blocked".format(max_retry))
+                raise RevocationCheckError(
                     msg="Failed to get OCSP response after {} attempt.".format(max_retry),
-                    errno=ER_INVALID_OCSP_RESPONSE_CODE
-                )
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE)
 
         return ret
 
@@ -1157,7 +1191,7 @@ class SnowflakeOCSP(object):
             self.extract_good_status(single_response)
 
         if this_update_native is None or next_update_native is None:
-            raise OperationalError(
+            raise RevocationCheckError(
                 msg=u"Either this update or next "
                     u"update is None. this_update: {}, next_update: {}".format(
                     this_update_native, next_update_native),
@@ -1169,7 +1203,7 @@ class SnowflakeOCSP(object):
             tzinfo=None) - SnowflakeOCSP.ZERO_EPOCH).total_seconds()
         if not SnowflakeOCSP._is_validaity_range(
                 current_time, this_update, next_update):
-            raise OperationalError(
+            raise RevocationCheckError(
                 msg=SnowflakeOCSP._validity_error_message(
                     current_time, this_update, next_update),
                 errno=ER_INVALID_OCSP_RESPONSE)
@@ -1182,7 +1216,7 @@ class SnowflakeOCSP(object):
         SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
         revocation_time, revocation_reason = self.extract_revoked_status(
             single_response)
-        raise OperationalError(
+        raise RevocationCheckError(
             msg="The certificate has been revoked: current_time={0}, "
                 "revocation_time={1}, reason={2}".format(
                 strftime(
@@ -1199,7 +1233,7 @@ class SnowflakeOCSP(object):
         Process UNKNOWN status
         """
         SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
-        raise OperationalError(
+        raise RevocationCheckError(
             msg=u"The certificate is in UNKNOWN revocation status.",
             errno=ER_SERVER_CERTIFICATE_UNKNOWN,
         )

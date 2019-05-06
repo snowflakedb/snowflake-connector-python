@@ -226,7 +226,9 @@ class SnowflakeRestful(object):
         # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = \
             self._connection and self._connection._ocsp_response_cache_filename
-        #
+        # softfail mode (enabled by default)
+        ssl_wrap_socket.FEATURE_SOFTFAIL_MODE = \
+            self._connection and self._connection._ocsp_softfail_mode
 
         # This is to address the issue where requests hangs
         _ = 'dummy'.encode('idna').decode('utf-8')  # noqa
