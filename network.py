@@ -220,15 +220,12 @@ class SnowflakeRestful(object):
         self._idle_sessions = collections.deque()
         self._active_sessions = set()
 
-        # insecure mode (disabled by default)
-        ssl_wrap_socket.FEATURE_INSECURE_MODE = \
-            self._connection and self._connection._insecure_mode
+        # OCSP mode (OCSPMode.FAIL_OPEN by default)
+        ssl_wrap_socket.FEATURE_OCSP_MODE = \
+            self._connection and self._connection._ocsp_mode()
         # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = \
             self._connection and self._connection._ocsp_response_cache_filename
-        # softfail mode (enabled by default)
-        ssl_wrap_socket.FEATURE_SOFTFAIL_MODE = \
-            self._connection and self._connection._ocsp_softfail_mode
 
         # This is to address the issue where requests hangs
         _ = 'dummy'.encode('idna').decode('utf-8')  # noqa

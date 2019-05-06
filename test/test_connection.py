@@ -382,10 +382,8 @@ def test_drop_create_user(conn_cnx, db_parameters):
 
         exe('use role snowdog_role')
         exe(u"use {0}".format(db_parameters['database']))
-        exe(
-            u"use schema {0}".format(db_parameters['schema']))
-        exe(
-            'create or replace table friends(name varchar(100))')
+        exe(u"use schema {0}".format(db_parameters['schema']))
+        exe('create or replace table friends(name varchar(100))')
         exe('drop table friends')
     with conn_cnx() as cnx:
         def exe(sql):
@@ -520,6 +518,7 @@ def test_privatelink(db_parameters):
 
     ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
     assert ocsp_url is None, "OCSP URL should be None: {0}".format(ocsp_url)
+
 
 def test_disable_request_pooling(db_parameters):
     """

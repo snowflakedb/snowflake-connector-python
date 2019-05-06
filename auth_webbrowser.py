@@ -299,7 +299,8 @@ You can close this window now and go back where you started from.
             user, account,
             self._rest._connection.application,
             self._rest._connection._internal_application_name,
-            self._rest._connection._internal_application_version)
+            self._rest._connection._internal_application_version,
+            self._rest._connection._ocsp_mode())
 
         body[u'data'][u'AUTHENTICATOR'] = authenticator
         body[u'data'][u"BROWSER_MODE_REDIRECT_PORT"] = str(callback_port)

@@ -149,3 +149,12 @@ HTTP_HEADER_USER_AGENT = u"User-Agent"
 HTTP_HEADER_SERVICE_NAME = u'X-Snowflake-Service'
 
 HTTP_HEADER_VALUE_OCTET_STREAM = u'application/octet-stream'
+
+
+class OCSPMode(Enum):
+    """
+    OCSP Mode
+    """
+    FAIL_CLOSED = u'FAIL_CLOSED'
+    FAIL_OPEN = u'FAIL_OPEN'
+    INSECURE = u'INSECURE'
