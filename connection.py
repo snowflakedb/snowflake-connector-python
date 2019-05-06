@@ -135,6 +135,7 @@ DEFAULT_CONFIGURATION = {
     u'service_name': None,  # snowflake,
     u'support_negative_year': True,  # snowflake
     u'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
+    u'disable_request_pooling': False,  # snowflake
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -443,6 +444,14 @@ class SnowflakeConnection(object):
     @property
     def log_max_query_length(self):
         return self._log_max_query_length
+
+    @property
+    def disable_request_pooling(self):
+        return self._disable_request_pooling
+
+    @disable_request_pooling.setter
+    def disable_request_pooling(self, value):
+        self._disable_request_pooling = True if value else False
 
     def connect(self, **kwargs):
         u"""
