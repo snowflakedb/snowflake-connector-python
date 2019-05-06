@@ -115,6 +115,7 @@ DEFAULT_CONFIGURATION = {
     u'internal_application_version': CLIENT_VERSION,
 
     u'insecure_mode': False,  # Error security fix requirement
+    u'ocsp_softfail_mode': True,  # softfail on ocsp issues, default true
     u'inject_client_pause': 0,  # snowflake internal
     u'session_parameters': None,  # snowflake session parameters
     u'autocommit': None,  # snowflake
@@ -191,6 +192,15 @@ class SnowflakeConnection(object):
         :return:
         """
         return self._insecure_mode
+
+    @property
+    def ocsp_softfail_mode(self):
+        u"""
+        softfail mode. TLS cerificates continue to be validated. Revoked
+        certificates are blocked. Any other exceptions are disregarded.
+        :return:
+        """
+        return self._ocsp_softfail_mode
 
     @property
     def session_id(self):
@@ -750,12 +760,22 @@ class SnowflakeConnection(object):
             # remove region subdomain
             self._account = self._account[0:self._account.find(u'.')]
 
+        if self.ocsp_softfail_mode:
+            logger.info(
+                u'This connection is in OCSP Soft Fail Mode.'
+                u'TLS Certificates would be checked for validity'
+                u'and revocation status. Any other Certificate'
+                u'Revocation related exceptions or OCSP Responder'
+                u'failures would be disregarded in favor of '
+                u'connectivity.')
+
         if self.insecure_mode:
             logger.info(
                 u'THIS CONNECTION IS IN INSECURE MODE. IT '
                 u'MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE '
                 u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
                 u'CHECKED.')
+
         elif self._protocol == u'https':
             if IS_OLD_PYTHON():
                 msg = (u"ERROR: The ssl package installed with your Python "
