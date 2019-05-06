@@ -520,3 +520,25 @@ def test_privatelink(db_parameters):
 
     ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
     assert ocsp_url is None, "OCSP URL should be None: {0}".format(ocsp_url)
+
+def test_disable_request_pooling(db_parameters):
+    """
+    Creates a connection with client_session_keep_alive parameter.
+    """
+    config = {
+        'user': db_parameters['user'],
+        'password': db_parameters['password'],
+        'host': db_parameters['host'],
+        'port': db_parameters['port'],
+        'account': db_parameters['account'],
+        'schema': db_parameters['schema'],
+        'database': db_parameters['database'],
+        'protocol': db_parameters['protocol'],
+        'timezone': 'UTC',
+        'disable_request_pooling': True
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
+        assert cnx.disable_request_pooling
+    finally:
+        cnx.close()

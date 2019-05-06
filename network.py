@@ -886,22 +886,29 @@ class SnowflakeRestful(object):
         """ Session caching context manager.  Note that the session is not
         closed until close() is called so each session may be used multiple
         times. """
-        try:
-            session = self._idle_sessions.pop()
-        except IndexError:
+        if self._connection.disable_request_pooling:
             session = self.make_requests_session()
-        self._active_sessions.add(session)
-        logger.debug("Active requests sessions: %s, idle: %s",
-                     len(self._active_sessions), len(self._idle_sessions))
-        try:
-            yield session
-        finally:
-            self._idle_sessions.appendleft(session)
             try:
-                self._active_sessions.remove(session)
-            except KeyError:
-                logger.debug(
-                    "session doesn't exist in the active session pool. "
-                    "Ignored...")
+                yield session
+            finally:
+                session.close()
+        else:
+            try:
+                session = self._idle_sessions.pop()
+            except IndexError:
+                session = self.make_requests_session()
+            self._active_sessions.add(session)
             logger.debug("Active requests sessions: %s, idle: %s",
                          len(self._active_sessions), len(self._idle_sessions))
+            try:
+                yield session
+            finally:
+                self._idle_sessions.appendleft(session)
+                try:
+                    self._active_sessions.remove(session)
+                except KeyError:
+                    logger.debug(
+                        "session doesn't exist in the active session pool. "
+                        "Ignored...")
+                logger.debug("Active requests sessions: %s, idle: %s",
+                             len(self._active_sessions), len(self._idle_sessions))
