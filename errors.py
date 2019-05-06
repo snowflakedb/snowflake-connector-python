@@ -160,6 +160,11 @@ class NotSupportedError(DatabaseError):
     pass
 
 
+class RevocationCheckError(OperationalError):
+    u"""Exception for errors during certificate revocation check"""
+    pass
+
+
 # internal errors
 class InternalServerError(Error):
     u"""Exception for 500 HTTP code for retry"""
