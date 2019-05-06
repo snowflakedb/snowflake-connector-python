@@ -130,7 +130,8 @@ class Auth(object):
     @staticmethod
     def base_auth_data(user, account, application,
                        internal_application_name,
-                       internal_application_version):
+                       internal_application_version,
+                       ocsp_mode):
         return {
             u'data': {
                 u"CLIENT_APP_ID": internal_application_name,
@@ -145,6 +146,7 @@ class Auth(object):
                     u"PYTHON_VERSION": PYTHON_VERSION,
                     u"PYTHON_RUNTIME": IMPLEMENTATION,
                     u"PYTHON_COMPILER": COMPILER,
+                    u"OCSP_MODE": ocsp_mode.name,
                 }
             },
         }
@@ -173,7 +175,8 @@ class Auth(object):
         body_template = Auth.base_auth_data(
             user, account, self._rest._connection.application,
             self._rest._connection._internal_application_name,
-            self._rest._connection._internal_application_version)
+            self._rest._connection._internal_application_version,
+            self._rest._connection._ocsp_mode())
 
         body = copy.deepcopy(body_template)
         # updating request body

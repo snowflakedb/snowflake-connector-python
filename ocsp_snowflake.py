@@ -11,7 +11,6 @@ import platform
 import re
 import tempfile
 import time
-import jwt
 from base64 import b64decode, b64encode
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -21,6 +20,7 @@ from os.path import expanduser
 from threading import (Lock)
 from time import gmtime, strftime
 
+import jwt
 import requests as generic_requests
 
 from snowflake.connector.compat import (urlsplit, OK)
@@ -33,13 +33,13 @@ from snowflake.connector.errorcode import (
     ER_OCSP_FAILED_TO_CONNECT_HOST,
 )
 from snowflake.connector.errors import RevocationCheckError
-from snowflake.connector.time_util import DecorrelateJitterBackoff
 from snowflake.connector.ssd_internal_keys import (
     ocsp_internal_ssd_pub_dep1,
     ocsp_internal_ssd_pub_dep2,
     ocsp_internal_dep1_key_ver,
     ocsp_internal_dep2_key_ver,
 )
+from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 logger = getLogger(__name__)
 
@@ -93,7 +93,8 @@ class OCSPServer(object):
         enabled
         :return: True or False
         """
-        return os.getenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "false").lower() == "true"
+        return os.getenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT",
+                         "false").lower() == "true"
 
     def reset_ocsp_endpoint(self, hname):
 
@@ -115,12 +116,14 @@ class OCSPServer(object):
             temp_ocsp_endpoint = "".join(["https://ocspssd.", hname, "/ocsp/"])
         elif hname.endswith("global.snowflakecomputing.com"):
             rep_id_begin = hname[hname.find("-"):]
-            temp_ocsp_endpoint = "".join(["https://ocspssd", rep_id_begin, "/ocsp/"])
+            temp_ocsp_endpoint = "".join(
+                ["https://ocspssd", rep_id_begin, "/ocsp/"])
         elif not hname.endswith("snowflakecomputing.com"):
             temp_ocsp_endpoint = self.NEW_DEFAULT_CACHE_SERVER_BASE_URL
         else:
             hname_wo_acc = hname[hname.find("."):]
-            temp_ocsp_endpoint = "".join(["https://ocspssd", hname_wo_acc, "/ocsp/"])
+            temp_ocsp_endpoint = "".join(
+                ["https://ocspssd", hname_wo_acc, "/ocsp/"])
 
         self.CACHE_SERVER_URL = "".join([temp_ocsp_endpoint, "fetch"])
         self.OCSP_RETRY_URL = "".join([temp_ocsp_endpoint, "retry"])
@@ -157,7 +160,8 @@ class OCSPServer(object):
                     else:
                         self.OCSP_RETRY_URL = \
                             u"{0}://{1}/retry/".format(
-                                parsed_url.scheme, parsed_url.hostname) + u"{0}/{1}"
+                                parsed_url.scheme,
+                                parsed_url.hostname) + u"{0}/{1}"
                 else:
                     if parsed_url.port:
                         self.OCSP_RETRY_URL = \
@@ -177,7 +181,8 @@ class OCSPServer(object):
             # if any of them is not cache, download the cache file from
             # OCSP response cache server.
             try:
-                OCSPServer._download_ocsp_response_cache(ocsp, self.CACHE_SERVER_URL)
+                OCSPServer._download_ocsp_response_cache(ocsp,
+                                                         self.CACHE_SERVER_URL)
                 logger.debug("downloaded OCSP response cache file from %s",
                              self.CACHE_SERVER_URL)
                 logger.debug("# of certificates: %s", len(OCSPCache.CACHE))
@@ -195,7 +200,8 @@ class OCSPServer(object):
         """
         try:
             start_time = time.time()
-            logger.debug("started downloading OCSP response cache file")
+            logger.debug(
+                "started downloading OCSP response cache file: %s", url)
             with generic_requests.Session() as session:
                 max_retry = 30 if do_retry else 1
                 sleep_time = 1
@@ -227,8 +233,9 @@ class OCSPServer(object):
             logger.debug("Failed to get OCSP response cache from %s: %s", url,
                          e)
             raise RevocationCheckError(
-                msg="Failed to get OCSP Response Cache from {0}: {1}".format(url,
-                                                                             e),
+                msg="Failed to get OCSP Response Cache from {0}: {1}".format(
+                    url,
+                    e),
                 errno=ER_OCSP_FAILED_TO_CONNECT_HOST)
 
     def generate_get_url(self, ocsp_url, b64data):
@@ -282,7 +289,7 @@ class OCSPCache(object):
             os.makedirs(CACHE_DIR, mode=0o700)
         except Exception as ex:
             logger.debug('cannot create a cache directory: [%s], err=[%s]',
-                           CACHE_DIR, ex)
+                         CACHE_DIR, ex)
             CACHE_DIR = None
     logger.debug("cache directory: %s", CACHE_DIR)
 
@@ -478,20 +485,23 @@ class OCSPCache(object):
                     OCSPCache.delete_cache(ocsp, cert_id)
             except Exception as ex:
                 if OCSPCache.ACTIVATE_SSD:
-                    logger.debug("Potentially tried to validate SSD as OCSP Response."
-                                 "Attempting to validate as SSD", ex)
+                    logger.debug(
+                        "Potentially tried to validate SSD as OCSP Response."
+                        "Attempting to validate as SSD", ex)
                     try:
                         if OCSPCache.is_cache_fresh(current_time, ts) and \
                                 SFSsd.validate(cache):
                             if subject_name:
-                                logger.debug('hit cache for subject: %s', subject_name)
+                                logger.debug('hit cache for subject: %s',
+                                             subject_name)
                             return True, cache
                         else:
                             OCSPCache.delete_cache(ocsp, cert_id)
                     except Exception as ex:
                         OCSPCache.delete_cache(ocsp, cert_id)
                 else:
-                    logger.debug("Could not validate cache entry %s %s", cert_id, ex)
+                    logger.debug("Could not validate cache entry %s %s",
+                                 cert_id, ex)
             OCSPCache.CACHE_UPDATED = True
         if subject_name:
             logger.debug('not hit cache for subject: %s', subject_name)
@@ -629,7 +639,6 @@ class OCSPCache(object):
 
 
 class SFSsd(object):
-
     # Support for Server Side Directives
     ACTIVATE_SSD = False
 
@@ -647,20 +656,24 @@ class SFSsd(object):
                    expanduser("~") or tempfile.gettempdir()
 
     if platform.system() == 'Windows':
-        SSD_DIR = path.join(SSD_ROOT_DIR, 'AppData', 'Local', 'Snowflake', 'Caches')
+        SSD_DIR = path.join(SSD_ROOT_DIR, 'AppData', 'Local', 'Snowflake',
+                            'Caches')
     elif platform.system() == 'Darwin':
         SSD_DIR = path.join(SSD_ROOT_DIR, 'Library', 'Caches', 'Snowflake')
     else:
         SSD_DIR = path.join(SSD_ROOT_DIR, '.cache', 'snowflake')
 
     def __init__(self):
-        SFSsd.ssd_pub_key_dep1.update(ocsp_internal_dep1_key_ver, ocsp_internal_ssd_pub_dep1)
-        SFSsd.ssd_pub_key_dep2.update(ocsp_internal_dep2_key_ver, ocsp_internal_ssd_pub_dep2)
+        SFSsd.ssd_pub_key_dep1.update(ocsp_internal_dep1_key_ver,
+                                      ocsp_internal_ssd_pub_dep1)
+        SFSsd.ssd_pub_key_dep2.update(ocsp_internal_dep2_key_ver,
+                                      ocsp_internal_ssd_pub_dep2)
 
     @staticmethod
     def check_ssd_support():
         # Activate server side directive support
-        SFSsd.ACTIVATE_SSD = os.getenv("SF_OCSP_ACTIVATE_SSD", "false").lower() == "true"
+        SFSsd.ACTIVATE_SSD = os.getenv("SF_OCSP_ACTIVATE_SSD",
+                                       "false").lower() == "true"
 
     @staticmethod
     def add_to_ssd_persistent_cache(hostname, ssd):
@@ -713,7 +726,8 @@ class SFSsd(object):
     def validate(ssd):
         try:
             ssd_header = jwt.get_unverified_header(ssd)
-            jwt.decode(ssd, SFSsd.ret_ssd_pub_key(ssd_header['ssd_iss']), algorithm='RS512')
+            jwt.decode(ssd, SFSsd.ret_ssd_pub_key(ssd_header['ssd_iss']),
+                       algorithm='RS512')
         except Exception as ex:
             logger.debug("Error while validating SSD Token", ex)
             return False
@@ -770,7 +784,7 @@ class SnowflakeOCSP(object):
             ocsp_response_cache_uri=None,
             use_ocsp_cache_server=None,
             use_post_method=True,
-            use_softfail=True):
+            use_fail_open=True):
 
         self._use_post_method = use_post_method
         SnowflakeOCSP.SSD.check_ssd_support()
@@ -778,10 +792,16 @@ class SnowflakeOCSP(object):
 
         self.debug_ocsp_failure_url = None
 
-        self.SOFT_FAIL_ENABLED = use_softfail or os.getenv("SF_OCSP_SOFTFAIL_MODE", "false").lower() == "true"
+        if os.getenv("SF_OCSP_FAIL_OPEN") is not None:
+            # failOpen Env Variable is for internal usage/ testing only.
+            # Using it in production is not advised and not supported.
+            self.FAIL_OPEN = os.getenv("SF_OCSP_FAIL_OPEN")
+        else:
+            self.FAIL_OPEN = use_fail_open
 
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
-            SnowflakeOCSP.OCSP_CACHE.set_ssd_status(SnowflakeOCSP.SSD.ACTIVATE_SSD)
+            SnowflakeOCSP.OCSP_CACHE.set_ssd_status(
+                SnowflakeOCSP.SSD.ACTIVATE_SSD)
             SnowflakeOCSP.SSD.clear_ssd_cache()
             SnowflakeOCSP.read_directives()
 
@@ -867,10 +887,11 @@ class SnowflakeOCSP(object):
             acc_name = split_hname[0]
         return acc_name
 
-    def is_enabled_soft_fail(self):
-        return self.SOFT_FAIL_ENABLED
+    def is_enabled_fail_open(self):
+        return self.FAIL_OPEN
 
-    def validate_by_direct_connection(self, issuer, subject, hostname=None, do_retry=True):
+    def validate_by_direct_connection(
+            self, issuer, subject, hostname=None, do_retry=True):
         ssd_cache_status = False
         cache_status = False
         ocsp_response = None
@@ -878,7 +899,8 @@ class SnowflakeOCSP(object):
 
         cert_id, req = self.create_ocsp_request(issuer, subject)
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
-            ssd_cache_status, ssd = SnowflakeOCSP.SSD.find_in_ssd_cache(self.get_account_from_hostname(hostname))
+            ssd_cache_status, ssd = SnowflakeOCSP.SSD.find_in_ssd_cache(
+                self.get_account_from_hostname(hostname))
 
         if not ssd_cache_status:
             cache_status, ocsp_response = \
@@ -889,10 +911,12 @@ class SnowflakeOCSP(object):
         try:
             if SnowflakeOCSP.SSD.ACTIVATE_SSD:
                 if ssd_cache_status:
-                    if SnowflakeOCSP.process_ocsp_bypass_directive(ssd, cert_id, hostname):
+                    if SnowflakeOCSP.process_ocsp_bypass_directive(ssd, cert_id,
+                                                                   hostname):
                         return None, issuer, subject, cert_id, ssd
                     else:
-                        SnowflakeOCSP.SSD.remove_from_ssd_persistent_cache(hostname)
+                        SnowflakeOCSP.SSD.remove_from_ssd_persistent_cache(
+                            hostname)
                         raise RevocationCheckError(
                             msg="The account specific SSD being used is invalid. "
                                 "Please contact Snowflake support",
@@ -900,26 +924,30 @@ class SnowflakeOCSP(object):
                         )
                 else:
                     wildcard_ssd_status, \
-                        ssd = SnowflakeOCSP.OCSP_CACHE.find_cache(self,
-                                                                  self.WILDCARD_CERTID,
-                                                                  subject)
+                    ssd = SnowflakeOCSP.OCSP_CACHE.find_cache(
+                        self, self.WILDCARD_CERTID, subject)
                     # if the wildcard SSD is invalid
                     # fall back to normal OCSP checking
                     try:
                         if wildcard_ssd_status and \
-                                self.process_ocsp_bypass_directive(ssd, self.WILDCARD_CERTID, '*'):
+                                self.process_ocsp_bypass_directive(
+                                    ssd, self.WILDCARD_CERTID, '*'):
                             return None, issuer, subject, cert_id, ssd
                     except Exception as ex:
-                        logger.debug("Failed to validate wildcard SSD, falling back to "
-                                     "specific OCSP Responses", ex)
-                        SnowflakeOCSP.OCSP_CACHE.delete_cache(self, self.WILDCARD_CERTID)
+                        logger.debug(
+                            "Failed to validate wildcard SSD, falling back to "
+                            "specific OCSP Responses", ex)
+                        SnowflakeOCSP.OCSP_CACHE.delete_cache(
+                            self, self.WILDCARD_CERTID)
 
             if not cache_status:
                 logger.debug("getting OCSP response from CA's OCSP server")
-                ocsp_response = self._fetch_ocsp_response(req, subject, cert_id, hostname)
+                ocsp_response = self._fetch_ocsp_response(req, subject, cert_id,
+                                                          hostname)
             else:
                 ocsp_url = self.extract_ocsp_url(subject)
-                self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(self, req, ocsp_url)
+                self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
+                    self, req, ocsp_url)
                 logger.debug("using OCSP response cache")
 
             if not ocsp_response:
@@ -931,8 +959,10 @@ class SnowflakeOCSP(object):
                 err = None
             except RevocationCheckError as op_er:
                 if SnowflakeOCSP.SSD.ACTIVATE_SSD and op_er.errno == ER_INVALID_OCSP_RESPONSE:
-                    logger.debug("Potentially the response is a server side directive")
-                    if self.process_ocsp_bypass_directive(ocsp_response, cert_id, hostname):
+                    logger.debug(
+                        "Potentially the response is a server side directive")
+                    if self.process_ocsp_bypass_directive(ocsp_response,
+                                                          cert_id, hostname):
                         err = None
                     else:
                         # TODO - Remove this potentially broken OCSP Response / SSD
@@ -943,7 +973,7 @@ class SnowflakeOCSP(object):
         except RevocationCheckError as rce:
             logger.debug(
                 "Failed to get OCSP response: %s," % rce.msg)
-            if self.is_enabled_soft_fail():
+            if self.is_enabled_fail_open():
                 if rce.errno is not ER_SERVER_CERTIFICATE_REVOKED:
                     err = None
                 else:
@@ -955,7 +985,7 @@ class SnowflakeOCSP(object):
 
         except Exception as ex:
             logger.debug("OCSP Validation failed %s", ex.message)
-            if self.is_enabled_soft_fail():
+            if self.is_enabled_fail_open():
                 err = None
             else:
                 err = ex
@@ -963,7 +993,8 @@ class SnowflakeOCSP(object):
 
         return err, issuer, subject, cert_id, ocsp_response
 
-    def _validate_certificates_sequential(self, cert_data, hostname=None, do_retry=True):
+    def _validate_certificates_sequential(self, cert_data, hostname=None,
+                                          do_retry=True):
         results = []
         self._check_ocsp_response_cache_server(cert_data)
         for issuer, subject in cert_data:
@@ -1097,12 +1128,14 @@ class SnowflakeOCSP(object):
         target_url = "{0}/{1}".format(ocsp_url, b64data)
         return target_url
 
-    def _fetch_ocsp_response(self, ocsp_request, subject, cert_id, hostname=None, do_retry=True):
+    def _fetch_ocsp_response(self, ocsp_request, subject, cert_id,
+                             hostname=None, do_retry=True):
         """
         Fetch OCSP response using OCSPRequest
         """
         ocsp_url = self.extract_ocsp_url(subject)
-        cert_id_enc = self.encode_cert_id_base64(self.decode_cert_id_key(cert_id))
+        cert_id_enc = self.encode_cert_id_base64(
+            self.decode_cert_id_key(cert_id))
         if not ocsp_url:
             return None
 
@@ -1133,7 +1166,8 @@ class SnowflakeOCSP(object):
                                   'ocsp_responder_url': ocsp_url})
             headers = {'Content-Type': 'application/json'}
 
-        self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(self, ocsp_request, ocsp_url)
+        self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
+            self, ocsp_request, ocsp_url)
 
         ret = None
         logger.debug('url: %s', target_url)
@@ -1158,8 +1192,9 @@ class SnowflakeOCSP(object):
                         break
                     elif max_retry > 1:
                         sleep_time = backoff.next_sleep(1, sleep_time)
-                        logger.debug("OCSP server returned %s. Retrying in %s(s)",
-                                     response.status_code, sleep_time)
+                        logger.debug(
+                            "OCSP server returned %s. Retrying in %s(s)",
+                            response.status_code, sleep_time)
                     time.sleep(sleep_time)
                 except Exception as ex:
                     if max_retry > 1:
@@ -1170,14 +1205,16 @@ class SnowflakeOCSP(object):
                     else:
                         raise RevocationCheckError(
                             msg="Could not fetch OCSP Response from server. Consider"
-                                "checking your whitelists : Exception - {}".format(ex.message),
+                                "checking your whitelists : Exception - {}".format(
+                                ex.message),
                             errno=ER_OCSP_FAILED_TO_CONNECT_HOST)
             else:
                 logger.error(
                     "Failed to get OCSP response after {0} attempt. Consider checking "
                     "for OCSP URLs being blocked".format(max_retry))
                 raise RevocationCheckError(
-                    msg="Failed to get OCSP response after {} attempt.".format(max_retry),
+                    msg="Failed to get OCSP response after {} attempt.".format(
+                        max_retry),
                     errno=ER_INVALID_OCSP_RESPONSE_CODE)
 
         return ret
@@ -1275,13 +1312,15 @@ class SnowflakeOCSP(object):
                     SnowflakeOCSP.process_key_update_directive(issuer, ssd)
 
         if path.exists(host_specific_ssd):
-            with codecs. open(host_specific_ssd, 'r', encoding='utf-8',
-                              errors='ignore') as f:
+            with codecs.open(host_specific_ssd, 'r', encoding='utf-8',
+                             errors='ignore') as f:
                 ssd_json = json.load(f)
                 for account_name, ssd in ssd_json.items():
-                    SnowflakeOCSP.SSD.add_to_ssd_persistent_cache(account_name, ssd)
+                    SnowflakeOCSP.SSD.add_to_ssd_persistent_cache(account_name,
+                                                                  ssd)
 
-    def process_ocsp_bypass_directive(self, ssd_dir_enc, sfc_cert_id, sfc_endpoint):
+    def process_ocsp_bypass_directive(self, ssd_dir_enc, sfc_cert_id,
+                                      sfc_endpoint):
         """
         Parse the jwt token as ocsp bypass directive.
         Expected format:
@@ -1301,18 +1340,21 @@ class SnowflakeOCSP(object):
 
         logger.debug("Received an OCSP Bypass Server Side Directive")
         jwt_ssd_header = jwt.get_unverified_header(ssd_dir_enc)
-        jwt_ssd_decoded = jwt.decode(ssd_dir_enc, SnowflakeOCSP.SSD.ret_ssd_pub_key(jwt_ssd_header['ssd_iss']),
+        jwt_ssd_decoded = jwt.decode(ssd_dir_enc,
+                                     SnowflakeOCSP.SSD.ret_ssd_pub_key(
+                                         jwt_ssd_header['ssd_iss']),
                                      algorithm='RS512')
 
         if datetime.fromtimestamp(jwt_ssd_decoded['exp']) - \
                 datetime.fromtimestamp(jwt_ssd_decoded['nbf']) \
                 > timedelta(days=7):
-            logger.debug(" Server Side Directive is invalid. Validity exceeds 7 days start - "
-                         "start {0} end {1} ".
-                         format(datetime.fromtimestamp(jwt_ssd_decoded['nbf']).
-                                strftime("%m/%d/%Y, %H:%M:%S"),
-                                datetime.fromtimestamp(jwt_ssd_decoded['exp']).
-                                strftime("%m/%d/%Y, %H:%M:%S")))
+            logger.debug(
+                " Server Side Directive is invalid. Validity exceeds 7 days start - "
+                "start {0} end {1} ".
+                    format(datetime.fromtimestamp(jwt_ssd_decoded['nbf']).
+                           strftime("%m/%d/%Y, %H:%M:%S"),
+                           datetime.fromtimestamp(jwt_ssd_decoded['exp']).
+                           strftime("%m/%d/%Y, %H:%M:%S")))
             return False
 
         # Check if the directive is generic (endpoint = *)
@@ -1341,8 +1383,9 @@ class SnowflakeOCSP(object):
             logger.debug("Found SSD for CertID", sfc_cert_id)
             return True
         else:
-            logger.debug("Found error in SSD. CertId key in OCSP Cache and CertID in SSD do not match",
-                         sfc_cert_id, jwt_ssd_decoded['certId'])
+            logger.debug(
+                "Found error in SSD. CertId key in OCSP Cache and CertID in SSD do not match",
+                sfc_cert_id, jwt_ssd_decoded['certId'])
             return False
 
     @staticmethod
@@ -1366,13 +1409,17 @@ class SnowflakeOCSP(object):
         :param key_upd_dir_enc
         """
 
-        logger.debug("Received an OCSP Key Update Server Side Directive from Issuer - ", issuer)
+        logger.debug(
+            "Received an OCSP Key Update Server Side Directive from Issuer - ",
+            issuer)
         jwt_ssd_header = jwt.get_unverified_header(key_upd_dir_enc)
         ssd_issuer = jwt_ssd_header['ssd_iss']
 
         # Use the in memory public key corresponding to 'issuer'
         # for JWT signature validation.
-        jwt_ssd_decoded = jwt.decode(key_upd_dir_enc, SnowflakeOCSP.SSD.ret_ssd_pub_key(ssd_issuer), algorithm='RS512')
+        jwt_ssd_decoded = jwt.decode(key_upd_dir_enc,
+                                     SnowflakeOCSP.SSD.ret_ssd_pub_key(
+                                         ssd_issuer), algorithm='RS512')
 
         ssd_pub_key_ver = float(jwt_ssd_decoded['keyVer'])
         ssd_pub_key_new = jwt_ssd_decoded['pubKey']
@@ -1384,8 +1431,10 @@ class SnowflakeOCSP(object):
         If both checks pass update key.
         """
 
-        if ssd_issuer == issuer and ssd_pub_key_ver > SFSsd.ret_ssd_pub_key_ver(ssd_issuer):
-                SnowflakeOCSP.SSD.update_pub_key(ssd_issuer, ssd_pub_key_ver, ssd_pub_key_new)
+        if ssd_issuer == issuer and ssd_pub_key_ver > SFSsd.ret_ssd_pub_key_ver(
+                ssd_issuer):
+            SnowflakeOCSP.SSD.update_pub_key(ssd_issuer, ssd_pub_key_ver,
+                                             ssd_pub_key_new)
 
     def read_cert_bundle(self, ca_bundle_file, storage=None):
         """
