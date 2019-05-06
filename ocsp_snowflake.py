@@ -778,7 +778,7 @@ class SnowflakeOCSP(object):
 
         self.debug_ocsp_failure_url = None
 
-        self.SOFT_FAIL_ENABLED = use_softfail or os.getenv("SF_OCSP_SOFT_FAIL", "false").lower() == "true"
+        self.SOFT_FAIL_ENABLED = use_softfail or os.getenv("SF_OCSP_SOFTFAIL_MODE", "false").lower() == "true"
 
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
             SnowflakeOCSP.OCSP_CACHE.set_ssd_status(SnowflakeOCSP.SSD.ACTIVATE_SSD)
