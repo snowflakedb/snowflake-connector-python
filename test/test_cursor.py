@@ -755,11 +755,11 @@ def test_nope_errorhandler(conn_testaccount):
     assert len(c.messages) == 1, 'should be one error'
 
 
-def test_binding_negative(conn_cnx, db_parameters):
+def test_binding_negative(negative_conn_cnx, db_parameters):
     """
     Negative binding tests
     """
-    with conn_cnx() as cnx:
+    with negative_conn_cnx() as cnx:
         with pytest.raises(TypeError):
             cnx.cursor().execute(
                 "INSERT INTO {name}(aa) VALUES(%s)".format(

@@ -64,14 +64,14 @@ def test_numeric_paramstyle(conn_cnx, db_parameters):
                     name=db_parameters['name']))
 
 
-def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
+def test_qmark_paramstyle_enabled(negative_conn_cnx, db_parameters):
     """
     Enable qmark binding
     """
     import snowflake.connector
     snowflake.connector.paramstyle = u'qmark'
     try:
-        with conn_cnx() as cnx:
+        with negative_conn_cnx() as cnx:
             cnx.cursor().execute(
                 "CREATE OR REPLACE TABLE {name} "
                 "(aa STRING, bb STRING)".format(
@@ -84,7 +84,7 @@ def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
             assert ret[0] == 'test11'
             assert ret[1] == 'test12'
     finally:
-        with conn_cnx() as cnx:
+        with negative_conn_cnx() as cnx:
             cnx.cursor().execute(
                 "DROP TABLE IF EXISTS {name}".format(
                     name=db_parameters['name']))
@@ -92,7 +92,7 @@ def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
 
     # After changing back to pyformat, binding qmark should fail.
     try:
-        with conn_cnx() as cnx:
+        with negative_conn_cnx() as cnx:
             cnx.cursor().execute(
                 "CREATE OR REPLACE TABLE {name} "
                 "(aa STRING, bb STRING)".format(
@@ -102,7 +102,7 @@ def test_qmark_paramstyle_enabled(conn_cnx, db_parameters):
                     "INSERT INTO {name} VALUES(?, ?)".format(
                         name=db_parameters['name']), ('test11', 'test12'))
     finally:
-        with conn_cnx() as cnx:
+        with negative_conn_cnx() as cnx:
             cnx.cursor().execute(
                 "DROP TABLE IF EXISTS {name}".format(
                     name=db_parameters['name']))
@@ -142,6 +142,7 @@ def test_binding_datetime_qmark(conn_cnx, db_parameters):
 
 def test_binding_none(conn_cnx):
     import snowflake.connector
+    original = snowflake.connector.paramstyle
     snowflake.connector.paramstyle = 'qmark'
 
     with conn_cnx() as con:
@@ -151,3 +152,4 @@ def test_binding_none(conn_cnx):
             con.cursor().execute('INSERT INTO {table} VALUES (?)'.format(table=table_name), [None])
         finally:
             con.cursor().execute('DROP TABLE {table}'.format(table=table_name))
+            snowflake.connector.paramstyle = original
