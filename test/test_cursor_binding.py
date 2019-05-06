@@ -112,12 +112,12 @@ SELECT * FROM {name} WHERE aa IN (%s) ORDER BY 1 DESC
                     name=db_parameters['name']))
 
 
-def test_unsupported_binding(conn_cnx, db_parameters):
+def test_unsupported_binding(negative_conn_cnx, db_parameters):
     """
     Unsupported data binding
     """
     try:
-        with conn_cnx() as cnx:
+        with negative_conn_cnx() as cnx:
             cnx.cursor().execute(
                 "CREATE OR REPLACE TABLE {name} "
                 "(aa INT, bb STRING)".format(
@@ -138,7 +138,7 @@ def test_unsupported_binding(conn_cnx, db_parameters):
             with pytest.raises(ProgrammingError):
                 cnx.cursor().execute(sql, ({'value': 1},))
     finally:
-        with conn_cnx() as cnx:
+        with negative_conn_cnx() as cnx:
             cnx.cursor().execute(
                 "drop table if exists {name}".format(
                     name=db_parameters['name']))

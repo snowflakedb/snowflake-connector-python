@@ -13,6 +13,7 @@ from logging import getLogger
 from threading import Lock
 from time import strptime
 
+from .incident import IncidentAPI
 from . import errors
 from . import proxy
 from .auth import Auth
@@ -177,6 +178,7 @@ class SnowflakeConnection(object):
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
         self.telemetry_enabled = False
+        self.incident = IncidentAPI(self._rest)
 
     def __del__(self):
         try:
