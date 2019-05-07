@@ -18,7 +18,7 @@ from time import (time, sleep)
 import botocore.exceptions
 
 from .azure_util import SnowflakeAzureUtil
-from .compat import (GET_CWD, TO_UNICODE)
+from .compat import (GET_CWD, TO_UNICODE, IS_WINDOWS)
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .converter_snowsql import SnowflakeConverterSnowSQL
 from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
@@ -671,6 +671,11 @@ class SnowflakeFileTransferAgent(object):
                 file_name = os.path.expanduser(file_name)
                 if not os.path.isabs(file_name):
                     file_name = os.path.join(GET_CWD(), file_name)
+                if IS_WINDOWS and len(file_name) > 2 \
+                        and file_name[0] == u'/' and file_name[2] == u':':
+                    # Windows path: /C:/data/file1.txt where it starts with slash
+                    # followed by a drive letter and colon.
+                    file_name = file_name[1:]
                 files = glob.glob(file_name)
                 canonical_locations += files
             else:
