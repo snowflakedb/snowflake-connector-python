@@ -44,6 +44,69 @@ from snowflake.connector.time_util import DecorrelateJitterBackoff
 logger = getLogger(__name__)
 
 
+class OCSPTelemetryData(object):
+
+    def __init__(self):
+        self.cert_id = None
+        self.sfc_peer_host = None
+        self.ocsp_url = None
+        self.ocsp_req = None
+        self.error_msg = None
+        self.cache_enabled = False
+        self.cache_hit = False
+        self.fail_open = False
+        self.insecure_mode = False
+
+    def set_cert_id(self, cert_id):
+        self.cert_id = cert_id
+
+    def set_sfc_peer_host(self, sfc_peer_host):
+        self.sfc_peer_host = sfc_peer_host
+
+    def set_ocsp_url(self, ocsp_url):
+        self.ocsp_url = ocsp_url
+
+    def set_ocsp_req(self, ocsp_req):
+        self.ocsp_req = ocsp_req
+
+    def set_error_msg(self, error_msg):
+        self.error_msg = error_msg
+
+    def set_cache_enabled(self, cache_enabled):
+        self.cache_enabled = cache_enabled
+        if not cache_enabled:
+            self.cache_hit = False
+
+    def set_cache_hit(self, cache_hit):
+        if not self.cache_enabled:
+            self.cache_hit = False
+        else:
+            self.cache_hit = cache_hit
+
+    def set_fail_open(self, fail_open):
+        self.fail_open = fail_open
+
+    def set_insecure_mode(self, insecure_mode):
+        self.insecure_mode = insecure_mode
+
+    def generate_telemetry_data(self, event_type):
+        telemetry_data = {}
+        telemetry_data.update({"eventType": event_type})
+        telemetry_data.update({"sfcPeerHost": self.sfc_peer_host})
+        telemetry_data.update({"certId": self.cert_id})
+        telemetry_data.update({"ocspRequestBase64": self.ocsp_req})
+        telemetry_data.update({"ocspResponderURL": self.ocsp_url})
+        telemetry_data.update({"errorMessage": self.error_msg})
+        telemetry_data.update({"insecureMode": self.insecure_mode})
+        telemetry_data.update({"failOpen": self.fail_open})
+        telemetry_data.update({"cacheEnabled": self.cache_enabled})
+        telemetry_data.update({"cacheHit": self.cache_hit})
+        return telemetry_data
+        # To be updated once Python Driver has out of band telemetry.
+        # telemetry_client = TelemetryClient()
+        # telemetry_client.add_log_to_batch(TelemetryData(telemetry_data, datetime.utcnow()))
+
+
 class SSDPubKey(object):
 
     def __init__(self):
@@ -890,12 +953,25 @@ class SnowflakeOCSP(object):
     def is_enabled_fail_open(self):
         return self.FAIL_OPEN
 
-    def validate_by_direct_connection(
-            self, issuer, subject, hostname=None, do_retry=True):
+    @staticmethod
+    def print_fail_open_warning(ocsp_log):
+        static_warning = "WARNING!!! Using fail-open to connect. Driver is connecting to an "\
+                         "HTTPS endpoint without OCSP based Certificate Revocation checking "\
+                         "as it could not obtain a valid OCSP Response to use from the CA OCSP "\
+                         "responder. Details:"
+        ocsp_warning = "".format("{0} \n {1}", static_warning, ocsp_log)
+        logger.error(ocsp_warning)
+
+    def validate_by_direct_connection(self, issuer, subject, hostname=None, do_retry=True):
         ssd_cache_status = False
         cache_status = False
         ocsp_response = None
         ssd = None
+        telemetry_data = OCSPTelemetryData()
+        telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
+        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_sfc_peer_host(hostname)
+        telemetry_data.set_fail_open(self.is_enabled_fail_open())
 
         cert_id, req = self.create_ocsp_request(issuer, subject)
         if SnowflakeOCSP.SSD.ACTIVATE_SSD:
@@ -941,13 +1017,18 @@ class SnowflakeOCSP(object):
                             self, self.WILDCARD_CERTID)
 
             if not cache_status:
+                telemetry_data.set_cache_hit(False)
                 logger.debug("getting OCSP response from CA's OCSP server")
-                ocsp_response = self._fetch_ocsp_response(req, subject, cert_id,
+                ocsp_response = self._fetch_ocsp_response(req, subject,
+                                                          cert_id, telemetry_data,
                                                           hostname)
             else:
                 ocsp_url = self.extract_ocsp_url(subject)
+                telemetry_data.set_cache_hit(True)
                 self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
                     self, req, ocsp_url)
+                telemetry_data.set_ocsp_url(ocsp_url)
+                telemetry_data.set_ocsp_req(req)
                 logger.debug("using OCSP response cache")
 
             if not ocsp_response:
@@ -973,21 +1054,33 @@ class SnowflakeOCSP(object):
         except RevocationCheckError as rce:
             logger.debug(
                 "Failed to get OCSP response: %s," % rce.msg)
+            telemetry_data.set_error_msg(rce.msg)
             if self.is_enabled_fail_open():
                 if rce.errno is not ER_SERVER_CERTIFICATE_REVOKED:
                     err = None
+                    SnowflakeOCSP.print_fail_open_warning(
+                        telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
                 else:
+                    logger.debug(
+                        telemetry_data.generate_telemetry_data("RevokedCertificateError"))
                     err = rce
             else:
                 err = rce
                 cache_status = False
+                logger.debug(
+                    telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
+
             SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
 
         except Exception as ex:
             logger.debug("OCSP Validation failed %s", ex.message)
+            telemetry_data.set_error_msg(ex.message)
+            ocsp_log = telemetry_data.generate_telemetry_data("RevocationCheckFailure")
             if self.is_enabled_fail_open():
+                SnowflakeOCSP.print_fail_open_warning(ocsp_log)
                 err = None
             else:
+                logger.debug(ocsp_log)
                 err = ex
             SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
 
@@ -1129,7 +1222,7 @@ class SnowflakeOCSP(object):
         return target_url
 
     def _fetch_ocsp_response(self, ocsp_request, subject, cert_id,
-                             hostname=None, do_retry=True):
+                             telemetry_data, hostname=None, do_retry=True):
         """
         Fetch OCSP response using OCSPRequest
         """
@@ -1168,6 +1261,8 @@ class SnowflakeOCSP(object):
 
         self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
             self, ocsp_request, ocsp_url)
+        telemetry_data.set_ocsp_req(self.decode_ocsp_request_b64(ocsp_request))
+        telemetry_data.set_ocsp_url(ocsp_url)
 
         ret = None
         logger.debug('url: %s', target_url)
