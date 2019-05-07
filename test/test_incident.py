@@ -5,10 +5,11 @@
 #
 
 import warnings
+import os
 from uuid import uuid4
 
-import pytest
 from mock import patch
+import pytest
 from pytest import fail
 
 from snowflake.connector import converter, ProgrammingError
@@ -16,8 +17,11 @@ from snowflake.connector import converter, ProgrammingError
 from snowflake.connector.incident import Incident
 from traceback import format_exc
 
-# NOTE the incident throttling feature is working and will stop returning new incident ids, so do not assert them, or
-#   don't add many more incidents to be reported
+IS_PUBLIC_CI = os.getenv('TRAVIS') == 'true' or os.getenv('APPVEYOR') == 'true'
+
+# NOTE the incident throttling feature is working and will stop returning new
+# incident ids, so do not assert them, or don't add many more incidents to be
+# reported
 
 
 def test_incident_creation():
@@ -59,6 +63,7 @@ def test_default_values():
     assert incident.osVersion
 
 
+@pytest.mark.skipif(IS_PUBLIC_CI, reason="internal test")
 def test_create_incident_from_exception(negative_conn_cnx):
     with negative_conn_cnx() as con:
         try:
@@ -69,9 +74,11 @@ def test_create_incident_from_exception(negative_conn_cnx):
             incident = Incident(None, None, "unit test", "99.99.99", em, est)
             new_incident_id = con.incident.report_incident(incident)
             if new_incident_id is None:
-                warnings.warn(UserWarning("incident reported in 'test_create_incident_from_exception' was ignored"))
+                warnings.warn(
+                    UserWarning("incident reported in 'test_create_incident_from_exception' was ignored"))
 
 
+@pytest.mark.skipif(IS_PUBLIC_CI, reason="internal test")
 def test_report_automatic_incident(negative_conn_cnx):
     def helper(number):
         if number == 0:
@@ -88,6 +95,7 @@ def test_report_automatic_incident(negative_conn_cnx):
                 warnings.warn(UserWarning("incident reported in 'test_report_automatic_incident' was ignored"))
 
 
+@pytest.mark.skipif(IS_PUBLIC_CI, reason="internal test")
 @pytest.mark.parametrize('app_name', ['asd', 'mark'])
 def test_reporting_values(app_name, db_parameters):
     import snowflake.connector
@@ -97,12 +105,13 @@ def test_reporting_values(app_name, db_parameters):
     snowflake.connector.incident.CLS_BLACKLIST = frozenset()
     converter.PYTHON_TO_SNOWFLAKE_TYPE[u'nonetype'] = None
     db_parameters['internal_application_name'] = app_name
+    con = None
     try:
         con = snowflake.connector.connect(**db_parameters)
         con.cursor().execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
         cursor = con.cursor()
         with patch.object(con.rest, 'request') as incident_report:
-            cursor.execute('INSERT INTO foo VALUES (?)', [None])
+            cursor.execute("INSERT INTO foo VALUES (?)", [None])
             fail("Shouldn't reach ths statement")
     except ProgrammingError:
         pass  # ignore, should be thrown
@@ -113,5 +122,6 @@ def test_reporting_values(app_name, db_parameters):
         for tag in incident_report.call_args[0][1][u'Tags']:
             if tag[u'Name'] == u'driver':
                 assert tag[u'Value'] == app_name
-        con.close()
+        if con is not None:
+            con.close()
 
