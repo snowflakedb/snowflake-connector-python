@@ -5,19 +5,21 @@
 #
 
 import warnings
-import os
 from uuid import uuid4
 
-from mock import patch
 import pytest
 from pytest import fail
+
+from snowflake.connector.compat import PY2
+if PY2:
+    from mock import patch
+else:
+    from unittest.mock import patch
 
 from snowflake.connector import converter, ProgrammingError
 
 from snowflake.connector.incident import Incident
 from traceback import format_exc
-
-IS_PUBLIC_CI = os.getenv('TRAVIS') == 'true' or os.getenv('APPVEYOR') == 'true'
 
 # NOTE the incident throttling feature is working and will stop returning new
 # incident ids, so do not assert them, or don't add many more incidents to be
@@ -63,7 +65,7 @@ def test_default_values():
     assert incident.osVersion
 
 
-@pytest.mark.skipif(IS_PUBLIC_CI, reason="internal test")
+@pytest.mark.internal
 def test_create_incident_from_exception(negative_conn_cnx):
     with negative_conn_cnx() as con:
         try:
@@ -78,7 +80,7 @@ def test_create_incident_from_exception(negative_conn_cnx):
                     UserWarning("incident reported in 'test_create_incident_from_exception' was ignored"))
 
 
-@pytest.mark.skipif(IS_PUBLIC_CI, reason="internal test")
+@pytest.mark.internal
 def test_report_automatic_incident(negative_conn_cnx):
     def helper(number):
         if number == 0:
@@ -92,10 +94,11 @@ def test_report_automatic_incident(negative_conn_cnx):
         except RuntimeWarning:
             new_incident_id = con.incident.report_incident(job_id=uuid4(), request_id=uuid4())
             if new_incident_id is None:
-                warnings.warn(UserWarning("incident reported in 'test_report_automatic_incident' was ignored"))
+                warnings.warn(
+                    UserWarning("incident reported in 'test_report_automatic_incident' was ignored"))
 
 
-@pytest.mark.skipif(IS_PUBLIC_CI, reason="internal test")
+@pytest.mark.internal
 @pytest.mark.parametrize('app_name', ['asd', 'mark'])
 def test_reporting_values(app_name, db_parameters):
     import snowflake.connector
