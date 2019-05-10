@@ -9,6 +9,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.8.0 (May 10, 2019)
+
+    - support numpy.bool_ in binding type
+    - Add Option to Skip Request Pooling
+    - Add OCSP_MODE metric
+    - Fixed PUT URI issue for Windows path
+    - OCSP SoftFail 
+
 - v1.7.11 (April 22, 2019)
 
     - numpy timestamp with timezone support
