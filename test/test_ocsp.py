@@ -70,6 +70,18 @@ def test_ocsp():
             'Failed to validate: {0}'.format(url)
 
 
+def test_ocsp_wo_cache_server():
+    """
+    OCSP Tests with Cache Server Disabled
+    """
+    SnowflakeOCSP.clear_cache()
+    ocsp = SFOCSP(use_ocsp_cache_server=False)
+    for url in TARGET_HOSTS:
+        connection = _openssl_connect(url)
+        assert ocsp.validate(url, connection),\
+            'Failed to validate: {0}'.format(url)
+
+
 def test_ocsp_single_endpoint():
     environ['SF_OCSP_ACTIVATE_NEW_ENDPOINT'] = 'True'
     SnowflakeOCSP.clear_cache()
