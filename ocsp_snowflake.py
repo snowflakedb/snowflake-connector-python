@@ -1024,11 +1024,13 @@ class SnowflakeOCSP(object):
                                                           hostname)
             else:
                 ocsp_url = self.extract_ocsp_url(subject)
+                cert_id_enc = self.encode_cert_id_base64(self.decode_cert_id_key(cert_id))
                 telemetry_data.set_cache_hit(True)
                 self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
                     self, req, ocsp_url)
                 telemetry_data.set_ocsp_url(ocsp_url)
                 telemetry_data.set_ocsp_req(req)
+                telemetry_data.set_cert_id(cert_id_enc)
                 logger.debug("using OCSP response cache")
 
             if not ocsp_response:
@@ -1052,25 +1054,23 @@ class SnowflakeOCSP(object):
                     raise op_er
 
         except RevocationCheckError as rce:
-            logger.debug(
-                "Failed to get OCSP response: %s," % rce.msg)
             telemetry_data.set_error_msg(rce.msg)
-            if self.is_enabled_fail_open():
-                if rce.errno is not ER_SERVER_CERTIFICATE_REVOKED:
+            if rce.errno is not ER_SERVER_CERTIFICATE_REVOKED:
+                logger.debug(
+                    "Failed to get OCSP response: %s," % rce.msg)
+                if self.is_enabled_fail_open():
                     err = None
                     SnowflakeOCSP.print_fail_open_warning(
                         telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
                 else:
-                    logger.debug(
-                        telemetry_data.generate_telemetry_data("RevokedCertificateError"))
                     err = rce
+                    logger.debug(
+                        telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
+                SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
             else:
-                err = rce
-                cache_status = False
                 logger.debug(
-                    telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
-
-            SnowflakeOCSP.OCSP_CACHE.delete_cache(self, cert_id)
+                    telemetry_data.generate_telemetry_data("RevokedCertificateError"))
+                err = rce
 
         except Exception as ex:
             logger.debug("OCSP Validation failed %s", ex.message)
@@ -1263,11 +1263,12 @@ class SnowflakeOCSP(object):
             self, ocsp_request, ocsp_url)
         telemetry_data.set_ocsp_req(self.decode_ocsp_request_b64(ocsp_request))
         telemetry_data.set_ocsp_url(ocsp_url)
+        telemetry_data.set_cert_id(cert_id_enc)
 
         ret = None
         logger.debug('url: %s', target_url)
         with generic_requests.Session() as session:
-            max_retry = 30 if do_retry else 1
+            max_retry = 10 if do_retry else 1
             sleep_time = 1
             backoff = DecorrelateJitterBackoff(sleep_time, 16)
             for attempt in range(max_retry):
