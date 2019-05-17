@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-import collections
+import collections.abc
 import contextlib
 import gzip
 import itertools
@@ -184,7 +184,7 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
-class ResultIterWithTimings(collections.Iterator):
+class ResultIterWithTimings(collections.abc.Iterator):
     DOWNLOAD = u"download"
     PARSE = u"parse"
 
