@@ -1034,9 +1034,9 @@ class SnowflakeOCSP(object):
                 logger.debug("using OCSP response cache")
 
             if not ocsp_response:
-                # TODO - this needs to be changed potentially - No OCSP Info should Fail
                 logger.debug('No OCSP URL is found.')
-                return None, issuer, subject, cert_id, ocsp_response
+                raise RevocationCheckError(msg="Could not retrieve OCSP Response. Cannot perform Revocation Check",
+                                           errno=ER_SERVER_CERTIFICATE_UNKNOWN)
             try:
                 self.process_ocsp_response(issuer, cert_id, ocsp_response)
                 err = None
@@ -1230,7 +1230,8 @@ class SnowflakeOCSP(object):
         cert_id_enc = self.encode_cert_id_base64(
             self.decode_cert_id_key(cert_id))
         if not ocsp_url:
-            return None
+            raise RevocationCheckError(msg="No OCSP URL found in cert. Cannot perform Certificate Revocation check",
+                                       errno=ER_SERVER_CERTIFICATE_UNKNOWN)
 
         if not SnowflakeOCSP.SSD.ACTIVATE_SSD and \
                 not OCSPServer.is_enabled_new_ocsp_endpoint():
