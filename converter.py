@@ -109,10 +109,54 @@ def _extract_timestamp(value, ctx):
     scale = ctx['scale']
     microseconds = float(
         value[0:-scale + 6]) if scale > 6 else float(value)
-    fraction_of_nanoseconds = SnowflakeConverter._adjust_fraction_of_nanoseconds(
+    fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
         value, ctx['max_fraction'], scale)
 
     return microseconds, fraction_of_nanoseconds
+
+
+def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
+    if scale == 0:
+        return 0
+    if value[0] != '-':
+        return int((value[-scale:] + ZERO_FILL[:9 - scale]))
+
+    frac = int(value[-scale:])
+    if frac == 0:
+        return 0
+    else:
+        return int(TO_UNICODE(max_fraction - frac) + ZERO_FILL[:9 - scale])
+
+
+def _generate_tzinfo_from_tzoffset(tzoffset_minutes):
+    """
+    Generates tzinfo object from tzoffset.
+    """
+    try:
+        return _TZINFO_CLASS_CACHE[tzoffset_minutes]
+    except KeyError:
+        pass
+    sign = u'P' if tzoffset_minutes >= 0 else u'N'
+    abs_tzoffset_minutes = abs(tzoffset_minutes)
+    hour, minute = divmod(abs_tzoffset_minutes, 60)
+    name = u'GMT{sign:s}{hour:02d}{minute:02d}'.format(
+        sign=sign,
+        hour=hour,
+        minute=minute)
+    tzinfo_class_type = type(
+        str(name),  # str() for both Python 2 and 3
+        (tzinfo,),
+        dict(
+            utcoffset=lambda self0, dt, is_dst=False: timedelta(
+                minutes=tzoffset_minutes),
+            tzname=lambda self0, dt: name,
+            dst=lambda self0, dt: ZERO_TIMEDELTA,
+            __repr__=lambda _: name
+        )
+    )
+    tzinfo_cls = tzinfo_class_type()
+    _TZINFO_CLASS_CACHE[tzoffset_minutes] = tzinfo_cls
+    return tzinfo_cls
 
 
 class SnowflakeConverter(object):
@@ -135,47 +179,6 @@ class SnowflakeConverter(object):
 
     def get_parameter(self, param):
         return self._parameters[param] if param in self._parameters else None
-
-    @staticmethod
-    def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
-        if scale == 0:
-            return 0
-        if value[0] != '-':
-            return int((value[-scale:] + ZERO_FILL)[:9])
-
-        return int((TO_UNICODE(max_fraction - int(value[-scale:])) +
-                    ZERO_FILL)[:9])
-
-    @staticmethod
-    def _generate_tzinfo_from_tzoffset(tzoffset_minutes):
-        """
-        Generates tzinfo object from tzoffset.
-        """
-        try:
-            return _TZINFO_CLASS_CACHE[tzoffset_minutes]
-        except KeyError:
-            pass
-        sign = u'P' if tzoffset_minutes >= 0 else u'N'
-        abs_tzoffset_minutes = abs(tzoffset_minutes)
-        hour, minute = divmod(abs_tzoffset_minutes, 60)
-        name = u'GMT{sign:s}{hour:02d}{minute:02d}'.format(
-            sign=sign,
-            hour=hour,
-            minute=minute)
-        tzinfo_class_type = type(
-            str(name),  # str() for both Python 2 and 3
-            (tzinfo,),
-            dict(
-                utcoffset=lambda self0, dt, is_dst=False: timedelta(
-                    minutes=tzoffset_minutes),
-                tzname=lambda self0, dt: name,
-                dst=lambda self0, dt: ZERO_TIMEDELTA,
-                __repr__=lambda _: name
-            )
-        )
-        tzinfo_cls = tzinfo_class_type()
-        _TZINFO_CLASS_CACHE[tzoffset_minutes] = tzinfo_cls
-        return tzinfo_cls
 
     #
     # FROM Snowflake to Python Objects
@@ -263,15 +266,13 @@ class SnowflakeConverter(object):
 
         def conv0(encoded_value):
             value, tz = encoded_value.split()
-            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-                int(tz) - 1440)
+            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
             return datetime.fromtimestamp(float(value), tz=tzinfo)
 
         def conv(encoded_value):
             value, tz = encoded_value.split()
             microseconds = float(value[0:-scale + 6])
-            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-                int(tz) - 1440)
+            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
             return datetime.fromtimestamp(microseconds, tz=tzinfo)
 
         return conv if scale > 6 else conv0
@@ -592,8 +593,7 @@ class SnowflakeConverter(object):
         return value.strftime(u'%H:%M:%S')
 
     def _struct_time_to_snowflake(self, value):
-        tzinfo_value = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-            -time.timezone // 60)
+        tzinfo_value = _generate_tzinfo_from_tzoffset(time.timezone // 60)
         t = datetime.fromtimestamp(time.mktime(value))
         if pytz.utc != tzinfo_value:
             t += tzinfo_value.utcoffset(t)
