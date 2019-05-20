@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-import collections.abc
+import collections
 import contextlib
 import gzip
 import itertools
@@ -29,6 +29,7 @@ from snowflake.connector.time_util import get_time_millis
 from . import ssl_wrap_socket
 from .compat import (
     PY2,
+    ITERATOR,
     METHOD_NOT_ALLOWED, BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
@@ -184,7 +185,7 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
-class ResultIterWithTimings(collections.abc.Iterator):
+class ResultIterWithTimings(ITERATOR):
     DOWNLOAD = u"download"
     PARSE = u"parse"
 
@@ -908,4 +909,5 @@ class SnowflakeRestful(object):
                         "session doesn't exist in the active session pool. "
                         "Ignored...")
                 logger.debug("Active requests sessions: %s, idle: %s",
-                             len(self._active_sessions), len(self._idle_sessions))
+                             len(self._active_sessions),
+                             len(self._idle_sessions))

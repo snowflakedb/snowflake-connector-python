@@ -22,7 +22,7 @@ import socket
 import sys
 import time
 from collections import namedtuple
-from collections.abc import Mapping
+from .compat import MAPPING
 
 try:
     monotonic = time.monotonic
@@ -138,7 +138,7 @@ else:
 SelectorKey = namedtuple('SelectorKey', ['fileobj', 'fd', 'events', 'data'])
 
 
-class _SelectorMapping(Mapping):
+class _SelectorMapping(MAPPING):
     """ Mapping of file objects to selector keys """
 
     def __init__(self, selector):
