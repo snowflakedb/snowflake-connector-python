@@ -3,7 +3,9 @@ from datetime import timedelta, datetime
 import pytz
 from dateutil.parser import parse
 
-from snowflake.connector.converter import (SnowflakeConverter, ZERO_EPOCH)
+from snowflake.connector.converter import (
+    _generate_tzinfo_from_tzoffset,
+    ZERO_EPOCH)
 
 
 def test_fetch_various_timestamps(conn_cnx):
@@ -34,8 +36,7 @@ def test_fetch_various_timestamps(conn_cnx):
                 for tz in timezones:
                     tzdiff = (int(tz[1:3]) * 60 + int(tz[4:6])) * (
                         -1 if tz[0] == '-' else 1)
-                    tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-                        tzdiff)
+                    tzinfo = _generate_tzinfo_from_tzoffset(tzdiff)
                     try:
                         ts = datetime.fromtimestamp(float(et), tz=tzinfo)
                     except OSError:
@@ -54,7 +55,8 @@ def test_fetch_various_timestamps(conn_cnx):
                         scale = idx + 1
                         if idx + 1 != 6:  # SNOW-28597
                             try:
-                                ts0 = datetime.fromtimestamp(float(et), tz=tzinfo)
+                                ts0 = datetime.fromtimestamp(float(et),
+                                                             tz=tzinfo)
                             except OSError:
                                 ts0 = ZERO_EPOCH + timedelta(seconds=float(et))
                                 if pytz.utc != tzinfo:

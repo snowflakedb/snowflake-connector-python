@@ -63,5 +63,13 @@ def test_more_timestamps():
     conv.set_parameter('TIMESTAMP_NTZ_OUTPUT_FORMAT',
                        'YYYY-MM-DD HH24:MI:SS.FF9')
     m = conv.to_python_method('TIMESTAMP_NTZ', {'scale': 9})
-    ret = m('-2208943503.876543211')
-    assert ret == '1900-01-01 12:34:56.123456789'
+    assert m('-2208943503.876543211') == '1900-01-01 12:34:56.123456789'
+    assert m('-2208943503.000000000') == '1900-01-01 12:34:57.000000000'
+    assert m('-2208943503.012000000') == '1900-01-01 12:34:56.988000000'
+
+    conv.set_parameter('TIMESTAMP_NTZ_OUTPUT_FORMAT',
+                       'YYYY-MM-DD HH24:MI:SS.FF9')
+    m = conv.to_python_method('TIMESTAMP_NTZ', {'scale': 7})
+    assert m('-2208943503.8765432') == '1900-01-01 12:34:56.123456800'
+    assert m('-2208943503.0000000') == '1900-01-01 12:34:57.000000000'
+    assert m('-2208943503.0120000') == '1900-01-01 12:34:56.988000000'
