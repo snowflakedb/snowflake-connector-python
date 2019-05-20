@@ -8,7 +8,10 @@ from logging import getLogger
 
 import pytz
 
-from .converter import (SnowflakeConverter, ZERO_EPOCH)
+from .converter import (
+    SnowflakeConverter,
+    ZERO_EPOCH,
+    _generate_tzinfo_from_tzoffset)
 
 logger = getLogger(__name__)
 
@@ -34,8 +37,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
         def conv0(encoded_value):
             value, tz = encoded_value.split()
-            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-                int(tz) - 1440)
+            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
             microseconds = float(value)
             t = ZERO_EPOCH + timedelta(seconds=microseconds)
             if pytz.utc != tzinfo:
@@ -44,8 +46,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
         def conv(encoded_value):
             value, tz = encoded_value.split()
-            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-                int(tz) - 1440)
+            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
             microseconds = float(value[0:-scale + 6])
             t = ZERO_EPOCH + timedelta(seconds=microseconds)
             if pytz.utc != tzinfo:
@@ -91,7 +92,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         scale = ctx['scale']
 
         conv0 = lambda value: (
-            ZERO_EPOCH + timedelta(seconds=(float(value)))).time()
+                ZERO_EPOCH + timedelta(seconds=(float(value)))).time()
 
         def conv(value):
             microseconds = float(value[0:-scale + 6])

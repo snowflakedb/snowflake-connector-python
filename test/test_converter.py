@@ -10,7 +10,9 @@ import pytest
 import pytz
 
 from snowflake.connector.compat import PY2, IS_WINDOWS
-from snowflake.connector.converter import (SnowflakeConverter, ZERO_EPOCH)
+from snowflake.connector.converter import (
+    ZERO_EPOCH,
+    _generate_tzinfo_from_tzoffset)
 from snowflake.connector.converter_snowsql import (SnowflakeConverterSnowSQL)
 
 
@@ -34,7 +36,7 @@ def test_fetch_timestamps(conn_cnx):
     PST_TZ = "America/Los_Angeles"
 
     tzdiff = 1860 - 1440  # -07:00
-    tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(tzdiff)
+    tzinfo = _generate_tzinfo_from_tzoffset(tzdiff)
 
     # TIMESTAMP_TZ
     r0 = _compose_tz('1325568896.123456', tzinfo)
@@ -438,3 +440,49 @@ SELECT
     '2012-01-03 05:34:56.123456'::TIMESTAMP_NTZ(6)
 """):
             assert rec[0] == '05:34:56.123456 Jan 03, 2012'
+
+
+def test_fetch_fraction_001(conn_cnx):
+    PST_TZ = "America/Los_Angeles"
+
+    converter_class = SnowflakeConverterSnowSQL
+    sql = """
+SELECT
+    '1900-01-01T05:00:00.000Z'::timestamp_tz(7),
+    '1900-01-01T05:00:00.000'::timestamp_ntz(7),
+    '1900-01-01T05:00:01.000Z'::timestamp_tz(7),
+    '1900-01-01T05:00:01.000'::timestamp_ntz(7),
+    '1900-01-01T05:00:01.012Z'::timestamp_tz(7),
+    '1900-01-01T05:00:01.012'::timestamp_ntz(7),
+    '1900-01-01T05:00:00.012Z'::timestamp_tz(7),
+    '1900-01-01T05:00:00.012'::timestamp_ntz(7),
+    '2100-01-01T05:00:00.012Z'::timestamp_tz(7),
+    '2100-01-01T05:00:00.012'::timestamp_ntz(7),
+    '1970-01-01T00:00:00Z'::timestamp_tz(7),
+    '1970-01-01T00:00:00'::timestamp_ntz(7)
+"""
+    with conn_cnx(converter_class=converter_class) as cnx:
+        cur = cnx.cursor()
+        cur.execute("""
+ALTER SESSION SET TIMEZONE='{tz}';
+""".format(tz=PST_TZ))
+        cur.execute("""
+ALTER SESSION SET
+    TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9',
+    TIME_OUTPUT_FORMAT='HH24:MI:SS.FF9';
+        """)
+        cur.execute(sql)
+        ret = cur.fetchone()
+        assert ret[0] == '1900-01-01 05:00:00.000000000 +0000'
+        assert ret[1] == '1900-01-01 05:00:00.000000000'
+        assert ret[2] == '1900-01-01 05:00:01.000000000 +0000'
+        assert ret[3] == '1900-01-01 05:00:01.000000000'
+        assert ret[4] == '1900-01-01 05:00:01.012000000 +0000'
+        assert ret[5] == '1900-01-01 05:00:01.012000000'
+        assert ret[6] == '1900-01-01 05:00:00.012000000 +0000'
+        assert ret[7] == '1900-01-01 05:00:00.012000000'
+        assert ret[8] == '2100-01-01 05:00:00.012000000 +0000'
+        assert ret[9] == '2100-01-01 05:00:00.012000000'
+        assert ret[10] == '1970-01-01 00:00:00.000000000 +0000'
+        assert ret[11] == '1970-01-01 00:00:00.000000000'

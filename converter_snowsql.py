@@ -12,7 +12,12 @@ import pytz
 
 from .compat import TO_UNICODE, IS_WINDOWS
 from .constants import (is_timestamp_type_name, is_date_type_name)
-from .converter import (SnowflakeConverter, ZERO_EPOCH, _extract_timestamp)
+from .converter import (
+    SnowflakeConverter,
+    ZERO_EPOCH,
+    _extract_timestamp,
+    _adjust_fraction_of_nanoseconds,
+    _generate_tzinfo_from_tzoffset)
 from .sfbinaryformat import (binary_to_python, SnowflakeBinaryFormat)
 from .sfdatetime import (
     SnowflakeDateTimeFormat,
@@ -149,8 +154,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         def conv0(encoded_value):
             value, tz = encoded_value.split()
             microseconds = float(value)
-            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-                int(tz) - 1440)
+            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
             try:
                 t = datetime.fromtimestamp(microseconds, tz=tzinfo)
             except OSError as e:
@@ -160,7 +164,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 if pytz.utc != tzinfo:
                     t += tzinfo.utcoffset(t, is_dst=False)
                 t = t.replace(tzinfo=tzinfo)
-            fraction_of_nanoseconds = SnowflakeConverter._adjust_fraction_of_nanoseconds(
+            fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
                 value, max_fraction, scale)
 
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
@@ -168,8 +172,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         def conv(encoded_value):
             value, tz = encoded_value.split()
             microseconds = float(value[0:-scale + 6])
-            tzinfo = SnowflakeConverter._generate_tzinfo_from_tzoffset(
-                int(tz) - 1440)
+            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
             try:
                 t = datetime.fromtimestamp(microseconds, tz=tzinfo)
             except OSError as e:
@@ -180,7 +183,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                     t += tzinfo.utcoffset(t, is_dst=False)
                 t = t.replace(tzinfo=tzinfo)
 
-            fraction_of_nanoseconds = SnowflakeConverter._adjust_fraction_of_nanoseconds(
+            fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
                 value, max_fraction, scale)
 
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
