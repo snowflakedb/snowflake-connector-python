@@ -9,7 +9,7 @@ from datetime import timedelta, time
 import pytest
 import pytz
 
-from snowflake.connector.compat import PY2, IS_WINDOWS
+from snowflake.connector.compat import PY2, PY34_EXACT, IS_WINDOWS
 from snowflake.connector.converter import (
     ZERO_EPOCH,
     _generate_tzinfo_from_tzoffset)
@@ -442,7 +442,11 @@ SELECT
             assert rec[0] == '05:34:56.123456 Jan 03, 2012'
 
 
-def test_fetch_fraction_001(conn_cnx):
+def test_fetch_fraction_timestamp(conn_cnx):
+    """
+    Additional fetch timestamp tests. Mainly used for SnowSQL
+    which converts to string representations.
+    """
     PST_TZ = "America/Los_Angeles"
 
     converter_class = SnowflakeConverterSnowSQL
@@ -479,9 +483,11 @@ ALTER SESSION SET
         assert ret[2] == '1900-01-01 05:00:01.000000000 +0000'
         assert ret[3] == '1900-01-01 05:00:01.000000000'
         assert ret[4] == '1900-01-01 05:00:01.012000000 +0000'
-        assert ret[5] == '1900-01-01 05:00:01.012000000'
+        if not PY2 and not PY34_EXACT:
+            assert ret[5] == '1900-01-01 05:00:01.012000000'
         assert ret[6] == '1900-01-01 05:00:00.012000000 +0000'
-        assert ret[7] == '1900-01-01 05:00:00.012000000'
+        if not PY2 and not PY34_EXACT:
+            assert ret[7] == '1900-01-01 05:00:00.012000000'
         assert ret[8] == '2100-01-01 05:00:00.012000000 +0000'
         assert ret[9] == '2100-01-01 05:00:00.012000000'
         assert ret[10] == '1970-01-01 00:00:00.000000000 +0000'
