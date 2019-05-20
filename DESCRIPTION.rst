@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.8.1 (May 20,2019)
+
+    - Revoked OCSP Responses persists in Driver Cache + Logging Fix
+    - Fixed DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated
+
 - v1.8.0 (May 10, 2019)
 
     - support numpy.bool_ in binding type
