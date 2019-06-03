@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.8.2 (June 03,2019)
+
+    - Pendulum datatype support
+
 - v1.8.1 (May 20,2019)
 
     - Revoked OCSP Responses persists in Driver Cache + Logging Fix

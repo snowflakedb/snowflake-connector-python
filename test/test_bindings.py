@@ -25,7 +25,7 @@ import time
 from datetime import datetime, date, timedelta
 from datetime import time as datetime_time
 from decimal import Decimal
-
+import pendulum
 import pytest
 import pytz
 
@@ -182,6 +182,43 @@ select * from {name} where c1=? and c2=?
             cnx.cursor().execute("""
 drop table if exists {name}
 """.format(name=db_parameters['name']))
+
+
+def test_pendulum_binding(conn_cnx, db_parameters):
+    pendulum_test = pendulum.now()
+    try:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+    create or replace table {name} (
+        c1 timestamp
+    )
+    """.format(name=db_parameters['name']))
+            c = cnx.cursor()
+            fmt = "insert into {name}(c1) values(%(v1)s)".format(
+                name=db_parameters['name']
+            )
+            c.execute(fmt, {'v1': pendulum_test})
+            assert len(cnx.cursor().execute(
+               "select count(*) from {name}".format(
+                  name=db_parameters['name'])).fetchall()) == 1
+        with conn_cnx(paramstyle=u'qmark') as cnx:
+            cnx.cursor().execute("""
+            create or replace table {name} (c1 timestamp, c2 timestamp)
+    """.format(name=db_parameters['name']))
+        with conn_cnx(paramstyle=u'qmark') as cnx:
+            cnx.cursor().execute("""
+            insert into {name} values(?, ?)
+            """.format(name=db_parameters['name']), (pendulum_test, pendulum_test))
+            ret = cnx.cursor().execute("""
+            select * from {name}
+            """.format(name=db_parameters['name'])).fetchone()
+            assert convert_datetime_to_epoch(
+                ret[0]) == convert_datetime_to_epoch(pendulum_test)
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute("""
+    drop table if exists {name}
+    """.format(name=db_parameters['name']))
 
 
 def test_binding_with_numeric(conn_cnx, db_parameters):

@@ -858,7 +858,7 @@ class SnowflakeOCSP(object):
         if os.getenv("SF_OCSP_FAIL_OPEN") is not None:
             # failOpen Env Variable is for internal usage/ testing only.
             # Using it in production is not advised and not supported.
-            self.FAIL_OPEN = os.getenv("SF_OCSP_FAIL_OPEN")
+            self.FAIL_OPEN = os.getenv("SF_OCSP_FAIL_OPEN").lower() == 'true'
         else:
             self.FAIL_OPEN = use_fail_open
 
@@ -893,6 +893,8 @@ class SnowflakeOCSP(object):
         """
         logger.debug(u'validating certificate: %s', hostname)
 
+        do_retry = SnowflakeOCSP.get_ocsp_retry_choice()
+
         m = not SnowflakeOCSP.OCSP_WHITELIST.match(hostname)
         if m or hostname.startswith("ocspssd"):
             logger.debug(u'skipping OCSP check: %s', hostname)
@@ -902,7 +904,7 @@ class SnowflakeOCSP(object):
             self.OCSP_CACHE_SERVER.reset_ocsp_endpoint(hostname)
 
         cert_data = self.extract_certificate_chain(connection)
-        return self._validate(hostname, cert_data, no_exception=no_exception)
+        return self._validate(hostname, cert_data, do_retry, no_exception)
 
     def _validate(
             self, hostname, cert_data, do_retry=True, no_exception=False):
@@ -923,6 +925,10 @@ class SnowflakeOCSP(object):
 
         logger.debug('ok' if not any_err else 'failed')
         return results
+
+    @staticmethod
+    def get_ocsp_retry_choice():
+        return os.getenv("SF_OCSP_DO_RETRY", "true") == "true"
 
     def is_cert_id_in_cache(self, cert_id, subject):
         """
@@ -1021,7 +1027,7 @@ class SnowflakeOCSP(object):
                 logger.debug("getting OCSP response from CA's OCSP server")
                 ocsp_response = self._fetch_ocsp_response(req, subject,
                                                           cert_id, telemetry_data,
-                                                          hostname)
+                                                          hostname, do_retry)
             else:
                 ocsp_url = self.extract_ocsp_url(subject)
                 cert_id_enc = self.encode_cert_id_base64(self.decode_cert_id_key(cert_id))
