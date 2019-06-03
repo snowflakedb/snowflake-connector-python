@@ -488,6 +488,8 @@ def test_privatelink(db_parameters):
     connection is used.
     """
     try:
+        os.environ['SF_OCSP_FAIL_OPEN'] = 'false'
+        os.environ['SF_OCSP_DO_RETRY'] = 'false'
         snowflake.connector.connect(
             account='testaccount',
             user='testuser',
@@ -499,10 +501,9 @@ def test_privatelink(db_parameters):
     except OperationalError:
         ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
         assert ocsp_url is not None, "OCSP URL should not be None"
-        assert ocsp_url.endswith(
-            'eu-central-1.privatelink.snowflakecomputing.com'
-            '/ocsp_response_cache.json')
-        assert ocsp_url.startswith('http://ocsp')
+        assert ocsp_url == "http://ocsp.testaccount.eu-central-1." \
+                           "privatelink.snowflakecomputing.com/" \
+                           "ocsp_response_cache.json"
 
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -518,6 +519,8 @@ def test_privatelink(db_parameters):
 
     ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
     assert ocsp_url is None, "OCSP URL should be None: {0}".format(ocsp_url)
+    del os.environ['SF_OCSP_DO_RETRY']
+    del os.environ['SF_OCSP_FAIL_OPEN']
 
 
 def test_disable_request_pooling(db_parameters):
