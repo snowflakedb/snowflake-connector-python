@@ -372,7 +372,6 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
 
         tbs_response_data = basic_ocsp_response.getComponentByName(
             'tbsResponseData')
-
         single_response = tbs_response_data.getComponentByName('responses')[0]
         cert_status = single_response.getComponentByName('certStatus')
         try:
@@ -410,8 +409,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
             logger.debug("Certificate is attached in Basic OCSP Response")
             cert_der = der_encoder.encode(attached_certs[0])
             cert_openssl = load_certificate(FILETYPE_ASN1, cert_der)
-            ocsp_cert = self._convert_openssl_to_pyasn1_certificate(
-                cert_openssl)
+            ocsp_cert = self._convert_openssl_to_pyasn1_certificate(cert_openssl)
 
             cur_time = datetime.utcnow().replace(tzinfo=pytz.utc)
             tbs_certificate = ocsp_cert.getComponentByName('tbsCertificate')
@@ -467,8 +465,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
                             "OCSP response may be malformed: {0}. ".format(cert_status)
                 raise RevocationCheckError(
                     msg=debug_msg,
-                    errno=ER_INVALID_OCSP_RESPONSE_CODE
-                )
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE)
         except RevocationCheckError as op_er:
             if not self.debug_ocsp_failure_url:
                 debug_msg = op_er.msg

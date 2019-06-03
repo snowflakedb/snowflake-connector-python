@@ -534,7 +534,10 @@ class SnowflakeConverter(object):
         tzinfo_value = value.tzinfo
         if tzinfo_value:
             if pytz.utc != tzinfo_value:
-                td = tzinfo_value.utcoffset(value, is_dst=False)
+                try:
+                    td = tzinfo_value.utcoffset(value)
+                except pytz.exceptions.AmbiguousTimeError:
+                    td = tzinfo_value.utcoffset(value, is_dst=False)
             else:
                 td = ZERO_TIMEDELTA
             sign = u'+' if td >= ZERO_TIMEDELTA else u'-'

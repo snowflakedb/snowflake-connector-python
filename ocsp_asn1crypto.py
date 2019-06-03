@@ -194,8 +194,8 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
             if cur_time > ocsp_cert['tbs_certificate']['validity']['not_after'].native or \
                     cur_time < ocsp_cert['tbs_certificate']['validity']['not_before'].native:
-                debug_msg = "Certificate attached to OCSP response is invalid. OCSP response " \
-                            "current time - {0} certificate not before time - {1} certificate " \
+                debug_msg = "Certificate attached to OCSP response is invalid. OCSP response "\
+                            "current time - {0} certificate not before time - {1} certificate "\
                             "not after time - {2}. Consider running curl -o ocsp.der {3}".\
                     format(cur_time,
                            ocsp_cert['tbs_certificate']['validity']['not_before'].native,

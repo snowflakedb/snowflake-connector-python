@@ -628,8 +628,8 @@ class SnowflakeConnection(object):
 
         if self.host.endswith(u".privatelink.snowflakecomputing.com"):
             ocsp_cache_server = \
-                u'http://ocsp{}/ocsp_response_cache.json'.format(
-                    self.host[self.host.index('.'):])
+                u'http://ocsp.{}/ocsp_response_cache.json'.format(
+                    self.host)
             if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' not in os.environ:
                 os.environ[
                     'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
