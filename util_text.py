@@ -200,3 +200,20 @@ def construct_hostname(region, account):
     else:
         host = u'{0}.snowflakecomputing.com'.format(account)
     return host
+
+
+def parse_account(account):
+    url_parts = account.split(u'.')
+    # if this condition is true, then we have some extra
+    # stuff in the account field.
+    if len(url_parts) > 1:
+        if url_parts[1] == u'global':
+            # remove external ID from account
+            parsed_account = url_parts[0][0:url_parts[0].rfind(u'-')]
+        else:
+            # remove region subdomain
+            parsed_account = url_parts[0]
+    else:
+        parsed_account = account
+
+    return parsed_account
