@@ -28,3 +28,6 @@ def test_construct_hostname_basic():
 
     assert construct_hostname(None, 'account1.eu-central-1') == \
            'account1.eu-central-1.snowflakecomputing.com'
+
+    assert construct_hostname(None, 'account1-jkabfvdjisoa778wqfgeruishafeuw89q.global') == \
+           'account1-jkabfvdjisoa778wqfgeruishafeuw89q.global.snowflakecomputing.com'
