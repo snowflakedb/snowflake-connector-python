@@ -19,6 +19,9 @@ try:
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
+from snowflake.connector.network import APPLICATION_SNOWSQL, CLIENT_NAME
+from snowflake.connector.connection import SnowflakeConnection
+
 
 def test_basic(conn_testaccount):
     """
@@ -544,3 +547,20 @@ def test_disable_request_pooling(db_parameters):
         assert cnx.disable_request_pooling
     finally:
         cnx.close()
+
+
+def test_privatelink_ocsp_url_creation():
+    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
+    SnowflakeConnection.setup_ocsp_privatelink(APPLICATION_SNOWSQL, hostname)
+
+    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
+    assert ocsp_cache_server == \
+        "http://ocsp.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
+
+    del os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']
+
+    SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
+    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
+    assert ocsp_cache_server == \
+        "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
+
