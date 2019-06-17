@@ -68,6 +68,8 @@ from .time_util import (
     HeartBeatTimer, get_time_millis)
 from .util_text import split_statements, construct_hostname, parse_account
 
+from snowflake.connector.network import APPLICATION_SNOWSQL
+
 
 def DefaultConverterClass():
     if PY_ISSUE_23517 or IS_WINDOWS:
@@ -599,6 +601,33 @@ class SnowflakeConnection(object):
                   callable(getattr(errors, method))]:
             setattr(self, m, getattr(errors, m))
 
+    @staticmethod
+    def setup_ocsp_privatelink(app, hostname):
+        if app == APPLICATION_SNOWSQL:
+            ocsp_cache_server = u'http://ocsp{}/ocsp_response_cache.json'.format(
+                hostname[hostname.index('.'):])
+        else:
+            ocsp_cache_server = \
+                u'http://ocsp.{}/ocsp_response_cache.json'.format(
+                    hostname)
+        if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' not in os.environ:
+            os.environ[
+                'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
+        else:
+            if not os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']. \
+                    startswith("http://"):
+                ocsp_cache_server = "http://{0}/{1}".format(
+                    os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
+                    "ocsp_response_cache.json")
+            else:
+                ocsp_cache_server = "{0}/{1}".format(
+                    os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
+                    "ocsp_response_cache.json")
+
+            os.environ[
+                'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
+        logger.debug(u"OCSP Cache Server is updated: %s", ocsp_cache_server)
+
     def __open_connection(self):
         u"""
         Opens a new network connection
@@ -627,26 +656,7 @@ class SnowflakeConnection(object):
                 os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'])
 
         if self.host.endswith(u".privatelink.snowflakecomputing.com"):
-            ocsp_cache_server = \
-                u'http://ocsp.{}/ocsp_response_cache.json'.format(
-                    self.host)
-            if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' not in os.environ:
-                os.environ[
-                    'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
-            else:
-                if not os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']. \
-                        startswith("http://"):
-                    ocsp_cache_server = "http://{0}/{1}".format(
-                        os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
-                        "ocsp_response_cache.json")
-                else:
-                    ocsp_cache_server = "{0}/{1}".format(
-                        os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
-                        "ocsp_response_cache.json")
-
-                os.environ[
-                    'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
-            logger.debug(u"OCSP Cache Server is updated: %s", ocsp_cache_server)
+            SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
         else:
             if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' in os.environ:
                 del os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']
