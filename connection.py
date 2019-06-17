@@ -66,7 +66,7 @@ from .telemetry import (TelemetryClient)
 from .time_util import (
     DEFAULT_MASTER_VALIDITY_IN_SECONDS,
     HeartBeatTimer, get_time_millis)
-from .util_text import split_statements, construct_hostname
+from .util_text import split_statements, construct_hostname, parse_account
 
 
 def DefaultConverterClass():
@@ -779,8 +779,7 @@ class SnowflakeConnection(object):
                     u'errno': ER_NO_ACCOUNT_NAME
                 })
         if u'.' in self._account:
-            # remove region subdomain
-            self._account = self._account[0:self._account.find(u'.')]
+            self._account = parse_account(self._account)
 
         if self.ocsp_fail_open:
             logger.info(
