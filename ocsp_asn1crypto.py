@@ -144,6 +144,32 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         revocation_reason = revoked_info.native['revocation_reason']
         return revocation_time, revocation_reason
 
+    def check_cert_time_validity(self, cur_time, ocsp_cert):
+
+        val_start = ocsp_cert['tbs_certificate']['validity']['not_before'].native
+        val_end = ocsp_cert['tbs_certificate']['validity']['not_after'].native
+
+        if cur_time > val_end or \
+                cur_time < val_start:
+            debug_msg = "Certificate attached to OCSP response is invalid. OCSP response " \
+                        "current time - {0} certificate not before time - {1} certificate " \
+                        "not after time - {2}. Consider running curl -o ocsp.der {3}". \
+                        format(cur_time,
+                               val_start,
+                               val_end,
+                               super(SnowflakeOCSPAsn1Crypto, self).debug_ocsp_failure_url)
+
+            return False, debug_msg
+        else:
+            return True, None
+
+    """
+    is_valid_time - checks various components of the OCSP Response
+    for expiry.
+    :param cert_id - certificate id corresponding to OCSP Response
+    :param ocsp_response
+    :return True/False depending on time validity within the response
+    """
     def is_valid_time(self, cert_id, ocsp_response):
         res = OCSPResponse.load(ocsp_response)
 
@@ -153,6 +179,33 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                 errno=ER_INVALID_OCSP_RESPONSE)
 
         basic_ocsp_response = res.basic_ocsp_response
+        if basic_ocsp_response['certs'].native:
+            logger.debug("Certificate is attached in Basic OCSP Response")
+            ocsp_cert = basic_ocsp_response['certs'][0]
+            logger.debug("Verifying the attached certificate is signed by "
+                         "the issuer")
+            logger.debug(
+                "Valid Not After: %s",
+                ocsp_cert['tbs_certificate']['validity']['not_after'].native)
+
+            cur_time = datetime.now(timezone.utc)
+
+            """
+            Note:
+            We purposefully do not verify certificate signature here.
+            The OCSP Response is extracted from the OCSP Response Cache
+            which is expected to have OCSP Responses with verified
+            attached signature. Moreover this OCSP Response is eventually
+            going to be processed by the driver before being consumed by
+            the driver.
+            This step ensures that the OCSP Response cache does not have
+            any invalid entries.
+            """
+            cert_valid, debug_msg = self.check_cert_time_validity(cur_time, ocsp_cert)
+            if not cert_valid:
+                logger.debug(debug_msg)
+                return False
+
         tbs_response_data = basic_ocsp_response['tbs_response_data']
 
         single_response = tbs_response_data['responses'][0]
@@ -192,26 +245,22 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
             cur_time = datetime.now(timezone.utc)
 
-            if cur_time > ocsp_cert['tbs_certificate']['validity']['not_after'].native or \
-                    cur_time < ocsp_cert['tbs_certificate']['validity']['not_before'].native:
-                debug_msg = "Certificate attached to OCSP response is invalid. OCSP response "\
-                            "current time - {0} certificate not before time - {1} certificate "\
-                            "not after time - {2}. Consider running curl -o ocsp.der {3}".\
-                    format(cur_time,
-                           ocsp_cert['tbs_certificate']['validity']['not_before'].native,
-                           ocsp_cert['tbs_certificate']['validity']['not_after'].native,
-                           super(SnowflakeOCSPAsn1Crypto, self).debug_ocsp_failure_url)
-
-                raise RevocationCheckError(
-                    msg=debug_msg,
-                    errno=ER_INVALID_OCSP_RESPONSE_CODE)
-
+            """
+            Signature verification should happen before any kind of
+            validation
+            """
             self.verify_signature(
                 ocsp_cert.hash_algo,
                 ocsp_cert.signature,
                 issuer,
-                ocsp_cert['tbs_certificate']
-            )
+                ocsp_cert['tbs_certificate'])
+
+            cert_valid, debug_msg = self.check_cert_time_validity(cur_time, ocsp_cert)
+            if not cert_valid:
+                raise RevocationCheckError(
+                    msg=debug_msg,
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE)
+
         else:
             logger.debug("Certificate is NOT attached in Basic OCSP Response. "
                          "Using issuer's certificate")
