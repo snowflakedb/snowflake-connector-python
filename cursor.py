@@ -460,6 +460,8 @@ class SnowflakeCursor(object):
                 query = command
                 processed_params = self._connection._process_params_qmarks(
                     params, self)
+        except ValueError:
+            raise
         except Exception:
             self.connection.incident.report_incident()
             raise
