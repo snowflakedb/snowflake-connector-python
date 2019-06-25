@@ -1386,6 +1386,8 @@ class SnowflakeOCSP(object):
             for cert_id_base64, (
                     ts, ocsp_response) in ocsp_response_cache_json.items():
                 cert_id = self.decode_cert_id_base64(cert_id_base64)
+                if not self.is_valid_time(cert_id, b64decode(ocsp_response)):
+                    continue
                 SnowflakeOCSP.OCSP_CACHE.update_or_delete_cache(
                     self, cert_id, b64decode(ocsp_response), ts)
         except Exception as ex:
