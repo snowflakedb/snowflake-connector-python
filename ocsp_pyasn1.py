@@ -355,6 +355,29 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
     def _convert_generalized_time_to_datetime(self, gentime):
         return datetime.strptime(str(gentime), '%Y%m%d%H%M%SZ')
 
+    def check_cert_time_validity(self, cur_time, tbs_certificate):
+        cert_validity = tbs_certificate.getComponentByName('validity')
+        cert_not_after = cert_validity.getComponentByName('notAfter')
+        val_end = cert_not_after.getComponentByName('utcTime').asDateTime
+        cert_not_before = cert_validity.getComponentByName('notBefore')
+        val_start = cert_not_before.getComponentByName('utcTime').asDateTime
+
+        if cur_time > val_end or cur_time < val_start:
+            debug_msg = "Certificate attached to OCSP Response is invalid. " \
+                         "OCSP response current time - {0} certificate not " \
+                         "before time - {1} certificate not after time - {2}. ". \
+                         format(cur_time, val_start, val_end)
+            return False, debug_msg
+        else:
+            return True, None
+
+    """
+    is_valid_time - checks various components of the OCSP Response
+    for expiry.
+    :param cert_id - certificate id corresponding to OCSP Response
+    :param ocsp_response
+    :return True/False depending on time validity within the response
+    """
     def is_valid_time(self, cert_id, ocsp_response):
         res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
 
@@ -369,6 +392,35 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         basic_ocsp_response = der_decoder.decode(
             response_bytes.getComponentByName('response'),
             BasicOCSPResponse())[0]
+
+        attached_certs = basic_ocsp_response.getComponentByName('certs')
+        if self._has_certs_in_ocsp_response(attached_certs):
+            logger.debug("Certificate is attached in Basic OCSP Response")
+            cert_der = der_encoder.encode(attached_certs[0])
+            cert_openssl = load_certificate(FILETYPE_ASN1, cert_der)
+            ocsp_cert = self._convert_openssl_to_pyasn1_certificate(
+                cert_openssl)
+
+            cur_time = datetime.utcnow().replace(tzinfo=pytz.utc)
+            tbs_certificate = ocsp_cert.getComponentByName('tbsCertificate')
+
+            """
+            Note:
+            We purposefully do not verify certificate signature here.
+            The OCSP Response is extracted from the OCSP Response Cache
+            which is expected to have OCSP Responses with verified
+            attached signature. Moreover this OCSP Response is eventually
+            going to be processed by the driver before being consumed by
+            the driver.
+            This step ensures that the OCSP Response cache does not have
+            any invalid entries.
+            """
+
+            cert_valid, debug_msg = self.check_cert_time_validity(cur_time,
+                                                                  tbs_certificate)
+            if not cert_valid:
+                logger.debug(debug_msg)
+                return False
 
         tbs_response_data = basic_ocsp_response.getComponentByName(
             'tbsResponseData')
@@ -413,27 +465,25 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
 
             cur_time = datetime.utcnow().replace(tzinfo=pytz.utc)
             tbs_certificate = ocsp_cert.getComponentByName('tbsCertificate')
-            cert_validity = tbs_certificate.getComponentByName('validity')
-            cert_not_after = cert_validity.getComponentByName('notAfter')
-            cert_not_after_utc = cert_not_after.getComponentByName('utcTime').asDateTime
-            cert_not_before = cert_validity.getComponentByName('notBefore')
-            cert_not_before_utc = cert_not_before.getComponentByName('utcTime').asDateTime
 
-            if cur_time > cert_not_after_utc or cur_time < cert_not_before_utc:
-                debug_msg = "Certificate attached to OCSP Response is invalid. " \
-                            "OCSP response current time - {0} certificate not " \
-                            "before time - {1} certificate not after time - {2}. ".\
-                    format(cur_time, cert_not_before_utc, cert_not_after_utc)
-                raise RevocationCheckError(
-                    msg=debug_msg,
-                    errno=ER_INVALID_OCSP_RESPONSE_CODE
-                )
+            """
+            Signature verification should happen before any kind of
+            validation
+            """
 
             self.verify_signature(
                 ocsp_cert.getComponentByName('signatureAlgorithm'),
                 ocsp_cert.getComponentByName('signatureValue'),
                 issuer,
                 ocsp_cert.getComponentByName('tbsCertificate'))
+
+            cert_valid, debug_msg = self.check_cert_time_validity(cur_time,
+                                                                  tbs_certificate)
+            if not cert_valid:
+                raise RevocationCheckError(
+                    msg=debug_msg,
+                    errno=ER_INVALID_OCSP_RESPONSE_CODE
+                )
         else:
             logger.debug("Certificate is NOT attached in Basic OCSP Response. "
                          "Using issuer's certificate")
