@@ -267,3 +267,12 @@ class OtherHTTPRetryableError(Error):
             errno=kwargs.get('errno'),
             sqlstate=kwargs.get('sqlstate'),
             sfqid=kwargs.get('sfqid'))
+
+
+class DependencyMissingError(Error):
+    u"""Exception for missing extras dependencies"""
+    pass
+
+
+AWSDependencyMissingError = DependencyMissingError("AWS functionality is not available, you must install with: pip install snowflake-connector-python[aws]")
+AzureDependencyMissingError = DependencyMissingError("Azure functionality is not available, you must install with: pip install snowflake-connector-python[azure]")

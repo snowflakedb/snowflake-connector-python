@@ -28,9 +28,9 @@ from socket import error as SocketError
 from socket import (socket, timeout)
 
 import OpenSSL.SSL
-from botocore.vendored.requests.packages.urllib3 import connection \
+from urllib3 import connection \
     as urllib3_connection
-from botocore.vendored.requests.packages.urllib3 import util \
+from urllib3 import util \
     as urllib3_util
 from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend

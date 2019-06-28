@@ -13,9 +13,9 @@ from os import path
 
 import OpenSSL.SSL
 import pytest
-from botocore.vendored.requests.exceptions import (
+from requests.exceptions import (
     ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
-from botocore.vendored.requests.packages.urllib3.exceptions import (
+from urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
 
 from snowflake.connector.compat import (

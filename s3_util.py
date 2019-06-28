@@ -6,6 +6,7 @@ from collections import namedtuple
 from logging import getLogger
 
 import OpenSSL
+
 import boto3
 import botocore.exceptions
 from boto3.exceptions import RetriesExceededError, S3UploadFailedError

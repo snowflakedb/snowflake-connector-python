@@ -9,5 +9,5 @@ python -m pip install --upgrade pip==18.1
 pip install pendulum
 pip install numpy
 pip install pytest pytest-cov pytest-rerunfailures
-pip install .
+pip install .[aws,azure]
 pip list --format=columns

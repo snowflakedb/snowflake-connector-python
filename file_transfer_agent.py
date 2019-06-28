@@ -15,9 +15,6 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from time import (time, sleep)
 
-import botocore.exceptions
-
-from .azure_util import SnowflakeAzureUtil
 from .compat import (GET_CWD, TO_UNICODE, IS_WINDOWS)
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .converter_snowsql import SnowflakeConverterSnowSQL
@@ -29,14 +26,25 @@ from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
                         ER_FAILED_TO_DOWNLOAD_FROM_STAGE,
                         ER_FAILED_TO_UPLOAD_TO_STAGE)
 from .errors import (Error, OperationalError, InternalError, DatabaseError,
-                     ProgrammingError)
+                     ProgrammingError, AWSDependencyMissingError, AzureDependencyMissingError)
 from .file_compression_type import FileCompressionType
 from .file_util import SnowflakeFileUtil
 from .local_util import SnowflakeLocalUtil
 from .remote_storage_util import (SnowflakeFileEncryptionMaterial,
                                   SnowflakeRemoteStorageUtil,
                                   )
-from .s3_util import SnowflakeS3Util
+
+try:
+    from .azure_util import SnowflakeAzureUtil
+except ImportError:
+    SnowflakeAzureUtil = None
+
+try:
+    from .s3_util import SnowflakeS3Util
+    from botocore.exceptions import ClientError as BotoClientError
+except ImportError:
+    SnowflakeS3Util = None
+    BotoClientError = None
 
 S3_FS = u'S3'
 AZURE_FS = u'AZURE'
@@ -239,8 +247,12 @@ class SnowflakeFileTransferAgent(object):
 
                 # multichunk uploader threshold
                 if self._stage_location_type == S3_FS:
+                    if SnowflakeS3Util is None:
+                        raise AWSDependencyMissingError
                     size_threshold = SnowflakeS3Util.DATA_SIZE_THRESHOLD
                 else:
+                    if SnowflakeAzureUtil is None:
+                        raise AzureDependencyMissingError
                     size_threshold = SnowflakeAzureUtil.DATA_SIZE_THRESHOLD
                 if meta.get(u'src_file_size', 1) > size_threshold:
                     meta[u'parallel'] = self._parallel
@@ -282,6 +294,8 @@ class SnowflakeFileTransferAgent(object):
 
     def _transfer_accelerate_config(self):
         if self._stage_location_type == S3_FS:
+            if SnowflakeS3Util is None:
+                raise AWSDependencyMissingError
             client = SnowflakeRemoteStorageUtil.create_client(
                 self._stage_info,
                 use_accelerate_endpoint=False)
@@ -294,7 +308,7 @@ class SnowflakeFileTransferAgent(object):
                 self._use_accelerate_endpoint = \
                     ret and 'Status' in ret and \
                     ret['Status'] == 'Enabled'
-            except botocore.exceptions.ClientError as e:
+            except BotoClientError as e:
                 if e.response['Error'].get('Code', 'Unknown') == \
                         'AccessDenied':
                     logger.debug(e)

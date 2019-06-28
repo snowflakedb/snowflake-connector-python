@@ -35,10 +35,6 @@ setup(
     python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
 
     install_requires=[
-        'azure-common',
-        'azure-storage-blob',
-        'boto3>=1.4.4,<1.10.0',
-        'botocore>=1.5.0,<1.13.0',
         'certifi',
         'future',
         'six',
@@ -53,7 +49,8 @@ setup(
         'pyasn1>=0.4.0,<0.5.0;python_version<"3.0"',
         'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
         'enum34;python_version<"3.4"',
-        'urllib3>=1.21.1,<1.25;python_version<"3.5"',
+        'urllib3>=1.21.1,<1.25',
+        'requests'
     ],
 
     namespace_packages=['snowflake'],
@@ -84,6 +81,14 @@ setup(
     extras_require={
         "secure-local-storage": [
             'keyring!=16.1.0'
+        ],
+        "aws": [
+            'boto3>=1.4.4,<1.10.0',
+            'botocore>=1.5.0,<1.13.0',
+        ],
+        "azure": [
+            'azure-common',
+            'azure-storage-blob',
         ],
     },
 

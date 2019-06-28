@@ -11,6 +11,7 @@ import platform
 import re
 import tempfile
 import time
+import sys
 from base64 import b64decode, b64encode
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -22,6 +23,7 @@ from time import gmtime, strftime
 
 import jwt
 import requests as generic_requests
+from requests import certs
 
 from snowflake.connector.compat import (urlsplit, OK)
 from snowflake.connector.errorcode import (
@@ -1137,8 +1139,6 @@ class SnowflakeOCSP(object):
                     # if the user/application specifies cabundle.
                     self.read_cert_bundle(ca_bundle)
                 else:
-                    import sys
-                    from botocore.vendored.requests import certs
                     if hasattr(certs, '__file__') and \
                             path.exists(certs.__file__) and \
                             path.exists(path.join(

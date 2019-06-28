@@ -12,10 +12,19 @@ import time
 from collections import namedtuple
 from logging import getLogger
 
-from .azure_util import SnowflakeAzureUtil
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .encryption_util import (SnowflakeEncryptionUtil)
-from .s3_util import SnowflakeS3Util
+from .errors import (AWSDependencyMissingError, AzureDependencyMissingError)
+
+try:
+    from .azure_util import SnowflakeAzureUtil
+except ImportError:
+    SnowflakeAzureUtil = None
+
+try:
+    from .s3_util import SnowflakeS3Util
+except ImportError:
+    SnowflakeS3Util = None
 
 DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
@@ -41,8 +50,12 @@ class SnowflakeRemoteStorageUtil(object):
     @staticmethod
     def getStorageType(type):
         if (type == u'S3'):
+            if SnowflakeS3Util is None:
+                raise AWSDependencyMissingError
             return SnowflakeS3Util
         elif (type == u'AZURE'):
+            if SnowflakeAzureUtil is None:
+                raise AzureDependencyMissingError
             return SnowflakeAzureUtil
 
     @staticmethod
