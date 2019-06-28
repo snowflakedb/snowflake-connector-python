@@ -682,7 +682,7 @@ class SnowflakeRestful(object):
             return None  # retry
         except Exception as e:
             if not no_retry:
-                raise e
+                raise
             logger.debug("Ignored error", exc_info=True)
             return {}
 
@@ -870,7 +870,7 @@ class SnowflakeRestful(object):
                     "Ignore the following error stack: %s", err,
                     exc_info=True)
                 raise RetryRequest(err)
-            raise err
+            raise
 
     def make_requests_session(self):
         s = requests.Session()

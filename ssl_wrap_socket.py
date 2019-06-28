@@ -317,7 +317,8 @@ if isinstance(DEFAULT_SSL_CIPHER_LIST, str):
 
 def ssl_wrap_socket(
         sock, keyfile=None, certfile=None, cert_reqs=None,
-        ca_certs=None, server_hostname=None, ssl_version=None):
+        ca_certs=None, server_hostname=None, ssl_version=None,
+        ca_cert_dir=None, ssl_context=None):
     ctx = OpenSSL.SSL.Context(_openssl_versions[ssl_version])
     if certfile:
         # Match behaviour of the normal python ssl library
@@ -329,7 +330,7 @@ def ssl_wrap_socket(
         ctx.set_verify(_stdlib_to_openssl_verify[cert_reqs], _verify_callback)
     if ca_certs:
         try:
-            ctx.load_verify_locations(ca_certs, None)
+            ctx.load_verify_locations(ca_certs, ca_cert_dir)
         except OpenSSL.SSL.Error as e:
             raise ssl.SSLError('bad ca_certs: %r' % ca_certs, e)
     else:
@@ -369,11 +370,13 @@ def _verify_callback(cnx, x509, err_no, err_depth, return_code):
 
 def ssl_wrap_socket_with_ocsp(
         sock, keyfile=None, certfile=None, cert_reqs=None,
-        ca_certs=None, server_hostname=None, ssl_version=None):
+        ca_certs=None, server_hostname=None, ssl_version=None,
+        ca_cert_dir=None, ssl_context=None):
     ret = ssl_wrap_socket(
         sock, keyfile=keyfile, certfile=certfile, cert_reqs=cert_reqs,
         ca_certs=ca_certs, server_hostname=server_hostname,
-        ssl_version=ssl_version)
+        ssl_version=ssl_version, ca_cert_dir=ca_cert_dir,
+        ssl_context=ssl_context)
     global FEATURE_OCSP_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 
