@@ -85,6 +85,10 @@ setup(
         "secure-local-storage": [
             'keyring!=16.1.0'
         ],
+        "arrow-result": [
+            'pyarrow>=0.13.0;python_version>"3.4"',
+            'pyarrow>=0.13.0;python_version<"3.0"'
+        ]
     },
 
     classifiers=[

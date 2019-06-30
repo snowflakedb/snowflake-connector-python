@@ -9,9 +9,20 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from threading import (Condition, Lock)
 
+from .compat import ITERATOR
 from snowflake.connector.network import ResultIterWithTimings
+from snowflake.connector.gzip_decoder import decompress_raw_data
+from snowflake.connector.util_text import split_rows_from_stream
 from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
+import json
+from io import StringIO
+from gzip import GzipFile
+
+try:
+    from pyarrow.ipc import open_stream
+except ImportError:
+    pass
 
 DEFAULT_REQUEST_TIMEOUT = 3600
 
@@ -42,9 +53,11 @@ class SnowflakeChunkDownloader(object):
     """
 
     def _pre_init(self, chunks, connection, cursor, qrmk, chunk_headers,
+                  query_result_format='JSON',
                   prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
                   use_ijson=False):
         self._use_ijson = use_ijson
+        self._query_result_format = query_result_format
 
         self._downloader_error = None
 
@@ -87,9 +100,11 @@ class SnowflakeChunkDownloader(object):
         self._next_chunk_to_consume = 0
 
     def __init__(self, chunks, connection, cursor, qrmk, chunk_headers,
+                 query_result_format='JSON',
                  prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
                  use_ijson=False):
         self._pre_init(chunks, connection, cursor, qrmk, chunk_headers,
+                       query_result_format=query_result_format,
                        prefetch_threads=prefetch_threads,
                        use_ijson=use_ijson)
         logger.debug('Chunk Downloader in memory')
@@ -251,10 +266,95 @@ class SnowflakeChunkDownloader(object):
         """
         Fetch the chunk from S3.
         """
+        handler = JsonBinaryHandler(is_raw_binary_iterator=True,
+                                    use_ijson=self._use_ijson) \
+            if self._query_result_format == 'json' else \
+            ArrowBinaryHandler()
+
         return self._connection.rest.fetch(
             u'get', url, headers,
             timeout=DEFAULT_REQUEST_TIMEOUT,
             is_raw_binary=True,
-            is_raw_binary_iterator=True,
-            use_ijson=self._use_ijson,
+            binary_data_handler=handler,
             return_timing_metrics=True)
+
+
+class RawBinaryDataHandler:
+    """
+    Abstract class being passed to network.py to handle raw binary data
+    """
+    def to_iterator(self, raw_data_fd):
+        pass
+
+
+class JsonBinaryHandler(RawBinaryDataHandler):
+    """
+    Convert result chunk in json format into interator
+    """
+    def __init__(self, is_raw_binary_iterator, use_ijson):
+        self._is_raw_binary_iterator = is_raw_binary_iterator
+        self._use_ijson = use_ijson
+
+    def to_iterator(self, raw_data_fd):
+        raw_data = decompress_raw_data(
+            raw_data_fd, add_bracket=True
+        ).decode('utf-8', 'replace')
+        if not self._is_raw_binary_iterator:
+            ret = json.loads(raw_data)
+        elif not self._use_ijson:
+            ret = iter(json.loads(raw_data))
+        else:
+            ret = split_rows_from_stream(StringIO(raw_data))
+        return ret
+
+
+class ArrowBinaryHandler(RawBinaryDataHandler):
+    """
+    Handler to consume data as arrow stream
+    """
+    def to_iterator(self, raw_data_fd):
+        gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
+        reader = open_stream(gzip_decoder)
+        return ArrowChunkIterator(reader)
+
+
+class ArrowChunkIterator(ITERATOR):
+    """
+    Given a list of record batches, iterate over
+    these batches row by row
+    """
+
+    def __init__(self, arrow_stream_reader):
+        self._batches = []
+        for record_batch in arrow_stream_reader:
+            self._batches.append(record_batch.columns)
+
+        self._column_count = len(self._batches[0])
+        self._batch_count = len(self._batches)
+        self._batch_index = -1
+        self._index_in_batch = -1
+        self._row_count_in_batch = 0
+
+    def next(self):
+        return self.__next__()
+
+    def __next__(self):
+        self._index_in_batch += 1
+        if self._index_in_batch < self._row_count_in_batch:
+            return self._return_row()
+        else:
+            self._batch_index += 1
+            if self._batch_index < self._batch_count:
+                self._index_in_batch = 0
+                self._row_count_in_batch = len(self._batches[self._batch_index][0])
+                return self._return_row()
+
+        raise StopIteration
+
+    def _return_row(self):
+        ret = []
+        current_batch = self._batches[self._batch_index]
+        for col_array in current_batch:
+            ret.append(col_array[self._index_in_batch])
+
+        return ret

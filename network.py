@@ -13,7 +13,7 @@ import platform
 import sys
 import time
 import uuid
-from io import StringIO, BytesIO
+from io import BytesIO
 from threading import Lock
 
 import OpenSSL.SSL
@@ -47,7 +47,6 @@ from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
                      InterfaceError, InternalServerError, ForbiddenError,
                      BadGatewayError, BadRequest, MethodNotAllowed,
                      OtherHTTPRetryableError)
-from .gzip_decoder import decompress_raw_data
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                        SQLSTATE_CONNECTION_REJECTED)
@@ -56,7 +55,6 @@ from .time_util import (
     DEFAULT_MASTER_VALIDITY_IN_SECONDS
 )
 from .tool.probe_connection import probe_connection
-from .util_text import split_rows_from_stream
 from .version import VERSION
 
 if PY2:
@@ -739,8 +737,7 @@ class SnowflakeRestful(object):
             catch_okta_unauthorized_error=False,
             is_raw_text=False,
             is_raw_binary=False,
-            is_raw_binary_iterator=True,
-            use_ijson=False,
+            binary_data_handler=None,
             socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
             return_timing_metrics=False):
         if socket_timeout > DEFAULT_SOCKET_CONNECT_TIMEOUT:
@@ -785,15 +782,7 @@ class SnowflakeRestful(object):
                         ret = raw_ret.text
                     elif is_raw_binary:
                         start_time = get_time_millis()
-                        raw_data = decompress_raw_data(
-                            raw_ret.raw, add_bracket=True
-                        ).decode('utf-8', 'replace')
-                        if not is_raw_binary_iterator:
-                            ret = json.loads(raw_data)
-                        elif not use_ijson:
-                            ret = iter(json.loads(raw_data))
-                        else:
-                            ret = split_rows_from_stream(StringIO(raw_data))
+                        ret = binary_data_handler.to_iterator(raw_ret.raw)
                         timing_metrics[
                             ResultIterWithTimings.PARSE] = get_time_millis() - start_time
 
