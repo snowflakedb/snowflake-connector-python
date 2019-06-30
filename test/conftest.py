@@ -126,6 +126,8 @@ def get_db_parameters():
     ret['name_wh'] = ret['name'] + 'wh'
 
     ret['schema'] = TEST_SCHEMA
+
+    # This reduces a chance to exposing password in test output.
     ret['a00'] = 'dummy parameter'
     ret['a01'] = 'dummy parameter'
     ret['a02'] = 'dummy parameter'
