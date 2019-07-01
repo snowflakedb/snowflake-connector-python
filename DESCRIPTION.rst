@@ -9,8 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.8.4(July 01,2019)
+
+    - Update Python Connector to discard invalid OCSP Responses while merging caches
 
 - v1.8.3(June 17,2019)
+
     - Update Client Driver OCSP Endpoint URL for Private Link Customers
     - Ignore session gone 390111 when closing
     - Python3.4 using requests 2.21.0 needs older version of urllib3
