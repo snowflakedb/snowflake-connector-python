@@ -560,7 +560,7 @@ class OCSPCache(object):
                             return True, cache
                         else:
                             OCSPCache.delete_cache(ocsp, cert_id)
-                    except Exception as ex:
+                    except Exception:
                         OCSPCache.delete_cache(ocsp, cert_id)
                 else:
                     logger.debug("Could not validate cache entry %s %s",

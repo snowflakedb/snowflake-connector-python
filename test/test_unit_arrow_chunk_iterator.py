@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from snowflake.connector.chunk_downloader import ArrowChunkIterator
-from snowflake.connector.compat import PY34_EXACT
 from io import BytesIO
 import random
 import pytest
@@ -15,18 +13,22 @@ try:
     from pyarrow import RecordBatchStreamWriter
     from pyarrow import RecordBatch
     import pyarrow
+    from snowflake.connector.arrow_iterator import ArrowChunkIterator
 except ImportError:
     pass
 
 
-@pytest.mark.skipif(
-    PY34_EXACT,
-    reason="Pyarrow is not support in python3.4 envrionment")
+@pytest.mark.skip(
+    reason="Cython is not enabled in build env")
 def test_iterate_over_single_arrow_chunk():
     stream = BytesIO()
     field_foo = pyarrow.field("column_foo", pyarrow.int64(), True)
     field_bar = pyarrow.field("column_bar", pyarrow.int64(), True)
     schema = pyarrow.schema([field_foo, field_bar])
+    column_meta = [
+      ("column_foo", "FIXED", None, 0, 0, 0, 0),
+      ("column_bar", "FIXED", None, 0, 0, 0, 0)
+    ]
 
     column_size = 2
     batch_row_count = 10
@@ -54,14 +56,14 @@ def test_iterate_over_single_arrow_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = ArrowChunkIterator(reader)
+    it = ArrowChunkIterator(reader, column_meta)
 
     count = 0
     while True:
         try:
             val = next(it)
-            assert val[0].as_py() == expected_data[int(count / 10)][0][count % 10]
-            assert val[1].as_py() == expected_data[int(count / 10)][1][count % 10]
+            assert val[0] == expected_data[int(count / 10)][0][count % 10]
+            assert val[1] == expected_data[int(count / 10)][1][count % 10]
             count += 1
         except StopIteration:
             assert count == 100

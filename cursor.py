@@ -30,11 +30,10 @@ from .file_transfer_agent import (SnowflakeFileTransferAgent)
 from .sqlstate import (SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryData, TelemetryField)
 from .time_util import get_time_millis
-from .chunk_downloader import ArrowChunkIterator
-from .converter_arrow import SnowflakeArrowConverter
 
 try:
     from pyarrow.ipc import open_stream
+    from .arrow_iterator import ArrowChunkIterator
 except ImportError:
     pass
 
@@ -587,8 +586,8 @@ class SnowflakeCursor(object):
         self._column_idx_to_name = {}
         self._column_converter = []
 
-        converter = SnowflakeArrowConverter() if \
-            self._query_result_format == 'arrow' else self._connection.converter
+        self._return_row_method = self._arrow_return_row if \
+            self._query_result_format == 'arrow' else self._json_return_row
 
         for idx, column in enumerate(data[u'rowtype']):
             self._column_idx_to_name[idx] = column[u'name']
@@ -601,7 +600,7 @@ class SnowflakeCursor(object):
                                       column[u'scale'],
                                       column[u'nullable']))
             self._column_converter.append(
-                    converter.to_python_method(
+                    self._connection.converter.to_python_method(
                         column[u'type'].upper(), column))
 
         self._total_row_index = -1  # last fetched number of rows
@@ -612,7 +611,7 @@ class SnowflakeCursor(object):
             # result as arrow chunk
             arrow_bytes = b64decode(data.get(u'rowsetBase64'))
             arrow_reader = open_stream(arrow_bytes)
-            self._current_chunk_row = ArrowChunkIterator(arrow_reader)
+            self._current_chunk_row = ArrowChunkIterator(arrow_reader, self._description)
         else:
             self._current_chunk_row = iter(data.get(u'rowset'))
             self._current_chunk_row_count = len(data.get(u'rowset'))
@@ -801,7 +800,7 @@ class SnowflakeCursor(object):
                     self._current_chunk_row = iter(())
                     is_done = True
 
-            return self._row_to_python(row) if row is not None else None
+            return self._return_row_method(row)
 
         except IndexError:
             # returns None if the iteration is completed so that iter() stops
@@ -813,6 +812,12 @@ class SnowflakeCursor(object):
                 self._log_telemetry_job_data(
                     TelemetryField.TIME_CONSUME_LAST_RESULT,
                     time_consume_last_result)
+
+    def _json_return_row(self, row):
+        return self._row_to_python(row) if row is not None else None
+
+    def _arrow_return_row(self, row):
+        return row
 
     def fetchmany(self, size=None):
         u"""

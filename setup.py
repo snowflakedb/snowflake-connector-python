@@ -5,8 +5,10 @@
 #
 from codecs import open
 from os import path
+import os
 
 from setuptools import setup
+from os.path import join
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
@@ -19,19 +21,31 @@ version = '.'.join([str(v) for v in VERSION if v is not None])
 with open(path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
+cython_build_dir = join("build", "cython")
+cython_source = [
+    "arrow_iterator.pyx"
+]
+enable_ext_modules = os.environ.get("ENABLE_EXT_MODULES", "false")
+ext_modules = None
+if enable_ext_modules == "true":
+    from Cython.Build import cythonize
+    ext_modules = cythonize(cython_source, build_dir=cython_build_dir)
+
 setup(
     name='snowflake-connector-python',
     version=version,
     description=u"Snowflake Connector for Python",
+    ext_modules=ext_modules,
     long_description=long_description,
-    author='Snowflake Computing, Inc',
-    author_email='support@snowflake.net',
+    author='Snowflake, Inc',
+    author_email='support@snowflake.com',
     license='Apache License, Version 2.0',
     keywords="Snowflake db database cloud analytics warehouse",
-    url='https://www.snowflake.net/',
-    download_url='https://www.snowflake.net/',
+    url='https://www.snowflake.com/',
+    download_url='https://www.snowflake.com/',
     use_2to3=False,
 
+    # NOTE: Python 3.4 will be dropped within one month.
     python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
 
     install_requires=[
@@ -108,7 +122,6 @@ setup(
 
         'Programming Language :: SQL',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
