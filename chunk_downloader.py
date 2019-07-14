@@ -9,7 +9,6 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from threading import (Condition, Lock)
 
-from .compat import ITERATOR
 from snowflake.connector.network import ResultIterWithTimings
 from snowflake.connector.gzip_decoder import decompress_raw_data
 from snowflake.connector.util_text import split_rows_from_stream
@@ -21,6 +20,7 @@ from gzip import GzipFile
 
 try:
     from pyarrow.ipc import open_stream
+    from .arrow_iterator import ArrowChunkIterator
 except ImportError:
     pass
 
@@ -269,7 +269,7 @@ class SnowflakeChunkDownloader(object):
         handler = JsonBinaryHandler(is_raw_binary_iterator=True,
                                     use_ijson=self._use_ijson) \
             if self._query_result_format == 'json' else \
-            ArrowBinaryHandler()
+            ArrowBinaryHandler(self._cursor.description)
 
         return self._connection.rest.fetch(
             u'get', url, headers,
@@ -309,52 +309,14 @@ class JsonBinaryHandler(RawBinaryDataHandler):
 
 
 class ArrowBinaryHandler(RawBinaryDataHandler):
+
+    def __init__(self, meta):
+        self._meta = meta
+
     """
     Handler to consume data as arrow stream
     """
     def to_iterator(self, raw_data_fd):
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
         reader = open_stream(gzip_decoder)
-        return ArrowChunkIterator(reader)
-
-
-class ArrowChunkIterator(ITERATOR):
-    """
-    Given a list of record batches, iterate over
-    these batches row by row
-    """
-
-    def __init__(self, arrow_stream_reader):
-        self._batches = []
-        for record_batch in arrow_stream_reader:
-            self._batches.append(record_batch.columns)
-
-        self._column_count = len(self._batches[0])
-        self._batch_count = len(self._batches)
-        self._batch_index = -1
-        self._index_in_batch = -1
-        self._row_count_in_batch = 0
-
-    def next(self):
-        return self.__next__()
-
-    def __next__(self):
-        self._index_in_batch += 1
-        if self._index_in_batch < self._row_count_in_batch:
-            return self._return_row()
-        else:
-            self._batch_index += 1
-            if self._batch_index < self._batch_count:
-                self._index_in_batch = 0
-                self._row_count_in_batch = len(self._batches[self._batch_index][0])
-                return self._return_row()
-
-        raise StopIteration
-
-    def _return_row(self):
-        ret = []
-        current_batch = self._batches[self._batch_index]
-        for col_array in current_batch:
-            ret.append(col_array[self._index_in_batch])
-
-        return ret
+        return ArrowChunkIterator(reader, self._meta)
