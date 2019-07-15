@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
+import pytest
 import os
 
 import snowflake.connector
@@ -169,6 +170,7 @@ def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
     assert con.service_name == 'FAKE_SERVICE_NAME'
 
 
+@pytest.mark.skip(reason="Mock doesn't work as expected.")
 @patch(
     'snowflake.connector.network.SnowflakeRestful._post_request'
 )
