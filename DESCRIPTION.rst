@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.8.5(July 15,2019)
+
+    - Drop Python 3.4 support for Python Connector
+
 - v1.8.4(July 01,2019)
 
     - Update Python Connector to discard invalid OCSP Responses while merging caches
