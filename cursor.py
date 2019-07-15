@@ -466,7 +466,7 @@ class SnowflakeCursor(object):
                 query = command
                 processed_params = self._connection._process_params_qmarks(
                     params, self)
-        # Skip reporting Value and Type errors
+        # Skip reporting Key, Value and Type errors
         except KeyError:
             raise
         except ValueError:
