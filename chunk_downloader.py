@@ -9,11 +9,11 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from threading import (Condition, Lock)
 
-from snowflake.connector.network import ResultIterWithTimings
 from snowflake.connector.gzip_decoder import decompress_raw_data
 from snowflake.connector.util_text import split_rows_from_stream
 from .errorcode import (ER_NO_ADDITIONAL_CHUNK, ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
+from .time_util import get_time_millis
 import json
 from io import StringIO
 from gzip import GzipFile
@@ -275,15 +275,32 @@ class SnowflakeChunkDownloader(object):
             u'get', url, headers,
             timeout=DEFAULT_REQUEST_TIMEOUT,
             is_raw_binary=True,
-            binary_data_handler=handler,
-            return_timing_metrics=True)
+            binary_data_handler=handler)
+
+
+class ResultIterWithTimings:
+    DOWNLOAD = u"download"
+    PARSE = u"parse"
+
+    def __init__(self, it, timings):
+        self._it = it
+        self._timings = timings
+
+    def __next__(self):
+        return next(self._it)
+
+    def next(self):
+        return self.__next__()
+
+    def get_timings(self):
+        return self._timings
 
 
 class RawBinaryDataHandler:
     """
     Abstract class being passed to network.py to handle raw binary data
     """
-    def to_iterator(self, raw_data_fd):
+    def to_iterator(self, raw_data_fd, download_time):
         pass
 
 
@@ -295,7 +312,8 @@ class JsonBinaryHandler(RawBinaryDataHandler):
         self._is_raw_binary_iterator = is_raw_binary_iterator
         self._use_ijson = use_ijson
 
-    def to_iterator(self, raw_data_fd):
+    def to_iterator(self, raw_data_fd, download_time):
+        parse_start_time = get_time_millis()
         raw_data = decompress_raw_data(
             raw_data_fd, add_bracket=True
         ).decode('utf-8', 'replace')
@@ -305,7 +323,15 @@ class JsonBinaryHandler(RawBinaryDataHandler):
             ret = iter(json.loads(raw_data))
         else:
             ret = split_rows_from_stream(StringIO(raw_data))
-        return ret
+
+        parse_end_time = get_time_millis()
+
+        timing_metrics = {
+            ResultIterWithTimings.DOWNLOAD: download_time,
+            ResultIterWithTimings.PARSE: parse_end_time - parse_start_time
+        }
+
+        return ResultIterWithTimings(ret, timing_metrics)
 
 
 class ArrowBinaryHandler(RawBinaryDataHandler):
@@ -316,7 +342,7 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
     """
     Handler to consume data as arrow stream
     """
-    def to_iterator(self, raw_data_fd):
+    def to_iterator(self, raw_data_fd, download_time):
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
         reader = open_stream(gzip_decoder)
         return ArrowChunkIterator(reader, self._meta)
