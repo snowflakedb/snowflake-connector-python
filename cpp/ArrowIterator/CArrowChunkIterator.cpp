@@ -10,9 +10,12 @@ sf::CArrowChunkIterator::CArrowChunkIterator()
     this->reset();
 }
 
-void sf::CArrowChunkIterator::addRecordBatch(std::shared_ptr<arrow::RecordBatch> rb)
+void sf::CArrowChunkIterator::addRecordBatch(PyObject * rb)
 {
-    m_cRecordBatches.push_back(rb);
+    std::shared_ptr<arrow::RecordBatch> cRecordBatch;
+    arrow::Status status = arrow::py::unwrap_record_batch(rb, &cRecordBatch);
+
+    m_cRecordBatches.push_back(cRecordBatch);
     m_columnCount = m_cRecordBatches[0]->num_columns();
     m_batchCount = m_cRecordBatches.size();
 }
@@ -44,7 +47,7 @@ PyObject * sf::CArrowChunkIterator::nextRow()
         }
     }
 
-    return NULL;
+    return Py_None;
 }
 
 PyObject * sf::CArrowChunkIterator::currentRowAsTuple()
@@ -68,6 +71,22 @@ void sf::CArrowChunkIterator::initColumnConverters()
         std::shared_ptr<arrow::DataType> dt = schema->field(i)->type();
         switch(dt->id())
         {
+
+            case arrow::Type::type::INT8:
+                m_currentBatchConverters.push_back(
+                        std::make_shared<sf::Int8Converter>(columnArray.get()));
+                break;
+
+            case arrow::Type::type::INT16:
+                m_currentBatchConverters.push_back(
+                        std::make_shared<sf::Int16Converter>(columnArray.get()));
+                break;
+
+            case arrow::Type::type::INT32:
+                m_currentBatchConverters.push_back(
+                        std::make_shared<sf::Int32Converter>(columnArray.get()));
+                break;
+
             case arrow::Type::type::INT64:
                 m_currentBatchConverters.push_back(
                     std::make_shared<sf::Int64Converter>(columnArray.get()));
