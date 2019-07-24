@@ -6,9 +6,11 @@
 from codecs import open
 from os import path
 import os
+import subprocess
+import sys
 
-from setuptools import setup
-from os.path import join
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
@@ -21,22 +23,92 @@ version = '.'.join([str(v) for v in VERSION if v is not None])
 with open(path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-cython_build_dir = join("build", "cython")
-cython_source = [
-    "arrow_iterator.pyx",
-    "arrow_result.pyx"
-]
-enable_ext_modules = os.environ.get("ENABLE_EXT_MODULES", "false")
-ext_modules = None
-if enable_ext_modules == "true":
+
+# Parse command line flags
+options = {k: 'OFF' for k in ['--opt', '--debug']}
+for flag in options.keys():
+    if flag in sys.argv:
+        options[flag] = 'ON'
+        sys.argv.remove(flag)
+
+# Command line flags forwarded to CMake
+cmake_cmd_args = []
+for f in sys.argv:
+    if f.startswith('-D'):
+        cmake_cmd_args.append(f)
+
+for f in cmake_cmd_args:
+    sys.argv.remove(f)
+
+
+class CMakeExtension(Extension):
+    def __init__(self, name, cmake_lists_dir='.', sources=[], **kwa):
+        Extension.__init__(self, name, sources=sources, **kwa)
+        self.cmake_lists_dir = os.path.abspath(cmake_lists_dir)
+
+
+extension = None
+cmd_class = None
+
+isBuildExtEnabled = (os.getenv('ENABLE_EXT_MODULES', 'false')).lower()
+
+if isBuildExtEnabled == 'true':
     from Cython.Build import cythonize
-    ext_modules = cythonize(cython_source, build_dir=cython_build_dir)
+    cython_build_dir = os.path.join('build', 'cython')
+    cython_extension = cythonize(["arrow_result.pyx"], build_dir=cython_build_dir)
+    extension = cython_extension + [
+        CMakeExtension(name="snowflake.connector.arrow_iterator", cmake_lists_dir="cpp")
+    ]
+    cmd_class = {
+        "buld_ext": CMakeExtension
+    }
+
+
+class CMakeBuild(build_ext):
+
+    def build_extensions(self):
+        try:
+            subprocess.check_output(['cmake', '--version'])
+        except OSError:
+            raise RuntimeError('Cannot find CMake executable')
+
+        for ext in self.extensions:
+
+            if isinstance(ext, CMakeExtension):
+                print('Building CMake Extension: {}'.format(ext.name))
+
+                extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+                cfg = 'Debug' if options['--debug'] == 'ON' else 'Release'
+
+                cmake_args = [
+                    '-DCMAKE_BUILD_TYPE=%s' % cfg,
+                    '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), extdir),
+                    '-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), self.build_temp),
+                    '-DPYTHON_EXECUTABLE={}'.format(sys.executable),
+                ]
+
+                cmake_args += cmake_cmd_args
+
+                if not os.path.exists(self.build_temp):
+                    os.makedirs(self.build_temp)
+
+                # Config and build the extension
+                subprocess.check_call(['cmake', ext.cmake_lists_dir] + cmake_args,
+                                      cwd=self.build_temp)
+                subprocess.check_call(['cmake', '--build', '.', '--config', cfg],
+                                      cwd=self.build_temp)
+            else:
+                build_ext.build_extension(self, ext)
+
 
 setup(
     name='snowflake-connector-python',
     version=version,
     description=u"Snowflake Connector for Python",
-    ext_modules=ext_modules,
+    ext_modules=extension,
+    cmdclass={
+        'build_ext': CMakeBuild
+    },
     long_description=long_description,
     author='Snowflake, Inc',
     author_email='support@snowflake.com',
