@@ -345,4 +345,7 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
     def to_iterator(self, raw_data_fd, download_time):
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
         reader = open_stream(gzip_decoder)
-        return ArrowChunkIterator(reader, self._meta)
+        it = ArrowChunkIterator()
+        for rb in reader:
+            it.add_record_batch(rb)
+        return it
