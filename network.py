@@ -111,9 +111,10 @@ COMPILER = platform.python_compiler()
 CLIENT_NAME = u"PythonConnector"  # don't change!
 CLIENT_VERSION = u'.'.join([TO_UNICODE(v) for v in VERSION[:3]])
 PYTHON_CONNECTOR_USER_AGENT = \
-    u'{name}/{version}/{python_version}/{platform}'.format(
+    u'{name}/{version}/{python_implementation}/{python_version}/{platform}'.format(
         name=CLIENT_NAME,
         version=SNOWFLAKE_CONNECTOR_VERSION,
+        python_implementation=IMPLEMENTATION,
         python_version=PYTHON_VERSION,
         platform=PLATFORM)
 
