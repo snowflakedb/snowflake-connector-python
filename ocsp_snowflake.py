@@ -24,6 +24,7 @@ import jwt
 import requests as generic_requests
 
 from snowflake.connector.compat import (urlsplit, OK)
+from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE,
     ER_INVALID_OCSP_RESPONSE_CODE,
@@ -33,6 +34,7 @@ from snowflake.connector.errorcode import (
     ER_OCSP_FAILED_TO_CONNECT_HOST,
 )
 from snowflake.connector.errors import RevocationCheckError
+from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
 from snowflake.connector.ssd_internal_keys import (
     ocsp_internal_ssd_pub_dep1,
     ocsp_internal_ssd_pub_dep2,
@@ -263,6 +265,7 @@ class OCSPServer(object):
         :param url: OCSP response cache server
         :param do_retry: retry if connection fails up to N times
         """
+        headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
         try:
             start_time = time.time()
             logger.debug(
@@ -275,6 +278,7 @@ class OCSPServer(object):
                     response = session.get(
                         url,
                         timeout=10,  # socket timeout
+                        headers=headers,
                     )
                     if response.status_code == OK:
                         ocsp.decode_ocsp_response_cache(response.json())
@@ -1240,6 +1244,7 @@ class SnowflakeOCSP(object):
         if not ocsp_url:
             raise RevocationCheckError(msg="No OCSP URL found in cert. Cannot perform Certificate Revocation check",
                                        errno=ER_SERVER_CERTIFICATE_UNKNOWN)
+        headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
 
         if not SnowflakeOCSP.SSD.ACTIVATE_SSD and \
                 not OCSPServer.is_enabled_new_ocsp_endpoint():
@@ -1253,11 +1258,10 @@ class SnowflakeOCSP(object):
                 target_url = self.OCSP_CACHE_SERVER.generate_get_url(
                     ocsp_url, b64data)
                 payload = None
-                headers = None
             else:
                 target_url = ocsp_url
                 payload = self.decode_ocsp_request(ocsp_request)
-                headers = {'Content-Type': 'application/ocsp-request'}
+                headers['Content-Type'] = 'application/ocsp-request'
         else:
             actual_method = 'post'
             target_url = self.OCSP_CACHE_SERVER.OCSP_RETRY_URL
@@ -1266,7 +1270,7 @@ class SnowflakeOCSP(object):
                                   'ocsp_request': ocsp_req_enc,
                                   'cert_id': cert_id_enc,
                                   'ocsp_responder_url': ocsp_url})
-            headers = {'Content-Type': 'application/json'}
+            headers['Content-Type'] = 'application/json'
 
         self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
             self, ocsp_request, ocsp_url)
