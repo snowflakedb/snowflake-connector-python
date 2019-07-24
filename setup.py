@@ -23,7 +23,8 @@ with open(path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
 
 cython_build_dir = join("build", "cython")
 cython_source = [
-    "arrow_iterator.pyx"
+    "arrow_iterator.pyx",
+    "arrow_result.pyx"
 ]
 enable_ext_modules = os.environ.get("ENABLE_EXT_MODULES", "false")
 ext_modules = None

@@ -10,30 +10,27 @@ import sys
 import uuid
 from logging import getLogger
 from threading import (Timer, Lock)
-from base64 import b64decode
 from six import u
 
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (
     FIELD_NAME_TO_ID,
-    FIELD_ID_TO_NAME,
 )
 from .errorcode import (ER_UNSUPPORTED_METHOD,
                         ER_CURSOR_IS_CLOSED,
                         ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
                         ER_NOT_POSITIVE_SIZE,
-                        ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
                         ER_INVALID_VALUE)
 from .errors import (Error, ProgrammingError, NotSupportedError,
                      DatabaseError, InterfaceError)
 from .file_transfer_agent import (SnowflakeFileTransferAgent)
+from .json_result import JsonResult, DictJsonResult
 from .sqlstate import (SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryData, TelemetryField)
 from .time_util import get_time_millis
 
 try:
-    from pyarrow.ipc import open_stream
-    from .arrow_iterator import ArrowChunkIterator
+    from .arrow_result import ArrowResult
 except ImportError:
     pass
 
@@ -73,7 +70,7 @@ class SnowflakeCursor(object):
         u(r'alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;'),
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
-    def __init__(self, connection):
+    def __init__(self, connection, json_result_class=JsonResult):
         self._connection = connection
 
         self._errorhandler = Error.default_errorhandler
@@ -96,6 +93,8 @@ class SnowflakeCursor(object):
         self._time_output_format = None
         self._timezone = None
         self._binary_output_format = None
+        self._result = None
+        self._json_result_class = json_result_class
 
         self._arraysize = 1  # PEP-0249: defaults to 1
 
@@ -143,7 +142,7 @@ class SnowflakeCursor(object):
         The current 0-based index of the cursor in the result set or None if
         the index cannot be determined.
         """
-        return self._total_row_index if self._total_row_index >= 0 else None
+        return self._result.total_row_index if self._result.total_row_index >= 0 else None
 
     @property
     def sfqid(self):
@@ -551,7 +550,7 @@ class SnowflakeCursor(object):
                     u'total'] if u'data' in ret and u'total' in ret[
                     u'data'] else -1
                 return data
-            self.chunk_info(data, use_ijson=_use_ijson)
+            self._init_result_and_meta(data, _use_ijson)
         else:
             self._total_rowcount = ret[u'data'][
                 u'total'] if u'data' in ret and u'total' in ret[u'data'] else -1
@@ -579,7 +578,7 @@ class SnowflakeCursor(object):
                and int(data[u'statementTypeId']) in \
                STATEMENT_TYPE_ID_DML_SET
 
-    def chunk_info(self, data, use_ijson=False):
+    def _init_result_and_meta(self, data, use_ijson=False):
         is_dml = self._is_dml(data)
         self._query_result_format = data.get(u'queryResultFormat', u'json')
 
@@ -588,14 +587,8 @@ class SnowflakeCursor(object):
             self._total_rowcount = data['total']
 
         self._description = []
-        self._column_idx_to_name = {}
-        self._column_converter = []
 
-        self._return_row_method = self._arrow_return_row if \
-            self._query_result_format == 'arrow' else self._json_return_row
-
-        for idx, column in enumerate(data[u'rowtype']):
-            self._column_idx_to_name[idx] = column[u'name']
+        for column in data[u'rowtype']:
             type_value = FIELD_NAME_TO_ID[column[u'type'].upper()]
             self._description.append((column[u'name'],
                                       type_value,
@@ -604,46 +597,9 @@ class SnowflakeCursor(object):
                                       column[u'precision'],
                                       column[u'scale'],
                                       column[u'nullable']))
-            self._column_converter.append(
-                    self._connection.converter.to_python_method(
-                        column[u'type'].upper(), column))
 
-        self._total_row_index = -1  # last fetched number of rows
-
-        self._chunk_index = 0
-        self._chunk_count = 0
-        if self._query_result_format == 'arrow':
-            # result as arrow chunk
-            arrow_bytes = b64decode(data.get(u'rowsetBase64'))
-            arrow_reader = open_stream(arrow_bytes)
-            self._current_chunk_row = ArrowChunkIterator(arrow_reader, self._description)
-        else:
-            self._current_chunk_row = iter(data.get(u'rowset'))
-            self._current_chunk_row_count = len(data.get(u'rowset'))
-
-        if u'chunks' in data:
-            chunks = data[u'chunks']
-            self._chunk_count = len(chunks)
-            logger.debug(u'chunk size=%s', self._chunk_count)
-            # prepare the downloader for further fetch
-            qrmk = data[u'qrmk'] if u'qrmk' in data else None
-            chunk_headers = None
-            if u'chunkHeaders' in data:
-                chunk_headers = {}
-                for header_key, header_value in data[
-                    u'chunkHeaders'].items():
-                    chunk_headers[header_key] = header_value
-                    logger.debug(
-                        u'added chunk header: key=%s, value=%s',
-                        header_key,
-                        header_value)
-
-            logger.debug(u'qrmk=%s', qrmk)
-            self._chunk_downloader = self._connection._chunk_downloader_class(
-                chunks, self._connection, self, qrmk, chunk_headers,
-                query_result_format=self._query_result_format,
-                prefetch_threads=self._connection.client_prefetch_threads,
-                use_ijson=use_ijson)
+        self._result = ArrowResult(data, self) if self._query_result_format == 'arrow' \
+            else self._json_result_class(data, self, use_ijson)
 
         if is_dml:
             updated_rows = 0
@@ -660,7 +616,7 @@ class SnowflakeCursor(object):
                 self._total_rowcount += updated_rows
 
     def query_result(self, qid, _use_ijson=False):
-        url = ('/queries/{qid}/result').format(qid=qid)
+        url = '/queries/{qid}/result'.format(qid=qid)
         ret = self._connection.rest.request(url=url, method='get')
         self._sfqid = ret[u'data'][
             u'queryId'] if u'data' in ret and u'queryId' in ret[
@@ -672,7 +628,7 @@ class SnowflakeCursor(object):
 
         if ret.get(u'success'):
             data = ret.get(u'data')
-            self.chunk_info(data, use_ijson=_use_ijson)
+            self._init_result_and_meta(data, _use_ijson)
         else:
             logger.info(u'failed')
             logger.debug(ret)
@@ -770,59 +726,10 @@ class SnowflakeCursor(object):
         """
         Fetch one row
         """
-        is_done = False
         try:
-            row = None
-            self._total_row_index += 1
-            try:
-                row = next(self._current_chunk_row)
-            except StopIteration:
-                if self._chunk_index < self._chunk_count:
-                    logger.debug(
-                        u"chunk index: %s, chunk_count: %s",
-                        self._chunk_index, self._chunk_count)
-                    next_chunk = self._chunk_downloader.next_chunk()
-                    self._current_chunk_row_count = next_chunk.row_count
-                    self._current_chunk_row = next_chunk.result_data
-                    self._chunk_index += 1
-                    try:
-                        row = next(self._current_chunk_row)
-                    except StopIteration:
-                        is_done = True
-                        raise IndexError
-                else:
-                    if self._chunk_count > 0 and \
-                            self._chunk_downloader is not None:
-                        self._chunk_downloader.terminate()
-                        self._log_telemetry_job_data(
-                            TelemetryField.TIME_DOWNLOADING_CHUNKS,
-                            self._chunk_downloader._total_millis_downloading_chunks)
-                        self._log_telemetry_job_data(
-                            TelemetryField.TIME_PARSING_CHUNKS,
-                            self._chunk_downloader._total_millis_parsing_chunks)
-                    self._chunk_downloader = None
-                    self._chunk_count = 0
-                    self._current_chunk_row = iter(())
-                    is_done = True
-
-            return self._return_row_method(row)
-
-        except IndexError:
-            # returns None if the iteration is completed so that iter() stops
+            return next(self._result)
+        except StopIteration:
             return None
-        finally:
-            if is_done and self._first_chunk_time:
-                logger.info("fetching data done")
-                time_consume_last_result = get_time_millis() - self._first_chunk_time
-                self._log_telemetry_job_data(
-                    TelemetryField.TIME_CONSUME_LAST_RESULT,
-                    time_consume_last_result)
-
-    def _json_return_row(self, row):
-        return self._row_to_python(row) if row is not None else None
-
-    def _arrow_return_row(self, row):
-        return row
 
     def fetchmany(self, size=None):
         u"""
@@ -896,23 +803,14 @@ class SnowflakeCursor(object):
         Reset the result set
         """
         self._total_rowcount = -1  # reset the rowcount
-        self._total_row_index = -1  # last fetched number of rows
-        self._current_chunk_row_count = 0
-        self._current_chunk_row = iter(())
-        self._chunk_index = 0
-
-        if hasattr(self, u'_chunk_count') and self._chunk_count > 0 and \
-                self._chunk_downloader is not None:
-            self._chunk_downloader.terminate()
-
-        self._chunk_count = 0
-        self._chunk_downloader = None
+        if self._result is not None:
+            self._result._reset()
 
     def __iter__(self):
         u"""
         Iteration over the result set
         """
-        return iter(self.fetchone, None)
+        return iter(self._result)
 
     def __cancel_query(self, query):
         if self._sequence_counter >= 0 and not self.is_closed():
@@ -920,37 +818,6 @@ class SnowflakeCursor(object):
                          query, self._request_id)
             with self._lock_canceling:
                 self._connection._cancel_query(query, self._request_id)
-
-    def _row_to_python(self, row):
-        """
-        Converts data in row if required.
-
-        NOTE: surprisingly using idx+1 is faster than enumerate here. Also
-        removing generator improved performance even better.
-        """
-        idx = 0
-        for col in row:
-            conv = self._column_converter[idx]
-            try:
-                row[idx] = col if conv is None or col is None else conv(col)
-            except Exception as e:
-                col_desc = self._description[idx]
-                msg = u'Failed to convert: ' \
-                      u'field {name}: {type}::{value}, Error: ' \
-                      u'{error}'.format(
-                    name=col_desc[0],
-                    type=FIELD_ID_TO_NAME[col_desc[1]],
-                    value=col,
-                    error=e
-                )
-                logger.exception(msg)
-                Error.errorhandler_wrapper(
-                    self.connection, self, InterfaceError, {
-                        u'msg': msg,
-                        u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
-                    })
-            idx += 1
-        return tuple(row)
 
     def _log_telemetry_job_data(self, telemetry_field, value):
         u"""
@@ -988,33 +855,4 @@ class DictCursor(SnowflakeCursor):
     """
 
     def __init__(self, connection):
-        SnowflakeCursor.__init__(self, connection)
-
-    def _row_to_python(self, row):
-        # see the base class
-        res = {}
-        idx = 0
-        for col in row:
-            col_name = self._column_idx_to_name[idx]
-            conv = self._column_converter[idx]
-            try:
-                res[col_name] = col if conv is None or col is None else conv(
-                    col)
-            except Exception as e:
-                col_desc = self._description[idx]
-                msg = u'Failed to convert: ' \
-                      u'field {name}: {type}::{value}, Error: ' \
-                      u'{error}'.format(
-                    name=col_desc[0],
-                    type=FIELD_ID_TO_NAME[col_desc[1]],
-                    value=col,
-                    error=e
-                )
-                logger.exception(msg)
-                Error.errorhandler_wrapper(
-                    self.connection, self, InterfaceError, {
-                        u'msg': msg,
-                        u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
-                    })
-            idx += 1
-        return res
+        SnowflakeCursor.__init__(self, connection, DictJsonResult)
