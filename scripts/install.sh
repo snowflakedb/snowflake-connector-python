@@ -31,9 +31,7 @@ fi
 
 source ./venv/bin/activate
 pip install numpy pendulum
-if [[ "$TRAVIS_PYTHON_VERSION" != "3.4" ]]; then
-    pip install pyarrow
-fi
+pip install pyarrow
 pip install pytest pytest-cov pytest-rerunfailures
 if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]] || [[ $PYTHON_VERSION == "2.7"* ]]; then
     pip install mock
