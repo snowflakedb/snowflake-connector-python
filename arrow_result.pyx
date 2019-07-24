@@ -10,7 +10,7 @@ from .telemetry import TelemetryField
 from .time_util import get_time_millis
 try:
     from pyarrow.ipc import open_stream
-    from .arrow_iterator import ArrowChunkIterator
+    from .libarrow_iterator import ArrowChunkIterator
 except ImportError:
     pass
 
@@ -45,7 +45,9 @@ cdef class ArrowResult:
         # result as arrow chunk
         arrow_bytes = b64decode(data.get(u'rowsetBase64'))
         arrow_reader = open_stream(arrow_bytes)
-        self._current_chunk_row = ArrowChunkIterator(arrow_reader, self._cursor.description)
+        self._current_chunk_row = ArrowChunkIterator()
+        for rb in arrow_reader:
+            self._current_chunk_row.add_record_batch(rb)
 
         if u'chunks' in data:
             chunks = data[u'chunks']
