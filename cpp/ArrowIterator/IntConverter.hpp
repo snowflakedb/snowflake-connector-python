@@ -6,7 +6,6 @@
 
 #include "IColumnConverter.hpp"
 
-
 namespace sf
 {
 
