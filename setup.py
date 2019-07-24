@@ -7,6 +7,7 @@ from codecs import open
 from os import path
 import os
 import sys
+from sys import platform
 from shutil import copy
 import glob
 
@@ -38,20 +39,16 @@ isBuildExtEnabled = (os.getenv('ENABLE_EXT_MODULES', 'false')).lower()
 
 if isBuildExtEnabled == 'true':
     from Cython.Distutils import build_ext
+    from Cython.Build import cythonize
     import os
     import pyarrow
 
-    extensions = [
-        Extension(name='snowflake.connector.arrow_result', sources=['arrow_result.pyx']),
-        Extension(name='snowflake.connector.arrow_iterator', sources=['arrow_iterator.pyx',
-                                                                      'cpp/ArrowIterator/CArrowChunkIterator.cpp',
-                                                                      'cpp/ArrowIterator/IntConverter.cpp',
-                                                                      'cpp/ArrowIterator/StringConverter.cpp'],
-                  extra_compile_args=['-std=c++11'],
-                  extra_link_args=['-Wl,-rpath,$ORIGIN'],
-                  language='c++'
-                  ),
-    ]
+    extensions = cythonize(
+        [
+            Extension(name='snowflake.connector.arrow_iterator', sources=['arrow_iterator.pyx']),
+            Extension(name='snowflake.connector.arrow_result', sources=['arrow_result.pyx'])
+        ],
+        build_dir=os.path.join('build', 'cython'))
 
     class MyBuildExt(build_ext):
 
@@ -61,14 +58,20 @@ if isBuildExtEnabled == 'true':
             if ext.name == 'snowflake.connector.arrow_iterator':
                 self._copy_arrow_lib()
 
-                ext.include_dirs.append(self._get_arrow_include_dir())
+                ext.sources += ['cpp/ArrowIterator/CArrowChunkIterator.cpp',
+                                'cpp/ArrowIterator/FloatConverter.cpp',
+                                'cpp/ArrowIterator/IntConverter.cpp',
+                                'cpp/ArrowIterator/StringConverter.cpp']
+                ext.include_dirs.append('cpp/ArrowIterator/')
+                ext.include_dirs.append(pyarrow.get_include())
+
+                ext.extra_compile_args.append('-std=c++11')
+
                 ext.library_dirs.append(os.path.join(current_dir, self.build_lib, 'snowflake', 'connector'))
                 ext.extra_link_args += self._get_arrow_lib_as_linker_input()
+                ext.extra_link_args += ['-Wl,-rpath,$ORIGIN']
 
             build_ext.build_extension(self, ext)
-
-        def _get_arrow_include_dir(self):
-            return pyarrow.get_include()
 
         def _get_arrow_lib_dir(self):
             return pyarrow.get_library_dirs()[0]
@@ -77,7 +80,7 @@ if isBuildExtEnabled == 'true':
             arrow_lib = pyarrow.get_libraries() + \
                         ['arrow_flight', 'arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
             for lib in arrow_lib:
-                lib_pattern = '{}/lib{}.so*'.format(self._get_arrow_lib_dir(), lib)
+                lib_pattern = self._get_pyarrow_lib_pattern(lib)
                 source = glob.glob(lib_pattern)[0]
                 copy(source, os.path.join(self.build_lib, 'snowflake', 'connector'))
 
@@ -85,11 +88,19 @@ if isBuildExtEnabled == 'true':
             arrow_lib = pyarrow.get_libraries()
             link_lib = []
             for lib in arrow_lib:
-                lib_pattern = '{}/lib{}.so*'.format(self._get_arrow_lib_dir(), lib)
+                lib_pattern = self._get_pyarrow_lib_pattern(lib)
                 source = glob.glob(lib_pattern)[0]
                 link_lib.append(source)
 
             return link_lib
+
+        def _get_pyarrow_lib_pattern(self, lib_name):
+            if platform.startswith('linux'):
+                return '{}/lib{}.so*'.format(self._get_arrow_lib_dir(), lib_name)
+            elif platform == 'darwin':
+                return '{}/lib{}*dylib'.format(self._get_arrow_lib_dir(), lib_name)
+            else:
+                raise RuntimeError('Building on platform {} is not supported yet.'.format(platform))
 
     cmd_class = {
         "build_ext": MyBuildExt
@@ -165,8 +176,8 @@ setup(
             'keyring!=16.1.0'
         ],
         "arrow-result": [
-            'pyarrow>=0.13.0;python_version>"3.4"',
-            'pyarrow>=0.13.0;python_version<"3.0"'
+            'pyarrow>=0.14.0;python_version>"3.4"',
+            'pyarrow>=0.14.0;python_version<"3.0"'
         ]
     },
 

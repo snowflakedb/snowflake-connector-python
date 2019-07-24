@@ -4,8 +4,9 @@
 #include "CArrowChunkIterator.hpp"
 #include "IntConverter.hpp"
 #include "StringConverter.hpp"
+#include "FloatConverter.hpp"
 
-sf::CArrowChunkIterator::CArrowChunkIterator()
+sf::CArrowChunkIterator::CArrowChunkIterator() : m_latestReturnedRow(nullptr)
 {
     this->reset();
 }
@@ -25,11 +26,15 @@ void sf::CArrowChunkIterator::reset()
     m_currentBatchIndex = -1;
     m_rowIndexInBatch = -1;
     m_rowCountInBatch = 0;
+    Py_XDECREF(m_latestReturnedRow);
+    m_latestReturnedRow = nullptr;
 }
 
 PyObject * sf::CArrowChunkIterator::nextRow()
 {
     m_rowIndexInBatch ++;
+    Py_XDECREF(m_latestReturnedRow);
+    m_latestReturnedRow = nullptr;
 
     if (m_rowIndexInBatch < m_rowCountInBatch)
     {
@@ -57,7 +62,7 @@ PyObject * sf::CArrowChunkIterator::currentRowAsTuple()
     {
         PyTuple_SET_ITEM(tuple, i, m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
     }
-    return tuple;
+    return m_latestReturnedRow = tuple;
 }
 
 void sf::CArrowChunkIterator::initColumnConverters()
@@ -95,6 +100,11 @@ void sf::CArrowChunkIterator::initColumnConverters()
             case arrow::Type::type::STRING:
                 m_currentBatchConverters.push_back(
                     std::make_shared<sf::StringConverter>(columnArray.get()));
+                break;
+
+            case arrow::Type::type::DOUBLE:
+                m_currentBatchConverters.push_back(
+                    std::make_shared<sf::FloatConverter>(columnArray.get()));
                 break;
 
             default:

@@ -28,7 +28,10 @@ public:
     /**
      * Desctructor
      */
-    ~CArrowChunkIterator() = default;
+    ~CArrowChunkIterator()
+    {
+        Py_XDECREF(m_latestReturnedRow);
+    }
 
     /**
      * Add Arrow RecordBach to current chunk
@@ -59,6 +62,9 @@ private:
 
     /** total number of rows inside current record batch */
     int64_t m_rowCountInBatch;
+   
+    /** pointer to the latest returned python tuple(row) result */
+    PyObject* m_latestReturnedRow;
 
     /** list of column converters*/
     std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
