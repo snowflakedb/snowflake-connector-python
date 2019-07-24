@@ -34,7 +34,7 @@ public:
      * Add Arrow RecordBach to current chunk
      * @param rb recordbatch to be added
      */
-    void addRecordBatch(std::shared_ptr<arrow::RecordBatch> rb);
+    void addRecordBatch(PyObject *rb);
 
     /**
      * @return a python tuple object which contains all data in current row

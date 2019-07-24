@@ -6,11 +6,11 @@
 from codecs import open
 from os import path
 import os
-import subprocess
 import sys
+from shutil import copy
+import glob
 
 from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
@@ -31,84 +31,76 @@ for flag in options.keys():
         options[flag] = 'ON'
         sys.argv.remove(flag)
 
-# Command line flags forwarded to CMake
-cmake_cmd_args = []
-for f in sys.argv:
-    if f.startswith('-D'):
-        cmake_cmd_args.append(f)
-
-for f in cmake_cmd_args:
-    sys.argv.remove(f)
-
-
-class CMakeExtension(Extension):
-    def __init__(self, name, cmake_lists_dir='.', sources=[], **kwa):
-        Extension.__init__(self, name, sources=sources, **kwa)
-        self.cmake_lists_dir = os.path.abspath(cmake_lists_dir)
-
-
-extension = None
-cmd_class = None
+extensions = None
+cmd_class = {}
 
 isBuildExtEnabled = (os.getenv('ENABLE_EXT_MODULES', 'false')).lower()
 
 if isBuildExtEnabled == 'true':
-    from Cython.Build import cythonize
-    cython_build_dir = os.path.join('build', 'cython')
-    cython_extension = cythonize(["arrow_result.pyx"], build_dir=cython_build_dir)
-    extension = cython_extension + [
-        CMakeExtension(name="snowflake.connector.arrow_iterator", cmake_lists_dir="cpp")
+    from Cython.Distutils import build_ext
+    import os
+    import pyarrow
+
+    extensions = [
+        Extension(name='snowflake.connector.arrow_result', sources=['arrow_result.pyx']),
+        Extension(name='snowflake.connector.arrow_iterator', sources=['arrow_iterator.pyx',
+                                                                      'cpp/ArrowIterator/CArrowChunkIterator.cpp',
+                                                                      'cpp/ArrowIterator/IntConverter.cpp',
+                                                                      'cpp/ArrowIterator/StringConverter.cpp'],
+                  extra_compile_args=['-std=c++11'],
+                  extra_link_args=['-Wl,-rpath,$ORIGIN'],
+                  language='c++'
+                  ),
     ]
+
+    class MyBuildExt(build_ext):
+
+        def build_extension(self, ext):
+            current_dir = os.getcwd()
+
+            if ext.name == 'snowflake.connector.arrow_iterator':
+                self._copy_arrow_lib()
+
+                ext.include_dirs.append(self._get_arrow_include_dir())
+                ext.library_dirs.append(os.path.join(current_dir, self.build_lib, 'snowflake', 'connector'))
+                ext.extra_link_args += self._get_arrow_lib_as_linker_input()
+
+            build_ext.build_extension(self, ext)
+
+        def _get_arrow_include_dir(self):
+            return pyarrow.get_include()
+
+        def _get_arrow_lib_dir(self):
+            return pyarrow.get_library_dirs()[0]
+
+        def _copy_arrow_lib(self):
+            arrow_lib = pyarrow.get_libraries() + \
+                        ['arrow_flight', 'arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
+            for lib in arrow_lib:
+                lib_pattern = '{}/lib{}.so*'.format(self._get_arrow_lib_dir(), lib)
+                source = glob.glob(lib_pattern)[0]
+                copy(source, os.path.join(self.build_lib, 'snowflake', 'connector'))
+
+        def _get_arrow_lib_as_linker_input(self):
+            arrow_lib = pyarrow.get_libraries()
+            link_lib = []
+            for lib in arrow_lib:
+                lib_pattern = '{}/lib{}.so*'.format(self._get_arrow_lib_dir(), lib)
+                source = glob.glob(lib_pattern)[0]
+                link_lib.append(source)
+
+            return link_lib
+
     cmd_class = {
-        "buld_ext": CMakeExtension
+        "build_ext": MyBuildExt
     }
-
-
-class CMakeBuild(build_ext):
-
-    def build_extensions(self):
-        try:
-            subprocess.check_output(['cmake', '--version'])
-        except OSError:
-            raise RuntimeError('Cannot find CMake executable')
-
-        for ext in self.extensions:
-
-            if isinstance(ext, CMakeExtension):
-                print('Building CMake Extension: {}'.format(ext.name))
-
-                extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
-                cfg = 'Debug' if options['--debug'] == 'ON' else 'Release'
-
-                cmake_args = [
-                    '-DCMAKE_BUILD_TYPE=%s' % cfg,
-                    '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), extdir),
-                    '-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), self.build_temp),
-                    '-DPYTHON_EXECUTABLE={}'.format(sys.executable),
-                ]
-
-                cmake_args += cmake_cmd_args
-
-                if not os.path.exists(self.build_temp):
-                    os.makedirs(self.build_temp)
-
-                # Config and build the extension
-                subprocess.check_call(['cmake', ext.cmake_lists_dir] + cmake_args,
-                                      cwd=self.build_temp)
-                subprocess.check_call(['cmake', '--build', '.', '--config', cfg],
-                                      cwd=self.build_temp)
-            else:
-                build_ext.build_extension(self, ext)
-
 
 setup(
     name='snowflake-connector-python',
     version=version,
     description=u"Snowflake Connector for Python",
-    ext_modules=extension,
-    cmdclass={
-        'build_ext': CMakeBuild
-    },
+    ext_modules=extensions,
+    cmdclass=cmd_class,
     long_description=long_description,
     author='Snowflake, Inc',
     author_email='support@snowflake.com',
