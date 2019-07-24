@@ -29,7 +29,6 @@ from snowflake.connector.time_util import get_time_millis
 from . import ssl_wrap_socket
 from .compat import (
     PY2,
-    ITERATOR,
     METHOD_NOT_ALLOWED, BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
@@ -182,24 +181,6 @@ class SnowflakeAuth(AuthBase):
                 HEADER_AUTHORIZATION_KEY] = HEADER_SNOWFLAKE_TOKEN.format(
                 token=self.token)
         return r
-
-
-class ResultIterWithTimings(ITERATOR):
-    DOWNLOAD = u"download"
-    PARSE = u"parse"
-
-    def __init__(self, it, timings):
-        self._it = it
-        self._timings = timings
-
-    def __next__(self):
-        return next(self._it)
-
-    def next(self):
-        return self.__next__()
-
-    def get_timings(self):
-        return self._timings
 
 
 class SnowflakeRestful(object):
@@ -739,8 +720,7 @@ class SnowflakeRestful(object):
             is_raw_text=False,
             is_raw_binary=False,
             binary_data_handler=None,
-            socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
-            return_timing_metrics=False):
+            socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT):
         if socket_timeout > DEFAULT_SOCKET_CONNECT_TIMEOUT:
             # socket timeout should not be more than the default.
             # A shorter timeout may be specified for login time, but
@@ -758,8 +738,7 @@ class SnowflakeRestful(object):
             else:
                 input_data = data
 
-            timing_metrics = {}
-            start_time = get_time_millis()
+            download_start_time = get_time_millis()
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
@@ -773,8 +752,7 @@ class SnowflakeRestful(object):
                 stream=is_raw_binary,
                 auth=SnowflakeAuth(token),
             )
-            timing_metrics[
-                ResultIterWithTimings.DOWNLOAD] = get_time_millis() - start_time
+            download_end_time = get_time_millis()
 
             try:
                 if raw_ret.status_code == OK:
@@ -782,15 +760,8 @@ class SnowflakeRestful(object):
                     if is_raw_text:
                         ret = raw_ret.text
                     elif is_raw_binary:
-                        start_time = get_time_millis()
-                        ret = binary_data_handler.to_iterator(raw_ret.raw)
-                        timing_metrics[
-                            ResultIterWithTimings.PARSE] = get_time_millis() - start_time
-
-                        # if timings requested, wrap the iterator so the timing
-                        # info is accessible
-                        if return_timing_metrics:
-                            ret = ResultIterWithTimings(ret, timing_metrics)
+                        ret = binary_data_handler.to_iterator(raw_ret.raw,
+                                                              download_end_time - download_start_time)
                     else:
                         ret = raw_ret.json()
                     return ret
