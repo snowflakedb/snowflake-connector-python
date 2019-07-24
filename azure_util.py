@@ -8,6 +8,7 @@ from logging import getLogger
 from azure.common import (AzureMissingResourceHttpError, AzureHttpError)
 from azure.storage.blob import BlockBlobService
 from azure.storage.blob.models import ContentSettings
+from azure.storage.common.retry import ExponentialRetry
 
 from .constants import (
     SHA256_DIGEST, ResultStatus, FileHeader, HTTP_HEADER_VALUE_OCTET_STREAM)
@@ -45,6 +46,8 @@ class SnowflakeAzureUtil(object):
             sas_token = sas_token[1:]
         client = BlockBlobService(account_name=stage_info[u'storageAccount'],
                                   sas_token=sas_token)
+        client.retry = ExponentialRetry(
+            initial_backoff=1, increment_base=2, max_attempts=60, random_jitter_range=2).retry
         return client
 
     @staticmethod
