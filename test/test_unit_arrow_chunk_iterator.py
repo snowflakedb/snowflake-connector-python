@@ -12,11 +12,10 @@ try:
     from pyarrow import RecordBatchStreamReader
     from pyarrow import RecordBatchStreamWriter
     from pyarrow import RecordBatch
+    from snowflake.connector.arrow_iterator import PyArrowChunkIterator
     import pyarrow
-    from snowflake.connector.libarrow_iterator import ArrowChunkIterator
 except ImportError:
     pass
-
 
 @pytest.mark.skip(
     reason="Cython is not enabled in build env")
@@ -56,7 +55,7 @@ def test_iterate_over_string_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = ArrowChunkIterator()
+    it = PyArrowChunkIterator()
     for rb in reader:
         it.add_record_batch(rb)
 
@@ -110,7 +109,7 @@ def test_iterate_over_int64_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = ArrowChunkIterator()
+    it = PyArrowChunkIterator()
     for rb in reader:
         it.add_record_batch(rb)
 

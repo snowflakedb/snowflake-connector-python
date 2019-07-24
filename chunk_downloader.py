@@ -20,7 +20,7 @@ from gzip import GzipFile
 
 try:
     from pyarrow.ipc import open_stream
-    from .arrow_iterator import ArrowChunkIterator
+    from .arrow_iterator import PyArrowChunkIterator
 except ImportError:
     pass
 
@@ -345,7 +345,7 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
     def to_iterator(self, raw_data_fd, download_time):
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
         reader = open_stream(gzip_decoder)
-        it = ArrowChunkIterator()
+        it = PyArrowChunkIterator()
         for rb in reader:
             it.add_record_batch(rb)
         return it
