@@ -4,7 +4,7 @@ Building and Testing Snowflake Connector for Python
 Building
 ================================================================================
 
-Install Python 2.7.9 or higher, or 3.4.3 or higher. Clone the Snowflake Connector for Python repository, then run the following command to create a wheel package:
+Install Python 2.7.9 or higher, or 3.5.0 or higher. Clone the Snowflake Connector for Python repository, then run the following command to create a wheel package:
 
     .. code-block:: bash
 

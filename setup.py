@@ -121,8 +121,7 @@ setup(
     download_url='https://www.snowflake.com/',
     use_2to3=False,
 
-    # NOTE: Python 3.4 will be dropped within one month.
-    python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*',
 
     install_requires=[
         'azure-common',
