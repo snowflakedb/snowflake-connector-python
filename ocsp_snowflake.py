@@ -126,6 +126,8 @@ class SSDPubKey(object):
 
 class OCSPServer(object):
 
+    MAX_RETRY = int(os.getenv('OCSP_MAX_RETRY', '3'))
+
     def __init__(self):
         self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
         '''
@@ -266,7 +268,7 @@ class OCSPServer(object):
             logger.debug(
                 "started downloading OCSP response cache file: %s", url)
             with generic_requests.Session() as session:
-                max_retry = 30 if do_retry else 1
+                max_retry = OCSPServer.MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = DecorrelateJitterBackoff(sleep_time, 16)
                 for attempt in range(max_retry):
@@ -1275,7 +1277,7 @@ class SnowflakeOCSP(object):
         ret = None
         logger.debug('url: %s', target_url)
         with generic_requests.Session() as session:
-            max_retry = 10 if do_retry else 1
+            max_retry = OCSPServer.MAX_RETRY if do_retry else 1
             sleep_time = 1
             backoff = DecorrelateJitterBackoff(sleep_time, 16)
             for attempt in range(max_retry):
@@ -1634,5 +1636,11 @@ class SnowflakeOCSP(object):
     def subject_name(self, subject):
         """
         Human readable Subject name
+        """
+        raise NotImplementedError
+
+    def is_valid_time(self, cert_id, ocsp_response):
+        """
+        Check whether ocsp_response is in valid time range
         """
         raise NotImplementedError
