@@ -6,6 +6,7 @@
 
 #include <Python.h>
 #include <vector>
+#include <arrow/python/platform.h>
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
 #include "IColumnConverter.hpp"
