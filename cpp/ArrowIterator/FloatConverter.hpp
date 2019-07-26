@@ -14,7 +14,7 @@ class FloatConverter : public IColumnConverter
 public:
     explicit FloatConverter(arrow::Array* array);
 
-    PyObject* toPyObject(long rowIndex) override;
+    PyObject* toPyObject(int64_t rowIndex) override;
 
 private:
     arrow::DoubleArray* m_array;

@@ -69,16 +69,21 @@ if isBuildExtEnabled == 'true':
 
                 ext.library_dirs.append(os.path.join(current_dir, self.build_lib, 'snowflake', 'connector'))
                 ext.extra_link_args += self._get_arrow_lib_as_linker_input()
-                ext.extra_link_args += ['-Wl,-rpath,$ORIGIN']
+
+                if self._is_unix():
+                    ext.extra_link_args += ['-Wl,-rpath,$ORIGIN']
 
             build_ext.build_extension(self, ext)
+
+        def _is_unix(self):
+            return platform.startswith('linux') or platform == 'darwin'
 
         def _get_arrow_lib_dir(self):
             return pyarrow.get_library_dirs()[0]
 
         def _copy_arrow_lib(self):
-            arrow_lib = pyarrow.get_libraries() + \
-                        ['arrow_flight', 'arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
+            arrow_lib = self._get_libs_to_copy()
+
             for lib in arrow_lib:
                 lib_pattern = self._get_pyarrow_lib_pattern(lib)
                 source = glob.glob(lib_pattern)[0]
@@ -94,11 +99,22 @@ if isBuildExtEnabled == 'true':
 
             return link_lib
 
+        def _get_libs_to_copy(self):
+            if self._is_unix():
+                return pyarrow.get_libraries() + \
+                    ['arrow_flight', 'arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
+            elif platform == 'win32':
+                return pyarrow.get_libraries() + ['arrow_flight']
+            else:
+                raise RuntimeError('Building on platform {} is not supported yet.'.format(platform))
+
         def _get_pyarrow_lib_pattern(self, lib_name):
             if platform.startswith('linux'):
                 return '{}/lib{}.so*'.format(self._get_arrow_lib_dir(), lib_name)
             elif platform == 'darwin':
                 return '{}/lib{}*dylib'.format(self._get_arrow_lib_dir(), lib_name)
+            elif platform == 'win32':
+                return '{}\\{}.lib'.format(self._get_arrow_lib_dir(), lib_name)
             else:
                 raise RuntimeError('Building on platform {} is not supported yet.'.format(platform))
 
@@ -121,7 +137,8 @@ setup(
     download_url='https://www.snowflake.com/',
     use_2to3=False,
 
-    python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*',
+    # NOTE: Python 3.4 will be dropped within one month.
+    python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
 
     install_requires=[
         'azure-common',

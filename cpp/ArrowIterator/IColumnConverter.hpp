@@ -5,6 +5,7 @@
 #define PC_ICOLUMNCONVERTER_HPP
 
 #include <Python.h>
+#include <arrow/python/platform.h>
 #include <arrow/api.h>
 
 
