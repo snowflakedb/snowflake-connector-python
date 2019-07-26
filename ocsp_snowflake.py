@@ -248,8 +248,10 @@ class OCSPServer(object):
             # if any of them is not cache, download the cache file from
             # OCSP response cache server.
             try:
-                OCSPServer._download_ocsp_response_cache(ocsp,
+                retval = OCSPServer._download_ocsp_response_cache(ocsp,
                                                          self.CACHE_SERVER_URL)
+                if not retval:
+                    raise RevocationCheckError(msg="OCSP Cache Server Unavailable.")
                 logger.debug("downloaded OCSP response cache file from %s",
                              self.CACHE_SERVER_URL)
                 logger.debug("# of certificates: %s", len(OCSPCache.CACHE))
@@ -297,6 +299,8 @@ class OCSPServer(object):
                     logger.error(
                         "Failed to get OCSP response after %s attempt.",
                         max_retry)
+                    return False
+                return True
 
         except Exception as e:
             logger.debug("Failed to get OCSP response cache from %s: %s", url,
