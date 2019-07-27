@@ -9,6 +9,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.8.6(July 29,2019)
+   
+    - Reduce retries for OCSP from Python Driver
+    - Azure PUT issue: ValueError: I/O operation on closed file
+    - Add client information to USER-AGENT HTTP header - PythonConnector
+    - Better handling of OCSP cache download failure
+
 - v1.8.5(July 15,2019)
 
     - Drop Python 3.4 support for Python Connector
