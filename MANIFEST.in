@@ -1,2 +1,4 @@
-include *.rst *.py
+include *.rst *.py *.pyx
+include LICENSE.txt
+recursive-include cpp *.cpp *.hpp
 prune test
