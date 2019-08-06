@@ -128,6 +128,24 @@ def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
         return int(TO_UNICODE(max_fraction - frac) + ZERO_FILL[:9 - scale])
 
 
+class OffsetTimezone(tzinfo):
+    def __init__(self, name, tzoffset_minutes):
+        self.name = name
+        self.tzoffset = timedelta(minutes=tzoffset_minutes)
+
+    def utcoffset(self, dt, is_dst=False):
+        return self.tzoffset
+
+    def tzname(self, dt):
+        return self.name
+
+    def dst(self, dt):
+        return ZERO_TIMEDELTA
+
+    def __repr__(self):
+        return self.name
+
+
 def _generate_tzinfo_from_tzoffset(tzoffset_minutes):
     """
     Generates tzinfo object from tzoffset.
@@ -143,20 +161,9 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes):
         sign=sign,
         hour=hour,
         minute=minute)
-    tzinfo_class_type = type(
-        str(name),  # str() for both Python 2 and 3
-        (tzinfo,),
-        dict(
-            utcoffset=lambda self0, dt, is_dst=False: timedelta(
-                minutes=tzoffset_minutes),
-            tzname=lambda self0, dt: name,
-            dst=lambda self0, dt: ZERO_TIMEDELTA,
-            __repr__=lambda _: name
-        )
-    )
-    tzinfo_cls = tzinfo_class_type()
-    _TZINFO_CLASS_CACHE[tzoffset_minutes] = tzinfo_cls
-    return tzinfo_cls
+    tzinfo_obj = OffsetTimezone(name, tzoffset_minutes)
+    _TZINFO_CLASS_CACHE[tzoffset_minutes] = tzinfo_obj
+    return tzinfo_obj
 
 
 class SnowflakeConverter(object):
