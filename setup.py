@@ -159,7 +159,7 @@ setup(
         'pyasn1>=0.4.0,<0.5.0;python_version<"3.0"',
         'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
         'enum34;python_version<"3.4"',
-        'urllib3>=1.21.1,<1.25;python_version<"3.5"',
+        'urllib3>=1.21.1,<1.26;python_version<"3.5"',
     ],
 
     namespace_packages=['snowflake'],
