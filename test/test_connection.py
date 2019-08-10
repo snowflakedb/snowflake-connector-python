@@ -19,7 +19,8 @@ try:
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
-from snowflake.connector.network import APPLICATION_SNOWSQL, CLIENT_NAME
+from snowflake.connector.description import CLIENT_NAME
+from snowflake.connector.network import APPLICATION_SNOWSQL
 from snowflake.connector.connection import SnowflakeConnection
 
 
