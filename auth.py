@@ -26,7 +26,14 @@ from .constants import (
     HTTP_HEADER_USER_AGENT,
     HTTP_HEADER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
-    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL,
+    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL
+)
+from .description import (
+    OPERATING_SYSTEM,
+    PYTHON_VERSION,
+    PLATFORM,
+    IMPLEMENTATION,
+    COMPILER
 )
 from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB)
 from .errors import (Error,
@@ -37,10 +44,6 @@ from .errors import (Error,
 from .network import (CONTENT_TYPE_APPLICATION_JSON,
                       ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
                       PYTHON_CONNECTOR_USER_AGENT,
-                      OPERATING_SYSTEM,
-                      PLATFORM,
-                      PYTHON_VERSION,
-                      IMPLEMENTATION, COMPILER,
                       ReauthenticationRequest)
 from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
 from .version import VERSION

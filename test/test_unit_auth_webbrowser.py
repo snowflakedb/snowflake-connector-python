@@ -7,9 +7,8 @@
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.compat import PY2
 from snowflake.connector.constants import OCSPMode
-from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR
-from snowflake.connector.network import (SnowflakeRestful, CLIENT_NAME,
-                                         CLIENT_VERSION)
+from snowflake.connector.description import (CLIENT_NAME, CLIENT_VERSION)
+from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR, SnowflakeRestful
 
 if PY2:
     from mock import MagicMock, Mock, PropertyMock

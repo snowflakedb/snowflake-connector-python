@@ -9,8 +9,10 @@ import json
 import os
 import platform
 import re
+import sys
 import tempfile
 import time
+import traceback
 from base64 import b64decode, b64encode
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -41,6 +43,7 @@ from snowflake.connector.ssd_internal_keys import (
     ocsp_internal_dep1_key_ver,
     ocsp_internal_dep2_key_ver,
 )
+from snowflake.connector.telemetry_oob import TelemetryService
 from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 logger = getLogger(__name__)
@@ -92,6 +95,7 @@ class OCSPTelemetryData(object):
         self.insecure_mode = insecure_mode
 
     def generate_telemetry_data(self, event_type):
+        cls, exception, stack_trace = sys.exc_info()
         telemetry_data = {}
         telemetry_data.update({"eventType": event_type})
         telemetry_data.update({"sfcPeerHost": self.sfc_peer_host})
@@ -103,6 +107,10 @@ class OCSPTelemetryData(object):
         telemetry_data.update({"failOpen": self.fail_open})
         telemetry_data.update({"cacheEnabled": self.cache_enabled})
         telemetry_data.update({"cacheHit": self.cache_hit})
+
+        telemetry_client = TelemetryService.get_instance()
+        telemetry_client.log_ocsp_exception(event_type, telemetry_data, exception=str(exception), stack_trace=traceback.format_exc())
+
         return telemetry_data
         # To be updated once Python Driver has out of band telemetry.
         # telemetry_client = TelemetryClient()

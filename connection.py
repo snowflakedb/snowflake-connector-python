@@ -33,6 +33,7 @@ from .constants import (
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE,
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
+    PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_TIMEZONE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
@@ -41,6 +42,13 @@ from .constants import (
     OCSPMode
 )
 from .cursor import SnowflakeCursor, LOG_MAX_QUERY_LENGTH
+from .description import (
+    SNOWFLAKE_CONNECTOR_VERSION,
+    PYTHON_VERSION,
+    PLATFORM,
+    CLIENT_NAME,
+    CLIENT_VERSION
+)
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
                         ER_NO_PASSWORD, ER_INVALID_VALUE,
@@ -49,11 +57,6 @@ from .errorcode import (ER_CONNECTION_IS_CLOSED,
 from .errors import (Error, ProgrammingError, InterfaceError,
                      DatabaseError)
 from .network import (
-    SNOWFLAKE_CONNECTOR_VERSION,
-    PYTHON_VERSION,
-    PLATFORM,
-    CLIENT_NAME,
-    CLIENT_VERSION,
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
@@ -64,6 +67,7 @@ from .network import (
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryClient)
+from .telemetry_oob import TelemetryService
 from .time_util import (
     DEFAULT_MASTER_VALIDITY_IN_SECONDS,
     HeartBeatTimer, get_time_millis)
@@ -474,6 +478,7 @@ class SnowflakeConnection(object):
         logger.debug(u'connect')
         if len(kwargs) > 0:
             self.__config(**kwargs)
+            TelemetryService.get_instance().update_context(kwargs)
 
         self.__set_error_attributes()
         self.__open_connection()
@@ -1146,6 +1151,11 @@ class SnowflakeConnection(object):
             session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
                 self.telemetry_enabled = value
+            elif PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED == name:
+                if value:
+                    TelemetryService.get_instance().enable()
+                else:
+                    TelemetryService.get_instance().disable()
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
                 self.client_session_keep_alive = value
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == \
