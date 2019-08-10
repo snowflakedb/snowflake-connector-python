@@ -279,9 +279,6 @@ def test_valid_application(db_parameters):
     cnx.close()
 
 
-@pytest.mark.skipif(True,
-    reason="Disable temporarily"
-)
 def test_invalid_default_parameters(db_parameters):
     """
     Invalid database, schema, warehouse and role name
