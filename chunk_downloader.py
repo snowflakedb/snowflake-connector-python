@@ -21,6 +21,7 @@ from gzip import GzipFile
 try:
     from pyarrow.ipc import open_stream
     from .arrow_iterator import PyArrowChunkIterator
+    from .arrow_context import ArrowConverterContext
 except ImportError:
     pass
 
@@ -254,7 +255,7 @@ class SnowflakeChunkDownloader(object):
         handler = JsonBinaryHandler(is_raw_binary_iterator=True,
                                     use_ijson=self._use_ijson) \
             if self._query_result_format == 'json' else \
-            ArrowBinaryHandler(self._cursor.description)
+            ArrowBinaryHandler(self._cursor.description, self._connection)
 
         return self._connection.rest.fetch(
             u'get', url, headers,
@@ -321,8 +322,9 @@ class JsonBinaryHandler(RawBinaryDataHandler):
 
 class ArrowBinaryHandler(RawBinaryDataHandler):
 
-    def __init__(self, meta):
+    def __init__(self, meta, connection):
         self._meta = meta
+        self._arrow_context = ArrowConverterContext(connection._session_parameters)
 
     """
     Handler to consume data as arrow stream
@@ -330,5 +332,5 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
     def to_iterator(self, raw_data_fd, download_time):
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
         reader = open_stream(gzip_decoder)
-        it = PyArrowChunkIterator(reader)
+        it = PyArrowChunkIterator(reader, self._arrow_context)
         return it

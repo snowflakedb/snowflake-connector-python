@@ -10,6 +10,7 @@ import pytest
 import decimal
 import datetime
 import os
+from snowflake.connector.arrow_context import ArrowConverterContext
 
 try:
     from pyarrow import RecordBatchStreamReader
@@ -34,6 +35,9 @@ def test_iterate_over_string_chunk():
             {"logicalType": "TEXT"},
             {"logicalType": "TEXT"}
     ]
+    field_foo = pyarrow.field("column_foo", pyarrow.string(), True, column_meta[0])
+    field_bar = pyarrow.field("column_bar", pyarrow.string(), True, column_meta[1])
+    schema = pyarrow.schema([field_foo, field_bar])
 
     def str_generator():
         return str(random.randint(-100, 100))
@@ -57,6 +61,21 @@ def test_iterate_over_int64_chunk():
     iterate_over_test_chunk([pyarrow.int64(), pyarrow.int64()],
                             column_meta, int64_generator)
 
+
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
+def test_iterate_over_int32_chunk():
+    column_meta = [
+            {"logicalType": "FIXED", "precision": "10", "scale": "0"},
+            {"logicalType": "FIXED", "precision": "10", "scale": "0"}
+    ]
+
+    def int32_generator():
+        return random.randint(-1000000000, 1000000000)
+
+    iterate_over_test_chunk([pyarrow.int32(), pyarrow.int32()],
+                            column_meta, int32_generator)
 
 @pytest.mark.skipif(
     no_arrow_iterator_ext,
@@ -126,7 +145,7 @@ def test_iterate_over_decimal_chunk():
             column_data = []
             not_none_cnt = 0
             while not_none_cnt == 0:
-                column_data.clear()
+                column_data = []
                 for k in range(batch_row_count):
                     data = None if bool(random.getrandbits(1)) else get_random_decimal(10 if j % 2 == 0 else 38, 3 if j % 2 == 0 else 0)
                     if data != None:
@@ -144,7 +163,8 @@ def test_iterate_over_decimal_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator(reader)
+    context = ArrowConverterContext()
+    it = PyArrowChunkIterator(reader, context)
 
     count = 0
     while True:
@@ -200,7 +220,54 @@ def test_iterate_over_binary_chunk():
                             byte_array_generator)
 
 
-def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator):
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
+def test_iterate_over_time_chunk():
+    column_meta_int64 = [
+        {"logicalType": "TIME", "scale": "9"},
+        {"logicalType": "TIME", "scale": "9"}
+    ]
+
+    column_meta_int32 = [
+        {"logicalType": "TIME", "scale": "4"},
+        {"logicalType": "TIME", "scale": "4"}
+    ]
+
+    def time_generator_int64():
+        return random.randint(0, 86399999999999)
+
+    def time_generator_int32():
+        return random.randint(0, 863999999)
+
+    def expected_data_transform_int64(data):
+        milisec = data % (10**9)
+        milisec //= 10**3
+        data //= 10**9
+        second = data % 60
+        data //= 60
+        minute = data % 60
+        hour = data // 60
+        return datetime.time(hour, minute, second, milisec)
+
+    def expected_data_transform_int32(data):
+        milisec = data % (10**4)
+        milisec *= 10**2
+        data //= 10**4
+        second = data % 60
+        data //= 60
+        minute = data % 60
+        hour = data // 60
+        return datetime.time(hour, minute, second, milisec)
+
+    iterate_over_test_chunk([pyarrow.int64(), pyarrow.int64()],
+                            column_meta_int64, time_generator_int64, expected_data_transform_int64)
+
+    iterate_over_test_chunk([pyarrow.int32(), pyarrow.int32()],
+                            column_meta_int32, time_generator_int32, expected_data_transform_int32)
+
+
+def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, expected_data_transformer=None):
     stream = BytesIO()
 
     assert len(pyarrow_type) == len(column_meta)
@@ -224,15 +291,18 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator):
             column_data = []
             not_none_cnt = 0
             while not_none_cnt == 0:
-                column_data.clear()
+                column_data = []
                 for k in range(batch_row_count):
                     data = None if bool(random.getrandbits(1)) else source_data_generator()
                     if data:
                         not_none_cnt += 1
                     column_data.append(data)
             column_arrays.append(column_data)
-            py_arrays.append(pyarrow.array(column_data))
+            py_arrays.append(pyarrow.array(column_data, type=pyarrow_type[j]))
 
+        if expected_data_transformer:
+            for i in range(len(column_arrays)):
+                column_arrays[i] = [expected_data_transformer(data) if data else None for data in column_arrays[i]] 
         expected_data.append(column_arrays)
 
         column_names = ["column_{}".format(i) for i in range(column_size)]
@@ -244,7 +314,8 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator):
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator(reader)
+    context = ArrowConverterContext()
+    it = PyArrowChunkIterator(reader, context)
 
     count = 0
     while True:
