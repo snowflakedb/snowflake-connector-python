@@ -9,7 +9,8 @@ import socket
 import time
 import webbrowser
 
-from .auth import Auth, AuthByPlugin
+from .auth import Auth
+from .auth_by_plugin import AuthByPlugin
 from .compat import (urlparse, urlsplit, parse_qs)
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,

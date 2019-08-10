@@ -4,7 +4,7 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from .auth import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin
 from .network import OAUTH_AUTHENTICATOR
 
 
