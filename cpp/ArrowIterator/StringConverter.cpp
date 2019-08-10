@@ -3,12 +3,13 @@
  */
 #include "StringConverter.hpp"
 
-sf::StringConverter::StringConverter(arrow::Array * array)
+namespace sf
 {
-    m_array = dynamic_cast<arrow::StringArray *>(array);
-}
 
-PyObject* sf::StringConverter::toPyObject(int64_t rowIndex)
+StringConverter::StringConverter(std::shared_ptr<arrow::Array> array)
+    : m_array(std::dynamic_pointer_cast<arrow::StringArray>(array)) {}
+
+PyObject* StringConverter::toPyObject(int64_t rowIndex)
 {
     if (m_array->IsValid(rowIndex))
     {
@@ -17,7 +18,9 @@ PyObject* sf::StringConverter::toPyObject(int64_t rowIndex)
     }
     else
     {
-        return Py_None;
+        Py_RETURN_NONE;
     }
 }
+
+} // namespace sf
 

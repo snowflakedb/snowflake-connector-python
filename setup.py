@@ -59,9 +59,15 @@ if isBuildExtEnabled == 'true':
                 self._copy_arrow_lib()
 
                 ext.sources += ['cpp/ArrowIterator/CArrowChunkIterator.cpp',
+                                'cpp/ArrowIterator/SnowflakeType.cpp',
+                                'cpp/ArrowIterator/BooleanConverter.cpp',
+                                'cpp/ArrowIterator/DecimalConverter.cpp',
+                                'cpp/ArrowIterator/DateConverter.cpp',
                                 'cpp/ArrowIterator/FloatConverter.cpp',
                                 'cpp/ArrowIterator/IntConverter.cpp',
-                                'cpp/ArrowIterator/StringConverter.cpp']
+                                'cpp/ArrowIterator/StringConverter.cpp',
+                                'cpp/ArrowIterator/Python/Common.cpp',
+                                'cpp/ArrowIterator/Python/Helpers.cpp']
                 ext.include_dirs.append('cpp/ArrowIterator/')
                 ext.include_dirs.append(pyarrow.get_include())
 

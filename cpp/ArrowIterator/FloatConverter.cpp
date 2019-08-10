@@ -3,14 +3,24 @@
  */
 #include "FloatConverter.hpp"
 
-sf::FloatConverter::FloatConverter(arrow::Array* array)
+namespace sf
 {
-    /** snowflake float is 64-precision, which refers to double here */
-    m_array = dynamic_cast<arrow::DoubleArray*>(array);
+
+/** snowflake float is 64-precision, which refers to double here */
+FloatConverter::FloatConverter(std::shared_ptr<arrow::Array> array)
+    : m_array(std::dynamic_pointer_cast<arrow::DoubleArray>(array)) {}
+
+PyObject* FloatConverter::toPyObject(int64_t rowIndex)
+{
+    if (m_array->IsValid(rowIndex))
+    {
+        return PyFloat_FromDouble(m_array->Value(rowIndex));
+    }
+    else
+    {
+        Py_RETURN_NONE;
+    }
+
 }
 
-PyObject* sf::FloatConverter::toPyObject(int64_t rowIndex)
-{
-    return (m_array->IsValid(rowIndex)) ? PyFloat_FromDouble(m_array->Value(rowIndex)) : Py_None;
-}
-
+} // namespace sf

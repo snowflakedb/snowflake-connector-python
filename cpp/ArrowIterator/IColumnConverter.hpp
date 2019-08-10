@@ -15,8 +15,8 @@ namespace sf
 class IColumnConverter
 {
 public:
-    IColumnConverter(){}
-    virtual ~IColumnConverter(){}
+    IColumnConverter() = default;
+    virtual ~IColumnConverter() = default;
     virtual PyObject * toPyObject(int64_t rowIndex) = 0;
 };
 

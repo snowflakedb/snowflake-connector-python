@@ -2,16 +2,24 @@
  * Copyright (c) 2013-2019 Snowflake Computing
  */
 #include "CArrowChunkIterator.hpp"
+#include "SnowflakeType.hpp"
 #include "IntConverter.hpp"
 #include "StringConverter.hpp"
 #include "FloatConverter.hpp"
+#include "DecimalConverter.hpp"
+#include "BooleanConverter.hpp"
+#include "DateConverter.hpp"
+#include <iostream>
 
-sf::CArrowChunkIterator::CArrowChunkIterator() : m_latestReturnedRow(nullptr)
+namespace sf
+{
+
+CArrowChunkIterator::CArrowChunkIterator() : m_latestReturnedRow(nullptr)
 {
     this->reset();
 }
 
-void sf::CArrowChunkIterator::addRecordBatch(PyObject * rb)
+void CArrowChunkIterator::addRecordBatch(PyObject * rb)
 {
     std::shared_ptr<arrow::RecordBatch> cRecordBatch;
     arrow::Status status = arrow::py::unwrap_record_batch(rb, &cRecordBatch);
@@ -21,7 +29,7 @@ void sf::CArrowChunkIterator::addRecordBatch(PyObject * rb)
     m_batchCount = m_cRecordBatches.size();
 }
 
-void sf::CArrowChunkIterator::reset()
+void CArrowChunkIterator::reset()
 {
     m_currentBatchIndex = -1;
     m_rowIndexInBatch = -1;
@@ -30,7 +38,7 @@ void sf::CArrowChunkIterator::reset()
     m_latestReturnedRow = nullptr;
 }
 
-PyObject * sf::CArrowChunkIterator::nextRow()
+PyObject * CArrowChunkIterator::nextRow()
 {
     m_rowIndexInBatch ++;
     Py_XDECREF(m_latestReturnedRow);
@@ -52,10 +60,11 @@ PyObject * sf::CArrowChunkIterator::nextRow()
         }
     }
 
+    /** It looks like no one will decrease the ref of this Py_None, so we don't increament the ref count here */
     return Py_None;
 }
 
-PyObject * sf::CArrowChunkIterator::currentRowAsTuple()
+PyObject * CArrowChunkIterator::currentRowAsTuple()
 {
     PyObject* tuple = PyTuple_New(m_columnCount);
     for (int i = 0; i < m_columnCount; i++)
@@ -65,7 +74,7 @@ PyObject * sf::CArrowChunkIterator::currentRowAsTuple()
     return m_latestReturnedRow = tuple;
 }
 
-void sf::CArrowChunkIterator::initColumnConverters()
+void CArrowChunkIterator::initColumnConverters()
 {
     m_currentBatchConverters.clear();
     std::shared_ptr<arrow::RecordBatch> currentBatch = m_cRecordBatches[m_currentBatchIndex];
@@ -74,42 +83,141 @@ void sf::CArrowChunkIterator::initColumnConverters()
     {
         std::shared_ptr<arrow::Array> columnArray = currentBatch->column(i);
         std::shared_ptr<arrow::DataType> dt = schema->field(i)->type();
-        switch(dt->id())
+        std::shared_ptr<const arrow::KeyValueMetadata> metaData = schema->field(i)->metadata();
+        SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
+                                        metaData->value(metaData->FindKey("logicalType")));
+
+        switch(st)
         {
+            case SnowflakeType::Type::FIXED:
+            {
+                int scale = metaData ? std::stoi(metaData->value(metaData->FindKey("scale"))) : 0;
+                int precision = metaData ? std::stoi(metaData->value(metaData->FindKey("precision"))) : 38;
+                switch(dt->id())
+                {
 
-            case arrow::Type::type::INT8:
-                m_currentBatchConverters.push_back(
-                        std::make_shared<sf::Int8Converter>(columnArray.get()));
-                break;
+                    case arrow::Type::type::INT8:
+                    {
+                        if (scale > 0)
+                        {
+                            m_currentBatchConverters.push_back(
+                                    std::make_shared<sf::DecimalFromIntConverter<arrow::Int8Array>>(
+                                            columnArray,
+                                            precision,
+                                            scale));
+                            break;
+                        }
 
-            case arrow::Type::type::INT16:
-                m_currentBatchConverters.push_back(
-                        std::make_shared<sf::Int16Converter>(columnArray.get()));
-                break;
+                        m_currentBatchConverters.push_back(
+                                std::make_shared<sf::IntConverter<arrow::Int8Array>>(columnArray));
+                        break;
+                    }
 
-            case arrow::Type::type::INT32:
-                m_currentBatchConverters.push_back(
-                        std::make_shared<sf::Int32Converter>(columnArray.get()));
-                break;
+                    case arrow::Type::type::INT16:
+                    {
+                        if (scale > 0)
+                        {
+                            m_currentBatchConverters.push_back(
+                                    std::make_shared<sf::DecimalFromIntConverter<arrow::Int16Array>>(
+                                            columnArray,
+                                            precision,
+                                            scale));
+                            break;
+                        }
 
-            case arrow::Type::type::INT64:
-                m_currentBatchConverters.push_back(
-                    std::make_shared<sf::Int64Converter>(columnArray.get()));
-                break;
+                        m_currentBatchConverters.push_back(
+                                std::make_shared<sf::IntConverter<arrow::Int16Array>>(columnArray));
+                        break;
+                    }
 
-            case arrow::Type::type::STRING:
-                m_currentBatchConverters.push_back(
-                    std::make_shared<sf::StringConverter>(columnArray.get()));
-                break;
+                    case arrow::Type::type::INT32:
+                    {
+                        if (scale > 0)
+                        {
+                            m_currentBatchConverters.push_back(
+                                    std::make_shared<sf::DecimalFromIntConverter<arrow::Int32Array>>(
+                                            columnArray,
+                                            precision,
+                                            scale));
+                            break;
+                        }
 
-            case arrow::Type::type::DOUBLE:
-                m_currentBatchConverters.push_back(
-                    std::make_shared<sf::FloatConverter>(columnArray.get()));
+                        m_currentBatchConverters.push_back(
+                                std::make_shared<sf::IntConverter<arrow::Int32Array>>(columnArray));
+                        break;
+                    }
+
+                    case arrow::Type::type::INT64:
+                    {
+                        if (scale > 0)
+                        {
+                            m_currentBatchConverters.push_back(
+                                    std::make_shared<sf::DecimalFromIntConverter<arrow::Int64Array>>(
+                                            columnArray,
+                                            precision,
+                                            scale));
+                            break;
+                        }
+
+                        m_currentBatchConverters.push_back(
+                                std::make_shared<sf::IntConverter<arrow::Int64Array>>(columnArray));
+                        break;
+                    }
+
+                    case arrow::Type::type::DECIMAL:
+                    {
+                        m_currentBatchConverters.push_back(
+                                std::make_shared<sf::DecimalFromDecimalConverter>(columnArray, scale));
+                        break;
+                    }
+
+                    default:
+                    {
+                        /** cout is playing a placeholder here and will be replaced by exception soon */
+                        std::cout << "unknown arrow internal data type (" << dt->id() << ") for FIXED data" << std::endl;
+                        break;
+                    }
+                }
                 break;
+            }
+
+            case SnowflakeType::Type::TEXT:
+            {
+                m_currentBatchConverters.push_back(
+                        std::make_shared<sf::StringConverter>(columnArray));
+                break;
+            }
+            
+            case SnowflakeType::Type::BOOLEAN:
+            {
+                m_currentBatchConverters.push_back(
+                        std::make_shared<sf::BooleanConverter>(columnArray));
+                break;
+            }
+            
+            case SnowflakeType::Type::REAL:
+            {
+                m_currentBatchConverters.push_back(
+                        std::make_shared<sf::FloatConverter>(columnArray));
+                break;
+            }
+
+            case SnowflakeType::Type::DATE:
+            {
+                m_currentBatchConverters.push_back(
+                        std::make_shared<sf::DateConverter>(columnArray));
+                break;
+            }
 
             default:
+            {
+                /** cout is playing a placeholder here and will be replaced by exception soon */
+                std::cout << "[ERROR] unknown snowflake data type : " << metaData->value(metaData->FindKey("logicalType")) << std::endl;
                 break;
-        }
+            }
+        }    
     }
 
 }
+
+} // namespace sf
