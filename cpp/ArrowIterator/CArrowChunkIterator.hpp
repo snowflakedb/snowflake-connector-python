@@ -38,12 +38,12 @@ public:
      * Add Arrow RecordBach to current chunk
      * @param rb recordbatch to be added
      */
-    void addRecordBatch(PyObject *rb);
+    void addRecordBatch(PyObject* rb);
 
     /**
      * @return a python tuple object which contains all data in current row
      */
-    PyObject * nextRow();
+    PyObject* nextRow();
 
 private:
     /** list of all record batch in current chunk */
@@ -82,7 +82,4 @@ private:
 
 }
 
-
-
 #endif // PC_ARROWCHUNKITERATOR_HPP
-

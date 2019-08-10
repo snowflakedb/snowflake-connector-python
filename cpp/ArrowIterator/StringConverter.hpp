@@ -12,13 +12,14 @@ namespace sf
 class StringConverter : public IColumnConverter
 {
 public:
-    StringConverter(arrow::Array * array);
+    StringConverter(std::shared_ptr<arrow::Array> array);
 
-    PyObject * toPyObject(int64_t rowIndex) override;
+    PyObject* toPyObject(int64_t rowIndex) override;
 
 private:
-    arrow::StringArray * m_array;
+    std::shared_ptr<arrow::StringArray> m_array;
 };
-}
 
-#endif
+} // namespace sf
+
+#endif // PC_STRINGCONVERTER_HPP
