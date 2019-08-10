@@ -9,50 +9,31 @@
 namespace sf
 {
 
-class Int64Converter : public IColumnConverter
+template<typename T>
+class IntConverter : public IColumnConverter
 {
 public:
-    Int64Converter(arrow::Array * array);
+    explicit IntConverter(std::shared_ptr<arrow::Array> array) : m_array(std::dynamic_pointer_cast<T>(array)) {}
 
-    PyObject * toPyObject(int64_t rowIndex) override;
+    PyObject* toPyObject(int64_t rowIndex) override;
 
 private:
-    arrow::Int64Array * m_array;
+    std::shared_ptr<T> m_array;
 };
 
-class Int32Converter : public IColumnConverter
+template<typename T>
+PyObject* IntConverter<T>::toPyObject(int64_t rowIndex)
 {
-public:
-    Int32Converter(arrow::Array * array);
-
-    PyObject * toPyObject(int64_t rowIndex) override;
-
-private:
-    arrow::Int32Array * m_array;
-};
-
-class Int16Converter : public IColumnConverter
-{
-public:
-    Int16Converter(arrow::Array * array);
-
-    PyObject * toPyObject(int64_t rowIndex) override;
-
-private:
-    arrow::Int16Array * m_array;
-};
-
-class Int8Converter : public IColumnConverter
-{
-public:
-    Int8Converter(arrow::Array * array);
-
-    PyObject * toPyObject(int64_t rowIndex) override;
-
-private:
-    arrow::Int8Array * m_array;
-};
-
+    if (m_array->IsValid(rowIndex))
+    {
+        return PyLong_FromLongLong(m_array->Value(rowIndex));
+    }
+    else
+    {
+        Py_RETURN_NONE;
+    } 
 }
 
-#endif
+} // namespace sf
+
+#endif // PC_INTCONVERTER_HPP
