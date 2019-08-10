@@ -9,31 +9,34 @@
 namespace sf
 {
 
-template<typename T>
+template <typename T>
 class IntConverter : public IColumnConverter
 {
 public:
-    explicit IntConverter(std::shared_ptr<arrow::Array> array) : m_array(std::dynamic_pointer_cast<T>(array)) {}
+  explicit IntConverter(std::shared_ptr<arrow::Array> array)
+  : m_array(std::dynamic_pointer_cast<T>(array))
+  {
+  }
 
-    PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) override;
 
 private:
-    std::shared_ptr<T> m_array;
+  std::shared_ptr<T> m_array;
 };
 
-template<typename T>
+template <typename T>
 PyObject* IntConverter<T>::toPyObject(int64_t rowIndex)
 {
-    if (m_array->IsValid(rowIndex))
-    {
-        return PyLong_FromLongLong(m_array->Value(rowIndex));
-    }
-    else
-    {
-        Py_RETURN_NONE;
-    } 
+  if (m_array->IsValid(rowIndex))
+  {
+    return PyLong_FromLongLong(m_array->Value(rowIndex));
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
 }
 
-} // namespace sf
+}  // namespace sf
 
-#endif // PC_INTCONVERTER_HPP
+#endif  // PC_INTCONVERTER_HPP
