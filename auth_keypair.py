@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptography.hazmat.backends import default_backend
 from datetime import datetime, timedelta
 from logging import getLogger
-from .auth import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin
 from .network import KEY_PAIR_AUTHENTICATOR
 from .errorcode import ER_INVALID_PRIVATE_KEY
 from .errors import ProgrammingError
@@ -26,7 +26,7 @@ class AuthByKeyPair(AuthByPlugin):
     """
         Key pair based authentication
     """
-    LIFETIME = timedelta(seconds=60)
+    LIFETIME = timedelta(seconds=120)
     ALGORITHM = 'RS256'
     ISSUER = 'iss'
     SUBJECT = 'sub'
@@ -39,6 +39,7 @@ class AuthByKeyPair(AuthByPlugin):
         """
         self._private_key = private_key
         self._jwt_token = ''
+        self._jwt_token_exp = 0
 
     def authenticate(
             self, authenticator, service_name, account, user, password):
@@ -65,11 +66,12 @@ class AuthByKeyPair(AuthByPlugin):
 
         public_key_fp = self.calculate_public_key_fingerprint(private_key)
 
+        self._jwt_token_exp = now + self.LIFETIME
         payload = {
             self.ISSUER: "{}.{}.{}".format(account, user, public_key_fp),
             self.SUBJECT: "{}.{}".format(account, user),
             self.ISSUE_TIME: now,
-            self.EXPIRE_TIME: now + self.LIFETIME
+            self.EXPIRE_TIME: self._jwt_token_exp
         }
 
         self._jwt_token = jwt.encode(payload, private_key,
