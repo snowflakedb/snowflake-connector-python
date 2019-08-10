@@ -37,6 +37,7 @@ from .constants import (
     PARAMETER_SERVICE_NAME,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_PREFETCH_THREADS,
+    PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     OCSPMode
 )
 from .cursor import SnowflakeCursor, LOG_MAX_QUERY_LENGTH
@@ -682,6 +683,10 @@ class SnowflakeConnection(object):
 
         if self._timezone is not None:
             self._session_parameters[PARAMETER_TIMEZONE] = self._timezone
+
+        if self._validate_default_parameters:
+            # Snowflake will validate the requested database, schema, and warehouse
+            self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = True
 
         if self.client_session_keep_alive:
             self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = True
