@@ -10,6 +10,7 @@
 #include "BinaryConverter.hpp"
 #include "BooleanConverter.hpp"
 #include "DateConverter.hpp"
+#include "TimeConverter.hpp"
 #include <iostream>
 #include "logging.hpp"
 
@@ -17,7 +18,8 @@ namespace sf
 {
 Logger CArrowChunkIterator::logger("snowflake.connector.CArrowChunkIterator");
 
-CArrowChunkIterator::CArrowChunkIterator() : m_latestReturnedRow(nullptr)
+CArrowChunkIterator::CArrowChunkIterator(PyObject* context)
+: m_latestReturnedRow(nullptr), m_context(context)
 {
 }
 
@@ -229,6 +231,41 @@ void CArrowChunkIterator::initColumnConverters()
       {
         m_currentBatchConverters.push_back(
             std::make_shared<sf::BinaryConverter>(columnArray));
+        break;
+      }
+
+      case SnowflakeType::Type::TIME:
+      {
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        switch (dt->id())
+        {
+          case arrow::Type::type::INT32:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::TimeConverter<arrow::Int32Array>>(
+                    columnArray, scale));
+            break;
+          }
+
+          case arrow::Type::type::INT64:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::TimeConverter<arrow::Int64Array>>(
+                    columnArray, scale));
+            break;
+          }
+
+          default:
+          {
+            /** cout is playing a placeholder here and will be replaced by
+             * exception soon */
+            std::cout << "unknown arrow internal data type (" << dt->id()
+                      << ") for TIME data" << std::endl;
+            break;
+          }
+        }
         break;
       }
 

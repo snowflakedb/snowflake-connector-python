@@ -8,7 +8,7 @@ from cpython.ref cimport PyObject
 
 cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator:
-        CArrowChunkIterator()
+        CArrowChunkIterator(PyObject* context)
 
         void addRecordBatch(PyObject * rb)
 
@@ -20,16 +20,16 @@ cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
 cdef class PyArrowChunkIterator:
     cdef CArrowChunkIterator * cIterator
 
-    def __cinit__(self, arrow_stream_reader):
-        self.cIterator = new CArrowChunkIterator()
+    def __cinit__(PyArrowChunkIterator self, object arrow_stream_reader, object arrow_context):
+        self.cIterator = new CArrowChunkIterator(<PyObject*>arrow_context)
         for rb in arrow_stream_reader:
             self.cIterator.addRecordBatch(<PyObject *>rb)
         self.cIterator.reset()
 
-    def __dealloc(self):
+    def __dealloc__(PyArrowChunkIterator self):
         del self.cIterator
 
-    def __next__(self):
+    def __next__(PyArrowChunkIterator self):
         ret = <object>self.cIterator.nextRow()
         if ret is None:
             raise StopIteration
