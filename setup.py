@@ -60,6 +60,7 @@ if isBuildExtEnabled == 'true':
 
                 ext.sources += ['cpp/ArrowIterator/CArrowChunkIterator.cpp',
                                 'cpp/ArrowIterator/SnowflakeType.cpp',
+                                'cpp/ArrowIterator/BinaryConverter.cpp',
                                 'cpp/ArrowIterator/BooleanConverter.cpp',
                                 'cpp/ArrowIterator/DecimalConverter.cpp',
                                 'cpp/ArrowIterator/DateConverter.cpp',
