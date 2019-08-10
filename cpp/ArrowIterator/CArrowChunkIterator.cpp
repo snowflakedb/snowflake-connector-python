@@ -7,6 +7,7 @@
 #include "StringConverter.hpp"
 #include "FloatConverter.hpp"
 #include "DecimalConverter.hpp"
+#include "BinaryConverter.hpp"
 #include "BooleanConverter.hpp"
 #include "DateConverter.hpp"
 #include <iostream>
@@ -221,6 +222,13 @@ void CArrowChunkIterator::initColumnConverters()
       {
         m_currentBatchConverters.push_back(
             std::make_shared<sf::DateConverter>(columnArray));
+        break;
+      }
+
+      case SnowflakeType::Type::BINARY:
+      {
+        m_currentBatchConverters.push_back(
+            std::make_shared<sf::BinaryConverter>(columnArray));
         break;
       }
 
