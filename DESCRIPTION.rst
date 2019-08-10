@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.8.7(August 12,2019)
+
+    - Rewrote validateDefaultParameters to validate the database, schema and warehouse at connection time. False by default.
+    - Fix OCSP Server URL problem in multithreaded env
+
 - v1.8.6(July 29,2019)
    
     - Reduce retries for OCSP from Python Driver
