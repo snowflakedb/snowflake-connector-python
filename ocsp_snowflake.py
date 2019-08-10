@@ -1327,7 +1327,7 @@ class SnowflakeOCSP(object):
                         raise RevocationCheckError(
                             msg="Could not fetch OCSP Response from server. Consider"
                                 "checking your whitelists : Exception - {}".format(
-                                ex.message),
+                                str(ex)),
                             errno=ER_OCSP_FAILED_TO_CONNECT_HOST)
             else:
                 logger.error(
