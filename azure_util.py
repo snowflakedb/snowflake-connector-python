@@ -44,8 +44,12 @@ class SnowflakeAzureUtil(object):
         sas_token = stage_credentials[u'AZURE_SAS_TOKEN']
         if sas_token and sas_token.startswith(u'?'):
             sas_token = sas_token[1:]
+        end_point = stage_info['endPoint']
+        if end_point.startswith('blob.'):
+            end_point = end_point[len('blob.'):]
         client = BlockBlobService(account_name=stage_info[u'storageAccount'],
-                                  sas_token=sas_token)
+                                  sas_token=sas_token,
+                                  endpoint_suffix=end_point)
         client.retry = ExponentialRetry(
             initial_backoff=1, increment_base=2, max_attempts=60, random_jitter_range=2).retry
         return client
