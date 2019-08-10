@@ -12,13 +12,20 @@ try:
     from pyarrow import RecordBatchStreamReader
     from pyarrow import RecordBatchStreamWriter
     from pyarrow import RecordBatch
-    from snowflake.connector.arrow_iterator import PyArrowChunkIterator
     import pyarrow
 except ImportError:
     pass
 
-@pytest.mark.skip(
-    reason="Cython is not enabled in build env")
+try:
+    from snowflake.connector.arrow_iterator import PyArrowChunkIterator
+    no_arrow_iterator_ext = False
+except ImportError:
+    no_arrow_iterator_ext = True
+
+
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
 def test_iterate_over_string_chunk():
     stream = BytesIO()
     field_foo = pyarrow.field("column_foo", pyarrow.string(), True)
@@ -71,8 +78,9 @@ def test_iterate_over_string_chunk():
             break
 
 
-@pytest.mark.skip(
-    reason="Cython is not enabled in build env")
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
 def test_iterate_over_int64_chunk():
     stream = BytesIO()
     field_foo = pyarrow.field("column_foo", pyarrow.int64(), True)
@@ -125,8 +133,9 @@ def test_iterate_over_int64_chunk():
             break
 
 
-@pytest.mark.skip(
-    reason="Cython is not enabled in build env")
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
 def test_iterate_over_float_chunk():
     stream = BytesIO()
     field_foo = pyarrow.field("column_foo", pyarrow.float64(), True)
