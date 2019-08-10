@@ -11,6 +11,7 @@ from .time_util import get_time_millis
 try:
     from pyarrow.ipc import open_stream
     from .arrow_iterator import PyArrowChunkIterator
+    from .arrow_context import ArrowConverterContext
 except ImportError:
     pass
 
@@ -30,6 +31,7 @@ cdef class ArrowResult:
         object _column_idx_to_name
         object _current_chunk_row
         object _chunk_downloader
+        object _arrow_context
 
     def __init__(self, raw_response, cursor):
         self._reset()
@@ -45,7 +47,8 @@ cdef class ArrowResult:
         # result as arrow chunk
         arrow_bytes = b64decode(data.get(u'rowsetBase64'))
         arrow_reader = open_stream(arrow_bytes)
-        self._current_chunk_row = PyArrowChunkIterator(arrow_reader)
+        self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
+        self._current_chunk_row = PyArrowChunkIterator(arrow_reader, self._arrow_context)
 
         if u'chunks' in data:
             chunks = data[u'chunks']
@@ -137,4 +140,5 @@ cdef class ArrowResult:
 
         self._chunk_count = 0
         self._chunk_downloader = None
+        self._arrow_context = None
 

@@ -26,7 +26,7 @@ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator();
+  CArrowChunkIterator(PyObject* context);
 
   /**
    * Desctructor
@@ -73,6 +73,9 @@ private:
 
   /** list of column converters*/
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
+
+  /** arrow format convert context for the current session */
+  PyObject* m_context;
 
   /**
    * @return python object of tuple which is tuple of all row values

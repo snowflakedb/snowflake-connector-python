@@ -5,6 +5,7 @@
 #define PC_INTCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include <iostream>
 
 namespace sf
 {
@@ -18,6 +19,16 @@ public:
   {
   }
 
+  PyObject* pyLongForward(int64_t value)
+  {
+    return PyLong_FromLongLong(value);
+  }
+
+  PyObject* pyLongForward(int32_t value)
+  {
+    return PyLong_FromLong(value);
+  }
+
   PyObject* toPyObject(int64_t rowIndex) override;
 
 private:
@@ -29,7 +40,8 @@ PyObject* IntConverter<T>::toPyObject(int64_t rowIndex)
 {
   if (m_array->IsValid(rowIndex))
   {
-    return PyLong_FromLongLong(m_array->Value(rowIndex));
+    // TODO : this forward function need to be tested in Win64
+    return pyLongForward(m_array->Value(rowIndex));
   }
   else
   {
