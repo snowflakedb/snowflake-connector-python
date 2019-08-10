@@ -6,8 +6,6 @@
 
 from snowflake.connector.auth_oauth import AuthByOAuth
 from snowflake.connector.compat import PY2
-from snowflake.connector.network import (
-    SnowflakeRestful, CLIENT_VERSION, CLIENT_NAME)
 
 if PY2:
     from mock import MagicMock, Mock, PropertyMock

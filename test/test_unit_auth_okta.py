@@ -7,8 +7,8 @@
 from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.compat import PY2
 from snowflake.connector.constants import OCSPMode
-from snowflake.connector.network import (
-    SnowflakeRestful, CLIENT_VERSION, CLIENT_NAME)
+from snowflake.connector.description import (CLIENT_NAME, CLIENT_VERSION)
+from snowflake.connector.network import SnowflakeRestful
 
 if PY2:
     from mock import MagicMock, Mock, PropertyMock
