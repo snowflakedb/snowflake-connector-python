@@ -287,10 +287,10 @@ class Auth(object):
             if type(auth_instance) is AuthByKeyPair:
                 logger.debug(
                     "JWT Token authentication failed. "
-                    "Token expires at: {jwt_token_exp}. "
-                    "Current Time: {current_time}",
-                    jwt_token_exp=auth_instance._jwt_token_exp,
-                    current_time=datetime.utcnow()
+                    "Token expires at: %s. "
+                    "Current Time: %s",
+                    str(auth_instance._jwt_token_exp),
+                    str(datetime.utcnow())
                 )
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
