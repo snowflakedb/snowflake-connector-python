@@ -5,6 +5,7 @@
 #define PC_STRINGCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include "logging.hpp"
 
 namespace sf
 {
@@ -12,14 +13,16 @@ namespace sf
 class StringConverter : public IColumnConverter
 {
 public:
-    StringConverter(std::shared_ptr<arrow::Array> array);
+  StringConverter(std::shared_ptr<arrow::Array> array);
 
-    PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) override;
 
 private:
-    std::shared_ptr<arrow::StringArray> m_array;
+  std::shared_ptr<arrow::StringArray> m_array;
+
+  static Logger logger;
 };
 
-} // namespace sf
+}  // namespace sf
 
-#endif // PC_STRINGCONVERTER_HPP
+#endif  // PC_STRINGCONVERTER_HPP

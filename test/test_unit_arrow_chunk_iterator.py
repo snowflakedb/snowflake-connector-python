@@ -69,9 +69,7 @@ def test_iterate_over_string_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator()
-    for rb in reader:
-        it.add_record_batch(rb)
+    it = PyArrowChunkIterator(reader)
 
     count = 0
     while True:
@@ -129,9 +127,7 @@ def test_iterate_over_int64_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator()
-    for rb in reader:
-        it.add_record_batch(rb)
+    it = PyArrowChunkIterator(reader)
 
     count = 0
     while True:
@@ -189,9 +185,7 @@ def test_iterate_over_bool_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator()
-    for rb in reader:
-        it.add_record_batch(rb)
+    it = PyArrowChunkIterator(reader)
 
     count = 0
     while True:
@@ -249,9 +243,7 @@ def test_iterate_over_float_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator()
-    for rb in reader:
-        it.add_record_batch(rb)
+    it = PyArrowChunkIterator(reader)
 
     count = 0
     while True:
@@ -321,9 +313,7 @@ def test_iterate_over_decimal_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator()
-    for rb in reader:
-        it.add_record_batch(rb)
+    it = PyArrowChunkIterator(reader)
 
     count = 0
     while True:
@@ -387,9 +377,7 @@ def test_iterate_over_date_chunk():
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     reader = RecordBatchStreamReader(stream)
-    it = PyArrowChunkIterator()
-    for rb in reader:
-        it.add_record_batch(rb)
+    it = PyArrowChunkIterator(reader)
 
     count = 0
     while True:

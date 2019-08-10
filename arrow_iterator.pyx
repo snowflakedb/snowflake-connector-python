@@ -14,18 +14,23 @@ cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
 
         PyObject *nextRow();
 
+        void reset();
+
 
 cdef class PyArrowChunkIterator:
-    cdef CArrowChunkIterator thisptr
+    cdef CArrowChunkIterator * cIterator
 
-    def __cinit__(self):
-        self.thisptr = CArrowChunkIterator()
+    def __cinit__(self, arrow_stream_reader):
+        self.cIterator = new CArrowChunkIterator()
+        for rb in arrow_stream_reader:
+            self.cIterator.addRecordBatch(<PyObject *>rb)
+        self.cIterator.reset()
 
-    def add_record_batch(self, rb):
-        self.thisptr.addRecordBatch(<PyObject *>rb)
+    def __dealloc(self):
+        del self.cIterator
 
     def __next__(self):
-        ret = <object>self.thisptr.nextRow()
+        ret = <object>self.cIterator.nextRow()
         if ret is None:
             raise StopIteration
         else:

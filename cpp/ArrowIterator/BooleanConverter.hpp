@@ -12,14 +12,14 @@ namespace sf
 class BooleanConverter : public IColumnConverter
 {
 public:
-    explicit BooleanConverter(std::shared_ptr<arrow::Array> array);
+  explicit BooleanConverter(std::shared_ptr<arrow::Array> array);
 
-    PyObject * toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) override;
 
 private:
-    std::shared_ptr<arrow::BooleanArray> m_array;
+  std::shared_ptr<arrow::BooleanArray> m_array;
 };
 
-} // namespace sf
+}  // namespace sf
 
-#endif // PC_BOOLEANCONVERTER_HPP
+#endif  // PC_BOOLEANCONVERTER_HPP

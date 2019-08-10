@@ -45,9 +45,7 @@ cdef class ArrowResult:
         # result as arrow chunk
         arrow_bytes = b64decode(data.get(u'rowsetBase64'))
         arrow_reader = open_stream(arrow_bytes)
-        self._current_chunk_row = PyArrowChunkIterator()
-        for rb in arrow_reader:
-            self._current_chunk_row.add_record_batch(rb)
+        self._current_chunk_row = PyArrowChunkIterator(arrow_reader)
 
         if u'chunks' in data:
             chunks = data[u'chunks']
