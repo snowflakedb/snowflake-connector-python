@@ -5,9 +5,16 @@
 #
 
 import pytest
+try:
+    from snowflake.connector.arrow_iterator import PyArrowChunkIterator
+    no_arrow_iterator_ext = False
+except ImportError:
+    no_arrow_iterator_ext = True
 
-@pytest.mark.skip(
-    reason="Cython is not enabled in build env")
+
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
 def test_select_with_num(conn_cnx):
     with conn_cnx() as json_cnx:
         with conn_cnx() as arrow_cnx:

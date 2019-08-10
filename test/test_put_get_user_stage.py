@@ -90,6 +90,8 @@ credentials=(
                 account=db_parameters['s3_account'],
                 password=db_parameters['s3_password']) as cnx:
             cnx.cursor().execute(
+                "alter session set disable_put_and_get_on_external_stage = false")
+            cnx.cursor().execute(
                 "rm @{stage_name}".format(stage_name=stage_name))
             cnx.cursor().execute(
                 "put file://{file} @{stage_name}".format(
@@ -207,6 +209,8 @@ credentials=(
             success_cnt = 0
             skipped_cnt = 0
             c = cnx.cursor()
+            c.execute(
+                "alter session set disable_put_and_get_on_external_stage = false")
             try:
                 for rec in c.execute(
                         "put file://{file} @{stage_name}".format(
@@ -365,6 +369,8 @@ create or replace stage {stage_name}
             cnx.cursor().execute("""
 RM @{stage_name}
 """.format(stage_name=stage_name))
+            cnx.cursor().execute(
+                "alter session set disable_put_and_get_on_external_stage = false")
             rec = cnx.cursor().execute("""
 PUT file://{file} @{stage_name}
 """.format(file=data_file, stage_name=stage_name)).fetchone()

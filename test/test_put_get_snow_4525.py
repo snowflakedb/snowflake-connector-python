@@ -24,7 +24,8 @@ pct float,
 ratio number(5,2))
 """.format(name=db_parameters['name']))
         temp_file = str(tmpdir.join('bogus_files'))
-        os.system("head -c 100000 /dev/urandom > {0}".format(temp_file))
+        with open(temp_file, 'wb') as random_binary_file:
+            random_binary_file.write(os.urandom(1024))
         cnx.cursor().execute(
             "put file://{file} @%{name}".format(file=temp_file,
                                                 name=db_parameters['name']))
@@ -52,7 +53,8 @@ def test_load_bogus_json_file(tmpdir, conn_cnx, db_parameters):
             "create table {name} (v variant)".format(name=json_table))
 
         temp_file = str(tmpdir.join('bogus_json_files'))
-        os.system("head -c 100000 /dev/urandom > {0}".format(temp_file))
+        with open(temp_file, 'wb') as random_binary_file:
+            random_binary_file.write(os.urandom(1024))
         cnx.cursor().execute(
             "put file://{file} @%{name}".format(file=temp_file,
                                                 name=json_table))
