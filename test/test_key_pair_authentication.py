@@ -14,12 +14,13 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
 
-IS_RUNNING_ON_PROD = os.getenv('TRAVIS') == 'true' or \
-                     os.getenv('APPVEYOR') == 'True'
+NO_ACCOUNTADMIN_PRIV = os.getenv('TRAVIS') == 'true' or \
+                       os.getenv('APPVEYOR') == 'True' or \
+                       os.getenv('sf_account') == 'testaccount5'
 
 
 @pytest.mark.skipif(
-    IS_RUNNING_ON_PROD,
+    NO_ACCOUNTADMIN_PRIV,
     reason="Change user's public key requires accountadmin privilege"
 )
 def test_different_key_length(request, conn_cnx, db_parameters):
@@ -63,7 +64,7 @@ def test_different_key_length(request, conn_cnx, db_parameters):
 
 
 @pytest.mark.skipif(
-    IS_RUNNING_ON_PROD,
+    NO_ACCOUNTADMIN_PRIV,
     reason="Change user's public key requires accountadmin privilege"
 )
 def test_multiple_key_pair(request, conn_cnx, db_parameters):
