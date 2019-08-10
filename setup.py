@@ -67,8 +67,10 @@ if isBuildExtEnabled == 'true':
                                 'cpp/ArrowIterator/IntConverter.cpp',
                                 'cpp/ArrowIterator/StringConverter.cpp',
                                 'cpp/ArrowIterator/Python/Common.cpp',
-                                'cpp/ArrowIterator/Python/Helpers.cpp']
+                                'cpp/ArrowIterator/Python/Helpers.cpp',
+                                'cpp/Logging/logging.cpp']
                 ext.include_dirs.append('cpp/ArrowIterator/')
+                ext.include_dirs.append('cpp/Logging')
                 ext.include_dirs.append(pyarrow.get_include())
 
                 ext.extra_compile_args.append('-std=c++11')

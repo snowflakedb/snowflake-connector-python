@@ -5,6 +5,6 @@
 
 namespace sf
 {
-    /** this file is needed in the future, when the main functionality is done
-     * e.g. our own Status data structure */
-} // namespace sf
+/** this file is needed in the future, when the main functionality is done
+ * e.g. our own Status data structure */
+}  // namespace sf
