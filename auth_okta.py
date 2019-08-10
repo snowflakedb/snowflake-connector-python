@@ -6,7 +6,8 @@
 import json
 import logging
 
-from .auth import Auth, AuthByPlugin
+from .auth import Auth
+from .auth_by_plugin import AuthByPlugin
 from .compat import (urlsplit, unescape, urlencode)
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,

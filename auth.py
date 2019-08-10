@@ -6,6 +6,7 @@
 
 import codecs
 import copy
+from datetime import datetime
 import json
 import logging
 import platform
@@ -17,6 +18,7 @@ from os.path import expanduser
 from threading import Lock
 from threading import Thread
 
+from .auth_keypair import AuthByKeyPair
 from .compat import (TO_UNICODE, urlencode, IS_LINUX)
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
@@ -81,42 +83,6 @@ TEMPORARY_CREDENTIAL_FILE_LOCK = TEMPORARY_CREDENTIAL_FILE + ".lck"
 # keyring
 KEYRING_SERVICE_NAME = "net.snowflake.temporary_token"
 KEYRING_USER = "temp_token"
-
-
-class AuthByPlugin(object):
-    """
-    External Authenticator interface.
-    """
-
-    @property
-    def assertion_content(self):
-        raise NotImplementedError
-
-    def update_body(self, body):
-        raise NotImplementedError
-
-    def authenticate(
-            self, authenticator, service_name, account, user, password):
-        raise NotImplementedError
-
-    def handle_failure(self, ret):
-        """ Handles a failure when connecting to Snowflake
-
-        Args:
-            ret: dictionary returned from Snowflake.
-        """
-        Error.errorhandler_wrapper(
-            self._rest._connection, None, DatabaseError,
-            {
-                u'msg': (u"Failed to connect to DB: {host}:{port}, "
-                         u"{message}").format(
-                    host=self._rest._host,
-                    port=self._rest._port,
-                    message=ret[u'message'],
-                ),
-                u'errno': int(ret.get(u'code', -1)),
-                u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-            })
 
 
 class Auth(object):
@@ -318,6 +284,14 @@ class Auth(object):
 
         logger.debug(u'completed authentication')
         if not ret[u'success']:
+            if type(auth_instance) is AuthByKeyPair:
+                logger.debug(
+                    "JWT Token authentication failed. "
+                    "Token expires at: {jwt_token_exp}. "
+                    "Current Time: {current_time}",
+                    jwt_token_exp=auth_instance._jwt_token_exp,
+                    current_time=datetime.utcnow()
+                )
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
                 {
