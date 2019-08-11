@@ -6,7 +6,7 @@
 import binascii
 import decimal
 import time
-from datetime import datetime, timedelta, tzinfo, date
+from datetime import datetime, timedelta, date
 from logging import getLogger
 
 import pytz
@@ -33,9 +33,6 @@ ZERO_TIMEDELTA = timedelta(seconds=0)
 ZERO_EPOCH_DATE = date(1970, 1, 1)
 ZERO_EPOCH = datetime.utcfromtimestamp(0)
 ZERO_FILL = u'000000000'
-
-# Tzinfo class cache
-_TZINFO_CLASS_CACHE = {}
 
 logger = getLogger(__name__)
 
@@ -128,42 +125,11 @@ def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
         return int(TO_UNICODE(max_fraction - frac) + ZERO_FILL[:9 - scale])
 
 
-class OffsetTimezone(tzinfo):
-    def __init__(self, name, tzoffset_minutes):
-        self.name = name
-        self.tzoffset = timedelta(minutes=tzoffset_minutes)
-
-    def utcoffset(self, dt, is_dst=False):
-        return self.tzoffset
-
-    def tzname(self, dt):
-        return self.name
-
-    def dst(self, dt):
-        return ZERO_TIMEDELTA
-
-    def __repr__(self):
-        return self.name
-
-
 def _generate_tzinfo_from_tzoffset(tzoffset_minutes):
     """
     Generates tzinfo object from tzoffset.
     """
-    try:
-        return _TZINFO_CLASS_CACHE[tzoffset_minutes]
-    except KeyError:
-        pass
-    sign = u'P' if tzoffset_minutes >= 0 else u'N'
-    abs_tzoffset_minutes = abs(tzoffset_minutes)
-    hour, minute = divmod(abs_tzoffset_minutes, 60)
-    name = u'GMT{sign:s}{hour:02d}{minute:02d}'.format(
-        sign=sign,
-        hour=hour,
-        minute=minute)
-    tzinfo_obj = OffsetTimezone(name, tzoffset_minutes)
-    _TZINFO_CLASS_CACHE[tzoffset_minutes] = tzinfo_obj
-    return tzinfo_obj
+    return pytz.FixedOffset(tzoffset_minutes)
 
 
 class SnowflakeConverter(object):
