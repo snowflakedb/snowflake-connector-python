@@ -13,6 +13,7 @@ Release Notes
 
     - Rewrote validateDefaultParameters to validate the database, schema and warehouse at connection time. False by default.
     - Fix OCSP Server URL problem in multithreaded env
+    - Fix Azure Gov PUT and GET issue
 
 - v1.8.6(July 29,2019)
    
