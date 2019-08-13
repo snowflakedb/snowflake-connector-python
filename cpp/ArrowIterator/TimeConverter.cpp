@@ -2,8 +2,6 @@
  * Copyright (c) 2013-2019 Snowflake Computing
  */
 #include "TimeConverter.hpp"
-#include "Python/Helpers.hpp"
-#include "Util/time.hpp"
 
 namespace sf
 {

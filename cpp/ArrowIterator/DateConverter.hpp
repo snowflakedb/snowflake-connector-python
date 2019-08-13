@@ -6,6 +6,7 @@
 
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
+#include "logging.hpp"
 
 namespace sf
 {
@@ -13,9 +14,9 @@ namespace sf
 class DateConverter : public IColumnConverter
 {
 public:
-  DateConverter(std::shared_ptr<arrow::Array> array);
+  explicit DateConverter(std::shared_ptr<arrow::Array> array);
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<arrow::Date32Array> m_array;
@@ -24,6 +25,8 @@ private:
   static constexpr int epochDay = 719163;
 
   static py::UniqueRef& m_pyDatetimeDate();
+
+  static Logger logger;
 };
 
 }  // namespace sf

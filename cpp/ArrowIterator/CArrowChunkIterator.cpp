@@ -10,8 +10,8 @@
 #include "BinaryConverter.hpp"
 #include "BooleanConverter.hpp"
 #include "DateConverter.hpp"
+#include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
-#include <iostream>
 #include "logging.hpp"
 
 namespace sf
@@ -37,8 +37,7 @@ void CArrowChunkIterator::reset()
   m_currentBatchIndex = -1;
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
-  Py_XDECREF(m_latestReturnedRow);
-  m_latestReturnedRow = nullptr;
+  m_latestReturnedRow.reset();
 
   logger.info("Arrow chunk info: batchCount %d, columnCount %d", m_batchCount,
               m_columnCount);
@@ -47,12 +46,11 @@ void CArrowChunkIterator::reset()
 PyObject* CArrowChunkIterator::nextRow()
 {
   m_rowIndexInBatch++;
-  Py_XDECREF(m_latestReturnedRow);
-  m_latestReturnedRow = nullptr;
 
   if (m_rowIndexInBatch < m_rowCountInBatch)
   {
-    return this->currentRowAsTuple();
+    this->currentRowAsTuple();
+    return m_latestReturnedRow.get();
   }
   else
   {
@@ -66,7 +64,8 @@ PyObject* CArrowChunkIterator::nextRow()
       logger.info("Current batch index: %d, rows in current batch: %d",
                   m_currentBatchIndex, m_rowCountInBatch);
 
-      return this->currentRowAsTuple();
+      this->currentRowAsTuple();
+      return m_latestReturnedRow.get();
     }
   }
 
@@ -75,15 +74,16 @@ PyObject* CArrowChunkIterator::nextRow()
   return Py_None;
 }
 
-PyObject* CArrowChunkIterator::currentRowAsTuple()
+void CArrowChunkIterator::currentRowAsTuple()
 {
-  PyObject* tuple = PyTuple_New(m_columnCount);
+  m_latestReturnedRow.reset(PyTuple_New(m_columnCount));
   for (int i = 0; i < m_columnCount; i++)
   {
     PyTuple_SET_ITEM(
-        tuple, i, m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+        m_latestReturnedRow.get(), i,
+        m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
   }
-  return m_latestReturnedRow = tuple;
+  return;
 }
 
 void CArrowChunkIterator::initColumnConverters()
@@ -189,10 +189,9 @@ void CArrowChunkIterator::initColumnConverters()
 
           default:
           {
-            /** cout is playing a placeholder here and will be replaced by
-             * exception soon */
-            std::cout << "unknown arrow internal data type (" << dt->id()
-                      << ") for FIXED data" << std::endl;
+            /** TODO: how to throw an exception will be decided later */
+            logger.error("unknown arrow internal data type(%d) for FIXED data",
+                         dt->id());
             break;
           }
         }
@@ -259,23 +258,130 @@ void CArrowChunkIterator::initColumnConverters()
 
           default:
           {
-            /** cout is playing a placeholder here and will be replaced by
-             * exception soon */
-            std::cout << "unknown arrow internal data type (" << dt->id()
-                      << ") for TIME data" << std::endl;
+            /** TODO: how to throw an exception will be decided later */
+            logger.error("unknown arrow internal data type(%d) for TIME data",
+                         dt->id());
             break;
           }
         }
         break;
       }
 
+      case SnowflakeType::Type::TIMESTAMP_NTZ:
+      {
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        switch (dt->id())
+        {
+          case arrow::Type::type::INT64:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::OneFieldTimeStampNTZConverter>(
+                    columnArray, scale, m_context));
+            break;
+          }
+
+          case arrow::Type::type::STRUCT:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::TwoFieldTimeStampNTZConverter>(
+                    columnArray, scale, m_context));
+            break;
+          }
+
+          default:
+          {
+            /** TODO: how to throw an exception will be decided later */
+            logger.error(
+                "unknown arrow internal data type(%d) for TIMESTAMP_NTZ data",
+                dt->id());
+            break;
+          }
+        }
+        break;
+      }
+
+      case SnowflakeType::Type::TIMESTAMP_LTZ:
+      {
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        switch (dt->id())
+        {
+          case arrow::Type::type::INT64:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::OneFieldTimeStampLTZConverter>(
+                    columnArray, scale, m_context));
+            break;
+          }
+
+          case arrow::Type::type::STRUCT:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::TwoFieldTimeStampLTZConverter>(
+                    columnArray, scale, m_context));
+            break;
+          }
+
+          default:
+          {
+            /** TODO: how to throw an exception will be decided later */
+            logger.error(
+                "unknown arrow internal data type(%d) for TIMESTAMP_LTZ data",
+                dt->id());
+            break;
+          }
+        }
+        break;
+      }
+
+      case SnowflakeType::Type::TIMESTAMP_TZ:
+      {
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        int byteLength =
+            metaData
+                ? std::stoi(metaData->value(metaData->FindKey("byteLength")))
+                : 16;
+        switch (byteLength)
+        {
+          case 8:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::TwoFieldTimeStampTZConverter>(
+                    columnArray, scale, m_context));
+            break;
+          }
+
+          case 16:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::ThreeFieldTimeStampTZConverter>(
+                    columnArray, scale, m_context));
+            break;
+          }
+
+          default:
+          {
+            /** TODO: how to throw an exception will be decided later */
+            logger.error(
+                "unknown arrow internal data type(%d) for TIMESTAMP_TZ data",
+                dt->id());
+            break;
+          }
+        }
+
+        break;
+      }
+
       default:
       {
-        /** cout is playing a placeholder here and will be replaced by exception
-         * soon */
-        std::cout << "[ERROR] unknown snowflake data type : "
-                  << metaData->value(metaData->FindKey("logicalType"))
-                  << std::endl;
+        /** TODO: how to throw an exception will be decided later */
+        logger.error("unknown snowflake data type : %d",
+                     metaData->value(metaData->FindKey("logicalType")));
         break;
       }
     }

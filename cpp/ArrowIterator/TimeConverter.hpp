@@ -16,12 +16,12 @@ template <typename T>
 class TimeConverter : public IColumnConverter
 {
 public:
-  TimeConverter(std::shared_ptr<arrow::Array> array, int32_t scale)
+  explicit TimeConverter(std::shared_ptr<arrow::Array> array, int32_t scale)
   : m_array(std::dynamic_pointer_cast<T>(array)), m_scale(scale)
   {
   }
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   /** can be arrow::Int32Array and arrow::Int64Array */
@@ -33,7 +33,7 @@ private:
 };
 
 template <typename T>
-PyObject* TimeConverter<T>::toPyObject(int64_t rowIndex)
+PyObject* TimeConverter<T>::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {

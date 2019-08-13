@@ -13,9 +13,9 @@ namespace sf
 class StringConverter : public IColumnConverter
 {
 public:
-  StringConverter(std::shared_ptr<arrow::Array> array);
+  explicit StringConverter(std::shared_ptr<arrow::Array> array);
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<arrow::StringArray> m_array;

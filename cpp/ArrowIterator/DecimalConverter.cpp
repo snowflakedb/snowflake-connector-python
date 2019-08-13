@@ -31,7 +31,7 @@ DecimalFromDecimalConverter::DecimalFromDecimalConverter(
 {
 }
 
-PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex)
+PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
