@@ -5,7 +5,6 @@
 #define PC_INTCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
-#include <iostream>
 
 namespace sf
 {
@@ -19,24 +18,24 @@ public:
   {
   }
 
-  PyObject* pyLongForward(int64_t value)
+  PyObject* pyLongForward(int64_t value) const
   {
     return PyLong_FromLongLong(value);
   }
 
-  PyObject* pyLongForward(int32_t value)
+  PyObject* pyLongForward(int32_t value) const
   {
     return PyLong_FromLong(value);
   }
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<T> m_array;
 };
 
 template <typename T>
-PyObject* IntConverter<T>::toPyObject(int64_t rowIndex)
+PyObject* IntConverter<T>::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {

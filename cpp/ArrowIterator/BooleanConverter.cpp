@@ -3,8 +3,6 @@
  */
 #include "BooleanConverter.hpp"
 
-#include <iostream>
-
 namespace sf
 {
 
@@ -13,7 +11,7 @@ BooleanConverter::BooleanConverter(std::shared_ptr<arrow::Array> array)
 {
 }
 
-PyObject* BooleanConverter::toPyObject(int64_t rowIndex)
+PyObject* BooleanConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {

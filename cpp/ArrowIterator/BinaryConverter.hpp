@@ -5,6 +5,7 @@
 #define PC_BINARYCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include "logging.hpp"
 
 namespace sf
 {
@@ -12,12 +13,14 @@ namespace sf
 class BinaryConverter : public IColumnConverter
 {
 public:
-  BinaryConverter(std::shared_ptr<arrow::Array> array);
+  explicit BinaryConverter(std::shared_ptr<arrow::Array> array);
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<arrow::BinaryArray> m_array;
+
+  static Logger logger;
 };
 
 }  // namespace sf

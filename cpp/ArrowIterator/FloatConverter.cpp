@@ -12,7 +12,7 @@ FloatConverter::FloatConverter(std::shared_ptr<arrow::Array> array)
 {
 }
 
-PyObject* FloatConverter::toPyObject(int64_t rowIndex)
+PyObject* FloatConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {

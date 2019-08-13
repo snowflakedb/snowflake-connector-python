@@ -20,7 +20,7 @@ std::unordered_map<std::string, SnowflakeType::Type>
         {"FLOAT", SnowflakeType::Type::REAL},
         {"DOUBLE", SnowflakeType::Type::REAL},
         {"DOUBLE PRECISION", SnowflakeType::Type::REAL},
-        {"VARVHAR", SnowflakeType::Type::TEXT},
+        {"VARCHAR", SnowflakeType::Type::TEXT},
         {"STRING", SnowflakeType::Type::TEXT},
         {"TEXT", SnowflakeType::Type::TEXT},
         {"TIME", SnowflakeType::Type::TIME},

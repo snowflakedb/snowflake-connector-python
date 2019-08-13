@@ -14,7 +14,7 @@ class FloatConverter : public IColumnConverter
 public:
   explicit FloatConverter(std::shared_ptr<arrow::Array> array);
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<arrow::DoubleArray> m_array;

@@ -63,19 +63,48 @@ int32_t getSecondFromSeconds(int32_t seconds, int32_t scale)
 int32_t getMicrosecondFromSeconds(int64_t seconds, int32_t scale)
 {
   int32_t microsec = seconds % powTenSB4[scale];
-  return scale > PYTHON_DATETIME_TIME_MICROSEC_BITS ? microsec /=
-         powTenSB4[scale - PYTHON_DATETIME_TIME_MICROSEC_BITS] : microsec *=
-         powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_BITS - scale];
+  return scale > PYTHON_DATETIME_TIME_MICROSEC_DIGIT ? microsec /=
+         powTenSB4[scale - PYTHON_DATETIME_TIME_MICROSEC_DIGIT] : microsec *=
+         powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_DIGIT - scale];
 }
 
-double secondsToDouble(int64_t seconds, int32_t scale)
+double getFormattedDoubleFromEpoch(int64_t epoch, int32_t scale)
 {
-  return scale > PYTHON_DATETIME_TIME_MICROSEC_BITS
+  return scale > PYTHON_DATETIME_TIME_MICROSEC_DIGIT
              ? static_cast<double>(
-                   seconds /
-                   powTenSB4[scale - PYTHON_DATETIME_TIME_MICROSEC_BITS]) /
-                   powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_BITS]
-             : static_cast<double>(seconds) / powTenSB4[scale];
+                   epoch /
+                   powTenSB4[scale - PYTHON_DATETIME_TIME_MICROSEC_DIGIT]) /
+                   powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_DIGIT]
+             : static_cast<double>(epoch) / powTenSB4[scale];
+}
+
+double getFormattedDoubleFromEpochFraction(int64_t epoch, int32_t frac,
+                                           int32_t scale)
+{
+  return static_cast<double>(epoch) +
+         static_cast<double>(castToFormattedFraction(frac, epoch > 0, scale)) /
+             powTenSB4[std::min(scale, PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
+}
+
+int32_t castToFormattedFraction(int32_t frac, bool isPositive, int32_t scale)
+{
+  // if scale > 6 or not
+  constexpr int DIFF_DIGIT =
+      NANOSEC_DIGIT - PYTHON_DATETIME_TIME_MICROSEC_DIGIT;
+  if (scale > 6)
+  {
+    return isPositive
+               ? (frac / powTenSB4[DIFF_DIGIT])
+               : (powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_DIGIT] -
+                  (powTenSB4[NANOSEC_DIGIT] - frac) / powTenSB4[DIFF_DIGIT]);
+  }
+  else
+  {
+    return isPositive
+               ? (frac / powTenSB4[NANOSEC_DIGIT - scale])
+               : (powTenSB4[scale] - (powTenSB4[NANOSEC_DIGIT] - frac) /
+                                         powTenSB4[NANOSEC_DIGIT - scale]);
+  }
 }
 
 }  // namespace internal

@@ -11,6 +11,7 @@
 #include <arrow/python/pyarrow.h>
 #include "IColumnConverter.hpp"
 #include "logging.hpp"
+#include "Python/Common.hpp"
 
 namespace sf
 {
@@ -31,10 +32,7 @@ public:
   /**
    * Desctructor
    */
-  ~CArrowChunkIterator()
-  {
-    Py_XDECREF(m_latestReturnedRow);
-  }
+  ~CArrowChunkIterator() = default;
 
   /**
    * Add Arrow RecordBach to current chunk
@@ -69,7 +67,7 @@ private:
   int64_t m_rowCountInBatch;
 
   /** pointer to the latest returned python tuple(row) result */
-  PyObject* m_latestReturnedRow;
+  py::UniqueRef m_latestReturnedRow;
 
   /** list of column converters*/
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
@@ -80,7 +78,7 @@ private:
   /**
    * @return python object of tuple which is tuple of all row values
    */
-  PyObject* currentRowAsTuple();
+  void currentRowAsTuple();
 
   static Logger logger;
 

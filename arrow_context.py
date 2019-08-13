@@ -4,11 +4,13 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from logging import getLogger
 from .constants import (
-        PARAMETER_TIMEZONE
-)
+    PARAMETER_TIMEZONE)
+from .converter import (
+    _generate_tzinfo_from_tzoffset)
 
 import pytz
 
@@ -16,6 +18,8 @@ try:
     import tzlocal
 except ImportError:
     tzlocal = None
+
+ZERO_EPOCH = datetime.utcfromtimestamp(0)
 
 logger = getLogger(__name__)
 
@@ -32,7 +36,7 @@ class ArrowConverterContext(object):
     def timezone(self, tz):
         self._timezone = tz
 
-    def get_session_tz(self):
+    def _get_session_tz(self):
         """ Get the session timezone or use the local computer's timezone. """
         try:
             tz = 'UTC' if not self.timezone else self.timezone
@@ -46,3 +50,46 @@ class ArrowConverterContext(object):
                     return datetime.timezone.utc
                 except AttributeError:
                     return pytz.timezone('UTC')
+
+    def TIMESTAMP_TZ_to_python(self, microseconds, tz):
+        """
+        TIMESTAMP TZ to datetime
+
+        The timezone offset is piggybacked
+
+        @para microseconds : float
+        @para tz : int
+        """
+
+        tzinfo = _generate_tzinfo_from_tzoffset(tz - 1440)
+        return datetime.fromtimestamp(microseconds, tz=tzinfo)
+
+    def TIMESTAMP_TZ_to_python_windows(self, microseconds, tz):
+        tzinfo = _generate_tzinfo_from_tzoffset(tz - 1440)
+        t = ZERO_EPOCH + timedelta(seconds=microseconds)
+        if pytz.utc != tzinfo:
+            t += tzinfo.utcoffset(t, is_dst=False)
+        return t.replace(tzinfo=tzinfo)
+
+    def TIMESTAMP_NTZ_to_python(self, microseconds):
+        return datetime.utcfromtimestamp(microseconds)
+
+    def TIMESTAMP_NTZ_to_python_windows(self, microseconds):
+        return ZERO_EPOCH + timedelta(seconds=(microseconds))
+
+    def TIMESTAMP_LTZ_to_python(self, microseconds):
+        tzinfo = self._get_session_tz()
+        return datetime.fromtimestamp(microseconds, tz=tzinfo)
+
+    def TIMESTAMP_LTZ_to_python_windows(self, microseconds):
+        tzinfo = self._get_session_tz()
+        try:
+            t0 = ZERO_EPOCH + timedelta(seconds=(microseconds))
+            t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo)
+            return t
+        except OverflowError:
+            logger.debug(
+                "OverflowError in converting from epoch time to "
+                "timestamp_ltz: %s(ms). Falling back to use struct_time."
+            )
+            return time.localtime(microseconds)
