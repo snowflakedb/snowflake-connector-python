@@ -16,7 +16,7 @@ class IColumnConverter
 public:
   IColumnConverter() = default;
   virtual ~IColumnConverter() = default;
-  virtual PyObject* toPyObject(int64_t rowIndex) = 0;
+  virtual PyObject* toPyObject(int64_t rowIndex) const = 0;
 };
 }
 

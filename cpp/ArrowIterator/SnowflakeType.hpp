@@ -7,7 +7,6 @@
 #include <string>
 #include <algorithm>
 #include <unordered_map>
-#include <iostream>
 
 namespace sf
 {

@@ -68,6 +68,7 @@ if isBuildExtEnabled == 'true':
                                 'cpp/ArrowIterator/IntConverter.cpp',
                                 'cpp/ArrowIterator/StringConverter.cpp',
                                 'cpp/ArrowIterator/TimeConverter.cpp',
+                                'cpp/ArrowIterator/TimeStampConverter.cpp',
                                 'cpp/ArrowIterator/Python/Common.cpp',
                                 'cpp/ArrowIterator/Python/Helpers.cpp',
                                 'cpp/ArrowIterator/Util/time.cpp',

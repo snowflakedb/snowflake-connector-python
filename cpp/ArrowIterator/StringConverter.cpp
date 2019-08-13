@@ -12,7 +12,7 @@ StringConverter::StringConverter(std::shared_ptr<arrow::Array> array)
 {
 }
 
-PyObject* StringConverter::toPyObject(int64_t rowIndex)
+PyObject* StringConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {

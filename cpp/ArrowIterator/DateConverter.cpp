@@ -3,10 +3,10 @@
  */
 #include "DateConverter.hpp"
 #include "Python/Helpers.hpp"
-#include <iostream>
 
 namespace sf
 {
+Logger DateConverter::logger("snowflake.connector.DateConverter");
 
 py::UniqueRef& DateConverter::m_pyDatetimeDate()
 {
@@ -18,18 +18,14 @@ py::UniqueRef& DateConverter::m_pyDatetimeDate()
     arrow::Status status = py::importPythonModule("datetime", pyDatetimeModule);
     if (!status.ok())
     {
-      /** cout is playing a placeholder here and will be replaced by exception
-       * soon */
-      std::cout << "[ERROR] import python module 'datetime' failed"
-                << std::endl;
+      /** TODO : How to throw an exception will be decided later */
+      logger.error("import python module 'datetime' failed");
     }
     status = py::importFromModule(pyDatetimeModule, "date", pyDatetimeDate);
     if (!status.ok())
     {
-      /** cout is playing a placeholder here and will be replaced by exception
-       * soon */
-      std::cout << "[ERROR] import python module 'datetime.date' failed"
-                << std::endl;
+      /** TODO : How to throw an exception will be decided later */
+      logger.error("import python module 'datetime.date' failed");
     }
   }
   return pyDatetimeDate;
@@ -40,7 +36,7 @@ DateConverter::DateConverter(std::shared_ptr<arrow::Array> array)
 {
 }
 
-PyObject* DateConverter::toPyObject(int64_t rowIndex)
+PyObject* DateConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {

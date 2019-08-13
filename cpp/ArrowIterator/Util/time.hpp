@@ -16,13 +16,16 @@ namespace sf
 
 namespace internal
 {
+/** python datetime.time has only support 6 bit precision, which is formated
+ * double in this file */
 
 constexpr int SECONDS_PER_MINUTE = 60;
 constexpr int MINUTES_PER_HOUR = 60;
 constexpr int HOURS_PER_DAY = 24;
 constexpr int SECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE;
 
-constexpr int PYTHON_DATETIME_TIME_MICROSEC_BITS = 6;
+constexpr int32_t PYTHON_DATETIME_TIME_MICROSEC_DIGIT = 6;
+constexpr int32_t NANOSEC_DIGIT = 9;
 
 constexpr int powTenSB4[]{1,      10,      100,      1000,      10000,
                           100000, 1000000, 10000000, 100000000, 1000000000};
@@ -42,12 +45,9 @@ constexpr int pow10Int(int n)
   return n == 0 ? 1 : 10 * pow10Int(n - 1);
 }
 
-inline int32_t castFraction(int32_t frac, int32_t scale)
-{
-  return scale <= PYTHON_DATETIME_TIME_MICROSEC_BITS
-             ? frac
-             : frac / powTenSB4[scale - PYTHON_DATETIME_TIME_MICROSEC_BITS];
-}
+/** if the fraction's digit is greater than PYTHON_DATETIME_TIME_MICROSEC_DIGIT,
+ * we cast it to exactly PYTHON_DATETIME_TIME_MICROSEC_DIGIT digit */
+int32_t castToFormattedFraction(int32_t frac, bool isPositive, int32_t scale);
 
 int32_t getNumberOfDigit(int32_t num);
 
@@ -69,18 +69,14 @@ int32_t getSecondFromSeconds(int32_t seconds, int32_t scale);
 
 int32_t getMicrosecondFromSeconds(int32_t seconds, int32_t scale);
 
-double secondsToDouble(int64_t seconds, int32_t scale);
+/** the input epoch is the combination of seconds and fraction
+ *  the output is formated double needed by python connector */
+double getFormattedDoubleFromEpoch(int64_t epoch, int32_t scale);
 
-inline double secondsFractionToDouble(int64_t seconds, int32_t frac,
-                                      int32_t scale)
-{
-  return static_cast<double>(seconds) +
-         static_cast<double>(castFraction(frac, scale)) /
-             powTenSB4[std::min(scale, PYTHON_DATETIME_TIME_MICROSEC_BITS)];
-}
-
-// TODO
-double bigSecondToDouble();
+/** the input are epoch and fraction
+ *  the output is formated double needed by python connector */
+double getFormattedDoubleFromEpochFraction(int64_t epoch, int32_t frac,
+                                           int32_t scale);
 
 }  // namespace internal
 }  // namespace sf

@@ -21,13 +21,18 @@ public:
   UniqueRef(const UniqueRef&) = delete;
   UniqueRef& operator=(const UniqueRef&) = delete;
 
-  UniqueRef() : m_pyObj(nullptr) {};
+  UniqueRef() : m_pyObj(nullptr)
+  {
+  }
+
   explicit UniqueRef(PyObject* pyObj) : m_pyObj(pyObj)
   {
   }
+
   UniqueRef(UniqueRef&& other) : UniqueRef(other.detach())
   {
   }
+
   UniqueRef& operator=(UniqueRef&& other)
   {
     m_pyObj = other.detach();

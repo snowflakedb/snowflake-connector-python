@@ -23,9 +23,10 @@ protected:
 class DecimalFromDecimalConverter : public DecimalBaseConverter
 {
 public:
-  DecimalFromDecimalConverter(std::shared_ptr<arrow::Array> array, int scale);
+  explicit DecimalFromDecimalConverter(std::shared_ptr<arrow::Array> array,
+                                       int scale);
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<arrow::Decimal128Array> m_array;
@@ -38,15 +39,15 @@ template <typename T>
 class DecimalFromIntConverter : public DecimalBaseConverter
 {
 public:
-  DecimalFromIntConverter(std::shared_ptr<arrow::Array> array, int precision,
-                          int scale)
+  explicit DecimalFromIntConverter(std::shared_ptr<arrow::Array> array,
+                                   int precision, int scale)
   : m_array(std::dynamic_pointer_cast<T>(array)),
     m_precision(precision),
     m_scale(scale)
   {
   }
 
-  PyObject* toPyObject(int64_t rowIndex) override;
+  PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<T> m_array;
@@ -58,7 +59,7 @@ private:
 };
 
 template <typename T>
-PyObject* DecimalFromIntConverter<T>::toPyObject(int64_t rowIndex)
+PyObject* DecimalFromIntConverter<T>::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
