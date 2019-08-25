@@ -6,7 +6,7 @@
 import binascii
 import decimal
 import time
-from datetime import datetime, timedelta, tzinfo, date
+from datetime import datetime, timedelta, date
 from logging import getLogger
 
 import pytz
@@ -33,9 +33,6 @@ ZERO_TIMEDELTA = timedelta(seconds=0)
 ZERO_EPOCH_DATE = date(1970, 1, 1)
 ZERO_EPOCH = datetime.utcfromtimestamp(0)
 ZERO_FILL = u'000000000'
-
-# Tzinfo class cache
-_TZINFO_CLASS_CACHE = {}
 
 logger = getLogger(__name__)
 
@@ -132,31 +129,7 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes):
     """
     Generates tzinfo object from tzoffset.
     """
-    try:
-        return _TZINFO_CLASS_CACHE[tzoffset_minutes]
-    except KeyError:
-        pass
-    sign = u'P' if tzoffset_minutes >= 0 else u'N'
-    abs_tzoffset_minutes = abs(tzoffset_minutes)
-    hour, minute = divmod(abs_tzoffset_minutes, 60)
-    name = u'GMT{sign:s}{hour:02d}{minute:02d}'.format(
-        sign=sign,
-        hour=hour,
-        minute=minute)
-    tzinfo_class_type = type(
-        str(name),  # str() for both Python 2 and 3
-        (tzinfo,),
-        dict(
-            utcoffset=lambda self0, dt, is_dst=False: timedelta(
-                minutes=tzoffset_minutes),
-            tzname=lambda self0, dt: name,
-            dst=lambda self0, dt: ZERO_TIMEDELTA,
-            __repr__=lambda _: name
-        )
-    )
-    tzinfo_cls = tzinfo_class_type()
-    _TZINFO_CLASS_CACHE[tzoffset_minutes] = tzinfo_cls
-    return tzinfo_cls
+    return pytz.FixedOffset(tzoffset_minutes)
 
 
 class SnowflakeConverter(object):
