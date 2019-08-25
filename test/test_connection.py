@@ -487,7 +487,7 @@ def test_us_west_connection(tmpdir):
         )
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_privatelink(db_parameters):
     """
     Ensure the OCSP cache server URL is overridden if privatelink
