@@ -73,8 +73,6 @@ from .time_util import (
     HeartBeatTimer, get_time_millis)
 from .util_text import split_statements, construct_hostname, parse_account
 
-from snowflake.connector.network import APPLICATION_SNOWSQL
-
 
 def DefaultConverterClass():
     if PY_ISSUE_23517 or IS_WINDOWS:
@@ -612,36 +610,11 @@ class SnowflakeConnection(object):
     @staticmethod
     def setup_ocsp_privatelink(app, hostname):
         SnowflakeConnection.OCSP_ENV_LOCK.acquire()
-        if app is APPLICATION_SNOWSQL:
-            ocsp_cache_server = u'http://ocsp{}/ocsp_response_cache.json'.format(
-                hostname[hostname.index('.'):])
-            '''
-             Check if user has configured a custom OCSP Cache Server URL
-             '''
-            if 'SF_OCSP_RESPONSE_CACHE_SERVER_URL' not in os.environ:
-                os.environ[
-                    'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
-            else:
-                if "ocsp_response_cache" not in os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']:
-                    if not os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']. \
-                            startswith("http://"):
-                        ocsp_cache_server = "http://{0}/{1}".format(
-                            os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
-                            "ocsp_response_cache.json")
-                    else:
-                        ocsp_cache_server = "{0}/{1}".format(
-                            os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'],
-                            "ocsp_response_cache.json")
-                else:
-                    ocsp_cache_server = os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']
-
-                os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
-        else:
-            ocsp_cache_server = \
-                u'http://ocsp.{}/ocsp_response_cache.json'.format(
-                    hostname)
-            os.environ[
-                'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
+        ocsp_cache_server = \
+            u'http://ocsp.{}/ocsp_response_cache.json'.format(
+                hostname)
+        os.environ[
+            'SF_OCSP_RESPONSE_CACHE_SERVER_URL'] = ocsp_cache_server
         logger.debug(u"OCSP Cache Server is updated: %s", ocsp_cache_server)
         SnowflakeConnection.OCSP_ENV_LOCK.release()
 

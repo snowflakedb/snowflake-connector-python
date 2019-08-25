@@ -25,6 +25,7 @@ from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
 from collections import OrderedDict
 from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
+from os import getenv
 
 logger = getLogger(__name__)
 
@@ -223,11 +224,16 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     def process_ocsp_response(self, issuer, cert_id, ocsp_response):
         try:
             res = OCSPResponse.load(ocsp_response)
+            if self.test_mode is not None:
+                ocsp_load_failure = getenv("SF_TEST_OCSP_FORCE_BAD_OCSP_RESPONSE")
+                if ocsp_load_failure is not None:
+                    raise RevocationCheckError("Force fail")
         except Exception:
             raise RevocationCheckError(
                 msg='Invalid OCSP Response',
                 errno=ER_INVALID_OCSP_RESPONSE
             )
+
         if res['response_status'].native != 'successful':
             raise RevocationCheckError(
                 msg="Invalid Status: {0}".format(res['response_status'].native),
@@ -256,6 +262,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                 ocsp_cert['tbs_certificate'])
 
             cert_valid, debug_msg = self.check_cert_time_validity(cur_time, ocsp_cert)
+
             if not cert_valid:
                 raise RevocationCheckError(
                     msg=debug_msg,
@@ -277,6 +284,15 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         single_response = tbs_response_data['responses'][0]
         cert_status = single_response['cert_status'].name
+        if self.test_mode is not None:
+            test_cert_status = getenv("SF_TEST_OCSP_CERT_STATUS")
+            if test_cert_status == 'revoked':
+                cert_status = 'revoked'
+            elif test_cert_status == 'unknown':
+                cert_status = 'unknown'
+            elif test_cert_status == 'good':
+                cert_status = 'good'
+
         try:
             if cert_status == 'good':
                 self._process_good_status(single_response, cert_id, ocsp_response)
