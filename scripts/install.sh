@@ -30,7 +30,9 @@ else
 fi
 
 source ./venv/bin/activate
-pip install numpy pendulum
+pip install pandas
+pip install numpy
+pip install pendulum
 pip install pyarrow
 pip install pytest pytest-cov pytest-rerunfailures
 if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]] || [[ $PYTHON_VERSION == "2.7"* ]]; then
