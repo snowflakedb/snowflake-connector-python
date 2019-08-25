@@ -8,6 +8,7 @@
  * own status data structure */
 #include <arrow/python/platform.h>
 #include <arrow/api.h>
+#include "logging.hpp"
 
 namespace sf
 {
@@ -16,6 +17,8 @@ namespace py
 {
 
 class UniqueRef;
+
+using Logger = ::sf::Logger;
 
 /** All arrow::Status will be replaced by our own data structure in the future
  */
@@ -26,10 +29,16 @@ class UniqueRef;
  * \param ref: the RAII object to manage the PyObject
  * \return:
  */
-arrow::Status importPythonModule(const std::string& moduleName, UniqueRef& ref);
+void importPythonModule(const std::string& moduleName, UniqueRef& ref);
 
-arrow::Status importFromModule(const UniqueRef& moduleRef,
-                               const std::string& name, UniqueRef& ref);
+void importPythonModule(const std::string& moduleName, UniqueRef& ref,
+                        const Logger& logger);
+
+void importFromModule(const UniqueRef& moduleRef, const std::string& name,
+                      UniqueRef& ref);
+
+void importFromModule(const UniqueRef& moduleRef, const std::string& name,
+                      UniqueRef& ref, const Logger& logger);
 
 }  // namespace py
 }  // namespace sf

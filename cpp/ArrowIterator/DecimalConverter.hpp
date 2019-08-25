@@ -13,11 +13,14 @@ namespace sf
 class DecimalBaseConverter : public IColumnConverter
 {
 public:
-  DecimalBaseConverter() = default;
+  DecimalBaseConverter();
   virtual ~DecimalBaseConverter() = default;
 
 protected:
-  static py::UniqueRef& m_decimalConstructor();
+  py::UniqueRef& m_pyDecimalConstructor;
+
+private:
+  static py::UniqueRef& initPyDecimalConstructor();
 };
 
 class DecimalFromDecimalConverter : public DecimalBaseConverter
@@ -66,7 +69,7 @@ PyObject* DecimalFromIntConverter<T>::toPyObject(int64_t rowIndex) const
     int64_t val = m_array->Value(rowIndex);
 
     py::UniqueRef decimal(
-        PyObject_CallFunction(m_decimalConstructor().get(), "L", val));
+        PyObject_CallFunction(m_pyDecimalConstructor.get(), "L", val));
     return PyObject_CallMethod(decimal.get(), "scaleb", "i", -m_scale);
   }
   else
