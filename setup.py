@@ -58,7 +58,9 @@ if isBuildExtEnabled == 'true':
             if ext.name == 'snowflake.connector.arrow_iterator':
                 self._copy_arrow_lib()
 
-                ext.sources += ['cpp/ArrowIterator/CArrowChunkIterator.cpp',
+                ext.sources += ['cpp/ArrowIterator/CArrowIterator.cpp',
+                                'cpp/ArrowIterator/CArrowChunkIterator.cpp',
+                                'cpp/ArrowIterator/CArrowTableIterator.cpp',
                                 'cpp/ArrowIterator/SnowflakeType.cpp',
                                 'cpp/ArrowIterator/BinaryConverter.cpp',
                                 'cpp/ArrowIterator/BooleanConverter.cpp',

@@ -16,7 +16,6 @@
 
 namespace sf
 {
-Logger CArrowChunkIterator::logger("snowflake.connector.CArrowChunkIterator");
 
 CArrowChunkIterator::CArrowChunkIterator(PyObject* context)
 : m_latestReturnedRow(nullptr), m_context(context)
@@ -25,9 +24,8 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context)
 
 void CArrowChunkIterator::addRecordBatch(PyObject* rb)
 {
-  std::shared_ptr<arrow::RecordBatch> cRecordBatch;
-  arrow::Status status = arrow::py::unwrap_record_batch(rb, &cRecordBatch);
-  m_cRecordBatches.push_back(cRecordBatch);
+  // may add some specific behaviors for this iterator
+  CArrowIterator::addRecordBatch(rb);
 }
 
 void CArrowChunkIterator::reset()
@@ -43,7 +41,7 @@ void CArrowChunkIterator::reset()
               m_columnCount);
 }
 
-PyObject* CArrowChunkIterator::nextRow()
+PyObject* CArrowChunkIterator::next()
 {
   m_rowIndexInBatch++;
 
