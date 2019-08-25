@@ -61,6 +61,7 @@ if PY2:
     FORBIDDEN = httplib.FORBIDDEN
     UNAUTHORIZED = httplib.UNAUTHORIZED
     INTERNAL_SERVER_ERROR = httplib.INTERNAL_SERVER_ERROR
+    IncompleteRead = httplib.IncompleteRead
     OK = httplib.OK
     BadStatusLine = httplib.BadStatusLine
 
@@ -105,6 +106,7 @@ else:
     FORBIDDEN = http.client.FORBIDDEN
     UNAUTHORIZED = http.client.UNAUTHORIZED
     INTERNAL_SERVER_ERROR = http.client.INTERNAL_SERVER_ERROR
+    IncompleteRead = http.client.IncompleteRead
     OK = http.client.OK
     BadStatusLine = http.client.BadStatusLine
 
