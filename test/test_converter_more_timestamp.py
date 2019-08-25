@@ -42,7 +42,7 @@ def test_fetch_various_timestamps(conn_cnx):
                     except OSError:
                         ts = ZERO_EPOCH + timedelta(seconds=float(et))
                         if pytz.utc != tzinfo:
-                            ts += tzinfo.utcoffset(ts, is_dst=False)
+                            ts += tzinfo.utcoffset(ts)
                         ts = ts.replace(tzinfo=tzinfo)
                     data.append({
                         'scale': 0,
@@ -60,7 +60,7 @@ def test_fetch_various_timestamps(conn_cnx):
                             except OSError:
                                 ts0 = ZERO_EPOCH + timedelta(seconds=float(et))
                                 if pytz.utc != tzinfo:
-                                    ts0 += tzinfo.utcoffset(ts0, is_dst=False)
+                                    ts0 += tzinfo.utcoffset(ts0)
                                 ts0 = ts0.replace(tzinfo=tzinfo)
                             ts0_str = ts0.strftime(
                                 '%Y-%m-%d %H:%M:%S.{ff}{tz}'.format(
@@ -76,7 +76,7 @@ def test_fetch_various_timestamps(conn_cnx):
                 # WIP. this test work in edge case
                 tzinfo = pytz.timezone(PST_TZ)
                 ts0 = datetime.fromtimestamp(float(et))
-                ts0 = pytz.utc.localize(ts0, is_dst=False).astimezone(tzinfo)
+                ts0 = pytz.utc.localize(ts0).astimezone(tzinfo)
                 ts0_str = ts0.strftime('%Y-%m-%d %H:%M:%S')
                 ts1 = ts0
                 data.append({
@@ -87,8 +87,7 @@ def test_fetch_various_timestamps(conn_cnx):
                 })
                 for idx in range(len(fractions)):
                     ts0 = datetime.fromtimestamp(float(et))
-                    ts0 = pytz.utc.localize(ts0, is_dst=False).astimezone(
-                        tzinfo)
+                    ts0 = pytz.utc.localize(ts0).astimezone(tzinfo)
                     ts0_str = ts0.strftime(
                         '%Y-%m-%d %H:%M:%S.{ff}'.format(
                             ff=fractions[:idx + 1]

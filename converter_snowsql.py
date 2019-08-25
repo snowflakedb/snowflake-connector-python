@@ -162,7 +162,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                     "OSError occurred but falling back to datetime: %s", e)
                 t = ZERO_EPOCH + timedelta(seconds=microseconds)
                 if pytz.utc != tzinfo:
-                    t += tzinfo.utcoffset(t, is_dst=False)
+                    t += tzinfo.utcoffset(t)
                 t = t.replace(tzinfo=tzinfo)
             fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
                 value, max_fraction, scale)
@@ -180,7 +180,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                     "OSError occurred but falling back to datetime: %s", e)
                 t = ZERO_EPOCH + timedelta(seconds=microseconds)
                 if pytz.utc != tzinfo:
-                    t += tzinfo.utcoffset(t, is_dst=False)
+                    t += tzinfo.utcoffset(t)
                 t = t.replace(tzinfo=tzinfo)
 
             fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(

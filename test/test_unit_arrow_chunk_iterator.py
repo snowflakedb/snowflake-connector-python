@@ -479,7 +479,7 @@ def test_iterate_over_timestamp_tz_chunk():
             if platform.system() == 'Windows':
                 t = datetime.datetime.utcfromtimestamp(0) + datetime.timedelta(seconds=(float(microsec)))
                 if pytz.utc != tzinfo:
-                    t += tzinfo.utcoffset(t, is_dst=False)
+                    t += tzinfo.utcoffset(t)
                 return t.replace(tzinfo=tzinfo)
             else:
                 return datetime.datetime.fromtimestamp(float(microsec), tz=tzinfo)

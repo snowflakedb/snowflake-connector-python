@@ -41,7 +41,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
             microseconds = float(value)
             t = ZERO_EPOCH + timedelta(seconds=microseconds)
             if pytz.utc != tzinfo:
-                t += tzinfo.utcoffset(t, is_dst=False)
+                t += tzinfo.utcoffset(t)
             return t.replace(tzinfo=tzinfo)
 
         def conv(encoded_value):
@@ -50,7 +50,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
             microseconds = float(value[0:-scale + 6])
             t = ZERO_EPOCH + timedelta(seconds=microseconds)
             if pytz.utc != tzinfo:
-                t += tzinfo.utcoffset(t, is_dst=False)
+                t += tzinfo.utcoffset(t)
             return t.replace(tzinfo=tzinfo)
 
         return conv if scale > 6 else conv0
