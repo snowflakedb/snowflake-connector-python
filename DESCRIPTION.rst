@@ -9,6 +9,18 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v1.9.0(August 26,2019)
+
+    - Implement converter for all arrow data types in python connector extension
+    - Fix arrow error when returning empty result using python connecter
+    - Fix OCSP responder hang, AttributeError: 'ReadTimeout' object has no attribute 'message'
+    - Update OCSP Connection timeout.
+    - Fix RevokedCertificateError OOB Telemetry events are not sent
+    - Uncaught RevocationCheckError for FAIL_OPEN in create_pair_issuer_subject
+    - Fix uncaught exception in generate_telemetry_data function
+    - Fix connector looses context after connection drop/restore by retrying IncompleteRead error.
+    - Make tzinfo class at the module level instead of inlining
+
 - v1.8.7(August 12,2019)
 
     - Rewrote validateDefaultParameters to validate the database, schema and warehouse at connection time. False by default.
