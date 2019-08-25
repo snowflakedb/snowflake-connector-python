@@ -18,7 +18,7 @@ from snowflake.connector.converter_snowsql import (SnowflakeConverterSnowSQL)
 
 def _compose_tz(dt, tzinfo):
     ret = ZERO_EPOCH + timedelta(seconds=float(dt))
-    ret += tzinfo.utcoffset(ret, is_dst=False)
+    ret += tzinfo.utcoffset(ret)
     return ret.replace(tzinfo=tzinfo)
 
 
@@ -28,7 +28,7 @@ def _compose_ntz(dt):
 
 def _compose_ltz(dt, tz):
     ret = ZERO_EPOCH + timedelta(seconds=float(dt))
-    return pytz.utc.localize(ret, is_dst=False).astimezone(
+    return pytz.utc.localize(ret).astimezone(
         pytz.timezone(tz))
 
 
