@@ -32,7 +32,7 @@ from .compat import (
     METHOD_NOT_ALLOWED, BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
-from .compat import (TO_UNICODE, urlencode, urlparse)
+from .compat import (TO_UNICODE, urlencode, urlparse, IncompleteRead)
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_ACCEPT,
@@ -855,6 +855,7 @@ class SnowflakeRestful(object):
                 ReadTimeout,
                 BadStatusLine,
                 ConnectionError,
+                IncompleteRead,
                 SSLError,
                 ProtocolError,  # from urllib3
                 ReadTimeoutError,  # from urllib3

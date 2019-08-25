@@ -25,7 +25,8 @@ from snowflake.connector.compat import (
     BAD_REQUEST,
     BAD_GATEWAY,
     UNAUTHORIZED,
-    BadStatusLine)
+    BadStatusLine,
+    IncompleteRead)
 from snowflake.connector.errors import (
     InterfaceError, DatabaseError, OtherHTTPRetryableError)
 from snowflake.connector.network import (
@@ -117,10 +118,15 @@ def test_request_exec():
             session=session, catch_okta_unauthorized_error=True,
             **default_parameters)
 
+    class IncompleteReadMock(IncompleteRead):
+        def __init__(self):
+            IncompleteRead.__init__(self, "")
+
     # handle retryable exception
     for exc in [
         ConnectTimeout,
         ReadTimeout,
+        IncompleteReadMock,
         SSLError,
         ProtocolError,
         ConnectionError,
