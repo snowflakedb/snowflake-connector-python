@@ -12,7 +12,7 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
-#include "logging.hpp"
+#include <string>
 
 namespace sf
 {
@@ -50,6 +50,10 @@ PyObject* CArrowChunkIterator::nextRow()
   if (m_rowIndexInBatch < m_rowCountInBatch)
   {
     this->currentRowAsTuple();
+    if (py::checkPyError())
+    {
+      return nullptr;
+    }
     return m_latestReturnedRow.get();
   }
   else
@@ -60,11 +64,19 @@ PyObject* CArrowChunkIterator::nextRow()
       m_rowIndexInBatch = 0;
       m_rowCountInBatch = m_cRecordBatches[m_currentBatchIndex]->num_rows();
       this->initColumnConverters();
+      if (py::checkPyError())
+      {
+        return nullptr;
+      }
 
       logger.info("Current batch index: %d, rows in current batch: %d",
                   m_currentBatchIndex, m_rowCountInBatch);
 
       this->currentRowAsTuple();
+      if (py::checkPyError())
+      {
+        return nullptr;
+      }
       return m_latestReturnedRow.get();
     }
   }
@@ -189,15 +201,22 @@ void CArrowChunkIterator::initColumnConverters()
 
           default:
           {
-            /** TODO: how to throw an exception will be decided later */
-            logger.error("unknown arrow internal data type(%d) for FIXED data",
-                         dt->id());
-            break;
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for FIXED data",
+                dt->id());
+            logger.error(errorInfo.c_str());
+            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+            return;
           }
         }
         break;
       }
 
+      case SnowflakeType::Type::ANY:
+      case SnowflakeType::Type::CHAR:
+      case SnowflakeType::Type::OBJECT:
+      case SnowflakeType::Type::VARIANT:
       case SnowflakeType::Type::TEXT:
       {
         m_currentBatchConverters.push_back(
@@ -258,10 +277,13 @@ void CArrowChunkIterator::initColumnConverters()
 
           default:
           {
-            /** TODO: how to throw an exception will be decided later */
-            logger.error("unknown arrow internal data type(%d) for TIME data",
-                         dt->id());
-            break;
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for TIME data",
+                dt->id());
+            logger.error(errorInfo.c_str());
+            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+            return;
           }
         }
         break;
@@ -292,11 +314,13 @@ void CArrowChunkIterator::initColumnConverters()
 
           default:
           {
-            /** TODO: how to throw an exception will be decided later */
-            logger.error(
-                "unknown arrow internal data type(%d) for TIMESTAMP_NTZ data",
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for TIMESTAMP_NTZ data",
                 dt->id());
-            break;
+            logger.error(errorInfo.c_str());
+            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+            return;
           }
         }
         break;
@@ -327,11 +351,13 @@ void CArrowChunkIterator::initColumnConverters()
 
           default:
           {
-            /** TODO: how to throw an exception will be decided later */
-            logger.error(
-                "unknown arrow internal data type(%d) for TIMESTAMP_LTZ data",
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for TIMESTAMP_LTZ data",
                 dt->id());
-            break;
+            logger.error(errorInfo.c_str());
+            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+            return;
           }
         }
         break;
@@ -366,11 +392,13 @@ void CArrowChunkIterator::initColumnConverters()
 
           default:
           {
-            /** TODO: how to throw an exception will be decided later */
-            logger.error(
-                "unknown arrow internal data type(%d) for TIMESTAMP_TZ data",
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for TIMESTAMP_TZ data",
                 dt->id());
-            break;
+            logger.error(errorInfo.c_str());
+            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+            return;
           }
         }
 
@@ -379,10 +407,12 @@ void CArrowChunkIterator::initColumnConverters()
 
       default:
       {
-        /** TODO: how to throw an exception will be decided later */
-        logger.error("unknown snowflake data type : %d",
-                     metaData->value(metaData->FindKey("logicalType")));
-        break;
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] unknown snowflake data type : %d",
+            metaData->value(metaData->FindKey("logicalType")));
+        logger.error(errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        return;
       }
     }
   }

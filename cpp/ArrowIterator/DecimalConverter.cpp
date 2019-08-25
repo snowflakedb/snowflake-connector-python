@@ -9,19 +9,23 @@
 namespace sf
 {
 
-py::UniqueRef& DecimalBaseConverter::m_decimalConstructor()
+DecimalBaseConverter::DecimalBaseConverter()
+: m_pyDecimalConstructor(initPyDecimalConstructor())
 {
-  static py::UniqueRef decimalConstructor;
-  if (decimalConstructor.empty())
-  {
-    py::PyUniqueLock lock;
-    py::UniqueRef decimalModule;
-    arrow::Status status = py::importPythonModule("decimal", decimalModule);
+}
 
-    status = py::importFromModule(decimalModule, "Decimal", decimalConstructor);
+py::UniqueRef& DecimalBaseConverter::initPyDecimalConstructor()
+{
+  static py::UniqueRef pyDecimalConstructor;
+  if (pyDecimalConstructor.empty())
+  {
+    py::UniqueRef decimalModule;
+    py::importPythonModule("decimal", decimalModule);
+    py::importFromModule(decimalModule, "Decimal", pyDecimalConstructor);
+    Py_XINCREF(pyDecimalConstructor.get());
   }
 
-  return decimalConstructor;
+  return pyDecimalConstructor;
 }
 
 DecimalFromDecimalConverter::DecimalFromDecimalConverter(
@@ -43,8 +47,7 @@ PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const
 
     /** the reason we use c_str() instead of std::string here is that we may
      * meet some encoding problem with std::string */
-    py::PyUniqueLock lock;
-    return PyObject_CallFunction(m_decimalConstructor().get(), "s#",
+    return PyObject_CallFunction(m_pyDecimalConstructor.get(), "s#",
                                  formatDecimalString.c_str(),
                                  formatDecimalString.size());
   }

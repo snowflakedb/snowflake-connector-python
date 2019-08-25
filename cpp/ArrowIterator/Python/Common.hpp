@@ -5,12 +5,17 @@
 #define PC_PYTHON_COMMON_HPP
 
 #include <Python.h>
+#include "Util/macros.hpp"
 
 namespace sf
 {
 
 namespace py
 {
+inline bool checkPyError()
+{
+  return UNLIKELY(PyErr_Occurred());
+}
 
 /**
  * A RAII class to wrap the PyObject*. The semantics are like std::unique_ptr.

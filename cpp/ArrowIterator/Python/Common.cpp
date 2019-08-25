@@ -5,6 +5,9 @@
 
 namespace sf
 {
-/** this file is needed in the future, when the main functionality is done
- * e.g. our own Status data structure */
+
+namespace py
+{
+  // this file will be deleted if it is not used in the future
+}
 }  // namespace sf
