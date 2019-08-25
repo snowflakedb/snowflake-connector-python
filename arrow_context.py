@@ -68,7 +68,7 @@ class ArrowConverterContext(object):
         tzinfo = _generate_tzinfo_from_tzoffset(tz - 1440)
         t = ZERO_EPOCH + timedelta(seconds=microseconds)
         if pytz.utc != tzinfo:
-            t += tzinfo.utcoffset(t, is_dst=False)
+            t += tzinfo.utcoffset(t)
         return t.replace(tzinfo=tzinfo)
 
     def TIMESTAMP_NTZ_to_python(self, microseconds):
