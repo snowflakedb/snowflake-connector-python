@@ -8,7 +8,7 @@ import random
 import pytest
 from datetime import datetime
 try:
-    from snowflake.connector.arrow_iterator import PyArrowChunkIterator
+    from snowflake.connector.arrow_iterator import PyArrowIterator
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True

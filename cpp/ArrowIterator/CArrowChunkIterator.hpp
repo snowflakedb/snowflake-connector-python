@@ -4,13 +4,8 @@
 #ifndef PC_ARROWCHUNKITERATOR_HPP
 #define PC_ARROWCHUNKITERATOR_HPP
 
-#include <Python.h>
-#include <vector>
-#include <arrow/python/platform.h>
-#include <arrow/api.h>
-#include <arrow/python/pyarrow.h>
+#include "CArrowIterator.hpp"
 #include "IColumnConverter.hpp"
-#include "logging.hpp"
 #include "Python/Common.hpp"
 
 namespace sf
@@ -21,7 +16,7 @@ namespace sf
  * iterator object)
  * will ask for nextRow to be returned back to Python
  */
-class CArrowChunkIterator
+class CArrowChunkIterator : public CArrowIterator
 {
 public:
   /**
@@ -38,19 +33,16 @@ public:
    * Add Arrow RecordBach to current chunk
    * @param rb recordbatch to be added
    */
-  void addRecordBatch(PyObject* rb);
+  void addRecordBatch(PyObject* rb) override;
 
   /**
    * @return a python tuple object which contains all data in current row
    */
-  PyObject* nextRow();
+  PyObject* next() override;
 
-  void reset();
+  void reset() override;
 
 private:
-  /** list of all record batch in current chunk */
-  std::vector<std::shared_ptr<arrow::RecordBatch>> m_cRecordBatches;
-
   /** number of columns */
   int m_columnCount;
 
@@ -79,8 +71,6 @@ private:
    * @return python object of tuple which is tuple of all row values
    */
   void currentRowAsTuple();
-
-  static Logger logger;
 
   void initColumnConverters();
 };

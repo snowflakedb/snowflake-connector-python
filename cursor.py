@@ -647,6 +647,23 @@ class SnowflakeCursor(object):
                                        errvalue)
         return self
 
+    def fetch_pandas_batches(self):
+        u"""
+        Fetch a single Arrow Table
+        """
+        if self._query_result_format != 'arrow':
+            raise NotSupportedError
+        for df in self._result._fetch_pandas_batches():
+            yield df
+
+    def fetch_pandas_all(self):
+        u"""
+        Fetch Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk
+        """
+        if self._query_result_format != 'arrow':
+            raise NotSupportedError
+        return self._result._fetch_pandas_all()
+
     def abort_query(self, qid):
         url = '/queries/{qid}/abort-request'.format(qid=qid)
         ret = self._connection.rest.request(url=url, method='post')
