@@ -45,10 +45,15 @@ cdef class ArrowResult:
         self._chunk_index = 0
         self._chunk_count = 0
         # result as arrow chunk
-        arrow_bytes = b64decode(data.get(u'rowsetBase64'))
-        arrow_reader = open_stream(arrow_bytes)
-        self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
-        self._current_chunk_row = PyArrowChunkIterator(arrow_reader, self._arrow_context)
+        rowset_b64 = data.get(u'rowsetBase64')
+
+        if rowset_b64:
+            arrow_bytes = b64decode(rowset_b64)
+            arrow_reader = open_stream(arrow_bytes)
+            self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
+            self._current_chunk_row = PyArrowChunkIterator(arrow_reader, self._arrow_context)
+        else:
+            self._current_chunk_row = iter([])
 
         if u'chunks' in data:
             chunks = data[u'chunks']
