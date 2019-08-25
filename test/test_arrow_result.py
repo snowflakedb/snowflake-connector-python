@@ -13,6 +13,7 @@ try:
 except ImportError:
     no_arrow_iterator_ext = True
 
+
 @pytest.mark.skipif(
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
@@ -59,8 +60,9 @@ def test_select_with_float(conn_cnx):
     random_seed = get_random_seed()
     pow_val = random.randint(0, 10)
     val_len = random.randint(0, 16)
-    # if we assign val_len a larger value like 20, then the precison difference between c++ and python will become very obvious
-    # so if we meet some error in this test in the future, please check that whether it is caused by different precision between python and c++
+    # if we assign val_len a larger value like 20, then the precision difference between c++ and python will become
+    # very obvious so if we meet some error in this test in the future, please check that whether it is caused by
+    # different precision between python and c++
     val_range = random.randint(0, 10**val_len)
     
     sql_text = ("select seq4() as c1, as_double(uniform({}, {}, random({})))/{} as c2 from ".format(-val_range, val_range, random_seed, 10**pow_val) +
@@ -68,9 +70,22 @@ def test_select_with_float(conn_cnx):
     iterate_over_test_chunk("float", conn_cnx, sql_text, row_count, col_count, eps=10**(-pow_val+1))
 
 
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
+def test_select_with_empty_resultset(conn_cnx):
+    with conn_cnx() as cnx:
+        cursor = cnx.cursor()
+        cursor.execute("alter session set query_result_format='ARROW_FORCE'")
+        cursor.execute("select seq4() from table(generator(rowcount=>100)) limit 0")
+
+        assert cursor.fetchone() is None
+
+
 def get_random_seed():
     random.seed(datetime.now())
     return random.randint(0, 10000)
+
 
 def iterate_over_test_chunk(test_name, conn_cnx, sql_text, row_count, col_count, eps=None): 
     with conn_cnx() as json_cnx:
