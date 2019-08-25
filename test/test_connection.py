@@ -558,7 +558,7 @@ def test_privatelink_ocsp_url_creation():
 
     ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
     assert ocsp_cache_server == \
-        "http://ocsp.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
+        "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
 
     del os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']
 
@@ -598,7 +598,7 @@ def test_privatelink_ocsp_url_multithreaded_snowsql():
     bucket = queue.Queue()
 
     hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    expectation = "http://ocsp.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
+    expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
     thread_obj = []
     for i in range(15):
         thread_obj.append(ExecPrivatelinkThread(bucket, hostname, expectation, APPLICATION_SNOWSQL))
