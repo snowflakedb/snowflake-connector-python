@@ -8,15 +8,19 @@ import json
 import logging
 import tempfile
 import time
+import os
+import platform
 from os import path
 from os import environ
+
 
 import pytest
 
 from snowflake.connector import OperationalError
 from snowflake.connector.compat import PY2
-from snowflake.connector.errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
+from snowflake.connector.errorcode import (ER_SERVER_CERTIFICATE_REVOKED, ER_INVALID_OCSP_RESPONSE_CODE)
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
+from snowflake.connector.errors import RevocationCheckError
 
 if PY2:
     from snowflake.connector.ocsp_pyasn1 import (
@@ -56,6 +60,19 @@ TARGET_HOSTS = [
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
+CACHE_ROOT_DIR = os.getenv('SF_OCSP_RESPONSE_CACHE_DIR') or \
+                     os.path.expanduser("~") or tempfile.gettempdir()
+
+if platform.system() == 'Windows':
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'AppData', 'Local', 'Snowflake',
+                          'Caches')
+elif platform.system() == 'Darwin':
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, 'Library', 'Caches', 'Snowflake')
+else:
+    CACHE_DIR = path.join(CACHE_ROOT_DIR, '.cache', 'snowflake')
+
+CACHE_LOCATION = path.join(CACHE_DIR, "ocsp_response_cache.json")
+
 
 def test_ocsp():
     """
@@ -80,6 +97,69 @@ def test_ocsp_wo_cache_server():
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection),\
             'Failed to validate: {0}'.format(url)
+
+
+def test_ocsp_fail_open_w_single_endpoint():
+    SnowflakeOCSP.clear_cache()
+
+    if os.path.exists(CACHE_LOCATION):
+        os.remove(CACHE_LOCATION)
+
+    environ["SF_OCSP_TEST_MODE"] = "true"
+    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
+    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+
+    ocsp = SFOCSP(use_ocsp_cache_server=False)
+    connection = _openssl_connect("snowflake.okta.com")
+
+    try:
+        assert ocsp.validate("snowflake.okta.com", connection), \
+            'Failed to validate: {0}'.format("snowflake.okta.com")
+    finally:
+        del environ['SF_OCSP_TEST_MODE']
+        del environ['SF_TEST_OCSP_URL']
+        del environ['SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT']
+
+
+def test_ocsp_fail_close_w_single_endpoint():
+    SnowflakeOCSP.clear_cache()
+
+    environ["SF_OCSP_TEST_MODE"] = "true"
+    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
+    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+
+    if os.path.exists(CACHE_LOCATION):
+        os.remove(CACHE_LOCATION)
+
+    ocsp = SFOCSP(use_ocsp_cache_server=False, use_fail_open=False)
+    connection = _openssl_connect("snowflake.okta.com")
+
+    with pytest.raises(RevocationCheckError) as ex:
+        ocsp.validate("snowflake.okta.com", connection)
+
+    try:
+        assert ex.value.errno == ER_INVALID_OCSP_RESPONSE_CODE, "Connection should have failed"
+    finally:
+        del environ['SF_OCSP_TEST_MODE']
+        del environ['SF_TEST_OCSP_URL']
+        del environ['SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT']
+
+
+def test_ocsp_bad_validity():
+    SnowflakeOCSP.clear_cache()
+
+    environ["SF_OCSP_TEST_MODE"] = "true"
+    environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"] = "true"
+
+    if os.path.exists(CACHE_LOCATION):
+        os.remove(CACHE_LOCATION)
+
+    ocsp = SFOCSP(use_ocsp_cache_server=False)
+    connection = _openssl_connect("snowflake.okta.com")
+
+    assert ocsp.validate("snowflake.okta.com", connection), "Connection should have passed with fail open"
+    del environ['SF_OCSP_TEST_MODE']
+    del environ['SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY']
 
 
 def test_ocsp_single_endpoint():

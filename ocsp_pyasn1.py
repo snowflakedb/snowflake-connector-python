@@ -11,6 +11,7 @@ from collections import OrderedDict
 from datetime import datetime
 from logging import getLogger
 from threading import Lock
+from os import getenv
 
 import pyasn1
 from Cryptodome.Hash import SHA256, SHA384, SHA1, SHA512
@@ -438,6 +439,10 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
     def process_ocsp_response(self, issuer, cert_id, ocsp_response):
         try:
             res = der_decoder.decode(ocsp_response, OCSPResponse())[0]
+            if self.test_mode is not None:
+                ocsp_load_failure = getenv("SF_TEST_OCSP_FORCE_BAD_OCSP_RESPONSE")
+                if ocsp_load_failure is not None:
+                    raise RevocationCheckError("Force fail")
         except Exception:
             raise RevocationCheckError(
                 msg='Invalid OCSP Response',
@@ -502,6 +507,16 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
 
         single_response = tbs_response_data.getComponentByName('responses')[0]
         cert_status = single_response.getComponentByName('certStatus')
+
+        if self.test_mode is not None:
+            test_cert_status = getenv("SF_TEST_OCSP_CERT_STATUS")
+            if test_cert_status == 'revoked':
+                cert_status = 'revoked'
+            elif test_cert_status == 'unknown':
+                cert_status = 'unknown'
+            elif test_cert_status == 'good':
+                cert_status = 'good'
+
         try:
             if cert_status.getName() == 'good':
                 self._process_good_status(single_response, cert_id, ocsp_response)
