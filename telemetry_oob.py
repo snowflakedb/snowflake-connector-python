@@ -119,7 +119,7 @@ class TelemetryEvent(TelemetryEventBase):
         if self.tags and len(self.tags) > 0:
             for k, v in self.tags.items():
                 if v is not None:
-                    tags[k.lower()] = str(v)
+                    tags[str(k).lower()] = str(v)
 
         telemetry = TelemetryService.get_instance()
         # Add telemetry service generated tags
@@ -130,7 +130,7 @@ class TelemetryEvent(TelemetryEventBase):
         if telemetry.context and len(telemetry.context) > 0:
             for k, v in telemetry.context.items():
                 if v is not None:
-                    tags['ctx_' + k.lower()] = str(v)
+                    tags['ctx_' + str(k).lower()] = str(v)
 
         return tags
 
@@ -300,7 +300,10 @@ class TelemetryService(object):
 
         self.queue.put(event)
         if self.queue.qsize() > self.batch_size or event.urgent:
-            self._upload_payload(self.export_queue_to_string())
+            payload = self.export_queue_to_string()
+            if payload is None:
+                return
+            self._upload_payload(payload)
 
     def flush(self):
         """
@@ -310,7 +313,10 @@ class TelemetryService(object):
             return
 
         if not self.queue.empty():
-            self._upload_payload(self.export_queue_to_string())
+            payload = self.export_queue_to_string()
+            if payload is None:
+                return
+            self._upload_payload(payload)
 
     def update_context(self, connection_params):
         """
@@ -351,26 +357,30 @@ class TelemetryService(object):
         """
         Logs an OCSP Exception and adds it to the queue to be uploaded
         """
-        if self.enabled:
-            event_name = 'OCSPException'
-            if exception is not None:
-                telemetry_data['exceptionMessage'] = str(exception)
-            if stack_trace is not None:
-                telemetry_data['exceptionStackTrace'] = stack_trace
+        try:
+            if self.enabled:
+                event_name = 'OCSPException'
+                if exception is not None:
+                    telemetry_data['exceptionMessage'] = str(exception)
+                if stack_trace is not None:
+                    telemetry_data['exceptionStackTrace'] = stack_trace
 
-            if tags is None:
-                tags = dict()
+                if tags is None:
+                    tags = dict()
 
-            tags['eventType'] = event_type
+                tags['eventType'] = event_type
 
-            log_event = TelemetryLogEvent(
-                name=event_name,
-                tags=tags,
-                urgent=urgent,
-                value=telemetry_data
-            )
+                log_event = TelemetryLogEvent(
+                    name=event_name,
+                    tags=tags,
+                    urgent=urgent,
+                    value=telemetry_data
+                )
 
-            self.add(log_event)
+                self.add(log_event)
+        except Exception:
+            # Do nothing on exception, just log
+            logger.debug("Failed to log OCSP exception", exc_info=True)
 
     def log_http_request(self,
                          event_name,
@@ -388,43 +398,47 @@ class TelemetryService(object):
         """
         Logs an HTTP Request error and adds it to the queue to be uploaded
         """
-        if self.enabled:
-            telemetry_data = dict()
-            response_status_code = -1
-            # This mimics the output of HttpRequestBase.toString() from JBDC
-            telemetry_data['request'] = "{0} {1}".format(method, url)
-            telemetry_data['sqlState'] = sqlstate
-            telemetry_data['errorCode'] = errno
-            if response:
-                telemetry_data['response'] = response.json()
-                telemetry_data['responseStatusLine'] = str(response.reason)
-                if response.status_code:
-                    response_status_code = str(response.status_code)
-                    telemetry_data['responseStatusCode'] = response_status_code
-            if retry_timeout:
-                telemetry_data['retryTimeout'] = str(retry_timeout)
-            if retry_count:
-                telemetry_data['retryCount'] = str(retry_count)
-            if exception:
-                telemetry_data['exceptionMessage'] = str(exception)
-            if stack_trace:
-                telemetry_data['exceptionStackTrace'] = stack_trace
+        try:
+            if self.enabled:
+                telemetry_data = dict()
+                response_status_code = -1
+                # This mimics the output of HttpRequestBase.toString() from JBDC
+                telemetry_data['request'] = "{0} {1}".format(method, url)
+                telemetry_data['sqlState'] = sqlstate
+                telemetry_data['errorCode'] = errno
+                if response:
+                    telemetry_data['response'] = response.json()
+                    telemetry_data['responseStatusLine'] = str(response.reason)
+                    if response.status_code:
+                        response_status_code = str(response.status_code)
+                        telemetry_data['responseStatusCode'] = response_status_code
+                if retry_timeout:
+                    telemetry_data['retryTimeout'] = str(retry_timeout)
+                if retry_count:
+                    telemetry_data['retryCount'] = str(retry_count)
+                if exception:
+                    telemetry_data['exceptionMessage'] = str(exception)
+                if stack_trace:
+                    telemetry_data['exceptionStackTrace'] = stack_trace
 
-            if tags is None:
-                tags = dict()
+                if tags is None:
+                    tags = dict()
 
-            tags['responseStatusCode'] = response_status_code
-            tags['sqlState'] = str(sqlstate)
-            tags['errorCode'] = errno
+                tags['responseStatusCode'] = response_status_code
+                tags['sqlState'] = str(sqlstate)
+                tags['errorCode'] = errno
 
-            log_event = TelemetryLogEvent(
-                name=event_name,
-                tags=tags,
-                value=telemetry_data,
-                urgent=urgent
-            )
+                log_event = TelemetryLogEvent(
+                    name=event_name,
+                    tags=tags,
+                    value=telemetry_data,
+                    urgent=urgent
+                )
 
-            self.add(log_event)
+                self.add(log_event)
+        except Exception:
+            # Do nothing on exception, just log
+            logger.debug("Failed to log HTTP request error", exc_info=True)
 
     def _upload_payload(self, payload):
         """
@@ -467,13 +481,20 @@ class TelemetryService(object):
         logs = list()
         while not self._queue.empty():
             logs.append(self._queue.get().to_dict())
-        return SecretDetector.mask_secrets(json.dumps(logs))
+        # We may get an exception trying to serialize a python object to JSON
+        try:
+            payload = json.dumps(logs)
+        except Exception:
+            logger.debug("Failed to generate a JSON dump from the passed in telemetry OOB events. String representation of logs: %s" % str(logs), exc_info=True)
+            payload = None
+        return SecretDetector.mask_secrets(payload)
 
     def close(self):
         """
         Close the telemetry service
         """
         self.flush()
+        self.disable()
 
     def size(self):
         """

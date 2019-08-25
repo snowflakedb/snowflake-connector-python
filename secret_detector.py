@@ -46,6 +46,9 @@ class SecretDetector(object):
         :param text: a string which may contain a secret
         :return: the masked string
         """
+        if text is None:
+            return None
+
         masked_text = SecretDetector.mask_private_key_data(
             SecretDetector.mask_private_key(
                 SecretDetector.mask_aws_tokens(
