@@ -40,6 +40,7 @@ except ImportError:
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_string_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = [
             {"logicalType": "TEXT"},
             {"logicalType": "TEXT"}
@@ -59,6 +60,7 @@ def test_iterate_over_string_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_int64_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = [
             {"logicalType": "FIXED", "precision": "38", "scale": "0"},
             {"logicalType": "FIXED", "precision": "38", "scale": "0"}
@@ -74,6 +76,7 @@ def test_iterate_over_int64_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_int32_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = [
             {"logicalType": "FIXED", "precision": "10", "scale": "0"},
             {"logicalType": "FIXED", "precision": "10", "scale": "0"}
@@ -89,6 +92,7 @@ def test_iterate_over_int32_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_int16_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = [
             {"logicalType": "FIXED", "precision": "5", "scale": "0"},
             {"logicalType": "FIXED", "precision": "5", "scale": "0"}
@@ -104,6 +108,7 @@ def test_iterate_over_int16_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_int8_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = [
             {"logicalType": "FIXED", "precision": "3", "scale": "0"},
             {"logicalType": "FIXED", "precision": "3", "scale": "0"}
@@ -119,6 +124,7 @@ def test_iterate_over_int8_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_bool_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = {"logicalType": "BOOLEAN"}
 
     def bool_generator():
@@ -133,6 +139,7 @@ def test_iterate_over_bool_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_float_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = [
             {"logicalType": "REAL"},
             {"logicalType": "FLOAT"}
@@ -148,80 +155,78 @@ def test_iterate_over_float_chunk():
 @pytest.mark.skipif(
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
-def test_iterate_over_decimal_chunk():
-    # TODO: to add more test case to cover as much code as possible
-    #       e.g. Decimal(19, 0) for Int64, Decimal(9, 0) for Int32, Decimal(4, 0) for Int16, Decimal(2, 0) for Int8
+def test_iterate_over_decimal_chunk(): 
+    random.seed(datetime.datetime.now())
+    precision = random.randint(1, 38)
+    scale = random.randint(0, precision)
+    datatype = None
+    if precision <= 2:
+        datatype = pyarrow.int8()
+    elif precision <= 4:
+        datatype = pyarrow.int16()
+    elif precision <= 9:
+        datatype = pyarrow.int32()
+    elif precision <= 19:
+        datatype = pyarrow.int64()
+    else:
+        datatype = pyarrow.decimal128(precision, scale)
 
-    def get_random_decimal(precision, scale):
-        data = []
-        for i in range(precision):
-            data.append(str(random.randint(1,9)))
+    def decimal_generator(_precision, _scale):
+        def decimal128_generator(precision, scale):
+            data = []
+            for i in range(precision):
+                data.append(str(random.randint(0, 9)))
 
-        if scale:
-            data.insert(-scale, '.')
-        return decimal.Decimal("".join(data))
+            if scale:
+                data.insert(-scale, '.')
+            return decimal.Decimal("".join(data))
 
-    stream = BytesIO()
-    column_meta = [
-            { "logicalType" : "FIXED", "precision" : "10", "scale" : "3" },
-            { "logicalType" : "FIXED", "precision" : "38", "scale" : "0" }
-    ]
-    field_foo = pyarrow.field("column_foo", pyarrow.decimal128(10, 3), True, column_meta[0])
-    field_bar = pyarrow.field("column_bar", pyarrow.decimal128(38, 0), True, column_meta[1])
-    schema = pyarrow.schema([field_foo, field_bar])
+        def int64_generator(precision):
+            data = random.randint(-9223372036854775808, 9223372036854775807)
+            return int(str(data)[:precision if data >= 0 else precision + 1])
+            
+        def int32_generator(precision):
+            data = random.randint(-2147483648, 2147483637)
+            return int(str(data)[:precision if data >= 0 else precision + 1])
 
-    column_size = 2
-    batch_row_count = 10
-    batch_count = 10
-    expected_data = []
-    writer = RecordBatchStreamWriter(stream, schema)
+        def int16_generator(precision):
+            data = random.randint(-32768, 32767)
+            return int(str(data)[:precision if data >= 0 else precision + 1])
 
-    for i in range(batch_count):
-        column_arrays = []
-        py_arrays = []
-        for j in range(column_size):
-            column_data = []
-            not_none_cnt = 0
-            while not_none_cnt == 0:
-                column_data = []
-                for k in range(batch_row_count):
-                    data = None if bool(random.getrandbits(1)) else get_random_decimal(10 if j % 2 == 0 else 38, 3 if j % 2 == 0 else 0)
-                    if data != None:
-                        not_none_cnt += 1
-                    column_data.append(data)
-            column_arrays.append(column_data if j % 2 == 0 else [int(data) if data is not None else None for data in column_data])
-            py_arrays.append(pyarrow.array(column_data))
+        def int8_generator(precision):
+            data = random.randint(-128, 127)
+            return int(str(data)[:precision if data >= 0 else precision + 1])
 
-        expected_data.append(column_arrays)
-        rb = RecordBatch.from_arrays(py_arrays, ["column_foo", "column_bar"])
-        writer.write_batch(rb)
+        if _precision <= 2:
+            return int8_generator(_precision)
+        elif _precision <= 4:
+            return int16_generator(_precision)
+        elif _precision <= 9:
+            return int32_generator(_precision)
+        elif _precision <= 19:
+            return int64_generator(_precision)
+        else:
+            return decimal128_generator(_precision, _scale)
 
-    writer.close()
+    def expected_data_transform_decimal(_precision, _scale):
+        def expected_data_transform_decimal_impl(data, precision=_precision, scale=_scale):
+            if precision <= 19:
+                return decimal.Decimal(data).scaleb(-scale)
+            else:
+                return data
 
-    # seek stream to begnning so that we can read from stream
-    stream.seek(0)
-    reader = RecordBatchStreamReader(stream)
-    context = ArrowConverterContext()
-    it = PyArrowChunkIterator(reader, context)
+        return expected_data_transform_decimal_impl 
 
-    count = 0
-    while True:
-        try:
-            val = next(it)
-            assert val[0] == expected_data[int(count / 10)][0][count % 10]
-            assert type(val[0]) == type(expected_data[int(count / 10)][0][count % 10])  # Decimal type or NoneType
-            assert val[1] == expected_data[int(count / 10)][1][count % 10]
-            assert type(val[1]) == type(expected_data[int(count / 10)][1][count % 10])  # Int type or NoneType
-            count += 1
-        except StopIteration:
-            assert count == 100
-            break
+    column_meta = { "logicalType" : "FIXED", "precision" : str(precision), "scale" : str(scale) }
+    iterate_over_test_chunk([datatype, datatype], [column_meta, column_meta],
+        lambda: decimal_generator(precision, scale), expected_data_transform_decimal(precision, scale))
 
 
 @pytest.mark.skipif(
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_date_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = {
         "byteLength": "4",
         "logicalType": "DATE",
@@ -242,6 +247,7 @@ def test_iterate_over_date_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_binary_chunk():
+    random.seed(datetime.datetime.now())
     column_meta = {
         "byteLength": "100",
         "logicalType": "BINARY",
@@ -262,6 +268,7 @@ def test_iterate_over_binary_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_time_chunk():
+    random.seed(datetime.datetime.now())
     column_meta_int64 = [
         {"logicalType": "TIME", "scale": "9"},
         {"logicalType": "TIME", "scale": "9"}
@@ -309,6 +316,7 @@ def test_iterate_over_time_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_timestamp_ntz_chunk():
+    random.seed(datetime.datetime.now())
     scale = random.randint(0, 9)
     column_meta = [
         {"logicalType": "TIMESTAMP_NTZ", "scale": str(scale)},
@@ -363,6 +371,7 @@ def test_iterate_over_timestamp_ntz_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_timestamp_ltz_chunk():
+    random.seed(datetime.datetime.now())
     scale = random.randint(0, 9)
     column_meta = [
         {"logicalType": "TIMESTAMP_LTZ", "scale": str(scale)},
@@ -419,6 +428,7 @@ def test_iterate_over_timestamp_ltz_chunk():
     no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_iterate_over_timestamp_tz_chunk():
+    random.seed(datetime.datetime.now())
     scale = random.randint(0, 9)
     column_meta = [
         {"byteLength": "16" if scale > 3 else "8", "logicalType": "TIMESTAMP_TZ", "scale": str(scale)},
@@ -507,7 +517,7 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
                 column_data = []
                 for k in range(batch_row_count):
                     data = None if bool(random.getrandbits(1)) else source_data_generator()
-                    if data:
+                    if data != None:
                         not_none_cnt += 1
                     column_data.append(data)
             column_arrays.append(column_data)
@@ -515,7 +525,7 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
 
         if expected_data_transformer:
             for i in range(len(column_arrays)):
-                column_arrays[i] = [expected_data_transformer(data) if data else None for data in column_arrays[i]] 
+                column_arrays[i] = [expected_data_transformer(data) if data is not None else None for data in column_arrays[i]] 
         expected_data.append(column_arrays)
 
         column_names = ["column_{}".format(i) for i in range(column_size)]

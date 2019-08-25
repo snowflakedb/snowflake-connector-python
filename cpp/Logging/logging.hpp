@@ -4,8 +4,8 @@
 #ifndef PC_LOGGING_HPP
 #define PC_LOGGING_HPP
 
-#include "Python/Helpers.hpp"
 #include "Python/Common.hpp"
+#include <string>
 
 namespace sf
 {
@@ -22,6 +22,8 @@ public:
   void warn(const char *fmt, ...);
 
   void error(const char *fmt, ...);
+
+  static std::string formatString(const char *fmt, ...);
 
 private:
   py::UniqueRef m_pyLogger;
