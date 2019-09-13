@@ -159,7 +159,7 @@ def IS_OLD_PYTHON():
 
 
 """
-Is Python 3.4.3 or 3.5.0
+Is Python 3.5.0
 This is to check if a workaround for http://bugs.python.org/issue23517
 is required or not. 3.6.0 already has the fix.
 No RC or dev version will be checked.

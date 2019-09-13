@@ -20,7 +20,10 @@ from .errorcode import (ER_UNSUPPORTED_METHOD,
                         ER_CURSOR_IS_CLOSED,
                         ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
                         ER_NOT_POSITIVE_SIZE,
-                        ER_INVALID_VALUE)
+                        ER_INVALID_VALUE,
+                        ER_NO_PYARROW,
+                        ER_NO_ARROW_RESULT,
+                        ER_NO_PYARROW_SNOWSQL)
 from .errors import (Error, ProgrammingError, NotSupportedError,
                      DatabaseError, InterfaceError)
 from .file_transfer_agent import (SnowflakeFileTransferAgent)
@@ -29,10 +32,20 @@ from .sqlstate import (SQLSTATE_FEATURE_NOT_SUPPORTED)
 from .telemetry import (TelemetryData, TelemetryField)
 from .time_util import get_time_millis
 
+logger = getLogger(__name__)
+
+try:
+    import pyarrow
+except ImportError:
+    logger.debug("Failed to import pyarrow. No Apache Arrow result set format can be used.")
+    pyarrow = None
+
 try:
     from .arrow_result import ArrowResult
+    CAN_USE_ARROW_RESULT = True
 except ImportError:
-    pass
+    logger.debug("Failed to import ArrowResult. No Apache Arrow result set format can be used.")
+    CAN_USE_ARROW_RESULT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
 STATEMENT_TYPE_ID_INSERT = STATEMENT_TYPE_ID_DML + 0x100
@@ -49,8 +62,6 @@ STATEMENT_TYPE_ID_DML_SET = frozenset(
 
 DESC_TABLE_RE = re.compile(u(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$'),
                            flags=re.IGNORECASE)
-
-logger = getLogger(__name__)
 
 LOG_MAX_QUERY_LENGTH = 80
 
@@ -110,7 +121,6 @@ class SnowflakeCursor(object):
         try:
             self.close()
         except BASE_EXCEPTION_CLASS as e:
-            logger = getLogger(__name__)
             if logger.getEffectiveLevel() <= logging.INFO:
                 logger.info(e)
 
@@ -599,11 +609,7 @@ class SnowflakeCursor(object):
                                       column[u'nullable']))
 
         if self._query_result_format == 'arrow':
-            try:
-                import pyarrow  # noqa: F401
-            except ImportError:
-                logger.error("Failed to import pyarrow")
-                raise
+            self.check_pyarrow_resultset()
             self._result = ArrowResult(data, self)
         else:
             self._result = self._json_result_class(data, self, use_ijson)
@@ -621,6 +627,36 @@ class SnowflakeCursor(object):
                 self._total_rowcount = updated_rows
             else:
                 self._total_rowcount += updated_rows
+
+    def check_pyarrow_resultset(self):
+        global CAN_USE_ARROW_RESULT
+        global pyarrow
+
+        if not CAN_USE_ARROW_RESULT:
+            if self._connection.application == 'SnowSQL':
+                msg = (
+                    "Currently SnowSQL doesn't support the result set in Apache Arrow format."
+                )
+                errno = ER_NO_PYARROW_SNOWSQL
+            elif pyarrow is None:
+                msg = (
+                    "pyarrow package is missing. Install using pip if the platform is supported."
+                )
+                errno = ER_NO_PYARROW
+            else:
+                msg = (
+                    "The result set in Apache Arrow format is not supported for the platform."
+                )
+                errno = ER_NO_ARROW_RESULT
+
+            Error.errorhandler_wrapper(
+                self.connection, self,
+                ProgrammingError,
+                {
+                    u'msg': msg,
+                    u'errno': errno,
+                }
+            )
 
     def query_result(self, qid, _use_ijson=False):
         url = '/queries/{qid}/result'.format(qid=qid)

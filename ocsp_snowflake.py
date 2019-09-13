@@ -1252,8 +1252,6 @@ class SnowflakeOCSP(object):
 
         tolerable_validity = SnowflakeOCSP._calculate_tolerable_validity(
             this_update, next_update)
-        logger.debug(u'Tolerable Validity range for OCSP response: +%s(s)',
-                     tolerable_validity)
         return this_update - SnowflakeOCSP.MAX_CLOCK_SKEW <= \
                current_time <= next_update + tolerable_validity
 
