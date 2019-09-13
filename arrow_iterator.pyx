@@ -38,7 +38,21 @@ cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
         CArrowTableIterator(PyObject* context) except +
 
 
-cdef class PyArrowIterator:
+cdef class EmptyPyArrowIterator:
+    def __cinit__(self, object arrow_stream_reader, object arrow_context):
+        pass
+
+    def __dealloc__(self):
+        pass
+
+    def __next__(self):
+       raise StopIteration
+
+    def init(self, str iter_unit):
+        pass
+
+
+cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object reader
     cdef object context
     cdef CArrowIterator* cIterator
