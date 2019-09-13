@@ -598,8 +598,15 @@ class SnowflakeCursor(object):
                                       column[u'scale'],
                                       column[u'nullable']))
 
-        self._result = ArrowResult(data, self) if self._query_result_format == 'arrow' \
-            else self._json_result_class(data, self, use_ijson)
+        if self._query_result_format == 'arrow':
+            try:
+                import pyarrow  # noqa: F401
+            except ImportError:
+                logger.error("Failed to import pyarrow")
+                raise
+            self._result = ArrowResult(data, self)
+        else:
+            self._result = self._json_result_class(data, self, use_ijson)
 
         if is_dml:
             updated_rows = 0
