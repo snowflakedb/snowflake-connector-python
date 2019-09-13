@@ -1157,7 +1157,11 @@ class SnowflakeOCSP(object):
     def _validate_certificates_sequential(self, cert_data, telemetry_data,
                                           hostname=None, do_retry=True):
         results = []
-        self._check_ocsp_response_cache_server(cert_data)
+        try:
+            self._check_ocsp_response_cache_server(cert_data)
+        except Exception as ex:
+            logger.debug("Caught unknown exception - %s. Continue to validate by direct connection", str(ex))
+
         for issuer, subject in cert_data:
             r = self.validate_by_direct_connection(
                 issuer, subject, telemetry_data, hostname, do_retry=do_retry)
