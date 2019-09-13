@@ -12,7 +12,7 @@ from .time_util import get_time_millis
 try:
     from pyarrow.ipc import open_stream
     from pyarrow import concat_tables
-    from .arrow_iterator import PyArrowIterator, ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
+    from .arrow_iterator import PyArrowIterator, EmptyPyArrowIterator, ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
     from .arrow_context import ArrowConverterContext
 except ImportError:
     pass
@@ -56,7 +56,7 @@ cdef class ArrowResult:
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
             self._current_chunk_row = PyArrowIterator(arrow_reader, self._arrow_context)
         else:
-            self._current_chunk_row = iter(())
+            self._current_chunk_row = EmptyPyArrowIterator(None, None)
         self._iter_unit = EMPTY_UNIT
 
         if u'chunks' in data:
@@ -126,7 +126,7 @@ cdef class ArrowResult:
                             self._chunk_downloader._total_millis_parsing_chunks)
                     self._chunk_downloader = None
                     self._chunk_count = 0
-                    self._current_chunk_row = iter(())
+                    self._current_chunk_row = EmptyPyArrowIterator(None, None)
                     is_done = True
 
             if is_done:
@@ -148,7 +148,7 @@ cdef class ArrowResult:
     def _reset(self):
         self.total_row_index = -1  # last fetched number of rows
         self._current_chunk_row_count = 0
-        self._current_chunk_row = iter(())
+        self._current_chunk_row = EmptyPyArrowIterator(None, None)
         self._chunk_index = 0
 
         if hasattr(self, u'_chunk_count') and self._chunk_count > 0 and \
@@ -196,7 +196,7 @@ cdef class ArrowResult:
                         self._chunk_downloader._total_millis_parsing_chunks)
                 self._chunk_downloader = None
                 self._chunk_count = 0
-                self._current_chunk_row = iter(())
+                self._current_chunk_row = EmptyPyArrowIterator(None, None)
         except AttributeError:
             # just for handling the case of empty result
             return None
@@ -209,9 +209,9 @@ cdef class ArrowResult:
                     time_consume_last_result)
 
     def _fetch_arrow_all(self):
-        '''
+        """
             Fetch a single Arrow Table
-        '''
+        """
         tables = list(self._fetch_arrow_batches())
         if tables:
             return concat_tables(tables)
@@ -219,7 +219,7 @@ cdef class ArrowResult:
             return None
 
     def _fetch_pandas_batches(self):
-        '''
+        """
             Fetch Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk
             Thus, the batch size (the number of rows in dataframe) may be different
             TODO: take a look at pyarrow to_pandas() API, which provides some useful arguments
@@ -230,14 +230,14 @@ cdef class ArrowResult:
                     the user wishes to interpret as categorical data instead of integer.
                  3. use `zero_copy_only` to capture the potential unnecessary memory copying
             we'd better also provide these handy arguments to make data scientists happy :)
-        '''
+        """
         for table in self._fetch_arrow_batches():
             yield table.to_pandas()
 
     def _fetch_pandas_all(self):
-        '''
+        """
             Fetch a single Pandas dataframe
-        '''
+        """
         table = self._fetch_arrow_all()
         if table:
             return table.to_pandas()

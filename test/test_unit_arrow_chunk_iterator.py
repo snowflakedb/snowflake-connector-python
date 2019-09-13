@@ -31,6 +31,7 @@ except ImportError as e:
 
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator
+    from snowflake.connector.arrow_iterator import ROW_UNIT
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
@@ -539,6 +540,7 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
     reader = RecordBatchStreamReader(stream)
     context = ArrowConverterContext()
     it = PyArrowIterator(reader, context)
+    it.init(ROW_UNIT)
 
     count = 0
     while True:
@@ -551,7 +553,6 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
         except StopIteration:
             assert count == (batch_count * batch_row_count)
             break
-
 
 
 def get_timezone(timezone=None):
