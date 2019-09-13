@@ -4,9 +4,12 @@
 #ifndef PC_ICOLUMNCONVERTER_HPP
 #define PC_ICOLUMNCONVERTER_HPP
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 #include <Python.h>
 #include <arrow/python/platform.h>
 #include <arrow/api.h>
+#pragma GCC diagnostic pop
 
 namespace sf
 {

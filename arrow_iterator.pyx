@@ -3,6 +3,7 @@
 #
 
 # distutils: language = c++
+# cython: language_level=3
 
 from logging import getLogger
 from cpython.ref cimport PyObject
