@@ -805,7 +805,7 @@ class SnowflakeConnection(object):
             if IS_OLD_PYTHON():
                 msg = (u"ERROR: The ssl package installed with your Python "
                        u"- version {0} - does not have the security fix. "
-                       u"Upgrade to Python 2.7.9/3.4.3 or higher.\n").format(
+                       u"Upgrade to Python 2.7.9/3.5.0 or higher.\n").format(
                     PYTHON_VERSION)
                 raise InterfaceError(
                     msg=msg,

@@ -181,13 +181,10 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         basic_ocsp_response = res.basic_ocsp_response
         if basic_ocsp_response['certs'].native:
-            logger.debug("Certificate is attached in Basic OCSP Response")
             ocsp_cert = basic_ocsp_response['certs'][0]
             logger.debug("Verifying the attached certificate is signed by "
-                         "the issuer")
-            logger.debug(
-                "Valid Not After: %s",
-                ocsp_cert['tbs_certificate']['validity']['not_after'].native)
+                         "the issuer. Valid Not After: %s",
+                         ocsp_cert['tbs_certificate']['validity']['not_after'].native)
 
             cur_time = datetime.now(timezone.utc)
 

@@ -27,8 +27,8 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, PyObject* batches)
   m_rowCountInBatch = 0;
   m_latestReturnedRow.reset();
 
-  logger.info("Arrow chunk info: batchCount %d, columnCount %d", m_batchCount,
-              m_columnCount);
+  logger.debug("Arrow chunk info: batchCount %d, columnCount %d", m_batchCount,
+               m_columnCount);
 }
 
 PyObject* CArrowChunkIterator::next()
@@ -57,7 +57,7 @@ PyObject* CArrowChunkIterator::next()
         return nullptr;
       }
 
-      logger.info("Current batch index: %d, rows in current batch: %d",
+      logger.debug("Current batch index: %d, rows in current batch: %d",
                   m_currentBatchIndex, m_rowCountInBatch);
 
       this->currentRowAsTuple();
