@@ -82,6 +82,24 @@ def test_select_with_empty_resultset(conn_cnx):
         assert cursor.fetchone() is None
 
 
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
+def test_large_number_resultset(conn_cnx):
+    row_count = 10000000
+    random_seed = get_random_seed()
+    sql_text = ("select seq4() as c1, uniform(1, 10, random({})) as c2 from ".format(random_seed) +
+                "table(generator(rowcount=>{})) order by c1".format(row_count))
+    with conn_cnx() as cnx:
+        cursor = cnx.cursor()
+        cursor.execute("alter session set query_result_format='ARROW_FORCE'")
+        count = 0
+        for (c1, c2) in cursor.execute(sql_text):
+            count += 1
+
+        assert count == row_count
+
+
 def get_random_seed():
     random.seed(datetime.now())
     return random.randint(0, 10000)

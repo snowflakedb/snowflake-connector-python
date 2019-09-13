@@ -8,19 +8,8 @@
 namespace sf
 {
 
-CArrowTableIterator::CArrowTableIterator(PyObject* context)
-: m_context(context)
-{
-}
-
-void CArrowTableIterator::addRecordBatch(PyObject* rb)
-{
-  // may add some specific behaviors for this iterator
-  // e.g. support retrieve table with row size
-  CArrowIterator::addRecordBatch(rb);
-}
-
-void CArrowTableIterator::reset()
+CArrowTableIterator::CArrowTableIterator(PyObject* context, PyObject* batches)
+: CArrowIterator(batches), m_context(context)
 {
 }
 
