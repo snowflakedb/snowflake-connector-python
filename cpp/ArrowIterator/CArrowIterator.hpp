@@ -4,11 +4,14 @@
 #ifndef PC_ARROWITERATOR_HPP
 #define PC_ARROWITERATOR_HPP
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 #include <Python.h>
 #include <vector>
 #include <arrow/python/platform.h>
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
+#pragma GCC diagnostic pop
 #include "logging.hpp"
 
 namespace sf

@@ -255,9 +255,9 @@ void CArrowTableIterator::reconstructRecordBatches()
 
         case SnowflakeType::Type::TIMESTAMP_TZ:
         {
-          int scale = metaData
-                          ? std::stoi(metaData->value(metaData->FindKey("scale")))
-                          : 9;
+          // int scale = metaData
+          //                 ? std::stoi(metaData->value(metaData->FindKey("scale")))
+          //                 : 9;
           int byteLength =
               metaData
                   ? std::stoi(metaData->value(metaData->FindKey("byteLength")))

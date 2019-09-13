@@ -3,6 +3,7 @@
 #
 
 # cython: profile=False
+# cython: language_level=3
 
 from base64 import b64decode
 from logging import getLogger
