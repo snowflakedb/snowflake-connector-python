@@ -22,7 +22,7 @@ public:
   /**
    * Constructor
    */
-  CArrowTableIterator(PyObject* context);
+  CArrowTableIterator(PyObject* context, PyObject* batches);
 
   /**
    * Desctructor
@@ -30,17 +30,9 @@ public:
   ~CArrowTableIterator() = default;
 
   /**
-   * Add Arrow RecordBach to current chunk
-   * @param rb recordbatch to be added
-   */
-  void addRecordBatch(PyObject* rb) override;
-
-  /**
    * @return an arrow table containing all data in all record batches
    */
   PyObject* next() override;
-
-  void reset() override;
 
 private:
   /* arrow table of all record batches in current chunk */

@@ -21,21 +21,17 @@ ROW_UNIT, TABLE_UNIT, EMPTY_UNIT = 'row', 'table', ''
 
 cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
     cdef cppclass CArrowIterator:
-        void addRecordBatch(PyObject * rb)
-
         PyObject* next();
-
-        void reset();
 
 
 cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator(CArrowIterator):
-        CArrowChunkIterator(PyObject* context) except +
+        CArrowChunkIterator(PyObject* context, PyObject* batches) except +
 
 
 cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
     cdef cppclass CArrowTableIterator(CArrowIterator):
-        CArrowTableIterator(PyObject* context) except +
+        CArrowTableIterator(PyObject* context, PyObject* batches) except +
 
 
 cdef class EmptyPyArrowIterator:
@@ -53,14 +49,16 @@ cdef class EmptyPyArrowIterator:
 
 
 cdef class PyArrowIterator(EmptyPyArrowIterator):
-    cdef object reader
     cdef object context
     cdef CArrowIterator* cIterator
     cdef str unit
     cdef PyObject* cret
+    cdef list batches
 
     def __cinit__(self, object arrow_stream_reader, object arrow_context):
-        self.reader = arrow_stream_reader
+        self.batches = []
+        for rb in arrow_stream_reader:
+            self.batches.append(rb)
         self.context = arrow_context
         self.cIterator = NULL
         self.unit = ''
@@ -87,12 +85,8 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         if iter_unit != ROW_UNIT and iter_unit != TABLE_UNIT:
             raise NotImplementedError
         elif iter_unit == ROW_UNIT:
-            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context)
+            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context, <PyObject*>self.batches)
         elif iter_unit == TABLE_UNIT:
-            self.cIterator = new CArrowTableIterator(<PyObject*>self.context)
+            self.cIterator = new CArrowTableIterator(<PyObject*>self.context, <PyObject*>self.batches)
         self.unit = iter_unit
 
-        # read
-        for rb in self.reader:
-            self.cIterator.addRecordBatch(<PyObject*>rb)
-        self.cIterator.reset()

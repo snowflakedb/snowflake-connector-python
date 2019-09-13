@@ -9,11 +9,17 @@ namespace sf
 
 Logger CArrowIterator::logger("snowflake.connector.CArrowIterator");
 
-void CArrowIterator::addRecordBatch(PyObject* rb)
+CArrowIterator::CArrowIterator(PyObject* batches)
 {
-  std::shared_ptr<arrow::RecordBatch> cRecordBatch;
-  arrow::Status status = arrow::py::unwrap_record_batch(rb, &cRecordBatch);
-  m_cRecordBatches.push_back(cRecordBatch);
+  int pyListSize = PyList_Size(batches);
+  logger.debug("BatchSize: %d", pyListSize);
+
+  for (int i=0; i<pyListSize; i++)
+  {
+    std::shared_ptr<arrow::RecordBatch> cRecordBatch;
+    arrow::Status status = arrow::py::unwrap_record_batch(PyList_GetItem(batches, i), &cRecordBatch);
+    m_cRecordBatches.push_back(cRecordBatch);
+  }
 }
 
 }

@@ -17,18 +17,8 @@
 namespace sf
 {
 
-CArrowChunkIterator::CArrowChunkIterator(PyObject* context)
-: m_latestReturnedRow(nullptr), m_context(context)
-{
-}
-
-void CArrowChunkIterator::addRecordBatch(PyObject* rb)
-{
-  // may add some specific behaviors for this iterator
-  CArrowIterator::addRecordBatch(rb);
-}
-
-void CArrowChunkIterator::reset()
+CArrowChunkIterator::CArrowChunkIterator(PyObject* context, PyObject* batches)
+: CArrowIterator(batches), m_latestReturnedRow(nullptr), m_context(context)
 {
   m_batchCount = m_cRecordBatches.size();
   m_columnCount = m_batchCount > 0 ? m_cRecordBatches[0]->num_columns() : 0;
