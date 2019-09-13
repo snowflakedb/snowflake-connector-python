@@ -897,7 +897,7 @@ class SnowflakeOCSP(object):
 
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
 
-        if self.test_mode is 'true':
+        if self.test_mode == 'true':
             logger.debug("WARNING - DRIVER CONFIGURED IN TEST MODE")
 
         self._use_post_method = use_post_method
