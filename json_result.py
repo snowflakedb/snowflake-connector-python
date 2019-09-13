@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-
+from __future__ import generator_stop
 from logging import getLogger
 from .telemetry import TelemetryField
 from .constants import FIELD_ID_TO_NAME
@@ -104,7 +104,7 @@ class JsonResult:
                     is_done = True
 
             if is_done:
-                raise StopIteration
+                return
 
             return self._row_to_python(row) if row is not None else None
 
