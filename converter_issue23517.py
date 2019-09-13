@@ -18,7 +18,7 @@ logger = getLogger(__name__)
 
 class SnowflakeConverterIssue23517(SnowflakeConverter):
     """
-    Converter for Python 3.4.3 and 3.5.0
+    Converter for Python 3.5.0 or Any Python on Windows
     This is to address http://bugs.python.org/issue23517
     """
 

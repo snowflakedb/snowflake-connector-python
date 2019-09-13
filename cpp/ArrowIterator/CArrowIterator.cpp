@@ -12,7 +12,7 @@ Logger CArrowIterator::logger("snowflake.connector.CArrowIterator");
 CArrowIterator::CArrowIterator(PyObject* batches)
 {
   int pyListSize = PyList_Size(batches);
-  logger.debug("BatchSize: %d", pyListSize);
+  logger.debug("Arrow BatchSize: %d", pyListSize);
 
   for (int i=0; i<pyListSize; i++)
   {
