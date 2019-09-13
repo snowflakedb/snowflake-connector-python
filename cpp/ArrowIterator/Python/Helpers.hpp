@@ -6,8 +6,11 @@
 
 /** this two header files will be removed when we replace arrow::Status with our
  * own status data structure */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 #include <arrow/python/platform.h>
 #include <arrow/api.h>
+#pragma GCC diagnostic pop
 #include "logging.hpp"
 
 namespace sf
