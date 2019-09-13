@@ -22,7 +22,7 @@ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator(PyObject* context);
+  CArrowChunkIterator(PyObject* context, PyObject* batches);
 
   /**
    * Desctructor
@@ -30,17 +30,9 @@ public:
   ~CArrowChunkIterator() = default;
 
   /**
-   * Add Arrow RecordBach to current chunk
-   * @param rb recordbatch to be added
-   */
-  void addRecordBatch(PyObject* rb) override;
-
-  /**
    * @return a python tuple object which contains all data in current row
    */
   PyObject* next() override;
-
-  void reset() override;
 
 private:
   /** number of columns */

@@ -24,22 +24,14 @@ namespace sf
 class CArrowIterator
 {
 public:
-  CArrowIterator() = default;
+  CArrowIterator(PyObject *batches);
 
   virtual ~CArrowIterator() = default;
-
-  /**
-   * Add Arrow RecordBach to current chunk
-   * @param rb recordbatch to be added
-   */
-  virtual void addRecordBatch(PyObject* rb);
 
   /**
    * @return a python object which might be current row or an Arrow Table
    */
   virtual PyObject* next() = 0;
-
-  virtual void reset() = 0;
 
 protected:
    /** list of all record batch in current chunk */
