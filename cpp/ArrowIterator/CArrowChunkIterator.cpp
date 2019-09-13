@@ -406,8 +406,8 @@ void CArrowChunkIterator::initColumnConverters()
       default:
       {
         std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] unknown snowflake data type : %d",
-            metaData->value(metaData->FindKey("logicalType")));
+            "[Snowflake Exception] unknown snowflake data type : %s",
+            metaData->value(metaData->FindKey("logicalType")).c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
