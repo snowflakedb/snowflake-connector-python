@@ -70,11 +70,11 @@ int32_t getSecondFromSeconds(int32_t seconds, int32_t scale);
 int32_t getMicrosecondFromSeconds(int32_t seconds, int32_t scale);
 
 /** the input epoch is the combination of seconds and fraction
- *  the output is formated double needed by python connector */
+ *  the output is formatted double needed by python connector */
 double getFormattedDoubleFromEpoch(int64_t epoch, int32_t scale);
 
-/** the input are epoch and fraction
- *  the output is formated double needed by python connector */
+/** the input are epoch (value based on the scale)  and fraction
+ *  the output is formatted double needed by python connector */
 double getFormattedDoubleFromEpochFraction(int64_t epoch, int32_t frac,
                                            int32_t scale);
 

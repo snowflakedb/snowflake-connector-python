@@ -42,6 +42,14 @@ private:
   PyObject* m_context;
 
   /**
+   * arrow memory buffer to allocate type converted arrays for fetching pandas from arrow
+   */
+  arrow::MemoryPool* m_pool = arrow::default_memory_pool();
+
+  /** local time zone */
+  char* m_timezone;
+
+  /**
    * Reconstruct record batches with type conversion in place
    */
   void reconstructRecordBatches();
@@ -51,7 +59,60 @@ private:
    * @return if conversion is executed at first time and successfully
    */
   bool convertRecordBatchesToTable();
+
+  /**
+   * replace column with the new column in place
+   */
+  arrow::Status replaceColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field>& newField,
+    const std::shared_ptr<arrow::Array>& newColumn);
+
+  /**
+   * convert scaled fixed number column to double column
+   */
+  void convertScaledFixedNumberColumnToDoubleColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const int scale);
+
+  /**
+   * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
+   * Since Python/Pandas Time does not support nanoseconds, this function truncates values to microseconds if necessary
+   */
+  void convertTimeColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const int scale);
+
+  /**
+   * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp column
+   */
+  void convertTimestampColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const int scale,
+    const std::string timezone="");
+
+  /**
+   * convert Snowflake TimestampTZ column to Arrow Timestamp column in UTC
+   * Arrow Timestamp does not support time zone info in each value, so this method convert TimestampTZ to Arrow
+   * timestamp with UTC timezone
+   */
+  void convertTimestampTZColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const int scale,
+    const int byteLength);
 };
 }
-
 #endif  // PC_ARROWTABLEITERATOR_HPP
