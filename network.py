@@ -121,7 +121,7 @@ COMPILER = COMPILER
 CLIENT_NAME = CLIENT_NAME  # don't change!
 CLIENT_VERSION = CLIENT_VERSION
 PYTHON_CONNECTOR_USER_AGENT = \
-    u'{name}/{version}/{python_implementation}/{python_version}/{platform}'.format(
+    u'{name}/{version} ({platform}) {python_implementation}/{python_version}'.format(
         name=CLIENT_NAME,
         version=SNOWFLAKE_CONNECTOR_VERSION,
         python_implementation=IMPLEMENTATION,
