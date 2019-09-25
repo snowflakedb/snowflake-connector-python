@@ -382,19 +382,19 @@ class TelemetryService(object):
             # Do nothing on exception, just log
             logger.debug("Failed to log OCSP exception", exc_info=True)
 
-    def log_http_request(self,
-                         event_name,
-                         url,
-                         method,
-                         sqlstate,
-                         errno,
-                         response=None,
-                         retry_timeout=None,
-                         retry_count=None,
-                         exception=None,
-                         stack_trace=None,
-                         tags=dict(),
-                         urgent=False):
+    def log_http_request_error(self,
+                               event_name,
+                               url,
+                               method,
+                               sqlstate,
+                               errno,
+                               response=None,
+                               retry_timeout=None,
+                               retry_count=None,
+                               exception=None,
+                               stack_trace=None,
+                               tags=dict(),
+                               urgent=False):
         """
         Logs an HTTP Request error and adds it to the queue to be uploaded
         """

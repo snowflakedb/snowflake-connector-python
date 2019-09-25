@@ -127,7 +127,6 @@ def test_request_exec():
         ConnectTimeout,
         ReadTimeout,
         IncompleteReadMock,
-        SSLError,
         ProtocolError,
         ConnectionError,
         AttributeError,
