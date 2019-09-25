@@ -136,7 +136,6 @@ class SSDPubKey(object):
 
 
 class OCSPServer(object):
-
     MAX_RETRY = int(os.getenv('OCSP_MAX_RETRY', '3'))
 
     def __init__(self):
@@ -258,7 +257,7 @@ class OCSPServer(object):
             # OCSP response cache server.
             try:
                 retval = OCSPServer._download_ocsp_response_cache(ocsp,
-                                                         self.CACHE_SERVER_URL)
+                                                                  self.CACHE_SERVER_URL)
                 if not retval:
                     raise RevocationCheckError(msg="OCSP Cache Server Unavailable.")
                 logger.debug("downloaded OCSP response cache file from %s",
@@ -344,6 +343,9 @@ class OCSPServer(object):
 
 
 class OCSPCache(object):
+    # Activate server side directive support
+    ACTIVATE_SSD = False
+
     CACHE = {}
 
     # OCSP cache lock
@@ -363,29 +365,39 @@ class OCSPCache(object):
     OCSP_RESPONSE_CACHE_FILE_NAME = 'ocsp_response_cache.json'
 
     # Cache directory
-    CACHE_ROOT_DIR = os.getenv('SF_OCSP_RESPONSE_CACHE_DIR') or \
-                     expanduser("~") or tempfile.gettempdir()
     CACHE_DIR = None
 
-    # Activate server side directive support
-    ACTIVATE_SSD = False
+    @staticmethod
+    def reset_cache_dir():
+        # Cache directory
+        OCSPCache.CACHE_DIR = os.getenv('SF_OCSP_RESPONSE_CACHE_DIR')
+        if OCSPCache.CACHE_DIR is None:
+            cache_root_dir = expanduser("~") or tempfile.gettempdir()
+            if platform.system() == 'Windows':
+                OCSPCache.CACHE_DIR = path.join(cache_root_dir, 'AppData', 'Local', 'Snowflake',
+                                                'Caches')
+            elif platform.system() == 'Darwin':
+                OCSPCache.CACHE_DIR = path.join(cache_root_dir, 'Library', 'Caches', 'Snowflake')
+            else:
+                OCSPCache.CACHE_DIR = path.join(cache_root_dir, '.cache', 'snowflake')
+        logger.debug("cache directory: %s", OCSPCache.CACHE_DIR)
 
-    if platform.system() == 'Windows':
-        CACHE_DIR = path.join(CACHE_ROOT_DIR, 'AppData', 'Local', 'Snowflake',
-                              'Caches')
-    elif platform.system() == 'Darwin':
-        CACHE_DIR = path.join(CACHE_ROOT_DIR, 'Library', 'Caches', 'Snowflake')
-    else:
-        CACHE_DIR = path.join(CACHE_ROOT_DIR, '.cache', 'snowflake')
+        if not path.exists(OCSPCache.CACHE_DIR):
+            try:
+                os.makedirs(OCSPCache.CACHE_DIR, mode=0o700)
+            except Exception as ex:
+                logger.debug('cannot create a cache directory: [%s], err=[%s]',
+                             OCSPCache.CACHE_DIR, ex)
+                OCSPCache.CACHE_DIR = None
 
-    if not path.exists(CACHE_DIR):
-        try:
-            os.makedirs(CACHE_DIR, mode=0o700)
-        except Exception as ex:
-            logger.debug('cannot create a cache directory: [%s], err=[%s]',
-                         CACHE_DIR, ex)
-            CACHE_DIR = None
-    logger.debug("cache directory: %s", CACHE_DIR)
+    @staticmethod
+    def del_cache_file():
+        """
+        Delete the OCSP response cache file if exists
+        """
+        cache_file = path.join(OCSPCache.CACHE_DIR, OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME)
+        if path.exists(cache_file):
+            os.unlink(cache_file)
 
     @staticmethod
     def set_ssd_status(ssd_status):
@@ -732,6 +744,10 @@ class OCSPCache(object):
             return len(OCSPCache.CACHE)
 
 
+# Reset OCSP cache directory
+OCSPCache.reset_cache_dir()
+
+
 class SFSsd(object):
     # Support for Server Side Directives
     ACTIVATE_SSD = False
@@ -1033,9 +1049,9 @@ class SnowflakeOCSP(object):
 
     @staticmethod
     def print_fail_open_warning(ocsp_log):
-        static_warning = "WARNING!!! Using fail-open to connect. Driver is connecting to an "\
-                         "HTTPS endpoint without OCSP based Certificate Revocation checking "\
-                         "as it could not obtain a valid OCSP Response to use from the CA OCSP "\
+        static_warning = "WARNING!!! Using fail-open to connect. Driver is connecting to an " \
+                         "HTTPS endpoint without OCSP based Certificate Revocation checking " \
+                         "as it could not obtain a valid OCSP Response to use from the CA OCSP " \
                          "responder. Details:"
         ocsp_warning = "{0} \n {1}".format(static_warning, ocsp_log)
         logger.error(ocsp_warning)
