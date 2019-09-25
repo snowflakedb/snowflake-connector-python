@@ -58,7 +58,7 @@ class SnowflakeS3Util:
         logger = getLogger(__name__)
         stage_credentials = stage_info[u'creds']
         security_token = stage_credentials.get(u'AWS_TOKEN', None)
-        logger.debug(u"AWS_ID: %s", stage_credentials[u'AWS_ID'])
+        logger.debug(u"AWS_KEY_ID: %s", stage_credentials[u'AWS_KEY_ID'])
 
         config = Config(
             signature_version=u's3v4',
@@ -69,8 +69,8 @@ class SnowflakeS3Util:
         client = boto3.resource(
             u's3',
             region_name=stage_info['region'],
-            aws_access_key_id=stage_credentials[u'AWS_ID'],
-            aws_secret_access_key=stage_credentials[u'AWS_KEY'],
+            aws_access_key_id=stage_credentials[u'AWS_KEY_ID'],
+            aws_secret_access_key=stage_credentials[u'AWS_SECRET_KEY'],
             aws_session_token=security_token,
             config=config,
         )
