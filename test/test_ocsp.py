@@ -340,6 +340,7 @@ def _validate_certs_using_ocsp(url, cache_file_name):
     ocsp.validate(url, connection)
 
 
+@pytest.mark.skip(reason="certificate expired.")
 def test_ocsp_revoked_certificate():
     """
     Test Revoked certificate.
