@@ -218,28 +218,21 @@ cdef class ArrowResult:
         else:
             return None
 
-    def _fetch_pandas_batches(self):
-        """
+    def _fetch_pandas_batches(self, **kwargs):
+        u"""
             Fetch Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk
-            Thus, the batch size (the number of rows in dataframe) may be different
-            TODO: take a look at pyarrow to_pandas() API, which provides some useful arguments
-            e.g. 1. use `use_threads=true` for acceleration
-                 2. use `strings_to_categorical` and `categories` to encoding categorical data,
-                    which is really different from `string` in data science.
-                    For example, some data may be marked as 0 and 1 as binary class in dataset,
-                    the user wishes to interpret as categorical data instead of integer.
-                 3. use `zero_copy_only` to capture the potential unnecessary memory copying
-            we'd better also provide these handy arguments to make data scientists happy :)
+            Thus, the batch size (the number of rows in dataframe) is optimized by
+            Snowflake Python Connector
         """
         for table in self._fetch_arrow_batches():
-            yield table.to_pandas()
+            yield table.to_pandas(**kwargs)
 
-    def _fetch_pandas_all(self):
+    def _fetch_pandas_all(self, **kwargs):
         """
             Fetch a single Pandas dataframe
         """
         table = self._fetch_arrow_all()
         if table:
-            return table.to_pandas()
+            return table.to_pandas(**kwargs)
         else:
             return None
