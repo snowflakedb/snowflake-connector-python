@@ -690,22 +690,24 @@ class SnowflakeCursor(object):
                                        errvalue)
         return self
 
-    def fetch_pandas_batches(self):
+    def fetch_pandas_batches(self, **kwargs):
         u"""
         Fetch a single Arrow Table
+        @param kwargs: will be passed to pyarrow.Table.to_pandas() method
         """
-        if self._query_result_format != 'arrow':
+        if self._query_result_format != 'arrow':  # TODO: or pandas isn't imported
             raise NotSupportedError
-        for df in self._result._fetch_pandas_batches():
+        for df in self._result._fetch_pandas_batches(**kwargs):
             yield df
 
-    def fetch_pandas_all(self):
+    def fetch_pandas_all(self, **kwargs):
         u"""
         Fetch Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk
+        @param kwargs: will be passed to pyarrow.Table.to_pandas() method
         """
         if self._query_result_format != 'arrow':
             raise NotSupportedError
-        return self._result._fetch_pandas_all()
+        return self._result._fetch_pandas_all(**kwargs)
 
     def abort_query(self, qid):
         url = '/queries/{qid}/abort-request'.format(qid=qid)
