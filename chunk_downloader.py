@@ -15,7 +15,7 @@ from .errorcode import (ER_CHUNK_DOWNLOAD_FAILED)
 from .errors import (Error, OperationalError)
 from .time_util import get_time_millis
 import json
-from io import StringIO
+from io import BytesIO
 from gzip import GzipFile
 
 try:
@@ -308,7 +308,7 @@ class JsonBinaryHandler(RawBinaryDataHandler):
         elif not self._use_ijson:
             ret = iter(json.loads(raw_data))
         else:
-            ret = split_rows_from_stream(StringIO(raw_data))
+            ret = split_rows_from_stream(BytesIO(raw_data.encode('utf-8')))
 
         parse_end_time = get_time_millis()
 
