@@ -646,7 +646,7 @@ class SnowflakeRestful(object):
         except RetryRequest as e:
             if retry_ctx.cnt == TelemetryService.get_instance().num_of_retry_to_trigger_telemetry:
                 _, _, stack_trace = sys.exc_info()
-                TelemetryService.get_instance().log_http_request(
+                TelemetryService.get_instance().log_http_request_error(
                     "HttpRequestRetry%dTimes" % retry_ctx.cnt,
                     full_url,
                     method,
@@ -665,7 +665,7 @@ class SnowflakeRestful(object):
                 if retry_ctx.timeout <= 0:
                     logger.error(cause, exc_info=True)
                     _, _, stack_trace = sys.exc_info()
-                    TelemetryService.get_instance().log_http_request(
+                    TelemetryService.get_instance().log_http_request_error(
                         "HttpRequestRetryTimeout",
                         full_url,
                         method,
@@ -827,7 +827,7 @@ class SnowflakeRestful(object):
                     )
                     return None  # required for tests
                 else:
-                    TelemetryService.get_instance().log_http_request(
+                    TelemetryService.get_instance().log_http_request_error(
                         "HttpError%s" % str(raw_ret.status_code),
                         full_url,
                         method,
@@ -851,12 +851,23 @@ class SnowflakeRestful(object):
                     return None  # required for tests
             finally:
                 raw_ret.close()  # ensure response is closed
+        except SSLError as se:
+            logger.debug("Hit non-retryable SSL error, %s", str(se))
+            TelemetryService.get_instance().log_http_request_error(
+                "CertificateException%s" % str(se),
+                full_url,
+                method,
+                SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                ER_FAILED_TO_REQUEST,
+                exception=se,
+                stack_trace=traceback.format_exc()
+            )
+
         except (ConnectTimeout,
                 ReadTimeout,
                 BadStatusLine,
                 ConnectionError,
                 IncompleteRead,
-                SSLError,
                 ProtocolError,  # from urllib3
                 ReadTimeoutError,  # from urllib3
                 OpenSSL.SSL.SysCallError,
@@ -878,7 +889,7 @@ class SnowflakeRestful(object):
                     exc_info=True)
                 raise RetryRequest(err)
             _, _, stack_trace = sys.exc_info()
-            TelemetryService.get_instance().log_http_request(
+            TelemetryService.get_instance().log_http_request_error(
                 "HttpException%s" % str(err),
                 full_url,
                 method,

@@ -110,7 +110,7 @@ def test_telemetry_oob_http_log(telemetry_setup):
     """
     telemetry = TelemetryService.get_instance()
 
-    telemetry.log_http_request(event_name, url, method, SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED, ER_FAILED_TO_REQUEST,
+    telemetry.log_http_request_error(event_name, url, method, SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED, ER_FAILED_TO_REQUEST,
                                exception=exception, stack_trace=stack_trace)
     assert telemetry.size() == 1
     telemetry.flush()
@@ -124,6 +124,6 @@ def test_telemetry_oob_http_log_urgent(telemetry_setup):
     telemetry = TelemetryService.get_instance()
 
     assert telemetry.size() == 0
-    telemetry.log_http_request(event_name, url, method, SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED, ER_FAILED_TO_REQUEST,
+    telemetry.log_http_request_error(event_name, url, method, SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED, ER_FAILED_TO_REQUEST,
                                exception=exception, stack_trace=stack_trace, urgent=True)
     assert telemetry.size() == 0
