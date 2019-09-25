@@ -39,7 +39,7 @@ def test_fetch_various_timestamps(conn_cnx):
                     tzinfo = _generate_tzinfo_from_tzoffset(tzdiff)
                     try:
                         ts = datetime.fromtimestamp(float(et), tz=tzinfo)
-                    except OSError:
+                    except (OSError, ValueError):
                         ts = ZERO_EPOCH + timedelta(seconds=float(et))
                         if pytz.utc != tzinfo:
                             ts += tzinfo.utcoffset(ts)
@@ -57,7 +57,7 @@ def test_fetch_various_timestamps(conn_cnx):
                             try:
                                 ts0 = datetime.fromtimestamp(float(et),
                                                              tz=tzinfo)
-                            except OSError:
+                            except (OSError, ValueError):
                                 ts0 = ZERO_EPOCH + timedelta(seconds=float(et))
                                 if pytz.utc != tzinfo:
                                     ts0 += tzinfo.utcoffset(ts0)
@@ -104,7 +104,7 @@ def test_fetch_various_timestamps(conn_cnx):
                 # TIMESTAMP_NTZ
                 try:
                     ts0 = datetime.fromtimestamp(float(et))
-                except OSError:
+                except (OSError, ValueError):
                     ts0 = ZERO_EPOCH + timedelta(seconds=(float(et)))
                 ts0_str = ts0.strftime('%Y-%m-%d %H:%M:%S')
                 ts1 = parse(ts0_str)
@@ -117,7 +117,7 @@ def test_fetch_various_timestamps(conn_cnx):
                 for idx in range(len(fractions)):
                     try:
                         ts0 = datetime.fromtimestamp(float(et))
-                    except OSError:
+                    except (OSError, ValueError):
                         ts0 = ZERO_EPOCH + timedelta(seconds=(float(et)))
                     ts0_str = ts0.strftime(
                         '%Y-%m-%d %H:%M:%S.{ff}'.format(
