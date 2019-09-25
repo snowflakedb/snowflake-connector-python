@@ -867,7 +867,8 @@ class SnowflakeOCSP(object):
         r'(.*\.snowflakecomputing\.com$'
         r'|(?:|.*\.)s3.*\.amazonaws\.com$'  # start with s3 or .s3 in the middle
         r'|.*\.okta\.com$'
-        r'|.*\.blob\.core\.windows\.net$)')
+        r'|.*\.blob\.core\.windows\.net$'
+        r'|.*\.blob\.core\.usgovcloudapi\.net$)')
 
     # Tolerable validity date range ratio. The OCSP response is valid up
     # to (next update timestap) + (next update timestamp -
