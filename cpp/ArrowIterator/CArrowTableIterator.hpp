@@ -13,7 +13,7 @@ namespace sf
 /**
  * Arrow table iterator implementation in C++.
  * The caller will ask for an Arrow Table to be returned back to Python
- * This conversion is zero-copy, just aggregate every columns from mutiple record batches
+ * This conversion is zero-copy, just aggregate every columns from multiple record batches
  * and build a new table.
  */
 class CArrowTableIterator : public CArrowIterator
@@ -25,7 +25,7 @@ public:
   CArrowTableIterator(PyObject* context, PyObject* batches);
 
   /**
-   * Desctructor
+   * Destructor
    */
   ~CArrowTableIterator() = default;
 
@@ -48,7 +48,7 @@ private:
 
   /**
    * Convert all current RecordBatches to Arrow Table
-   * @return if conversion is executed at first time and sucessfully
+   * @return if conversion is executed at first time and successfully
    */
   bool convertRecordBatchesToTable();
 };
