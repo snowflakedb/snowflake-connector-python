@@ -212,7 +212,7 @@ class SnowflakeConverter(object):
         def conv(value):
             try:
                 return datetime.utcfromtimestamp(int(value) * 86400).date()
-            except OSError as e:
+            except (OSError, ValueError) as e:
                 logger.debug("Failed to convert: %s", e)
                 ts = ZERO_EPOCH + timedelta(
                     seconds=int(value) * (24 * 60 * 60))

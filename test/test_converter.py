@@ -346,6 +346,7 @@ SELECT
         assert ret[1] == r1
 
 
+@pytest.mark.skipif(PY2, reason="the datetime strftime() methods require year >= 1900")
 def test_date_0001_9999(conn_cnx):
     """
     Test 0001 and 9999 for all platforms
