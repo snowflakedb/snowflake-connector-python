@@ -206,6 +206,7 @@ void CArrowChunkIterator::initColumnConverters()
       case SnowflakeType::Type::OBJECT:
       case SnowflakeType::Type::VARIANT:
       case SnowflakeType::Type::TEXT:
+      case SnowflakeType::Type::ARRAY:
       {
         m_currentBatchConverters.push_back(
             std::make_shared<sf::StringConverter>(columnArray));
