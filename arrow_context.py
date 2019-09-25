@@ -75,7 +75,7 @@ class ArrowConverterContext(object):
         return datetime.utcfromtimestamp(microseconds)
 
     def TIMESTAMP_NTZ_to_python_windows(self, microseconds):
-        return ZERO_EPOCH + timedelta(seconds=(microseconds))
+        return ZERO_EPOCH + timedelta(seconds=microseconds)
 
     def TIMESTAMP_LTZ_to_python(self, microseconds):
         tzinfo = self._get_session_tz()
@@ -84,7 +84,7 @@ class ArrowConverterContext(object):
     def TIMESTAMP_LTZ_to_python_windows(self, microseconds):
         tzinfo = self._get_session_tz()
         try:
-            t0 = ZERO_EPOCH + timedelta(seconds=(microseconds))
+            t0 = ZERO_EPOCH + timedelta(seconds=microseconds)
             t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo)
             return t
         except OverflowError:

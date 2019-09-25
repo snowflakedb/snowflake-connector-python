@@ -82,25 +82,25 @@ double getFormattedDoubleFromEpochFraction(int64_t epoch, int32_t frac,
                                            int32_t scale)
 {
   return static_cast<double>(epoch) +
-         static_cast<double>(castToFormattedFraction(frac, epoch > 0, scale)) /
+         static_cast<double>(castToFormattedFraction(frac, epoch < 0, scale)) /
              powTenSB4[std::min(scale, PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
 }
 
-int32_t castToFormattedFraction(int32_t frac, bool isPositive, int32_t scale)
+int32_t castToFormattedFraction(int32_t frac, bool isNegative, int32_t scale)
 {
   // if scale > 6 or not
   constexpr int DIFF_DIGIT =
       NANOSEC_DIGIT - PYTHON_DATETIME_TIME_MICROSEC_DIGIT;
   if (scale > 6)
   {
-    return isPositive
+    return !isNegative
                ? (frac / powTenSB4[DIFF_DIGIT])
                : (powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_DIGIT] -
                   (powTenSB4[NANOSEC_DIGIT] - frac) / powTenSB4[DIFF_DIGIT]);
   }
   else
   {
-    return isPositive
+    return !isNegative
                ? (frac / powTenSB4[NANOSEC_DIGIT - scale])
                : (powTenSB4[scale] - (powTenSB4[NANOSEC_DIGIT] - frac) /
                                          powTenSB4[NANOSEC_DIGIT - scale]);
