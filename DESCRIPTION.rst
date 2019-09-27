@@ -9,6 +9,19 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.0.0(September 30,2019)
+
+    - Release Python Connector 2.0.0 for Arrow format change.
+    - Fix SF_OCSP_RESPONSE_CACHE_DIR referring to the OCSP cache response file directory and not the top level of directory.
+    - Fix Malformed certificate ID key causes uncaught KeyError.
+    - No retry for certificate errors.
+    - Fix In-Memory OCSP Response Cache - PythonConnector
+    - Move AWS_ID and AWS_SECRET_KEY to their newer versions in the Python client
+    - Fix result set downloader for ijson 2.5
+    - Make authenticator field case insensitive earlier
+    - Update USER-AGENT to be consistent with new format
+    - Update Python Driver URL Whitelist to support US Gov domain
+
 - v1.9.0(August 26,2019)
 
     - Implement converter for all arrow data types in python connector extension
