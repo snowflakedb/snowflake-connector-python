@@ -747,6 +747,9 @@ class SnowflakeConnection(object):
             if u'protocol' not in kwargs:
                 setattr(self, u'_protocol', u'https')
 
+        if self._authenticator:
+            self._authenticator = self._authenticator.upper()
+
         if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
             # OAuth Authentication does not require a username
             Error.errorhandler_wrapper(
@@ -758,9 +761,6 @@ class SnowflakeConnection(object):
 
         if self._private_key:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
-
-        if self._authenticator:
-            self._authenticator = self._authenticator.upper()
 
         if self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR and \
                 self._authenticator != OAUTH_AUTHENTICATOR and \
