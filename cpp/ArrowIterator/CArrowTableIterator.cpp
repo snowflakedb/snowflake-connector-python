@@ -224,7 +224,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
       std::string errorInfo = Logger::formatString(
           "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
           ", errorInfo: %s",
-          dt->id(), ret.message());
+          dt->id(), ret.message().c_str());
       logger.error(errorInfo.c_str());
       PyErr_SetString(PyExc_Exception, errorInfo.c_str());
       return;
@@ -240,7 +240,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
     std::string errorInfo = Logger::formatString(
         "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
         ", errorInfo: %s",
-        dt->id(), ret.message());
+        dt->id(), ret.message().c_str());
     logger.error(errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     return;
@@ -285,7 +285,7 @@ void CArrowTableIterator::convertTimeColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -321,7 +321,7 @@ void CArrowTableIterator::convertTimeColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -372,7 +372,7 @@ void CArrowTableIterator::convertTimeColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -425,7 +425,7 @@ void CArrowTableIterator::convertTimeColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -442,7 +442,7 @@ void CArrowTableIterator::convertTimeColumn(
     std::string errorInfo = Logger::formatString(
         "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
         ", errorInfo: %s",
-        dt->id(), ret.message());
+        dt->id(), ret.message().c_str());
     logger.error(errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     return;
@@ -496,7 +496,7 @@ void CArrowTableIterator::convertTimestampColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -539,7 +539,7 @@ void CArrowTableIterator::convertTimestampColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -594,7 +594,7 @@ void CArrowTableIterator::convertTimestampColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -662,7 +662,7 @@ void CArrowTableIterator::convertTimestampColumn(
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
             ", errorInfo: %s",
-            dt->id(), ret.message());
+            dt->id(), ret.message().c_str());
         logger.error(errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -679,7 +679,7 @@ void CArrowTableIterator::convertTimestampColumn(
     std::string errorInfo = Logger::formatString(
         "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
         ", errorInfo: %s",
-        dt->id(), ret.message());
+        dt->id(), ret.message().c_str());
     logger.error(errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     return;
@@ -809,7 +809,7 @@ void CArrowTableIterator::convertTimestampTZColumn(
       std::string errorInfo = Logger::formatString(
           "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
           ", errorInfo: %s",
-          dt->id(), ret.message());
+          dt->id(), ret.message().c_str());
       logger.error(errorInfo.c_str());
       PyErr_SetString(PyExc_Exception, errorInfo.c_str());
       return;
@@ -824,7 +824,7 @@ void CArrowTableIterator::convertTimestampTZColumn(
     std::string errorInfo = Logger::formatString(
         "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
         ", errorInfo: %s",
-        dt->id(), ret.message());
+        dt->id(), ret.message().c_str());
     logger.error(errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     return;
