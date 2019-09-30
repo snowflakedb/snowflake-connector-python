@@ -41,6 +41,9 @@ private:
   /** arrow format convert context for the current session */
   PyObject* m_context;
 
+  /** reference to PyObject */
+  py::UniqueRef m_pyTableObjRef;
+
   /**
    * arrow memory buffer to allocate type converted arrays for fetching pandas from arrow
    */

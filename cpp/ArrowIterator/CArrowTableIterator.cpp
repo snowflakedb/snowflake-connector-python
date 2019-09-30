@@ -128,7 +128,7 @@ void CArrowTableIterator::reconstructRecordBatches()
 }
 
 CArrowTableIterator::CArrowTableIterator(PyObject* context, PyObject* batches)
-: CArrowIterator(batches), m_context(context)
+: CArrowIterator(batches), m_context(context), m_pyTableObjRef(nullptr)
 {
   PyObject* tz = PyObject_GetAttrString(m_context, "_timezone");
   PyArg_Parse(tz, "s", &m_timezone);
@@ -138,7 +138,15 @@ CArrowTableIterator::CArrowTableIterator(PyObject* context, PyObject* batches)
 PyObject* CArrowTableIterator::next()
 {
   bool firstDone = this->convertRecordBatchesToTable();
-  return (firstDone && m_cTable) ? arrow::py::wrap_table(m_cTable) : Py_None;
+  if (firstDone && m_cTable)
+  {
+    m_pyTableObjRef.reset(arrow::py::wrap_table(m_cTable));
+    return m_pyTableObjRef.get();
+  }
+  else
+  {
+    return Py_None;
+  }
 }
 
 arrow::Status CArrowTableIterator::replaceColumn(
