@@ -295,7 +295,6 @@ ratio number(5,2))
 """)
         run(cnx, """
 create or replace stage {name_unload}
-url='file://{tmpdir}/'
 file_format = (
 format_name = 'common.public.csv'
 field_delimiter = '|'
