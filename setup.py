@@ -155,6 +155,7 @@ setup(
     python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
 
     install_requires=[
+        'asn1crypto<1.0.0',
         'azure-common',
         'azure-storage-blob',
         'boto3>=1.4.4,<1.10.0',
