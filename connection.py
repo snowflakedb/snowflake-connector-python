@@ -191,7 +191,7 @@ class SnowflakeConnection(object):
 
     def __del__(self):
         try:
-            self.close()
+            self.close(retry=False)
         except:
             pass
 
@@ -483,12 +483,13 @@ class SnowflakeConnection(object):
         self.__set_error_attributes()
         self.__open_connection()
 
-    def close(self):
+    def close(self, retry=True):
         u"""
         Closes the connection.
         """
         try:
             if not self.rest:
+                logger.debug(u'Rest object has been destroyed, cannot close session')
                 return
 
             # will hang if the application doesn't close the connection and
@@ -499,12 +500,13 @@ class SnowflakeConnection(object):
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
             self._telemetry.close()
-            self.rest.delete_session()
+            self.rest.delete_session(retry=retry)
             self.rest.close()
             self._rest = None
             del self.messages[:]
-        except:
-            pass
+            logger.debug(u'Session is closed')
+        except Exception as e:
+            logger.debug(u'Exception encountered in closing connection. ignoring...: %s', e)
 
     def is_closed(self):
         u"""

@@ -429,7 +429,7 @@ class SnowflakeRestful(object):
             logger.error("Failed to heartbeat. code: %s, url: %s",
                          ret.get(u'code'), url)
 
-    def delete_session(self):
+    def delete_session(self, retry=False):
         """
         Deletes the session
         """
@@ -452,19 +452,31 @@ class SnowflakeRestful(object):
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
 
         body = {}
-        try:
-            ret = self._post_request(
-                url, headers, json.dumps(body),
-                token=self.token, timeout=5, no_retry=True)
-            if not ret or ret.get(u'success'):
-                return
-            err = ret.get(u'message')
-            if err is not None and ret.get(u'data'):
-                err += ret[u'data'].get(u'errorMessage', '')
-                # no exception is raised
-            logger.debug('error in deleting session. ignoring...: %s', err)
-        except Exception as e:
-            logger.debug('error in deleting session. ignoring...: %s', e)
+        retry_limit = 3 if retry else 1
+        num_retries = 0
+        should_retry = True
+        while should_retry and (num_retries < retry_limit):
+            try:
+                should_retry = False
+                ret = self._post_request(
+                    url, headers, json.dumps(body),
+                    token=self.token, timeout=5, no_retry=True)
+                if not ret:
+                    if retry:
+                        should_retry = True
+                    else:
+                        return
+                elif ret.get(u'success'):
+                    return
+                err = ret.get(u'message')
+                if err is not None and ret.get(u'data'):
+                    err += ret[u'data'].get(u'errorMessage', '')
+                    # no exception is raised
+                logger.debug('error in deleting session. ignoring...: %s', err)
+            except Exception as e:
+                logger.debug('error in deleting session. ignoring...: %s', e)
+            finally:
+                num_retries += 1
 
     def _get_request(self, url, headers, token=None,
                      timeout=None,
