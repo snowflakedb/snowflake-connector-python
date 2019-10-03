@@ -21,6 +21,7 @@ Release Notes
     - Make authenticator field case insensitive earlier
     - Update USER-AGENT to be consistent with new format
     - Update Python Driver URL Whitelist to support US Gov domain
+    - Fix memory leak in python connector panda df fetch API
 
 - v1.9.0(August 26,2019)
 
