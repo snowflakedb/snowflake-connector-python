@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 Release Notes
 -------------------------------------------------------------------------------
+- v2.0.1(October 04,2019)
+
+    - Add asn1crypto requirement to mitigate incompatibility change
 
 - v2.0.0(September 30,2019)
 
