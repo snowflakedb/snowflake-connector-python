@@ -174,7 +174,6 @@ setup(
         'pyasn1>=0.4.0,<0.5.0;python_version<"3.0"',
         'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
         'enum34;python_version<"3.4"',
-        'pyarrow>=0.14.0;python_version>"3.4"',
     ],
 
     namespace_packages=['snowflake'],
@@ -205,6 +204,10 @@ setup(
     extras_require={
         "secure-local-storage": [
             'keyring!=16.1.0'
+        ],
+        "arrow-result": [
+            'pyarrow>=0.14.0;python_version>"3.4"',
+            'pyarrow>=0.14.0;python_version<"3.0"'
         ]
     },
 
