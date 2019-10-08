@@ -191,7 +191,7 @@ class SnowflakeConnection(object):
 
     def __del__(self):
         try:
-            self.close(retry=False)
+            self.close(retry=False, in_shutdown=True)
         except:
             pass
 
@@ -483,7 +483,7 @@ class SnowflakeConnection(object):
         self.__set_error_attributes()
         self.__open_connection()
 
-    def close(self, retry=True):
+    def close(self, retry=True, in_shutdown=False):
         u"""
         Closes the connection.
         """
@@ -499,7 +499,7 @@ class SnowflakeConnection(object):
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
-            self._telemetry.close()
+            self._telemetry.close(in_shutdown=in_shutdown)
             self.rest.delete_session(retry=retry)
             self.rest.close()
             self._rest = None

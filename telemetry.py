@@ -108,10 +108,11 @@ class TelemetryClient(object):
     def is_closed(self):
         return self._is_closed
 
-    def close(self):
+    def close(self, in_shutdown=False):
         if not self._is_closed:
             logger.debug("Closing telemetry client.")
-            self.send_batch()
+            if not in_shutdown:
+                self.send_batch()
             self._is_closed = True
 
     def disable(self):
