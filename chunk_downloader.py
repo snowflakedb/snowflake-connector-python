@@ -17,12 +17,7 @@ from .time_util import get_time_millis
 import json
 from io import BytesIO
 from gzip import GzipFile
-
-try:
-    from .arrow_iterator import PyArrowIterator
-    from .arrow_context import ArrowConverterContext
-except ImportError:
-    pass
+from .arrow_context import ArrowConverterContext
 
 DEFAULT_REQUEST_TIMEOUT = 3600
 
@@ -329,6 +324,7 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
     Handler to consume data as arrow stream
     """
     def to_iterator(self, raw_data_fd, download_time):
+        from .arrow_iterator import PyArrowIterator
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
         it = PyArrowIterator(gzip_decoder, self._arrow_context)
         return it
