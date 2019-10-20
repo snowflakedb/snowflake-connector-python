@@ -609,7 +609,7 @@ class SnowflakeCursor(object):
                                       column[u'nullable']))
 
         if self._query_result_format == 'arrow':
-            self.check_pyarrow_resultset()
+            self.check_can_use_arrow_resultset()
             self._result = ArrowResult(data, self)
         else:
             self._result = self._json_result_class(data, self, use_ijson)
@@ -628,9 +628,8 @@ class SnowflakeCursor(object):
             else:
                 self._total_rowcount += updated_rows
 
-    def check_pyarrow_resultset(self):
+    def check_can_use_arrow_resultset(self):
         global CAN_USE_ARROW_RESULT
-        global pyarrow
 
         if not CAN_USE_ARROW_RESULT:
             if self._connection.application == 'SnowSQL':
@@ -638,16 +637,29 @@ class SnowflakeCursor(object):
                     "Currently SnowSQL doesn't support the result set in Apache Arrow format."
                 )
                 errno = ER_NO_PYARROW_SNOWSQL
-            elif pyarrow is None:
-                msg = (
-                    "pyarrow package is missing. Install using pip if the platform is supported."
-                )
-                errno = ER_NO_PYARROW
             else:
                 msg = (
                     "The result set in Apache Arrow format is not supported for the platform."
                 )
                 errno = ER_NO_ARROW_RESULT
+
+            Error.errorhandler_wrapper(
+                self.connection, self,
+                ProgrammingError,
+                {
+                    u'msg': msg,
+                    u'errno': errno,
+                }
+            )
+
+    def check_can_use_panadas(self):
+        global pyarrow
+
+        if pyarrow is None:
+            msg = (
+                "pyarrow package is missing. Install using pip if the platform is supported."
+            )
+            errno = ER_NO_PYARROW
 
             Error.errorhandler_wrapper(
                 self.connection, self,
@@ -695,6 +707,7 @@ class SnowflakeCursor(object):
         Fetch a single Arrow Table
         @param kwargs: will be passed to pyarrow.Table.to_pandas() method
         """
+        self.check_can_use_panadas()
         if self._query_result_format != 'arrow':  # TODO: or pandas isn't imported
             raise NotSupportedError
         for df in self._result._fetch_pandas_batches(**kwargs):
@@ -705,6 +718,7 @@ class SnowflakeCursor(object):
         Fetch Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk
         @param kwargs: will be passed to pyarrow.Table.to_pandas() method
         """
+        self.check_can_use_panadas()
         if self._query_result_format != 'arrow':
             raise NotSupportedError
         return self._result._fetch_pandas_all(**kwargs)

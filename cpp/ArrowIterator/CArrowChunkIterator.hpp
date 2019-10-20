@@ -22,7 +22,7 @@ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator(PyObject* context, PyObject* batches);
+  CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> *);
 
   /**
    * Desctructor

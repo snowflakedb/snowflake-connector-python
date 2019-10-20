@@ -6,14 +6,14 @@
 # cython: language_level=3
 
 from base64 import b64decode
+import io
 from logging import getLogger
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
 try:
-    from pyarrow.ipc import open_stream
-    from pyarrow import concat_tables
     from .arrow_iterator import PyArrowIterator, EmptyPyArrowIterator, ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
     from .arrow_context import ArrowConverterContext
+    from pyarrow import concat_tables
 except ImportError:
     pass
 
@@ -52,9 +52,8 @@ cdef class ArrowResult:
 
         if rowset_b64:
             arrow_bytes = b64decode(rowset_b64)
-            arrow_reader = open_stream(arrow_bytes)
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
-            self._current_chunk_row = PyArrowIterator(arrow_reader, self._arrow_context)
+            self._current_chunk_row = PyArrowIterator(io.BytesIO(arrow_bytes), self._arrow_context)
         else:
             self._current_chunk_row = EmptyPyArrowIterator(None, None)
         self._iter_unit = EMPTY_UNIT

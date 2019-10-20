@@ -17,11 +17,11 @@
 namespace sf
 {
 
-CArrowChunkIterator::CArrowChunkIterator(PyObject* context, PyObject* batches)
+CArrowChunkIterator::CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> *batches)
 : CArrowIterator(batches), m_latestReturnedRow(nullptr), m_context(context)
 {
-  m_batchCount = m_cRecordBatches.size();
-  m_columnCount = m_batchCount > 0 ? m_cRecordBatches[0]->num_columns() : 0;
+  m_batchCount = m_cRecordBatches->size();
+  m_columnCount = m_batchCount > 0 ? (*m_cRecordBatches)[0]->num_columns() : 0;
   m_currentBatchIndex = -1;
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
@@ -50,7 +50,7 @@ PyObject* CArrowChunkIterator::next()
     if (m_currentBatchIndex < m_batchCount)
     {
       m_rowIndexInBatch = 0;
-      m_rowCountInBatch = m_cRecordBatches[m_currentBatchIndex]->num_rows();
+      m_rowCountInBatch = (*m_cRecordBatches)[m_currentBatchIndex]->num_rows();
       this->initColumnConverters();
       if (py::checkPyError())
       {
@@ -90,7 +90,7 @@ void CArrowChunkIterator::initColumnConverters()
 {
   m_currentBatchConverters.clear();
   std::shared_ptr<arrow::RecordBatch> currentBatch =
-      m_cRecordBatches[m_currentBatchIndex];
+      (*m_cRecordBatches)[m_currentBatchIndex];
   std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
   for (int i = 0; i < currentBatch->num_columns(); i++)
   {
