@@ -418,6 +418,25 @@ def test_select_with_empty_resultset(conn_cnx):
         assert cursor.fetchone() is None
 
 
+@pytest.mark.skipif(
+    no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built.")
+def test_select_with_large_resultset(conn_cnx):
+    col_count = 5
+    row_count = 1000000
+    random_seed = get_random_seed()
+
+    sql_text = "select seq4() as c1, " \
+               "uniform(-10000, 10000, random({})) as c2, " \
+               "randstr(5, random({})) as c3, " \
+               "randstr(10, random({})) as c4, " \
+               "uniform(-100000, 100000, random({})) as c5 " \
+               "from table(generator(rowcount=>{}))"\
+        .format(random_seed, random_seed, random_seed, random_seed, row_count)
+
+    iterate_over_test_chunk("large_resultset", conn_cnx, sql_text, row_count, col_count)
+
+
 def get_random_seed():
     random.seed(datetime.now())
     return random.randint(0, 10000)
