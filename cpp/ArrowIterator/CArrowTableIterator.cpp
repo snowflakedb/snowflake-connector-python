@@ -26,9 +26,9 @@ namespace sf
 void CArrowTableIterator::reconstructRecordBatches()
 {
   // Type conversion, the code needs to be optimized
-  for (unsigned int batchIdx = 0; batchIdx <  m_cRecordBatches.size(); batchIdx++)
+  for (unsigned int batchIdx = 0; batchIdx <  m_cRecordBatches->size(); batchIdx++)
   {
-    std::shared_ptr<arrow::RecordBatch> currentBatch = m_cRecordBatches[batchIdx];
+    std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
     std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
     for (int colIdx = 0; colIdx < currentBatch->num_columns(); colIdx++)
     {
@@ -127,7 +127,7 @@ void CArrowTableIterator::reconstructRecordBatches()
   }
 }
 
-CArrowTableIterator::CArrowTableIterator(PyObject* context, PyObject* batches)
+CArrowTableIterator::CArrowTableIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>>* batches)
 : CArrowIterator(batches), m_context(context), m_pyTableObjRef(nullptr)
 {
   PyObject* tz = PyObject_GetAttrString(m_context, "_timezone");
@@ -156,7 +156,7 @@ arrow::Status CArrowTableIterator::replaceColumn(
     const std::shared_ptr<arrow::Array>& newColumn)
 {
   // replace the targeted column
-  std::shared_ptr<arrow::RecordBatch> currentBatch = m_cRecordBatches[batchIdx];
+  std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
   arrow::Status ret = currentBatch->AddColumn(colIdx+1, newField, newColumn, &currentBatch);
   if(!ret.ok())
   {
@@ -167,7 +167,7 @@ arrow::Status CArrowTableIterator::replaceColumn(
   {
     return ret;
   }
-  m_cRecordBatches[batchIdx] = currentBatch;
+  (*m_cRecordBatches)[batchIdx] = currentBatch;
   return ret;
 }
 
@@ -842,10 +842,10 @@ void CArrowTableIterator::convertTimestampTZColumn(
 bool CArrowTableIterator::convertRecordBatchesToTable()
 {
   // only do conversion once and there exist some record batches
-  if (!m_cTable && !m_cRecordBatches.empty())
+  if (!m_cTable && !m_cRecordBatches->empty())
   {
     reconstructRecordBatches();
-    arrow::Table::FromRecordBatches(m_cRecordBatches, &m_cTable);
+    arrow::Table::FromRecordBatches(*m_cRecordBatches, &m_cTable);
     return true;
   }
   return false;

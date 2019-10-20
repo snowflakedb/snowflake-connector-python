@@ -22,7 +22,7 @@ public:
   /**
    * Constructor
    */
-  CArrowTableIterator(PyObject* context, PyObject* batches);
+  CArrowTableIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>>* batches);
 
   /**
    * Destructor

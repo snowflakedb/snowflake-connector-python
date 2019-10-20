@@ -42,6 +42,7 @@ if isBuildExtEnabled == 'true':
     from Cython.Build import cythonize
     import os
     import pyarrow
+    import numpy
 
     extensions = cythonize(
         [
@@ -78,6 +79,7 @@ if isBuildExtEnabled == 'true':
                 ext.include_dirs.append('cpp/ArrowIterator/')
                 ext.include_dirs.append('cpp/Logging')
                 ext.include_dirs.append(pyarrow.get_include())
+                ext.include_dirs.append(numpy.get_include())
 
                 ext.extra_compile_args.append('-std=c++11')
 
@@ -124,7 +126,7 @@ if isBuildExtEnabled == 'true':
 
         def _get_pyarrow_lib_pattern(self, lib_name):
             if platform.startswith('linux'):
-                return '{}/lib{}.so*'.format(self._get_arrow_lib_dir(), lib_name)
+                return '{}/lib{}.so.*'.format(self._get_arrow_lib_dir(), lib_name)
             elif platform == 'darwin':
                 return '{}/lib{}*dylib'.format(self._get_arrow_lib_dir(), lib_name)
             elif platform == 'win32':
@@ -174,7 +176,6 @@ setup(
         'pyasn1>=0.4.0,<0.5.0;python_version<"3.0"',
         'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
         'enum34;python_version<"3.4"',
-        'pyarrow>=0.14.0;python_version>"3.4"',
     ],
 
     namespace_packages=['snowflake'],
@@ -205,6 +206,9 @@ setup(
     extras_require={
         "secure-local-storage": [
             'keyring!=16.1.0'
+        ],
+        "pandas": [
+            'pyarrow>=0.14.0;python_version>"3.4"',
         ]
     },
 

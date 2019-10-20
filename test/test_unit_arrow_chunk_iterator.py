@@ -537,9 +537,8 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
 
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
-    reader = RecordBatchStreamReader(stream)
     context = ArrowConverterContext()
-    it = PyArrowIterator(reader, context)
+    it = PyArrowIterator(stream, context)
     it.init(ROW_UNIT)
 
     count = 0

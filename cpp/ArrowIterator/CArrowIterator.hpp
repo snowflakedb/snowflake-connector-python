@@ -24,7 +24,7 @@ namespace sf
 class CArrowIterator
 {
 public:
-  CArrowIterator(PyObject *batches);
+  CArrowIterator(std::vector<std::shared_ptr<arrow::RecordBatch>> * batches);
 
   virtual ~CArrowIterator() = default;
 
@@ -35,7 +35,7 @@ public:
 
 protected:
    /** list of all record batch in current chunk */
-  std::vector<std::shared_ptr<arrow::RecordBatch>> m_cRecordBatches;
+  std::vector<std::shared_ptr<arrow::RecordBatch>> *m_cRecordBatches;
 
   static Logger logger;
 };
