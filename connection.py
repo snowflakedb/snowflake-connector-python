@@ -499,7 +499,7 @@ class SnowflakeConnection(object):
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
-            self._telemetry.close()
+            self._telemetry.close(send_on_close=retry)
             self.rest.delete_session(retry=retry)
             self.rest.close()
             self._rest = None
