@@ -508,7 +508,7 @@ def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='fl
     reason="arrow_iterator extension is not built.")
 def test_num_batch(conn_cnx):
     print('Test fetching dataframes in batch')
-    row_count = 50000
+    row_count = 1000000
     col_count = 2
     random_seed = get_random_seed()
     sql_exec = ("select seq4() as c1, uniform(1, 10, random({})) as c2 from ".format(random_seed) +
@@ -559,7 +559,18 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method='one'):
             # actually its exec time would be different from `pd.read_sql()` via sqlalchemy as most people use
             # further perf test can be done separately
             start_time = time.time()
-            df_old = pd.DataFrame(cursor_row.fetchall(), columns=['c{}'.format(i) for i in range(col_count)])
+            rows = 0
+            if method == 'one':
+                df_old = pd.DataFrame(cursor_row.fetchall(), columns=['c{}'.format(i) for i in range(col_count)])
+            else:
+                print("use fetchmany")
+                while True:
+                    dat = cursor_row.fetchmany(10000)
+                    if not dat:
+                        break
+                    else:
+                        df_old = pd.DataFrame(dat, columns=['c{}'.format(i) for i in range(col_count)])
+                        rows += df_old.shape[0]
             end_time = time.time()
             print('The original way took {}s'.format(end_time - start_time))
             cursor_row.close()
@@ -598,6 +609,8 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method='one'):
                     for j, (c_old, c_new) in enumerate(zip(col_old, col_new)):
                         assert c_old == c_new, '{} row, {} column: old value is {}, new value is {}, \
                                               values are not equal'.format(i, j, c_old, c_new)
+            else:
+                assert rows == total_rows, 'the number of rows are not equal {} vs {}'.format(rows, total_rows)
 
 
 def init(conn_cnx, table, column, values, timezone=None):
