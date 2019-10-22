@@ -8,6 +8,16 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 Release Notes
 -------------------------------------------------------------------------------
+
+- v2.0.2(October 21,2019)
+
+    - Fix sessions remaining open even if they are disposed manually. Retry deleting session if the connection is explicitly closed.
+    - Fix memory leak in the new fetch pandas API
+    - Fix Auditwheel failed with python37
+    - Reduce the footprint of Python Connector
+    - Support asn1crypto 1.1.x
+    - Ensure that the cython components are present for Conda package
+
 - v2.0.1(October 04,2019)
 
     - Add asn1crypto requirement to mitigate incompatibility change
