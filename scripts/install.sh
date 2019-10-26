@@ -41,13 +41,19 @@ if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]] || [[ $PYTHON_VERSION == "2.7"* ]]; t
 fi
 
 if [ "$TRAVIS_OS_NAME" == "osx" ]; then
-    pip install .
+    export ENABLE_EXT_MODULES=true
+    cd $THIS_DIR/..
+    pip install Cython pyarrow==0.14.1 wheel
+    python setup.py bdist_wheel
+    unset ENABLE_EXT_MODULES
+    CONNECTOR_WHL=$(ls $THIS_DIR/../dist/snowflake_connector_python*.whl | sort -r | head -n 1)
+    pip install -U $CONNECTOR_WHL[pandas]
 else
     if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
         pip install .
     else
         pv=${TRAVIS_PYTHON_VERSION/./}
-        $THIS_DIR/build_inside_docker.sh $pv 
+        $THIS_DIR/build_inside_docker.sh $pv
         CONNECTOR_WHL=$(ls $THIS_DIR/../dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*.whl | sort -r | head -n 1)
         pip install -U $CONNECTOR_WHL[pandas]
         cd $THIS_DIR/..
