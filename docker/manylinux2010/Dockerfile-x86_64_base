@@ -1,0 +1,19 @@
+# We use manylinux1 base image because pyarrow_manylinux2010 has a bug and wheel failed to be audited
+FROM quay.io/pypa/manylinux1_x86_64
+
+# This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
+RUN curl -o /usr/local/bin/gosu -SL "https://github.com/tianon/gosu/releases/download/1.11/gosu-amd64"
+RUN chmod +x /usr/local/bin/gosu
+
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+
+WORKDIR /home/user
+RUN chmod 777 /home/user
+RUN git clone https://github.com/matthew-brett/multibuild.git && cd /home/user/multibuild && git checkout 1a7f31be677185f2dface2643284846e14130c3f
+
+ADD scripts/build_virtualenvs.sh /home/user
+RUN /home/user/build_virtualenvs.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
