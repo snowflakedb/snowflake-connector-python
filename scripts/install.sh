@@ -4,6 +4,8 @@
 #
 set -o pipefail
 
+THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     brew update
     brew install openssl readline sqlite3 xz zlib
@@ -33,10 +35,22 @@ source ./venv/bin/activate
 pip install pandas
 pip install numpy
 pip install pendulum
-pip install pyarrow
 pip install pytest pytest-cov pytest-rerunfailures
 if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]] || [[ $PYTHON_VERSION == "2.7"* ]]; then
     pip install mock
 fi
-pip install .
+
+if [ "$TRAVIS_OS_NAME" == "osx" ]; then
+    pip install .
+else
+    if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
+        pip install .
+    else
+        pv=${TRAVIS_PYTHON_VERSION/./}
+        $THIS_DIR/build_inside_docker.sh $pv 
+        CONNECTOR_WHL=$(ls $THIS_DIR/../dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*.whl | sort -r | head -n 1)
+        pip install -U $CONNECTOR_WHL[pandas]
+        cd $THIS_DIR/..
+    fi
+fi
 pip list --format=columns
