@@ -36,13 +36,13 @@ cdef class ArrowResult:
         object _arrow_context
         str _iter_unit
 
-    def __init__(self, raw_response, cursor):
+    def __init__(self, raw_response, cursor, _chunk_downloader=None):
         self._reset()
         self._cursor = cursor
         self._connection = cursor.connection
-        self._chunk_info(raw_response)
+        self._chunk_info(raw_response, _chunk_downloader)
 
-    def _chunk_info(self, data):
+    def _chunk_info(self, data, _chunk_downloader=None):
         self.total_row_index = -1  # last fetched number of rows
 
         self._chunk_index = 0
@@ -55,6 +55,7 @@ cdef class ArrowResult:
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
             self._current_chunk_row = PyArrowIterator(io.BytesIO(arrow_bytes), self._arrow_context)
         else:
+            logger.debug("Data from first gs response is empty")
             self._current_chunk_row = EmptyPyArrowIterator(None, None)
         self._iter_unit = EMPTY_UNIT
 
@@ -76,11 +77,12 @@ cdef class ArrowResult:
                         header_value)
 
             logger.debug(u'qrmk=%s', qrmk)
-            self._chunk_downloader = self._connection._chunk_downloader_class(
-                chunks, self._connection, self._cursor, qrmk, chunk_headers,
-                query_result_format='arrow',
-                prefetch_threads=self._connection.client_prefetch_threads,
-                use_ijson=False)
+            self._chunk_downloader = _chunk_downloader if _chunk_downloader \
+                else self._connection._chunk_downloader_class(
+                    chunks, self._connection, self._cursor, qrmk, chunk_headers,
+                    query_result_format='arrow',
+                    prefetch_threads=self._connection.client_prefetch_threads,
+                    use_ijson=False)
 
     def __iter__(self):
         return self
@@ -171,9 +173,16 @@ cdef class ArrowResult:
             raise RuntimeError
 
         try:
-            self._current_chunk_row.init(self._iter_unit) # AttributeError if it is iter(())
+            self._current_chunk_row.init(self._iter_unit)
+            logger.debug(u'Init table iterator successfully, current chunk index: %s, '
+                         u'chunk count: %s', self._chunk_index, self._chunk_count)
             while self._chunk_index <= self._chunk_count:
-                table = self._current_chunk_row.__next__()
+                stop_iteration_except = False
+                try:
+                    table = self._current_chunk_row.__next__()
+                except StopIteration:
+                    stop_iteration_except = True
+
                 if self._chunk_index < self._chunk_count: # multiple chunks
                     logger.debug(
                         u"chunk index: %s, chunk_count: %s",
@@ -182,7 +191,11 @@ cdef class ArrowResult:
                     self._current_chunk_row = next_chunk.result_data
                     self._current_chunk_row.init(self._iter_unit)
                 self._chunk_index += 1
-                yield table
+
+                if stop_iteration_except:
+                    continue
+                else:
+                    yield table
             else:
                 if self._chunk_count > 0 and \
                         self._chunk_downloader is not None:
@@ -196,9 +209,6 @@ cdef class ArrowResult:
                 self._chunk_downloader = None
                 self._chunk_count = 0
                 self._current_chunk_row = EmptyPyArrowIterator(None, None)
-        except AttributeError:
-            # just for handling the case of empty result
-            return None
         finally:
             if self._cursor._first_chunk_time:
                 logger.info("fetching data into pandas dataframe done")
