@@ -12,6 +12,8 @@ from libcpp cimport bool as c_bool
 from libcpp.memory cimport shared_ptr
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
+from .errors import (Error, OperationalError)
+from .errorcode import ER_FAILED_TO_READ_ARROW_STREAM
 
 logger = getLogger(__name__)
 
@@ -140,14 +142,35 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         cdef shared_ptr[CRecordBatchReader] reader
         cdef shared_ptr[CRecordBatch] record_batch
         input_stream.reset(new PyReadableFile(py_inputstream))
-        CRecordBatchStreamReader.Open(input_stream.get(), &reader)
+        cdef CStatus ret = CRecordBatchStreamReader.Open(input_stream.get(), &reader)
+        if not ret.ok():
+            Error.errorhandler_wrapper(
+                None,
+                None,
+                OperationalError,
+                {
+                    u'msg': u'Failed to open arrow stream: ' + ret.message(),
+                    u'errno': ER_FAILED_TO_READ_ARROW_STREAM
+                })
+
         while True:
-            reader.get().ReadNext(&record_batch)
+            ret = reader.get().ReadNext(&record_batch)
+            if not ret.ok():
+                Error.errorhandler_wrapper(
+                    None,
+                    None,
+                    OperationalError,
+                    {
+                        u'msg': u'Failed to read next arrow batch: ' + ret.message(),
+                        u'errno': ER_FAILED_TO_READ_ARROW_STREAM
+                    })
 
             if record_batch.get() is NULL:
                 break
 
             self.batches.push_back(record_batch)
+
+        logger.debug("Batches read: %d", self.batches.size())
 
         self.context = arrow_context
         self.cIterator = NULL
