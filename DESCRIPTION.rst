@@ -37,12 +37,11 @@ Release Notes
     - Fix memory leak in python connector panda df fetch API
 
 - v1.9.1(October 4,2019)
-
+   
     - Add asn1crypto requirement to mitigate incompatibility change.
-    
+
 - v1.9.0(August 26,2019)
 
-    - Add asn1crypto requirement to mitigate incompatibility change.
     - Implement converter for all arrow data types in python connector extension
     - Fix arrow error when returning empty result using python connecter
     - Fix OCSP responder hang, AttributeError: 'ReadTimeout' object has no attribute 'message'
