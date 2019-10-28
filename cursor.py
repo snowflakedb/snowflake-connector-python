@@ -652,7 +652,7 @@ class SnowflakeCursor(object):
                 }
             )
 
-    def check_can_use_panadas(self):
+    def check_can_use_pandas(self):
         global pyarrow
 
         if pyarrow is None:
@@ -707,7 +707,7 @@ class SnowflakeCursor(object):
         Fetch a single Arrow Table
         @param kwargs: will be passed to pyarrow.Table.to_pandas() method
         """
-        self.check_can_use_panadas()
+        self.check_can_use_pandas()
         if self._query_result_format != 'arrow':  # TODO: or pandas isn't imported
             raise NotSupportedError
         for df in self._result._fetch_pandas_batches(**kwargs):
@@ -718,7 +718,7 @@ class SnowflakeCursor(object):
         Fetch Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk
         @param kwargs: will be passed to pyarrow.Table.to_pandas() method
         """
-        self.check_can_use_panadas()
+        self.check_can_use_pandas()
         if self._query_result_format != 'arrow':
             raise NotSupportedError
         return self._result._fetch_pandas_all(**kwargs)
