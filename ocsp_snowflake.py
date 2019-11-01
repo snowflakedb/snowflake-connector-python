@@ -1221,7 +1221,7 @@ class SnowflakeOCSP(object):
                     self.read_cert_bundle(ca_bundle)
                 else:
                     import sys
-                    from botocore.vendored.requests import certs
+                    from requests import certs
                     if hasattr(certs, '__file__') and \
                             path.exists(certs.__file__) and \
                             path.exists(path.join(
