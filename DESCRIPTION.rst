@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.0.3(November 1,2019)
+
+    - Fix for ,Pandas fetch API did not handle the case that first chunk is empty correctly.
+    - Updated with botocore, boto3 and requests packages to the latest version.
+    - Pinned stable versions of Azure urllib3 packages.
+
 - v2.0.2(October 21,2019)
 
     - Fix sessions remaining open even if they are disposed manually. Retry deleting session if the connection is explicitly closed.
