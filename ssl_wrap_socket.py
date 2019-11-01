@@ -28,13 +28,13 @@ from socket import error as SocketError
 from socket import (socket, timeout)
 
 import OpenSSL.SSL
-from botocore.vendored.requests.packages.urllib3 import connection \
-    as urllib3_connection
-from botocore.vendored.requests.packages.urllib3 import util \
-    as urllib3_util
+
 from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend
 from cryptography.hazmat.backends.openssl.x509 import _Certificate
+
+import requests.packages.urllib3.util.ssl_ as ssl_
+import requests.packages.urllib3.connection as connection_
 
 from .compat import PY2
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
@@ -84,7 +84,7 @@ def inject_into_urllib3():
     Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP.
     """
     log.debug(u'Injecting ssl_wrap_socket_with_ocsp')
-    urllib3_connection.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
+    connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
 
 
 def _dnsname_to_stdlib(name):
@@ -310,7 +310,7 @@ else:  # Platform-specific: Python 3
 
 WrappedSocket.makefile = makefile
 
-DEFAULT_SSL_CIPHER_LIST = urllib3_util.ssl_.DEFAULT_CIPHERS
+DEFAULT_SSL_CIPHER_LIST = ssl_.DEFAULT_CIPHERS
 if isinstance(DEFAULT_SSL_CIPHER_LIST, str):
     DEFAULT_SSL_CIPHER_LIST = DEFAULT_SSL_CIPHER_LIST.encode('utf-8')
 
@@ -368,12 +368,13 @@ def _verify_callback(cnx, x509, err_no, err_depth, return_code):
 
 
 def ssl_wrap_socket_with_ocsp(
-        sock, keyfile=None, certfile=None, cert_reqs=None,
-        ca_certs=None, server_hostname=None, ssl_version=None):
-    ret = ssl_wrap_socket(
-        sock, keyfile=keyfile, certfile=certfile, cert_reqs=cert_reqs,
-        ca_certs=ca_certs, server_hostname=server_hostname,
-        ssl_version=ssl_version)
+        sock, keyfile=None, certfile=None, ca_certs=None,
+        ca_cert_dir=None, server_hostname=None, ssl_context=None):
+
+    ret = ssl_.ssl_wrap_socket(
+        sock, keyfile=keyfile, certfile=certfile,
+        ca_certs=ca_certs, ca_cert_dir=ca_cert_dir,
+        server_hostname=server_hostname)
     global FEATURE_OCSP_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 
