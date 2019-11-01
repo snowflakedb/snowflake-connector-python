@@ -17,12 +17,12 @@ from io import BytesIO
 from threading import Lock
 
 import OpenSSL.SSL
-from botocore.vendored import requests
-from botocore.vendored.requests.adapters import HTTPAdapter
-from botocore.vendored.requests.auth import AuthBase
-from botocore.vendored.requests.exceptions import (
+import requests
+from requests.adapters import HTTPAdapter
+from requests.auth import AuthBase
+from requests.exceptions import (
     ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
-from botocore.vendored.requests.packages.urllib3.exceptions import (
+from requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
 
 from snowflake.connector.time_util import get_time_millis
