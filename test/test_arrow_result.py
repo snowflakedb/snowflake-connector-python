@@ -413,6 +413,7 @@ def test_select_with_empty_resultset(conn_cnx):
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
         cursor.execute("alter session set query_result_format='ARROW_FORCE'")
+        cursor.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
         cursor.execute("select seq4() from table(generator(rowcount=>100)) limit 0")
 
         assert cursor.fetchone() is None
@@ -448,10 +449,12 @@ def iterate_over_test_chunk(test_name, conn_cnx, sql_text, row_count, col_count,
             if expected is None:
                 cursor_json = json_cnx.cursor()
                 cursor_json.execute("alter session set query_result_format='JSON'")
+                cursor_json.execute("alter session set python_connector_query_result_format='JSON'")
                 cursor_json.execute(sql_text)
 
             cursor_arrow = arrow_cnx.cursor()
             cursor_arrow.execute("alter session set query_result_format='ARROW_FORCE'")
+            cursor_arrow.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
             cursor_arrow.execute(sql_text)
 
             if expected is None:
