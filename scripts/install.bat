@@ -7,7 +7,7 @@ SET SCRIPT_DIR=%~dp0
 "%PYTHON%/python.exe" -m venv env
 call env\Scripts\activate
 # https://github.com/pypa/pip/issues/6566
-python -m pip install --upgrade pip==18.1
+python -m pip install --upgrade pip
 pip install pandas
 pip install numpy
 pip install pendulum
