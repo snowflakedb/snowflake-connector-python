@@ -354,9 +354,9 @@ class OCSPCache(object):
     # OCSP cache update flag
     CACHE_UPDATED = False
 
-    # Cache Expiration in seconds (24 hours). OCSP validation cache is
-    # invalidated every 24 hours
-    CACHE_EXPIRATION = 86400
+    # Cache Expiration in seconds (120 hours). OCSP validation cache is
+    # invalidated every 120 hours (5 days)
+    CACHE_EXPIRATION = 432000
 
     # OCSP Response Cache URI
     OCSP_RESPONSE_CACHE_URI = None
