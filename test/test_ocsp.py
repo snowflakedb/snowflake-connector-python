@@ -259,7 +259,7 @@ def test_ocsp_with_outdated_cache(tmpdir):
     # setting outdated data
     current_time = int(time.time())
     for k, v in cache_data.items():
-        cache_data[k] = (current_time - 48 * 60 * 60, v[1])
+        cache_data[k] = (current_time - 144 * 60 * 60, v[1])
 
     # write back the cache file
     OCSPCache.CACHE = cache_data
