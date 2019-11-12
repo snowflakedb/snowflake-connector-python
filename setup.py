@@ -82,6 +82,7 @@ if isBuildExtEnabled == 'true':
                 ext.include_dirs.append(numpy.get_include())
 
                 ext.extra_compile_args.append('-std=c++11')
+                ext.extra_compile_args.append('-D_GLIBCXX_USE_CXX11_ABI=0')
 
                 ext.library_dirs.append(os.path.join(current_dir, self.build_lib, 'snowflake', 'connector'))
                 ext.extra_link_args += self._get_arrow_lib_as_linker_input()
