@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.0.4(November 13,2019)
+
+    - Increase OCSP Cache expiry time from 24 hours to 120 hours.
+    - Fix pyarrow cxx11 abi compatibility issue
+    - Use new query result format parameter in python tests
+
 - v2.0.3(November 1,2019)
 
     - Fix for ,Pandas fetch API did not handle the case that first chunk is empty correctly.
