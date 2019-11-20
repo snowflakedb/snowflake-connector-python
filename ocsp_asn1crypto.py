@@ -17,7 +17,6 @@ from asn1crypto.core import OctetString, Integer
 from asn1crypto.ocsp import CertId, OCSPRequest, TBSRequest, Requests, \
     Request, OCSPResponse, Version
 from asn1crypto.x509 import Certificate
-from oscrypto import asymmetric
 
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE,
@@ -314,7 +313,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             raise RevocationCheckError(msg=debug_msg, errno=op_er.errno)
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
-        pubkey = asymmetric.load_public_key(cert.public_key).unwrap().dump()
+        pubkey = cert.public_key.unwrap().dump()
         rsakey = RSA.importKey(pubkey)
         signer = PKCS1_v1_5.new(rsakey)
         if signature_algorithm in SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS:

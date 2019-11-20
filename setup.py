@@ -175,7 +175,6 @@ setup(
         'ijson',
         'pyjwt',
         'idna',
-        'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
         'pyasn1>=0.4.0,<0.5.0;python_version<"3.0"',
         'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
