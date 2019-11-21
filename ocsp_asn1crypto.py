@@ -3,6 +3,8 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
+import platform
+import sys
 
 from datetime import datetime, timezone
 
@@ -17,7 +19,6 @@ from asn1crypto.core import OctetString, Integer
 from asn1crypto.ocsp import CertId, OCSPRequest, TBSRequest, Requests, \
     Request, OCSPResponse, Version
 from asn1crypto.x509 import Certificate
-from oscrypto import asymmetric
 
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE,
@@ -27,6 +28,12 @@ from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
 from collections import OrderedDict
 from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
 from os import getenv
+
+# force versioned dylibs onto oscrypto ssl on catalina
+if sys.platform == 'darwin' and platform.mac_ver()[0].startswith('10.15'):
+    from oscrypto import use_openssl
+    use_openssl(libcrypto_path='/usr/lib/libcrypto.35.dylib', libssl_path='/usr/lib/libssl.35.dylib')
+from oscrypto import asymmetric
 
 logger = getLogger(__name__)
 
