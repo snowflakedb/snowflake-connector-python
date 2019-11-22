@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2013-2019 Snowflake Computing
  */
+#include <Python.h>
+#include <arrow/python/api.h>
 #include "CArrowTableIterator.hpp"
 #include "SnowflakeType.hpp"
 #include "Util/time.hpp"
@@ -227,32 +229,23 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
     {
       ret = builder.AppendNull();
     }
-    if(!ret.ok())
-    {
-      std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-          ", errorInfo: %s",
-          dt->id(), ret.message().c_str());
-      logger.error(errorInfo.c_str());
-      PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      return;
-    }
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      dt->id(),  ret.message().c_str());
   }
+
   std::shared_ptr<arrow::Array> doubleArray;
-  builder.Finish(&doubleArray);
+  ret = builder.Finish(&doubleArray);
+  SF_CHECK_ARROW_RC(ret, 
+    "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+    ret.message().c_str());
 
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, doubleField, doubleArray);
-  if(!ret.ok())
-  {
-    std::string errorInfo = Logger::formatString(
-        "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-        ", errorInfo: %s",
-        dt->id(), ret.message().c_str());
-    logger.error(errorInfo.c_str());
-    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-    return;
-  }
+  SF_CHECK_ARROW_RC(ret, 
+    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
+    ", errorInfo: %s",
+    dt->id(), ret.message().c_str());
 }
 
 void CArrowTableIterator::convertTimeColumn(
@@ -288,20 +281,16 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
+        ", errorInfo: %s",
+        dt->id(), ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
-
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else if (scale <= 3)
   {
@@ -324,19 +313,16 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
+        ", errorInfo: %s",
+        dt->id(), ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else if (scale <= 6)
   {
@@ -375,19 +361,15 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+        dt->id(),  ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else
   {
@@ -428,33 +410,23 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+        dt->id(),  ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
 
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  if(!ret.ok())
-  {
-    std::string errorInfo = Logger::formatString(
-        "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-        ", errorInfo: %s",
-        dt->id(), ret.message().c_str());
-    logger.error(errorInfo.c_str());
-    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-    return;
-  }
+  SF_CHECK_ARROW_RC(ret, 
+    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
+    ", errorInfo: %s",
+    dt->id(), ret.message().c_str());
 }
 
 void CArrowTableIterator::convertTimestampColumn(
@@ -499,20 +471,14 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+        dt->id(),  ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
-
+    ret = builder.Finish(&tsArray); SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else if (scale <= 3)
   {
@@ -542,19 +508,15 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+        dt->id(),  ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else if (scale <= 6)
   {
@@ -597,19 +559,15 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+        dt->id(),  ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else
   {
@@ -665,33 +623,23 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      if(!ret.ok())
-      {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-            ", errorInfo: %s",
-            dt->id(), ret.message().c_str());
-        logger.error(errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
-      }
+      SF_CHECK_ARROW_RC(ret, 
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+        dt->id(),  ret.message().c_str());
     }
 
-    builder.Finish(&tsArray);
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
 
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  if(!ret.ok())
-  {
-    std::string errorInfo = Logger::formatString(
-        "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-        ", errorInfo: %s",
-        dt->id(), ret.message().c_str());
-    logger.error(errorInfo.c_str());
-    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-    return;
-  }
+  SF_CHECK_ARROW_RC(ret, 
+    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
+    ", errorInfo: %s",
+    dt->id(), ret.message().c_str());
 }
 
 void CArrowTableIterator::convertTimestampTZColumn(
@@ -713,8 +661,6 @@ void CArrowTableIterator::convertTimestampTZColumn(
           structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH));
   auto fractionArray = std::static_pointer_cast<arrow::Int32Array>(
           structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION));
-  auto timezoneIndexArray = std::static_pointer_cast<arrow::Int32Array>(
-          structArray->GetFieldByName(sf::internal::FIELD_NAME_TIME_ZONE));
 
   if (scale == 0)
   {
@@ -754,7 +700,6 @@ void CArrowTableIterator::convertTimestampTZColumn(
       {
         // two fields
         int64_t epoch = epochArray->Value(rowIdx);
-        int32_t timezoneIndex = timezoneIndexArray->Value(rowIdx);
         // append value
         if (scale == 0)
         {
@@ -778,7 +723,6 @@ void CArrowTableIterator::convertTimestampTZColumn(
         // three fields
         int64_t epoch = epochArray->Value(rowIdx);
         int32_t fraction = fractionArray->Value(rowIdx);
-        int32_t timezoneIndex = timezoneIndexArray->Value(rowIdx);
         if (scale == 0)
         {
           ret = builder.Append(epoch);
@@ -812,31 +756,22 @@ void CArrowTableIterator::convertTimestampTZColumn(
     {
       ret = builder.AppendNull();
     }
-    if(!ret.ok())
-    {
-      std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
-          ", errorInfo: %s",
-          dt->id(), ret.message().c_str());
-      logger.error(errorInfo.c_str());
-      PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      return;
-    }
+    SF_CHECK_ARROW_RC(ret, 
+      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      dt->id(),  ret.message().c_str());
   }
 
-  builder.Finish(&tsArray);
+  ret = builder.Finish(&tsArray);
+  SF_CHECK_ARROW_RC(ret, 
+    "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+    ret.message().c_str());
+
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  if(!ret.ok())
-  {
-    std::string errorInfo = Logger::formatString(
-        "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-        ", errorInfo: %s",
-        dt->id(), ret.message().c_str());
-    logger.error(errorInfo.c_str());
-    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-    return;
-  }
+  SF_CHECK_ARROW_RC(ret, 
+    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
+    ", errorInfo: %s",
+    dt->id(), ret.message().c_str());
 }
 
 bool CArrowTableIterator::convertRecordBatchesToTable()
@@ -845,7 +780,11 @@ bool CArrowTableIterator::convertRecordBatchesToTable()
   if (!m_cTable && !m_cRecordBatches->empty())
   {
     reconstructRecordBatches();
-    arrow::Table::FromRecordBatches(*m_cRecordBatches, &m_cTable);
+    arrow::Status ret = arrow::Table::FromRecordBatches(*m_cRecordBatches, &m_cTable);
+    SF_CHECK_ARROW_RC_AND_RETURN(ret, false,
+      "[Snowflake Exception] arrow failed to build table from batches, errorInfo: %s",
+      ret.message().c_str());
+
     return true;
   }
   return false;
