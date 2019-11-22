@@ -56,8 +56,6 @@ DEFAULT_PARAMETERS = {
     'port': '443',
 }
 
-IS_PUBLIC_CI = os.getenv('TRAVIS') == 'true' or os.getenv('APPVEYOR') == 'True'
-
 
 def help():
     print("""Connection parameter must be specified in parameters.py,
@@ -70,6 +68,18 @@ CONNECTION_PARAMETERS = {
     'schema': 'public',
 }
 """)
+
+
+@pytest.fixture(scope='session')
+def is_public_test():
+    return is_public_testaccount()
+
+
+def is_public_testaccount():
+    db_parameters = get_db_parameters()
+    return os.getenv('TRAVIS') == 'true' or \
+           os.getenv('APPVEYOR') == 'True' or \
+           db_parameters.get('account').startswith('sfctest0')
 
 
 @pytest.fixture(scope='session')
@@ -305,7 +315,7 @@ def negative_db(**kwargs):
     if not kwargs.get(u'converter_class'):
         kwargs[u'converter_class'] = DefaultConverterClass()
     cnx = create_connection(**kwargs)
-    if not IS_PUBLIC_CI:
+    if not is_public_testaccount():
         cnx.cursor().execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
     try:
         yield cnx
@@ -344,5 +354,5 @@ def test_files():
 
 def pytest_runtest_setup(item):
     for _ in item.iter_markers(name="internal"):
-        if IS_PUBLIC_CI:
+        if is_public_testaccount():
             pytest.skip("cannot run on public CI")
