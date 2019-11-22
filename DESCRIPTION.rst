@@ -52,7 +52,7 @@ Release Notes
    
     - Add asn1crypto requirement to mitigate incompatibility change.
 
-- v1.9.0(August 26,2019)
+- v1.9.0(August 26,2019) **REMOVED from pypi**
 
     - Implement converter for all arrow data types in python connector extension
     - Fix arrow error when returning empty result using python connecter
