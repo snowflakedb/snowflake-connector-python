@@ -82,7 +82,14 @@ class SnowflakeCursor(object):
         u(r'alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;'),
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
-    def __init__(self, connection, json_result_class=JsonResult):
+    def __init__(self, connection, use_dict_result=False, json_result_class=JsonResult):
+        """
+        :param connection: connection created this cursor
+        :param use_dict_result: whether use dict result or not. This variable only applied to
+                                arrow result. When result in json, json_result_class will be
+                                honored
+        :param json_result_class: class that used in json result
+        """
         self._connection = connection
 
         self._errorhandler = Error.default_errorhandler
@@ -106,6 +113,7 @@ class SnowflakeCursor(object):
         self._timezone = None
         self._binary_output_format = None
         self._result = None
+        self._use_dict_result = use_dict_result
         self._json_result_class = json_result_class
 
         self._arraysize = 1  # PEP-0249: defaults to 1
@@ -623,7 +631,7 @@ class SnowflakeCursor(object):
 
         if self._query_result_format == 'arrow':
             self.check_can_use_arrow_resultset()
-            self._result = ArrowResult(data, self)
+            self._result = ArrowResult(data, self, use_dict_result=self._use_dict_result)
         else:
             self._result = self._json_result_class(data, self, use_ijson)
 
@@ -944,4 +952,4 @@ class DictCursor(SnowflakeCursor):
     """
 
     def __init__(self, connection):
-        SnowflakeCursor.__init__(self, connection, DictJsonResult)
+        SnowflakeCursor.__init__(self, connection, use_dict_result=True, json_result_class=DictJsonResult)

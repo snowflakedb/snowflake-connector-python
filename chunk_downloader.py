@@ -249,7 +249,7 @@ class SnowflakeChunkDownloader(object):
         handler = JsonBinaryHandler(is_raw_binary_iterator=True,
                                     use_ijson=self._use_ijson) \
             if self._query_result_format == 'json' else \
-            ArrowBinaryHandler(self._cursor.description, self._connection)
+            ArrowBinaryHandler(self._cursor, self._connection)
 
         return self._connection.rest.fetch(
             u'get', url, headers,
@@ -316,8 +316,8 @@ class JsonBinaryHandler(RawBinaryDataHandler):
 
 class ArrowBinaryHandler(RawBinaryDataHandler):
 
-    def __init__(self, meta, connection):
-        self._meta = meta
+    def __init__(self, cursor, connection):
+        self._cursor = cursor
         self._arrow_context = ArrowConverterContext(connection._session_parameters)
 
     """
@@ -326,5 +326,5 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
     def to_iterator(self, raw_data_fd, download_time):
         from .arrow_iterator import PyArrowIterator
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
-        it = PyArrowIterator(gzip_decoder, self._arrow_context)
+        it = PyArrowIterator(gzip_decoder, self._arrow_context, self._cursor._use_dict_result)
         return it
