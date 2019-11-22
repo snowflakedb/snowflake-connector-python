@@ -23,8 +23,7 @@ try:
 except ImportError:
     no_arrow_iterator_ext = True
 
-SQL_ENABLE_ARROW = "alter session set query_result_format='ARROW_FORCE';"
-SQL_ENABLE_ARROW_V2 = "alter session set python_connector_query_result_format='ARROW_FORCE';"
+SQL_ENABLE_ARROW = "alter session set python_connector_query_result_format='ARROW';"
 
 EPSILON = 1e-8
 
@@ -230,7 +229,6 @@ def test_semi_struct(conn_cnx):
         # fetch dataframe with new arrow support
         cursor_table = cnx_table.cursor()
         cursor_table.execute(SQL_ENABLE_ARROW)
-        cursor_table.execute(SQL_ENABLE_ARROW_V2)
         cursor_table.execute(sql_text)
         df_new = cursor_table.fetch_pandas_all()
         col_new = df_new.iloc[0]
@@ -432,7 +430,6 @@ def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='fl
         # fetch dataframe with new arrow support
         cursor_table = cnx_table.cursor()
         cursor_table.execute(SQL_ENABLE_ARROW)
-        cursor_table.execute(SQL_ENABLE_ARROW_V2)
         cursor_table.execute(sql)
 
         # build dataframe
@@ -527,7 +524,6 @@ def test_empty(conn_cnx):
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
         cursor.execute(SQL_ENABLE_ARROW)
-        cursor.execute(SQL_ENABLE_ARROW_V2)
         cursor.execute("select seq4() from table(generator(rowcount=>1)) limit 0")
         assert cursor.fetch_pandas_all() is None, 'the result is not none'
 
@@ -557,7 +553,6 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method='one'):
             # fetch dataframe by fetching row by row
             cursor_row = cnx_row.cursor()
             cursor_row.execute(SQL_ENABLE_ARROW)
-            cursor_row.execute(SQL_ENABLE_ARROW_V2)
             cursor_row.execute(sql)
 
             # build dataframe
@@ -583,7 +578,6 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method='one'):
             # fetch dataframe with new arrow support
             cursor_table = cnx_table.cursor()
             cursor_table.execute(SQL_ENABLE_ARROW)
-            cursor_table.execute(SQL_ENABLE_ARROW_V2)
             cursor_table.execute(sql)
 
             # build dataframe
