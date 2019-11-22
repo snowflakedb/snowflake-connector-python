@@ -33,6 +33,23 @@ namespace sf
 {
 
 /**
+ * A simple struct to contain return data back cython.
+ * PyObject would be nullptr if failed and cause string will be populated
+ */
+class ReturnVal
+{
+public:
+  ReturnVal(PyObject * obj, PyObject *except) :
+    successObj(obj), exception(except)
+  {
+  }
+
+  PyObject * successObj;
+
+  PyObject * exception;
+};
+
+/**
  * Arrow base iterator implementation in C++.
  */
 
@@ -46,7 +63,7 @@ public:
   /**
    * @return a python object which might be current row or an Arrow Table
    */
-  virtual PyObject* next() = 0;
+  virtual std::shared_ptr<ReturnVal> next() = 0;
 
 protected:
    /** list of all record batch in current chunk */

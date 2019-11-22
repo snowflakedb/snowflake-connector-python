@@ -32,7 +32,7 @@ public:
   /**
    * @return a python tuple object which contains all data in current row
    */
-  PyObject* next() override;
+  std::shared_ptr<ReturnVal> next() override;
 
 protected:
   /**
@@ -64,6 +64,9 @@ private:
 
   /** total number of rows inside current record batch */
   int64_t m_rowCountInBatch;
+
+  /** pointer to the current python exception object */
+  py::UniqueRef m_currentPyException;
 
   /** arrow format convert context for the current session */
   PyObject* m_context;
