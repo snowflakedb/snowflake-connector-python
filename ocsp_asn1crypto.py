@@ -20,6 +20,11 @@ from asn1crypto.ocsp import CertId, OCSPRequest, TBSRequest, Requests, \
     Request, OCSPResponse, Version
 from asn1crypto.x509 import Certificate
 
+import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    from oscrypto import asymmetric
+
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE,
     ER_INVALID_OCSP_RESPONSE_CODE)
@@ -33,7 +38,6 @@ from os import getenv
 if sys.platform == 'darwin' and platform.mac_ver()[0].startswith('10.15'):
     from oscrypto import use_openssl
     use_openssl(libcrypto_path='/usr/lib/libcrypto.35.dylib', libssl_path='/usr/lib/libssl.35.dylib')
-from oscrypto import asymmetric
 
 logger = getLogger(__name__)
 
