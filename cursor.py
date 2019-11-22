@@ -15,6 +15,7 @@ from six import u
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (
     FIELD_NAME_TO_ID,
+    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
 )
 from .errorcode import (ER_UNSUPPORTED_METHOD,
                         ER_CURSOR_IS_CLOSED,
@@ -314,6 +315,18 @@ class SnowflakeCursor(object):
                             u"It must be dict.",
                     u'errno': ER_INVALID_VALUE,
                 })
+
+        # check if current installation include arrow extension or not,
+        # if not, we set statement level query result format to be JSON
+        if not CAN_USE_ARROW_RESULT:
+            if statement_params is None:
+                statement_params = {PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: 'JSON'}
+            else:
+                result_format_val = statement_params.get(PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT)
+                if str(result_format_val).upper() == u'ARROW':
+                    self.check_can_use_arrow_resultset()
+                elif result_format_val is None:
+                    statement_params[PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT] = 'JSON'
 
         self._sequence_counter = self._connection._next_sequence_counter()
         self._request_id = uuid.uuid4()
