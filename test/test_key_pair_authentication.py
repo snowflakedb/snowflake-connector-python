@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-import os
-
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -14,16 +12,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
 
-NO_ACCOUNTADMIN_PRIV = os.getenv('TRAVIS') == 'true' or \
-                       os.getenv('APPVEYOR') == 'True' or \
-                       os.getenv('sf_account') == 'testaccount5'
 
+def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
+    if is_public_test:
+        pytest.skip('This test requires ACCOUNTADMIN privilege to set the public key')
 
-@pytest.mark.skipif(
-    NO_ACCOUNTADMIN_PRIV,
-    reason="Change user's public key requires accountadmin privilege"
-)
-def test_different_key_length(request, conn_cnx, db_parameters):
     db_config = {
         'protocol': db_parameters['protocol'],
         'account': db_parameters['account'],
@@ -63,11 +56,10 @@ def test_different_key_length(request, conn_cnx, db_parameters):
         snowflake.connector.connect(**db_config)
 
 
-@pytest.mark.skipif(
-    NO_ACCOUNTADMIN_PRIV,
-    reason="Change user's public key requires accountadmin privilege"
-)
-def test_multiple_key_pair(request, conn_cnx, db_parameters):
+def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
+    if is_public_test:
+        pytest.skip('This test requires ACCOUNTADMIN privilege to set the public key')
+
     db_config = {
         'protocol': db_parameters['protocol'],
         'account': db_parameters['account'],
