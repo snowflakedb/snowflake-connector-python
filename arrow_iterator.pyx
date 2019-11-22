@@ -12,8 +12,8 @@ from libcpp cimport bool as c_bool
 from libcpp.memory cimport shared_ptr
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
-from .errors import (Error, OperationalError)
-from .errorcode import ER_FAILED_TO_READ_ARROW_STREAM
+from .errors import (Error, OperationalError, InterfaceError)
+from .errorcode import (ER_FAILED_TO_READ_ARROW_STREAM, ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE)
 
 logger = getLogger(__name__)
 
@@ -27,8 +27,13 @@ ROW_UNIT, TABLE_UNIT, EMPTY_UNIT = 'row', 'table', ''
 
 
 cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
+    cdef cppclass ReturnVal:
+        PyObject * successObj;
+
+        PyObject * exception;
+
     cdef cppclass CArrowIterator:
-        PyObject* next();
+        shared_ptr[ReturnVal] next();
 
 
 cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
@@ -132,11 +137,12 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object context
     cdef CArrowIterator* cIterator
     cdef str unit
-    cdef PyObject* cret
+    cdef shared_ptr[ReturnVal] cret
     cdef vector[shared_ptr[CRecordBatch]] batches
     cdef object use_dict_result
+    cdef object cursor
 
-    def __cinit__(self, object py_inputstream, object arrow_context, object use_dict_result):
+    def __cinit__(self, object cursor, object py_inputstream, object arrow_context, object use_dict_result):
         cdef shared_ptr[InputStream] input_stream
         cdef shared_ptr[CRecordBatchReader] reader
         cdef shared_ptr[CRecordBatch] record_batch
@@ -144,8 +150,8 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         cdef CStatus ret = CRecordBatchStreamReader.Open(input_stream.get(), &reader)
         if not ret.ok():
             Error.errorhandler_wrapper(
-                None,
-                None,
+                cursor.connection,
+                cursor,
                 OperationalError,
                 {
                     u'msg': u'Failed to open arrow stream: ' + ret.message(),
@@ -156,8 +162,8 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             ret = reader.get().ReadNext(&record_batch)
             if not ret.ok():
                 Error.errorhandler_wrapper(
-                    None,
-                    None,
+                    cursor.connection,
+                    cursor,
                     OperationalError,
                     {
                         u'msg': u'Failed to read next arrow batch: ' + ret.message(),
@@ -175,6 +181,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.cIterator = NULL
         self.unit = ''
         self.use_dict_result = use_dict_result
+        self.cursor = cursor
 
     def __dealloc__(self):
         del self.cIterator
@@ -182,11 +189,16 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     def __next__(self):
         self.cret = self.cIterator.next()
 
-        if not self.cret:
-            logger.error("Internal error from CArrowIterator\n")
+        if not self.cret.get().successObj:
+            msg = u'Failed to convert current row, cause: ' + str(<object>self.cret.get().exception)
+            Error.errorhandler_wrapper(self.cursor.connection, self.cursor, InterfaceError,
+                                       {
+                                           u'msg': msg,
+                                           u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
+                                       })
             # it looks like this line can help us get into python and detect the global variable immediately
             # however, this log will not show up for unclear reason
-        ret = <object>self.cret
+        ret = <object>self.cret.get().successObj
 
         if ret is None:
             raise StopIteration

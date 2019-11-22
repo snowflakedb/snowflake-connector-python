@@ -14,6 +14,21 @@
 #include "TimeConverter.hpp"
 #include <string>
 
+#define SF_CHECK_PYTHON_ERR() \
+  if (py::checkPyError())\
+  {\
+    PyObject *type, * val, *traceback;\
+    PyErr_Fetch(&type, &val, &traceback);\
+    PyErr_Clear();\
+    m_currentPyException.reset(val);\
+\
+    Py_XDECREF(type);\
+    Py_XDECREF(traceback);\
+\
+    return std::make_shared<ReturnVal>(nullptr, m_currentPyException.get());\
+  }
+
+
 namespace sf
 {
 
@@ -31,18 +46,15 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, std::vector<std::sha
                m_columnCount);
 }
 
-PyObject* CArrowChunkIterator::next()
+std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
 {
   m_rowIndexInBatch++;
 
   if (m_rowIndexInBatch < m_rowCountInBatch)
   {
     this->createRowPyObject();
-    if (py::checkPyError())
-    {
-      return nullptr;
-    }
-    return m_latestReturnedRow.get();
+    SF_CHECK_PYTHON_ERR()
+    return std::make_shared<ReturnVal>(m_latestReturnedRow.get(), nullptr);
   }
   else
   {
@@ -52,26 +64,21 @@ PyObject* CArrowChunkIterator::next()
       m_rowIndexInBatch = 0;
       m_rowCountInBatch = (*m_cRecordBatches)[m_currentBatchIndex]->num_rows();
       this->initColumnConverters();
-      if (py::checkPyError())
-      {
-        return nullptr;
-      }
+      SF_CHECK_PYTHON_ERR()
 
       logger.debug("Current batch index: %d, rows in current batch: %d",
                   m_currentBatchIndex, m_rowCountInBatch);
 
       this->createRowPyObject();
-      if (py::checkPyError())
-      {
-        return nullptr;
-      }
-      return m_latestReturnedRow.get();
+      SF_CHECK_PYTHON_ERR()
+
+      return std::make_shared<ReturnVal>(m_latestReturnedRow.get(), nullptr);
     }
   }
 
   /** It looks like no one will decrease the ref of this Py_None, so we don't
    * increament the ref count here */
-  return Py_None;
+  return std::make_shared<ReturnVal>(Py_None, nullptr);
 }
 
 void CArrowChunkIterator::createRowPyObject()

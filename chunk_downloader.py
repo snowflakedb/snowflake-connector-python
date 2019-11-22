@@ -326,5 +326,5 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
     def to_iterator(self, raw_data_fd, download_time):
         from .arrow_iterator import PyArrowIterator
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode='r')
-        it = PyArrowIterator(gzip_decoder, self._arrow_context, self._cursor._use_dict_result)
+        it = PyArrowIterator(self._cursor, gzip_decoder, self._arrow_context, self._cursor._use_dict_result)
         return it

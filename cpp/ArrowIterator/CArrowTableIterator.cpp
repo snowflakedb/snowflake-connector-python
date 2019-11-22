@@ -137,17 +137,17 @@ CArrowTableIterator::CArrowTableIterator(PyObject* context, std::vector<std::sha
   Py_XDECREF(tz);
 }
 
-PyObject* CArrowTableIterator::next()
+std::shared_ptr<ReturnVal> CArrowTableIterator::next()
 {
   bool firstDone = this->convertRecordBatchesToTable();
   if (firstDone && m_cTable)
   {
     m_pyTableObjRef.reset(arrow::py::wrap_table(m_cTable));
-    return m_pyTableObjRef.get();
+    return std::make_shared<ReturnVal>(m_pyTableObjRef.get(), nullptr);
   }
   else
   {
-    return Py_None;
+    return std::make_shared<ReturnVal>(Py_None, nullptr);
   }
 }
 

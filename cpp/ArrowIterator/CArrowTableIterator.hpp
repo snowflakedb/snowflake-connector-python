@@ -32,7 +32,7 @@ public:
   /**
    * @return an arrow table containing all data in all record batches
    */
-  PyObject* next() override;
+  std::shared_ptr<ReturnVal> next() override;
 
 private:
   /* arrow table of all record batches in current chunk */
