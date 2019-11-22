@@ -12,28 +12,24 @@ from logging import getLogger
 import pytest
 
 
-@pytest.mark.skipif(
-    'AWS_ACCESS_KEY_ID' not in os.environ,
-    reason="Snowflake admin account is not accessible."
-)
 def test_put_get_small_data_via_user_stage(
-        tmpdir, test_files, conn_cnx, db_parameters):
+        is_public_test, tmpdir, test_files, conn_cnx, db_parameters):
     """
     [s3] Put and Get Small Data via User Stage
     """
+    if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
+        pytest.skip('This test requires to change the internal parameter')
     _put_get_user_stage(tmpdir, test_files, conn_cnx, db_parameters,
                         number_of_files=5, number_of_lines=10)
 
 
-@pytest.mark.skipif(
-    'AWS_ACCESS_KEY_ID' not in os.environ,
-    reason="Snowflake admin account is not accessible."
-)
-def test_put_get_large_data_via_user_stage(tmpdir, test_files, conn_cnx,
-                                           db_parameters):
+def test_put_get_large_data_via_user_stage(
+        is_public_test, tmpdir, test_files, conn_cnx, db_parameters):
     """
     [s3] Put and Get Large Data via User Stage
     """
+    if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
+        pytest.skip('This test requires to change the internal parameter')
     _put_get_user_stage(tmpdir, test_files, conn_cnx, db_parameters,
                         number_of_files=2,
                         number_of_lines=200000)
@@ -142,17 +138,16 @@ credentials=(
                     name=db_parameters['name']))
 
 
-@pytest.mark.skipif(
-    'AWS_ACCESS_KEY_ID' not in os.environ,
-    reason="Snowflake admin account is not accessible."
-)
-def test_put_get_duplicated_data_user_stage(tmpdir, test_files, conn_cnx,
+def test_put_get_duplicated_data_user_stage(is_public_test, tmpdir, test_files, conn_cnx,
                                             db_parameters,
                                             number_of_files=5,
                                             number_of_lines=100):
     """
     [s3] Put and Get Duplicated Data using User Stage
     """
+    if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
+        pytest.skip('This test requires to change the internal parameter')
+
     logger = getLogger(__name__)
     assert 'AWS_ACCESS_KEY_ID' in os.environ, 'AWS_ACCESS_KEY_ID is missing'
     assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
@@ -302,17 +297,12 @@ credentials=(
                     name=db_parameters['name']))
 
 
-@pytest.mark.skipif(
-    'AWS_ACCESS_KEY_ID' not in os.environ,
-    reason="Snowflake admin account is not accessible."
-)
-def test_get_data_user_stage(tmpdir, conn_cnx, db_parameters):
+def test_get_data_user_stage(is_public_test, tmpdir, conn_cnx, db_parameters):
     """
     SNOW-20927: get failed with 404 error
     """
-    assert 'AWS_ACCESS_KEY_ID' in os.environ, 'AWS_ACCESS_KEY_ID is missing'
-    assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
-        'AWS_SECRET_ACCESS_KEY is missing'
+    if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
+        pytest.skip('This test requires to change the internal parameter')
 
     default_s3bucket = os.getenv('SF_AWS_USER_BUCKET',
                                  "sfc-dev1-regression/{0}/reg".format(
