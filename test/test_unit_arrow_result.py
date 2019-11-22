@@ -70,7 +70,8 @@ def test_fdb_result_data_empty_row_fetch():
     cur = MockCursor(con)
     res = ArrowResult(raw_response,
                       cur,
-                      MockDownloader(arrow_stream))
+                      use_dict_result=False,
+                      _chunk_downloader=MockDownloader(arrow_stream))
     cur._query_result_format = 'arrow'
     cur._result = res
 
@@ -130,7 +131,8 @@ def test_fdb_result_data_empty_pandas_fetch_all():
     cur = MockCursor(con)
     res = ArrowResult(raw_response,
                       cur,
-                      MockDownloader(arrow_stream))
+                      use_dict_result=False,
+                      _chunk_downloader=MockDownloader(arrow_stream))
     cur._query_result_format = 'arrow'
     cur._result = res
 
@@ -191,7 +193,8 @@ def test_fdb_result_data_empty_pandas_fetch_by_batch():
     cur = MockCursor(con)
     res = ArrowResult(raw_response,
                       cur,
-                      MockDownloader(arrow_stream))
+                      use_dict_result=False,
+                      _chunk_downloader=MockDownloader(arrow_stream))
     cur._query_result_format = 'arrow'
     cur._result = res
 
@@ -258,7 +261,7 @@ class MockChunk:
     def __init__(self, data):
         session_parameters = {"TIMEZONE": "America/Los_Angeles"}
         self.result_data = PyArrowIterator(data,
-                                           ArrowConverterContext(session_parameters))
+                                           ArrowConverterContext(session_parameters), False)
 
 
 def generate_data(pyarrow_type, column_meta, source_data_generator, batch_count, batch_row_count):
