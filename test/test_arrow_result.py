@@ -15,9 +15,6 @@ except ImportError:
     no_arrow_iterator_ext = True
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_tinyint(conn_cnx):
     cases = [0, 1, -1, 127, -128]
     table = "test_arrow_tiny_int"
@@ -31,9 +28,6 @@ def test_select_tinyint(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_scaled_tinyint(conn_cnx):
     cases = [0.0, 0.11, -0.11, 1.27, -1.28]
     table = "test_arrow_tiny_int"
@@ -47,9 +41,6 @@ def test_select_scaled_tinyint(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_smallint(conn_cnx):
     cases = [0, 1, -1, 127, -128, 128, -129, 32767, -32768]
     table = "test_arrow_small_int"
@@ -63,9 +54,6 @@ def test_select_smallint(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_scaled_smallint(conn_cnx):
     cases = ["0", "2.0", "-2.0", "32.767", "-32.768"]
     table = "test_arrow_small_int"
@@ -79,9 +67,6 @@ def test_select_scaled_smallint(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_int(conn_cnx):
     cases = [0, 1, -1, 127, -128, 128, -129, 32767, -32768, 32768, -32769, 2147483647, -2147483648]
     table = "test_arrow_int"
@@ -95,9 +80,6 @@ def test_select_int(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_scaled_int(conn_cnx):
     cases = ["0", "0.123456789", "-0.123456789", "0.2147483647", "-0.2147483647"]
     table = "test_arrow_int"
@@ -111,9 +93,6 @@ def test_select_scaled_int(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_bigint(conn_cnx):
     cases = [0, 1, -1, 127, -128, 128, -129, 32767, -32768, 32768, -32769, 2147483647, -2147483648, 2147483648,
              -2147483649, 9223372036854775807, -9223372036854775808]
@@ -128,9 +107,6 @@ def test_select_bigint(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_scaled_bigint(conn_cnx):
     cases = ["0",
              "0.000000000000000001", "-0.000000000000000001", "0.000000000000000127", "-0.000000000000000128",
@@ -148,9 +124,6 @@ def test_select_scaled_bigint(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_decimal(conn_cnx):
     cases = [
         "10000000000000000000000000000000000000",
@@ -168,9 +141,6 @@ def test_select_decimal(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_scaled_decimal(conn_cnx):
     cases = ["0",
              "0.000000000000000001", "-0.000000000000000001", "0.000000000000000127", "-0.000000000000000128",
@@ -188,9 +158,6 @@ def test_select_scaled_decimal(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_large_scaled_decimal(conn_cnx):
     cases = [
         "1.0000000000000000000000000000000000000",
@@ -208,9 +175,6 @@ def test_select_large_scaled_decimal(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_boolean(conn_cnx):
     cases = [
         "true",
@@ -251,13 +215,10 @@ def test_select_double_precision(conn_cnx):
     sql_text = "select * from {}".format(table)
     row_count = len(cases)
     col_count = 1
-    iterate_over_test_chunk("boolean", conn_cnx, sql_text, row_count, col_count, expected=cases)
+    iterate_over_test_chunk("float", conn_cnx, sql_text, row_count, col_count, expected=cases)
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_semi_structure(conn_cnx):
     sql_text = """select array_construct(10, 20, 30), 
         array_construct(null, 'hello', 3::double, 4, 5), 
@@ -273,9 +234,6 @@ def test_select_semi_structure(conn_cnx):
     iterate_over_test_chunk("struct", conn_cnx, sql_text, row_count, col_count)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_time(conn_cnx):
     for scale in range(10):
         select_time_with_scale(conn_cnx, scale)
@@ -305,13 +263,9 @@ def select_time_with_scale(conn_cnx, scale):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
-def select_date(conn_cnx):
+def test_select_date(conn_cnx):
     cases = [
         "2016-07-23",
-        "0000-01-01",
         "1970-01-01",
         "1969-12-31",
         "0001-01-01",
@@ -319,7 +273,7 @@ def select_date(conn_cnx):
     ]
     table = "test_arrow_time"
     column = "(a date)"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(NULL), ('" + "'),('".join([str(i) for i in cases]) + "'), (NULL)"
     init(conn_cnx, table, column, values)
     sql_text = "select * from {}".format(table)
     row_count = len(cases) + 2
@@ -328,9 +282,6 @@ def select_date(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 @pytest.mark.parametrize("scale, type",
                          itertools.product(
                              [i for i in range(10)],
@@ -362,9 +313,6 @@ def test_select_timestamp_with_scale(conn_cnx, scale, type):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_with_string(conn_cnx):
     col_count = 2
     row_count = 50000
@@ -375,9 +323,6 @@ def test_select_with_string(conn_cnx):
     iterate_over_test_chunk("string", conn_cnx, sql_text, row_count, col_count)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_with_bool(conn_cnx):
     col_count = 2
     row_count = 50000
@@ -387,9 +332,6 @@ def test_select_with_bool(conn_cnx):
     iterate_over_test_chunk("bool", conn_cnx, sql_text, row_count, col_count)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_with_float(conn_cnx):
     col_count = 2
     row_count = 50000
@@ -406,9 +348,6 @@ def test_select_with_float(conn_cnx):
     iterate_over_test_chunk("float", conn_cnx, sql_text, row_count, col_count, eps=10**(-pow_val+1))
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_with_empty_resultset(conn_cnx):
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
@@ -419,9 +358,6 @@ def test_select_with_empty_resultset(conn_cnx):
         assert cursor.fetchone() is None
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
 def test_select_with_large_resultset(conn_cnx):
     col_count = 5
     row_count = 1000000
