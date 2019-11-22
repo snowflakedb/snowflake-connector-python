@@ -11,6 +11,8 @@
 """
 OCSP Mode: FAIL_OPEN, FAIL_CLOSED or INSECURE
 """
+from six import wraps
+
 from .constants import OCSPMode
 
 FEATURE_OCSP_MODE = OCSPMode.FAIL_OPEN
@@ -37,6 +39,7 @@ import requests.packages.urllib3.util.ssl_ as ssl_
 import requests.packages.urllib3.connection as connection_
 
 from .compat import PY2
+from .compat import get_args
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
 from .ssl_wrap_util import wait_for_read, wait_for_write
@@ -367,14 +370,17 @@ def _verify_callback(cnx, x509, err_no, err_depth, return_code):
     return err_no == 0
 
 
-def ssl_wrap_socket_with_ocsp(
-        sock, keyfile=None, certfile=None, ca_certs=None,
-        ca_cert_dir=None, server_hostname=None, ssl_context=None):
+@wraps(ssl_.ssl_wrap_socket)
+def ssl_wrap_socket_with_ocsp(*args, **kwargs):
+    # Manipulate necessary parameters
+    if 'ssl_context' in kwargs:
+        del kwargs['ssl_context']  # force urllib context
 
-    ret = ssl_.ssl_wrap_socket(
-        sock, keyfile=keyfile, certfile=certfile,
-        ca_certs=ca_certs, ca_cert_dir=ca_cert_dir,
-        server_hostname=server_hostname)
+    ret = ssl_.ssl_wrap_socket(*args, **kwargs)
+
+    hostname_index = get_args(ssl_.ssl_wrap_socket).args.index('server_hostname')
+    server_hostname = args[hostname_index] if len(args) > hostname_index else kwargs.get('server_hostname', None)
+
     global FEATURE_OCSP_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 

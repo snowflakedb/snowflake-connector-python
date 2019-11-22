@@ -163,7 +163,7 @@ setup(
         'boto3>=1.4.4,<1.11.0',
         'botocore>=1.5.0,<1.14.0',
         'requests<2.23.0',
-        'urllib3<1.25.0',
+        'urllib3<1.26.0,>=.1.20',
         'certifi',
         'future',
         'six',
