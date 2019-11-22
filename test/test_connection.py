@@ -635,3 +635,14 @@ class ExecPrivatelinkThread(threading.Thread):
             self.bucket.put("Fail")
         else:
             self.bucket.put("Success")
+
+
+def test_another_site(db_parameters):
+    import urllib3
+
+    def get(url):
+        pool_manager = urllib3.PoolManager()
+        res = pool_manager.request('GET', url)
+        return res.status
+
+    assert get('https://wikipedia.org') == 200
