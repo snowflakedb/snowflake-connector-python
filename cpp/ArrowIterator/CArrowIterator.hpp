@@ -4,15 +4,30 @@
 #ifndef PC_ARROWITERATOR_HPP
 #define PC_ARROWITERATOR_HPP
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
 #include <Python.h>
 #include <vector>
 #include <arrow/python/platform.h>
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
-#pragma GCC diagnostic pop
 #include "logging.hpp"
+
+#define SF_CHECK_ARROW_RC(arrow_status, format_string, ...) \
+  if (!arrow_status.ok()) \
+  { \
+    std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
+    logger.error(errorInfo.c_str()); \
+    PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
+    return; \
+  }
+
+#define SF_CHECK_ARROW_RC_AND_RETURN(arrow_status, ret_val, format_string, ...) \
+  if (!arrow_status.ok()) \
+  { \
+    std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
+    logger.error(errorInfo.c_str()); \
+    PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
+    return ret_val; \
+  }
 
 namespace sf
 {

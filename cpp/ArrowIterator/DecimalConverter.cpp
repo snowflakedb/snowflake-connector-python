@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2013-2019 Snowflake Computing
  */
+#include <Python.h>
 #include <string>
-
 #include "DecimalConverter.hpp"
 #include "Python/Helpers.hpp"
 
