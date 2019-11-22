@@ -11,7 +11,9 @@
 """
 OCSP Mode: FAIL_OPEN, FAIL_CLOSED or INSECURE
 """
+import certifi
 from six import wraps
+from urllib3.contrib.pyopenssl import PyOpenSSLContext
 
 from .constants import OCSPMode
 
@@ -372,14 +374,28 @@ def _verify_callback(cnx, x509, err_no, err_depth, return_code):
 
 @wraps(ssl_.ssl_wrap_socket)
 def ssl_wrap_socket_with_ocsp(*args, **kwargs):
-    # Manipulate necessary parameters
-    if 'ssl_context' in kwargs:
-        del kwargs['ssl_context']  # force urllib context
-
-    ret = ssl_.ssl_wrap_socket(*args, **kwargs)
-
+    # Extract host_name
     hostname_index = get_args(ssl_.ssl_wrap_socket).args.index('server_hostname')
     server_hostname = args[hostname_index] if len(args) > hostname_index else kwargs.get('server_hostname', None)
+    # Remove context if present
+    ssl_context_index = get_args(ssl_.ssl_wrap_socket).args.index('ssl_context')
+    context_in_args = len(args) > ssl_context_index
+    ssl_context = args[hostname_index] if context_in_args else kwargs.get('ssl_context', None)
+    if not isinstance(ssl_context, PyOpenSSLContext):
+        # Create new default context
+        if context_in_args:
+            new_args = list(args)
+            new_args[ssl_context_index] = None
+            args = tuple(new_args)
+        else:
+            del kwargs['ssl_context']
+    # Fix ca certs location
+    ca_certs_index = get_args(ssl_.ssl_wrap_socket).args.index('ca_certs')
+    ca_certs_in_args = len(args) > ca_certs_index
+    if not ca_certs_in_args and not kwargs.get('ca_certs'):
+        kwargs['ca_certs'] = certifi.where()
+
+    ret = ssl_.ssl_wrap_socket(*args, **kwargs)
 
     global FEATURE_OCSP_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
