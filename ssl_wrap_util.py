@@ -115,11 +115,7 @@ else:
                 elif hasattr(e, "args"):
                     errcode = e.args[0]
 
-                # Also test for the Windows equivalent of EINTR.
-                is_interrupt = (errcode == errno.EINTR or (hasattr(errno, "WSAEINTR") and
-                                                           errcode == errno.WSAEINTR))
-
-                if is_interrupt:
+                if _is_interrupted(errcode):
                     if expires is not None:
                         current_time = monotonic()
                         if current_time > expires:
@@ -134,6 +130,9 @@ else:
                     raise
         return result
 
+    def _is_interrupted(errcode):
+        # Also test for the Windows equivalent of EINTR.
+        errcode == errno.EINTR or hasattr(errno, "WSAEINTR") and errcode == errno.WSAEINTR
 
 SelectorKey = namedtuple('SelectorKey', ['fileobj', 'fd', 'events', 'data'])
 
