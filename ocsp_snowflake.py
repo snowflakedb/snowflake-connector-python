@@ -1214,8 +1214,7 @@ class SnowflakeOCSP(object):
                 return
 
             try:
-                ca_bundle = (environ.get('REQUESTS_CA_BUNDLE') or
-                             environ.get('CURL_CA_BUNDLE'))
+                ca_bundle = environ.get('REQUESTS_CA_BUNDLE') or environ.get('CURL_CA_BUNDLE')
                 if ca_bundle and path.exists(ca_bundle):
                     # if the user/application specifies cabundle.
                     self.read_cert_bundle(ca_bundle)
