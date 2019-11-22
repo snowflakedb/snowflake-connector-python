@@ -216,7 +216,8 @@ setup(
             'keyring!=16.1.0'
         ],
         "pandas": [
-            'pyarrow>=0.14.0,<0.15.0;python_version>"3.4"',
+            'pyarrow>=0.15.1,<0.16.0;python_version>"3.4"',
+            'pandas<1.0.0;python_version>"3.4"',
         ]
     },
 
