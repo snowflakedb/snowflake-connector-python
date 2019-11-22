@@ -14,6 +14,8 @@ from .constants import (
     SHA256_DIGEST, ResultStatus, FileHeader, HTTP_HEADER_VALUE_OCTET_STREAM)
 from .encryption_util import (EncryptionMetadata)
 
+logger = getLogger(__name__)
+
 """
 Azure Location: Azure container name + path
 """
@@ -79,8 +81,6 @@ class SnowflakeAzureUtil(object):
         :return:  FileHeader if no error,
         u'result_status'] for status.
         """
-
-        logger = getLogger(__name__)
         client = meta[u'client']
         azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
             meta[u'stage_info'][u'location'])
@@ -100,8 +100,7 @@ class SnowflakeAzureUtil(object):
                 status_code=err.status_code,
                 ex_representation=str(err)
             ))
-            if err.status_code == 403 and ("Signature not valid in the specified time frame" in str(err) or
-                                           "Server failed to authenticate the request." in str(err)):
+            if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None
@@ -130,8 +129,15 @@ class SnowflakeAzureUtil(object):
         )
 
     @staticmethod
+    def _detect_azure_token_expire_error(err):
+        if err.status_code != 403:
+            return False
+        errstr = str(err)
+        return "Signature not valid in the specified time frame" in errstr or \
+               "Server failed to authenticate the request." in errstr
+
+    @staticmethod
     def upload_file(data_file, meta, encryption_metadata, max_concurrency):
-        logger = getLogger(__name__)
         try:
             azure_metadata = {
                 u'sfcdigest': meta[SHA256_DIGEST],
@@ -197,8 +203,7 @@ class SnowflakeAzureUtil(object):
                 status_code=err.status_code,
                 ex_representation=str(err)
             ))
-            if err.status_code == 403 and ("Signature not valid in the specified time frame" in str(err) or
-                                           "Server failed to authenticate the request." in str(err)):
+            if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None
@@ -210,7 +215,6 @@ class SnowflakeAzureUtil(object):
 
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
-        logger = getLogger(__name__)
         try:
             azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
                 meta[u'stage_info'][u'location'])
@@ -246,8 +250,7 @@ class SnowflakeAzureUtil(object):
                 status_code=err.status_code,
                 ex_representation=str(err)
             ))
-            if (err.status_code == 403 and ("Signature not valid in the specified time frame" in str(err) or
-                                            "Server failed to authenticate the request." in str(err))):
+            if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
                 logger.debug(u"AZURE Token expired. Renew and retry")
                 meta[u'result_status'] = ResultStatus.RENEW_TOKEN
                 return None

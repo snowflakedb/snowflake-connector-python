@@ -6,7 +6,10 @@
 import logging
 import re
 
-import ijson
+try:
+    import ijson
+except:
+    ijson = None
 
 COMMENT_PATTERN_RE = re.compile(r'^\s*\-\-')
 EMPTY_LINE_RE = re.compile(r'^\s*$')
@@ -171,6 +174,8 @@ def split_rows_from_stream(stream):
     """
     Splits into rows from a stream object. Generator.
     """
+    if not ijson:
+        raise Exception("install ijson")
     row = []
     in_row = False
     for prefix, event, value in ijson.parse(stream):
