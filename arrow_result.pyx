@@ -6,7 +6,6 @@
 # cython: language_level=3
 
 from base64 import b64decode
-from libcpp cimport bool
 import io
 from logging import getLogger
 from .telemetry import TelemetryField
@@ -57,7 +56,8 @@ cdef class ArrowResult:
         if rowset_b64:
             arrow_bytes = b64decode(rowset_b64)
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
-            self._current_chunk_row = PyArrowIterator(io.BytesIO(arrow_bytes), self._arrow_context, self._use_dict_result)
+            self._current_chunk_row = PyArrowIterator(self._cursor, io.BytesIO(arrow_bytes),
+                                                      self._arrow_context, self._use_dict_result)
         else:
             logger.debug("Data from first gs response is empty")
             self._current_chunk_row = EmptyPyArrowIterator()

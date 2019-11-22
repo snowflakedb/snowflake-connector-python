@@ -260,7 +260,7 @@ class MockDownloader:
 class MockChunk:
     def __init__(self, data):
         session_parameters = {"TIMEZONE": "America/Los_Angeles"}
-        self.result_data = PyArrowIterator(data,
+        self.result_data = PyArrowIterator(None, data,
                                            ArrowConverterContext(session_parameters), False)
 
 

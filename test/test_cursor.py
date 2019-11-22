@@ -8,6 +8,7 @@ import json
 import os
 import time
 from datetime import datetime
+from sys import platform
 
 import pytest
 import pytz
@@ -835,11 +836,17 @@ def test_close_twice(conn_testaccount):
     conn_testaccount.close()
 
 
-def test_fetch_out_of_range_timestamp_value(conn):
-    with conn() as cnx:
-        cur = cnx.cursor()
-        cur.execute("""
-select '12345-01-02'::timestamp_ntz
+@pytest.mark.skipif(not platform.startswith('linux'), reason="""
+Running tests only in linux env. Once 3.52.2 is deployed to preprod2,
+we can remove this skip and running this tests on all platform
 """)
-        with pytest.raises(errors.InterfaceError):
-            cur.fetchone()
+def test_fetch_out_of_range_timestamp_value(conn):
+    for result_format in ['arrow', 'json']:
+        with conn() as cnx:
+            cur = cnx.cursor()
+            cur.execute("alter session set python_connector_query_result_format='{}'".format(result_format))
+            cur.execute("""
+    select '12345-01-02'::timestamp_ntz
+    """)
+            with pytest.raises(errors.InterfaceError):
+                cur.fetchone()
