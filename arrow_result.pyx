@@ -6,6 +6,7 @@
 # cython: language_level=3
 
 from base64 import b64decode
+from libcpp cimport bool
 import io
 from logging import getLogger
 from .telemetry import TelemetryField
@@ -35,11 +36,14 @@ cdef class ArrowResult:
         object _chunk_downloader
         object _arrow_context
         str _iter_unit
+        object _use_dict_result
 
-    def __init__(self, raw_response, cursor, _chunk_downloader=None):
+
+    def __init__(self, raw_response, cursor, use_dict_result=False, _chunk_downloader=None):
         self._reset()
         self._cursor = cursor
         self._connection = cursor.connection
+        self._use_dict_result = use_dict_result
         self._chunk_info(raw_response, _chunk_downloader)
 
     def _chunk_info(self, data, _chunk_downloader=None):
@@ -53,10 +57,10 @@ cdef class ArrowResult:
         if rowset_b64:
             arrow_bytes = b64decode(rowset_b64)
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
-            self._current_chunk_row = PyArrowIterator(io.BytesIO(arrow_bytes), self._arrow_context)
+            self._current_chunk_row = PyArrowIterator(io.BytesIO(arrow_bytes), self._arrow_context, self._use_dict_result)
         else:
             logger.debug("Data from first gs response is empty")
-            self._current_chunk_row = EmptyPyArrowIterator(None, None)
+            self._current_chunk_row = EmptyPyArrowIterator()
         self._iter_unit = EMPTY_UNIT
 
         if u'chunks' in data:
@@ -127,7 +131,7 @@ cdef class ArrowResult:
                             self._chunk_downloader._total_millis_parsing_chunks)
                     self._chunk_downloader = None
                     self._chunk_count = 0
-                    self._current_chunk_row = EmptyPyArrowIterator(None, None)
+                    self._current_chunk_row = EmptyPyArrowIterator()
                     is_done = True
 
             if is_done:
@@ -149,7 +153,7 @@ cdef class ArrowResult:
     def _reset(self):
         self.total_row_index = -1  # last fetched number of rows
         self._current_chunk_row_count = 0
-        self._current_chunk_row = EmptyPyArrowIterator(None, None)
+        self._current_chunk_row = EmptyPyArrowIterator()
         self._chunk_index = 0
 
         if hasattr(self, u'_chunk_count') and self._chunk_count > 0 and \
@@ -208,7 +212,7 @@ cdef class ArrowResult:
                         self._chunk_downloader._total_millis_parsing_chunks)
                 self._chunk_downloader = None
                 self._chunk_count = 0
-                self._current_chunk_row = EmptyPyArrowIterator(None, None)
+                self._current_chunk_row = EmptyPyArrowIterator()
         finally:
             if self._cursor._first_chunk_time:
                 logger.info("fetching data into pandas dataframe done")

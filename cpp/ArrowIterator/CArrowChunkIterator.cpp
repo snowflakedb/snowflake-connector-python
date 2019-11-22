@@ -37,7 +37,7 @@ PyObject* CArrowChunkIterator::next()
 
   if (m_rowIndexInBatch < m_rowCountInBatch)
   {
-    this->currentRowAsTuple();
+    this->createRowPyObject();
     if (py::checkPyError())
     {
       return nullptr;
@@ -60,7 +60,7 @@ PyObject* CArrowChunkIterator::next()
       logger.debug("Current batch index: %d, rows in current batch: %d",
                   m_currentBatchIndex, m_rowCountInBatch);
 
-      this->currentRowAsTuple();
+      this->createRowPyObject();
       if (py::checkPyError())
       {
         return nullptr;
@@ -74,7 +74,7 @@ PyObject* CArrowChunkIterator::next()
   return Py_None;
 }
 
-void CArrowChunkIterator::currentRowAsTuple()
+void CArrowChunkIterator::createRowPyObject()
 {
   m_latestReturnedRow.reset(PyTuple_New(m_columnCount));
   for (int i = 0; i < m_columnCount; i++)
@@ -91,13 +91,13 @@ void CArrowChunkIterator::initColumnConverters()
   m_currentBatchConverters.clear();
   std::shared_ptr<arrow::RecordBatch> currentBatch =
       (*m_cRecordBatches)[m_currentBatchIndex];
-  std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
+  m_currentSchema = currentBatch->schema();
   for (int i = 0; i < currentBatch->num_columns(); i++)
   {
     std::shared_ptr<arrow::Array> columnArray = currentBatch->column(i);
-    std::shared_ptr<arrow::DataType> dt = schema->field(i)->type();
+    std::shared_ptr<arrow::DataType> dt = m_currentSchema->field(i)->type();
     std::shared_ptr<const arrow::KeyValueMetadata> metaData =
-        schema->field(i)->metadata();
+        m_currentSchema->field(i)->metadata();
     SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
         metaData->value(metaData->FindKey("logicalType")));
 
@@ -405,6 +405,24 @@ void CArrowChunkIterator::initColumnConverters()
       }
     }
   }
+}
+
+DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
+                                                 std::vector<std::shared_ptr<arrow::RecordBatch>> * batches)
+: CArrowChunkIterator(context, batches)
+{
+}
+
+void DictCArrowChunkIterator::createRowPyObject()
+{
+  m_latestReturnedRow.reset(PyDict_New());
+  for (int i = 0; i < m_currentSchema->num_fields(); i++)
+  {
+    PyDict_SetItemString(
+        m_latestReturnedRow.get(), m_currentSchema->field(i)->name().c_str(),
+        m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+  }
+  return;
 }
 
 }  // namespace sf

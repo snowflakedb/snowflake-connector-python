@@ -35,6 +35,9 @@ cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator(CArrowIterator):
         CArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches) except +
 
+    cdef cppclass DictCArrowChunkIterator(CArrowChunkIterator):
+        DictCArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches) except +
+
 
 cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
     cdef cppclass CArrowTableIterator(CArrowIterator):
@@ -117,11 +120,6 @@ cdef extern from "arrow/python/api.h" namespace "arrow::py" nogil:
 
 
 cdef class EmptyPyArrowIterator:
-    def __cinit__(self, object arrow_stream_reader, object arrow_context):
-        pass
-
-    def __dealloc__(self):
-        pass
 
     def __next__(self):
        raise StopIteration
@@ -136,8 +134,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef str unit
     cdef PyObject* cret
     cdef vector[shared_ptr[CRecordBatch]] batches
+    cdef object use_dict_result
 
-    def __cinit__(self, object py_inputstream, object arrow_context):
+    def __cinit__(self, object py_inputstream, object arrow_context, object use_dict_result):
         cdef shared_ptr[InputStream] input_stream
         cdef shared_ptr[CRecordBatchReader] reader
         cdef shared_ptr[CRecordBatch] record_batch
@@ -175,6 +174,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.context = arrow_context
         self.cIterator = NULL
         self.unit = ''
+        self.use_dict_result = use_dict_result
 
     def __dealloc__(self):
         del self.cIterator
@@ -198,7 +198,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         if iter_unit != ROW_UNIT and iter_unit != TABLE_UNIT:
             raise NotImplementedError
         elif iter_unit == ROW_UNIT:
-            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context, &self.batches)
+            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context, &self.batches) if not self.use_dict_result \
+                else new DictCArrowChunkIterator(<PyObject*>self.context, &self.batches)
+
         elif iter_unit == TABLE_UNIT:
             self.cIterator = new CArrowTableIterator(<PyObject*>self.context, &self.batches)
         self.unit = iter_unit
