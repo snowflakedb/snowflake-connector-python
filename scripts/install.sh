@@ -7,19 +7,11 @@ set -o pipefail
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 if [ "$TRAVIS_OS_NAME" == "osx" ]; then
-    brew update
-    brew install openssl readline sqlite3 xz zlib
-    brew outdated pyenv || brew upgrade pyenv
-    brew install pyenv-virtualenv
-    pyenv install ${PYTHON_VERSION}
-    export PYENV_VERSION=$PYTHON
-    export PATH="${HOME}/.pyenv/shims:${PATH}"
-    if [[ $PYTHON_VERSION == "2.7"* ]]; then
-        pip install -U virtualenv
-        python -m virtualenv venv
-    else
-        python3 -m venv venv
-    fi
+    curl -O https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-macosx10.9.pkg
+    sudo installer -pkg python-${PYTHON_VERSION}-macosx10.9.pkg -target /
+    which python3
+    python3 --version
+    python3 -m venv venv
 else
     sudo apt-get update
     pip install -U virtualenv
@@ -43,7 +35,7 @@ fi
 if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     export ENABLE_EXT_MODULES=true
     cd $THIS_DIR/..
-    pip install Cython pyarrow==0.14.1 wheel
+    pip install Cython pyarrow==0.15.1 wheel
     python setup.py bdist_wheel
     unset ENABLE_EXT_MODULES
     CONNECTOR_WHL=$(ls $THIS_DIR/../dist/snowflake_connector_python*.whl | sort -r | head -n 1)
