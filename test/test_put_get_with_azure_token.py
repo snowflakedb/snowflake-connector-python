@@ -89,8 +89,9 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, (
         'Output is different from the original file')
 
+
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
+    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
@@ -145,8 +146,9 @@ ratio number(6,2))
                 password=db_parameters['azure_password']) as cnx:
             run(cnx, "drop table if exists {name}")
 
+
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
+    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,

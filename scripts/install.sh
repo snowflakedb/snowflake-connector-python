@@ -19,6 +19,8 @@ else
 fi
 if [[ -n "$SNOWFLAKE_AZURE" ]]; then
     openssl aes-256-cbc -k "$super_azure_secret_password" -in parameters_az.py.enc -out test/parameters.py -d
+elif [[ -n "$SNOWFLAKE_GCP" ]]; then
+    openssl aes-256-cbc -k "$super_gcp_secret_password" -in parameters_gcp.py.enc -out test/parameters.py -d
 else
     openssl aes-256-cbc -k "$super_secret_password" -in parameters.py.enc -out test/parameters.py -d
 fi
