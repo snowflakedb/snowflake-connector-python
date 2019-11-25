@@ -5,8 +5,10 @@
 #
 
 import os
+import pytest
 
 
+@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
     """
     [s3] Put and Copy large files
