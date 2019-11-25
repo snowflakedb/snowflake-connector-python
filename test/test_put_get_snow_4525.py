@@ -5,8 +5,10 @@
 #
 
 import os
+import pytest
 
 
+@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET  is not supportd for GCP yet")
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
     """
     SNOW-4525: Load Bogus file and should fail
@@ -42,6 +44,7 @@ ratio number(5,2))
             "drop table if exists {name}".format(name=db_parameters['name']))
 
 
+@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET  is not supportd for GCP yet")
 def test_load_bogus_json_file(tmpdir, conn_cnx, db_parameters):
     """
     SNOW-4525: Load Bogus JSON file and should fail
