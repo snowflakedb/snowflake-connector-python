@@ -239,8 +239,8 @@ credentials=(
             c = cnx.cursor()
             try:
                 for rec in c.execute(
-                        "put file://{file} @{stage_name}".format(
-                            file=files, stage_name=stage_name)):
+                        "put file://{file} @{stage_name}".format(file=files, stage_name=stage_name),
+                        _raise_put_get_error=False):
                     logger.info('rec=%s', rec)
                     if rec[6] == 'UPLOADED':
                         success_cnt += 1

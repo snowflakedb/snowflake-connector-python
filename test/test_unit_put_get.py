@@ -19,7 +19,7 @@ else:
 @pytest.mark.skipif(IS_WINDOWS, reason='permission model is different')
 def test_put_error(tmpdir):
     """
-    Test for raise_put_get_error flag in SnowflakeFileTransferAgent
+    Test for raise_put_get_error flag (now turned on by default) in SnowflakeFileTransferAgent
     """
     tmp_dir = str(tmpdir.mkdir('putfiledir'))
     file1 = path.join(tmp_dir, 'file1')
@@ -64,6 +64,15 @@ def test_put_error(tmpdir):
         query,
         ret,
         raise_put_get_error=True)
+    sf_file_transfer_agent.execute()
+    with pytest.raises(Exception):
+        sf_file_transfer_agent.result()
+
+    # unspecified, should fail because flag is on by default now
+    sf_file_transfer_agent = SnowflakeFileTransferAgent(
+        cursor,
+        query,
+        ret)
     sf_file_transfer_agent.execute()
     with pytest.raises(Exception):
         sf_file_transfer_agent.result()
