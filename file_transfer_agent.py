@@ -185,7 +185,7 @@ class SnowflakeFileTransferAgent(object):
                  get_azure_callback=None,
                  get_callback_output_stream=sys.stdout,
                  show_progress_bar=True,
-                 raise_put_get_error=False,
+                 raise_put_get_error=True,
                  force_put_overwrite=True):
         self._cursor = cursor
         self._command = command

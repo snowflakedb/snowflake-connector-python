@@ -167,7 +167,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
         sql = sql.format(
             files=files,
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql).fetchall()
+        return cnx.cursor().execute(sql, _raise_put_get_error=False).fetchall()
 
     with conn_cnx(
             user=db_parameters['azure_user'],

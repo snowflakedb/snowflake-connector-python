@@ -451,7 +451,7 @@ def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
         sql = sql.format(
             files=files.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql).fetchall()
+        return cnx.cursor().execute(sql, _raise_put_get_error=False).fetchall()
 
     with conn_cnx(
             user=db_parameters['s3_user'],
