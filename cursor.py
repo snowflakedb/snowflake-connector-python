@@ -456,7 +456,7 @@ class SnowflakeCursor(object):
                 _no_results=False,
                 _use_ijson=False,
                 _is_put_get=None,
-                _raise_put_get_error=False,
+                _raise_put_get_error=True,
                 _force_put_overwrite=False):
         u"""
         Executes a command/query
@@ -497,11 +497,7 @@ class SnowflakeCursor(object):
                 processed_params = self._connection._process_params_qmarks(
                     params, self)
         # Skip reporting Key, Value and Type errors
-        except KeyError:
-            raise
-        except ValueError:
-            raise
-        except TypeError:
+        except (KeyError, ValueError, TypeError):
             raise
         except Exception:
             self.connection.incident.report_incident()
