@@ -217,8 +217,26 @@ setup(
         ],
         "pandas": [
             'pyarrow>=0.15.1,<0.16.0;python_version>"3.4"',
-            'pandas<1.0.0;python_version>"3.4"',
-        ]
+            'pandas==0.24.2;python_version=="2.7" or python_version=="3.5"',
+            'pandas<1.0.0;python_version>"3.5"',
+        ],
+        "development": [
+            'pytest==4.6.6',  # Last Python 2.7 supported version
+            'pytest-cov',
+            'pytest-rerunfailures',
+            'pytest-timeout',
+            'coverage',
+            'pexpect',
+            'mock',
+            'pytz',
+            'pytzdata',
+            'Cython',
+            'pendulum',
+            'more-itertools==4.3.0;python_version=="2.7"',  # Last Python 2.7 supported version
+            'more-itertools;python_version!="2.7"',
+            'numpy==1.16.5;python_version=="2.7"',  # Last Python 2.7 supported version
+            'numpy;python_version!="2.7"',
+        ],
     },
 
     classifiers=[
