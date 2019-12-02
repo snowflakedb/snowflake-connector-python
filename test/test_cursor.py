@@ -836,10 +836,6 @@ def test_close_twice(conn_testaccount):
     conn_testaccount.close()
 
 
-@pytest.mark.skipif(not platform.startswith('linux'), reason="""
-Running tests only in linux env. Once 3.52.2 is deployed to preprod2,
-we can remove this skip and running this tests on all platform
-""")
 def test_fetch_out_of_range_timestamp_value(conn):
     for result_format in ['arrow', 'json']:
         with conn() as cnx:
