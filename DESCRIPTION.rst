@@ -9,6 +9,16 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.1.0(December 2,2019)
+
+    - GA: ARROW format support, to be enabled in the next few weeks.
+    - Fix default `ssl_context` options
+    - Pin more dependencies for Python Connector
+    - Fix import of SnowflakeOCSPAsn1Crypto crashes Python on MacOS Catalina
+    - Update the release note that 1.9.0 was removed
+    - Support DictCursor for arrow result format
+    - Upgrade Python's arrow lib to 0.15.1
+
 - v2.0.4(November 13,2019)
 
     - Increase OCSP Cache expiry time from 24 hours to 120 hours.
