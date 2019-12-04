@@ -227,6 +227,9 @@ SELECT
     with conn_cnx(converter_class=converter_class) as cnx:
         cur = cnx.cursor()
         cur.execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
+        cur.execute("""
 ALTER SESSION SET TIMEZONE='{tz}';
 """.format(tz=PST_TZ))
         cur.execute("""
@@ -360,6 +363,9 @@ ALTER SESSION SET
 """)
         cur = cnx.cursor()
         cur.execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
+        cur.execute("""
 SELECT
     DATE_FROM_PARTS(1900, 1, 1),
     DATE_FROM_PARTS(2500, 2, 3),
@@ -387,6 +393,9 @@ ALTER SESSION SET
     DATE_OUTPUT_FORMAT='YYYY-MM-DD'
 """)
         cur = cnx.cursor()
+        cur.execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
         cur.execute("""
 SELECT
     DATE_FROM_PARTS(10000, 1, 1),
@@ -432,6 +441,9 @@ def test_franction_followed_by_year_format(conn_cnx):
     """
     with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
         cnx.cursor().execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
+        cnx.cursor().execute("""
 ALTER SESSION SET
     TIMESTAMP_OUTPUT_FORMAT='HH24:MI:SS.FF6 MON DD, YYYY',
     TIMESTAMP_NTZ_OUTPUT_FORMAT='HH24:MI:SS.FF6 MON DD, YYYY'
@@ -468,6 +480,9 @@ SELECT
 """
     with conn_cnx(converter_class=converter_class) as cnx:
         cur = cnx.cursor()
+        cur.execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
         cur.execute("""
 ALTER SESSION SET TIMEZONE='{tz}';
 """.format(tz=PST_TZ))

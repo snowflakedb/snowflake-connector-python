@@ -21,6 +21,9 @@ def test_snowsql_timestamp_format(conn_cnx):
             converter_class=SnowflakeConverterSnowSQL
     ) as cnx:
         cnx.cursor().execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
+        cnx.cursor().execute("""
 ALTER SESSION SET 
     TIMEZONE='America/Los_Angeles',
     TIMESTAMP_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM',
@@ -47,6 +50,9 @@ SELECT
 @pytest.mark.skipif(PY2 or PY34_EXACT, reason="SnowSQL runs on Python35+")
 def test_snowsql_timestamp_negative_epoch(conn_cnx):
     with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
+        cnx.cursor().execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
         cnx.cursor().execute("""
 ALTER SESSION SET
     TIMEZONE='America/Los_Angeles',

@@ -33,6 +33,9 @@ def test_converter_no_converter_to_python(db_parameters):
         timezone='UTC',
         converter_class=SnowflakeNoConverterToPython,
     )
+    con.cursor().execute("""
+alter session set python_connector_query_result_format='JSON'
+""")
 
     ret = con.cursor().execute("""
 select  current_timestamp(),
