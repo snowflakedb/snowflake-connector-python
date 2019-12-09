@@ -90,7 +90,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     upload_meta[u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
     tmp_upload_meta = upload_meta.copy()
     try:
-        SnowflakeRemoteStorageUtil.upload_one_file_to_s3(tmp_upload_meta)
+        SnowflakeRemoteStorageUtil.upload_one_file(tmp_upload_meta)
         raise Exception("Should fail with OpenSSL.SSL.SysCallError")
     except OpenSSL.SSL.SysCallError:
         assert upload_file.call_count == DEFAULT_MAX_RETRY
@@ -105,7 +105,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     upload_meta[u'parallel'] = initial_parallel
     tmp_upload_meta = upload_meta.copy()
     try:
-        SnowflakeRemoteStorageUtil.upload_one_file_to_s3(tmp_upload_meta)
+        SnowflakeRemoteStorageUtil.upload_one_file(tmp_upload_meta)
         raise Exception("Should fail with OpenSSL.SSL.SysCallError")
     except OpenSSL.SSL.SysCallError:
         assert upload_file.call_count == DEFAULT_MAX_RETRY
@@ -148,7 +148,7 @@ def test_upload_one_file_to_s3_econnreset():
         upload_meta[
             u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
         try:
-            SnowflakeRemoteStorageUtil.upload_one_file_to_s3(upload_meta)
+            SnowflakeRemoteStorageUtil.upload_one_file(upload_meta)
             raise Exception("Should fail with OpenSSL.SSL.SysCallError")
         except OpenSSL.SSL.SysCallError:
             assert upload_file.call_count == DEFAULT_MAX_RETRY
@@ -214,6 +214,6 @@ def test_upload_file_with_s3_upload_failed_error():
     upload_meta[
         u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
 
-    akey = SnowflakeRemoteStorageUtil.upload_one_file_to_s3(upload_meta)
+    akey = SnowflakeRemoteStorageUtil.upload_one_file(upload_meta)
     assert akey is None
     assert upload_meta['result_status'] == ResultStatus.RENEW_TOKEN

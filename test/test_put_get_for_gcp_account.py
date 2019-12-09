@@ -7,13 +7,16 @@
 import glob
 import gzip
 import os
+
 import sys
+
 import time
-from logging import getLogger
 
 import pytest
 
 from snowflake.connector.constants import UTF8
+
+from logging import getLogger
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -22,26 +25,25 @@ except:
 
 logger = getLogger(__name__)
 
-
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
+def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
     """
-    [azure] Put and Get a small text using Azure
+    [gcp] Put and Get a small text using gcp
     """
     # create a data file
-    fname = str(tmpdir.join('test_put_get_with_azure_token.txt.gz'))
+    fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
     with gzip.open(fname, 'wb') as f:
         original_contents = "123,test1\n456,test2\n"
         f.write(original_contents.encode(UTF8))
-    tmp_dir = str(tmpdir.mkdir('test_put_get_with_azure_token'))
+    tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['gcp_user'],
+            account=db_parameters['gcp_account'],
+            password=db_parameters['gcp_password']) as cnx:
         with cnx.cursor() as csr:
             csr.execute("rm @~/snow32806")
             csr.execute(
@@ -77,14 +79,13 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, (
         'Output is different from the original file')
 
-
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
+    not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_copy_many_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
     """
-    [azure] Put and Copy many files
+    [gcp] Put and Copy many files
     """
     # generates N files
     number_of_files = 10
@@ -100,9 +101,9 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
         return csr.execute(sql).fetchall()
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['gcp_user'],
+            account=db_parameters['gcp_account'],
+            password=db_parameters['gcp_password']) as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -127,15 +128,14 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
             finally:
                 run(csr, "drop table if exists {name}")
 
-
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
+    not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
+def test_put_copy_duplicated_files_gcp(tmpdir, test_files, conn_cnx,
                                          db_parameters):
     """
-    [azure] Put and Copy duplicated files
+    [gcp] Put and Copy duplicated files
     """
     # generates N files
     number_of_files = 5
@@ -148,12 +148,12 @@ def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
         sql = sql.format(
             files=files,
             name=db_parameters['name'])
-        return csr.execute(sql, _raise_put_get_error=False).fetchall()
+        return csr.execute(sql).fetchall()
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['gcp_user'],
+            account=db_parameters['gcp_account'],
+            password=db_parameters['gcp_password']) as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -195,9 +195,9 @@ def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
                         success_cnt += 1
                     elif rec[6] == 'SKIPPED':
                         skipped_cnt += 1
-                assert success_cnt == deleted_cnt, \
+                assert success_cnt == number_of_files, \
                     'uploaded files in the second time'
-                assert skipped_cnt == number_of_files - deleted_cnt, \
+                assert skipped_cnt == 0, \
                     'skipped files in the second time'
 
                 run(csr, "copy into {name}")
@@ -209,14 +209,13 @@ def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
             finally:
                 run(csr, "drop table if exists {name}")
 
-
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_get_large_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
     """
-    [azure] Put and Get Large files
+    [gcp] Put and Get Large files
     """
     number_of_files = 3
     number_of_lines = 200000
@@ -245,9 +244,9 @@ def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
             _put_callback=cb).fetchall()
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['gcp_user'],
+            account=db_parameters['gcp_account'],
+            password=db_parameters['gcp_password']) as cnx:
         try:
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == u'UPLOADED' for rec in all_recs])
@@ -258,7 +257,7 @@ def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
                     if len(all_recs) == number_of_files:
                         break
                     # you may not get the files right after PUT command
-                    # due to the nature of Azure blob, which synchronizes
+                    # due to the nature of gcs blob, which synchronizes
                     # data eventually.
                     time.sleep(1)
                 else:

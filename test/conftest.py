@@ -27,6 +27,11 @@ except:
     CONNECTION_PARAMETERS_AZURE = {}
 
 try:
+    from parameters import CONNECTION_PARAMETERS_GCP
+except:
+    CONNECTION_PARAMETERS_GCP = {}
+
+try:
     from parameters import CONNECTION_PARAMETERS_ADMIN
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
@@ -120,6 +125,14 @@ def get_db_parameters():
         for k, v in CONNECTION_PARAMETERS.items():
             ret['azure_' + k] = v
 
+    # azure testaccount connection info. Not available in TravisCI
+    if CONNECTION_PARAMETERS_GCP:
+        for k, v in CONNECTION_PARAMETERS_GCP.items():
+            ret['gcp_' + k] = v
+    else:
+        for k, v in CONNECTION_PARAMETERS.items():
+            ret['gcp_' + k] = v
+
     # snowflake admin account. Not available in TravisCI
     for k, v in CONNECTION_PARAMETERS_ADMIN.items():
         ret['sf_' + k] = v
@@ -199,6 +212,19 @@ def init_test_schema(request, db_parameters):
                 database=ret['azure_database'],
                 account=ret['azure_account'],
                 protocol=ret['azure_protocol']
+        ) as con:
+            con.cursor().execute(
+                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+
+    if CONNECTION_PARAMETERS_GCP:
+        with snowflake.connector.connect(
+                user=ret['gcp_user'],
+                password=ret['gcp_password'],
+                host=ret['gcp_host'],
+                port=ret['gcp_port'],
+                database=ret['gcp_database'],
+                account=ret['gcp_account'],
+                protocol=ret['gcp_protocol']
         ) as con:
             con.cursor().execute(
                 "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))

@@ -21,7 +21,7 @@ class SnowflakeFileUtil(object):
         Compresses a file by GZIP
         :param file_name: a file name
         :param tmp_dir: temprary directory where an GZIP file will be created
-        :return: a paif of gzip file name and size
+        :return: a pair of gzip file name and size
         """
         logger = getLogger(__name__)
         base_name = os.path.basename(file_name)
