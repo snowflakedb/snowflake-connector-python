@@ -40,6 +40,26 @@ PyObject* OneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
   }
 }
 
+NumpyOneFieldTimeStampNTZConverter::NumpyOneFieldTimeStampNTZConverter(
+    std::shared_ptr<arrow::Array> array, int32_t scale, PyObject* context)
+: TimeStampBaseConverter(context, scale),
+  m_array(std::dynamic_pointer_cast<arrow::Int64Array>(array))
+{
+}
+
+PyObject* NumpyOneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
+{
+  if (m_array->IsValid(rowIndex))
+  {
+    int64_t val = m_array->Value(rowIndex);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64", "Li", val, m_scale);
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
+}
+
 TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
     std::shared_ptr<arrow::Array> array, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
@@ -72,6 +92,32 @@ PyObject* TwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
     Py_RETURN_NONE;
   }
 }
+
+NumpyTwoFieldTimeStampNTZConverter::NumpyTwoFieldTimeStampNTZConverter(
+    std::shared_ptr<arrow::Array> array, int32_t scale, PyObject* context)
+: TimeStampBaseConverter(context, scale),
+  m_array(std::dynamic_pointer_cast<arrow::StructArray>(array)),
+  m_epoch(std::dynamic_pointer_cast<arrow::Int64Array>(
+      m_array->GetFieldByName(internal::FIELD_NAME_EPOCH))),
+  m_fraction(std::dynamic_pointer_cast<arrow::Int32Array>(
+      m_array->GetFieldByName(internal::FIELD_NAME_FRACTION)))
+{
+}
+
+PyObject* NumpyTwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
+{
+  if (m_array->IsValid(rowIndex))
+  {
+    int64_t epoch = m_epoch->Value(rowIndex);
+    int32_t frac = m_fraction->Value(rowIndex);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_TWO_FIELD_to_numpy_datetime64", "Li", epoch, frac);
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
+}
+
 
 OneFieldTimeStampLTZConverter::OneFieldTimeStampLTZConverter(
     std::shared_ptr<arrow::Array> array, int32_t scale, PyObject* context)

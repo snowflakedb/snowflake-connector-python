@@ -22,7 +22,7 @@ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> *);
+  CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> * batches, PyObject *use_numpy);
 
   /**
    * Desctructor
@@ -71,13 +71,16 @@ private:
   /** arrow format convert context for the current session */
   PyObject* m_context;
 
+  /** true if return numnpy int64 float64 datetime*/
+  bool m_useNumpy;
+
   void initColumnConverters();
 };
 
 class DictCArrowChunkIterator : public CArrowChunkIterator
 {
 public:
-  DictCArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> *);
+  DictCArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> * batches, PyObject *use_numpy);
 
   ~DictCArrowChunkIterator() = default;
 

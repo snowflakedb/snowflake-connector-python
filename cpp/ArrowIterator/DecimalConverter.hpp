@@ -78,6 +78,48 @@ PyObject* DecimalFromIntConverter<T>::toPyObject(int64_t rowIndex) const
   }
 }
 
+
+template <typename T>
+class NumpyDecimalConverter : public IColumnConverter
+{
+public:
+  explicit NumpyDecimalConverter(std::shared_ptr<arrow::Array> array,
+                                 int precision, int scale, PyObject * context)
+  : m_array(std::dynamic_pointer_cast<T>(array)),
+    m_precision(precision),
+    m_scale(scale),
+    m_context(context)
+  {
+  }
+
+  PyObject* toPyObject(int64_t rowIndex) const override;
+
+private:
+  std::shared_ptr<T> m_array;
+
+  int m_precision;
+
+  int m_scale;
+
+  PyObject * m_context;
+};
+
+template <typename T>
+PyObject* NumpyDecimalConverter<T>::toPyObject(int64_t rowIndex) const
+{
+  if (m_array->IsValid(rowIndex))
+  {
+    int64_t val = m_array->Value(rowIndex);
+
+    return PyObject_CallMethod(m_context, "FIXED_to_numpy_float64", "Li", val, m_scale);
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
+}
+
+
 }  // namespace sf
 
 #endif  // PC_DECIMALCONVERTER_HPP
