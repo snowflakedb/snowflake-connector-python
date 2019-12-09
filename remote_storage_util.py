@@ -15,6 +15,7 @@ from logging import getLogger
 from .azure_util import SnowflakeAzureUtil
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .encryption_util import (SnowflakeEncryptionUtil)
+from .gcs_util import SnowflakeGCSUtil
 from .s3_util import SnowflakeS3Util
 
 DEFAULT_CONCURRENCY = 1
@@ -39,22 +40,26 @@ class NeedRenewTokenError(Exception):
 class SnowflakeRemoteStorageUtil(object):
 
     @staticmethod
-    def getStorageType(type):
+    def getForStorageType(type):
         if (type == u'S3'):
             return SnowflakeS3Util
         elif (type == u'AZURE'):
             return SnowflakeAzureUtil
+        elif (type == u'GCS'):
+            return SnowflakeGCSUtil
+        else:
+            return None
 
     @staticmethod
     def create_client(stage_info, use_accelerate_endpoint=False):
-        util_class = SnowflakeRemoteStorageUtil.getStorageType(
+        util_class = SnowflakeRemoteStorageUtil.getForStorageType(
             stage_info[u'locationType'])
         return util_class.create_client(
             stage_info,
             use_accelerate_endpoint=use_accelerate_endpoint)
 
     @staticmethod
-    def upload_one_file_to_s3(meta):
+    def upload_one_file(meta):
         """
         Uploads a file to S3
         :param meta: a file meta
@@ -74,7 +79,8 @@ class SnowflakeRemoteStorageUtil(object):
         else:
             logger.debug(u'not encrypted data file')
             data_file = meta[u'real_src_file_name']
-        util_class = SnowflakeRemoteStorageUtil.getStorageType(
+
+        util_class = SnowflakeRemoteStorageUtil.getForStorageType(
             meta[u'stage_info'][u'locationType'])
         if not meta.get(u'overwrite'):
             file_header = util_class.get_file_header(
@@ -82,9 +88,8 @@ class SnowflakeRemoteStorageUtil(object):
             if meta[u'result_status'] == ResultStatus.RENEW_TOKEN:
                 # need renew token
                 return
-            elif file_header and meta[
-                u'result_status'] == ResultStatus.UPLOADED and \
-                    not meta.get(u'overwrite'):
+            elif file_header and \
+                    meta[u'result_status'] == ResultStatus.UPLOADED:
                 logger.debug(
                     u'file already exists, checking digest: '
                     u'location="%s", file_name="%s"',
@@ -174,10 +179,12 @@ class SnowflakeRemoteStorageUtil(object):
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
 
-        util_class = SnowflakeRemoteStorageUtil.getStorageType(
+        util_class = SnowflakeRemoteStorageUtil.getForStorageType(
             meta[u'stage_info'][u'locationType'])
         file_header = util_class.get_file_header(meta, meta[u'src_file_name'])
-        meta[u'src_file_size'] = file_header.content_length
+
+        if file_header:
+            meta[u'src_file_size'] = file_header.content_length
 
         full_dst_file_name = os.path.join(
             meta[u'local_location'],
@@ -194,6 +201,19 @@ class SnowflakeRemoteStorageUtil(object):
                 if u'encryption_material' in meta:
                     logger.debug(
                         u'encrypted data file=%s', full_dst_file_name)
+
+                    # For storage utils that do not have the privilege of
+                    # getting the metadata early, both object and metadata
+                    # are downloaded at once. In which case, the file meta will
+                    # be updated with all the metadata that we need and
+                    # then we can call get_file_header to get just that and also
+                    # preserve the idea of getting metadata in the first place.
+                    # One example of this is the utils that use presigned url
+                    # for upload/download and not the storage client library.
+                    if meta.get(u'presigned_url', None):
+                        file_header = util_class.get_file_header(meta, meta[
+                            u'src_file_name'])
+
                     tmp_dst_file_name = SnowflakeEncryptionUtil.decrypt_file(
                         file_header.encryption_metadata,
                         meta[u'encryption_material'],
@@ -245,16 +265,16 @@ class SnowflakeRemoteStorageUtil(object):
     @staticmethod
     def upload_one_file_with_retry(meta):
         """
-        Uploads one file to S3 with retry
+        Uploads one file with retry
         :param meta: a file meta
         """
         logger = getLogger(__name__)
 
-        util_class = SnowflakeRemoteStorageUtil.getStorageType(
+        util_class = SnowflakeRemoteStorageUtil.getForStorageType(
             meta[u'stage_info'][u'locationType'])
         for _ in range(10):
             # retry
-            SnowflakeRemoteStorageUtil.upload_one_file_to_s3(meta)
+            SnowflakeRemoteStorageUtil.upload_one_file(meta)
             if meta[u'result_status'] == ResultStatus.UPLOADED:
                 for _ in range(10):
                     util_class.get_file_header(

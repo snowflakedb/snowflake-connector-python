@@ -32,6 +32,7 @@ from .errors import (Error, OperationalError, InternalError, DatabaseError,
                      ProgrammingError)
 from .file_compression_type import FileCompressionType
 from .file_util import SnowflakeFileUtil
+from .gcs_util import SnowflakeGCSUtil
 from .local_util import SnowflakeLocalUtil
 from .remote_storage_util import (SnowflakeFileEncryptionMaterial,
                                   SnowflakeRemoteStorageUtil,
@@ -40,9 +41,11 @@ from .s3_util import SnowflakeS3Util
 
 S3_FS = u'S3'
 AZURE_FS = u'AZURE'
+GCS_FS = u'GCS'
 LOCAL_FS = u'LOCAL_FS'
 CMD_TYPE_UPLOAD = u'UPLOAD'
 CMD_TYPE_DOWNLOAD = u'DOWNLOAD'
+FILE_PROTOCOL = u'file://'
 
 RESULT_TEXT_COLUMN_DESC = lambda name: {
     u'name': name, u'type': u'text',
@@ -221,9 +224,11 @@ class SnowflakeFileTransferAgent(object):
             if not os.path.isdir(self._stage_info[u'location']):
                 os.makedirs(self._stage_info[u'location'])
 
+        self._update_file_metas_with_presigned_url()
+
         small_file_metas = []
         large_file_metas = []
-        for meta in self._file_metadata.values():
+        for meta in self._file_metadata:
             meta[u'overwrite'] = self._overwrite
             meta[u'self'] = self
             if self._stage_location_type != LOCAL_FS:
@@ -341,7 +346,7 @@ class SnowflakeFileTransferAgent(object):
                 if len(retry_meta) == 0:
                     # no new AWS token is required
                     break
-                client = self.renew_expired_aws_token()
+                client = self.renew_expired_client()
                 for result_meta in retry_meta:
                     result_meta[u'client'] = client
                 if end_of_idx < len_file_metas:
@@ -365,7 +370,7 @@ class SnowflakeFileTransferAgent(object):
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
             if result[u'result_status'] == ResultStatus.RENEW_TOKEN:
-                client = self.renew_expired_aws_token()
+                client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0][u'client'] = client
                 continue
@@ -380,7 +385,7 @@ class SnowflakeFileTransferAgent(object):
     def get_storage_client(stage_location_type):
         if (stage_location_type == LOCAL_FS):
             return SnowflakeLocalUtil
-        elif (stage_location_type in [S3_FS, AZURE_FS]):
+        elif (stage_location_type in [S3_FS, AZURE_FS, GCS_FS]):
             return SnowflakeRemoteStorageUtil
         else:
             return None
@@ -487,7 +492,7 @@ class SnowflakeFileTransferAgent(object):
                 if len(retry_meta) == 0:
                     # no new AWS token is required
                     break
-                client = self.renew_expired_aws_token()
+                client = self.renew_expired_client()
                 for result_meta in retry_meta:
                     result_meta[u'client'] = client
                 if end_of_idx < len_file_metas:
@@ -509,7 +514,7 @@ class SnowflakeFileTransferAgent(object):
             result = SnowflakeFileTransferAgent.download_one_file(
                 file_metas[idx])
             if result[u'result_status'] == ResultStatus.RENEW_TOKEN:
-                client = self.renew_expired_aws_token()
+                client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0][u'client'] = client
                 continue
@@ -551,7 +556,7 @@ class SnowflakeFileTransferAgent(object):
             shutil.rmtree(tmp_dir)
         return meta
 
-    def renew_expired_aws_token(self):
+    def renew_expired_client(self):
         logger = getLogger(__name__)
         logger.debug(u'renewing expired aws token')
         ret = self._cursor._execute_helper(
@@ -562,6 +567,71 @@ class SnowflakeFileTransferAgent(object):
         return storage_client.create_client(
             stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint)
+
+    def _update_file_metas_with_presigned_url(self):
+        """
+        Update the file metas with presigned urls if any.
+        Currently only the file metas generated for PUT/GET on a GCP account
+        need the presigned urls.
+        """
+        logger = getLogger(__name__)
+
+        storage_client_class = SnowflakeFileTransferAgent.get_storage_client(
+            self._stage_location_type)
+
+        # presigned url only applies to remote storage
+        if storage_client_class is not SnowflakeRemoteStorageUtil:
+            return
+
+        storage_util_class = SnowflakeRemoteStorageUtil.getForStorageType(
+            self._stage_location_type)
+
+        # presigned url only applies to GCS
+        if storage_util_class in [SnowflakeGCSUtil]:
+            if self._command_type == CMD_TYPE_UPLOAD:
+                logger.debug(u'getting presigned urls for upload')
+
+                # Rewrite the command such that a new PUT call is made for each file
+                # represented by the regex (if present) separately. This is the only
+                # way to get the presigned url for that file.
+                file_path_to_be_replaced = self.get_local_file_path_from_put_command(
+                    self._command)
+
+                for meta in self._file_metadata:
+                    # At this point the connector has already figured out and
+                    # validated that the local file exists and has also decided
+                    # upon the destination file name and the compression type.
+                    # The only thing that's left to do is to get the presigned
+                    # url for the destination file. If the command originally
+                    # referred to a single file, then the presigned url got in
+                    # that case is simply ignore, since the file name is not what
+                    # we want.
+
+                    # GS only looks at the file name at the end of local file
+                    # path to figure out the remote object name. Hence the prefix
+                    # for local path is not necessary in the reconstructed command.
+                    file_path_to_replace_with = meta[u'dst_file_name']
+                    command_with_single_file = self._command
+                    command_with_single_file = command_with_single_file.replace(
+                        file_path_to_be_replaced,
+                        file_path_to_replace_with)
+
+                    logger.debug(u'getting presigned url for %s',
+                                 file_path_to_replace_with)
+
+                    ret = self._cursor._execute_helper(command_with_single_file)
+
+                    if ret.get(u'data', None) and \
+                            ret[u'data'].get(u'stageInfo', None):
+                        meta[u'stage_info'] = ret[u'data'][u'stageInfo']
+                        meta[u'presigned_url'] = meta[u'stage_info'].get(
+                            u'presignedUrl', None)
+            elif self._command_type == CMD_TYPE_DOWNLOAD:
+                logger.debug(u'updating download file metas with presigned urls')
+
+                for idx, meta in enumerate(self._file_metadata):
+                    meta[u'presigned_url'] = self._presigned_urls[idx] \
+                        if len(self._presigned_urls) > idx else None
 
     def result(self):
         converter_class = self._cursor._connection.converter_class
@@ -732,7 +802,7 @@ class SnowflakeFileTransferAgent(object):
             )
 
         if self._command_type == CMD_TYPE_UPLOAD:
-            self._src_files = self._expand_filenames(self._src_locations)
+            self._src_files = list(self._expand_filenames(self._src_locations))
             self._auto_compress = \
                 u'autoCompress' not in self._ret[u'data'] or \
                 self._ret[u'data'][u'autoCompress']
@@ -740,14 +810,14 @@ class SnowflakeFileTransferAgent(object):
                 u'sourceCompression'].lower() \
                 if u'sourceCompression' in self._ret[u'data'] else u''
         else:
-            self._src_files = set(self._src_locations)
+            self._src_files = list(self._src_locations)
             self._src_file_to_encryption_material = {}
             if len(self._ret[u'data'][u'src_locations']) == len(
                     self._encryption_material):
-                for idx, src_location in enumerate(self._src_locations):
-                    logger.debug(src_location)
+                for idx, src_file in enumerate(self._src_files):
+                    logger.debug(src_file)
                     logger.debug(self._encryption_material[idx])
-                    self._src_file_to_encryption_material[src_location] = \
+                    self._src_file_to_encryption_material[src_file] = \
                         self._encryption_material[idx]
             elif len(self._encryption_material) != 0:
                 # some encryption material exists. Zero means no encryption
@@ -786,6 +856,7 @@ class SnowflakeFileTransferAgent(object):
             u'locationType'].upper()
         self._stage_location = self._ret[u'data'][u'stageInfo'][u'location']
         self._stage_info = self._ret[u'data'][u'stageInfo']
+        self._presigned_urls = self._ret[u'data'].get(u'presignedUrls', None)
 
         if self.get_storage_client(self._stage_location_type) is None:
             Error.errorhandler_wrapper(
@@ -801,7 +872,11 @@ class SnowflakeFileTransferAgent(object):
 
     def _init_file_metadata(self):
         logger.debug(u"command type: %s", self._command_type)
-        self._file_metadata = {}
+
+        # The list of self-sufficient file metas that are sent to
+        # remote storage clients to get operated on.
+        self._file_metadata = []
+
         if self._command_type == CMD_TYPE_UPLOAD:
             if len(self._src_files) == 0:
                 file_name = self._ret[u'data'][u'src_locations'] \
@@ -836,16 +911,16 @@ class SnowflakeFileTransferAgent(object):
                             u'errno': ER_FILE_NOT_EXISTS
                         })
                 statinfo = os.stat(file_name)
-                self._file_metadata[file_name] = {
+                self._file_metadata += [{
                     u'name': os.path.basename(file_name),
                     u'src_file_name': file_name,
                     u'src_file_size': statinfo.st_size,
                     u'stage_location_type': self._stage_location_type,
                     u'stage_info': self._stage_info,
-                }
-                if len(self._encryption_material) > 0:
-                    self._file_metadata[file_name][u'encryption_material'] = \
-                        self._encryption_material[0]
+                }]
+            if len(self._encryption_material) > 0:
+                for meta in self._file_metadata:
+                    meta[u'encryption_material'] = self._encryption_material[0]
         elif self._command_type == CMD_TYPE_DOWNLOAD:
             for file_name in self._src_files:
                 if len(file_name) > 0:
@@ -853,18 +928,19 @@ class SnowflakeFileTransferAgent(object):
                     first_path_sep = file_name.find(u'/')
                     dst_file_name = file_name[first_path_sep + 1:] \
                         if first_path_sep >= 0 else file_name
-                    self._file_metadata[file_name] = {
+                    self._file_metadata += [{
                         u'name': os.path.basename(file_name),
                         u'src_file_name': file_name,
                         u'dst_file_name': dst_file_name,
                         u'stage_location_type': self._stage_location_type,
                         u'stage_info': self._stage_info,
                         u'local_location': self._local_location,
-                    }
-                    if file_name in self._src_file_to_encryption_material:
-                        self._file_metadata[file_name][
-                            u'encryption_material'] = \
-                            self._src_file_to_encryption_material[file_name]
+                    }]
+            for meta in self._file_metadata:
+                file_name = meta[u'src_file_name']
+                if file_name in self._src_file_to_encryption_material:
+                    meta[u'encryption_material'] = \
+                        self._src_file_to_encryption_material[file_name]
 
     def _process_file_compression_type(self):
         user_specified_source_compression = None
@@ -891,8 +967,8 @@ class SnowflakeFileTransferAgent(object):
 
             auto_detect = False
 
-        for file_name in self._src_files:
-            meta = self._file_metadata[file_name]
+        for meta in self._file_metadata:
+            file_name = meta[u'src_file_name']
 
             current_file_compression_type = None
             if auto_detect:
@@ -970,4 +1046,43 @@ class SnowflakeFileTransferAgent(object):
                     meta[u'dst_file_name'] = meta[u'name']
                     meta[u'dst_compression_type'] = None
 
-            self._file_metadata[file_name] = meta
+    def get_local_file_path_from_put_command(self, command):
+        """
+        Get the local file path from PUT command.
+        (Logic adopted from JDBC, written by Polita)
+        :param command: to parse and get the local file path
+        :return: local file path
+        """
+        if command is None or len(command) == 0 or FILE_PROTOCOL not in command:
+            return None
+
+        if not self._cursor.PUT_SQL_RE.match(command):
+            return None
+
+        file_path_begin_index = command.find(FILE_PROTOCOL)
+        is_file_path_quoted = command[file_path_begin_index - 1] == "'"
+        file_path_begin_index += len(FILE_PROTOCOL)
+
+        file_path = ""
+        file_path_end_index = 0
+
+        if is_file_path_quoted:
+            file_path_end_index = command.find("'", file_path_begin_index)
+
+            if file_path_end_index > file_path_begin_index:
+                file_path = command[file_path_begin_index:file_path_end_index]
+        else:
+            index_list = []
+            for delimiter in [' ', '\n', ';']:
+                index = command.find(delimiter, file_path_begin_index)
+                if index != -1:
+                    index_list += [index]
+
+            file_path_end_index = min(index_list) if index_list else -1
+
+            if file_path_end_index > file_path_begin_index:
+                file_path = command[file_path_begin_index:file_path_end_index]
+            elif file_path_end_index == -1:
+                file_path = command[file_path_begin_index:]
+
+        return file_path
