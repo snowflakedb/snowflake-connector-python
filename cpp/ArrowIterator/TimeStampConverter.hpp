@@ -39,11 +39,38 @@ private:
   std::shared_ptr<arrow::Int64Array> m_array;
 };
 
+class NumpyOneFieldTimeStampNTZConverter : public TimeStampBaseConverter
+{
+public:
+  explicit NumpyOneFieldTimeStampNTZConverter(std::shared_ptr<arrow::Array> array,
+                                              int32_t scale, PyObject* context);
+
+  PyObject* toPyObject(int64_t rowIndex) const override;
+
+private:
+  std::shared_ptr<arrow::Int64Array> m_array;
+};
+
 class TwoFieldTimeStampNTZConverter : public TimeStampBaseConverter
 {
 public:
   explicit TwoFieldTimeStampNTZConverter(std::shared_ptr<arrow::Array> array,
                                          int32_t scale, PyObject* context);
+
+  PyObject* toPyObject(int64_t rowIndex) const override;
+
+private:
+  std::shared_ptr<arrow::StructArray> m_array;
+  std::shared_ptr<arrow::Int64Array> m_epoch;
+  std::shared_ptr<arrow::Int32Array> m_fraction;
+};
+
+
+class NumpyTwoFieldTimeStampNTZConverter : public TimeStampBaseConverter
+{
+public:
+  explicit NumpyTwoFieldTimeStampNTZConverter(std::shared_ptr<arrow::Array> array,
+                                              int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 

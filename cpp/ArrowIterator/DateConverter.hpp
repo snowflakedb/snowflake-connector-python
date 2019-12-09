@@ -31,6 +31,19 @@ private:
   py::UniqueRef& m_pyDatetimeDate;
 };
 
+class NumpyDateConverter : public IColumnConverter
+{
+public:
+  explicit NumpyDateConverter(std::shared_ptr<arrow::Array> array, PyObject * context);
+
+  PyObject* toPyObject(int64_t rowIndex) const override;
+
+private:
+  std::shared_ptr<arrow::Date32Array> m_array;
+
+  PyObject * m_context;
+};
+
 }  // namespace sf
 
 #endif  // PC_DATECONVERTER_HPP

@@ -36,6 +36,7 @@ cdef class ArrowResult:
         object _arrow_context
         str _iter_unit
         object _use_dict_result
+        object _use_numpy
 
 
     def __init__(self, raw_response, cursor, use_dict_result=False, _chunk_downloader=None):
@@ -43,6 +44,7 @@ cdef class ArrowResult:
         self._cursor = cursor
         self._connection = cursor.connection
         self._use_dict_result = use_dict_result
+        self._use_numpy = self._connection._numpy
         self._chunk_info(raw_response, _chunk_downloader)
 
     def _chunk_info(self, data, _chunk_downloader=None):
@@ -57,7 +59,8 @@ cdef class ArrowResult:
             arrow_bytes = b64decode(rowset_b64)
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
             self._current_chunk_row = PyArrowIterator(self._cursor, io.BytesIO(arrow_bytes),
-                                                      self._arrow_context, self._use_dict_result)
+                                                      self._arrow_context, self._use_dict_result,
+                                                      self._use_numpy)
         else:
             logger.debug("Data from first gs response is empty")
             self._current_chunk_row = EmptyPyArrowIterator()

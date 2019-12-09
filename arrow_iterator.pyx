@@ -38,10 +38,10 @@ cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
 
 cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator(CArrowIterator):
-        CArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches) except +
+        CArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches, PyObject* use_numpy) except +
 
     cdef cppclass DictCArrowChunkIterator(CArrowChunkIterator):
-        DictCArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches) except +
+        DictCArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches, PyObject* use_numpy) except +
 
 
 cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
@@ -142,7 +142,15 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object use_dict_result
     cdef object cursor
 
-    def __cinit__(self, object cursor, object py_inputstream, object arrow_context, object use_dict_result):
+    # this is the flag indicating whether fetch data as numpy datatypes or not. The flag
+    # is passed from the constructor of SnowflakeConnection class. Note, only FIXED, REAL
+    # and TIMESTAMP_NTZ will be converted into numpy data types, all other sql types will
+    # still be converted into native python types.
+    # https://docs.snowflake.net/manuals/user-guide/sqlalchemy.html#numpy-data-type-support
+    cdef object use_numpy
+
+    def __cinit__(self, object cursor, object py_inputstream, object arrow_context, object use_dict_result,
+                  object numpy):
         cdef shared_ptr[InputStream] input_stream
         cdef shared_ptr[CRecordBatchReader] reader
         cdef shared_ptr[CRecordBatch] record_batch
@@ -182,6 +190,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.unit = ''
         self.use_dict_result = use_dict_result
         self.cursor = cursor
+        self.use_numpy = numpy
 
     def __dealloc__(self):
         del self.cIterator
@@ -210,8 +219,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         if iter_unit != ROW_UNIT and iter_unit != TABLE_UNIT:
             raise NotImplementedError
         elif iter_unit == ROW_UNIT:
-            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context, &self.batches) if not self.use_dict_result \
-                else new DictCArrowChunkIterator(<PyObject*>self.context, &self.batches)
+            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context, &self.batches, <PyObject *>self.use_numpy) \
+                if not self.use_dict_result \
+                else new DictCArrowChunkIterator(<PyObject*>self.context, &self.batches, <PyObject *>self.use_numpy)
 
         elif iter_unit == TABLE_UNIT:
             self.cIterator = new CArrowTableIterator(<PyObject*>self.context, &self.batches)
