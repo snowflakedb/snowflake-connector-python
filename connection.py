@@ -53,7 +53,8 @@ from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
                         ER_NO_PASSWORD, ER_INVALID_VALUE,
                         ER_FAILED_PROCESSING_PYFORMAT,
-                        ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE)
+                        ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
+                        ER_NO_NUMPY)
 from .errors import (Error, ProgrammingError, InterfaceError,
                      DatabaseError)
 from .network import (
@@ -729,6 +730,17 @@ class SnowflakeConnection(object):
                     setattr(self, u'_' + name, value)
             else:
                 setattr(self, u'_' + name, value)
+
+        if self._numpy:
+            try:
+                import numpy  # noqa: F401
+            except ModuleNotFoundError:
+                Error.errorhandler_wrapper(
+                    self, None, ProgrammingError,
+                    {
+                        u'msg': 'Numpy module is not installed. Cannot fetch data as numpy',
+                        u'errno': ER_NO_NUMPY
+                    })
 
         if self._paramstyle is None:
             import snowflake.connector

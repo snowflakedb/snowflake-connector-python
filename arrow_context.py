@@ -4,6 +4,7 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
+import decimal
 import time
 from datetime import datetime, timedelta
 from logging import getLogger
@@ -11,6 +12,11 @@ from .constants import (
     PARAMETER_TIMEZONE)
 from .converter import (
     _generate_tzinfo_from_tzoffset)
+
+try:
+    import numpy
+except ImportError:
+    numpy = None
 
 import pytz
 
@@ -93,3 +99,23 @@ class ArrowConverterContext(object):
                 "timestamp_ltz: %s(ms). Falling back to use struct_time."
             )
             return time.localtime(microseconds)
+
+    def REAL_to_numpy_float64(self, py_double):
+        return numpy.float64(py_double)
+
+    def FIXED_to_numpy_int64(self, py_long):
+        return numpy.int64(py_long)
+
+    def FIXED_to_numpy_float64(self, py_long, scale):
+        return numpy.float64(decimal.Decimal(py_long).scaleb(-scale))
+
+    def DATE_to_numpy_datetime64(self, py_days):
+        return numpy.datetime64(py_days, 'D')
+
+    def TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64(self, value, scale):
+        nanoseconds = int(decimal.Decimal(value).scaleb(9 - scale))
+        return numpy.datetime64(nanoseconds, 'ns')
+
+    def TIMESTAMP_NTZ_TWO_FIELD_to_numpy_datetime64(self, epoch, fraction):
+        nanoseconds = int(decimal.Decimal(epoch).scaleb(9) + decimal.Decimal(fraction))
+        return numpy.datetime64(nanoseconds, 'ns')

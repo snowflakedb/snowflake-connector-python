@@ -326,10 +326,8 @@ class SnowflakeConverter(object):
         No timezone info is attached.
         """
 
-        scale = ctx['scale']
-
         def conv(value):
-            nanoseconds = int(decimal.Decimal(value).scaleb(scale))
+            nanoseconds = int(decimal.Decimal(value).scaleb(9))
             return numpy.datetime64(nanoseconds, 'ns')
 
         return conv

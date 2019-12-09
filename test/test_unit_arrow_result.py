@@ -27,11 +27,6 @@ try:
 except ImportError:
     no_arrow_iterator_ext = True
 
-import logging
-logging.basicConfig(
-    filename='/tmp/snowflake_python_connector.log',
-    level=logging.DEBUG)
-
 EPSILON = 1e-8
 
 
@@ -225,6 +220,7 @@ def test_fdb_result_data_empty_pandas_fetch_by_batch():
 class MockConnection:
     def __init__(self):
         self._log_max_query_length = 20
+        self._numpy = False
 
     @property
     def log_max_query_length(self):
@@ -261,7 +257,7 @@ class MockChunk:
     def __init__(self, data):
         session_parameters = {"TIMEZONE": "America/Los_Angeles"}
         self.result_data = PyArrowIterator(None, data,
-                                           ArrowConverterContext(session_parameters), False)
+                                           ArrowConverterContext(session_parameters), False, False)
 
 
 def generate_data(pyarrow_type, column_meta, source_data_generator, batch_count, batch_row_count):

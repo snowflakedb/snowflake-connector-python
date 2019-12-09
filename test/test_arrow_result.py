@@ -9,6 +9,7 @@ import random
 import pytest
 from datetime import datetime
 import snowflake.connector
+import numpy
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator
     no_arrow_iterator_ext = False
@@ -393,6 +394,35 @@ def test_dict_cursor(conn_cnx):
                 assert row['FOO'] == row_index
                 assert row['BAR'] == row_index
                 row_index += 1
+
+
+def test_fetch_as_numpy_val(conn_cnx):
+    with conn_cnx(numpy=True) as cnx:
+        cursor = cnx.cursor()
+        cursor.execute("alter session set python_connector_query_result_format='ARROW'")
+
+        val = cursor.execute("""
+select 1.23456::double, 1.3456::number(10, 4), 1234567::number(10, 0)
+""").fetchone()
+        assert isinstance(val[0], numpy.float64)
+        assert val[0] == numpy.float64('1.23456')
+        assert isinstance(val[1], numpy.float64)
+        assert val[1] == numpy.float64('1.3456')
+        assert isinstance(val[2], numpy.int64)
+        assert val[2] == numpy.float64('1234567')
+
+        val = cursor.execute("""
+select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4), 
+'2019-01-02 12:34:56.123456789'::timestamp_ntz(9), '2019-01-02 12:34:56.123456789'::timestamp_ntz(8)
+""").fetchone()
+        assert isinstance(val[0], numpy.datetime64)
+        assert val[0] == numpy.datetime64('2019-08-10')
+        assert isinstance(val[1], numpy.datetime64)
+        assert val[1] == numpy.datetime64('2019-01-02 12:34:56.1234')
+        assert isinstance(val[2], numpy.datetime64)
+        assert val[2] == numpy.datetime64('2019-01-02 12:34:56.123456789')
+        assert isinstance(val[3], numpy.datetime64)
+        assert val[3] == numpy.datetime64('2019-01-02 12:34:56.12345678')
 
 
 def get_random_seed():
