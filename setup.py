@@ -133,7 +133,7 @@ if isBuildExtEnabled == 'true':
             if platform.startswith('linux'):
                 return '{}/lib{}.so.*'.format(self._get_arrow_lib_dir(), lib_name)
             elif platform == 'darwin':
-                return '{}/lib{}*dylib'.format(self._get_arrow_lib_dir(), lib_name)
+                return '{}/lib{}.dylib'.format(self._get_arrow_lib_dir(), lib_name)
             elif platform == 'win32':
                 return '{}\\{}.lib'.format(self._get_arrow_lib_dir(), lib_name)
             else:
