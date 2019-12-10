@@ -44,8 +44,8 @@ except ImportError:
 try:
     from .arrow_result import ArrowResult
     CAN_USE_ARROW_RESULT = True
-except ImportError:
-    logger.debug("Failed to import ArrowResult. No Apache Arrow result set format can be used.")
+except ImportError as e:
+    logger.debug("Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s", e)
     CAN_USE_ARROW_RESULT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
