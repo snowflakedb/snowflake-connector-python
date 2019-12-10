@@ -10,12 +10,11 @@ import io
 from logging import getLogger
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
-try:
-    from .arrow_iterator import PyArrowIterator, EmptyPyArrowIterator, ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
-    from .arrow_context import ArrowConverterContext
-    from pyarrow import concat_tables
-except ImportError:
-    pass
+from .arrow_iterator import PyArrowIterator
+from .arrow_iterator import EmptyPyArrowIterator
+from .arrow_iterator import ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
+from .arrow_context import ArrowConverterContext
+from pyarrow import concat_tables
 
 
 logger = getLogger(__name__)
