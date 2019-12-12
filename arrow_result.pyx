@@ -16,8 +16,12 @@ from .arrow_iterator import ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
 from .arrow_context import ArrowConverterContext
 from pyarrow import concat_tables
 
-
 logger = getLogger(__name__)
+
+try:
+    import pandas
+except ImportError as e:
+    logger.info("Failed to import pandas, %s", e)
 
 
 cdef class ArrowResult:
@@ -29,7 +33,7 @@ cdef class ArrowResult:
         int _chunk_count
         int _current_chunk_row_count
         list _description
-        object _column_idx_to_name
+        list _column_idx_to_name
         object _current_chunk_row
         object _chunk_downloader
         object _arrow_context
@@ -44,6 +48,11 @@ cdef class ArrowResult:
         self._connection = cursor.connection
         self._use_dict_result = use_dict_result
         self._use_numpy = self._connection._numpy
+
+        self._column_idx_to_name = []
+        for idx, column in enumerate(raw_response.get(u'rowtype')):
+            self._column_idx_to_name.append(column[u'name'])
+
         self._chunk_info(raw_response, _chunk_downloader)
 
     def _chunk_info(self, data, _chunk_downloader=None):
@@ -250,4 +259,5 @@ cdef class ArrowResult:
         if table:
             return table.to_pandas(**kwargs)
         else:
-            return None
+
+            return pandas.DataFrame(columns=self._column_idx_to_name)

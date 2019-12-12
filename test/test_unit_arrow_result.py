@@ -36,6 +36,7 @@ EPSILON = 1e-8
 def test_fdb_result_data_empty_row_fetch():
     raw_response = {
         'rowsetBase64': '',
+        'rowtype': [{"name": "c1"}, {"name": "c2"}],
         'chunks': ['f1', 'f2', 'f3']
     }
 
@@ -97,6 +98,7 @@ def test_fdb_result_data_empty_row_fetch():
 def test_fdb_result_data_empty_pandas_fetch_all():
     raw_response = {
         'rowsetBase64': '',
+        'rowtype': [{"name": "c1"}, {"name": "c2"}],
         'chunks': ['f1', 'f2', 'f3']
     }
 
@@ -160,6 +162,7 @@ def test_fdb_result_data_empty_pandas_fetch_all():
 def test_fdb_result_data_empty_pandas_fetch_by_batch():
     raw_response = {
         'rowsetBase64': '',
+        'rowtype': [{"name": "c1"}, {"name": "c2"}],
         'chunks': ['f1', 'f2', 'f3']
     }
 
