@@ -524,8 +524,18 @@ def test_empty(conn_cnx):
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
         cursor.execute(SQL_ENABLE_ARROW)
-        cursor.execute("select seq4() from table(generator(rowcount=>1)) limit 0")
-        assert cursor.fetch_pandas_all() is None, 'the result is not none'
+        cursor.execute("select seq4() as foo, seq4() as bar from table(generator(rowcount=>1)) limit 0")
+        result = cursor.fetch_pandas_all()
+        assert result.empty
+        assert len(list(result)) == 2
+        assert list(result)[0] == 'FOO'
+        assert list(result)[1] == 'BAR'
+
+        cursor.execute("select seq4() as foo from table(generator(rowcount=>1)) limit 0")
+        df_count = 0
+        for _ in cursor.fetch_pandas_batches():
+            df_count += 1
+        assert df_count == 0
 
 
 def get_random_seed():
