@@ -9,6 +9,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.1.1(December 12,2019)
+
+    - Fix GZIP uncompressed content for Azure GET command.
+    - Add support for GCS PUT and GET for private preview.
+    - Support fetch as numpy value in arrow result format.
+    - Fix NameError: name 'EmptyPyArrowIterator' is not defined for Mac.
+    - Return empty dataframe for fetch_pandas_all() api if result set is empty.
+
 - v2.1.0(December 2,2019)
 
     - GA: ARROW format support, to be enabled in the next few weeks.
@@ -18,6 +26,8 @@ Release Notes
     - Update the release note that 1.9.0 was removed
     - Support DictCursor for arrow result format
     - Upgrade Python's arrow lib to 0.15.1
+    - Raise Exception when PUT fails to Upload Data
+    - Handle year out of range correctly in arrow result format
 
 - v2.0.4(November 13,2019)
 
