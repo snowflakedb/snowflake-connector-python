@@ -91,8 +91,10 @@ if isBuildExtEnabled == 'true':
                 ext.library_dirs.append(os.path.join(current_dir, self.build_lib, 'snowflake', 'connector'))
                 ext.extra_link_args += self._get_arrow_lib_as_linker_input()
 
-                if self._is_unix():
+                if platform.startswith('linux'):
                     ext.extra_link_args += ['-Wl,-rpath,$ORIGIN']
+                elif platform == 'darwin':
+                    ext.extra_link_args += ['-rpath', '@loader_path']
 
             build_ext.build_extension(self, ext)
 
@@ -106,7 +108,7 @@ if isBuildExtEnabled == 'true':
             arrow_lib = self._get_libs_to_copy()
 
             for lib in arrow_lib:
-                lib_pattern = self._get_pyarrow_lib_pattern(lib)
+                lib_pattern = self._get_pyarrow_lib_pattern(lib, 'COPY')
                 source = glob.glob(lib_pattern)[0]
                 copy(source, os.path.join(self.build_lib, 'snowflake', 'connector'))
 
@@ -114,28 +116,35 @@ if isBuildExtEnabled == 'true':
             arrow_lib = pyarrow.get_libraries()
             link_lib = []
             for lib in arrow_lib:
-                lib_pattern = self._get_pyarrow_lib_pattern(lib)
+                lib_pattern = self._get_pyarrow_lib_pattern(lib, 'LINK_INPUT')
                 source = glob.glob(lib_pattern)[0]
                 link_lib.append(source)
 
             return link_lib
 
         def _get_libs_to_copy(self):
-            if self._is_unix():
+            if platform.startswith('linux'):
                 return pyarrow.get_libraries() + \
                     ['arrow_flight', 'arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
+            elif platform == 'darwin':
+                return pyarrow.get_libraries() + \
+                    ['arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
             elif platform == 'win32':
-                return pyarrow.get_libraries() + ['arrow_flight']
+                return pyarrow.get_libraries() + ['zlib']
             else:
                 raise RuntimeError('Building on platform {} is not supported yet.'.format(platform))
 
-        def _get_pyarrow_lib_pattern(self, lib_name):
+        def _get_pyarrow_lib_pattern(self, lib_name, usage=None):
             if platform.startswith('linux'):
                 return '{}/lib{}.so.*'.format(self._get_arrow_lib_dir(), lib_name)
             elif platform == 'darwin':
-                return '{}/lib{}.dylib'.format(self._get_arrow_lib_dir(), lib_name)
+                if lib_name.startswith('arrow_boost'):
+                    return '{}/lib{}.dylib'.format(self._get_arrow_lib_dir(), lib_name)
+                else:
+                    return '{}/lib{}.15.dylib'.format(self._get_arrow_lib_dir(), lib_name)
             elif platform == 'win32':
-                return '{}\\{}.lib'.format(self._get_arrow_lib_dir(), lib_name)
+                return '{}\\{}.dll'.format(self._get_arrow_lib_dir(), lib_name) if \
+                    usage == 'COPY' else '{}\\{}.lib'.format(self._get_arrow_lib_dir(), lib_name)
             else:
                 raise RuntimeError('Building on platform {} is not supported yet.'.format(platform))
 

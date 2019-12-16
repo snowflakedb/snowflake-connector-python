@@ -38,14 +38,14 @@ logger = getLogger(__name__)
 try:
     import pyarrow
 except ImportError:
-    logger.debug("Failed to import pyarrow. No Apache Arrow result set format can be used.")
+    logger.debug(u"Failed to import pyarrow. Cannot use pandas fetch API")
     pyarrow = None
 
 try:
     from .arrow_result import ArrowResult
     CAN_USE_ARROW_RESULT = True
 except ImportError as e:
-    logger.debug("Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s", e)
+    logger.debug(u"Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s", e)
     CAN_USE_ARROW_RESULT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
@@ -327,6 +327,7 @@ class SnowflakeCursor(object):
         # check if current installation include arrow extension or not,
         # if not, we set statement level query result format to be JSON
         if not CAN_USE_ARROW_RESULT:
+            logger.debug(u"Cannot use arrow result format, fallback to json format")
             if statement_params is None:
                 statement_params = {PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: 'JSON'}
             else:
@@ -608,6 +609,7 @@ class SnowflakeCursor(object):
     def _init_result_and_meta(self, data, use_ijson=False):
         is_dml = self._is_dml(data)
         self._query_result_format = data.get(u'queryResultFormat', u'json')
+        logger.debug(u"Query result format: %s", self._query_result_format)
 
         if self._total_rowcount == -1 and not is_dml and data.get(u'total') \
                 is not None:
