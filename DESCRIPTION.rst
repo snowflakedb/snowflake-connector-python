@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.1.2(December 16,2019)
+
+    - Fix the arrow bundling issue for python connector on mac.
+    - Fix the arrow dll bundle issue on windows.Add more logging.
+
 - v2.1.1(December 12,2019)
 
     - Fix GZIP uncompressed content for Azure GET command.
@@ -19,7 +24,6 @@ Release Notes
 
 - v2.1.0(December 2,2019)
 
-    - GA: ARROW format support, to be enabled in the next few weeks.
     - Fix default `ssl_context` options
     - Pin more dependencies for Python Connector
     - Fix import of SnowflakeOCSPAsn1Crypto crashes Python on MacOS Catalina
