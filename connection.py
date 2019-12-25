@@ -311,7 +311,7 @@ class SnowflakeConnection(object):
     @property
     def warehouse(self):
         u"""
-        Schema name
+        Warehouse name
         """
         return self._warehouse
 
