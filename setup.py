@@ -9,7 +9,6 @@ import os
 import sys
 from sys import platform
 from shutil import copy
-import glob
 
 from setuptools import setup, Extension
 
@@ -53,6 +52,35 @@ if isBuildExtEnabled == 'true':
 
     class MyBuildExt(build_ext):
 
+        # list of libraries that will be bundled with python connector,
+        # this list should be carefully examined when pyarrow lib is
+        # upgraded
+        arrow_libs_to_copy = {
+            'linux': ['libarrow.so.15',
+                      'libarrow_python.so.15',
+                      'libarrow_flight.so.15',
+                      'libarrow_boost_filesystem.so.1.68.0',
+                      'libarrow_boost_system.so.1.68.0',
+                      'libarrow_boost_regex.so.1.68.0'],
+            'darwin': ['libarrow.15.dylib',
+                       'libarrow_python.15.dylib',
+                       'libarrow_boost_filesystem.dylib',
+                       'libarrow_boost_regex.dylib',
+                       'libarrow_boost_system.dylib'],
+            'win32': ['arrow.dll',
+                      'arrow_python.dll',
+                      'zlib.dll']
+        }
+
+        arrow_libs_to_link = {
+            'linux': ['libarrow.so.15',
+                      'libarrow_python.so.15'],
+            'darwin': ['libarrow.15.dylib',
+                       'libarrow_python.15.dylib'],
+            'win32': ['arrow.lib',
+                      'arrow_python.lib']
+        }
+
         def build_extension(self, ext):
             current_dir = os.getcwd()
 
@@ -82,7 +110,7 @@ if isBuildExtEnabled == 'true':
                 if platform == 'win32':
                     ext.include_dirs.append(pyarrow.get_include())
                     ext.include_dirs.append(numpy.get_include())
-                elif self._is_unix():
+                elif platform == 'linux' or platform == 'darwin':
                     ext.extra_compile_args.append('-isystem' + pyarrow.get_include())
                     ext.extra_compile_args.append('-isystem' + numpy.get_include())
                     ext.extra_compile_args.append('-std=c++11')
@@ -91,62 +119,39 @@ if isBuildExtEnabled == 'true':
                 ext.library_dirs.append(os.path.join(current_dir, self.build_lib, 'snowflake', 'connector'))
                 ext.extra_link_args += self._get_arrow_lib_as_linker_input()
 
-                if platform.startswith('linux'):
+                # sys.platform for linux used to return with version suffix, (i.e. linux2, linux3)
+                # After version 3.3, it will always be just 'linux'
+                # https://docs.python.org/3/library/sys.html#sys.platform
+                if platform == 'linux':
                     ext.extra_link_args += ['-Wl,-rpath,$ORIGIN']
                 elif platform == 'darwin':
+                    # rpath,$ORIGIN only work on linux, did not work on darwin. use @loader_path instead
+                    # fyi, https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
                     ext.extra_link_args += ['-rpath', '@loader_path']
 
             build_ext.build_extension(self, ext)
-
-        def _is_unix(self):
-            return platform.startswith('linux') or platform == 'darwin'
 
         def _get_arrow_lib_dir(self):
             return pyarrow.get_library_dirs()[0]
 
         def _copy_arrow_lib(self):
-            arrow_lib = self._get_libs_to_copy()
+            libs_to_bundle = self.arrow_libs_to_copy[sys.platform]
 
-            for lib in arrow_lib:
-                lib_pattern = self._get_pyarrow_lib_pattern(lib, 'COPY')
-                source = glob.glob(lib_pattern)[0]
-                copy(source, os.path.join(self.build_lib, 'snowflake', 'connector'))
+            for lib in libs_to_bundle:
+                source = '{}/{}'.format(self._get_arrow_lib_dir(), lib)
+                build_dir = path.join(self.build_lib, 'snowflake', 'connector')
+                copy(source, build_dir)
 
         def _get_arrow_lib_as_linker_input(self):
-            arrow_lib = pyarrow.get_libraries()
-            link_lib = []
-            for lib in arrow_lib:
-                lib_pattern = self._get_pyarrow_lib_pattern(lib, 'LINK_INPUT')
-                source = glob.glob(lib_pattern)[0]
-                link_lib.append(source)
+            link_lib = self.arrow_libs_to_link[sys.platform]
+            ret = []
 
-            return link_lib
+            for lib in link_lib:
+                source = '{}/{}'.format(self._get_arrow_lib_dir(), lib)
+                assert path.exists(source)
+                ret.append(source)
 
-        def _get_libs_to_copy(self):
-            if platform.startswith('linux'):
-                return pyarrow.get_libraries() + \
-                    ['arrow_flight', 'arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
-            elif platform == 'darwin':
-                return pyarrow.get_libraries() + \
-                    ['arrow_boost_regex', 'arrow_boost_system', 'arrow_boost_filesystem']
-            elif platform == 'win32':
-                return pyarrow.get_libraries() + ['zlib']
-            else:
-                raise RuntimeError('Building on platform {} is not supported yet.'.format(platform))
-
-        def _get_pyarrow_lib_pattern(self, lib_name, usage=None):
-            if platform.startswith('linux'):
-                return '{}/lib{}.so.*'.format(self._get_arrow_lib_dir(), lib_name)
-            elif platform == 'darwin':
-                if lib_name.startswith('arrow_boost'):
-                    return '{}/lib{}.dylib'.format(self._get_arrow_lib_dir(), lib_name)
-                else:
-                    return '{}/lib{}.15.dylib'.format(self._get_arrow_lib_dir(), lib_name)
-            elif platform == 'win32':
-                return '{}\\{}.dll'.format(self._get_arrow_lib_dir(), lib_name) if \
-                    usage == 'COPY' else '{}\\{}.lib'.format(self._get_arrow_lib_dir(), lib_name)
-            else:
-                raise RuntimeError('Building on platform {} is not supported yet.'.format(platform))
+            return ret
 
     cmd_class = {
         "build_ext": MyBuildExt
