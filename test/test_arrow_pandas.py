@@ -6,7 +6,7 @@
 
 import pytest
 import time
-import pandas as pd
+from snowflake.connector.options import pandas as pd, installed_pandas
 import random
 from datetime import datetime
 from decimal import Decimal
@@ -27,10 +27,9 @@ SQL_ENABLE_ARROW = "alter session set python_connector_query_result_format='ARRO
 
 EPSILON = 1e-8
 
-
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_num_one(conn_cnx):
     print('Test fetching one single dataframe')
     row_count = 50000
@@ -42,8 +41,8 @@ def test_num_one(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_scaled_tinyint(conn_cnx):
     cases = ["NULL", 0.11, -0.11, "NULL", 1.27, -1.28, "NULL"]
     table = "test_arrow_tiny_int"
@@ -56,8 +55,8 @@ def test_scaled_tinyint(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_scaled_smallint(conn_cnx):
     cases = ["NULL", 0, 0.11, -0.11, "NULL", 32.767, -32.768, "NULL"]
     table = "test_arrow_small_int"
@@ -70,8 +69,8 @@ def test_scaled_smallint(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_scaled_int(conn_cnx):
     cases = ["NULL", 0, "NULL", 0.123456789, -0.123456789, 2.147483647, -2.147483648, "NULL"]
     table = "test_arrow_int"
@@ -84,8 +83,8 @@ def test_scaled_int(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is not installed.")
 def test_scaled_bigint(conn_cnx):
     cases = ["NULL", 0, "NULL",
              "1.23456789E-10", "-1.23456789E-10",
@@ -103,8 +102,8 @@ def test_scaled_bigint(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_decimal(conn_cnx):
     cases = ["NULL", 0, "NULL",
              "10000000000000000000000000000000000000",
@@ -124,8 +123,8 @@ def test_decimal(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is not installed.")
 def test_scaled_decimal(conn_cnx):
     cases = ["NULL", 0, "NULL",
              "1.0000000000000000000000000000000000000",
@@ -145,8 +144,8 @@ def test_scaled_decimal(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_boolean(conn_cnx):
     cases = ["NULL", True, "NULL", False, True, True, "NULL", True, False, "NULL"]
     table = "test_arrow_boolean"
@@ -159,8 +158,8 @@ def test_boolean(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_double(conn_cnx):
     cases = ["NULL",
              # SNOW-31249
@@ -184,8 +183,8 @@ def test_double(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_semi_struct(conn_cnx):
     sql_text = """
     select array_construct(10, 20, 30),
@@ -238,8 +237,8 @@ def test_semi_struct(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_date(conn_cnx):
     cases = ["NULL",
              "2017-01-01",
@@ -266,8 +265,8 @@ def test_date(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 @pytest.mark.parametrize("scale",
                          [i for i in range(10)])
 def test_time(conn_cnx, scale):
@@ -294,8 +293,8 @@ def test_time(conn_cnx, scale):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 @pytest.mark.parametrize("scale", [i for i in range(10)])
 def test_timestampntz(conn_cnx, scale):
     cases = [
@@ -328,8 +327,8 @@ def test_timestampntz(conn_cnx, scale):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 @pytest.mark.parametrize("scale, timezone",
                          itertools.product(
                              [i for i in range(10)],
@@ -369,8 +368,8 @@ def test_timestamptz(conn_cnx, scale, timezone):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 @pytest.mark.parametrize("scale, timezone",
                          itertools.product(
                              [i for i in range(10)],
@@ -504,8 +503,8 @@ def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='fl
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_num_batch(conn_cnx):
     print('Test fetching dataframes in batch')
     row_count = 1000000
@@ -517,8 +516,8 @@ def test_num_batch(conn_cnx):
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_empty(conn_cnx):
     print('Test fetch empty dataframe')
     with conn_cnx() as cnx:
