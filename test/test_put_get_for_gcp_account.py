@@ -283,6 +283,10 @@ def test_put_get_large_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
 def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
     with gzip.open(fname, 'wb') as f:
