@@ -8,11 +8,7 @@ SET SCRIPT_DIR=%~dp0
 call env\Scripts\activate
 # https://github.com/pypa/pip/issues/6566
 python -m pip install --upgrade pip
-pip install pandas
-pip install numpy
-pip install pendulum
 pip install pyarrow
-pip install pytest pytest-cov pytest-rerunfailures
 pip install wheel
 pip install Cython
 set ENABLE_EXT_MODULES=true
@@ -22,7 +18,7 @@ python setup.py bdist_wheel -d dist
 cd dist
 dir /b * > whl_name
 set /p connector_whl=<whl_name
-pip install %connector_whl%
+pip install %connector_whl%[pandas,development]
 pip list --format=columns
 
 cd %SCRIPT_DIR%/..
