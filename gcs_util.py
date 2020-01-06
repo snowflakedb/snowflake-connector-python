@@ -130,6 +130,12 @@ class SnowflakeGCSUtil:
                         meta[u'last_error'] = errh
                         meta[u'result_status'] = ResultStatus.NEED_RETRY
                         return
+                    elif (errh.response.status_code == 400 and
+                          (u'last_error' not in meta or meta[u'last_error'].response.status_code != 400)):
+                        # Only attempt to renew urls if this isn't the second time this happens
+                        meta[u'last_error'] = errh
+                        meta[u'result_status'] = ResultStatus.RENEW_PRESIGNED_URL
+                        return
                     # raise anything else
                     raise errh
                 except requests.exceptions.Timeout as errt:
@@ -195,6 +201,12 @@ class SnowflakeGCSUtil:
                 if errh.response.status_code in [403, 408, 429, 500, 503]:
                     meta[u'last_error'] = errh
                     meta[u'result_status'] = ResultStatus.NEED_RETRY
+                    return
+                elif (errh.response.status_code == 400 and
+                      (u'last_error' not in meta or meta[u'last_error'].errh.response.status_code != 400)):
+                    # Only attempt to renew urls if this isn't the second time this happens
+                    meta[u'last_error'] = errh
+                    meta[u'result_status'] = ResultStatus.RENEW_PRESIGNED_URL
                     return
                 # raise anything else
                 raise errh

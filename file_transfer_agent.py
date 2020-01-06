@@ -337,8 +337,10 @@ class SnowflakeFileTransferAgent(object):
                 # need renew AWS token?
                 retry_meta = []
                 for result_meta in results:
-                    if result_meta[
-                        u'result_status'] == ResultStatus.RENEW_TOKEN:
+                    if result_meta[u'result_status'] in [
+                        ResultStatus.RENEW_TOKEN,
+                        ResultStatus.RENEW_PRESIGNED_URL
+                    ]:
                         retry_meta.append(result_meta)
                     else:
                         self._results.append(result_meta)
@@ -346,9 +348,14 @@ class SnowflakeFileTransferAgent(object):
                 if len(retry_meta) == 0:
                     # no new AWS token is required
                     break
-                client = self.renew_expired_client()
-                for result_meta in retry_meta:
-                    result_meta[u'client'] = client
+                if any([result_meta[u'result_status'] == ResultStatus.RENEW_TOKEN
+                        for result_meta in results]):
+                    client = self.renew_expired_client()
+                    for result_meta in retry_meta:
+                        result_meta[u'client'] = client
+                if any([result_meta[u'result_status'] == ResultStatus.RENEW_PRESIGNED_URL
+                        for result_meta in results]):
+                    self._update_file_metas_with_presigned_url()
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
                         file_metas[idx0][u'client'] = client
@@ -373,6 +380,9 @@ class SnowflakeFileTransferAgent(object):
                 client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0][u'client'] = client
+                continue
+            elif result[u'result_status'] == ResultStatus.RENEW_PRESIGNED_URL:
+                self._update_file_metas_with_presigned_url()
                 continue
             self._results.append(result)
             idx += 1
@@ -484,7 +494,10 @@ class SnowflakeFileTransferAgent(object):
                 retry_meta = []
                 for result_meta in results:
                     if result_meta[
-                        u'result_status'] == ResultStatus.RENEW_TOKEN:
+                        u'result_status'] in [
+                        ResultStatus.RENEW_TOKEN,
+                        ResultStatus.RENEW_PRESIGNED_URL
+                    ]:
                         retry_meta.append(result_meta)
                     else:
                         self._results.append(result_meta)
@@ -492,9 +505,14 @@ class SnowflakeFileTransferAgent(object):
                 if len(retry_meta) == 0:
                     # no new AWS token is required
                     break
-                client = self.renew_expired_client()
-                for result_meta in retry_meta:
-                    result_meta[u'client'] = client
+                if any([result_meta[u'result_status'] == ResultStatus.RENEW_TOKEN
+                        for result_meta in results]):
+                    client = self.renew_expired_client()
+                    for result_meta in retry_meta:
+                        result_meta[u'client'] = client
+                if any([result_meta[u'result_status'] == ResultStatus.RENEW_PRESIGNED_URL
+                        for result_meta in results]):
+                    self._update_file_metas_with_presigned_url()
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
                         file_metas[idx0][u'client'] = client
@@ -517,6 +535,9 @@ class SnowflakeFileTransferAgent(object):
                 client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0][u'client'] = client
+                continue
+            elif result[u'result_status'] == ResultStatus.RENEW_PRESIGNED_URL:
+                self._update_file_metas_with_presigned_url()
                 continue
             self._results.append(result)
             idx += 1
@@ -621,8 +642,7 @@ class SnowflakeFileTransferAgent(object):
 
                     ret = self._cursor._execute_helper(command_with_single_file)
 
-                    if ret.get(u'data', None) and \
-                            ret[u'data'].get(u'stageInfo', None):
+                    if ret.get(u'data', dict()).get(u'stageInfo', None):
                         meta[u'stage_info'] = ret[u'data'][u'stageInfo']
                         meta[u'presigned_url'] = meta[u'stage_info'].get(
                             u'presignedUrl', None)

@@ -88,6 +88,8 @@ class SnowflakeRemoteStorageUtil(object):
             if meta[u'result_status'] == ResultStatus.RENEW_TOKEN:
                 # need renew token
                 return
+            elif meta[u'result_status'] == ResultStatus.RENEW_PRESIGNED_URL:
+                return
             elif file_header and \
                     meta[u'result_status'] == ResultStatus.UPLOADED:
                 logger.debug(
@@ -128,6 +130,8 @@ class SnowflakeRemoteStorageUtil(object):
             if (meta[u'result_status'] == ResultStatus.UPLOADED):
                 return
             elif (meta[u'result_status'] == ResultStatus.RENEW_TOKEN):
+                return
+            elif (meta[u'result_status'] == ResultStatus.RENEW_PRESIGNED_URL):
                 return
             elif (meta[u'result_status'] == ResultStatus.NEED_RETRY):
                 last_err = meta[u'last_error']
@@ -226,6 +230,8 @@ class SnowflakeRemoteStorageUtil(object):
 
                 statinfo = os.stat(full_dst_file_name)
                 meta[u'dst_file_size'] = statinfo.st_size
+                return
+            elif (meta[u'result_status'] == ResultStatus.RENEW_PRESIGNED_URL):
                 return
             elif (meta[u'result_status'] == ResultStatus.RENEW_TOKEN):
                 return

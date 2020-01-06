@@ -10,6 +10,9 @@ from logging import getLogger
 
 import pytest
 
+# Mark every test in this module as a putget test
+pytestmark = pytest.mark.putget
+
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except:

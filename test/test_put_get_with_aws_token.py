@@ -15,6 +15,9 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.remote_storage_util import SnowflakeRemoteStorageUtil
 from snowflake.connector.s3_util import SnowflakeS3Util
 
+# Mark every test in this module as an aws and a putget test
+pytestmark = [pytest.mark.aws, pytest.mark.putget]
+
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except:
