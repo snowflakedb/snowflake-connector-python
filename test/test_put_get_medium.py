@@ -26,6 +26,9 @@ try:
 except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
+# Mark every test in this module as a putget test
+pytestmark = pytest.mark.putget
+
 import logging
 
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
@@ -42,7 +45,6 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy0(conn_cnx, db_parameters):
     """
     Put and Copy a file
@@ -89,7 +91,6 @@ ratio number(5,2))
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy_compressed(conn_cnx, db_parameters):
     """
     Put and Copy compressed files
@@ -146,7 +147,6 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
     """
     Put and Copy brotli compressed files
@@ -172,7 +172,6 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
     """
     Put and Copy zstd compressed files
@@ -199,7 +198,7 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
 
 
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
+    not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_parquet_compressed(conn_cnx, db_parameters):
@@ -235,7 +234,6 @@ stage_file_format=(type='parquet')
         run(cnx, "alter session unset enable_parquet_filetype")
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy_orc_compressed(conn_cnx, db_parameters):
     """
     Put and Copy ORC compressed files
@@ -340,7 +338,6 @@ max_file_size=10000000
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
     """
     Put and Copy many_files
@@ -380,7 +377,6 @@ ratio number(6,2))
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
 def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     """
     [s3] Put and Copy many files
@@ -520,7 +516,6 @@ ratio number(6,2))
             run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET  is not supportd for GCP yet")
 def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
     """
     File name collision

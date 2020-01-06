@@ -10,6 +10,9 @@ from snowflake.connector.errors import Error
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 from snowflake.connector.compat import IS_WINDOWS
 
+# Mark every test in this module as a putget test
+pytestmark = pytest.mark.putget
+
 if PY2:
     from mock import MagicMock
 else:

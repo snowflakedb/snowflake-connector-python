@@ -11,6 +11,8 @@ from logging import getLogger
 
 import pytest
 
+# Mark every test in this module as a putget test
+pytestmark = pytest.mark.putget
 
 def test_put_get_small_data_via_user_stage(
         is_public_test, tmpdir, test_files, conn_cnx, db_parameters):
