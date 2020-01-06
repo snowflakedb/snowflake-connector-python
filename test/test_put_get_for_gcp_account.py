@@ -27,6 +27,9 @@ except:
 
 logger = getLogger(__name__)
 
+# Mark every test in this module as a putget test
+pytestmark = pytest.mark.putget
+
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
