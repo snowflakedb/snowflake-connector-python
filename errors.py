@@ -267,3 +267,10 @@ class OtherHTTPRetryableError(Error):
             errno=kwargs.get('errno'),
             sqlstate=kwargs.get('sqlstate'),
             sfqid=kwargs.get('sfqid'))
+
+
+class MissingDependencyError(Error):
+    u"""Exception for missing extras dependencies"""
+
+    def __init__(self, dependency):
+        super(MissingDependencyError, self).__init__(msg="Missing optional dependency: {}".format(dependency))

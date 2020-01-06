@@ -12,7 +12,9 @@ import sys
 
 import time
 
+import mock
 import pytest
+import requests
 
 from snowflake.connector.constants import UTF8
 
@@ -24,6 +26,9 @@ except:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 logger = getLogger(__name__)
+
+# Mark every test in this module as a putget test
+pytestmark = pytest.mark.putget
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
@@ -276,3 +281,97 @@ def test_put_get_large_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
             assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])
         finally:
             run(cnx, "RM @~/{dir}")
+
+
+from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
+def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
+    fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
+    with gzip.open(fname, 'wb') as f:
+        original_contents = "123,test1\n456,test2\n"
+        f.write(original_contents.encode(UTF8))
+    tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
+
+    with conn_cnx(
+            user=db_parameters['gcp_user'],
+            account=db_parameters['gcp_account'],
+            password=db_parameters['gcp_password']) as cnx:
+        with cnx.cursor() as csr:
+            csr.execute("rm @~/snow32807")
+            csr.execute(
+                "create or replace table snow32807 (a int, b string)")
+            try:
+                from requests import  put, get
+                def mocked_put(*args, **kwargs):
+                    if mocked_put.counter == 0:
+                        mocked_put.counter += 1
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = 400
+                        raise exc
+                    else:
+                        return put(*args, **kwargs)
+                mocked_put.counter = 0
+                def mocked_file_agent(*args, **kwargs):
+                    agent = SnowflakeFileTransferAgent(*args, **kwargs)
+                    agent._update_file_metas_with_presigned_url = mock.MagicMock(
+                        wraps=agent._update_file_metas_with_presigned_url
+                    )
+                    mocked_file_agent.agent = agent
+                    return agent
+                with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                                side_effect=mocked_file_agent):
+                    with mock.patch('requests.put', side_effect=mocked_put):
+                        csr.execute(
+                            "put file://{0} @%snow32807 auto_compress=true parallel=30".format(
+                                fname))
+                    assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
+                rec = csr.fetchone()
+                assert rec[6] == u'UPLOADED'
+                csr.execute("copy into snow32807")
+                csr.execute(
+                    "copy into @~/snow32807 from snow32807 "
+                    "file_format=( format_name='common.public.csv' "
+                    "compression='gzip')")
+                def mocked_get(*args, **kwargs):
+                    if mocked_get.counter == 0:
+                        mocked_get.counter += 1
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = 400
+                        raise exc
+                    else:
+                        return get(*args, **kwargs)
+                mocked_get.counter = 0
+                def mocked_file_agent(*args, **kwargs):
+                    agent = SnowflakeFileTransferAgent(*args, **kwargs)
+                    agent._update_file_metas_with_presigned_url = mock.MagicMock(
+                        wraps=agent._update_file_metas_with_presigned_url
+                    )
+                    mocked_file_agent.agent = agent
+                    return agent
+                with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                                side_effect=mocked_file_agent) as file_agent:
+                    with mock.patch('requests.get', side_effect=mocked_get):
+                        csr.execute(
+                            "get @~/snow32807 file://{0} pattern='snow32807.*'".format(
+                                tmp_dir))
+                    assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
+                rec = csr.fetchone()
+                assert rec[0].startswith(
+                    'snow32807'), 'A file downloaded by GET'
+                assert rec[1] == 36, 'Return right file size'
+                assert rec[2] == u'DOWNLOADED', 'Return DOWNLOADED status'
+                assert rec[3] == u'', 'Return no error message'
+            finally:
+                csr.execute("drop table snow32807")
+                csr.execute("rm @~/snow32807")
+
+    files = glob.glob(os.path.join(tmp_dir, 'snow32807*'))
+    with gzip.open(files[0], 'rb') as fd:
+        contents = fd.read().decode(UTF8)
+    assert original_contents == contents, (
+        'Output is different from the original file')

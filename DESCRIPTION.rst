@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.1.3(January 06,2020)
+   
+    - Fix GCP Put failed after hours
+ 
 - v2.1.2(December 16,2019)
 
     - Fix the arrow bundling issue for python connector on mac.

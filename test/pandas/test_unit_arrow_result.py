@@ -7,8 +7,9 @@ import datetime
 import pytest
 import random
 import math
-import pandas as pd
 from io import BytesIO
+
+from snowflake.connector.options import installed_pandas
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.cursor import SnowflakeCursor
 
@@ -31,7 +32,7 @@ EPSILON = 1e-8
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
+    not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built.")
 def test_fdb_result_data_empty_row_fetch():
     raw_response = {
@@ -93,8 +94,8 @@ def test_fdb_result_data_empty_row_fetch():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or missing pandas.")
 def test_fdb_result_data_empty_pandas_fetch_all():
     raw_response = {
         'rowsetBase64': '',
@@ -157,8 +158,8 @@ def test_fdb_result_data_empty_pandas_fetch_all():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
 def test_fdb_result_data_empty_pandas_fetch_by_batch():
     raw_response = {
         'rowsetBase64': '',

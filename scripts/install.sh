@@ -26,13 +26,6 @@ else
 fi
 
 source ./venv/bin/activate
-pip install pandas
-pip install numpy
-pip install pendulum
-pip install pytest pytest-cov pytest-rerunfailures
-if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]] || [[ $PYTHON_VERSION == "2.7"* ]]; then
-    pip install mock
-fi
 
 if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     export ENABLE_EXT_MODULES=true
@@ -41,15 +34,15 @@ if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     python setup.py bdist_wheel
     unset ENABLE_EXT_MODULES
     CONNECTOR_WHL=$(ls $THIS_DIR/../dist/snowflake_connector_python*.whl | sort -r | head -n 1)
-    pip install -U $CONNECTOR_WHL[pandas]
+    pip install -U ${CONNECTOR_WHL}[pandas,development]
 else
     if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-        pip install .
+         pip install .[pandas,development]
     else
         pv=${TRAVIS_PYTHON_VERSION/./}
         $THIS_DIR/build_inside_docker.sh $pv
         CONNECTOR_WHL=$(ls $THIS_DIR/../dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*.whl | sort -r | head -n 1)
-        pip install -U $CONNECTOR_WHL[pandas]
+        pip install -U ${CONNECTOR_WHL}[pandas,development]
         cd $THIS_DIR/..
     fi
 fi

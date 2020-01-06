@@ -13,6 +13,7 @@ import pytz
 import os
 import platform
 from snowflake.connector.arrow_context import ArrowConverterContext
+from snowflake.connector.options import pandas as pd, installed_pandas
 from snowflake.connector.converter import (
     _generate_tzinfo_from_tzoffset)
 
@@ -38,8 +39,8 @@ except ImportError:
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_string_chunk():
     random.seed(datetime.datetime.now())
     column_meta = [
@@ -58,8 +59,8 @@ def test_iterate_over_string_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_int64_chunk():
     random.seed(datetime.datetime.now())
     column_meta = [
@@ -74,8 +75,8 @@ def test_iterate_over_int64_chunk():
                             column_meta, int64_generator)
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_int32_chunk():
     random.seed(datetime.datetime.now())
     column_meta = [
@@ -90,8 +91,8 @@ def test_iterate_over_int32_chunk():
                             column_meta, int32_generator)
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_int16_chunk():
     random.seed(datetime.datetime.now())
     column_meta = [
@@ -106,8 +107,8 @@ def test_iterate_over_int16_chunk():
                             column_meta, int16_generator)
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_int8_chunk():
     random.seed(datetime.datetime.now())
     column_meta = [
@@ -122,8 +123,8 @@ def test_iterate_over_int8_chunk():
                             column_meta, int8_generator)
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_bool_chunk():
     random.seed(datetime.datetime.now())
     column_meta = {"logicalType": "BOOLEAN"}
@@ -137,8 +138,8 @@ def test_iterate_over_bool_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_float_chunk():
     random.seed(datetime.datetime.now())
     column_meta = [
@@ -154,9 +155,9 @@ def test_iterate_over_float_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
-def test_iterate_over_decimal_chunk(): 
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
+def test_iterate_over_decimal_chunk():
     random.seed(datetime.datetime.now())
     precision = random.randint(1, 38)
     scale = random.randint(0, precision)
@@ -224,8 +225,8 @@ def test_iterate_over_decimal_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason = "arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_date_chunk():
     random.seed(datetime.datetime.now())
     column_meta = {
@@ -245,8 +246,8 @@ def test_iterate_over_date_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_binary_chunk():
     random.seed(datetime.datetime.now())
     column_meta = {
@@ -266,8 +267,8 @@ def test_iterate_over_binary_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_time_chunk():
     random.seed(datetime.datetime.now())
     column_meta_int64 = [
@@ -314,8 +315,8 @@ def test_iterate_over_time_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_timestamp_ntz_chunk():
     random.seed(datetime.datetime.now())
     scale = random.randint(0, 9)
@@ -369,8 +370,8 @@ def test_iterate_over_timestamp_ntz_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_timestamp_ltz_chunk():
     random.seed(datetime.datetime.now())
     scale = random.randint(0, 9)
@@ -426,8 +427,8 @@ def test_iterate_over_timestamp_ltz_chunk():
 
 
 @pytest.mark.skipif(
-    no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_timestamp_tz_chunk():
     random.seed(datetime.datetime.now())
     scale = random.randint(0, 9)
