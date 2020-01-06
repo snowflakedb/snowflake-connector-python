@@ -37,7 +37,7 @@ if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     pip install -U ${CONNECTOR_WHL}[pandas,development]
 else
     if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-        pip install '.[pandas,development]'
+         pip install .[pandas,development]
     else
         pv=${TRAVIS_PYTHON_VERSION/./}
         $THIS_DIR/build_inside_docker.sh $pv
