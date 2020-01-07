@@ -172,8 +172,7 @@ setup(
     download_url='https://www.snowflake.com/',
     use_2to3=False,
 
-    # NOTE: Python 3.4 will be dropped within one month.
-    python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    python_requires='>=3.5',
 
     install_requires=[
         'azure-common<2.0.0',
@@ -231,11 +230,11 @@ setup(
         ],
         "pandas": [
             'pyarrow>=0.15.1,<0.16.0;python_version>"3.4"',
-            'pandas==0.24.2;python_version=="2.7" or python_version=="3.5"',
+            'pandas==0.24.2;python_version=="3.5"',
             'pandas<1.0.0;python_version>"3.5"',
         ],
         "development": [
-            'pytest==4.6.6',  # Last Python 2.7 supported version
+            'pytest',
             'pytest-cov',
             'pytest-rerunfailures',
             'pytest-timeout',
@@ -246,10 +245,8 @@ setup(
             'pytzdata',
             'Cython',
             'pendulum',
-            'more-itertools==4.3.0;python_version=="2.7"',  # Last Python 2.7 supported version
-            'more-itertools;python_version!="2.7"',
-            'numpy==1.16.5;python_version=="2.7"',  # Last Python 2.7 supported version
-            'numpy;python_version!="2.7"',
+            'more-itertools',
+            'numpy',
         ],
     },
 
@@ -269,7 +266,6 @@ setup(
         'Operating System :: OS Independent',
 
         'Programming Language :: SQL',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
