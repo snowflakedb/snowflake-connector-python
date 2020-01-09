@@ -762,7 +762,13 @@ class SnowflakeConnection(object):
                 setattr(self, u'_protocol', u'https')
 
         if self._authenticator:
-            self._authenticator = self._authenticator.upper()
+            authenticator_uc = self._authenticator.upper()
+            # if authenticator is okta URL, do not modify (uppercase) it
+            if authenticator_uc == DEFAULT_AUTHENTICATOR or \
+                    authenticator_uc == EXTERNAL_BROWSER_AUTHENTICATOR or \
+                    authenticator_uc == KEY_PAIR_AUTHENTICATOR or \
+                    authenticator_uc == OAUTH_AUTHENTICATOR:
+                self._authenticator = self._authenticator.upper()
 
         if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
             # OAuth Authentication does not require a username
