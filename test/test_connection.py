@@ -8,9 +8,11 @@ import os
 import queue
 import threading
 
+import mock
 import pytest
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
+from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errors import ForbiddenError
@@ -627,3 +629,26 @@ def test_another_site(db_parameters):
         return res.status
 
     assert get('https://wikipedia.org') == 200
+
+
+def test_okta_url(db_parameters):
+    orig_authenticator = 'https://someaccount.okta.com/snowflake/oO56fExYCGnfV83/2345'
+
+    def mock_auth(self, auth_instance):
+        assert isinstance(auth_instance, AuthByOkta)
+        assert self._authenticator == orig_authenticator
+
+    with mock.patch('snowflake.connector.connection.SnowflakeConnection._SnowflakeConnection__authenticate', mock_auth):
+        cnx = snowflake.connector.connect(
+            user=db_parameters['user'],
+            password=db_parameters['password'],
+            host=db_parameters['host'],
+            port=db_parameters['port'],
+            account=db_parameters['account'],
+            schema=db_parameters['schema'],
+            database=db_parameters['database'],
+            protocol=db_parameters['protocol'],
+            timezone='UTC',
+            authenticator=orig_authenticator,
+        )
+        assert cnx
