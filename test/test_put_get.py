@@ -7,6 +7,7 @@ import os
 from os import path
 from getpass import getuser
 from logging import getLogger
+from mock import patch
 
 import pytest
 
@@ -480,3 +481,47 @@ LS @~/test_put_uncompress_file
         assert "data.txt.gz" not in ret[0]
     finally:
         cnx.cursor().execute("RM @~/test_put_uncompress_file")
+
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
+def test_put_overwrite(tmpdir, db_parameters):
+    """
+    Test whether _force_put_overwrite and overwrite=true works as intended
+    """
+    import snowflake.connector
+    cnx = snowflake.connector.connect(
+        user=db_parameters['s3_user'],
+        password=db_parameters['s3_password'],
+        host=db_parameters['s3_host'],
+        port=db_parameters['s3_port'],
+        database=db_parameters['s3_database'],
+        account=db_parameters['s3_account'],
+        protocol=db_parameters['s3_protocol'])
+
+    tmp_dir = str(tmpdir.mkdir('data'))
+    test_data = os.path.join(tmp_dir, 'data.txt')
+    with open(test_data, 'w') as f:
+        f.write("test1,test2")
+        f.write("test3,test4")
+
+    cnx.cursor().execute("RM @~/test_put_overwrite")
+    try:
+        with cnx.cursor() as cur:
+            with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'UPLOADED'
+            with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'SKIPPED'
+            with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'UPLOADED'
+
+        ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
+        assert "test_put_overwrite/data.txt" in ret[0]
+        assert "data.txt.gz" in ret[0]
+    finally:
+        cnx.cursor().execute("RM @~/test_put_overwrite")

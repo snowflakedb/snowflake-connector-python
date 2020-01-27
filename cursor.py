@@ -560,7 +560,7 @@ class SnowflakeCursor(object):
                     get_callback_output_stream=_get_callback_output_stream,
                     show_progress_bar=_show_progress_bar,
                     raise_put_get_error=_raise_put_get_error,
-                    force_put_overwrite=_force_put_overwrite)
+                    force_put_overwrite=_force_put_overwrite or data.get('overwrite', False))
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data[u'rowset']) if \
