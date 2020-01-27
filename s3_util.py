@@ -55,7 +55,11 @@ class SnowflakeS3Util:
         logger = getLogger(__name__)
         stage_credentials = stage_info[u'creds']
         security_token = stage_credentials.get(u'AWS_TOKEN', None)
+        end_point = stage_info['endPoint']
         logger.debug(u"AWS_KEY_ID: %s", stage_credentials[u'AWS_KEY_ID'])
+
+        # if GS sends us an endpoint, it's likely for FIPS. Use it.
+        end_point = (u'https://' + stage_info['endPoint']) if stage_info['endPoint'] else None
 
         config = Config(
             signature_version=u's3v4',
@@ -69,6 +73,7 @@ class SnowflakeS3Util:
             aws_access_key_id=stage_credentials[u'AWS_KEY_ID'],
             aws_secret_access_key=stage_credentials[u'AWS_SECRET_KEY'],
             aws_session_token=security_token,
+            endpoint_url=end_point,
             config=config,
         )
         return client
