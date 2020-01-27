@@ -66,7 +66,7 @@ def test_encrypt_decrypt_large_file(tmpdir, test_files):
     # generates N files
     number_of_files = 1
     number_of_lines = 10000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = glob.glob(os.path.join(tmp_dir, 'file*'))
     input_file = files[0]

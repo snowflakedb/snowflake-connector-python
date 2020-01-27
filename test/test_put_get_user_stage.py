@@ -45,7 +45,7 @@ def _put_get_user_stage(tmpdir, test_files, conn_cnx, db_parameters,
     assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
         'AWS_SECRET_ACCESS_KEY is missing'
 
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -155,7 +155,7 @@ def test_put_get_duplicated_data_user_stage(is_public_test, tmpdir, test_files, 
     assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
         'AWS_SECRET_ACCESS_KEY is missing'
 
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = os.path.join(tmp_dir, 'file*')
 
