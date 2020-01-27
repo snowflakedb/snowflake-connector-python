@@ -10,12 +10,10 @@ from glob import glob
 from os import path
 from time import gmtime, strftime, time
 
-from OpenSSL.crypto import dump_certificate, FILETYPE_ASN1
 from asn1crypto import core, ocsp
 from asn1crypto.x509 import Certificate
-
-from snowflake.connector.ocsp_asn1crypto \
-    import SnowflakeOCSPAsn1Crypto as SFOCSP
+from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
+from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 ZERO_EPOCH = datetime.utcfromtimestamp(0)
@@ -35,7 +33,7 @@ def main():
             "Note the subject name shows up if the certificate exists in "
             "the certs directory.")
         print("""
-Usage: {0}  <ocsp response cache file> <hostname file> <cert file glob pattern>
+Usage: {}  <ocsp response cache file> <hostname file> <cert file glob pattern>
 """.format(path.basename(sys.argv[0])))
         sys.exit(2)
 

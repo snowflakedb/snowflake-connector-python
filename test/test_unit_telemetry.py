@@ -3,8 +3,7 @@
 #
 # Copyright (c) 2018-2019 Snowflake Computing Inc. All right reserved.
 #
-from snowflake.connector.telemetry import *
-
+import snowflake.connector.telemetry
 from mock import Mock
 
 
@@ -12,10 +11,10 @@ def test_telemetry_data_to_dict():
     """
     Test that TelemetryData instances are properly converted to dicts
     """
-    assert TelemetryData({}, 2000).to_dict() == {'message': {}, 'timestamp': '2000'}
+    assert snowflake.connector.telemetry.TelemetryData({}, 2000).to_dict() == {'message': {}, 'timestamp': '2000'}
 
     d = {'type': 'test', 'query_id': '1', 'value': 20}
-    assert TelemetryData(d, 1234).to_dict() == {'message': d, 'timestamp': '1234'}
+    assert snowflake.connector.telemetry.TelemetryData(d, 1234).to_dict() == {'message': d, 'timestamp': '1234'}
 
 
 def get_client_and_mock():
@@ -23,7 +22,7 @@ def get_client_and_mock():
     rest_call.return_value = {u'success': True}
     rest = Mock()
     rest.attach_mock(rest_call, 'request')
-    client = TelemetryClient(rest, 2)
+    client = snowflake.connector.telemetry.TelemetryClient(rest, 2)
     return (client, rest_call)
 
 
@@ -33,10 +32,10 @@ def test_telemetry_simple_flush():
     """
     client, rest_call = get_client_and_mock()
 
-    client.add_log_to_batch(TelemetryData({}, 2000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert rest_call.call_count == 0
 
-    client.add_log_to_batch(TelemetryData({}, 3000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 3000))
     assert rest_call.call_count == 1
 
 
@@ -46,7 +45,7 @@ def test_telemetry_close():
     """
     client, rest_call = get_client_and_mock()
 
-    client.add_log_to_batch(TelemetryData({}, 2000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert rest_call.call_count == 0
 
     client.close()
@@ -71,7 +70,7 @@ def test_telemetry_send_batch():
     """
     client, rest_call = get_client_and_mock()
 
-    client.add_log_to_batch(TelemetryData({}, 2000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert rest_call.call_count == 0
 
     client.send_batch()
@@ -95,7 +94,7 @@ def test_telemetry_send_batch_clear():
     """
     client, rest_call = get_client_and_mock()
 
-    client.add_log_to_batch(TelemetryData({}, 2000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert rest_call.call_count == 0
 
     client.send_batch()
@@ -112,7 +111,7 @@ def test_telemetry_auto_disable():
     client, rest_call = get_client_and_mock()
     rest_call.return_value = {u'success': False}
 
-    client.add_log_to_batch(TelemetryData({}, 2000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert client.is_enabled()
 
     client.send_batch()
@@ -126,7 +125,7 @@ def test_telemetry_add_batch_disabled():
     client, _ = get_client_and_mock()
 
     client.disable()
-    client.add_log_to_batch(TelemetryData({}, 2000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
 
     assert client.buffer_size() == 0
 
@@ -137,7 +136,7 @@ def test_telemetry_send_batch_disabled():
     """
     client, rest_call = get_client_and_mock()
 
-    client.add_log_to_batch(TelemetryData({}, 2000))
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert client.buffer_size() == 1
 
     client.disable()

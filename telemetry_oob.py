@@ -177,7 +177,7 @@ class TelemetryService(object):
         """
         try:
             self.close()
-        except:
+        except Exception:
             pass
 
     @property
@@ -353,10 +353,12 @@ class TelemetryService(object):
 
         self.deployment = deployment
 
-    def log_ocsp_exception(self, event_type, telemetry_data, exception=None, stack_trace=None, tags=dict(), urgent=False):
+    def log_ocsp_exception(self, event_type, telemetry_data, exception=None, stack_trace=None, tags=None, urgent=False):
         """
         Logs an OCSP Exception and adds it to the queue to be uploaded
         """
+        if tags is None:
+            tags = dict()
         try:
             if self.enabled:
                 event_name = 'OCSPException'
@@ -393,17 +395,19 @@ class TelemetryService(object):
                                retry_count=None,
                                exception=None,
                                stack_trace=None,
-                               tags=dict(),
+                               tags=None,
                                urgent=False):
         """
         Logs an HTTP Request error and adds it to the queue to be uploaded
         """
+        if tags is None:
+            tags = dict()
         try:
             if self.enabled:
                 telemetry_data = dict()
                 response_status_code = -1
                 # This mimics the output of HttpRequestBase.toString() from JBDC
-                telemetry_data['request'] = "{0} {1}".format(method, url)
+                telemetry_data['request'] = "{} {}".format(method, url)
                 telemetry_data['sqlState'] = sqlstate
                 telemetry_data['errorCode'] = errno
                 if response:

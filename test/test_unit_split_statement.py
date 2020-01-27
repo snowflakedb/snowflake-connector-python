@@ -6,7 +6,6 @@
 from io import StringIO
 
 import pytest
-
 from snowflake.connector.util_text import split_statements
 
 
@@ -516,7 +515,7 @@ def test_multiline_double_dollar_experssion_with_removed_comments():
 def test_backslash_quote_escape():
     s = """
 SELECT 1 'Snowflake\\'s 1';
-SELECT 2 'Snowflake\\'s 2'    
+SELECT 2 'Snowflake\\'s 2'
 """
     with StringIO(s) as f:
         itr = split_statements(f)

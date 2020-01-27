@@ -5,6 +5,7 @@
 #
 import datetime
 import gzip
+import logging
 import os
 import random
 import shutil
@@ -17,19 +18,17 @@ from os import path
 
 import pytest
 import pytz
-
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
 
-import logging
 
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
     logger = logging.getLogger(logger_name)
@@ -528,12 +527,12 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
     files = os.path.join(tmp_dir, 'file*')
     shutil.copy(os.path.join(tmp_dir, 'file0.gz'),
                 os.path.join(tmp_dir, 'file0'))
-    stage_name = "test_put_collision/{0}".format(db_parameters['name'])
+    stage_name = "test_put_collision/{}".format(db_parameters['name'])
     with conn_cnx(
             user=db_parameters['s3_user'],
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
-        cnx.cursor().execute("RM @~/{0}".format(stage_name))
+        cnx.cursor().execute("RM @~/{}".format(stage_name))
         try:
             success_cnt = 0
             skipped_cnt = 0
@@ -552,14 +551,14 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
                     user=db_parameters['s3_user'],
                     account=db_parameters['s3_account'],
                     password=db_parameters['s3_password']) as cnx:
-                cnx.cursor().execute("RM @~/{0}".format(stage_name))
+                cnx.cursor().execute("RM @~/{}".format(stage_name))
 
 
 def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     fname = str(tmpdir.join('test_put_get_huge_json'))
     f = gzip.open(fname, 'wb')
     for i in range(n):
-        logger.debug("adding a value in {0}".format(i))
+        logger.debug("adding a value in {}".format(i))
         f.write('{"k":"{0}"}'.format(
             ''.join(
                 random.choice(string.ascii_uppercase + string.digits) for _ in
@@ -680,7 +679,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             else:
                 pytest.fail(
                     'cannot list all files. Potentially '
-                    'PUT command missed uploading Files: {0}'.format(all_recs))
+                    'PUT command missed uploading Files: {}'.format(all_recs))
             all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])

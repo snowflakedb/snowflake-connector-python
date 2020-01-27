@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-from datetime import (datetime)
+from datetime import datetime
 
 import pytz
 
@@ -12,7 +12,7 @@ def _insert_timestamp(ctx, table, tz, dt):
     myzone = pytz.timezone(tz)
     ts = myzone.localize(dt, is_dst=True)
     print("\n")
-    print('{0}'.format(repr(ts)))
+    print('{}'.format(repr(ts)))
     ctx.cursor().execute("INSERT INTO {table} VALUES(%s)".format(
         table=table,
     ), (ts,))
@@ -21,9 +21,9 @@ def _insert_timestamp(ctx, table, tz, dt):
         table=table)).fetchone()
     retrieved_ts = result[0]
     print("#####")
-    print('Retrieved ts: {0}'.format(
+    print('Retrieved ts: {}'.format(
         repr(retrieved_ts)))
-    print('Retrieved and converted TS{0}'.format(
+    print('Retrieved and converted TS{}'.format(
         repr(retrieved_ts.astimezone(myzone))))
     print("#####")
     assert result[0] == ts

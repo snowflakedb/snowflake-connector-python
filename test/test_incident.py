@@ -5,17 +5,14 @@
 #
 
 import warnings
+from traceback import format_exc
 from uuid import uuid4
 
 import pytest
-from pytest import fail
-
 from mock import patch
-
-from snowflake.connector import converter, ProgrammingError
-
+from pytest import fail
+from snowflake.connector import ProgrammingError, converter
 from snowflake.connector.incident import Incident
-from traceback import format_exc
 
 # NOTE the incident throttling feature is working and will stop returning new
 # incident ids, so do not assert them, or don't add many more incidents to be
@@ -123,4 +120,3 @@ def test_reporting_values(app_name, db_parameters):
                 assert tag[u'Value'] == app_name
         if con is not None:
             con.close()
-

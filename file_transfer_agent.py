@@ -13,30 +13,30 @@ import tempfile
 import threading
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
-from time import (time, sleep)
+from time import sleep, time
 
 import botocore.exceptions
 
 from .azure_util import SnowflakeAzureUtil
-from .compat import (GET_CWD, TO_UNICODE, IS_WINDOWS)
-from .constants import (SHA256_DIGEST, ResultStatus)
+from .compat import GET_CWD, IS_WINDOWS, TO_UNICODE
+from .constants import SHA256_DIGEST, ResultStatus
 from .converter_snowsql import SnowflakeConverterSnowSQL
-from .errorcode import (ER_INVALID_STAGE_FS, ER_INVALID_STAGE_LOCATION,
-                        ER_LOCAL_PATH_NOT_DIRECTORY,
-                        ER_FILE_NOT_EXISTS,
-                        ER_COMPRESSION_NOT_SUPPORTED,
-                        ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL,
-                        ER_FAILED_TO_DOWNLOAD_FROM_STAGE,
-                        ER_FAILED_TO_UPLOAD_TO_STAGE)
-from .errors import (Error, OperationalError, InternalError, DatabaseError,
-                     ProgrammingError)
+from .errorcode import (
+    ER_COMPRESSION_NOT_SUPPORTED,
+    ER_FAILED_TO_DOWNLOAD_FROM_STAGE,
+    ER_FAILED_TO_UPLOAD_TO_STAGE,
+    ER_FILE_NOT_EXISTS,
+    ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL,
+    ER_INVALID_STAGE_FS,
+    ER_INVALID_STAGE_LOCATION,
+    ER_LOCAL_PATH_NOT_DIRECTORY,
+)
+from .errors import DatabaseError, Error, InternalError, OperationalError, ProgrammingError
 from .file_compression_type import FileCompressionType
 from .file_util import SnowflakeFileUtil
 from .gcs_util import SnowflakeGCSUtil
 from .local_util import SnowflakeLocalUtil
-from .remote_storage_util import (SnowflakeFileEncryptionMaterial,
-                                  SnowflakeRemoteStorageUtil,
-                                  )
+from .remote_storage_util import SnowflakeFileEncryptionMaterial, SnowflakeRemoteStorageUtil
 from .s3_util import SnowflakeS3Util
 
 S3_FS = u'S3'
@@ -323,7 +323,7 @@ class SnowflakeFileTransferAgent(object):
                 len_file_metas
 
             logger.debug(
-                u'uploading files idx: {0}/{1}'.format(idx + 1, end_of_idx))
+                u'uploading files idx: {}/{}'.format(idx + 1, end_of_idx))
 
             target_meta = file_metas[idx:end_of_idx]
             while True:
@@ -373,7 +373,7 @@ class SnowflakeFileTransferAgent(object):
         len_file_metas = len(file_metas)
         while idx < len_file_metas:
             logger.debug(
-                u'uploading files idx: {0}/{1}'.format(idx + 1, len_file_metas))
+                u'uploading files idx: {}/{}'.format(idx + 1, len_file_metas))
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
             if result[u'result_status'] == ResultStatus.RENEW_TOKEN:
@@ -479,7 +479,7 @@ class SnowflakeFileTransferAgent(object):
                 len_file_metas
 
             logger.debug(
-                'downloading files idx: {0} to {1}'.format(idx, end_of_idx))
+                'downloading files idx: {} to {}'.format(idx, end_of_idx))
 
             target_meta = file_metas[idx:end_of_idx]
             while True:
@@ -864,7 +864,7 @@ class SnowflakeFileTransferAgent(object):
                     ProgrammingError,
                     {
                         u'msg':
-                            u'The local path is not a directory: {0}'.format(
+                            u'The local path is not a directory: {}'.format(
                                 self._local_location),
                         u'errno': ER_LOCAL_PATH_NOT_DIRECTORY
                     })

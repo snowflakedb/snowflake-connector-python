@@ -13,7 +13,7 @@ import pytz
 import os
 import platform
 from snowflake.connector.arrow_context import ArrowConverterContext
-from snowflake.connector.options import pandas as pd, installed_pandas
+from snowflake.connector.options import installed_pandas
 from snowflake.connector.converter import (
     _generate_tzinfo_from_tzoffset)
 
@@ -23,16 +23,16 @@ except ImportError:
     tzlocal = None
 
 try:
-    from pyarrow import RecordBatchStreamReader
-    from pyarrow import RecordBatchStreamWriter
-    from pyarrow import RecordBatch
+    from pyarrow import RecordBatchStreamReader  # NOQA
+    from pyarrow import RecordBatchStreamWriter  # NOQA
+    from pyarrow import RecordBatch  # NOQA
     import pyarrow
-except ImportError as e:
+except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator
-    from snowflake.connector.arrow_iterator import ROW_UNIT
+    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_iterator import ROW_UNIT  # NOQA
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
@@ -49,13 +49,13 @@ def test_iterate_over_string_chunk():
     ]
     field_foo = pyarrow.field("column_foo", pyarrow.string(), True, column_meta[0])
     field_bar = pyarrow.field("column_bar", pyarrow.string(), True, column_meta[1])
-    schema = pyarrow.schema([field_foo, field_bar])
+    pyarrow.schema([field_foo, field_bar])
 
     def str_generator():
         return str(random.randint(-100, 100))
 
     iterate_over_test_chunk([pyarrow.string(), pyarrow.string()],
-                            column_meta,  str_generator)
+                            column_meta, str_generator)
 
 
 @pytest.mark.skipif(
@@ -74,6 +74,7 @@ def test_iterate_over_int64_chunk():
     iterate_over_test_chunk([pyarrow.int64(), pyarrow.int64()],
                             column_meta, int64_generator)
 
+
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.")
@@ -89,6 +90,7 @@ def test_iterate_over_int32_chunk():
 
     iterate_over_test_chunk([pyarrow.int32(), pyarrow.int32()],
                             column_meta, int32_generator)
+
 
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
@@ -106,6 +108,7 @@ def test_iterate_over_int16_chunk():
     iterate_over_test_chunk([pyarrow.int16(), pyarrow.int16()],
                             column_meta, int16_generator)
 
+
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.")
@@ -121,6 +124,7 @@ def test_iterate_over_int8_chunk():
 
     iterate_over_test_chunk([pyarrow.int8(), pyarrow.int8()],
                             column_meta, int8_generator)
+
 
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
@@ -176,7 +180,7 @@ def test_iterate_over_decimal_chunk():
     def decimal_generator(_precision, _scale):
         def decimal128_generator(precision, scale):
             data = []
-            for i in range(precision):
+            for _ in range(precision):
                 data.append(str(random.randint(0, 9)))
 
             if scale:
@@ -186,7 +190,7 @@ def test_iterate_over_decimal_chunk():
         def int64_generator(precision):
             data = random.randint(-9223372036854775808, 9223372036854775807)
             return int(str(data)[:precision if data >= 0 else precision + 1])
-            
+
         def int32_generator(precision):
             data = random.randint(-2147483648, 2147483637)
             return int(str(data)[:precision if data >= 0 else precision + 1])
@@ -217,16 +221,16 @@ def test_iterate_over_decimal_chunk():
             else:
                 return data
 
-        return expected_data_transform_decimal_impl 
+        return expected_data_transform_decimal_impl
 
-    column_meta = { "logicalType" : "FIXED", "precision" : str(precision), "scale" : str(scale) }
+    column_meta = {"logicalType": "FIXED", "precision": str(precision), "scale": str(scale)}
     iterate_over_test_chunk([datatype, datatype], [column_meta, column_meta],
         lambda: decimal_generator(precision, scale), expected_data_transform_decimal(precision, scale))
 
 
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
-    reason = "arrow_iterator extension is not built, or pandas option is not installed.")
+    reason="arrow_iterator extension is not built, or pandas option is not installed.")
 def test_iterate_over_date_chunk():
     random.seed(datetime.datetime.now())
     column_meta = {
@@ -326,12 +330,12 @@ def test_iterate_over_timestamp_ntz_chunk():
     ]
     data_type = pyarrow.struct([pyarrow.field('epoch', pyarrow.int64()),
                                 pyarrow.field('fraction', pyarrow.int32())]) if scale > 7 else pyarrow.int64()
-    
+
     def timestamp_ntz_generator(scale):
         epoch = random.randint(-621355968, 2534023007)
-        frac = random.randint(0, 10**scale - 1) * (10**(9 - scale)) if scale > 7 else random.randint(0, 10**scale - 1) 
+        frac = random.randint(0, 10**scale - 1) * (10**(9 - scale)) if scale > 7 else random.randint(0, 10**scale - 1)
         if scale > 7:
-            return {'epoch': epoch, 'fraction' : frac}
+            return {'epoch': epoch, 'fraction': frac}
         else:
             epoch = str(epoch)
             frac = str(frac)
@@ -362,7 +366,7 @@ def test_iterate_over_timestamp_ntz_chunk():
                 return datetime.datetime.utcfromtimestamp(0) + datetime.timedelta(seconds=(float(microsec)))
             else:
                 return datetime.datetime.utcfromtimestamp(float(microsec))
-                
+
         return expected_data_transform_ntz_impl
 
     iterate_over_test_chunk([data_type, data_type],
@@ -381,15 +385,15 @@ def test_iterate_over_timestamp_ltz_chunk():
     ]
     data_type = pyarrow.struct([pyarrow.field('epoch', pyarrow.int64()),
                                 pyarrow.field('fraction', pyarrow.int32())]) if scale > 7 else pyarrow.int64()
-    
+
     def timestamp_ltz_generator(scale):
         epoch = random.randint(-621355968, 2534023007)
-        frac = random.randint(0, 10**scale - 1) * (10**(9 - scale)) if scale > 7 else random.randint(0, 10**scale - 1) 
+        frac = random.randint(0, 10**scale - 1) * (10**(9 - scale)) if scale > 7 else random.randint(0, 10**scale - 1)
         if scale > 7:
-            return {'epoch': epoch, 'fraction' : frac}
+            return {'epoch': epoch, 'fraction': frac}
         else:
             epoch = str(epoch)
-            frac = str(frac)            
+            frac = str(frac)
             ZEROFILL = '000000000'
             frac = ZEROFILL[:scale - len(frac)] + frac
             return int(epoch + frac) if scale else int(epoch)
@@ -419,7 +423,7 @@ def test_iterate_over_timestamp_ltz_chunk():
                 return pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo)
             else:
                 return datetime.datetime.fromtimestamp(float(microsec), tz=tzinfo)
-                
+
         return expected_data_transform_ltz_impl
 
     iterate_over_test_chunk([data_type, data_type],
@@ -443,16 +447,16 @@ def test_iterate_over_timestamp_tz_chunk():
     type2 = pyarrow.struct([pyarrow.field('epoch', pyarrow.int64()),
               pyarrow.field('timezone', pyarrow.int32())])
     data_type = type1 if scale > 3 else type2
-    
+
     def timestamp_tz_generator(scale):
         epoch = random.randint(-621355968, 2534023007)
-        frac = random.randint(0, 10**scale - 1) * (10**(9 - scale)) if scale > 3 else random.randint(0, 10**scale - 1) 
+        frac = random.randint(0, 10**scale - 1) * (10**(9 - scale)) if scale > 3 else random.randint(0, 10**scale - 1)
         timezone = random.randint(1, 2879)
         if scale > 3:
-            return {'epoch': epoch, 'timezone': timezone, 'fraction' : frac}
+            return {'epoch': epoch, 'timezone': timezone, 'fraction': frac}
         else:
             epoch = str(epoch)
-            frac = str(frac)            
+            frac = str(frac)
             ZEROFILL = '000000000'
             frac = ZEROFILL[:scale - len(frac)] + frac
             return {'epoch': int(epoch + frac) if scale else int(epoch), 'timezone': timezone}
@@ -485,7 +489,7 @@ def test_iterate_over_timestamp_tz_chunk():
                 return t.replace(tzinfo=tzinfo)
             else:
                 return datetime.datetime.fromtimestamp(float(microsec), tz=tzinfo)
-                
+
         return expected_data_transform_tz_impl
 
     iterate_over_test_chunk([data_type, data_type],
@@ -517,9 +521,9 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
             not_none_cnt = 0
             while not_none_cnt == 0:
                 column_data = []
-                for k in range(batch_row_count):
+                for _ in range(batch_row_count):
                     data = None if bool(random.getrandbits(1)) else source_data_generator()
-                    if data != None:
+                    if data is not None:
                         not_none_cnt += 1
                     column_data.append(data)
             column_arrays.append(column_data)
@@ -527,7 +531,7 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
 
         if expected_data_transformer:
             for i in range(len(column_arrays)):
-                column_arrays[i] = [expected_data_transformer(data) if data is not None else None for data in column_arrays[i]] 
+                column_arrays[i] = [expected_data_transformer(_data) if _data is not None else None for _data in column_arrays[i]]
         expected_data.append(column_arrays)
 
         column_names = ["column_{}".format(i) for i in range(column_size)]

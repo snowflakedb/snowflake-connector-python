@@ -6,7 +6,6 @@
 
 
 import pytest
-
 from snowflake.connector import errors
 
 

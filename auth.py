@@ -6,46 +6,37 @@
 
 import codecs
 import copy
-from datetime import datetime
 import json
 import logging
 import platform
 import tempfile
 import time
 import uuid
-from os import getenv, path, makedirs, mkdir, rmdir, removedirs, remove
+from datetime import datetime
+from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
-from threading import Lock
-from threading import Thread
+from threading import Lock, Thread
 
 from .auth_keypair import AuthByKeyPair
-from .compat import (TO_UNICODE, urlencode, IS_LINUX)
+from .compat import IS_LINUX, TO_UNICODE, urlencode
 from .constants import (
-    HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_ACCEPT,
-    HTTP_HEADER_USER_AGENT,
+    HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
+    HTTP_HEADER_USER_AGENT,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
-    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL
+    PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL,
 )
-from .description import (
-    OPERATING_SYSTEM,
-    PYTHON_VERSION,
-    PLATFORM,
-    IMPLEMENTATION,
-    COMPILER
+from .description import COMPILER, IMPLEMENTATION, OPERATING_SYSTEM, PLATFORM, PYTHON_VERSION
+from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
+from .errors import BadGatewayError, DatabaseError, Error, ForbiddenError, ServiceUnavailableError
+from .network import (
+    ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
+    CONTENT_TYPE_APPLICATION_JSON,
+    PYTHON_CONNECTOR_USER_AGENT,
+    ReauthenticationRequest,
 )
-from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB)
-from .errors import (Error,
-                     DatabaseError,
-                     ServiceUnavailableError,
-                     ForbiddenError,
-                     BadGatewayError)
-from .network import (CONTENT_TYPE_APPLICATION_JSON,
-                      ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
-                      PYTHON_CONNECTOR_USER_AGENT,
-                      ReauthenticationRequest)
-from .sqlstate import (SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
+from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from .version import VERSION
 
 logger = logging.getLogger(__name__)

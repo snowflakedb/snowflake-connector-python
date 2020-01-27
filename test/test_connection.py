@@ -5,25 +5,21 @@
 #
 
 import os
+import queue
+import threading
 
 import pytest
-import threading
-import queue
-
 import snowflake.connector
-from snowflake.connector import (
-    DatabaseError,
-    ProgrammingError, OperationalError)
-from snowflake.connector.errors import (ForbiddenError)
+from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
+from snowflake.connector.connection import SnowflakeConnection
+from snowflake.connector.description import CLIENT_NAME
+from snowflake.connector.errors import ForbiddenError
+from snowflake.connector.network import APPLICATION_SNOWSQL
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
-
-from snowflake.connector.description import CLIENT_NAME
-from snowflake.connector.network import APPLICATION_SNOWSQL
-from snowflake.connector.connection import SnowflakeConnection
 
 
 def test_basic(conn_testaccount):
@@ -178,7 +174,7 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
     }
     cnx = snowflake.connector.connect(**config)
     try:
-        # The min value of client_session_keep_alive_heartbeat_frequency 
+        # The min value of client_session_keep_alive_heartbeat_frequency
         # is 1/16 of master token validity, so 14400 / 4 /4 => 900
         assert cnx.client_session_keep_alive_heartbeat_frequency == 900
     finally:
@@ -374,12 +370,12 @@ def test_drop_create_user(conn_cnx, db_parameters):
         exe('use role accountadmin')
         exe('drop user if exists snowdog')
         exe("create user if not exists snowdog identified by 'testdoc'")
-        exe("use {0}".format(db_parameters['database']))
+        exe("use {}".format(db_parameters['database']))
         exe("create or replace role snowdog_role")
         exe("grant role snowdog_role to user snowdog")
-        exe("grant all on database {0} to role snowdog_role".format(
+        exe("grant all on database {} to role snowdog_role".format(
             db_parameters['database']))
-        exe("grant all on schema {0} to role snowdog_role".format(
+        exe("grant all on schema {} to role snowdog_role".format(
             db_parameters['schema']))
 
     with conn_cnx(user='snowdog', password='testdoc') as cnx2:
@@ -387,8 +383,8 @@ def test_drop_create_user(conn_cnx, db_parameters):
             return cnx2.cursor().execute(sql)
 
         exe('use role snowdog_role')
-        exe(u"use {0}".format(db_parameters['database']))
-        exe(u"use schema {0}".format(db_parameters['schema']))
+        exe(u"use {}".format(db_parameters['database']))
+        exe(u"use schema {}".format(db_parameters['schema']))
         exe('create or replace table friends(name varchar(100))')
         exe('drop table friends')
     with conn_cnx() as cnx:
@@ -397,7 +393,7 @@ def test_drop_create_user(conn_cnx, db_parameters):
 
         exe('use role accountadmin')
         exe(
-            'revoke all on database {0} from role snowdog_role'.format(
+            'revoke all on database {} from role snowdog_role'.format(
                 db_parameters['database']))
         exe('drop role snowdog_role')
         exe('drop user if exists snowdog')
@@ -455,7 +451,6 @@ def test_eu_connection(tmpdir):
         )
 
 
-#@pytest.mark.timeout(15)
 def test_us_west_connection(tmpdir):
     """
     region='us-west-2' indicates no region is included in the hostname, i.e.,
@@ -510,7 +505,7 @@ def test_privatelink(db_parameters):
     assert cnx, 'invalid cnx'
 
     ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
-    assert ocsp_url is None, "OCSP URL should be None: {0}".format(ocsp_url)
+    assert ocsp_url is None, "OCSP URL should be None: {}".format(ocsp_url)
     del os.environ['SF_OCSP_DO_RETRY']
     del os.environ['SF_OCSP_FAIL_OPEN']
 
@@ -560,21 +555,21 @@ def test_privatelink_ocsp_url_multithreaded():
     hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
     expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
     thread_obj = []
-    for i in range(15):
+    for _ in range(15):
         thread_obj.append(ExecPrivatelinkThread(bucket, hostname, expectation, CLIENT_NAME))
 
-    for i in range(15):
-        thread_obj[i].start()
+    for t in thread_obj:
+        t.start()
 
     fail_flag = False
-    for i in range(15):
-        thread_obj[i].join()
+    for t in thread_obj:
+        t.join()
         exc = bucket.get(block=False)
         if exc != 'Success' and not fail_flag:
             fail_flag = True
 
     if fail_flag:
-        assert False, "OCSP URL was set incorrectly"
+        raise AssertionError()
 
     if os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None) is not None:
         del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
@@ -586,11 +581,11 @@ def test_privatelink_ocsp_url_multithreaded_snowsql():
     hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
     expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
     thread_obj = []
-    for i in range(15):
+    for _ in range(15):
         thread_obj.append(ExecPrivatelinkThread(bucket, hostname, expectation, APPLICATION_SNOWSQL))
 
-    for i in range(15):
-        thread_obj[i].start()
+    for t in thread_obj:
+        t.start()
 
     fail_flag = False
     for i in range(15):
@@ -600,7 +595,7 @@ def test_privatelink_ocsp_url_multithreaded_snowsql():
             fail_flag = True
 
     if fail_flag:
-        assert False, "OCSP URL was set incorrectly"
+        raise AssertionError()
 
 
 class ExecPrivatelinkThread(threading.Thread):
@@ -617,7 +612,7 @@ class ExecPrivatelinkThread(threading.Thread):
         ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
         if ocsp_cache_server is not None and ocsp_cache_server !=\
                 self.expectation:
-            print("Got {0} Expected {1}".format(ocsp_cache_server, self.expectation))
+            print("Got {} Expected {}".format(ocsp_cache_server, self.expectation))
             self.bucket.put("Fail")
         else:
             self.bucket.put("Success")

@@ -6,13 +6,14 @@
 
 import itertools
 import random
-import pytest
 from datetime import datetime
-import snowflake.connector
+
 import numpy
+import pytest
+import snowflake.connector
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator
+    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
@@ -223,9 +224,9 @@ def test_select_double_precision(conn_cnx):
 
 
 def test_select_semi_structure(conn_cnx):
-    sql_text = """select array_construct(10, 20, 30), 
-        array_construct(null, 'hello', 3::double, 4, 5), 
-        array_construct(), 
+    sql_text = """select array_construct(10, 20, 30),
+        array_construct(null, 'hello', 3::double, 4, 5),
+        array_construct(),
         object_construct('a',1,'b','BBBB', 'c',null),
         object_construct('Key_One', parse_json('NULL'), 'Key_Two', null, 'Key_Three', 'null'),
         to_variant(3.2),
@@ -345,10 +346,10 @@ def test_select_with_float(conn_cnx):
     # very obvious so if we meet some error in this test in the future, please check that whether it is caused by
     # different precision between python and c++
     val_range = random.randint(0, 10**val_len)
-    
+
     sql_text = ("select seq4() as c1, as_double(uniform({}, {}, random({})))/{} as c2 from ".format(-val_range, val_range, random_seed, 10**pow_val) +
                 "table(generator(rowcount=>{})) order by c1".format(row_count))
-    iterate_over_test_chunk("float", conn_cnx, sql_text, row_count, col_count, eps=10**(-pow_val+1))
+    iterate_over_test_chunk("float", conn_cnx, sql_text, row_count, col_count, eps=10**(-pow_val + 1))
 
 
 def test_select_with_empty_resultset(conn_cnx):
@@ -413,7 +414,7 @@ select 1.23456::double, 1.3456::number(10, 4), 1234567::number(10, 0)
         assert val[2] == numpy.float64('1234567')
 
         val = cursor.execute("""
-select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4), 
+select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4),
 '2019-01-02 12:34:56.123456789'::timestamp_ntz(9), '2019-01-02 12:34:56.123456789'::timestamp_ntz(8)
 """).fetchone()
         assert isinstance(val[0], numpy.datetime64)
@@ -448,7 +449,7 @@ def iterate_over_test_chunk(test_name, conn_cnx, sql_text, row_count, col_count,
             assert cursor_arrow._query_result_format == 'arrow'
 
             if expected is None:
-                for i in range(0, row_count):
+                for _ in range(0, row_count):
                     json_res = cursor_json.fetchone()
                     arrow_res = cursor_arrow.fetchone()
                     for j in range(0, col_count):
@@ -474,4 +475,3 @@ def finish(conn_cnx, table):
     with conn_cnx() as json_cnx:
         cursor_json = json_cnx.cursor()
         cursor_json.execute("drop table IF EXISTS {};".format(table))
-

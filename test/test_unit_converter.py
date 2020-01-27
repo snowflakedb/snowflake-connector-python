@@ -6,8 +6,6 @@
 
 from logging import getLogger
 
-import pytest
-
 from snowflake.connector.compat import TO_UNICODE
 from snowflake.connector.connection import DefaultConverterClass
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL

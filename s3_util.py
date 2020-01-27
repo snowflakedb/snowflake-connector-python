@@ -5,19 +5,16 @@ import os
 from collections import namedtuple
 from logging import getLogger
 
-import OpenSSL
 import boto3
 import botocore.exceptions
+import OpenSSL
 from boto3.exceptions import RetriesExceededError, S3UploadFailedError
 from boto3.s3.transfer import TransferConfig
 from botocore.client import Config
 
 from .compat import TO_UNICODE
-from .constants import (
-    SHA256_DIGEST, ResultStatus, FileHeader,
-    HTTP_HEADER_CONTENT_TYPE,
-    HTTP_HEADER_VALUE_OCTET_STREAM)
-from .encryption_util import (EncryptionMetadata)
+from .constants import HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_VALUE_OCTET_STREAM, SHA256_DIGEST, FileHeader, ResultStatus
+from .encryption_util import EncryptionMetadata
 
 SFC_DIGEST = u'sfc-digest'
 

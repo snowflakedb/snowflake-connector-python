@@ -8,22 +8,14 @@ import json
 import logging
 import tempfile
 import time
-from os import path
-from os import environ
-
+from os import environ, path
 
 import pytest
-
 from snowflake.connector import OperationalError
-from snowflake.connector.errorcode import (ER_SERVER_CERTIFICATE_REVOKED, ER_INVALID_OCSP_RESPONSE_CODE)
-from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
+from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE_CODE, ER_SERVER_CERTIFICATE_REVOKED
 from snowflake.connector.errors import RevocationCheckError
-
-from snowflake.connector.ocsp_asn1crypto import (
-    SnowflakeOCSPAsn1Crypto as SFOCSP
-)
-
-from snowflake.connector.ocsp_snowflake import OCSPCache
+from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
+from snowflake.connector.ocsp_snowflake import OCSPCache, SnowflakeOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
@@ -63,7 +55,7 @@ def test_ocsp():
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection), \
-            'Failed to validate: {0}'.format(url)
+            'Failed to validate: {}'.format(url)
 
 
 def test_ocsp_wo_cache_server():
@@ -75,7 +67,7 @@ def test_ocsp_wo_cache_server():
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection),\
-            'Failed to validate: {0}'.format(url)
+            'Failed to validate: {}'.format(url)
 
 
 def test_ocsp_wo_cache_file():
@@ -94,7 +86,7 @@ def test_ocsp_wo_cache_file():
         for url in TARGET_HOSTS:
             connection = _openssl_connect(url)
             assert ocsp.validate(url, connection), \
-                'Failed to validate: {0}'.format(url)
+                'Failed to validate: {}'.format(url)
     finally:
         del environ['SF_OCSP_RESPONSE_CACHE_DIR']
         OCSPCache.reset_cache_dir()
@@ -114,7 +106,7 @@ def test_ocsp_fail_open_w_single_endpoint():
 
     try:
         assert ocsp.validate("snowflake.okta.com", connection), \
-            'Failed to validate: {0}'.format("snowflake.okta.com")
+            'Failed to validate: {}'.format("snowflake.okta.com")
     finally:
         del environ['SF_OCSP_TEST_MODE']
         del environ['SF_TEST_OCSP_URL']
@@ -168,7 +160,7 @@ def test_ocsp_single_endpoint():
         "https://snowflake.preprod3.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
     connection = _openssl_connect("snowflake.okta.com")
     assert ocsp.validate("snowflake.okta.com", connection), \
-        'Failed to validate: {0}'.format("snowflake.okta.com")
+        'Failed to validate: {}'.format("snowflake.okta.com")
 
     del environ['SF_OCSP_ACTIVATE_NEW_ENDPOINT']
 
@@ -183,7 +175,7 @@ def test_ocsp_by_post_method():
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection), \
-            'Failed to validate: {0}'.format(url)
+            'Failed to validate: {}'.format(url)
 
 
 def test_ocsp_with_file_cache(tmpdir):
@@ -200,7 +192,7 @@ def test_ocsp_with_file_cache(tmpdir):
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection), \
-            'Failed to validate: {0}'.format(url)
+            'Failed to validate: {}'.format(url)
 
 
 def test_ocsp_with_bogus_cache_files(tmpdir):
@@ -218,7 +210,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
 
     # setting bogus data
     current_time = int(time.time())
-    for k, v in cache_data.items():
+    for k, _ in cache_data.items():
         cache_data[k] = (current_time, b'bogus')
 
     # write back the cache file
@@ -232,7 +224,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
     for hostname in target_hosts:
         connection = _openssl_connect(hostname)
         assert ocsp.validate(hostname, connection), \
-            'Failed to validate: {0}'.format(hostname)
+            'Failed to validate: {}'.format(hostname)
 
 
 def test_ocsp_with_outdated_cache(tmpdir):
@@ -281,7 +273,7 @@ def _store_cache_in_file(
     for hostname in target_hosts:
         connection = _openssl_connect(hostname)
         assert ocsp.validate(hostname, connection), \
-            'Failed to validate: {0}'.format(hostname)
+            'Failed to validate: {}'.format(hostname)
     assert path.exists(filename), "OCSP response cache file"
     return filename, target_hosts
 
@@ -295,7 +287,7 @@ def test_ocsp_with_invalid_cache_file():
     for url in TARGET_HOSTS[0:1]:
         connection = _openssl_connect(url)
         assert ocsp.validate(url, connection), \
-            'Failed to validate: {0}'.format(url)
+            'Failed to validate: {}'.format(url)
 
 
 def test_concurrent_ocsp_requests(tmpdir):

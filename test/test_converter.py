@@ -4,11 +4,10 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from datetime import timedelta, time
+from datetime import time, timedelta
 
 import pytest
 import pytz
-
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL

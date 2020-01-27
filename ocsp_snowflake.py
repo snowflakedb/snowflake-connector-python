@@ -17,31 +17,30 @@ from base64 import b64decode, b64encode
 from copy import deepcopy
 from datetime import datetime, timedelta
 from logging import getLogger
-from os import path, environ
+from os import environ, path
 from os.path import expanduser
-from threading import (Lock)
+from threading import Lock
 from time import gmtime, strftime
 
 import jwt
 import requests as generic_requests
-
-from snowflake.connector.compat import (urlsplit, OK)
+from snowflake.connector.compat import OK, urlsplit
 from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE,
     ER_INVALID_OCSP_RESPONSE_CODE,
     ER_INVALID_SSD,
-    ER_SERVER_CERTIFICATE_UNKNOWN,
-    ER_SERVER_CERTIFICATE_REVOKED,
     ER_OCSP_FAILED_TO_CONNECT_HOST,
+    ER_SERVER_CERTIFICATE_REVOKED,
+    ER_SERVER_CERTIFICATE_UNKNOWN,
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
 from snowflake.connector.ssd_internal_keys import (
-    ocsp_internal_ssd_pub_dep1,
-    ocsp_internal_ssd_pub_dep2,
     ocsp_internal_dep1_key_ver,
     ocsp_internal_dep2_key_ver,
+    ocsp_internal_ssd_pub_dep1,
+    ocsp_internal_ssd_pub_dep2,
 )
 from snowflake.connector.telemetry_oob import TelemetryService
 from snowflake.connector.time_util import DecorrelateJitterBackoff
@@ -149,7 +148,7 @@ class OCSPServer(object):
         if not OCSPServer.is_enabled_new_ocsp_endpoint():
             self.CACHE_SERVER_URL = os.getenv(
                 "SF_OCSP_RESPONSE_CACHE_SERVER_URL",
-                "{0}/{1}".format(
+                "{}/{}".format(
                     self.DEFAULT_CACHE_SERVER_URL,
                     OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME))
         else:
@@ -229,23 +228,23 @@ class OCSPServer(object):
                 if not OCSPCache.ACTIVATE_SSD:
                     if parsed_url.port:
                         self.OCSP_RETRY_URL = \
-                            u"{0}://{1}:{2}/retry/".format(
+                            u"{}://{}:{}/retry/".format(
                                 parsed_url.scheme, parsed_url.hostname,
                                 parsed_url.port) + u"{0}/{1}"
                     else:
                         self.OCSP_RETRY_URL = \
-                            u"{0}://{1}/retry/".format(
+                            u"{}://{}/retry/".format(
                                 parsed_url.scheme,
                                 parsed_url.hostname) + u"{0}/{1}"
                 else:
                     if parsed_url.port:
                         self.OCSP_RETRY_URL = \
-                            u"{0}://{1}:{2}/retry".format(
+                            u"{}://{}:{}/retry".format(
                                 parsed_url.scheme, parsed_url.hostname,
                                 parsed_url.port)
                     else:
                         self.OCSP_RETRY_URL = \
-                            u"{0}://{1}/retry".format(
+                            u"{}://{}/retry".format(
                                 parsed_url.scheme, parsed_url.hostname)
         logger.debug(
             "OCSP dynamic cache server RETRY URL: %s",
@@ -295,7 +294,7 @@ class OCSPServer(object):
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = DecorrelateJitterBackoff(sleep_time, 16)
-                for attempt in range(max_retry):
+                for _ in range(max_retry):
                     response = session.get(
                         url,
                         timeout=sf_timeout,  # socket timeout
@@ -325,7 +324,7 @@ class OCSPServer(object):
             logger.debug("Failed to get OCSP response cache from %s: %s", url,
                          e)
             raise RevocationCheckError(
-                msg="Failed to get OCSP Response Cache from {0}: {1}".format(
+                msg="Failed to get OCSP Response Cache from {}: {}".format(
                     url,
                     e),
                 errno=ER_OCSP_FAILED_TO_CONNECT_HOST)
@@ -333,7 +332,7 @@ class OCSPServer(object):
     def generate_get_url(self, ocsp_url, b64data):
         parsed_url = urlsplit(ocsp_url)
         if self.OCSP_RETRY_URL is None:
-            target_url = "{0}/{1}".format(ocsp_url, b64data)
+            target_url = "{}/{}".format(ocsp_url, b64data)
         else:
             target_url = self.OCSP_RETRY_URL.format(
                 parsed_url.hostname, b64data)
@@ -1004,7 +1003,7 @@ class SnowflakeOCSP(object):
         SnowflakeOCSP.OCSP_CACHE.update_file(self)
 
         any_err = False
-        for err, issuer, subject, cert_id, ocsp_response in results:
+        for err, _issuer, _subject, _cert_id, _ocsp_response in results:
             if isinstance(err, RevocationCheckError):
                 err.msg += u' for {}'.format(hostname)
             if not no_exception and err is not None:
@@ -1054,7 +1053,7 @@ class SnowflakeOCSP(object):
                          "HTTPS endpoint without OCSP based Certificate Revocation checking " \
                          "as it could not obtain a valid OCSP Response to use from the CA OCSP " \
                          "responder. Details:"
-        ocsp_warning = "{0} \n {1}".format(static_warning, ocsp_log)
+        ocsp_warning = "{} \n {}".format(static_warning, ocsp_log)
         logger.error(ocsp_warning)
 
     def validate_by_direct_connection(self, issuer, subject, telemetry_data, hostname=None, do_retry=True):
@@ -1280,9 +1279,9 @@ class SnowflakeOCSP(object):
         tolerable_validity = SnowflakeOCSP._calculate_tolerable_validity(
             this_update, next_update)
         return (u"Response is unreliable. Its validity "
-                u"date is out of range: current_time={0}, "
-                u"this_update={1}, next_update={2}, "
-                u"tolerable next_update={3}. A potential cause is "
+                u"date is out of range: current_time={}, "
+                u"this_update={}, next_update={}, "
+                u"tolerable next_update={}. A potential cause is "
                 u"client clock is skewed, CA fails to update OCSP "
                 u"response in time.".format(
             strftime(SnowflakeOCSP.OUTPUT_TIMESTAMP_FORMAT,
@@ -1309,7 +1308,7 @@ class SnowflakeOCSP(object):
     @staticmethod
     def create_ocsp_debug_info(ocsp, ocsp_request, ocsp_url):
         b64data = ocsp.decode_ocsp_request_b64(ocsp_request)
-        target_url = "{0}/{1}".format(ocsp_url, b64data)
+        target_url = "{}/{}".format(ocsp_url, b64data)
         return target_url
 
     def _fetch_ocsp_response(self, ocsp_request, subject, cert_id,
@@ -1378,7 +1377,7 @@ class SnowflakeOCSP(object):
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = DecorrelateJitterBackoff(sleep_time, 16)
-            for attempt in range(max_retry):
+            for _ in range(max_retry):
                 try:
                     response = session.request(
                         headers=headers,
@@ -1413,7 +1412,7 @@ class SnowflakeOCSP(object):
                             errno=ER_OCSP_FAILED_TO_CONNECT_HOST)
             else:
                 logger.error(
-                    "Failed to get OCSP response after {0} attempt. Consider checking "
+                    "Failed to get OCSP response after {} attempt. Consider checking "
                     "for OCSP URLs being blocked".format(max_retry))
                 raise RevocationCheckError(
                     msg="Failed to get OCSP response after {} attempt.".format(
@@ -1457,8 +1456,8 @@ class SnowflakeOCSP(object):
             test_cert_status = os.getenv("SF_TEST_OCSP_CERT_STATUS")
             if test_cert_status == 'revoked':
                 raise RevocationCheckError(
-                    msg="The certificate has been revoked: current_time={0}, "
-                        "revocation_time={1}, reason={2}".format(
+                    msg="The certificate has been revoked: current_time={}, "
+                        "revocation_time={}, reason={}".format(
                         strftime(
                             SnowflakeOCSP.OUTPUT_TIMESTAMP_FORMAT,
                             gmtime(current_time)),
@@ -1473,8 +1472,8 @@ class SnowflakeOCSP(object):
         revocation_time, revocation_reason = self.extract_revoked_status(
             single_response)
         raise RevocationCheckError(
-            msg="The certificate has been revoked: current_time={0}, "
-                "revocation_time={1}, reason={2}".format(
+            msg="The certificate has been revoked: current_time={}, "
+                "revocation_time={}, reason={}".format(
                 strftime(
                     SnowflakeOCSP.OUTPUT_TIMESTAMP_FORMAT,
                     gmtime(current_time)),
@@ -1571,7 +1570,7 @@ class SnowflakeOCSP(object):
                 > timedelta(days=7):
             logger.debug(
                 " Server Side Directive is invalid. Validity exceeds 7 days start - "
-                "start {0} end {1} ".
+                "start {} end {} ".
                     format(datetime.fromtimestamp(jwt_ssd_decoded['nbf']).
                            strftime("%m/%d/%Y, %H:%M:%S"),
                            datetime.fromtimestamp(jwt_ssd_decoded['exp']).

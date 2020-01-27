@@ -3,20 +3,20 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-from codecs import open
-from os import path
 import os
 import sys
-from sys import platform
+from codecs import open
+from os import path
 from shutil import copy
+from sys import platform
 
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 try:
     from generated_version import VERSION
-except:
+except Exception:
     from version import VERSION
 version = '.'.join([str(v) for v in VERSION if v is not None])
 
@@ -177,8 +177,8 @@ setup(
     install_requires=[
         'azure-common<2.0.0',
         'azure-storage-blob<12.0.0',
-        'boto3>=1.4.4,<1.11.0',
-        'botocore>=1.5.0,<1.14.0',
+        'boto3>=1.4.4,<1.12',
+        'botocore>=1.5.0,<1.15',
         'requests<2.23.0',
         'urllib3>=1.20,<1.26.0',
         'certifi<2021.0.0',

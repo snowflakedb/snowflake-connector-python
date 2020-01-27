@@ -8,19 +8,15 @@ import os
 from collections import defaultdict
 from os import path
 
-import OpenSSL
 import botocore
+import OpenSSL
 from boto3.exceptions import S3UploadFailedError
-
-from snowflake.connector.constants import (SHA256_DIGEST, ResultStatus)
-from snowflake.connector.remote_storage_util import (
-    SnowflakeRemoteStorageUtil, DEFAULT_MAX_RETRY)
-from snowflake.connector.s3_util import (SnowflakeS3Util,
-                                         ERRORNO_WSAECONNABORTED)
+from mock import MagicMock, Mock, PropertyMock
+from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
+from snowflake.connector.remote_storage_util import DEFAULT_MAX_RETRY, SnowflakeRemoteStorageUtil
+from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED, SnowflakeS3Util
 
 THIS_DIR = path.dirname(path.realpath(__file__))
-
-from mock import Mock, MagicMock, PropertyMock
 
 
 def test_extract_bucket_name_and_path():

@@ -3,16 +3,16 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 
+from os import chmod, path
+
 import pytest
-from os import path, chmod
+from mock import MagicMock
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.errors import Error
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
-from snowflake.connector.compat import IS_WINDOWS
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
-
-from mock import MagicMock
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason='permission model is different')

@@ -192,7 +192,7 @@ class SnowflakeConnection(object):
     def __del__(self):
         try:
             self.close(retry=False)
-        except:
+        except Exception:
             pass
 
     @property
@@ -530,13 +530,13 @@ class SnowflakeConnection(object):
             Error.errorhandler_wrapper(
                 self, None, ProgrammingError,
                 {
-                    u'msg': u'Invalid parameter: {0}'.format(mode),
+                    u'msg': u'Invalid parameter: {}'.format(mode),
                     u'errno': ER_INVALID_VALUE,
                 }
             )
         try:
             self.cursor().execute(
-                "ALTER SESSION SET autocommit={0}".format(mode))
+                "ALTER SESSION SET autocommit={}".format(mode))
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
                 logger.debug(u"Autocommit feature is not enabled for this "
@@ -716,7 +716,7 @@ class SnowflakeConnection(object):
                 self.sequence_counter = value
             elif name == u'application':
                 if not APPLICATION_RE.match(value):
-                    msg = u'Invalid application name: {0}'.format(value)
+                    msg = u'Invalid application name: {}'.format(value)
                     raise ProgrammingError(
                         msg=msg,
                         errno=0
@@ -748,13 +748,11 @@ class SnowflakeConnection(object):
 
         if u'account' in kwargs:
             if u'host' not in kwargs:
-                setattr(self, u'_host',
-                        construct_hostname(
-                            kwargs.get(u'region'), self._account))
+                self._host = construct_hostname(kwargs.get(u'region'), self._account)
             if u'port' not in kwargs:
-                setattr(self, u'_port', u'443')
+                self._port = u'443'
             if u'protocol' not in kwargs:
-                setattr(self, u'_protocol', u'https')
+                self._protocol = u'https'
 
         if self._authenticator:
             self._authenticator = self._authenticator.upper()
@@ -936,7 +934,7 @@ class SnowflakeConnection(object):
         processed_params = {}
         if not isinstance(params, (list, tuple)):
             errorvalue = {
-                u'msg': u"Binding parameters must be a list: {0}".format(
+                u'msg': u"Binding parameters must be a list: {}".format(
                     params
                 ),
                 u'errno': ER_FAILED_PROCESSING_PYFORMAT
@@ -971,7 +969,7 @@ class SnowflakeConnection(object):
                         self, cursor,
                         ProgrammingError,
                         {
-                            u'msg': u"Python data type [{0}] cannot be "
+                            u'msg': u"Python data type [{}] cannot be "
                                     u"automatically mapped to Snowflake data "
                                     u"type. Specify the snowflake data type "
                                     u"explicitly.".format(
@@ -1014,7 +1012,7 @@ class SnowflakeConnection(object):
             return ret
         except Exception as e:
             errorvalue = {
-                u'msg': u"Failed processing pyformat-parameters; {0}".format(
+                u'msg': u"Failed processing pyformat-parameters; {}".format(
                     e),
                 u'errno': ER_FAILED_PROCESSING_PYFORMAT}
             Error.errorhandler_wrapper(self, cursor,
@@ -1037,7 +1035,7 @@ class SnowflakeConnection(object):
             return res
         except Exception as e:
             errorvalue = {
-                u'msg': u"Failed processing pyformat-parameters; {0}".format(
+                u'msg': u"Failed processing pyformat-parameters; {}".format(
                     e),
                 u'errno': ER_FAILED_PROCESSING_PYFORMAT}
             Error.errorhandler_wrapper(

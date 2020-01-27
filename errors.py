@@ -260,7 +260,7 @@ class OtherHTTPRetryableError(Error):
     def __init__(self, **kwargs):
         code = kwargs.get('code', 'n/a')
         Error.__init__(
-            self, msg=kwargs.get('msg') or u'HTTP {0}'.format(code),
+            self, msg=kwargs.get('msg') or u'HTTP {}'.format(code),
             errno=kwargs.get('errno'),
             sqlstate=kwargs.get('sqlstate'),
             sfqid=kwargs.get('sfqid'))

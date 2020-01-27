@@ -6,11 +6,10 @@
 
 import codecs
 import os
-from io import StringIO, BytesIO
+from io import BytesIO, StringIO
 
-from mock import patch
 import pytest
-
+from mock import patch
 from snowflake.connector import ProgrammingError
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))

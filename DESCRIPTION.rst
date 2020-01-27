@@ -10,9 +10,9 @@ Release Notes
 -------------------------------------------------------------------------------
 
 - v2.1.3(January 06,2020)
-   
+
     - Fix GCP Put failed after hours
- 
+
 - v2.1.2(December 16,2019)
 
     - Fix the arrow bundling issue for python connector on mac.
@@ -77,7 +77,7 @@ Release Notes
     - Fix memory leak in python connector panda df fetch API
 
 - v1.9.1(October 4,2019)
-   
+
     - Add asn1crypto requirement to mitigate incompatibility change.
 
 - v1.9.0(August 26,2019) **REMOVED from pypi due to dependency compatibility issues**
@@ -99,7 +99,7 @@ Release Notes
     - Fix Azure Gov PUT and GET issue
 
 - v1.8.6(July 29,2019)
-   
+
     - Reduce retries for OCSP from Python Driver
     - Azure PUT issue: ValueError: I/O operation on closed file
     - Add client information to USER-AGENT HTTP header - PythonConnector
@@ -135,13 +135,13 @@ Release Notes
     - Add Option to Skip Request Pooling
     - Add OCSP_MODE metric
     - Fixed PUT URI issue for Windows path
-    - OCSP SoftFail 
+    - OCSP SoftFail
 
 - v1.7.11 (April 22, 2019)
 
     - numpy timestamp with timezone support
     - qmark not binding None
- 
+
 - v1.7.10 (April 8, 2019)
 
     - Fix the incorrect custom Server URL in Python Driver for Privatelink
@@ -231,7 +231,7 @@ Release Notes
 
     - Enforce virtual host URL for PUT and GET.
     - Added retryCount, clientStarTime for query-request for better service.
-    
+
 - v1.6.6 (August 9, 2018)
 
     - Replaced ``pycryptodome`` with ``pycryptodomex`` to avoid namespace conflict with ``PyCrypto``.
@@ -520,7 +520,7 @@ Release Notes
 
     - Added support for the ``BINARY`` data type, which enables support for more Python data types:
 
-        - Python 3: 
+        - Python 3:
 
             - ``bytes`` and ``bytearray`` can be used for binding.
             - ``bytes`` is also used for fetching ``BINARY`` data type.
@@ -633,12 +633,12 @@ Release Notes
 - v1.0.3 (Jan 13, 2016)
 
     - Added support for the ``BOOLEAN`` data type (i.e. ``TRUE`` or ``FALSE``). This changes the behavior of the binding for the ``bool`` type object:
-     
+
         - Previously, ``bool`` was bound as a numeric value (i.e. ``1`` for ``True``, ``0`` for ``False``).
         - Now, ``bool`` is bound as native SQL data (i.e. ``TRUE`` or ``FALSE``).
 
     - Added the ``autocommit`` method to the ``Connection`` object:
-     
+
         - By default, ``autocommit`` mode is ON (i.e. each DML statement commits the change).
         - If ``autocommit`` mode is OFF, the ``commit`` and ``rollback`` methods are enabled.
 
@@ -656,4 +656,3 @@ Release Notes
 - v1.0.0 (Dec 1, 2015)
 
     - General Availability release.
-

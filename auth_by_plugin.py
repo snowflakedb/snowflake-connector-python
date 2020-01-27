@@ -4,7 +4,7 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from .errors import Error, DatabaseError
+from .errors import DatabaseError, Error
 from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 
 

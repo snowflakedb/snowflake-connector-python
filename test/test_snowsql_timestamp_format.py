@@ -4,7 +4,6 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import pytest
-
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
@@ -24,7 +23,7 @@ def test_snowsql_timestamp_format(conn_cnx):
 alter session set python_connector_query_result_format='JSON'
 """)
         cnx.cursor().execute("""
-ALTER SESSION SET 
+ALTER SESSION SET
     TIMEZONE='America/Los_Angeles',
     TIMESTAMP_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM',
     TIMESTAMP_NTZ_OUTPUT_FORMAT='DY, DD MON YYYY HH24:MI:SS TZHTZM',
@@ -61,7 +60,7 @@ ALTER SESSION SET
 """)
         ret = cnx.cursor().execute("""
     SELECT
-        '1969-09-30 12:34:56.123456789'::timestamp_ltz(7),        
+        '1969-09-30 12:34:56.123456789'::timestamp_ltz(7),
         '1969-09-30 12:34:56.123456789'::timestamp_ntz(8),
         '1969-09-30 12:34:56.123456789 -08:00'::timestamp_tz(8),
         '1969-09-30 12:34:56.123456789 -08:00'::timestamp_tz(4),

@@ -7,8 +7,7 @@
 Various constants
 """
 
-from collections import defaultdict
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from enum import Enum
 
 DBAPI_TYPE_STRING = 0
