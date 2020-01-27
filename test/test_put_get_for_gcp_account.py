@@ -9,6 +9,7 @@ import gzip
 import os
 import sys
 import time
+from filecmp import cmp
 from logging import getLogger
 
 import mock
@@ -377,3 +378,28 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
         contents = fd.read().decode(UTF8)
     assert original_contents == contents, (
         'Output is different from the original file')
+
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
+def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
+    """
+    [gcp] Put and Get a small text using gcp with no auto compression
+    """
+    fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data', 'example.json'))
+    with conn_cnx(
+            user=db_parameters['gcp_user'],
+            account=db_parameters['gcp_account'],
+            password=db_parameters['gcp_password'],
+    ) as cnx:
+        with cnx.cursor() as cursor:
+            try:
+                cursor.execute("create or replace stage teststage")
+                cursor.execute("put file://{} @teststage auto_compress=false".format(fname))
+                cursor.execute("get @teststage file://{}".format(str(tmpdir)))
+                downloaded_file = os.path.join(tmpdir, 'example.json')
+                assert cmp(fname, downloaded_file)
+            finally:
+                cursor.execute("drop stage teststage")
