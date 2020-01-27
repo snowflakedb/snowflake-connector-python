@@ -755,7 +755,15 @@ class SnowflakeConnection(object):
                 self._protocol = u'https'
 
         if self._authenticator:
-            self._authenticator = self._authenticator.upper()
+            # Only upper self._authenticator if it is a non-okta link
+            auth_tmp = self._authenticator.upper()
+            if auth_tmp in [  # Non-okta authenticators
+                DEFAULT_AUTHENTICATOR,
+                EXTERNAL_BROWSER_AUTHENTICATOR,
+                KEY_PAIR_AUTHENTICATOR,
+                OAUTH_AUTHENTICATOR
+            ]:
+                self._authenticator = auth_tmp
 
         if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
             # OAuth Authentication does not require a username
@@ -769,9 +777,12 @@ class SnowflakeConnection(object):
         if self._private_key:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR and \
-                self._authenticator != OAUTH_AUTHENTICATOR and \
-                self._authenticator != KEY_PAIR_AUTHENTICATOR:
+        if self._authenticator not in [
+            # when self._authenticator would be in this list it is always upper'd before
+            EXTERNAL_BROWSER_AUTHENTICATOR,
+            OAUTH_AUTHENTICATOR,
+            KEY_PAIR_AUTHENTICATOR,
+        ]:
             # authentication is done by the browser if the authenticator
             # is externalbrowser
             if not self._password:
