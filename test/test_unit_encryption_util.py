@@ -9,7 +9,6 @@ import os
 import tempfile
 from os import path
 
-from snowflake.connector.compat import PY2
 from snowflake.connector.constants import (UTF8)
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import \

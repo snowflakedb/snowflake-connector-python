@@ -5,12 +5,6 @@
 #
 
 from snowflake.connector.auth_oauth import AuthByOAuth
-from snowflake.connector.compat import PY2
-
-if PY2:
-    from mock import MagicMock, Mock, PropertyMock
-else:
-    from unittest.mock import MagicMock, Mock, PropertyMock
 
 
 def test_auth_oauth():

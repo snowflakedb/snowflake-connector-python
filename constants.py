@@ -11,8 +11,6 @@ from collections import defaultdict
 from collections import namedtuple
 from enum import Enum
 
-from six import PY2
-
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
 DBAPI_TYPE_NUMBER = 2
@@ -36,7 +34,7 @@ FIELD_TYPES = [
 ]
 
 FIELD_NAME_TO_ID = defaultdict(int)
-FIELD_ID_TO_NAME = defaultdict(unicode if PY2 else str)  # noqa: F821
+FIELD_ID_TO_NAME = defaultdict(str)
 
 __binary_types = []
 __binary_type_names = []

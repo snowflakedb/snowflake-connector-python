@@ -11,8 +11,9 @@
 """
 OCSP Mode: FAIL_OPEN, FAIL_CLOSED or INSECURE
 """
+from functools import wraps
+
 import certifi
-from six import wraps
 from urllib3.contrib.pyopenssl import PyOpenSSLContext
 
 from .constants import OCSPMode
@@ -40,8 +41,7 @@ from cryptography.hazmat.backends.openssl.x509 import _Certificate
 import requests.packages.urllib3.util.ssl_ as ssl_
 import requests.packages.urllib3.connection as connection_
 
-from .compat import PY2
-from .compat import get_args
+from inspect import getfullargspec as get_args
 from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
 from .errors import (OperationalError)
 from .ssl_wrap_util import wait_for_read, wait_for_write
@@ -246,8 +246,6 @@ class WrappedSocket(object):
     def _send_until_done(self, data):
         while True:
             try:
-                if PY2 and isinstance(data, unicode):
-                    data = data.encode('utf-8')
                 return self.connection.send(data)
             except OpenSSL.SSL.WantWriteError:
                 wr = wait_for_write(self.socket, self.socket.gettimeout())
@@ -400,12 +398,7 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
     global FEATURE_OCSP_MODE
     global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 
-    if PY2:
-        # Python 2 uses pyasn1 for workaround. For some reason, asn1crypto
-        # fails to parse OCSP response in Python 2.
-        from .ocsp_pyasn1 import SnowflakeOCSPPyasn1 as SFOCSP
-    else:
-        from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
+    from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 
     log.debug(u'OCSP Mode: %s, '
               u'OCSP response cache file name: %s',

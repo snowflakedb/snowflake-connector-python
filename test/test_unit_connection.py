@@ -10,12 +10,8 @@ import snowflake.connector
 from snowflake.connector.auth import (
     delete_temporary_credential_file,
 )
-from snowflake.connector.compat import PY2
 
-if PY2:
-    from mock import patch
-else:
-    from unittest.mock import patch
+from mock import patch
 
 @patch(
     'snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate')

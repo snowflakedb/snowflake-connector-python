@@ -7,7 +7,7 @@ import logging
 from logging import getLogger
 
 from snowflake.connector.constants import UTF8
-from .compat import BASE_EXCEPTION_CLASS, PY2
+from .compat import BASE_EXCEPTION_CLASS
 
 logger = getLogger(__name__)
 
@@ -109,10 +109,7 @@ class Error(BASE_EXCEPTION_CLASS):
             raise errorclass(errorvalue)
 
 
-if PY2:
-    Error.__str__ = lambda self: self.__unicode__().encode(UTF8)
-else:
-    Error.__str__ = lambda self: self.__unicode__()
+Error.__str__ = lambda self: self.__unicode__()
 
 
 class Warning(BASE_EXCEPTION_CLASS):

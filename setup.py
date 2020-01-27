@@ -182,8 +182,6 @@ setup(
         'requests<2.23.0',
         'urllib3>=1.20,<1.26.0',
         'certifi<2021.0.0',
-        'future<1.0.0',
-        'six<2.0.0',
         'pytz<2021.0',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
         'pyOpenSSL>=16.2.0,<21.0.0',
@@ -194,9 +192,6 @@ setup(
         'idna<3.0.0',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
-        'pyasn1>=0.4.0,<0.5.0;python_version<"3.0"',
-        'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
-        'enum34;python_version<"3.4"',
     ],
 
     namespace_packages=['snowflake'],

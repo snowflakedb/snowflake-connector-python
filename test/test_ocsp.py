@@ -8,7 +8,6 @@ import json
 import logging
 import tempfile
 import time
-import os
 from os import path
 from os import environ
 
@@ -16,19 +15,13 @@ from os import environ
 import pytest
 
 from snowflake.connector import OperationalError
-from snowflake.connector.compat import PY2
 from snowflake.connector.errorcode import (ER_SERVER_CERTIFICATE_REVOKED, ER_INVALID_OCSP_RESPONSE_CODE)
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
 from snowflake.connector.errors import RevocationCheckError
 
-if PY2:
-    from snowflake.connector.ocsp_pyasn1 import (
-        SnowflakeOCSPPyasn1 as SFOCSP
-    )
-else:
-    from snowflake.connector.ocsp_asn1crypto import (
-        SnowflakeOCSPAsn1Crypto as SFOCSP
-    )
+from snowflake.connector.ocsp_asn1crypto import (
+    SnowflakeOCSPAsn1Crypto as SFOCSP
+)
 
 from snowflake.connector.ocsp_snowflake import OCSPCache
 from snowflake.connector.ssl_wrap_socket import _openssl_connect

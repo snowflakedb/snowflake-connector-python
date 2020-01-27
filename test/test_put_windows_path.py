@@ -6,12 +6,9 @@
 import os
 import pytest
 
-from snowflake.connector.compat import PY2
-
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
 
-@pytest.mark.skipif(PY2, reason="Python3.5 or more")
 def test_abc(conn_cnx, tmpdir, db_parameters):
     """
     PUT a file on Windows using the URI and Windows path
