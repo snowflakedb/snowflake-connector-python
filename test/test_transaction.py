@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-import pytest
-
 import snowflake.connector
 
 
@@ -112,7 +110,7 @@ SELECT SUM(cc1) FROM {name}
 SELECT WRONG SYNTAX QUERY
 """.format(name=db_parameters['name']))
             raise Exception("Failed to cause the syntax error")
-    except snowflake.connector.Error as e:
+    except snowflake.connector.Error:
         # syntax error should be caught here
         # and the last change must have been rollbacked
         with snowflake.connector.connect(**db_config) as cnx:

@@ -300,7 +300,7 @@ class SnowflakeCursor(object):
                 self._connection = None
                 del self.messages[:]
                 return True
-        except:
+        except Exception:
             pass
 
     def is_closed(self):
@@ -505,7 +505,7 @@ class SnowflakeCursor(object):
 
         m = DESC_TABLE_RE.match(query)
         if m:
-            query1 = u'describe table {0}'.format(m.group(1))
+            query1 = u'describe table {}'.format(m.group(1))
             if logger.getEffectiveLevel() <= logging.WARNING:
                 logger.info(
                     u'query was rewritten: org=%s, new=%s',
@@ -791,14 +791,14 @@ class SnowflakeCursor(object):
                 logger.debug(u'bulk insert')
                 num_params = len(seqparams[0])
                 pivot_param = []
-                for idx in range(num_params):
+                for _ in range(num_params):
                     pivot_param.append([])
                 for row in seqparams:
                     if len(row) != num_params:
                         errorvalue = {
                             u'msg':
-                                u"Bulk data size don't match. expected: {0}, "
-                                u"got: {1}, command: {2}".format(
+                                u"Bulk data size don't match. expected: {}, "
+                                u"got: {}, command: {}".format(
                                     num_params, len(row), command),
                             u'errno': ER_INVALID_VALUE,
                         }

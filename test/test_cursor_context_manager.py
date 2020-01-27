@@ -22,11 +22,11 @@ def test_context_manager(conn_testaccount, db_parameters):
 
     try:
         conn_testaccount.cursor().execute(
-            'create or replace table {0} (a int)'.format(db_parameters['name']))
-        all_tables = [rec for rec in tables(conn_testaccount) \
+            'create or replace table {} (a int)'.format(db_parameters['name']))
+        all_tables = [rec for rec in tables(conn_testaccount)
                       if rec == db_parameters['name'].upper()]
         logger.info('tables: %s', all_tables)
         assert len(all_tables) == 1, u'number of tables'
     finally:
         conn_testaccount.cursor().execute(
-            'drop table if exists {0}'.format(db_parameters['name']))
+            'drop table if exists {}'.format(db_parameters['name']))

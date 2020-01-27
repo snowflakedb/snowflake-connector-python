@@ -9,10 +9,9 @@ import os
 import tempfile
 from os import path
 
-from snowflake.connector.constants import (UTF8)
+from snowflake.connector.constants import UTF8
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import \
-    SnowflakeFileEncryptionMaterial
+from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 

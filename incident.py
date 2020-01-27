@@ -6,27 +6,27 @@
 
 import logging
 import platform
+from datetime import datetime
 from sys import exc_info
 from traceback import format_exc
 from uuid import uuid4
-from datetime import datetime
 
-
-from .network import REQUEST_ID
 from .compat import TO_UNICODE, urlencode
-from .constants import (HTTP_HEADER_CONTENT_TYPE,
-                        HTTP_HEADER_ACCEPT,
-                        HTTP_HEADER_USER_AGENT,
-                        HTTP_HEADER_SERVICE_NAME)
-from .network import (CONTENT_TYPE_APPLICATION_JSON,
-                      ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
-                      PYTHON_CONNECTOR_USER_AGENT)
-from .errors import (ServiceUnavailableError,
-                     ForbiddenError, ProgrammingError)
+from .constants import HTTP_HEADER_ACCEPT, HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_SERVICE_NAME, HTTP_HEADER_USER_AGENT
+from .errors import ForbiddenError, ProgrammingError, ServiceUnavailableError
+from .network import (
+    ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
+    CONTENT_TYPE_APPLICATION_JSON,
+    PYTHON_CONNECTOR_USER_AGENT,
+    REQUEST_ID,
+)
 
 logger = logging.getLogger(__name__)
 URL = u'/incidents/v2/create-incident'
 CLS_BLACKLIST = frozenset({ProgrammingError})
+
+current_os_release = platform.system()
+current_os_version = platform.release()
 
 
 class Incident(object):
@@ -38,8 +38,8 @@ class Incident(object):
                  driver_version,
                  error_message,
                  error_stack_trace,
-                 os=platform.system(),
-                 os_version=platform.release()):
+                 os=current_os_release,
+                 os_version=current_os_version):
         self.uuid = TO_UNICODE(uuid4())
         self.createdOn = TO_UNICODE(datetime.utcnow())[:-3]  # utcnow returns 6 ms digits, we only want 3
         self.jobId = TO_UNICODE(job_id) if job_id is not None else None
@@ -122,7 +122,7 @@ class IncidentAPI(object):
         if incident is None:
             cls, exc, trace = exc_info()
             if cls in CLS_BLACKLIST:
-                logger.warn("Ignoring blacklisted exception type: {type}".format(type=cls))
+                logger.warning("Ignoring blacklisted exception type: {type}".format(type=cls))
                 return
             incident = Incident(job_id,
                                 request_id,
@@ -152,7 +152,7 @@ class IncidentAPI(object):
                                                      body=body))
             raise
         if not ret[u'success']:
-            logger.warn(u"Reporting incident failed for reason: '{reason}'".format(reason=ret))
+            logger.warning(u"Reporting incident failed for reason: '{reason}'".format(reason=ret))
             return
         new_incident_id = ret[u'data'][u'incidentId'] if ret.get(u'data') else None
         if not new_incident_id:

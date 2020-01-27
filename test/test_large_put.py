@@ -5,11 +5,12 @@
 #
 
 import os
-import pytest
 
+import pytest
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
+
 
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
     """
@@ -46,7 +47,7 @@ ratio number(6,2))
                 file=files, name=db_parameters['name']))
             c = cnx.cursor()
             try:
-                c.execute("copy into {0}".format(db_parameters['name']))
+                c.execute("copy into {}".format(db_parameters['name']))
                 cnt = 0
                 for _ in c:
                     cnt += 1

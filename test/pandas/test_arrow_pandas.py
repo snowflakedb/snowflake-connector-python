@@ -13,12 +13,12 @@ from decimal import Decimal
 import itertools
 
 try:
-    import pyarrow
-except ImportError as e:
+    import pyarrow  # NOQA
+except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator
+    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
@@ -26,6 +26,7 @@ except ImportError:
 SQL_ENABLE_ARROW = "alter session set python_connector_query_result_format='ARROW';"
 
 EPSILON = 1e-8
+
 
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
@@ -332,11 +333,9 @@ def test_timestampntz(conn_cnx, scale):
 @pytest.mark.parametrize("scale, timezone",
                          itertools.product(
                              [i for i in range(10)],
-                             [
-                               "UTC",
-                               "America/New_York",
-                               "Australia/Sydney"
-                              ]))
+                             ["UTC",
+                              "America/New_York",
+                              "Australia/Sydney"]))
 def test_timestamptz(conn_cnx, scale, timezone):
     cases = [
         "NULL",

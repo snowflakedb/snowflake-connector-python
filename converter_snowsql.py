@@ -5,24 +5,22 @@
 #
 
 import time
-from datetime import timedelta, datetime, date
+from datetime import date, datetime, timedelta
 from logging import getLogger
 
 import pytz
 
-from .compat import TO_UNICODE, IS_WINDOWS
-from .constants import (is_timestamp_type_name, is_date_type_name)
+from .compat import IS_WINDOWS, TO_UNICODE
+from .constants import is_date_type_name, is_timestamp_type_name
 from .converter import (
-    SnowflakeConverter,
     ZERO_EPOCH,
-    _extract_timestamp,
+    SnowflakeConverter,
     _adjust_fraction_of_nanoseconds,
-    _generate_tzinfo_from_tzoffset)
-from .sfbinaryformat import (binary_to_python, SnowflakeBinaryFormat)
-from .sfdatetime import (
-    SnowflakeDateTimeFormat,
-    SnowflakeDateFormat,
-    SnowflakeDateTime)
+    _extract_timestamp,
+    _generate_tzinfo_from_tzoffset,
+)
+from .sfbinaryformat import SnowflakeBinaryFormat, binary_to_python
+from .sfdatetime import SnowflakeDateFormat, SnowflakeDateTime, SnowflakeDateTimeFormat
 
 logger = getLogger(__name__)
 

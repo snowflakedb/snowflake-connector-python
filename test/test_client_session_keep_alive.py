@@ -5,20 +5,19 @@
 #
 # This test requires the Snowflake admin connection parameters.
 
-import pytest
 import time
 
+import pytest
 import snowflake.connector
-from snowflake.connector.auth import delete_temporary_credential_file
 
 try:
     from parameters import (CONNECTION_PARAMETERS)
-except:
+except ImportError:
     CONNECTION_PARAMETERS = {}
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
@@ -27,7 +26,7 @@ def token_validity_test_values(request):
     with snowflake.connector.connect(**CONNECTION_PARAMETERS_ADMIN) as cnx:
         print("[INFO] Setting token validity to test values")
         cnx.cursor().execute("""
-ALTER SYSTEM SET 
+ALTER SYSTEM SET
     MASTER_TOKEN_VALIDITY=30,
     SESSION_TOKEN_VALIDITY=10
 """)
@@ -36,7 +35,7 @@ ALTER SYSTEM SET
         with snowflake.connector.connect(**CONNECTION_PARAMETERS_ADMIN) as cnx:
             print("[INFO] Reverting token validity")
             cnx.cursor().execute("""
-ALTER SYSTEM SET 
+ALTER SYSTEM SET
     MASTER_TOKEN_VALIDITY=default,
     SESSION_TOKEN_VALIDITY=default
 """)

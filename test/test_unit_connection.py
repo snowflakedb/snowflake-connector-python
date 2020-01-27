@@ -3,15 +3,13 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-import pytest
 import os
 
+import pytest
 import snowflake.connector
-from snowflake.connector.auth import (
-    delete_temporary_credential_file,
-)
-
 from mock import patch
+from snowflake.connector.auth import delete_temporary_credential_file
+
 
 @patch(
     'snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate')
@@ -216,4 +214,3 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
     )
     # Test to see if closing connection works or raises an exception. If an exception is raised, test will fail.
     con.close()
-

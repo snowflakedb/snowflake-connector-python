@@ -6,14 +6,15 @@
 
 
 import base64
-
-from logging import getLogger
 import json
-from Cryptodome.Cipher import AES
 import os
 import tempfile
 from collections import namedtuple
-from .compat import (PKCS5_PAD, PKCS5_UNPAD, PKCS5_OFFSET, TO_UNICODE)
+from logging import getLogger
+
+from Cryptodome.Cipher import AES
+
+from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD, TO_UNICODE
 from .constants import UTF8
 
 

@@ -6,44 +6,44 @@
 import os
 import sys
 import time
-import pytest
 import uuid
 from contextlib import contextmanager
 from logging import getLogger
 
-from parameters import CONNECTION_PARAMETERS
+import pytest
+import snowflake.connector
 from generate_test_files import generate_k_lines_of_n_files
+from parameters import CONNECTION_PARAMETERS
+from snowflake.connector.compat import IS_WINDOWS, TO_UNICODE
+from snowflake.connector.connection import DefaultConverterClass
 
 try:
     from parameters import CONNECTION_PARAMETERS_S3
-except:
+except ImportError:
     CONNECTION_PARAMETERS_S3 = {}
 
 try:
     from parameters import CONNECTION_PARAMETERS_AZURE
-except:
+except ImportError:
     CONNECTION_PARAMETERS_AZURE = {}
 
 try:
     from parameters import CONNECTION_PARAMETERS_GCP
-except:
+except ImportError:
     CONNECTION_PARAMETERS_GCP = {}
 
 try:
     from parameters import CONNECTION_PARAMETERS_ADMIN
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
-import snowflake.connector
-from snowflake.connector.connection import DefaultConverterClass
-from snowflake.connector.compat import TO_UNICODE, IS_WINDOWS
 
 logger = getLogger(__name__)
 
 if os.getenv('TRAVIS') == 'true':
-    TEST_SCHEMA = 'TRAVIS_JOB_{0}'.format(os.getenv('TRAVIS_JOB_ID'))
+    TEST_SCHEMA = 'TRAVIS_JOB_{}'.format(os.getenv('TRAVIS_JOB_ID'))
 elif os.getenv('APPVEYOR') == 'True':
-    TEST_SCHEMA = 'APPVEYOR_JOB_{0}'.format(os.getenv('APPVEYOR_BUILD_ID'))
+    TEST_SCHEMA = 'APPVEYOR_JOB_{}'.format(os.getenv('APPVEYOR_BUILD_ID'))
 else:
     TEST_SCHEMA = 'python_connector_tests_' + TO_UNICODE(uuid.uuid4()).replace(
         '-', '_')
@@ -186,7 +186,7 @@ def init_test_schema(request, db_parameters):
             protocol=ret['protocol']
     ) as con:
         con.cursor().execute(
-            "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+            "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     if CONNECTION_PARAMETERS_S3:
         with snowflake.connector.connect(
@@ -199,7 +199,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret['s3_protocol']
         ) as con:
             con.cursor().execute(
-                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+                "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     if CONNECTION_PARAMETERS_AZURE:
         with snowflake.connector.connect(
@@ -212,7 +212,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret['azure_protocol']
         ) as con:
             con.cursor().execute(
-                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+                "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     if CONNECTION_PARAMETERS_GCP:
         with snowflake.connector.connect(
@@ -225,7 +225,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret['gcp_protocol']
         ) as con:
             con.cursor().execute(
-                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+                "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     def fin():
         ret1 = db_parameters
@@ -239,7 +239,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret1['protocol']
         ) as con1:
             con1.cursor().execute(
-                "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
+                "DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
         if CONNECTION_PARAMETERS_S3:
             with snowflake.connector.connect(
                     user=ret1['s3_user'],
@@ -251,7 +251,7 @@ def init_test_schema(request, db_parameters):
                     protocol=ret1['s3_protocol']
             ) as con1:
                 con1.cursor().execute(
-                    "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
+                    "DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
 
     request.addfinalizer(fin)
 

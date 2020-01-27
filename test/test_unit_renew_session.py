@@ -4,9 +4,8 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from snowflake.connector.network import SnowflakeRestful
-
 from mock import MagicMock, Mock, PropertyMock
+from snowflake.connector.network import SnowflakeRestful
 
 
 def test_renew_session():

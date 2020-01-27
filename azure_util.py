@@ -5,21 +5,16 @@ import os
 from collections import namedtuple
 from logging import getLogger
 
-from azure.common import (AzureMissingResourceHttpError, AzureHttpError)
+import requests
+from azure.common import AzureHttpError, AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
 from azure.storage.blob.models import ContentSettings
+from azure.storage.common._http.httpclient import HTTPResponse, _HTTPClient
+from azure.storage.common._serialization import _get_data_bytes_or_stream_only
 from azure.storage.common.retry import ExponentialRetry
 
-from .constants import (
-    SHA256_DIGEST, ResultStatus, FileHeader, HTTP_HEADER_VALUE_OCTET_STREAM)
-from .encryption_util import (EncryptionMetadata)
-
-from azure.storage.common._http.httpclient import (
-    _HTTPClient,
-    HTTPResponse,
-)
-from azure.storage.common._serialization import _get_data_bytes_or_stream_only
-import requests
+from .constants import HTTP_HEADER_VALUE_OCTET_STREAM, SHA256_DIGEST, FileHeader, ResultStatus
+from .encryption_util import EncryptionMetadata
 
 logger = getLogger(__name__)
 

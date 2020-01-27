@@ -717,7 +717,7 @@ class SnowflakeRestful(object):
         Error.errorhandler_wrapper(
             conn, None, OperationalError,
             {
-                u'msg': u'Failed to execute request: {0}'.format(
+                u'msg': u'Failed to execute request: {}'.format(
                     cause),
                 u'errno': ER_FAILED_TO_REQUEST,
             })
@@ -735,7 +735,7 @@ class SnowflakeRestful(object):
                     # masking the password
                     decoded_data['data']['PASSWORD'] = '********'
                     data = json.dumps(decoded_data)
-            except:
+            except Exception:
                 logger.info("data is not JSON")
         logger.error(
             u'Failed to get the response. Hanging? '

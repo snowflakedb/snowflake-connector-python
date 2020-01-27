@@ -14,19 +14,39 @@ paramstyle = u'pyformat'
 import logging
 from logging import NullHandler
 
-logging.getLogger(__name__).addHandler(NullHandler())
-
-from .version import (VERSION)
-from .compat import (TO_UNICODE)
+from .compat import TO_UNICODE
 from .connection import SnowflakeConnection
 from .cursor import DictCursor
+from .dbapi import (
+    BINARY,
+    DATETIME,
+    NUMBER,
+    ROWID,
+    STRING,
+    Binary,
+    Date,
+    DateFromTicks,
+    Json,
+    Time,
+    TimeFromTicks,
+    Timestamp,
+    TimestampFromTicks,
+)
 from .errors import (
-    Error, Warning, InterfaceError, DatabaseError,
-    NotSupportedError, DataError, IntegrityError, ProgrammingError,
-    OperationalError, InternalError)
-from .dbapi import (Timestamp, TimeFromTicks, Time, TimestampFromTicks, Date,
-                    DateFromTicks, Binary, Json,
-                    DATETIME, ROWID, STRING, NUMBER, BINARY)
+    DatabaseError,
+    DataError,
+    Error,
+    IntegrityError,
+    InterfaceError,
+    InternalError,
+    NotSupportedError,
+    OperationalError,
+    ProgrammingError,
+    Warning,
+)
+from .version import VERSION
+
+logging.getLogger(__name__).addHandler(NullHandler())
 
 
 def Connect(**kwargs):

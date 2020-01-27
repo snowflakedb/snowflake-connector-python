@@ -5,13 +5,12 @@
 #
 from datetime import datetime
 
-import pytz
-
 import pytest
+import pytz
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 

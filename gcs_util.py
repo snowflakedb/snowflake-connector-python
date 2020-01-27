@@ -10,12 +10,8 @@ from logging import getLogger
 
 import requests
 
-from .constants import (
-    SHA256_DIGEST,
-    ResultStatus,
-    FileHeader,
-    HTTP_HEADER_CONTENT_ENCODING)
-from .encryption_util import (EncryptionMetadata)
+from .constants import HTTP_HEADER_CONTENT_ENCODING, SHA256_DIGEST, FileHeader, ResultStatus
+from .encryption_util import EncryptionMetadata
 
 GCS_METADATA_PREFIX = u'x-goog-meta-'
 GCS_METADATA_SFC_DIGEST = GCS_METADATA_PREFIX + u'sfc-digest'

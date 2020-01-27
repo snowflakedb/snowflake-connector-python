@@ -8,7 +8,7 @@ import re
 
 try:
     import ijson
-except:
+except Exception:
     ijson = None
 
 COMMENT_PATTERN_RE = re.compile(r'^\s*\-\-')
@@ -201,9 +201,9 @@ def construct_hostname(region, account):
     if region:
         if account.find(u'.') > 0:
             account = account[0:account.find(u'.')]
-        host = u'{0}.{1}.snowflakecomputing.com'.format(account, region)
+        host = u'{}.{}.snowflakecomputing.com'.format(account, region)
     else:
-        host = u'{0}.snowflakecomputing.com'.format(account)
+        host = u'{}.snowflakecomputing.com'.format(account)
     return host
 
 

@@ -5,13 +5,12 @@
 #
 import time
 
+from mock import MagicMock, Mock, PropertyMock
 from snowflake.connector.auth import Auth
 from snowflake.connector.auth_default import AuthByDefault
 from snowflake.connector.constants import OCSPMode
-from snowflake.connector.description import (CLIENT_NAME, CLIENT_VERSION)
+from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
-
-from mock import MagicMock, Mock, PropertyMock
 
 
 def _init_rest(application, post_requset):

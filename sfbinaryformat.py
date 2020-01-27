@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-from base64 import (b16encode, standard_b64encode, b16decode)
+from base64 import b16decode, b16encode, standard_b64encode
 
 from .errors import InternalError
 

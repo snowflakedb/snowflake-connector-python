@@ -12,12 +12,11 @@ import time
 from logging import getLogger
 
 import pytest
-
 from snowflake.connector.constants import UTF8
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 logger = getLogger(__name__)
@@ -52,7 +51,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
             try:
 
                 csr.execute(
-                    "put file://{0} @%snow32806 auto_compress=true parallel=30".format(
+                    "put file://{} @%snow32806 auto_compress=true parallel=30".format(
                         fname))
                 rec = csr.fetchone()
                 assert rec[6] == u'UPLOADED'
@@ -62,7 +61,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
                     "file_format=( format_name='common.public.csv' "
                     "compression='gzip')")
                 csr.execute(
-                    "get @~/snow32806 file://{0} pattern='snow32806.*'".format(
+                    "get @~/snow32806 file://{} pattern='snow32806.*'".format(
                         tmp_dir))
                 rec = csr.fetchone()
                 assert rec[0].startswith(
@@ -274,7 +273,7 @@ def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
             else:
                 pytest.fail(
                     'cannot list all files. Potentially '
-                    'PUT command missed uploading Files: {0}'.format(all_recs))
+                    'PUT command missed uploading Files: {}'.format(all_recs))
             all_recs = run(cnx, "GET @~/{dir} file://{output_dir}")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])

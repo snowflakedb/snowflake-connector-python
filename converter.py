@@ -114,7 +114,7 @@ def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
     if scale == 0:
         return 0
     if value[0] != '-':
-        return int((value[-scale:] + ZERO_FILL[:9 - scale]))
+        return int(value[-scale:] + ZERO_FILL[:9 - scale])
 
     frac = int(value[-scale:])
     if frac == 0:
@@ -619,17 +619,17 @@ class SnowflakeConverter(object):
     def __getattr__(self, item):
         if item.endswith('_to_snowflake'):
             raise ProgrammingError(
-                msg=u"Binding data in type ({0}) is not supported.".format(
+                msg=u"Binding data in type ({}) is not supported.".format(
                     item[1:item.find('_to_snowflake')]),
                 errno=ER_NOT_SUPPORT_DATA_TYPE
             )
         elif item.endswith('to_snowflake_bindings'):
             raise ProgrammingError(
-                msg=u"Binding data in type ({0}) is not supported.".format(
+                msg=u"Binding data in type ({}) is not supported.".format(
                     item[1:item.find('_to_snowflake_bindings')]),
                 errno=ER_NOT_SUPPORT_DATA_TYPE
             )
-        raise AttributeError('No method is available: {0}'.format(item))
+        raise AttributeError('No method is available: {}'.format(item))
 
     @staticmethod
     def escape(value):
@@ -656,6 +656,6 @@ class SnowflakeConverter(object):
             return TO_UNICODE(repr(value))
         elif IS_BINARY(value):
             # Binary literal syntax
-            return u"X'{0}'".format(value.decode('ascii'))
+            return u"X'{}'".format(value.decode('ascii'))
 
-        return u"'{0}'".format(value)
+        return u"'{}'".format(value)

@@ -4,13 +4,12 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import pytest
-
+from mock import Mock
 from snowflake.connector.telemetry import TelemetryField
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
 
-from mock import Mock
 
 NUMBER_OF_ROWS = 50000
 
@@ -132,12 +131,12 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
         assert len(result1) == len(result999), (
             "result length is different: result1, and result999")
         for i, (x, y) in enumerate(zip(result1, result999)):
-            assert x == y, "element {0}".format(i)
+            assert x == y, "element {}".format(i)
 
         assert len(result2) == len(result999), (
             "result length is different: result2, and result999")
         for i, (x, y) in enumerate(zip(result2, result999)):
-            assert x == y, "element {0}".format(i)
+            assert x == y, "element {}".format(i)
 
         # verify that the expected telemetry metrics were logged
         expected = [TelemetryField.TIME_CONSUME_FIRST_RESULT,
@@ -148,4 +147,4 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
             assert sum([1 if x.message['type'] == field else 0 for x in
                         telemetry_data]) == 3, \
                 "Expected three telemetry logs (one per query) " \
-                "for log type {0}".format(field)
+                "for log type {}".format(field)

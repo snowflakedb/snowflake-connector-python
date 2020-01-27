@@ -12,9 +12,7 @@ import time
 from math import fabs
 
 import pytz
-
-from snowflake.connector.dbapi import (
-    DateFromTicks, TimestampFromTicks, TimeFromTicks)
+from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFromTicks
 
 
 def table_exists(conn_cnx, name):
@@ -22,7 +20,7 @@ def table_exists(conn_cnx, name):
         with cnx.cursor() as cursor:
             try:
                 cursor.execute("select * from %s where 1=0" % name)
-            except:
+            except Exception:
                 cnx.rollback()
                 return False
             else:
@@ -30,7 +28,7 @@ def table_exists(conn_cnx, name):
 
 
 def create_table(conn_cnx, columndefs, partial_name):
-    table = '"dbabi_dibasic_{0}"'.format(partial_name)
+    table = '"dbabi_dibasic_{}"'.format(partial_name)
     with conn_cnx() as cnx:
         cnx.cursor().execute(
             "CREATE OR REPLACE TABLE {table} ({columns})".format(
@@ -58,7 +56,7 @@ def check_data_integrity(conn_cnx, columndefs, partial_name, generator):
 
             # verify 2 things: correct number of rows, correct values for
             # each row
-            cursor.execute('select * from {0} order by 1'.format(table))
+            cursor.execute('select * from {} order by 1'.format(table))
             result_sequences = cursor.fetchall()
             results = []
             for i in result_sequences:
@@ -70,10 +68,10 @@ def check_data_integrity(conn_cnx, columndefs, partial_name, generator):
 
             # verify the right values were returned
             # for numbers, allow a difference of .000001
-            for i, (x, y) in enumerate(zip(results, sorted(data))):
+            for x, y in zip(results, sorted(data)):
                 if any(data_type in partial_name for data_type in
                        floating_point_types):
-                    for i in range(rows):
+                    for _ in range(rows):
                         df = fabs(float(x[0]) - float(y[0]))
                         if float(y[0]) != 0.0:
                             df = df / float(y[0])
@@ -84,7 +82,7 @@ def check_data_integrity(conn_cnx, columndefs, partial_name, generator):
                     assert list(x) == list(y), \
                         "fetchall did not return correct values"
 
-            cursor.execute('drop table if exists {0}'.format(table))
+            cursor.execute('drop table if exists {}'.format(table))
 
 
 def test_INT(conn_cnx):
@@ -154,7 +152,7 @@ def test_STRING(conn_cnx):
 
 def test_TEXT(conn_cnx):
     def generator(row, col):
-        rstr = ''.join([chr(i) for i in range(33, 127)] * 100);
+        rstr = ''.join([chr(i) for i in range(33, 127)] * 100)
         return rstr
 
     check_data_integrity(conn_cnx, ('col2 TEXT',), 'TEXT', generator)

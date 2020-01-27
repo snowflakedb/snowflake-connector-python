@@ -5,6 +5,7 @@
 #
 
 import errno
+import logging
 import os
 import tempfile
 import time
@@ -13,30 +14,26 @@ from os import path
 
 import OpenSSL.SSL
 import pytest
-from requests.exceptions import (
-    ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
-from requests.packages.urllib3.exceptions import (
-    ProtocolError, ReadTimeoutError)
-
+from mock import MagicMock, Mock, PropertyMock
+from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
+from requests.packages.urllib3.exceptions import ProtocolError, ReadTimeoutError
 from snowflake.connector.compat import (
-    OK, INTERNAL_SERVER_ERROR, FORBIDDEN,
-    SERVICE_UNAVAILABLE,
-    GATEWAY_TIMEOUT,
-    BAD_REQUEST,
     BAD_GATEWAY,
+    BAD_REQUEST,
+    FORBIDDEN,
+    GATEWAY_TIMEOUT,
+    INTERNAL_SERVER_ERROR,
+    OK,
+    SERVICE_UNAVAILABLE,
     UNAUTHORIZED,
     BadStatusLine,
-    IncompleteRead)
-from snowflake.connector.errors import (
-    InterfaceError, DatabaseError, OtherHTTPRetryableError)
-from snowflake.connector.network import (
-    RetryRequest, SnowflakeRestful, STATUS_TO_EXCEPTION)
-
-from mock import MagicMock, PropertyMock, Mock
+    IncompleteRead,
+)
+from snowflake.connector.errors import DatabaseError, InterfaceError, OtherHTTPRetryableError
+from snowflake.connector.network import STATUS_TO_EXCEPTION, RetryRequest, SnowflakeRestful
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
-import logging
 
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
     logger = logging.getLogger(logger_name)
