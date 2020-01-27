@@ -345,7 +345,7 @@ def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
     # generates N files
     number_of_files = 100
     number_of_lines = 1000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -384,7 +384,7 @@ def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -439,7 +439,7 @@ def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
     # generates N files
     number_of_files = 5
     number_of_lines = 100
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -524,8 +524,7 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
     # generates N files
     number_of_files = 5
     number_of_lines = 10
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files,
-                         compress=True)
+    tmp_dir = test_files(number_of_lines, number_of_files, compress=True, tmp_dir=tmpdir.mkdir('data'))
     files = os.path.join(tmp_dir, 'file*')
     shutil.copy(os.path.join(tmp_dir, 'file0.gz'),
                 os.path.join(tmp_dir, 'file0'))
@@ -641,7 +640,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     """
     number_of_files = 3
     number_of_lines = 200000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')

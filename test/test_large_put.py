@@ -18,7 +18,7 @@ def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
     # generates N files
     number_of_files = 2
     number_of_lines = 200000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=tmpdir.mkdir('data'))
 
     files = os.path.join(tmp_dir, 'file*')
     with conn_cnx(
