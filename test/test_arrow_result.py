@@ -23,9 +23,9 @@ def test_select_tinyint(conn_cnx):
     cases = [0, 1, -1, 127, -128]
     table = "test_arrow_tiny_int"
     column = "(a int)"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -36,9 +36,9 @@ def test_select_scaled_tinyint(conn_cnx):
     cases = [0.0, 0.11, -0.11, 1.27, -1.28]
     table = "test_arrow_tiny_int"
     column = "(a number(5,3))"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -49,9 +49,9 @@ def test_select_smallint(conn_cnx):
     cases = [0, 1, -1, 127, -128, 128, -129, 32767, -32768]
     table = "test_arrow_small_int"
     column = "(a int)"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -62,9 +62,9 @@ def test_select_scaled_smallint(conn_cnx):
     cases = ["0", "2.0", "-2.0", "32.767", "-32.768"]
     table = "test_arrow_small_int"
     column = "(a number(5,3))"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -75,9 +75,9 @@ def test_select_int(conn_cnx):
     cases = [0, 1, -1, 127, -128, 128, -129, 32767, -32768, 32768, -32769, 2147483647, -2147483648]
     table = "test_arrow_int"
     column = "(a int)"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -88,9 +88,9 @@ def test_select_scaled_int(conn_cnx):
     cases = ["0", "0.123456789", "-0.123456789", "0.2147483647", "-0.2147483647"]
     table = "test_arrow_int"
     column = "(a number(10,9))"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -102,9 +102,9 @@ def test_select_bigint(conn_cnx):
              -2147483649, 9223372036854775807, -9223372036854775808]
     table = "test_arrow_bigint"
     column = "(a int)"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -119,9 +119,9 @@ def test_select_scaled_bigint(conn_cnx):
              "0.000000002147483648", "-0.000000002147483649", "9.223372036854775807", "-9.223372036854775808"]
     table = "test_arrow_bigint"
     column = "(a number(38,18))"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -136,9 +136,9 @@ def test_select_decimal(conn_cnx):
              ]
     table = "test_arrow_decimal"
     column = "(a number(38,0))"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -153,9 +153,9 @@ def test_select_scaled_decimal(conn_cnx):
              "0.000000002147483648", "-0.000000002147483649", "9.223372036854775807", "-9.223372036854775808"]
     table = "test_arrow_decimal"
     column = "(a number(38,37))"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -170,9 +170,31 @@ def test_select_large_scaled_decimal(conn_cnx):
     ]
     table = "test_arrow_decimal"
     column = "(a number(38,37))"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
+    row_count = len(cases) + 2
+    col_count = 1
+    iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    finish(conn_cnx, table)
+
+
+def test_scaled_decimal_SNOW_133561(conn_cnx):
+    cases = ["0",
+             "1.2345",
+             "2.3456",
+             "-9.999",
+             "-1.000",
+             "-3.4567",
+             "3.4567",
+             "4.5678",
+             "5.6789",
+             "NULL"]
+    table = "test_scaled_decimal_SNOW_133561"
+    column = "(a number(38,10))"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
+    init(conn_cnx, table, column, values)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
@@ -187,9 +209,9 @@ def test_select_boolean(conn_cnx):
     ]
     table = "test_arrow_boolean"
     column = "(a boolean)"
-    values = "(NULL), (" + "),(".join([str(i) for i in cases]) + "), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("boolean", conn_cnx, sql_text, row_count, col_count)
@@ -214,9 +236,9 @@ def test_select_double_precision(conn_cnx):
     ]
     table = "test_arrow_double"
     column = "(a double)"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases)
     col_count = 1
     iterate_over_test_chunk("float", conn_cnx, sql_text, row_count, col_count, expected=cases)
@@ -258,9 +280,9 @@ def select_time_with_scale(conn_cnx, scale):
     ]
     table = "test_arrow_time"
     column = "(a time({}))".format(scale)
-    values = "(NULL), ('" + "'),('".join([str(i) for i in cases]) + "'), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
@@ -277,9 +299,9 @@ def test_select_date(conn_cnx):
     ]
     table = "test_arrow_time"
     column = "(a date)"
-    values = "(NULL), ('" + "'),('".join([str(i) for i in cases]) + "'), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk("date", conn_cnx, sql_text, row_count, col_count)
@@ -308,9 +330,9 @@ def test_select_timestamp_with_scale(conn_cnx, scale, type):
     ]
     table = "test_arrow_timestamp"
     column = "(a {}({}))".format(type, scale)
-    values = "(NULL), ('" + "'),('".join([str(i) for i in cases]) + "'), (NULL)"
+    values = "(-1, NULL), (" + "),(".join(["{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + "), ({}, NULL)".format(len(cases))
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     row_count = len(cases) + 2
     col_count = 1
     iterate_over_test_chunk(type, conn_cnx, sql_text, row_count, col_count)
@@ -467,7 +489,8 @@ def iterate_over_test_chunk(test_name, conn_cnx, sql_text, row_count, col_count,
 def init(conn_cnx, table, column, values):
     with conn_cnx() as json_cnx:
         cursor_json = json_cnx.cursor()
-        cursor_json.execute("create or replace table {} {}".format(table, column))
+        column_with_seq = column[0] + 's number, ' + column[1:]
+        cursor_json.execute("create or replace table {} {}".format(table, column_with_seq))
         cursor_json.execute("insert into {} values {}".format(table, values))
 
 

@@ -48,9 +48,9 @@ def test_scaled_tinyint(conn_cnx):
     cases = ["NULL", 0.11, -0.11, "NULL", 1.27, -1.28, "NULL"]
     table = "test_arrow_tiny_int"
     column = "(a number(5,2))"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one')
     finish(conn_cnx, table)
 
@@ -62,9 +62,9 @@ def test_scaled_smallint(conn_cnx):
     cases = ["NULL", 0, 0.11, -0.11, "NULL", 32.767, -32.768, "NULL"]
     table = "test_arrow_small_int"
     column = "(a number(5,3))"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one')
     finish(conn_cnx, table)
 
@@ -76,9 +76,9 @@ def test_scaled_int(conn_cnx):
     cases = ["NULL", 0, "NULL", 0.123456789, -0.123456789, 2.147483647, -2.147483648, "NULL"]
     table = "test_arrow_int"
     column = "(a number(10,9))"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one')
     finish(conn_cnx, table)
 
@@ -95,9 +95,9 @@ def test_scaled_bigint(conn_cnx):
              "NULL"]
     table = "test_arrow_big_int"
     column = "(a number(38,18))"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', epsilon=EPSILON)
     finish(conn_cnx, table)
 
@@ -116,9 +116,9 @@ def test_decimal(conn_cnx):
              "NULL"]
     table = "test_arrow_decimal"
     column = "(a number(38,0))"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='decimal')
     finish(conn_cnx, table)
 
@@ -137,10 +137,37 @@ def test_scaled_decimal(conn_cnx):
              "NULL"]
     table = "test_arrow_decimal"
     column = "(a number(38,37))"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='decimal')
+    finish(conn_cnx, table)
+
+
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is not installed.")
+def test_scaled_decimal_SNOW_133561(conn_cnx):
+    cases = ["NULL", 0, "NULL",
+             "1.2345",
+             "2.1001",
+             "2.2001",
+             "2.3001",
+             "2.3456",
+             "-9.999",
+             "-1.000",
+             "-3.4567",
+             "3.4567",
+             "4.5678",
+             "5.6789",
+             "-0.0012",
+             "NULL"]
+    table = "test_scaled_decimal_SNOW_133561"
+    column = "(a number(38,10))"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
+    init(conn_cnx, table, column, values)
+    sql_text = "select a from {} order by s".format(table)
+    validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='float')
     finish(conn_cnx, table)
 
 
@@ -151,9 +178,9 @@ def test_boolean(conn_cnx):
     cases = ["NULL", True, "NULL", False, True, True, "NULL", True, False, "NULL"]
     table = "test_arrow_boolean"
     column = "(a boolean)"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one')
     finish(conn_cnx, table)
 
@@ -176,9 +203,9 @@ def test_double(conn_cnx):
              "NULL"]
     table = "test_arrow_double"
     column = "(a double)"
-    values = "(" + "),(".join([str(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one')
     finish(conn_cnx, table)
 
@@ -258,9 +285,9 @@ def test_date(conn_cnx):
              "NULL"]
     table = "test_arrow_date"
     column = "(a date)"
-    values = "(" + "),(".join([str(i) if i == "NULL" else "'{}'".format(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='date')
     finish(conn_cnx, table)
 
@@ -286,9 +313,9 @@ def test_time(conn_cnx, scale):
              "NULL"]
     table = "test_arrow_time"
     column = "(a time({}))".format(scale)
-    values = "(" + "),(".join([str(i) if i == "NULL" else "'{}'".format(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='time', scale=scale)
     finish(conn_cnx, table)
 
@@ -320,9 +347,9 @@ def test_timestampntz(conn_cnx, scale):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestampntz({}))".format(scale)
-    values = "(" + "),(".join([str(i) if i == "NULL" else "'{}'".format(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='timestamp', scale=scale)
     finish(conn_cnx, table)
 
@@ -359,9 +386,9 @@ def test_timestamptz(conn_cnx, scale, timezone):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestamptz({}))".format(scale)
-    values = "(" + "),(".join([str(i) if i == "NULL" else "'{}'".format(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values, timezone=timezone)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='timestamptz', scale=scale, timezone=timezone)
     finish(conn_cnx, table)
 
@@ -399,9 +426,9 @@ def test_timestampltz(conn_cnx, scale, timezone):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestampltz({}))".format(scale)
-    values = "(" + "),(".join([str(i) if i == "NULL" else "'{}'".format(i) for i in cases]) + ")"
+    values = "(" + "),(".join(["{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c) for i, c in enumerate(cases)]) + ")"
     init(conn_cnx, table, column, values, timezone=timezone)
-    sql_text = "select * from {}".format(table)
+    sql_text = "select a from {} order by s".format(table)
     validate_pandas(conn_cnx, sql_text, cases, 1, 'one', data_type='timestamp', scale=scale, timezone=timezone)
     finish(conn_cnx, table)
 
@@ -494,11 +521,11 @@ def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='fl
                             c_case = cases[i]
                         if epsilon is None:
                             assert c_case == c_new, '{} row, {} column: original value is {}, new value is {}, ' \
-                                                    'values are not equal'.format(i, j, cases[j], c_new)
+                                                    'values are not equal'.format(i, j, cases[i], c_new)
                         else:
                             assert abs(c_case - c_new) < epsilon, '{} row, {} column: original value is {}, ' \
                                                                   'new value is {}, epsilon is {} \
-                            values are not equal'.format(i, j, cases[j], c_new, epsilon)
+                            values are not equal'.format(i, j, cases[i], c_new, epsilon)
 
 
 @pytest.mark.skipif(
@@ -626,7 +653,8 @@ def init(conn_cnx, table, column, values, timezone=None):
         cursor_json = json_cnx.cursor()
         if timezone is not None:
             cursor_json.execute("ALTER SESSION SET TIMEZONE = '{}'".format(timezone))
-        cursor_json.execute("create or replace table {} {}".format(table, column))
+        column_with_seq = column[0] + 's number, ' + column[1:]
+        cursor_json.execute("create or replace table {} {}".format(table, column_with_seq))
         cursor_json.execute("insert into {} values {}".format(table, values))
 
 
