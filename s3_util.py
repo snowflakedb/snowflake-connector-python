@@ -42,7 +42,7 @@ class SnowflakeS3Util:
     S3 Utility class
     """
     # magic number, given from  error message.
-    DATA_SIZE_THRESHOLD = 5242880
+    DATA_SIZE_THRESHOLD = 67108864
 
     @staticmethod
     def create_client(stage_info, use_accelerate_endpoint=False):
