@@ -172,7 +172,7 @@ def test_ocsp_single_endpoint():
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL = \
-        "https://snowflake.preprod2.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
+        "https://snowflake.preprod3.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
     connection = _openssl_connect("snowflake.okta.com")
     assert ocsp.validate("snowflake.okta.com", connection), \
         'Failed to validate: {0}'.format("snowflake.okta.com")

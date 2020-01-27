@@ -46,7 +46,7 @@ class TelemetryServerDeployments(object):
     DEV = TelemetryServer("dev", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key)
     REG = TelemetryServer("reg", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key)
     QA1 = TelemetryServer("qa1", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
-    PREPROD2 = TelemetryServer("preprod2", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
+    PREPROD3 = TelemetryServer("preprod3", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
     PROD = TelemetryServer("prod", TelemetryAPIEndpoint.PROD.url, TelemetryAPIEndpoint.PROD.api_key)
 
 
@@ -54,7 +54,7 @@ ENABLED_DEPLOYMENTS = (
     TelemetryServerDeployments.DEV.name,
     TelemetryServerDeployments.REG.name,
     TelemetryServerDeployments.QA1.name,
-    TelemetryServerDeployments.PREPROD2.name,
+    TelemetryServerDeployments.PREPROD3.name,
     TelemetryServerDeployments.PROD.name
 )
 
@@ -348,8 +348,8 @@ class TelemetryService(object):
                 deployment = TelemetryServerDeployments.DEV
         elif 'qa1' in host or 'qa1' in account:
             deployment = TelemetryServerDeployments.QA1
-        elif 'preprod2' in host:
-            deployment = TelemetryServerDeployments.PREPROD2
+        elif 'preprod3' in host:
+            deployment = TelemetryServerDeployments.PREPROD3
 
         self.deployment = deployment
 
