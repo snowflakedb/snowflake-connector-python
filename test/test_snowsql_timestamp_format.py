@@ -5,12 +5,12 @@
 #
 import pytest
 
-from snowflake.connector.compat import (IS_WINDOWS, PY2, PY34_EXACT)
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
 
 @pytest.mark.skipif(
-    IS_WINDOWS or PY2 or PY34_EXACT,
+    IS_WINDOWS,
     reason="SnowSQL runs on Python 35+. "
            "Windows doesn't support more than 9999 yeers")
 def test_snowsql_timestamp_format(conn_cnx):
@@ -47,7 +47,6 @@ SELECT
         # what is the range?
 
 
-@pytest.mark.skipif(PY2 or PY34_EXACT, reason="SnowSQL runs on Python35+")
 def test_snowsql_timestamp_negative_epoch(conn_cnx):
     with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
         cnx.cursor().execute("""

@@ -8,14 +8,13 @@ import json
 import os
 import time
 from datetime import datetime
-from sys import platform
 
 import pytest
 import pytz
 
 import snowflake.connector
-from snowflake.connector import (constants, errorcode, errors)
-from snowflake.connector.compat import (BASE_EXCEPTION_CLASS, PY2, IS_WINDOWS)
+from snowflake.connector import constants, errorcode, errors
+from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -365,9 +364,6 @@ def test_struct_time(conn, db_parameters):
                 time.tzset()
 
 
-@pytest.mark.skipif(PY2, reason="""
-Binary not supported in Python 2 connector.
-""")
 def test_insert_binary_select(conn, db_parameters):
     """
     Insert and get a binary value.

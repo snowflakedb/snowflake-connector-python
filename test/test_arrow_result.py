@@ -10,7 +10,6 @@ import pytest
 from datetime import datetime
 import snowflake.connector
 import numpy
-from snowflake.connector.compat import PY2
 
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator
@@ -446,10 +445,7 @@ def iterate_over_test_chunk(test_name, conn_cnx, sql_text, row_count, col_count,
             cursor_arrow.execute("alter session set query_result_format='ARROW_FORCE'")
             cursor_arrow.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
             cursor_arrow.execute(sql_text)
-            if not PY2:
-                assert cursor_arrow._query_result_format == 'arrow'
-            else:
-                assert cursor_arrow._query_result_format == 'json'
+            assert cursor_arrow._query_result_format == 'arrow'
 
             if expected is None:
                 for i in range(0, row_count):

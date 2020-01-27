@@ -12,7 +12,6 @@ import OpenSSL
 import botocore
 from boto3.exceptions import S3UploadFailedError
 
-from snowflake.connector.compat import PY2
 from snowflake.connector.constants import (SHA256_DIGEST, ResultStatus)
 from snowflake.connector.remote_storage_util import (
     SnowflakeRemoteStorageUtil, DEFAULT_MAX_RETRY)
@@ -21,10 +20,7 @@ from snowflake.connector.s3_util import (SnowflakeS3Util,
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
-if PY2:
-    from mock import Mock, MagicMock, PropertyMock
-else:
-    from unittest.mock import Mock, MagicMock, PropertyMock
+from mock import Mock, MagicMock, PropertyMock
 
 
 def test_extract_bucket_name_and_path():

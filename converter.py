@@ -11,12 +11,10 @@ from logging import getLogger
 
 import pytz
 
-from .compat import (PY2, IS_BINARY, TO_UNICODE, IS_NUMERIC)
-from .errorcode import (
-    ER_NOT_SUPPORT_DATA_TYPE)
-from .errors import (ProgrammingError)
-from .sfbinaryformat import (binary_to_python,
-                             binary_to_snowflake)
+from .compat import IS_BINARY, TO_UNICODE, IS_NUMERIC
+from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
+from .errors import ProgrammingError
+from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
 try:
@@ -262,10 +260,7 @@ class SnowflakeConverter(object):
             if tzlocal is not None:
                 return tzlocal.get_localzone()
             else:
-                try:
-                    return datetime.timezone.utc
-                except AttributeError:  # py2k
-                    return pytz.timezone('UTC')
+                return datetime.timezone.utc
 
     def _pre_TIMESTAMP_LTZ_to_python(self, value, ctx):
         """
@@ -657,8 +652,6 @@ class SnowflakeConverter(object):
             return u'NULL'
         elif isinstance(value, bool):
             return u'TRUE' if value else u'FALSE'
-        elif PY2 and isinstance(value, long):
-            return TO_UNICODE(str(value))
         elif IS_NUMERIC(value):
             return TO_UNICODE(repr(value))
         elif IS_BINARY(value):

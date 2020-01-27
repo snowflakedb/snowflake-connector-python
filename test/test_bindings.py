@@ -29,7 +29,6 @@ import pendulum
 import pytest
 import pytz
 
-from snowflake.connector.compat import PY2
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ProgrammingError
 
@@ -109,7 +108,7 @@ insert into {name} values(
                 'str1',
                 1.2,
                 # Py2 has bytes in str type, so Python Connector
-                bytes(b'abc') if not PY2 else bytearray(b'abc'),
+                bytes(b'abc'),
                 bytearray(b'def'),
                 current_utctime,
                 current_localtime,
@@ -378,34 +377,6 @@ create or replace table {name} (
             assert rec[0][0] == 1
             assert rec[0][1] == 'test5'
 
-    finally:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("""
-drop table if exists {name}
-""".format(name=db_parameters['name']))
-
-
-@pytest.mark.skipif(not PY2, reason="Long type test")
-def test_binding_long_value(conn_cnx, db_parameters):
-    """
-    Test binding a long value. The problem was it was bound as '1L' and raised
-    a SQL compilation error.
-    """
-    try:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("""
-create or replace table {name} (
-    c1 integer
-)
-""".format(name=db_parameters['name']))
-            c = cnx.cursor()
-            fmt = "insert into {name}(c1) values(%(v1)s)".format(
-                name=db_parameters['name']
-            )
-            c.execute(fmt, {'v1': long(1)})
-            assert len(cnx.cursor().execute(
-                "select count(*) from {name}".format(
-                    name=db_parameters['name'])).fetchall()) == 1
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""

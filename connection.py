@@ -27,7 +27,7 @@ from .chunk_downloader import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     MAX_CLIENT_PREFETCH_THREADS)
 from .compat import (
-    TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517, IS_WINDOWS)
+    TO_UNICODE, urlencode, PY_ISSUE_23517, IS_WINDOWS)
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
@@ -50,13 +50,12 @@ from .description import (
     CLIENT_VERSION
 )
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
-                        ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
+                        ER_NO_ACCOUNT_NAME, ER_NO_USER,
                         ER_NO_PASSWORD, ER_INVALID_VALUE,
                         ER_FAILED_PROCESSING_PYFORMAT,
                         ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
                         ER_NO_NUMPY)
-from .errors import (Error, ProgrammingError, InterfaceError,
-                     DatabaseError)
+from .errors import Error, ProgrammingError, DatabaseError
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -580,11 +579,7 @@ class SnowflakeConnection(object):
         This is a non-standard convenient method.
         """
         ret = []
-        if PY2:
-            stream = StringIO(sql_text.decode('utf-8') if isinstance(
-                sql_text, str) else sql_text)
-        else:
-            stream = StringIO(sql_text)
+        stream = StringIO(sql_text)
         for sql, is_put_or_get in split_statements(
                 stream, remove_comments=remove_comments):
             cur = self.cursor()
@@ -814,16 +809,6 @@ class SnowflakeConnection(object):
                 u'MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE '
                 u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
                 u'CHECKED.')
-
-        elif self._protocol == u'https':
-            if IS_OLD_PYTHON():
-                msg = (u"ERROR: The ssl package installed with your Python "
-                       u"- version {0} - does not have the security fix. "
-                       u"Upgrade to 3.5.0 or higher.\n").format(
-                    PYTHON_VERSION)
-                raise InterfaceError(
-                    msg=msg,
-                    errno=ER_OLD_PYTHON)
 
     def cmd_query(self, sql, sequence_counter, request_id,
                   binding_params=None,

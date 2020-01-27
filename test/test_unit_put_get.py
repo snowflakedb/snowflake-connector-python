@@ -5,7 +5,6 @@
 
 import pytest
 from os import path, chmod
-from snowflake.connector.compat import PY2
 from snowflake.connector.errors import Error
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 from snowflake.connector.compat import IS_WINDOWS
@@ -13,10 +12,7 @@ from snowflake.connector.compat import IS_WINDOWS
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
 
-if PY2:
-    from mock import MagicMock
-else:
-    from unittest.mock import MagicMock
+from mock import MagicMock
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason='permission model is different')

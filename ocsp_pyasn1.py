@@ -28,7 +28,6 @@ from pyasn1.type import (univ, tag)
 from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
-from .compat import (PY2)
 from .errorcode import (ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE)
 from .errors import (RevocationCheckError)
 from .rfc6960 import (
@@ -547,19 +546,13 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         Verifies the signature
         """
         sig = SnowflakeOCSPPyasn1.bit_string_to_bytearray(signature)
-        if PY2:
-            sig = str(sig)
-        else:
-            sig = sig.decode('latin-1').encode('latin-1')
+        sig = sig.decode('latin-1').encode('latin-1')
 
         pubkey = SnowflakeOCSPPyasn1.bit_string_to_bytearray(
             cert.getComponentByName(
                 'tbsCertificate').getComponentByName(
                 'subjectPublicKeyInfo').getComponentByName('subjectPublicKey'))
-        if PY2:
-            pubkey = str(pubkey)
-        else:
-            pubkey = pubkey.decode('latin-1').encode('latin-1')
+        pubkey = pubkey.decode('latin-1').encode('latin-1')
 
         rsakey = RSA.importKey(pubkey)
         signer = PKCS1_v1_5.new(rsakey)

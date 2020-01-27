@@ -5,16 +5,12 @@
 #
 import pytest
 
-from snowflake.connector.compat import PY2
 from snowflake.connector.telemetry import TelemetryField
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
 
-if PY2:
-    from mock import Mock
-else:
-    from unittest.mock import Mock
+from mock import Mock
 
 NUMBER_OF_ROWS = 50000
 

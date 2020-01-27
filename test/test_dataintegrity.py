@@ -11,10 +11,8 @@ import random
 import time
 from math import fabs
 
-import pytest
 import pytz
 
-from snowflake.connector.compat import PY2
 from snowflake.connector.dbapi import (
     DateFromTicks, TimestampFromTicks, TimeFromTicks)
 
@@ -173,9 +171,6 @@ def test_VARCHAR(conn_cnx):
     check_data_integrity(conn_cnx, ('col2 VARCHAR',), 'VARCHAR', generator)
 
 
-@pytest.mark.skipif(PY2, reason="""
-Binary not supported in Python 2 connector.
-""")
 def test_BINARY(conn_cnx):
     def generator(row, col):
         return bytes(random.getrandbits(8) for _ in range(50))

@@ -19,7 +19,7 @@ from requests.packages.urllib3.exceptions import (
     ProtocolError, ReadTimeoutError)
 
 from snowflake.connector.compat import (
-    PY2, OK, INTERNAL_SERVER_ERROR, FORBIDDEN,
+    OK, INTERNAL_SERVER_ERROR, FORBIDDEN,
     SERVICE_UNAVAILABLE,
     GATEWAY_TIMEOUT,
     BAD_REQUEST,
@@ -32,10 +32,7 @@ from snowflake.connector.errors import (
 from snowflake.connector.network import (
     RetryRequest, SnowflakeRestful, STATUS_TO_EXCEPTION)
 
-if PY2:
-    from mock import MagicMock, PropertyMock, Mock
-else:
-    from unittest.mock import MagicMock, PropertyMock, Mock
+from mock import MagicMock, PropertyMock, Mock
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
