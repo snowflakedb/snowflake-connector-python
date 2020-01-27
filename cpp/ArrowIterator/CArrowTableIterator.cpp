@@ -51,6 +51,8 @@ void CArrowTableIterator::reconstructRecordBatches()
                           : 0;
           if (scale > 0 && dt->id() != arrow::Type::type::DECIMAL)
           {
+            logger.debug("Convert fixed number column to double column, column scale %d, column type id: %d",
+                         scale, dt->id());
             convertScaledFixedNumberColumnToDoubleColumn(batchIdx, colIdx, field, columnArray, scale);
           }
           break;
@@ -173,12 +175,41 @@ arrow::Status CArrowTableIterator::replaceColumn(
   return ret;
 }
 
+template <typename T>
+double CArrowTableIterator::convertScaledFixedNumberToDouble(
+  const unsigned int scale,
+  T originalValue
+)
+{
+  if (scale < 9)
+  {
+    // simply use divide to convert decimal value in double
+    return (double) originalValue / sf::internal::powTenSB4[scale];
+  }
+  else
+  {
+    // when scale is large, convert the value to string first and then convert it to double
+    // otherwise, it may loss precision
+    std::string valStr = std::to_string(originalValue);
+    int negative = valStr.at(0) == '-' ? 1:0;
+    unsigned int digits = valStr.length() - negative;
+    if (digits <= scale)
+    {
+      int numOfZeroes = scale - digits + 1;
+      valStr.insert(negative, std::string(numOfZeroes, '0'));
+    }
+    valStr.insert(valStr.length() - scale, ".");
+    std::size_t offset = 0;
+    return std::stod(valStr, &offset);
+  }
+}
+
 void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
   const unsigned int batchIdx,
   const int colIdx,
   const std::shared_ptr<arrow::Field> field,
   const std::shared_ptr<arrow::Array> columnArray,
-  const int scale
+  const unsigned int scale
 )
 {
   // Convert to arrow double/float64 column
@@ -191,21 +222,33 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
   {
     if (columnArray->IsValid(rowIdx))
     {
-      auto originalVal = 0;
+      double val;
       switch (dt->id())
       {
         case arrow::Type::type::INT8:
-          originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
           break;
+        }
         case arrow::Type::type::INT16:
-          originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
           break;
+        }
         case arrow::Type::type::INT32:
-          originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
           break;
+        }
         case arrow::Type::type::INT64:
-          originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
           break;
+        }
         default:
           std::string errorInfo = Logger::formatString(
               "[Snowflake Exception] unknown arrow internal data type(%d) "
@@ -214,15 +257,6 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
           logger.error(errorInfo.c_str());
           return;
       }
-
-      int s = scale;
-      double val = 1.0 * originalVal;
-      while (s > 9)
-      {
-        val = val / sf::internal::powTenSB4[9];
-        s -= 9;
-      }
-      val = val / sf::internal::powTenSB4[s];
       ret = builder.Append(val);
     }
     else

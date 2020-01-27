@@ -80,7 +80,7 @@ private:
     const int colIdx,
     const std::shared_ptr<arrow::Field> field,
     const std::shared_ptr<arrow::Array> columnArray,
-    const int scale);
+    const unsigned int scale);
 
   /**
    * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
@@ -116,6 +116,17 @@ private:
     const std::shared_ptr<arrow::Array> columnArray,
     const int scale,
     const int byteLength);
+
+  /**
+   * convert scaled fixed number to double
+   * if scale is small, then just divide based on the scale; otherwise, convert the value to string first and then
+   * convert to double to avoid precision loss
+   */
+  template <typename T>
+  double convertScaledFixedNumberToDouble(
+    const unsigned int scale,
+    T originalValue
+  );
 };
 }
 #endif  // PC_ARROWTABLEITERATOR_HPP
