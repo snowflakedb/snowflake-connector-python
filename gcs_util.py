@@ -68,9 +68,9 @@ class SnowflakeGCSUtil:
         if meta.get(u'presigned_url', None):
             # Use presigned url to upload the object
 
-            if u'dst_compression_type':
-                content_encoding = meta[u'dst_compression_type'][
-                    u'name'].lower()
+            content_encoding = ""
+            if meta.get(u'dst_compression_type') is not None:
+                content_encoding = meta[u'dst_compression_type'][u'name'].lower()
 
             # We set the contentEncoding to blank for GZIP files. We don't
             # want GCS to think our gzip files are gzips because it makes
