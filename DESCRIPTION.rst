@@ -9,6 +9,18 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.0(January 27,2020)
+
+    - Drop Python 2.7 support
+    - AWS: When OVERWRITE is false, which is set by default, the file is uploaded if no same file name exists in the stage. This used to check the content signature but it will no longer check. Azure and GCP already work this way.
+    - Document Python connector dependencies on our GitHub page in addition to Snowflake docs.
+    - Fix sqlalchemy and possibly python-connector warnings.
+    - Fix GCP exception using the Python connector to PUT a file in a stage with auto_compress=false.
+    - Bump up botocore requirements to 1.14.
+    - Fix uppercaseing authenticator breaks Okta URL which may include case-sensitive elements(#257).
+    - Fix wrong result bug while using fetch_pandas_all() to get fixed numbers with large scales.
+    - Increase multi part upload threshold for S3 to 64MB.
+
 - v2.1.3(January 06,2020)
 
     - Fix GCP Put failed after hours
