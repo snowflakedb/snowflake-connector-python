@@ -399,7 +399,7 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
                 cursor.execute("create or replace stage teststage")
                 cursor.execute("put file://{} @teststage auto_compress=false".format(fname))
                 cursor.execute("get @teststage file://{}".format(str(tmpdir)))
-                downloaded_file = os.path.join(tmpdir, 'example.json')
+                downloaded_file = os.path.join(str(tmpdir), 'example.json')
                 assert cmp(fname, downloaded_file)
             finally:
                 cursor.execute("drop stage teststage")
