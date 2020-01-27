@@ -81,6 +81,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
         },
         u'dst_file_name': 'data1.txt.gz',
         u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        u'overwrite': True,
     }
     upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
     upload_meta[u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
@@ -139,6 +140,7 @@ def test_upload_one_file_to_s3_econnreset():
             u'client': client,
             u'dst_file_name': 'data1.txt.gz',
             u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+            u'overwrite': True,
         }
         upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
         upload_meta[
@@ -205,6 +207,7 @@ def test_upload_file_with_s3_upload_failed_error():
         u'client': client,
         u'dst_file_name': 'data1.txt.gz',
         u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        u'overwrite': True,
     }
     upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
     upload_meta[

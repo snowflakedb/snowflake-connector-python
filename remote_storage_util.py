@@ -13,8 +13,8 @@ from collections import namedtuple
 from logging import getLogger
 
 from .azure_util import SnowflakeAzureUtil
-from .constants import (SHA256_DIGEST, ResultStatus)
-from .encryption_util import (SnowflakeEncryptionUtil)
+from .constants import ResultStatus
+from .encryption_util import SnowflakeEncryptionUtil
 from .gcs_util import SnowflakeGCSUtil
 from .s3_util import SnowflakeS3Util
 
@@ -93,25 +93,12 @@ class SnowflakeRemoteStorageUtil(object):
             elif file_header and \
                     meta[u'result_status'] == ResultStatus.UPLOADED:
                 logger.debug(
-                    u'file already exists, checking digest: '
-                    u'location="%s", file_name="%s"',
+                    u'file already exists location="%s", file_name="%s"',
                     meta[u'stage_info'][u'location'],
                     meta[u'dst_file_name'])
-                sfc_digest = file_header.digest
-                if sfc_digest == meta[SHA256_DIGEST]:
-                    logger.debug(u'file digest matched: digest=%s',
-                                 sfc_digest)
-                    meta[u'dst_file_size'] = 0
-                    meta[u'error_details'] = \
-                        (u'File with the same destination name '
-                         u'and checksum already exists')
-                    meta[u'result_status'] = ResultStatus.SKIPPED
-                    return
-                else:
-                    logger.debug(
-                        u"file digest didn't match: digest_s3=%s, "
-                        u"digest_local=%s",
-                        sfc_digest, meta[SHA256_DIGEST])
+                meta[u'dst_file_size'] = 0
+                meta[u'result_status'] = ResultStatus.SKIPPED
+                return
 
         logger.debug(u'putting a file: %s, %s',
                      meta[u'stage_info'][u'location'], meta[u'dst_file_name'])
