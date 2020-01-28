@@ -176,8 +176,6 @@ setup(
     python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
 
     install_requires=[
-        'azure-common<2.0.0',
-        'azure-storage-blob<12.0.0',
         'boto3>=1.4.4,<1.11.0',
         'botocore>=1.5.0,<1.14.0',
         'requests<2.23.0',
@@ -233,6 +231,10 @@ setup(
             'pyarrow>=0.15.1,<0.16.0;python_version>"3.4"',
             'pandas==0.24.2;python_version=="2.7" or python_version=="3.5"',
             'pandas<1.0.0;python_version>"3.5"',
+        ],
+        "azure": [
+            'azure-common<2.0.0',
+            'azure-storage-blob<12.0.0',
         ],
         "development": [
             'pytest==4.6.6',  # Last Python 2.7 supported version
