@@ -8,17 +8,17 @@ import decimal
 import time
 from datetime import datetime, timedelta
 from logging import getLogger
-from .constants import (
-    PARAMETER_TIMEZONE)
-from .converter import (
-    _generate_tzinfo_from_tzoffset)
+
+import pytz
+
+from .constants import PARAMETER_TIMEZONE
+from .converter import _generate_tzinfo_from_tzoffset
 
 try:
     import numpy
 except ImportError:
     numpy = None
 
-import pytz
 
 try:
     import tzlocal
@@ -31,7 +31,9 @@ logger = getLogger(__name__)
 
 
 class ArrowConverterContext(object):
-    def __init__(self, session_parameters={}):
+    def __init__(self, session_parameters=None):
+        if session_parameters is None:
+            session_parameters = {}
         self._timezone = None if PARAMETER_TIMEZONE not in session_parameters else session_parameters[PARAMETER_TIMEZONE]
 
     @property

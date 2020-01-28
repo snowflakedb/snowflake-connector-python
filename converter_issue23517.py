@@ -8,10 +8,7 @@ from logging import getLogger
 
 import pytz
 
-from .converter import (
-    SnowflakeConverter,
-    ZERO_EPOCH,
-    _generate_tzinfo_from_tzoffset)
+from .converter import ZERO_EPOCH, SnowflakeConverter, _generate_tzinfo_from_tzoffset
 
 logger = getLogger(__name__)
 

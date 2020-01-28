@@ -5,10 +5,11 @@
 #
 
 from logging import getLogger
-from .telemetry import TelemetryField
+
 from .constants import FIELD_ID_TO_NAME
-from .errors import Error, InterfaceError
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
+from .errors import Error, InterfaceError
+from .telemetry import TelemetryField
 from .time_util import get_time_millis
 
 logger = getLogger(__name__)

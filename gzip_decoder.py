@@ -72,14 +72,14 @@ class IterStreamer(object):
         return self.iterator
 
     def next(self):
-        return self.iterator.next()
+        return next(self.iterator)
 
     def read(self, size):
         data = self.leftover
         count = len(self.leftover)
         try:
             while count < size:
-                chunk = self.next()
+                chunk = next(self)
                 data += chunk
                 count += len(chunk)
         except StopIteration:

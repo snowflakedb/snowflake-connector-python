@@ -46,7 +46,7 @@ class TelemetryServerDeployments(object):
     DEV = TelemetryServer("dev", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key)
     REG = TelemetryServer("reg", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key)
     QA1 = TelemetryServer("qa1", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
-    PREPROD2 = TelemetryServer("preprod2", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
+    PREPROD3 = TelemetryServer("preprod3", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
     PROD = TelemetryServer("prod", TelemetryAPIEndpoint.PROD.url, TelemetryAPIEndpoint.PROD.api_key)
 
 
@@ -54,7 +54,7 @@ ENABLED_DEPLOYMENTS = (
     TelemetryServerDeployments.DEV.name,
     TelemetryServerDeployments.REG.name,
     TelemetryServerDeployments.QA1.name,
-    TelemetryServerDeployments.PREPROD2.name,
+    TelemetryServerDeployments.PREPROD3.name,
     TelemetryServerDeployments.PROD.name
 )
 
@@ -177,7 +177,7 @@ class TelemetryService(object):
         """
         try:
             self.close()
-        except:
+        except Exception:
             pass
 
     @property
@@ -348,15 +348,17 @@ class TelemetryService(object):
                 deployment = TelemetryServerDeployments.DEV
         elif 'qa1' in host or 'qa1' in account:
             deployment = TelemetryServerDeployments.QA1
-        elif 'preprod2' in host:
-            deployment = TelemetryServerDeployments.PREPROD2
+        elif 'preprod3' in host:
+            deployment = TelemetryServerDeployments.PREPROD3
 
         self.deployment = deployment
 
-    def log_ocsp_exception(self, event_type, telemetry_data, exception=None, stack_trace=None, tags=dict(), urgent=False):
+    def log_ocsp_exception(self, event_type, telemetry_data, exception=None, stack_trace=None, tags=None, urgent=False):
         """
         Logs an OCSP Exception and adds it to the queue to be uploaded
         """
+        if tags is None:
+            tags = dict()
         try:
             if self.enabled:
                 event_name = 'OCSPException'
@@ -393,17 +395,19 @@ class TelemetryService(object):
                                retry_count=None,
                                exception=None,
                                stack_trace=None,
-                               tags=dict(),
+                               tags=None,
                                urgent=False):
         """
         Logs an HTTP Request error and adds it to the queue to be uploaded
         """
+        if tags is None:
+            tags = dict()
         try:
             if self.enabled:
                 telemetry_data = dict()
                 response_status_code = -1
                 # This mimics the output of HttpRequestBase.toString() from JBDC
-                telemetry_data['request'] = "{0} {1}".format(method, url)
+                telemetry_data['request'] = "{} {}".format(method, url)
                 telemetry_data['sqlState'] = sqlstate
                 telemetry_data['errorCode'] = errno
                 if response:

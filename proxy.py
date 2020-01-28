@@ -6,7 +6,7 @@
 
 import os
 
-from .compat import (TO_UNICODE)
+from .compat import TO_UNICODE
 
 
 def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):

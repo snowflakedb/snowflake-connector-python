@@ -14,16 +14,16 @@ from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.cursor import SnowflakeCursor
 
 try:
-    from pyarrow import RecordBatchStreamReader
-    from pyarrow import RecordBatchStreamWriter
-    from pyarrow import RecordBatch
+    from pyarrow import RecordBatchStreamReader  # NOQA
+    from pyarrow import RecordBatchStreamWriter  # NOQA
+    from pyarrow import RecordBatch  # NOQA
     import pyarrow
-except ImportError as e:
+except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_result import ArrowResult
-    from snowflake.connector.arrow_iterator import PyArrowIterator
+    from snowflake.connector.arrow_result import ArrowResult  # NOQA
+    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
@@ -286,9 +286,9 @@ def generate_data(pyarrow_type, column_meta, source_data_generator, batch_count,
             not_none_cnt = 0
             while not_none_cnt == 0:
                 column_data = []
-                for k in range(batch_row_count):
+                for _ in range(batch_row_count):
                     data = None if bool(random.getrandbits(1)) else source_data_generator()
-                    if data != None:
+                    if data is not None:
                         not_none_cnt += 1
                     column_data.append(data)
             column_arrays.append(column_data)

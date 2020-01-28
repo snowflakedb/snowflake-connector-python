@@ -6,7 +6,7 @@
 # ASN.1 source from
 # https://tools.ietf.org/html/rfc6960
 #
-from pyasn1.type import (univ, namedtype, tag, namedval, useful)
+from pyasn1.type import namedtype, namedval, tag, univ, useful
 from pyasn1_modules import rfc2459
 
 

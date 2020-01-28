@@ -27,7 +27,7 @@ from .chunk_downloader import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     MAX_CLIENT_PREFETCH_THREADS)
 from .compat import (
-    TO_UNICODE, IS_OLD_PYTHON, urlencode, PY2, PY_ISSUE_23517, IS_WINDOWS)
+    TO_UNICODE, urlencode, PY_ISSUE_23517, IS_WINDOWS)
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
@@ -50,13 +50,12 @@ from .description import (
     CLIENT_VERSION
 )
 from .errorcode import (ER_CONNECTION_IS_CLOSED,
-                        ER_NO_ACCOUNT_NAME, ER_OLD_PYTHON, ER_NO_USER,
+                        ER_NO_ACCOUNT_NAME, ER_NO_USER,
                         ER_NO_PASSWORD, ER_INVALID_VALUE,
                         ER_FAILED_PROCESSING_PYFORMAT,
                         ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
                         ER_NO_NUMPY)
-from .errors import (Error, ProgrammingError, InterfaceError,
-                     DatabaseError)
+from .errors import Error, ProgrammingError, DatabaseError
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -193,7 +192,7 @@ class SnowflakeConnection(object):
     def __del__(self):
         try:
             self.close(retry=False)
-        except:
+        except Exception:
             pass
 
     @property
@@ -311,7 +310,7 @@ class SnowflakeConnection(object):
     @property
     def warehouse(self):
         u"""
-        Schema name
+        Warehouse name
         """
         return self._warehouse
 
@@ -531,13 +530,13 @@ class SnowflakeConnection(object):
             Error.errorhandler_wrapper(
                 self, None, ProgrammingError,
                 {
-                    u'msg': u'Invalid parameter: {0}'.format(mode),
+                    u'msg': u'Invalid parameter: {}'.format(mode),
                     u'errno': ER_INVALID_VALUE,
                 }
             )
         try:
             self.cursor().execute(
-                "ALTER SESSION SET autocommit={0}".format(mode))
+                "ALTER SESSION SET autocommit={}".format(mode))
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
                 logger.debug(u"Autocommit feature is not enabled for this "
@@ -580,11 +579,7 @@ class SnowflakeConnection(object):
         This is a non-standard convenient method.
         """
         ret = []
-        if PY2:
-            stream = StringIO(sql_text.decode('utf-8') if isinstance(
-                sql_text, str) else sql_text)
-        else:
-            stream = StringIO(sql_text)
+        stream = StringIO(sql_text)
         for sql, is_put_or_get in split_statements(
                 stream, remove_comments=remove_comments):
             cur = self.cursor()
@@ -721,7 +716,7 @@ class SnowflakeConnection(object):
                 self.sequence_counter = value
             elif name == u'application':
                 if not APPLICATION_RE.match(value):
-                    msg = u'Invalid application name: {0}'.format(value)
+                    msg = u'Invalid application name: {}'.format(value)
                     raise ProgrammingError(
                         msg=msg,
                         errno=0
@@ -753,16 +748,22 @@ class SnowflakeConnection(object):
 
         if u'account' in kwargs:
             if u'host' not in kwargs:
-                setattr(self, u'_host',
-                        construct_hostname(
-                            kwargs.get(u'region'), self._account))
+                self._host = construct_hostname(kwargs.get(u'region'), self._account)
             if u'port' not in kwargs:
-                setattr(self, u'_port', u'443')
+                self._port = u'443'
             if u'protocol' not in kwargs:
-                setattr(self, u'_protocol', u'https')
+                self._protocol = u'https'
 
         if self._authenticator:
-            self._authenticator = self._authenticator.upper()
+            # Only upper self._authenticator if it is a non-okta link
+            auth_tmp = self._authenticator.upper()
+            if auth_tmp in [  # Non-okta authenticators
+                DEFAULT_AUTHENTICATOR,
+                EXTERNAL_BROWSER_AUTHENTICATOR,
+                KEY_PAIR_AUTHENTICATOR,
+                OAUTH_AUTHENTICATOR
+            ]:
+                self._authenticator = auth_tmp
 
         if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
             # OAuth Authentication does not require a username
@@ -776,9 +777,12 @@ class SnowflakeConnection(object):
         if self._private_key:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR and \
-                self._authenticator != OAUTH_AUTHENTICATOR and \
-                self._authenticator != KEY_PAIR_AUTHENTICATOR:
+        if self._authenticator not in [
+            # when self._authenticator would be in this list it is always upper'd before
+            EXTERNAL_BROWSER_AUTHENTICATOR,
+            OAUTH_AUTHENTICATOR,
+            KEY_PAIR_AUTHENTICATOR,
+        ]:
             # authentication is done by the browser if the authenticator
             # is externalbrowser
             if not self._password:
@@ -814,16 +818,6 @@ class SnowflakeConnection(object):
                 u'MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE '
                 u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
                 u'CHECKED.')
-
-        elif self._protocol == u'https':
-            if IS_OLD_PYTHON():
-                msg = (u"ERROR: The ssl package installed with your Python "
-                       u"- version {0} - does not have the security fix. "
-                       u"Upgrade to Python 2.7.9/3.5.0 or higher.\n").format(
-                    PYTHON_VERSION)
-                raise InterfaceError(
-                    msg=msg,
-                    errno=ER_OLD_PYTHON)
 
     def cmd_query(self, sql, sequence_counter, request_id,
                   binding_params=None,
@@ -951,7 +945,7 @@ class SnowflakeConnection(object):
         processed_params = {}
         if not isinstance(params, (list, tuple)):
             errorvalue = {
-                u'msg': u"Binding parameters must be a list: {0}".format(
+                u'msg': u"Binding parameters must be a list: {}".format(
                     params
                 ),
                 u'errno': ER_FAILED_PROCESSING_PYFORMAT
@@ -986,7 +980,7 @@ class SnowflakeConnection(object):
                         self, cursor,
                         ProgrammingError,
                         {
-                            u'msg': u"Python data type [{0}] cannot be "
+                            u'msg': u"Python data type [{}] cannot be "
                                     u"automatically mapped to Snowflake data "
                                     u"type. Specify the snowflake data type "
                                     u"explicitly.".format(
@@ -1029,7 +1023,7 @@ class SnowflakeConnection(object):
             return ret
         except Exception as e:
             errorvalue = {
-                u'msg': u"Failed processing pyformat-parameters; {0}".format(
+                u'msg': u"Failed processing pyformat-parameters; {}".format(
                     e),
                 u'errno': ER_FAILED_PROCESSING_PYFORMAT}
             Error.errorhandler_wrapper(self, cursor,
@@ -1052,7 +1046,7 @@ class SnowflakeConnection(object):
             return res
         except Exception as e:
             errorvalue = {
-                u'msg': u"Failed processing pyformat-parameters; {0}".format(
+                u'msg': u"Failed processing pyformat-parameters; {}".format(
                     e),
                 u'errno': ER_FAILED_PROCESSING_PYFORMAT}
             Error.errorhandler_wrapper(

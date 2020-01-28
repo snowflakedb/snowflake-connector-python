@@ -4,48 +4,46 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import os
-import random
-import subprocess
 import sys
 import time
 import uuid
 from contextlib import contextmanager
-from io import open
 from logging import getLogger
 
 import pytest
+import snowflake.connector
+from generate_test_files import generate_k_lines_of_n_files
 from parameters import CONNECTION_PARAMETERS
+from snowflake.connector.compat import IS_WINDOWS, TO_UNICODE
+from snowflake.connector.connection import DefaultConverterClass
 
 try:
     from parameters import CONNECTION_PARAMETERS_S3
-except:
+except ImportError:
     CONNECTION_PARAMETERS_S3 = {}
 
 try:
     from parameters import CONNECTION_PARAMETERS_AZURE
-except:
+except ImportError:
     CONNECTION_PARAMETERS_AZURE = {}
 
 try:
     from parameters import CONNECTION_PARAMETERS_GCP
-except:
+except ImportError:
     CONNECTION_PARAMETERS_GCP = {}
 
 try:
     from parameters import CONNECTION_PARAMETERS_ADMIN
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
-import snowflake.connector
-from snowflake.connector.connection import DefaultConverterClass
-from snowflake.connector.compat import (UTF8, TO_UNICODE, IS_WINDOWS)
 
 logger = getLogger(__name__)
 
 if os.getenv('TRAVIS') == 'true':
-    TEST_SCHEMA = 'TRAVIS_JOB_{0}'.format(os.getenv('TRAVIS_JOB_ID'))
+    TEST_SCHEMA = 'TRAVIS_JOB_{}'.format(os.getenv('TRAVIS_JOB_ID'))
 elif os.getenv('APPVEYOR') == 'True':
-    TEST_SCHEMA = 'APPVEYOR_JOB_{0}'.format(os.getenv('APPVEYOR_BUILD_ID'))
+    TEST_SCHEMA = 'APPVEYOR_JOB_{}'.format(os.getenv('APPVEYOR_BUILD_ID'))
 else:
     TEST_SCHEMA = 'python_connector_tests_' + TO_UNICODE(uuid.uuid4()).replace(
         '-', '_')
@@ -188,7 +186,7 @@ def init_test_schema(request, db_parameters):
             protocol=ret['protocol']
     ) as con:
         con.cursor().execute(
-            "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+            "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     if CONNECTION_PARAMETERS_S3:
         with snowflake.connector.connect(
@@ -201,7 +199,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret['s3_protocol']
         ) as con:
             con.cursor().execute(
-                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+                "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     if CONNECTION_PARAMETERS_AZURE:
         with snowflake.connector.connect(
@@ -214,7 +212,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret['azure_protocol']
         ) as con:
             con.cursor().execute(
-                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+                "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     if CONNECTION_PARAMETERS_GCP:
         with snowflake.connector.connect(
@@ -227,7 +225,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret['gcp_protocol']
         ) as con:
             con.cursor().execute(
-                "CREATE SCHEMA IF NOT EXISTS {0}".format(TEST_SCHEMA))
+                "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
 
     def fin():
         ret1 = db_parameters
@@ -241,7 +239,7 @@ def init_test_schema(request, db_parameters):
                 protocol=ret1['protocol']
         ) as con1:
             con1.cursor().execute(
-                "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
+                "DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
         if CONNECTION_PARAMETERS_S3:
             with snowflake.connector.connect(
                     user=ret1['s3_user'],
@@ -253,7 +251,7 @@ def init_test_schema(request, db_parameters):
                     protocol=ret1['s3_protocol']
             ) as con1:
                 con1.cursor().execute(
-                    "DROP SCHEMA IF EXISTS {0}".format(TEST_SCHEMA))
+                    "DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
 
     request.addfinalizer(fin)
 
@@ -266,59 +264,6 @@ def create_connection(**kwargs):
     ret.update(kwargs)
     connection = snowflake.connector.connect(**ret)
     return connection
-
-
-def generate_k_lines_of_n_files(tmpdir, k, n, compress=False):
-    """
-    Generates K lines of N files
-    """
-    tmp_dir = str(tmpdir.mkdir('data'))
-    for i in range(n):
-        with open(os.path.join(tmp_dir, 'file{0}'.format(i)), 'w',
-                  encoding=UTF8) as f:
-            for j in range(k):
-                num = int(random.random() * 10000.0)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                dt = time.strftime('%Y-%m-%d', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                ts = time.strftime('%Y-%m-%d %H:%M:%S', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                tsltz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                tsntz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                tstz = time.strftime('%Y-%m-%dT%H:%M:%S', tm) + \
-                       ('-' if random.random() < 0.5 else '+') + \
-                       "{0:02d}:{1:02d}".format(
-                           int(random.random() * 12.0),
-                           int(random.random() * 60.0))
-                pct = random.random() * 1000.0
-                ratio = u"{0:5.2f}".format(random.random() * 1000.0)
-                rec = u"{0:d},{1:s},{2:s},{3:s},{4:s},{5:s},{6:f},{7:s}".format(
-                    num, dt, ts, tsltz, tsntz, tstz,
-                    pct,
-                    ratio)
-                f.write(rec + "\n")
-        if compress:
-            if not IS_WINDOWS:
-                subprocess.Popen(
-                    ['gzip', os.path.join(tmp_dir, 'file{0}'.format(i))],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE).communicate()
-            else:
-                import gzip
-                import shutil
-                fname = os.path.join(tmp_dir, 'file{0}'.format(i))
-                with open(fname, 'rb') as f_in, \
-                        gzip.open(fname + '.gz', 'wb') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-                os.unlink(fname)
-    return tmp_dir
 
 
 @contextmanager

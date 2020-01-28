@@ -7,39 +7,24 @@ import datetime
 import gzip
 import os
 import random
-import shutil
 import string
 import sys
-import tempfile
 import time
 from logging import getLogger
-from os import path
 
 import pytest
 import pytz
-
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
 
-import logging
-
-for logger_name in ['test', 'snowflake.connector', 'botocore']:
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    ch = logging.FileHandler(
-        path.join(tempfile.gettempdir(), 'python_connector.log'))
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(logging.Formatter(
-        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
-    logger.addHandler(ch)
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
@@ -345,7 +330,7 @@ def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
     # generates N files
     number_of_files = 100
     number_of_lines = 1000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -384,7 +369,7 @@ def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -430,7 +415,7 @@ ratio number(6,2))
             run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET is not supported for GCP yet")
+@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="GCS doesn't skip even if the same file exist ")
 def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
                                       db_parameters):
     """
@@ -439,7 +424,7 @@ def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
     # generates N files
     number_of_files = 5
     number_of_lines = 100
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -516,51 +501,83 @@ ratio number(6,2))
             run(cnx, "drop table if exists {name}")
 
 
+@pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="GCS doesn't skip even if the same file exist ")
 def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
     """
-    File name collision
-    TODO: this should be updated once non gz file support is in
+    File name collision test. The data set have the same file names but contents are different.
     """
-    # generates N files
     number_of_files = 5
     number_of_lines = 10
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files,
-                         compress=True)
-    files = os.path.join(tmp_dir, 'file*')
-    shutil.copy(os.path.join(tmp_dir, 'file0.gz'),
-                os.path.join(tmp_dir, 'file0'))
-    stage_name = "test_put_collision/{0}".format(db_parameters['name'])
+    # data set 1
+    tmp_dir = test_files(number_of_lines, number_of_files, compress=True, tmp_dir=str(tmpdir.mkdir('data1')))
+    files1 = os.path.join(tmp_dir, 'file*')
+
+    # data set 2
+    tmp_dir = test_files(number_of_lines, number_of_files, compress=True, tmp_dir=str(tmpdir.mkdir('data2')))
+    files2 = os.path.join(tmp_dir, 'file*')
+
+    stage_name = "test_put_collision/{}".format(db_parameters['name'])
     with conn_cnx(
             user=db_parameters['s3_user'],
             account=db_parameters['s3_account'],
             password=db_parameters['s3_password']) as cnx:
-        cnx.cursor().execute("RM @~/{0}".format(stage_name))
+        cnx.cursor().execute("RM @~/{}".format(stage_name))
         try:
+            # upload all files
             success_cnt = 0
             skipped_cnt = 0
-            for rec in cnx.cursor().execute(
-                    "PUT 'file://{file}' @~/{stage_name}".format(
-                        file=files.replace('\\', '\\\\'),
+            for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name}".format(
+                        file=files1.replace('\\', '\\\\'),
                         stage_name=stage_name)):
                 logger.info('rec=%s', rec)
                 if rec[6] == 'UPLOADED':
                     success_cnt += 1
                 elif rec[6] == 'SKIPPED':
                     skipped_cnt += 1
-            assert success_cnt == number_of_files + 1
+            assert success_cnt == number_of_files
+            assert skipped_cnt == 0
+
+            # will skip uploading all files
+            success_cnt = 0
+            skipped_cnt = 0
+            for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name}".format(
+                        file=files2.replace('\\', '\\\\'),
+                        stage_name=stage_name)):
+                logger.info('rec=%s', rec)
+                if rec[6] == 'UPLOADED':
+                    success_cnt += 1
+                elif rec[6] == 'SKIPPED':
+                    skipped_cnt += 1
+            assert success_cnt == 0
+            assert skipped_cnt == number_of_files
+
+            # will overwrite all files
+            success_cnt = 0
+            skipped_cnt = 0
+            for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name} OVERWRITE=true".format(
+                        file=files2.replace('\\', '\\\\'),
+                        stage_name=stage_name)):
+                logger.info('rec=%s', rec)
+                if rec[6] == 'UPLOADED':
+                    success_cnt += 1
+                elif rec[6] == 'SKIPPED':
+                    skipped_cnt += 1
+            assert success_cnt == number_of_files
+            assert skipped_cnt == 0
+
         finally:
             with conn_cnx(
                     user=db_parameters['s3_user'],
                     account=db_parameters['s3_account'],
                     password=db_parameters['s3_password']) as cnx:
-                cnx.cursor().execute("RM @~/{0}".format(stage_name))
+                cnx.cursor().execute("RM @~/{}".format(stage_name))
 
 
 def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     fname = str(tmpdir.join('test_put_get_huge_json'))
     f = gzip.open(fname, 'wb')
     for i in range(n):
-        logger.debug("adding a value in {0}".format(i))
+        logger.debug("adding a value in {}".format(i))
         f.write('{"k":"{0}"}'.format(
             ''.join(
                 random.choice(string.ascii_uppercase + string.digits) for _ in
@@ -641,7 +658,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     """
     number_of_files = 3
     number_of_lines = 200000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')
@@ -681,7 +698,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             else:
                 pytest.fail(
                     'cannot list all files. Potentially '
-                    'PUT command missed uploading Files: {0}'.format(all_recs))
+                    'PUT command missed uploading Files: {}'.format(all_recs))
             all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])

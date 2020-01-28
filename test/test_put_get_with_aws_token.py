@@ -10,9 +10,7 @@ import os
 
 import boto3
 import pytest
-
 from snowflake.connector.constants import UTF8
-from snowflake.connector.remote_storage_util import SnowflakeRemoteStorageUtil
 from snowflake.connector.s3_util import SnowflakeS3Util
 
 # Mark every test in this module as an aws and a putget test
@@ -20,7 +18,7 @@ pytestmark = [pytest.mark.aws, pytest.mark.putget]
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
@@ -53,7 +51,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
                 account=db_parameters['s3_account'],
                 password=db_parameters['s3_password']) as cnx:
             cnx.cursor().execute(
-                "put file://{0} @%snow9144 auto_compress=true parallel=30".format(
+                "put file://{} @%snow9144 auto_compress=true parallel=30".format(
                     fname))
             cnx.cursor().execute("copy into snow9144")
             cnx.cursor().execute(
@@ -62,12 +60,12 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
                 "compression='gzip')")
             c = cnx.cursor()
             c.execute(
-                "get @~/snow9144 file://{0} pattern='snow9144.*'".format(
+                "get @~/snow9144 file://{} pattern='snow9144.*'".format(
                     tmp_dir))
             rec = c.fetchone()
             assert rec[0].startswith('snow9144'), 'A file downloaded by GET'
             assert rec[1] == 36, 'Return right file size'
-            assert rec[2] == u'DOWNLOADED' , 'Return DOWNLOADED status'
+            assert rec[2] == u'DOWNLOADED', 'Return DOWNLOADED status'
             assert rec[3] == u'', 'Return no error message'
             cnx.cursor().execute("rm @%snow9144")
             cnx.cursor().execute("rm @~/snow9144")
@@ -109,7 +107,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
         cnx.cursor().execute(
             "create or replace table snow6154 (a int, b string)")
         ret = cnx.cursor()._execute_helper(
-            "put file://{0} @%snow6154".format(fname))
+            "put file://{} @%snow6154".format(fname))
         stage_location = ret['data']['stageInfo']['location']
         stage_credentials = ret['data']['stageInfo']['creds']
 
@@ -177,7 +175,7 @@ def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
         cnx.cursor().execute(
             "create or replace table snow6154 (a int, b string)")
         ret = cnx.cursor()._execute_helper(
-            "put file://{0} @%snow6154".format(fname))
+            "put file://{} @%snow6154".format(fname))
         stage_location = ret['data']['stageInfo']['location']
         stage_credentials = ret['data']['stageInfo']['creds']
 

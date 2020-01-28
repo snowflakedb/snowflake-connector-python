@@ -10,7 +10,6 @@ import sys
 import uuid
 from logging import getLogger
 from threading import (Timer, Lock)
-from six import u
 
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (
@@ -61,7 +60,7 @@ STATEMENT_TYPE_ID_DML_SET = frozenset(
      STATEMENT_TYPE_ID_DELETE, STATEMENT_TYPE_ID_MERGE,
      STATEMENT_TYPE_ID_MULTI_TABLE_INSERT])
 
-DESC_TABLE_RE = re.compile(u(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$'),
+DESC_TABLE_RE = re.compile(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$',
                            flags=re.IGNORECASE)
 
 LOG_MAX_QUERY_LENGTH = 80
@@ -72,14 +71,14 @@ class SnowflakeCursor(object):
     Implementation of Cursor object that is returned from Connection.cursor()
     method.
     """
-    PUT_SQL_RE = re.compile(u(r'^(?:/\*.*\*/\s*)*put\s+'), flags=re.IGNORECASE)
-    GET_SQL_RE = re.compile(u(r'^(?:/\*.*\*/\s*)*get\s+'), flags=re.IGNORECASE)
-    INSERT_SQL_RE = re.compile(u(r'^insert\s+into'), flags=re.IGNORECASE)
+    PUT_SQL_RE = re.compile(r'^(?:/\*.*\*/\s*)*put\s+', flags=re.IGNORECASE)
+    GET_SQL_RE = re.compile(r'^(?:/\*.*\*/\s*)*get\s+', flags=re.IGNORECASE)
+    INSERT_SQL_RE = re.compile(r'^insert\s+into', flags=re.IGNORECASE)
     COMMENT_SQL_RE = re.compile(r"/\*.*\*/")
-    INSERT_SQL_VALUES_RE = re.compile(u(r'.*VALUES\s*(\(.*\)).*'),
+    INSERT_SQL_VALUES_RE = re.compile(r'.*VALUES\s*(\(.*\)).*',
                                       re.IGNORECASE | re.MULTILINE | re.DOTALL)
     ALTER_SESSION_RE = re.compile(
-        u(r'alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;'),
+        r'alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;',
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
     def __init__(self, connection, use_dict_result=False, json_result_class=JsonResult):
@@ -301,7 +300,7 @@ class SnowflakeCursor(object):
                 self._connection = None
                 del self.messages[:]
                 return True
-        except:
+        except Exception:
             pass
 
     def is_closed(self):
@@ -506,7 +505,7 @@ class SnowflakeCursor(object):
 
         m = DESC_TABLE_RE.match(query)
         if m:
-            query1 = u'describe table {0}'.format(m.group(1))
+            query1 = u'describe table {}'.format(m.group(1))
             if logger.getEffectiveLevel() <= logging.WARNING:
                 logger.info(
                     u'query was rewritten: org=%s, new=%s',
@@ -561,7 +560,7 @@ class SnowflakeCursor(object):
                     get_callback_output_stream=_get_callback_output_stream,
                     show_progress_bar=_show_progress_bar,
                     raise_put_get_error=_raise_put_get_error,
-                    force_put_overwrite=_force_put_overwrite)
+                    force_put_overwrite=_force_put_overwrite or data.get('overwrite', False))
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data[u'rowset']) if \
@@ -792,14 +791,14 @@ class SnowflakeCursor(object):
                 logger.debug(u'bulk insert')
                 num_params = len(seqparams[0])
                 pivot_param = []
-                for idx in range(num_params):
+                for _ in range(num_params):
                     pivot_param.append([])
                 for row in seqparams:
                     if len(row) != num_params:
                         errorvalue = {
                             u'msg':
-                                u"Bulk data size don't match. expected: {0}, "
-                                u"got: {1}, command: {2}".format(
+                                u"Bulk data size don't match. expected: {}, "
+                                u"got: {}, command: {}".format(
                                     num_params, len(row), command),
                             u'errno': ER_INVALID_VALUE,
                         }

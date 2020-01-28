@@ -6,17 +6,11 @@
 
 import codecs
 import os
-from six import PY2
-from io import StringIO, BytesIO
+from io import BytesIO, StringIO
 
-if PY2:
-    from mock import patch
-else:
-    from unittest.mock import patch
 import pytest
-
+from mock import patch
 from snowflake.connector import ProgrammingError
-from snowflake.connector.compat import PY2
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -124,23 +118,11 @@ def test_execute_stream(conn_cnx):
 
 def test_execute_stream_with_error(conn_cnx):
     # file stream
-    if PY2:
-        # Python2 converts data into binary data
-        # codecs.open() must be used
-        with open(os.path.join(
-                THIS_DIR, 'data', 'multiple_statements.sql')) as f:
-            with conn_cnx() as cnx:
-                gen = cnx.execute_stream(f)
-                with pytest.raises(TypeError):
-                    next(gen)
-    else:
-        # Python 3 converts data into Unicode data
-        expected_results = [1, 2, 3]
-        with open(os.path.join(
-                THIS_DIR, 'data', 'multiple_statements.sql')) as f:
-            with conn_cnx() as cnx:
-                for idx, rec in enumerate(cnx.execute_stream(f)):
-                    assert rec.fetchall()[0][0] == expected_results[idx]
+    expected_results = [1, 2, 3]
+    with open(os.path.join(THIS_DIR, 'data', 'multiple_statements.sql')) as f:
+        with conn_cnx() as cnx:
+            for idx, rec in enumerate(cnx.execute_stream(f)):
+                assert rec.fetchall()[0][0] == expected_results[idx]
 
     # read a file including syntax error in the middle
     with codecs.open(os.path.join(

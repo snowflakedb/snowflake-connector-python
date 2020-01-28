@@ -28,7 +28,6 @@ from requests.packages.urllib3.exceptions import (
 from snowflake.connector.time_util import get_time_millis
 from . import ssl_wrap_socket
 from .compat import (
-    PY2,
     METHOD_NOT_ALLOWED, BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
@@ -67,8 +66,6 @@ from .time_util import (
 )
 from .tool.probe_connection import probe_connection
 
-if PY2:
-    from pyasn1.error import PyAsn1Error
 
 logger = logging.getLogger(__name__)
 
@@ -720,7 +717,7 @@ class SnowflakeRestful(object):
         Error.errorhandler_wrapper(
             conn, None, OperationalError,
             {
-                u'msg': u'Failed to execute request: {0}'.format(
+                u'msg': u'Failed to execute request: {}'.format(
                     cause),
                 u'errno': ER_FAILED_TO_REQUEST,
             })
@@ -738,7 +735,7 @@ class SnowflakeRestful(object):
                     # masking the password
                     decoded_data['data']['PASSWORD'] = '********'
                     data = json.dumps(decoded_data)
-            except:
+            except Exception:
                 logger.info("data is not JSON")
         logger.error(
             u'Failed to get the response. Hanging? '
@@ -894,12 +891,6 @@ class SnowflakeRestful(object):
                 exc_info=True)
             raise RetryRequest(err)
         except Exception as err:
-            if PY2 and isinstance(err, PyAsn1Error):
-                logger.debug(
-                    "Hit retryable client error. Retrying... "
-                    "Ignore the following error stack: %s", err,
-                    exc_info=True)
-                raise RetryRequest(err)
             _, _, stack_trace = sys.exc_info()
             TelemetryService.get_instance().log_http_request_error(
                 "HttpException%s" % str(err),

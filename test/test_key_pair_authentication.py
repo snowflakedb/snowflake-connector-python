@@ -4,14 +4,13 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-import pytest
 import uuid
+
+import pytest
+import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import dsa
-from cryptography.hazmat.primitives.asymmetric import rsa
-
-import snowflake.connector
+from cryptography.hazmat.primitives.asymmetric import dsa, rsa
 from snowflake.connector.compat import TO_UNICODE
 
 
@@ -51,7 +50,7 @@ def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
     use role accountadmin
     """)
         cursor.execute("create user " + test_user)
-        
+
         for key_length in testcases:
             private_key_der, public_key_der_encoded = generate_key_pair(key_length)
 
@@ -131,9 +130,10 @@ def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
     alter user {user} set rsa_public_key_2='{public_key}'
     """.format(user=test_user,
                public_key=public_key_two_der_encoded))
-    
+
     with snowflake.connector.connect(**db_config) as _:
         pass
+
 
 def test_bad_private_key(db_parameters):
     db_config = {

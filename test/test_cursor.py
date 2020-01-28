@@ -8,18 +8,16 @@ import json
 import os
 import time
 from datetime import datetime
-from sys import platform
 
 import pytest
 import pytz
-
 import snowflake.connector
-from snowflake.connector import (constants, errorcode, errors)
-from snowflake.connector.compat import (BASE_EXCEPTION_CLASS, PY2, IS_WINDOWS)
+from snowflake.connector import constants, errorcode, errors
+from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
 
 
 def _drop_warehouse(conn, db_parameters):
-    conn.cursor().execute("drop warehouse if exists {0}".format(
+    conn.cursor().execute("drop warehouse if exists {}".format(
         db_parameters['name_wh']
     ))
 
@@ -255,7 +253,7 @@ def test_insert_timestamp_select(conn, db_parameters):
         assert desc[4][0].upper() == 'DT', 'invalid column name'
         assert desc[5][0].upper() == 'TM', 'invalid column name'
         assert constants.FIELD_ID_TO_NAME[desc[0][1]] == 'FIXED', \
-            'invalid column name: {0}'.format(
+            'invalid column name: {}'.format(
                 constants.FIELD_ID_TO_NAME[desc[0][1]])
         assert constants.FIELD_ID_TO_NAME[desc[1][1]] == 'TIMESTAMP_LTZ', \
             'invalid column name'
@@ -348,26 +346,23 @@ def test_struct_time(conn, db_parameters):
             result = cnx.cursor().execute(
                 "select aa, tsltz from {name}".format(
                     name=db_parameters['name']))
-            for (aa, tsltz) in result:
+            for (_, _tsltz) in result:
                 pass
 
-            tsltz -= tsltz.tzinfo.utcoffset(tsltz)
+            _tsltz -= _tsltz.tzinfo.utcoffset(_tsltz)
 
-            assert test_time.tm_year == tsltz.year, "Year didn't match"
-            assert test_time.tm_mon == tsltz.month, "Month didn't match"
-            assert test_time.tm_mday == tsltz.day, "Day didn't match"
-            assert test_time.tm_hour == tsltz.hour, "Hour didn't match"
-            assert test_time.tm_min == tsltz.minute, "Minute didn't match"
-            assert test_time.tm_sec == tsltz.second, "Second didn't match"
+            assert test_time.tm_year == _tsltz.year, "Year didn't match"
+            assert test_time.tm_mon == _tsltz.month, "Month didn't match"
+            assert test_time.tm_mday == _tsltz.day, "Day didn't match"
+            assert test_time.tm_hour == _tsltz.hour, "Hour didn't match"
+            assert test_time.tm_min == _tsltz.minute, "Minute didn't match"
+            assert test_time.tm_sec == _tsltz.second, "Second didn't match"
         finally:
             os.environ['TZ'] = 'UTC'
             if not IS_WINDOWS:
                 time.tzset()
 
 
-@pytest.mark.skipif(PY2, reason="""
-Binary not supported in Python 2 connector.
-""")
 def test_insert_binary_select(conn, db_parameters):
     """
     Insert and get a binary value.
@@ -679,18 +674,18 @@ def test_process_params(conn, db_parameters):
 
         c = cnx.cursor()
         c.execute(fmt, {'value': 1233})
-        for (cnt,) in c:
+        for (_cnt,) in c:
             pass
-        assert cnt == 3, 'the number of records'
+        assert _cnt == 3, 'the number of records'
         c.close()
 
         fmt = 'select count(aa) from {name} where aa > %s'.format(
             name=db_parameters['name'])
         c = cnx.cursor()
         c.execute(fmt, (1234,))
-        for (cnt,) in c:
+        for (_cnt,) in c:
             pass
-        assert cnt == 2, 'the number of records'
+        assert _cnt == 2, 'the number of records'
         c.close()
 
 
@@ -703,20 +698,20 @@ def test_real_decimal(conn, db_parameters):
                'values(%s,%s,%s)').format(
             name=db_parameters['name'])
         c.execute(fmt, (9876, 12.3, decimal.Decimal('23.4')))
-        for (cnt,) in c:
+        for (_cnt,) in c:
             pass
-        assert cnt == 1, 'the number of records'
+        assert _cnt == 1, 'the number of records'
         c.close()
 
         c = cnx.cursor()
         fmt = 'select aa, pct, ratio from {name}'.format(
             name=db_parameters['name'])
         c.execute(fmt)
-        for (aa, pct, ratio) in c:
+        for (_aa, _pct, _ratio) in c:
             pass
-        assert aa == 9876, 'the integer value'
-        assert pct == 12.3, 'the float value'
-        assert ratio == decimal.Decimal('23.4'), 'the decimal value'
+        assert _aa == 9876, 'the integer value'
+        assert _pct == 12.3, 'the float value'
+        assert _ratio == decimal.Decimal('23.4'), 'the decimal value'
         c.close()
 
         with cnx.cursor(snowflake.connector.DictCursor) as c:

@@ -4,18 +4,19 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import os
-from os import path
 from getpass import getuser
 from logging import getLogger
+from os import path
 
 import pytest
+from mock import patch
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 THIS_DIR = path.dirname(path.realpath(__file__))
@@ -29,33 +30,33 @@ def test_data(request, conn_cnx, db_parameters):
     assert u'AWS_SECRET_ACCESS_KEY' in os.environ
 
     unique_name = db_parameters['name']
-    database_name = "{0}_db".format(unique_name)
-    warehouse_name = "{0}_wh".format(unique_name)
+    database_name = "{}_db".format(unique_name)
+    warehouse_name = "{}_wh".format(unique_name)
 
     def fin():
         with conn_cnx() as cnx:
             with cnx.cursor() as cur:
-                cur.execute("drop database {0}".format(database_name))
-                cur.execute("drop warehouse {0}".format(warehouse_name))
+                cur.execute("drop database {}".format(database_name))
+                cur.execute("drop warehouse {}".format(warehouse_name))
 
     request.addfinalizer(fin)
 
     class TestData(object):
         def __init__(self):
-            self.AWS_ACCESS_KEY_ID = "'{0}'".format(
+            self.AWS_ACCESS_KEY_ID = "'{}'".format(
                 os.environ[u'AWS_ACCESS_KEY_ID'])
-            self.AWS_SECRET_ACCESS_KEY = "'{0}'".format(
+            self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
                 os.environ[u'AWS_SECRET_ACCESS_KEY'])
             self.SF_PROJECT_ROOT = os.getenv('SF_PROJECT_ROOT')
             if self.SF_PROJECT_ROOT is None:
                 self.SF_PROJECT_ROOT = path.realpath(
                     path.join(THIS_DIR, '..', '..', '..', '..', ))
-            self.stage_name = "{0}_stage".format(unique_name)
+            self.stage_name = "{}_stage".format(unique_name)
             self.warehouse_name = warehouse_name
             self.database_name = database_name
             self.user_bucket = os.getenv(
                 'SF_AWS_USER_BUCKET',
-                "sfc-dev1-regression/{0}/reg".format(getuser()))
+                "sfc-dev1-regression/{}/reg".format(getuser()))
 
     ret = TestData()
 
@@ -66,13 +67,13 @@ def test_data(request, conn_cnx, db_parameters):
 use role sysadmin
 """)
             cur.execute("""
-create or replace warehouse {0}
+create or replace warehouse {}
 warehouse_size = 'small'
 warehouse_type='standard'
 auto_suspend=1800
 """.format(warehouse_name))
             cur.execute("""
-create or replace database {0}
+create or replace database {}
 """.format(database_name))
             cur.execute("""
 create or replace schema pytesting_schema
@@ -93,8 +94,8 @@ def test_load_s3(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(
-                """use warehouse {0}""".format(test_data.warehouse_name))
-            cur.execute("""use schema {0}.pytesting_schema""".format(
+                """use warehouse {}""".format(test_data.warehouse_name))
+            cur.execute("""use schema {}.pytesting_schema""".format(
                 test_data.database_name))
             cur.execute("""
 create or replace table tweets(created_at timestamp,
@@ -159,10 +160,10 @@ def test_put_local_file(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(
-                """use warehouse {0}""".format(test_data.warehouse_name))
+                """use warehouse {}""".format(test_data.warehouse_name))
             cur.execute(
                 "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
-            cur.execute("""use schema {0}.pytesting_schema""".format(
+            cur.execute("""use schema {}.pytesting_schema""".format(
                 test_data.database_name))
             cur.execute("""
 create or replace table pytest_putget_t1 (
@@ -185,7 +186,7 @@ stage_file_format = (
                 stage_name=test_data.stage_name,
             ))
             cur.execute("""
-put file://{0}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
+put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
 """.format(test_data.SF_PROJECT_ROOT)
                         )
             assert cur.is_file_transfer
@@ -226,8 +227,8 @@ def test_put_load_from_user_stage(test_data, conn_cnx):
             cur.execute(
                 "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute(
-                """use warehouse {0}""".format(test_data.warehouse_name))
-            cur.execute("""use schema {0}.pytesting_schema""".format(
+                """use warehouse {}""".format(test_data.warehouse_name))
+            cur.execute("""use schema {}.pytesting_schema""".format(
                 test_data.database_name))
             cur.execute("""
 create or replace stage {stage_name}
@@ -304,8 +305,8 @@ def test_unload(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(
-                """use warehouse {0}""".format(test_data.warehouse_name))
-            cur.execute("""use schema {0}.pytesting_schema""".format(
+                """use warehouse {}""".format(test_data.warehouse_name))
+            cur.execute("""use schema {}.pytesting_schema""".format(
                 test_data.database_name))
             cur.execute("""
 create or replace stage {stage_name}
@@ -336,7 +337,7 @@ alter stage {stage_name} set file_format = ( format_name = 'VSV' )
 
             # put local file
             cur.execute("""
-put file://{0}/ExecPlatform/Database/data/orders_10*.csv
+put file://{}/ExecPlatform/Database/data/orders_10*.csv
 @%pytest_t3""".format(test_data.SF_PROJECT_ROOT)
                         )
 
@@ -469,7 +470,7 @@ def test_put_with_auto_compress_false(tmpdir, db_parameters):
     try:
         with cnx.cursor() as cur:
             for rec in cur.execute("""
-PUT file://{0} @~/test_put_uncompress_file auto_compress=FALSE
+PUT file://{} @~/test_put_uncompress_file auto_compress=FALSE
 """.format(test_data)):
                 print(rec)
 
@@ -480,3 +481,47 @@ LS @~/test_put_uncompress_file
         assert "data.txt.gz" not in ret[0]
     finally:
         cnx.cursor().execute("RM @~/test_put_uncompress_file")
+
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
+def test_put_overwrite(tmpdir, db_parameters):
+    """
+    Test whether _force_put_overwrite and overwrite=true works as intended
+    """
+    import snowflake.connector
+    cnx = snowflake.connector.connect(
+        user=db_parameters['s3_user'],
+        password=db_parameters['s3_password'],
+        host=db_parameters['s3_host'],
+        port=db_parameters['s3_port'],
+        database=db_parameters['s3_database'],
+        account=db_parameters['s3_account'],
+        protocol=db_parameters['s3_protocol'])
+
+    tmp_dir = str(tmpdir.mkdir('data'))
+    test_data = os.path.join(tmp_dir, 'data.txt')
+    with open(test_data, 'w') as f:
+        f.write("test1,test2")
+        f.write("test3,test4")
+
+    cnx.cursor().execute("RM @~/test_put_overwrite")
+    try:
+        with cnx.cursor() as cur:
+            with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'UPLOADED'
+            with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'SKIPPED'
+            with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'UPLOADED'
+
+        ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
+        assert "test_put_overwrite/data.txt" in ret[0]
+        assert "data.txt.gz" in ret[0]
+    finally:
+        cnx.cursor().execute("RM @~/test_put_overwrite")

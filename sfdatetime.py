@@ -3,10 +3,9 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-from collections import namedtuple
-
 import time
-from datetime import timedelta, datetime, date
+from collections import namedtuple
+from datetime import date, datetime, timedelta
 
 from .compat import TO_UNICODE
 

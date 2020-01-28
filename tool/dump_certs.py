@@ -21,7 +21,7 @@ def main():
             "or a directory including multiple certificates. The certificate "
             "file format should be PEM.")
         print("""
-Usage: {0}  <input file/dir>
+Usage: {}  <input file/dir>
 """.format(path.basename(sys.argv[0])))
         sys.exit(2)
 

@@ -8,16 +8,15 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 
 import pytest
+from snowflake.connector import ProgrammingError
+from snowflake.connector.compat import TO_UNICODE
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
-    CONNECTION_PARAMETERS_ADMIN ={}
+except ImportError:
+    CONNECTION_PARAMETERS_ADMIN = {}
 
 logger = getLogger(__name__)
-
-from snowflake.connector import ProgrammingError
-from snowflake.connector.compat import TO_UNICODE
 
 
 @pytest.mark.skipif(
@@ -41,7 +40,7 @@ def _create_a_table(meta):
     name = meta['name']
     try:
         cnx.cursor().execute("""
-create table {0} (aa int)
+create table {} (aa int)
         """.format(name))
         # print("Success #" + meta['idx'])
         return {'success': True}
@@ -71,10 +70,10 @@ def _test_snow5871(conn_cnx,
                   account=db_parameters['sf_account']) as cnx:
         cnx.cursor().execute("""
 alter system set
-    RT_MAX_OUTGOING_RATE={0},
-    RT_MAX_BURST_SIZE={1},
-    RT_MAX_BORROWING_LIMIT={2},
-    RT_RESET_PERIOD={3}""".format(
+    RT_MAX_OUTGOING_RATE={},
+    RT_MAX_BURST_SIZE={},
+    RT_MAX_BORROWING_LIMIT={},
+    RT_RESET_PERIOD={}""".format(
             rt_max_outgoing_rate, rt_max_burst_size, rt_max_borrowing_limt, rt_reset_period))
 
     try:

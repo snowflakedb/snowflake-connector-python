@@ -71,7 +71,7 @@ class TelemetryClient(object):
         try:
             self.add_log_to_batch(telemetry_data)
         except Exception:
-            logger.warn("Failed to add log to telemetry.", exc_info=True)
+            logger.warning("Failed to add log to telemetry.", exc_info=True)
 
     def send_batch(self):
         if self._is_closed:

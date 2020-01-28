@@ -5,8 +5,8 @@
 #
 
 import os
-from snowflake.connector.ocsp_snowflake import OCSPCache
-from snowflake.connector.ocsp_snowflake import OCSPServer
+
+from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer
 
 
 def test_building_retry_url():
@@ -80,7 +80,7 @@ def test_building_retry_url():
         'http://ocsp.snowflakecomputing.com:80/ocsp_response_cache.json'
     OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
     assert OCSP_SERVER.OCSP_RETRY_URL is None
-    #Once SSD is active we would use hostname specific OCSP Endpoints.
+    # Once SSD is active we would use hostname specific OCSP Endpoints.
 
 
 def test_building_new_retry():
