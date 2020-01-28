@@ -11,21 +11,11 @@ import webbrowser
 
 from .auth import Auth
 from .auth_by_plugin import AuthByPlugin
-from .compat import (urlparse, urlsplit, parse_qs)
-from .constants import (
-    HTTP_HEADER_CONTENT_TYPE,
-    HTTP_HEADER_ACCEPT,
-    HTTP_HEADER_USER_AGENT,
-    HTTP_HEADER_SERVICE_NAME,
-)
-from .errorcode import (
-    ER_UNABLE_TO_OPEN_BROWSER, ER_IDP_CONNECTION_ERROR,
-    ER_NO_HOSTNAME_FOUND)
-from .errors import (OperationalError)
-from .network import (
-    CONTENT_TYPE_APPLICATION_JSON,
-    PYTHON_CONNECTOR_USER_AGENT,
-    EXTERNAL_BROWSER_AUTHENTICATOR)
+from .compat import parse_qs, urlparse, urlsplit
+from .constants import HTTP_HEADER_ACCEPT, HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_SERVICE_NAME, HTTP_HEADER_USER_AGENT
+from .errorcode import ER_IDP_CONNECTION_ERROR, ER_NO_HOSTNAME_FOUND, ER_UNABLE_TO_OPEN_BROWSER
+from .errors import OperationalError
+from .network import CONTENT_TYPE_APPLICATION_JSON, EXTERNAL_BROWSER_AUTHENTICATOR, PYTHON_CONNECTOR_USER_AGENT
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +159,12 @@ class AuthByWebBrowser(AuthByPlugin):
         self._origin = requested_origin
         content = [
             "HTTP/1.1 200 OK",
-            "Date: {0}".format(
+            "Date: {}".format(
                 time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())),
             "Access-Control-Allow-Methods: POST, GET",
-            "Access-Control-Allow-Headers: {0}".format(requested_headers),
+            "Access-Control-Allow-Headers: {}".format(requested_headers),
             "Access-Control-Max-Age: 86400",
-            "Access-Control-Allow-Origin: {0}".format(self._origin),
+            "Access-Control-Allow-Origin: {}".format(self._origin),
             "",
             "",
         ]
@@ -202,7 +192,7 @@ class AuthByWebBrowser(AuthByPlugin):
         if self._origin:
             data = {'consent': self._consent_cache_id_token}
             msg = json.dumps(data)
-            content.append("Access-Control-Allow-Origin: {0}".format(
+            content.append("Access-Control-Allow-Origin: {}".format(
                 self._origin))
             content.append("Vary: Accept-Encoding, Origin")
         else:
@@ -210,10 +200,10 @@ class AuthByWebBrowser(AuthByPlugin):
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>SAML Response for Snowflake</title></head>
 <body>
-Your identity was confirmed and propagated to Snowflake {0}.
+Your identity was confirmed and propagated to Snowflake {}.
 You can close this window now and go back where you started from.
 </body></html>""".format(self._application)
-        content.append("Content-Length: {0}".format(len(msg)))
+        content.append("Content-Length: {}".format(len(msg)))
         content.append("")
         content.append(msg)
 

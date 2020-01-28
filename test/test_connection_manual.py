@@ -18,18 +18,17 @@
 # CONNECTION_PARAMETERS_ADMIN = { ... Snowflake admin ... }
 
 import pytest
-
 import snowflake.connector
 from snowflake.connector.auth import delete_temporary_credential_file
 
 try:
     from parameters import (CONNECTION_PARAMETERS_SSO)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_SSO = {}
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
@@ -37,7 +36,7 @@ except:
 def token_validity_test_values(request):
     with snowflake.connector.connect(**CONNECTION_PARAMETERS_ADMIN) as cnx:
         cnx.cursor().execute("""
-ALTER SYSTEM SET 
+ALTER SYSTEM SET
     MASTER_TOKEN_VALIDITY=60,
     SESSION_TOKEN_VALIDITY=5,
     ID_TOKEN_VALIDITY=60
@@ -46,7 +45,7 @@ ALTER SYSTEM SET
     def fin():
         with snowflake.connector.connect(**CONNECTION_PARAMETERS_ADMIN) as cnx:
             cnx.cursor().execute("""
-ALTER SYSTEM SET 
+ALTER SYSTEM SET
     MASTER_TOKEN_VALIDITY=default,
     SESSION_TOKEN_VALIDITY=default,
     ID_TOKEN_VALIDITY=default

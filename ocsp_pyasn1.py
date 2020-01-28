@@ -28,7 +28,6 @@ from pyasn1.type import (univ, tag)
 from pyasn1_modules import (rfc2459, rfc2437, rfc2560)
 
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
-from .compat import (PY2)
 from .errorcode import (ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE)
 from .errors import (RevocationCheckError)
 from .rfc6960 import (
@@ -349,7 +348,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         revocation_reason = revoked.getComponentByName('revocationReason')
         try:
             revocation_reason_str = str(revocation_reason)
-        except:
+        except Exception:
             revocation_reason_str = 'n/a'
         return revocation_time, revocation_reason_str
 
@@ -365,8 +364,8 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
 
         if cur_time > val_end or cur_time < val_start:
             debug_msg = "Certificate attached to OCSP Response is invalid. " \
-                         "OCSP response current time - {0} certificate not " \
-                         "before time - {1} certificate not after time - {2}. ". \
+                         "OCSP response current time - {} certificate not " \
+                         "before time - {} certificate not after time - {}. ". \
                          format(cur_time, val_start, val_end)
             return False, debug_msg
         else:
@@ -385,7 +384,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         if res.getComponentByName('responseStatus') != OCSPResponseStatus(
                 'successful'):
             raise RevocationCheckError(
-                msg="Invalid Status: {0}".format(
+                msg="Invalid Status: {}".format(
                     res.getComponentByName('response_status')),
                 errno=ER_INVALID_OCSP_RESPONSE)
 
@@ -452,7 +451,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         if res.getComponentByName('responseStatus') != OCSPResponseStatus(
                 'successful'):
             raise RevocationCheckError(
-                msg="Invalid Status: {0}".format(
+                msg="Invalid Status: {}".format(
                     res.getComponentByName('response_status')),
                 errno=ER_INVALID_OCSP_RESPONSE)
 
@@ -527,7 +526,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
                 self._process_unknown_status(cert_id)
             else:
                 debug_msg = "Unknown revocation status was returned. " \
-                            "OCSP response may be malformed: {0}. ".format(cert_status)
+                            "OCSP response may be malformed: {}. ".format(cert_status)
                 raise RevocationCheckError(
                     msg=debug_msg,
                     errno=ER_INVALID_OCSP_RESPONSE_CODE)
@@ -535,7 +534,7 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
             if not self.debug_ocsp_failure_url:
                 debug_msg = op_er.msg
             else:
-                debug_msg = "{0} Consider running curl -o ocsp.der {1}".\
+                debug_msg = "{} Consider running curl -o ocsp.der {}".\
                     format(op_er.msg,
                            self.debug_ocsp_failure_url)
             raise RevocationCheckError(
@@ -547,19 +546,13 @@ class SnowflakeOCSPPyasn1(SnowflakeOCSP):
         Verifies the signature
         """
         sig = SnowflakeOCSPPyasn1.bit_string_to_bytearray(signature)
-        if PY2:
-            sig = str(sig)
-        else:
-            sig = sig.decode('latin-1').encode('latin-1')
+        sig = sig.decode('latin-1').encode('latin-1')
 
         pubkey = SnowflakeOCSPPyasn1.bit_string_to_bytearray(
             cert.getComponentByName(
                 'tbsCertificate').getComponentByName(
                 'subjectPublicKeyInfo').getComponentByName('subjectPublicKey'))
-        if PY2:
-            pubkey = str(pubkey)
-        else:
-            pubkey = pubkey.decode('latin-1').encode('latin-1')
+        pubkey = pubkey.decode('latin-1').encode('latin-1')
 
         rsakey = RSA.importKey(pubkey)
         signer = PKCS1_v1_5.new(rsakey)

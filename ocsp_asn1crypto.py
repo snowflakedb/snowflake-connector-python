@@ -5,22 +5,25 @@
 #
 import platform
 import sys
-
+import warnings
+from base64 import b64decode, b64encode
+from collections import OrderedDict
 from datetime import datetime, timezone
-
-from base64 import b64encode, b64decode
 from logging import getLogger
+from os import getenv
 
-from Cryptodome.Hash import SHA256, SHA384, SHA1, SHA512
+from asn1crypto.algos import DigestAlgorithm
+from asn1crypto.core import Integer, OctetString
+from asn1crypto.ocsp import CertId, OCSPRequest, OCSPResponse, Request, Requests, TBSRequest, Version
+from asn1crypto.x509 import Certificate
+from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Signature import PKCS1_v1_5
-from asn1crypto.algos import DigestAlgorithm
-from asn1crypto.core import OctetString, Integer
-from asn1crypto.ocsp import CertId, OCSPRequest, TBSRequest, Requests, \
-    Request, OCSPResponse, Version
-from asn1crypto.x509 import Certificate
+from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE
+from snowflake.connector.errors import RevocationCheckError
+from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
+from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
 
-import warnings
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     # force versioned dylibs onto oscrypto ssl on catalina
@@ -29,15 +32,6 @@ with warnings.catch_warnings():
         if _module_values['backend'] is None:
             use_openssl(libcrypto_path='/usr/lib/libcrypto.35.dylib', libssl_path='/usr/lib/libssl.35.dylib')
     from oscrypto import asymmetric
-
-from snowflake.connector.errorcode import (
-    ER_INVALID_OCSP_RESPONSE,
-    ER_INVALID_OCSP_RESPONSE_CODE)
-from snowflake.connector.errors import RevocationCheckError
-from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
-from collections import OrderedDict
-from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
-from os import getenv
 
 
 logger = getLogger(__name__)
@@ -166,8 +160,8 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         if cur_time > val_end or \
                 cur_time < val_start:
             debug_msg = "Certificate attached to OCSP response is invalid. OCSP response " \
-                        "current time - {0} certificate not before time - {1} certificate " \
-                        "not after time - {2}. Consider running curl -o ocsp.der {3}". \
+                        "current time - {} certificate not before time - {} certificate " \
+                        "not after time - {}. Consider running curl -o ocsp.der {}". \
                         format(cur_time,
                                val_start,
                                val_end,
@@ -189,7 +183,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         if res['response_status'].native != 'successful':
             raise RevocationCheckError(
-                msg="Invalid Status: {0}".format(res['response_status'].native),
+                msg="Invalid Status: {}".format(res['response_status'].native),
                 errno=ER_INVALID_OCSP_RESPONSE)
 
         basic_ocsp_response = res.basic_ocsp_response
@@ -246,7 +240,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         if res['response_status'].native != 'successful':
             raise RevocationCheckError(
-                msg="Invalid Status: {0}".format(res['response_status'].native),
+                msg="Invalid Status: {}".format(res['response_status'].native),
                 errno=ER_INVALID_OCSP_RESPONSE)
 
         basic_ocsp_response = res.basic_ocsp_response
@@ -313,14 +307,14 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                 self._process_unknown_status(cert_id)
             else:
                 debug_msg = "Unknown revocation status was returned." \
-                            "OCSP response may be malformed: {0}.".\
+                            "OCSP response may be malformed: {}.".\
                     format(cert_status)
                 raise RevocationCheckError(
                     msg=debug_msg,
                     errno=ER_INVALID_OCSP_RESPONSE_CODE
                 )
         except RevocationCheckError as op_er:
-            debug_msg = "{0} Consider running curl -o ocsp.der {1}".\
+            debug_msg = "{} Consider running curl -o ocsp.der {}".\
                 format(op_er.msg,
                            self.debug_ocsp_failure_url)
             raise RevocationCheckError(msg=debug_msg, errno=op_er.errno)

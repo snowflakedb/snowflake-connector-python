@@ -6,18 +6,19 @@
 import logging
 import time
 from logging import getLogger
-from threading import Thread, Lock
+from threading import Lock, Thread
 
 import pytest
+from snowflake.connector import errors
 
 logger = getLogger(__name__)
 logging.basicConfig(level=logging.CRITICAL)
-from snowflake.connector import errors
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
+
 
 @pytest.fixture()
 def conn_cnx(request, conn_cnx):
@@ -54,7 +55,7 @@ def _query_run(conn, shared, expectedCanceled=True):
             for rec in c:
                 with shared.lock:
                     shared.session_id = int(rec[0])
-        logger.info("Current Session id: {0}".format(shared.session_id))
+        logger.info("Current Session id: {}".format(shared.session_id))
 
         # Run a long query and see if we're canceled
         canceled = False
@@ -99,20 +100,20 @@ def _query_cancel(conn, shared, user, password, expectedCanceled):
             logger.info("User %s is waiting for Session ID to be available",
                         user)
             time.sleep(1)
-        logger.info("Target Session id: {0}".format(shared.session_id))
+        logger.info("Target Session id: {}".format(shared.session_id))
         try:
-            query = "call system$cancel_all_queries({0})".format(
+            query = "call system$cancel_all_queries({})".format(
                 shared.session_id)
             logger.info("Query: %s", query)
             cnx.cursor().execute(query)
             assert expectedCanceled, ("You should NOT be able to "
-                                      "cancel the query [{0}]".format(
+                                      "cancel the query [{}]".format(
                 shared.session_id))
         except errors.ProgrammingError as e:
             logger.info("FAILED TO CANCEL THE QUERY: %s", e)
             assert not expectedCanceled, (
                 "You should be able to "
-                "cancel the query [{0}]".format(
+                "cancel the query [{}]".format(
                     shared.session_id))
 
 

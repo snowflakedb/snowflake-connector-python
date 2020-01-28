@@ -5,11 +5,12 @@
 #
 
 import os
-import pytest
 
+import pytest
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
+
 
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
     """
@@ -18,7 +19,7 @@ def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
     # generates N files
     number_of_files = 2
     number_of_lines = 200000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
     with conn_cnx(
@@ -46,7 +47,7 @@ ratio number(6,2))
                 file=files, name=db_parameters['name']))
             c = cnx.cursor()
             try:
-                c.execute("copy into {0}".format(db_parameters['name']))
+                c.execute("copy into {}".format(db_parameters['name']))
                 cnt = 0
                 for _ in c:
                     cnt += 1

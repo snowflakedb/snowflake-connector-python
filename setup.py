@@ -3,20 +3,20 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-from codecs import open
-from os import path
 import os
 import sys
-from sys import platform
+from codecs import open
+from os import path
 from shutil import copy
+from sys import platform
 
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 try:
     from generated_version import VERSION
-except:
+except Exception:
     from version import VERSION
 version = '.'.join([str(v) for v in VERSION if v is not None])
 
@@ -172,19 +172,16 @@ setup(
     download_url='https://www.snowflake.com/',
     use_2to3=False,
 
-    # NOTE: Python 3.4 will be dropped within one month.
-    python_requires='>=2.7.9,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    python_requires='>=3.5',
 
     install_requires=[
         'azure-common<2.0.0',
         'azure-storage-blob<12.0.0',
-        'boto3>=1.4.4,<1.11.0',
-        'botocore>=1.5.0,<1.14.0',
+        'boto3>=1.4.4,<1.12',
+        'botocore>=1.5.0,<1.15',
         'requests<2.23.0',
         'urllib3>=1.20,<1.26.0',
         'certifi<2021.0.0',
-        'future<1.0.0',
-        'six<2.0.0',
         'pytz<2021.0',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
         'pyOpenSSL>=16.2.0,<21.0.0',
@@ -195,9 +192,6 @@ setup(
         'idna<3.0.0',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
-        'pyasn1>=0.4.0,<0.5.0;python_version<"3.0"',
-        'pyasn1-modules>=0.2.0,<0.3.0;python_version<"3.0"',
-        'enum34;python_version<"3.4"',
     ],
 
     namespace_packages=['snowflake'],
@@ -231,11 +225,11 @@ setup(
         ],
         "pandas": [
             'pyarrow>=0.15.1,<0.16.0;python_version>"3.4"',
-            'pandas==0.24.2;python_version=="2.7" or python_version=="3.5"',
+            'pandas==0.24.2;python_version=="3.5"',
             'pandas<1.0.0;python_version>"3.5"',
         ],
         "development": [
-            'pytest==4.6.6',  # Last Python 2.7 supported version
+            'pytest',
             'pytest-cov',
             'pytest-rerunfailures',
             'pytest-timeout',
@@ -246,10 +240,8 @@ setup(
             'pytzdata',
             'Cython',
             'pendulum',
-            'more-itertools==4.3.0;python_version=="2.7"',  # Last Python 2.7 supported version
-            'more-itertools;python_version!="2.7"',
-            'numpy==1.16.5;python_version=="2.7"',  # Last Python 2.7 supported version
-            'numpy;python_version!="2.7"',
+            'more-itertools',
+            'numpy',
         ],
     },
 
@@ -269,7 +261,6 @@ setup(
         'Operating System :: OS Independent',
 
         'Programming Language :: SQL',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',

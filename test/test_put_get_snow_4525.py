@@ -5,11 +5,12 @@
 #
 
 import os
-import pytest
 
+import pytest
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
+
 
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
     """
@@ -39,9 +40,9 @@ ratio number(5,2))
                 "copy into {name} on_error='skip_file'".format(
                     name=db_parameters['name']))
             cnt = 0
-            for rec in c:
+            for _rec in c:
                 cnt += 1
-            assert rec[1] == "LOAD_FAILED"
+            assert _rec[1] == "LOAD_FAILED"
         cnx.cursor().execute(
             "drop table if exists {name}".format(name=db_parameters['name']))
 
@@ -69,8 +70,8 @@ def test_load_bogus_json_file(tmpdir, conn_cnx, db_parameters):
                 "file_format=(type='json')".format(
                     name=json_table))
             cnt = 0
-            for rec in c:
+            for _rec in c:
                 cnt += 1
-            assert rec[1] == "LOAD_FAILED"
+            assert _rec[1] == "LOAD_FAILED"
         cnx.cursor().execute(
             "drop table if exists {name}".format(name=json_table))

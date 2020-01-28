@@ -4,9 +4,21 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
+import calendar
 import logging
 import tempfile
+import time
+from datetime import date, datetime
+from datetime import time as datetime_time
+from datetime import timedelta
+from decimal import Decimal
 from os import path
+
+import pendulum
+import pytest
+import pytz
+from snowflake.connector.converter import convert_datetime_to_epoch
+from snowflake.connector.errors import ProgrammingError
 
 tempfile.gettempdir()
 
@@ -20,18 +32,6 @@ for logger_name in ['snowflake.connector', 'botocore']:
         '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
     logger.addHandler(ch)
 
-import calendar
-import time
-from datetime import datetime, date, timedelta
-from datetime import time as datetime_time
-from decimal import Decimal
-import pendulum
-import pytest
-import pytz
-
-from snowflake.connector.compat import PY2
-from snowflake.connector.converter import convert_datetime_to_epoch
-from snowflake.connector.errors import ProgrammingError
 
 PST_TZ = "America/Los_Angeles"
 JST_TZ = "Asia/Tokyo"
@@ -109,7 +109,7 @@ insert into {name} values(
                 'str1',
                 1.2,
                 # Py2 has bytes in str type, so Python Connector
-                bytes(b'abc') if not PY2 else bytearray(b'abc'),
+                bytes(b'abc'),
                 bytearray(b'def'),
                 current_utctime,
                 current_localtime,
@@ -199,8 +199,8 @@ def test_pendulum_binding(conn_cnx, db_parameters):
             )
             c.execute(fmt, {'v1': pendulum_test})
             assert len(cnx.cursor().execute(
-               "select count(*) from {name}".format(
-                  name=db_parameters['name'])).fetchall()) == 1
+                "select count(*) from {name}".format(
+                    name=db_parameters['name'])).fetchall()) == 1
         with conn_cnx(paramstyle=u'qmark') as cnx:
             cnx.cursor().execute("""
             create or replace table {name} (c1 timestamp, c2 timestamp)
@@ -378,34 +378,6 @@ create or replace table {name} (
             assert rec[0][0] == 1
             assert rec[0][1] == 'test5'
 
-    finally:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("""
-drop table if exists {name}
-""".format(name=db_parameters['name']))
-
-
-@pytest.mark.skipif(not PY2, reason="Long type test")
-def test_binding_long_value(conn_cnx, db_parameters):
-    """
-    Test binding a long value. The problem was it was bound as '1L' and raised
-    a SQL compilation error.
-    """
-    try:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("""
-create or replace table {name} (
-    c1 integer
-)
-""".format(name=db_parameters['name']))
-            c = cnx.cursor()
-            fmt = "insert into {name}(c1) values(%(v1)s)".format(
-                name=db_parameters['name']
-            )
-            c.execute(fmt, {'v1': long(1)})
-            assert len(cnx.cursor().execute(
-                "select count(*) from {name}".format(
-                    name=db_parameters['name'])).fetchall()) == 1
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""

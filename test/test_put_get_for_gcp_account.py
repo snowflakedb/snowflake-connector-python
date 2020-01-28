@@ -7,28 +7,27 @@
 import glob
 import gzip
 import os
-
 import sys
-
 import time
+from filecmp import cmp
+from logging import getLogger
 
 import mock
 import pytest
 import requests
-
 from snowflake.connector.constants import UTF8
-
-from logging import getLogger
+from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
+except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 logger = getLogger(__name__)
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
+
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
@@ -56,7 +55,7 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
             try:
 
                 csr.execute(
-                    "put file://{0} @%snow32806 auto_compress=true parallel=30".format(
+                    "put file://{} @%snow32806 auto_compress=true parallel=30".format(
                         fname))
                 rec = csr.fetchone()
                 assert rec[6] == u'UPLOADED'
@@ -66,7 +65,7 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
                     "file_format=( format_name='common.public.csv' "
                     "compression='gzip')")
                 csr.execute(
-                    "get @~/snow32806 file://{0} pattern='snow32806.*'".format(
+                    "get @~/snow32806 file://{} pattern='snow32806.*'".format(
                         tmp_dir))
                 rec = csr.fetchone()
                 assert rec[0].startswith(
@@ -84,6 +83,7 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, (
         'Output is different from the original file')
 
+
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
@@ -95,7 +95,7 @@ def test_put_copy_many_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -133,6 +133,7 @@ def test_put_copy_many_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
             finally:
                 run(csr, "drop table if exists {name}")
 
+
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
@@ -145,7 +146,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, test_files, conn_cnx,
     # generates N files
     number_of_files = 5
     number_of_lines = 100
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -214,6 +215,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, test_files, conn_cnx,
             finally:
                 run(csr, "drop table if exists {name}")
 
+
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
@@ -224,7 +226,7 @@ def test_put_get_large_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
     """
     number_of_files = 3
     number_of_lines = 200000
-    tmp_dir = test_files(tmpdir, number_of_lines, number_of_files)
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')
@@ -275,15 +277,12 @@ def test_put_get_large_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
             else:
                 pytest.fail(
                     'cannot list all files. Potentially '
-                    'PUT command missed uploading Files: {0}'.format(all_recs))
+                    'PUT command missed uploading Files: {}'.format(all_recs))
             all_recs = run(cnx, "GET @~/{dir} file://{output_dir}")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])
         finally:
             run(cnx, "RM @~/{dir}")
-
-
-from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 
 @pytest.mark.skipif(
@@ -306,7 +305,8 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
             csr.execute(
                 "create or replace table snow32807 (a int, b string)")
             try:
-                from requests import  put, get
+                from requests import put, get
+
                 def mocked_put(*args, **kwargs):
                     if mocked_put.counter == 0:
                         mocked_put.counter += 1
@@ -316,6 +316,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                     else:
                         return put(*args, **kwargs)
                 mocked_put.counter = 0
+
                 def mocked_file_agent(*args, **kwargs):
                     agent = SnowflakeFileTransferAgent(*args, **kwargs)
                     agent._update_file_metas_with_presigned_url = mock.MagicMock(
@@ -327,7 +328,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.put', side_effect=mocked_put):
                         csr.execute(
-                            "put file://{0} @%snow32807 auto_compress=true parallel=30".format(
+                            "put file://{} @%snow32807 auto_compress=true parallel=30".format(
                                 fname))
                     assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
                 rec = csr.fetchone()
@@ -337,6 +338,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                     "copy into @~/snow32807 from snow32807 "
                     "file_format=( format_name='common.public.csv' "
                     "compression='gzip')")
+
                 def mocked_get(*args, **kwargs):
                     if mocked_get.counter == 0:
                         mocked_get.counter += 1
@@ -346,6 +348,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                     else:
                         return get(*args, **kwargs)
                 mocked_get.counter = 0
+
                 def mocked_file_agent(*args, **kwargs):
                     agent = SnowflakeFileTransferAgent(*args, **kwargs)
                     agent._update_file_metas_with_presigned_url = mock.MagicMock(
@@ -354,10 +357,10 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                     mocked_file_agent.agent = agent
                     return agent
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
-                                side_effect=mocked_file_agent) as file_agent:
+                                side_effect=mocked_file_agent):
                     with mock.patch('requests.get', side_effect=mocked_get):
                         csr.execute(
-                            "get @~/snow32807 file://{0} pattern='snow32807.*'".format(
+                            "get @~/snow32807 file://{} pattern='snow32807.*'".format(
                                 tmp_dir))
                     assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
                 rec = csr.fetchone()
@@ -375,3 +378,28 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
         contents = fd.read().decode(UTF8)
     assert original_contents == contents, (
         'Output is different from the original file')
+
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin account is not accessible."
+)
+def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
+    """
+    [gcp] Put and Get a small text using gcp with no auto compression
+    """
+    fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data', 'example.json'))
+    with conn_cnx(
+            user=db_parameters['gcp_user'],
+            account=db_parameters['gcp_account'],
+            password=db_parameters['gcp_password'],
+    ) as cnx:
+        with cnx.cursor() as cursor:
+            try:
+                cursor.execute("create or replace stage teststage")
+                cursor.execute("put file://{} @teststage auto_compress=false".format(fname))
+                cursor.execute("get @teststage file://{}".format(str(tmpdir)))
+                downloaded_file = os.path.join(str(tmpdir), 'example.json')
+                assert cmp(fname, downloaded_file)
+            finally:
+                cursor.execute("drop stage teststage")

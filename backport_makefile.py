@@ -9,7 +9,6 @@ Copied from:
 https://github.com/kennethreitz/requests/blob/master/requests/packages/urllib3/packages/backports/makefile.py
 """
 import io
-
 from socket import SocketIO
 
 
@@ -18,9 +17,9 @@ def backport_makefile(self, mode="r", buffering=None, encoding=None,
     """
     Backport of ``socket.makefile`` from Python 3.5.
     """
-    if not set(mode) <= set(["r", "w", "b"]):
+    if not set(mode) <= {"r", "w", "b"}:
         raise ValueError(
-            "invalid mode %r (only r, w, b allowed)" % (mode,)
+            "invalid mode {!r} (only r, w, b allowed)".format(mode)
         )
     writing = "w" in mode
     reading = "r" in mode or not writing

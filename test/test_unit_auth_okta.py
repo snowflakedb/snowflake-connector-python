@@ -4,16 +4,11 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
+from mock import MagicMock, Mock, PropertyMock
 from snowflake.connector.auth_okta import AuthByOkta
-from snowflake.connector.compat import PY2
 from snowflake.connector.constants import OCSPMode
-from snowflake.connector.description import (CLIENT_NAME, CLIENT_VERSION)
+from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
-
-if PY2:
-    from mock import MagicMock, Mock, PropertyMock
-else:
-    from unittest.mock import MagicMock, Mock, PropertyMock
 
 
 def test_auth_okta():

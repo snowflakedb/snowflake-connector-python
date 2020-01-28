@@ -96,3 +96,4 @@ generated_version.py
 *coverage.xml
 .idea/
 .pytest_cache/
+snowflake_connector_python.egg-info/
