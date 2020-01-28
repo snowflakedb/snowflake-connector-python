@@ -34,15 +34,15 @@ if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     python setup.py bdist_wheel
     unset ENABLE_EXT_MODULES
     CONNECTOR_WHL=$(ls $THIS_DIR/../dist/snowflake_connector_python*.whl | sort -r | head -n 1)
-    pip install -U ${CONNECTOR_WHL}[pandas,development]
+    pip install -U ${CONNECTOR_WHL}[pandas,development,azure,s3]
 else
     if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-         pip install .[pandas,development]
+         pip install .[pandas,development,azure,s3]
     else
         pv=${TRAVIS_PYTHON_VERSION/./}
         $THIS_DIR/build_inside_docker.sh $pv
         CONNECTOR_WHL=$(ls $THIS_DIR/../dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*.whl | sort -r | head -n 1)
-        pip install -U ${CONNECTOR_WHL}[pandas,development]
+        pip install -U ${CONNECTOR_WHL}[pandas,development,azure,s3]
         cd $THIS_DIR/..
     fi
 fi
