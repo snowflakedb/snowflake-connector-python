@@ -12,11 +12,9 @@ import time
 from collections import namedtuple
 from logging import getLogger
 
-from .azure_util import SnowflakeAzureUtil
+
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .encryption_util import (SnowflakeEncryptionUtil)
-from .gcs_util import SnowflakeGCSUtil
-from .s3_util import SnowflakeS3Util
 
 DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
@@ -42,10 +40,13 @@ class SnowflakeRemoteStorageUtil(object):
     @staticmethod
     def getForStorageType(type):
         if (type == u'S3'):
+            from .s3_util import SnowflakeS3Util
             return SnowflakeS3Util
         elif (type == u'AZURE'):
+            from .azure_util import SnowflakeAzureUtil
             return SnowflakeAzureUtil
         elif (type == u'GCS'):
+            from .gcs_util import SnowflakeGCSUtil
             return SnowflakeGCSUtil
         else:
             return None
