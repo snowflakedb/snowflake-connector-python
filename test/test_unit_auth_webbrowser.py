@@ -4,16 +4,11 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
+from mock import MagicMock, Mock, PropertyMock
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
-from snowflake.connector.compat import PY2
 from snowflake.connector.constants import OCSPMode
-from snowflake.connector.description import (CLIENT_NAME, CLIENT_VERSION)
+from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR, SnowflakeRestful
-
-if PY2:
-    from mock import MagicMock, Mock, PropertyMock
-else:
-    from unittest.mock import MagicMock, Mock, PropertyMock
 
 AUTHENTICATOR = 'https://testsso.snowflake.net/'
 APPLICATION = 'testapplication'
@@ -49,7 +44,7 @@ def test_auth_webbrowser_get():
 
     mock_socket_client = MagicMock()
     mock_socket_client.recv.return_value = ('\r\n'.join([
-        u"GET /?token={0}&confirm=true HTTP/1.1".format(ref_token),
+        u"GET /?token={}&confirm=true HTTP/1.1".format(ref_token),
         u"User-Agent: snowflake-agent"
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
@@ -91,7 +86,7 @@ def test_auth_webbrowser_post():
         u"User-Agent: snowflake-agent",
         u"Host: localhost:12345",
         u"",
-        u"token={0}&confirm=true".format(ref_token)
+        u"token={}&confirm=true".format(ref_token)
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)

@@ -4,20 +4,20 @@
 # Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
 #
 
-import jwt
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding
-from cryptography.hazmat.primitives.serialization import load_der_private_key
-from cryptography.hazmat.primitives.serialization import PublicFormat
-from cryptography.hazmat.backends import default_backend
-from datetime import datetime, timedelta
-from logging import getLogger
-from .auth_by_plugin import AuthByPlugin
-from .network import KEY_PAIR_AUTHENTICATOR
-from .errorcode import ER_INVALID_PRIVATE_KEY
-from .errors import ProgrammingError
 import base64
 import hashlib
+from datetime import datetime, timedelta
+from logging import getLogger
+
+import jwt
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_der_private_key
+
+from .auth_by_plugin import AuthByPlugin
+from .errorcode import ER_INVALID_PRIVATE_KEY
+from .errors import ProgrammingError
+from .network import KEY_PAIR_AUTHENTICATOR
 
 logger = getLogger(__name__)
 

@@ -5,11 +5,10 @@
 #
 from logging import getLogger
 
-logger = getLogger(__name__)
-
+from snowflake.connector import errorcode, errors
 from snowflake.connector.network import SnowflakeRestful
-from snowflake.connector import errors
-from snowflake.connector import errorcode
+
+logger = getLogger(__name__)
 
 
 def test_no_auth(db_parameters):

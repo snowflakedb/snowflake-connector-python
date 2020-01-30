@@ -13,7 +13,6 @@ import sys
 from .compat import TO_UNICODE
 from .version import VERSION
 
-
 SNOWFLAKE_CONNECTOR_VERSION = u'.'.join(TO_UNICODE(v) for v in VERSION[0:3])
 PYTHON_VERSION = u'.'.join(TO_UNICODE(v) for v in sys.version_info[:3])
 OPERATING_SYSTEM = platform.system()

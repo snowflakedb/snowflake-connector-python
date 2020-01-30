@@ -22,6 +22,7 @@ import socket
 import sys
 import time
 from collections import namedtuple
+
 from .compat import MAPPING
 
 try:
@@ -43,7 +44,7 @@ class SelectorError(Exception):
         self.errno = errcode
 
     def __repr__(self):
-        return "<SelectorError errno={0}>".format(self.errno)
+        return "<SelectorError errno={}>".format(self.errno)
 
     def __str__(self):
         return self.__repr__()
@@ -58,9 +59,9 @@ def _fileobj_to_fd(fileobj):
         try:
             fd = int(fileobj.fileno())
         except (AttributeError, TypeError, ValueError):
-            raise ValueError("Invalid file object: {0!r}".format(fileobj))
+            raise ValueError("Invalid file object: {!r}".format(fileobj))
     if fd < 0:
-        raise ValueError("Invalid file descriptor: {0}".format(fd))
+        raise ValueError("Invalid file descriptor: {}".format(fd))
     return fd
 
 
@@ -151,7 +152,7 @@ class _SelectorMapping(MAPPING):
             fd = self._selector._fileobj_lookup(fileobj)
             return self._selector._fd_to_key[fd]
         except KeyError:
-            raise KeyError("{0!r} is not registered.".format(fileobj))
+            raise KeyError("{!r} is not registered.".format(fileobj))
 
     def __iter__(self):
         return iter(self._selector._fd_to_key)
@@ -202,12 +203,12 @@ class BaseSelector(object):
     def register(self, fileobj, events, data=None):
         """ Register a file object for a set of events to monitor. """
         if (not events) or (events & ~(EVENT_READ | EVENT_WRITE)):
-            raise ValueError("Invalid events: {0!r}".format(events))
+            raise ValueError("Invalid events: {!r}".format(events))
 
         key = SelectorKey(fileobj, self._fileobj_lookup(fileobj), events, data)
 
         if key.fd in self._fd_to_key:
-            raise KeyError("{0!r} (FD {1}) is already registered"
+            raise KeyError("{!r} (FD {}) is already registered"
                            .format(fileobj, key.fd))
 
         self._fd_to_key[key.fd] = key
@@ -218,7 +219,7 @@ class BaseSelector(object):
         try:
             key = self._fd_to_key.pop(self._fileobj_lookup(fileobj))
         except KeyError:
-            raise KeyError("{0!r} is not registered".format(fileobj))
+            raise KeyError("{!r} is not registered".format(fileobj))
 
         # Getting the fileno of a closed socket on Windows errors with EBADF.
         except socket.error as e:  # Platform-specific: Windows.
@@ -230,7 +231,7 @@ class BaseSelector(object):
                         self._fd_to_key.pop(key.fd)
                         break
                 else:
-                    raise KeyError("{0!r} is not registered".format(fileobj))
+                    raise KeyError("{!r} is not registered".format(fileobj))
         return key
 
     def modify(self, fileobj, events, data=None):
@@ -239,7 +240,7 @@ class BaseSelector(object):
         try:
             key = self._fd_to_key[self._fileobj_lookup(fileobj)]
         except KeyError:
-            raise KeyError("{0!r} is not registered".format(fileobj))
+            raise KeyError("{!r} is not registered".format(fileobj))
 
         if events != key.events:
             self.unregister(fileobj)
@@ -271,7 +272,7 @@ class BaseSelector(object):
         try:
             return mapping[fileobj]
         except KeyError:
-            raise KeyError("{0!r} is not registered".format(fileobj))
+            raise KeyError("{!r} is not registered".format(fileobj))
 
     def get_map(self):
         """ Return a mapping of file objects to selector keys """

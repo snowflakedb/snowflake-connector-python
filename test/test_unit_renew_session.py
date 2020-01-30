@@ -4,14 +4,8 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from snowflake.connector.compat import (
-    PY2)
+from mock import MagicMock, Mock, PropertyMock
 from snowflake.connector.network import SnowflakeRestful
-
-if PY2:
-    from mock import MagicMock, Mock, PropertyMock
-else:
-    from unittest.mock import MagicMock, Mock, PropertyMock
 
 
 def test_renew_session():

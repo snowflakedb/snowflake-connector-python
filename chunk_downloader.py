@@ -4,20 +4,21 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
+import json
 from collections import namedtuple
+from gzip import GzipFile
+from io import BytesIO
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
-from threading import (Condition, Lock)
+from threading import Condition, Lock
 
 from snowflake.connector.gzip_decoder import decompress_raw_data
 from snowflake.connector.util_text import split_rows_from_stream
-from .errorcode import (ER_CHUNK_DOWNLOAD_FAILED)
-from .errors import (Error, OperationalError)
-from .time_util import get_time_millis
-import json
-from io import BytesIO
-from gzip import GzipFile
+
 from .arrow_context import ArrowConverterContext
+from .errorcode import ER_CHUNK_DOWNLOAD_FAILED
+from .errors import Error, OperationalError
+from .time_util import get_time_millis
 
 DEFAULT_REQUEST_TIMEOUT = 3600
 
@@ -238,7 +239,7 @@ class SnowflakeChunkDownloader(object):
     def __del__(self):
         try:
             self.terminate()
-        except:
+        except Exception:
             # ignore all errors in the destructor
             pass
 

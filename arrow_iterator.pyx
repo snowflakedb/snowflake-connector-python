@@ -226,4 +226,3 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         elif iter_unit == TABLE_UNIT:
             self.cIterator = new CArrowTableIterator(<PyObject*>self.context, &self.batches)
         self.unit = iter_unit
-

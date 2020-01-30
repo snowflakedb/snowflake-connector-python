@@ -10,16 +10,16 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 
 import pytest
-
-try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except:
-    CONNECTION_PARAMETERS_ADMIN = {}
-
-logger = getLogger(__name__)
 import snowflake.connector
 from snowflake.connector.compat import TO_UNICODE
 from snowflake.connector.errors import ProgrammingError
+
+try:
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except Exception:
+    CONNECTION_PARAMETERS_ADMIN = {}
+
+logger = getLogger(__name__)
 
 
 def _concurrent_insert(meta):
@@ -39,7 +39,7 @@ def _concurrent_insert(meta):
         # tracing = logging.DEBUG,
     )
     try:
-        cnx.cursor().execute("use warehouse {0}".format(meta['warehouse']))
+        cnx.cursor().execute("use warehouse {}".format(meta['warehouse']))
         table = meta['table']
         sql = "insert into {name} values(%(c1)s, %(c2)s)".format(name=table)
         logger.debug(sql)
@@ -49,7 +49,7 @@ def _concurrent_insert(meta):
         })
         meta['success'] = True
         logger.debug("Succeeded process #%s", meta['idx'])
-    except:
+    except Exception:
         logger.exception('failed to insert into a table [%s]', table)
         meta['success'] = False
     finally:
@@ -63,7 +63,7 @@ def _concurrent_insert(meta):
 )
 def test_concurrent_insert(conn_cnx, db_parameters):
     """
-    Concurrent insert tests. Inserts block on the one that's running. 
+    Concurrent insert tests. Inserts block on the one that's running.
     """
     number_of_threads = 22  # change this to increase the concurrency
     expected_success_runs = number_of_threads - 1
@@ -72,7 +72,7 @@ def test_concurrent_insert(conn_cnx, db_parameters):
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""
-create or replace warehouse {0}
+create or replace warehouse {}
 warehouse_type=standard
 warehouse_size=small
 """.format(db_parameters['name_wh']))
@@ -116,9 +116,9 @@ create or replace table {name} (c1 integer, c2 string)
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute(
-                "drop table if exists {0}".format(db_parameters['name']))
+                "drop table if exists {}".format(db_parameters['name']))
             cnx.cursor().execute(
-                "drop warehouse if exists {0}".format(db_parameters['name_wh']))
+                "drop warehouse if exists {}".format(db_parameters['name_wh']))
 
 
 def _concurrent_insert_using_connection(meta):
@@ -129,7 +129,7 @@ def _concurrent_insert_using_connection(meta):
         connection.cursor().execute(
             "INSERT INTO {name} VALUES(%s, %s)".format(
                 name=name),
-            (idx, 'test string{0}'.format(idx)))
+            (idx, 'test string{}'.format(idx)))
     except ProgrammingError as e:
         if e.errno != 619:  # SQL Execution Canceled
             raise
@@ -146,7 +146,7 @@ def test_concurrent_insert_using_connection(conn_cnx, db_parameters):
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""
-create or replace warehouse {0}
+create or replace warehouse {}
 warehouse_type=standard
 warehouse_size=small
 """.format(db_parameters['name_wh']))
@@ -176,6 +176,6 @@ CREATE OR REPLACE TABLE {name} (c1 INTEGER, c2 STRING)
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute(
-                "drop table if exists {0}".format(db_parameters['name']))
+                "drop table if exists {}".format(db_parameters['name']))
             cnx.cursor().execute(
-                "drop warehouse if exists {0}".format(db_parameters['name_wh']))
+                "drop warehouse if exists {}".format(db_parameters['name_wh']))

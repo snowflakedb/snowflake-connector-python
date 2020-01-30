@@ -10,12 +10,8 @@ from logging import getLogger
 
 import requests
 
-from .constants import (
-    SHA256_DIGEST,
-    ResultStatus,
-    FileHeader,
-    HTTP_HEADER_CONTENT_ENCODING)
-from .encryption_util import (EncryptionMetadata)
+from .constants import HTTP_HEADER_CONTENT_ENCODING, SHA256_DIGEST, FileHeader, ResultStatus
+from .encryption_util import EncryptionMetadata
 
 GCS_METADATA_PREFIX = u'x-goog-meta-'
 GCS_METADATA_SFC_DIGEST = GCS_METADATA_PREFIX + u'sfc-digest'
@@ -72,9 +68,9 @@ class SnowflakeGCSUtil:
         if meta.get(u'presigned_url', None):
             # Use presigned url to upload the object
 
-            if u'dst_compression_type':
-                content_encoding = meta[u'dst_compression_type'][
-                    u'name'].lower()
+            content_encoding = ""
+            if meta.get(u'dst_compression_type') is not None:
+                content_encoding = meta[u'dst_compression_type'][u'name'].lower()
 
             # We set the contentEncoding to blank for GZIP files. We don't
             # want GCS to think our gzip files are gzips because it makes

@@ -6,36 +6,30 @@
 from io import StringIO
 
 import pytest
-
-from snowflake.connector.compat import PY2
 from snowflake.connector.util_text import split_statements
 
 
-def _to_unicode(sql):
-    return sql.decode('utf-8') if PY2 and isinstance(sql, str) else sql
-
-
 def test_simple_sql():
-    with StringIO(_to_unicode("show tables")) as f:
+    with StringIO("show tables") as f:
         itr = split_statements(f)
         assert next(itr) == ('show tables', False)
         with pytest.raises(StopIteration):
             next(itr)
 
-    with StringIO(_to_unicode("show tables;")) as f:
+    with StringIO("show tables;") as f:
         itr = split_statements(f)
         assert next(itr) == ('show tables;', False)
         with pytest.raises(StopIteration):
             next(itr)
 
-    with StringIO(_to_unicode("select 1;select 2")) as f:
+    with StringIO("select 1;select 2") as f:
         itr = split_statements(f)
         assert next(itr) == ('select 1;', False)
         assert next(itr) == ('select 2', False)
         with pytest.raises(StopIteration):
             next(itr)
 
-    with StringIO(_to_unicode("select 1;select 2;")) as f:
+    with StringIO("select 1;select 2;") as f:
         itr = split_statements(f)
         assert next(itr) == ('select 1;', False)
         assert next(itr) == ('select 2;', False)
@@ -43,25 +37,25 @@ def test_simple_sql():
             next(itr)
 
     s = "select 1; -- test"
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == ('select 1; -- test', False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ('select 1;', False)
         with pytest.raises(StopIteration):
             next(itr)
 
     s = "select /* test */ 1; -- test comment select 1;"
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             'select /* test */ 1; -- test comment select 1;', False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ('select  1;', False)
         with pytest.raises(StopIteration):
@@ -72,14 +66,14 @@ def test_multiple_line_sql():
     s = """select /* test */ 1; -- test comment
 select 23;"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             ('select /* test */ 1; -- test comment', False))
         assert next(itr) == ('select 23;', False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ('select  1;', False)
         assert next(itr) == ('select 23;', False)
@@ -89,14 +83,14 @@ select 23;"""
     s = """select /* test */ 1; -- test comment
 select 23; -- test comment 2"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             'select /* test */ 1; -- test comment', False)
         assert next(itr) == ('select 23; -- test comment 2', False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ('select  1;', False)
         assert next(itr) == ('select 23;', False)
@@ -106,7 +100,7 @@ select 23; -- test comment 2"""
     s = """select /* test */ 1; -- test comment
 select 23; /* test comment 2 */ select 3"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             'select /* test */ 1; -- test comment', False)
@@ -114,7 +108,7 @@ select 23; /* test comment 2 */ select 3"""
         assert next(itr) == ('/* test comment 2 */ select 3', False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ('select  1;', False)
         assert next(itr) == ('select 23;', False)
@@ -126,7 +120,7 @@ select 23; /* test comment 2 */ select 3"""
 select 23; /* test comment 2
 */ select 3;"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             "select /* test */ 1; -- test comment", False)
@@ -134,7 +128,7 @@ select 23; /* test comment 2
         assert next(itr) == ("/* test comment 2\n*/ select 3;", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select  1;", False)
         assert next(itr) == ("select 23;", False)
@@ -149,7 +143,7 @@ select 23; /* test comment 2
 select 23; /* test comment 2
 */ select 3;"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == ("select /* test\n"
                              "    continued comments 1\n"
@@ -159,7 +153,7 @@ select 23; /* test comment 2
         assert next(itr) == ("/* test comment 2\n*/ select 3;", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select  1;", False)
         assert next(itr) == ("select 23;", False)
@@ -172,14 +166,14 @@ def test_quotes():
     s = """select 'hello', 1; -- test comment
 select 23,'hello"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             "select 'hello', 1; -- test comment", False)
         assert next(itr) == ("select 23,'hello", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello', 1;", False)
         assert next(itr) == ("select 23,'hello", False)
@@ -189,14 +183,14 @@ select 23,'hello"""
     s = """select 'he"llo', 1; -- test comment
 select "23,'hello" """
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             "select 'he\"llo', 1; -- test comment", False)
         assert next(itr) == ("select \"23,'hello\"", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'he\"llo', 1;", False)
         assert next(itr) == ("select \"23,'hello\"", False)
@@ -207,14 +201,14 @@ select "23,'hello" """
 ', 1; -- test comment
 select "23,'hello" """
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             "select 'hello\n', 1; -- test comment", False)
         assert next(itr) == ("select \"23,'hello\"", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello\n', 1;", False)
         assert next(itr) == ("select \"23,'hello\"", False)
@@ -225,14 +219,14 @@ select "23,'hello" """
 ', 1; -- test comment
 select "23,'','hello" """
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             "select 'hello''\n', 1; -- test comment", False)
         assert next(itr) == ("select \"23,'','hello\"", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello''\n', 1;", False)
         assert next(itr) == ("select \"23,'','hello\"", False)
@@ -244,7 +238,7 @@ def test_quotes_in_comments():
     s = """select 'hello'; -- test comment 'hello2' in comment
 /* comment 'quote'*/ select true
 """
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             "select 'hello'; -- test comment 'hello2' in comment", False)
@@ -263,14 +257,14 @@ def test_backslash():
     s = """select 'hello\\\\', 1; -- test comment
 select 23,'\nhello"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
             "select 'hello\\\\', 1; -- test comment", False)
         assert next(itr) == ("select 23,'\nhello", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello\\\\', 1;", False)
         assert next(itr) == ("select 23,'\nhello", False)
@@ -282,13 +276,13 @@ def test_file_with_slash_star():
     s = """put file:///tmp/* @%tmp;
 ls @%tmp;"""
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == ("put file:///tmp/* @%tmp;", True)
         assert next(itr) == ("ls @%tmp;", False)
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("put file:///tmp/* @%tmp;", True)
         assert next(itr) == ("ls @%tmp;", False)
@@ -309,7 +303,7 @@ remove @~ pattern='.*.csv.gz';
 list @~;
 """
 
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == ("list @~;", False)
         # no comment line is returned
@@ -334,7 +328,7 @@ list @~;
         # last raises StopIteration
         with pytest.raises(StopIteration):
             next(itr)
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("list @~;", False)
         # no comment line is returned
@@ -360,14 +354,14 @@ list @~;
 
 
 def test_sql_with_commands():
-    with StringIO(_to_unicode("""create or replace view aaa
+    with StringIO("""create or replace view aaa
     as select * from
     LINEITEM limit 1000;
 !spool $outfile
 show views like 'AAA';
 !spool off
 drop view if exists aaa;
-show tables""")) as f:
+show tables""") as f:
         itr = split_statements(f)
         assert next(itr) == ("""create or replace view aaa
     as select * from
@@ -383,14 +377,14 @@ show tables""")) as f:
 
 
 def test_sql_example1():
-    with StringIO(_to_unicode("""
+    with StringIO("""
 create or replace table a(aa int, bb string);
 truncate a;
 rm @%a;
 put file://a.txt @%a;
 copy into a;
 select * from a;
-drop table if exists a;""")) as f:
+drop table if exists a;""") as f:
         itr = split_statements(f)
         assert next(itr) == (
             "create or replace table a(aa int, bb string);", False)
@@ -405,12 +399,12 @@ drop table if exists a;""")) as f:
 
 
 def test_space_before_put():
-    with StringIO(_to_unicode("""
+    with StringIO("""
 -- sample data uploads
     PUT file:///tmp/data.txt @%ab;
 SELECT 1; /* 134 */ select /* 567*/ 345;>
 GET @%bcd file:///tmp/aaa.txt;
-""")) as f:
+""") as f:
         itr = split_statements(f)
         assert next(itr) == ("""-- sample data uploads
     PUT file:///tmp/data.txt @%ab;""", True)
@@ -422,10 +416,10 @@ GET @%bcd file:///tmp/aaa.txt;
 
 
 def test_empty_statement():
-    with StringIO(_to_unicode("""select 1;
+    with StringIO("""select 1;
 -- tail comment1
 -- tail comment2
-""")) as f:
+""") as f:
         itr = split_statements(f)
         assert next(itr) == ("""select 1;""", False)
         assert next(itr) == ("""-- tail comment1
@@ -440,7 +434,7 @@ select /*another test comments*/ 1; -- test comment 2
 -- test comment 3
 select 2;
 """
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=False)
         assert next(itr) == (
             "--- test comment 1\n"
@@ -452,7 +446,7 @@ def test_comments_with_semicolon():
     s = """--test ;
 select 1;
 """
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=False)
         assert next(itr) == (
             "--test ;\n"
@@ -469,7 +463,7 @@ def test_comment_in_values():
     # no space before a comment
     s = """INSERT INTO foo
 VALUES (/*TIMEOUT*/ 10);"""
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == (
             "INSERT INTO foo\nVALUES ( 10);", False
@@ -478,7 +472,7 @@ VALUES (/*TIMEOUT*/ 10);"""
     # no space before and after a comment
     s = """INSERT INTO foo
 VALUES (/*TIMEOUT*/10);"""
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == (
             "INSERT INTO foo\nVALUES (10);", False
@@ -487,7 +481,7 @@ VALUES (/*TIMEOUT*/10);"""
     # workaround
     s = """INSERT INTO foo
 VALUES ( /*TIMEOUT*/ 10);"""
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == (
             "INSERT INTO foo\nVALUES (  10);", False
@@ -497,7 +491,7 @@ VALUES ( /*TIMEOUT*/ 10);"""
     s = """INSERT INTO foo VALUES (
 /*TIMEOUT*/
 10);"""
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == (
             "INSERT INTO foo VALUES (\n\n10);", False
@@ -510,7 +504,7 @@ def test_multiline_double_dollar_experssion_with_removed_comments():
   var c = a + b;
   return(c / 2);
   $$;"""
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f, remove_comments=True)
         assert next(itr) == (
             "CREATE FUNCTION mean(a FLOAT, b FLOAT)\n"
@@ -521,9 +515,9 @@ def test_multiline_double_dollar_experssion_with_removed_comments():
 def test_backslash_quote_escape():
     s = """
 SELECT 1 'Snowflake\\'s 1';
-SELECT 2 'Snowflake\\'s 2'    
+SELECT 2 'Snowflake\\'s 2'
 """
-    with StringIO(_to_unicode(s)) as f:
+    with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == ("SELECT 1 'Snowflake\\'s 1';", False)
         assert next(itr) == ("SELECT 2 'Snowflake\\'s 2'", False)

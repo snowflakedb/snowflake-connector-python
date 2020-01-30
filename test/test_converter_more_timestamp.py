@@ -1,11 +1,8 @@
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
 import pytz
 from dateutil.parser import parse
-
-from snowflake.connector.converter import (
-    _generate_tzinfo_from_tzoffset,
-    ZERO_EPOCH)
+from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 
 
 def test_fetch_various_timestamps(conn_cnx):
@@ -93,7 +90,7 @@ def test_fetch_various_timestamps(conn_cnx):
                             ff=fractions[:idx + 1]
                         ))
                     ts1 = ts0 + timedelta(seconds=float(
-                        '0.{0}'.format(fractions[:idx + 1])))
+                        '0.{}'.format(fractions[:idx + 1])))
                     data.append({
                         'scale': idx + 1,
                         'dt': dt,

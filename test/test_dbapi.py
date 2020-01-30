@@ -16,12 +16,9 @@ import sys
 import time
 
 import pytest
-
 import snowflake.connector
 import snowflake.connector.dbapi
-from snowflake.connector import dbapi
-from snowflake.connector import errorcode
-from snowflake.connector import errors
+from snowflake.connector import dbapi, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS
 
 TABLE1 = 'dbapi_ddl1'
@@ -32,16 +29,16 @@ def drop_dbapi_tables(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
             for ddl in (TABLE1, TABLE2):
-                dropsql = 'drop table if exists {0}'.format(ddl)
+                dropsql = 'drop table if exists {}'.format(ddl)
                 cursor.execute(dropsql)
 
 
 def executeDDL1(cursor):
-    cursor.execute('create or replace table {0} (name string)'.format(TABLE1))
+    cursor.execute('create or replace table {} (name string)'.format(TABLE1))
 
 
 def executeDDL2(cursor):
-    cursor.execute('create or replace table {0} (name string)'.format(TABLE2))
+    cursor.execute('create or replace table {} (name string)'.format(TABLE2))
 
 
 @pytest.fixture()
@@ -56,16 +53,16 @@ def conn_local(request, conn_cnx):
 
 def _paraminsert(cur):
     executeDDL1(cur)
-    cur.execute("insert into {0} values ('string inserted into table')".format(
+    cur.execute("insert into {} values ('string inserted into table')".format(
         TABLE1
     ))
     assert cur.rowcount in (-1, 1)
 
-    cur.execute("insert into {0} values (%(dbapi_ddl2)s)".format(TABLE1),
+    cur.execute("insert into {} values (%(dbapi_ddl2)s)".format(TABLE1),
                 {TABLE2: "Cooper's"})
     assert cur.rowcount in (-1, 1)
 
-    cur.execute('select name from {0}'.format(TABLE1))
+    cur.execute('select name from {}'.format(TABLE1))
     res = cur.fetchall()
     assert len(res) == 2, 'cursor.fetchall returned too few rows'
     dbapi_ddl2s = [res[0][0], res[1][0]]
@@ -77,7 +74,7 @@ def _paraminsert(cur):
 
 
 def test_connect(conn_cnx):
-    with conn_cnx() as cnx:
+    with conn_cnx():
         pass
 
 
@@ -154,18 +151,18 @@ def test_commit(db_parameters):
 def test_rollback(conn_cnx, db_parameters):
     with conn_cnx() as cnx:
         cur = cnx.cursor()
-        cur.execute('create or replace table {0} (a int)'.format(
+        cur.execute('create or replace table {} (a int)'.format(
             db_parameters['name']))
         cnx.cursor().execute("begin")
         cur.execute("""
-insert into {0} (select seq8() seq
+insert into {} (select seq8() seq
   from table(generator(rowCount => 10)) v)
 """.format(db_parameters['name']))
         cnx.rollback()
         dbapi_rollback = cur.execute(
-            "select count(*) from {0}".format(db_parameters['name'])).fetchone()
+            "select count(*) from {}".format(db_parameters['name'])).fetchone()
         assert dbapi_rollback[0] == 0, 'transaction not rolled back'
-        cur.execute('drop table {0}'.format(db_parameters['name']))
+        cur.execute('drop table {}'.format(db_parameters['name']))
         cur.close()
 
 
@@ -184,10 +181,10 @@ def test_cursor_isolation(conn_local):
         cur2 = con.cursor()
         executeDDL1(cur1)
         cur1.execute(
-            "insert into {0} values ('string inserted into table')".format(
+            "insert into {} values ('string inserted into table')".format(
                 TABLE1
             ))
-        cur2.execute("select name from {0}".format(TABLE1))
+        cur2.execute("select name from {}".format(TABLE1))
         dbapi_ddl1 = cur2.fetchall()
         assert len(dbapi_ddl1) == 1
         assert len(dbapi_ddl1[0]) == 1
@@ -263,7 +260,6 @@ def test_close(db_parameters):
     # closed.
     #        assert calling(con.commit()),raises(errors.Error,'con.commit'))
 
-
     # disabling due to SNOW-13645
     # cursor.close() should raise an Error if called after connection closed
     #        try:
@@ -275,11 +271,10 @@ def test_close(db_parameters):
     #            assert error.errno,equal_to(
     #   errorcode.ER_CURSOR_IS_CLOSED),'cursor.close() called twice in a row')
 
-
     # calling cursor.execute after connection is closed should raise an error
     try:
         cur.execute(
-            'create or replace table {0} (name string)'.format(
+            'create or replace table {} (name string)'.format(
                 TABLE1))
     except BASE_EXCEPTION_CLASS as error:
         assert error.errno == errorcode.ER_CURSOR_IS_CLOSED, (
@@ -287,7 +282,7 @@ def test_close(db_parameters):
 
         # try to create a cursor on a closed connection
         try:
-            cursor = con.cursor()
+            con.cursor()
         except BASE_EXCEPTION_CLASS as error:
             assert error.errno == errorcode.ER_CONNECTION_IS_CLOSED, (
                 'tried to create a cursor on a closed cursor')
@@ -303,7 +298,6 @@ def test_executemany(conn_local):
     with conn_local() as con:
         cur = con.cursor()
         executeDDL1(cur)
-        largs = [("Cooper's",), ("Boag's",)]
         margs = [{'dbapi_ddl2': "Cooper's"},
                  {'dbapi_ddl2': "Boag's"}]
 
@@ -375,7 +369,7 @@ def _populate():
     '''
     populate = [
         # NOTE NO GOOD using format to bind data
-        "insert into {0} values ('{1}')".format(
+        "insert into {} values ('{}')".format(
             TABLE1, s)
         for s in SAMPLES
     ]
@@ -440,7 +434,7 @@ def test_fetchmany(conn_local):
         assert cur.rowcount in (-1, 6)
         assert len(rows) == 6
         assert len(rows) == 6
-        rows = [r[0] for r in rows]
+        rows = [row[0] for row in rows]
         rows.sort()
 
         # Make sure we get the right data back out
@@ -481,7 +475,7 @@ def test_fetchall(conn_local):
         #                                )
 
         cur.execute(
-            'select name from {0}'.format(
+            'select name from {}'.format(
                 TABLE1))
         rows = cur.fetchall()
         assert cur.rowcount in (-1, len(SAMPLES))
@@ -810,7 +804,7 @@ def test_substring(
                 0][
                 0]
         assert dbapi_ddl2 == args['dbapi_ddl2'], (
-            'incorrect data retrieved, got %s, should be %s' % (
+            'incorrect data retrieved, got {}, should be {}'.format(
                 dbapi_ddl2,
                 args['dbapi_ddl2']))
 
@@ -855,5 +849,5 @@ def test_escape(
                 i)
             assert i == row[
                 0], (
-                'newline not properly converted, got %s, should be %s' % (
+                'newline not properly converted, got {}, should be {}'.format(
                     row[0], i))

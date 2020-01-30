@@ -15,7 +15,7 @@ Snowflake Connector for Python
 
 .. image:: http://img.shields.io/:license-Apache%202-brightgreen.svg
     :target: http://www.apache.org/licenses/LICENSE-2.0.txt
-    
+
 This package includes the Snowflake Connector for Python, which conforms to the Python DB API 2.0 specification:
 https://www.python.org/dev/peps/pep-0249/
 
@@ -26,7 +26,7 @@ using the Snowflake JDBC or ODBC drivers.
 
 The connector is a native, pure Python package that has no dependencies on JDBC or
 ODBC. It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
-where either Python 2.7.9 (or higher) or Python 3.5.0 (or higher) is installed.
+where Python 3.5.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
 https://docs.snowflake.net/

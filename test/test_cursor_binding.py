@@ -5,7 +5,7 @@
 #
 
 import pytest
-from snowflake.connector.errors import (ProgrammingError)
+from snowflake.connector.errors import ProgrammingError
 
 
 def test_binding_security(conn_cnx, db_parameters):
@@ -26,18 +26,18 @@ def test_binding_security(conn_cnx, db_parameters):
                 "INSERT INTO {name} VALUES(%(aa)s, %(bb)s)".format(
                     name=db_parameters['name']),
                 {'aa': 2, 'bb': 'test2'})
-            for rec in cnx.cursor().execute(
+            for _rec in cnx.cursor().execute(
                     "SELECT * FROM {name} ORDER BY 1 DESC".format(
                         name=db_parameters['name'])):
                 break
-            assert rec[0] == 2, 'First column'
-            assert rec[1] == 'test2', 'Second column'
-            for rec in cnx.cursor().execute(
+            assert _rec[0] == 2, 'First column'
+            assert _rec[1] == 'test2', 'Second column'
+            for _rec in cnx.cursor().execute(
                     "SELECT * FROM {name} WHERE aa=%s".format(
                         name=db_parameters['name']), (1,)):
                 break
-            assert rec[0] == 1, 'First column'
-            assert rec[1] == 'test1', 'Second column'
+            assert _rec[0] == 1, 'First column'
+            assert _rec[1] == 'test1', 'Second column'
 
             # SQL injection safe test
             # Good Example
@@ -87,21 +87,21 @@ def test_binding_list(conn_cnx, db_parameters):
             cnx.cursor().execute(
                 "INSERT INTO {name} VALUES(3, 'test3')".format(
                     name=db_parameters['name']))
-            for rec in cnx.cursor().execute("""
+            for _rec in cnx.cursor().execute("""
 SELECT * FROM {name} WHERE aa IN (%s) ORDER BY 1 DESC
 """.format(name=db_parameters['name']), ([1, 3],)):
                 break
-            assert rec[0] == 3, 'First column'
-            assert rec[1] == 'test3', 'Second column'
+            assert _rec[0] == 3, 'First column'
+            assert _rec[1] == 'test3', 'Second column'
 
-            for rec in cnx.cursor().execute(
+            for _rec in cnx.cursor().execute(
                     "SELECT * FROM {name} WHERE aa=%s".format(
                         name=db_parameters['name']), (1,)):
                 break
-            assert rec[0] == 1, 'First column'
-            assert rec[1] == 'test1', 'Second column'
+            assert _rec[0] == 1, 'First column'
+            assert _rec[1] == 'test1', 'Second column'
 
-            rec = cnx.cursor().execute("""
+            cnx.cursor().execute("""
 SELECT * FROM {name} WHERE aa IN (%s) ORDER BY 1 DESC
 """.format(name=db_parameters['name']), ((1,),))
 
