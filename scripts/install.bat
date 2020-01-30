@@ -18,7 +18,7 @@ python setup.py bdist_wheel -d dist
 cd dist
 dir /b * > whl_name
 set /p connector_whl=<whl_name
-pip install %connector_whl%[pandas,development]
+pip install %connector_whl%[pandas,development,azure,s3]
 pip list --format=columns
 
 cd %SCRIPT_DIR%/..

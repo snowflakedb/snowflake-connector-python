@@ -15,6 +15,7 @@ from logging import getLogger
 
 from .constants import (SHA256_DIGEST, ResultStatus)
 from .encryption_util import (SnowflakeEncryptionUtil)
+from .errors import (MissingDependencyError)
 
 DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
@@ -40,11 +41,19 @@ class SnowflakeRemoteStorageUtil(object):
     @staticmethod
     def getForStorageType(type):
         if (type == u'S3'):
-            from .s3_util import SnowflakeS3Util
-            return SnowflakeS3Util
+            try:
+                from .s3_util import SnowflakeS3Util
+                return SnowflakeS3Util
+            except ImportError:
+                raise MissingDependencyError("s3")
+
         elif (type == u'AZURE'):
-            from .azure_util import SnowflakeAzureUtil
-            return SnowflakeAzureUtil
+            try:
+                from .azure_util import SnowflakeAzureUtil
+                return SnowflakeAzureUtil
+            except ImportError:
+                raise MissingDependencyError("s3")
+
         elif (type == u'GCS'):
             from .gcs_util import SnowflakeGCSUtil
             return SnowflakeGCSUtil
