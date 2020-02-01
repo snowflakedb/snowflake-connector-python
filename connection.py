@@ -573,7 +573,7 @@ class SnowflakeConnection(object):
     def execute_string(self, sql_text,
                        remove_comments=False,
                        return_cursors=True,
-                       cursor_class=SnowflakeCursor
+                       cursor_class=SnowflakeCursor,
                        **kwargs):
         """
         Executes a SQL text including multiple statements.
