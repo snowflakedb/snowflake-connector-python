@@ -573,6 +573,7 @@ class SnowflakeConnection(object):
     def execute_string(self, sql_text,
                        remove_comments=False,
                        return_cursors=True,
+                       cursor_class=SnowflakeCursor
                        **kwargs):
         """
         Executes a SQL text including multiple statements.
@@ -582,7 +583,7 @@ class SnowflakeConnection(object):
         stream = StringIO(sql_text)
         for sql, is_put_or_get in split_statements(
                 stream, remove_comments=remove_comments):
-            cur = self.cursor()
+            cur = self.cursor(cursor_class=cursor_class)
             if return_cursors:
                 ret.append(cur)
             cur.execute(sql, _is_put_get=is_put_or_get, **kwargs)
