@@ -20,7 +20,7 @@ jobs:
         with:
           PROJECT: SNOW
           TYPE: Bug
-          AREA: Eng-Internal-Infra
+          AREA: Data Platform
           SUMMARY: "{{ event.issue.title }}"
           DESCRIPTION: "{{ event.issue.body }}\n\n_Created from GitHub Action_"
       - name: update issue
