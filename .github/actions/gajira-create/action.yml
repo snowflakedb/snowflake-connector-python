@@ -1,0 +1,24 @@
+name: Jira Create issue
+description: Create a new Jira issue
+branding:
+  icon: 'check-square'
+  color: 'blue'
+inputs:
+  project:
+    description: Key of the project
+    required: true
+  issuetype:
+    description: "Type of the issue to be created. Example: 'Incident'"
+    required: true
+  summary:
+    description: Issue summary
+    required: true
+  description:
+    description: Issue description
+    required: false
+outputs:
+  issue:
+    description: Key of the newly created issue
+runs:
+  using: 'node12'
+  main: 'index.js'
