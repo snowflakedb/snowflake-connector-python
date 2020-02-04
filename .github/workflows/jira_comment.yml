@@ -1,0 +1,28 @@
+name: Jira comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  comment-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Jira login
+        uses: atlassian/gajira-login@master
+        env:
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+      - name: Extract issue from title
+        id: extract
+        env:
+          TITLE: "${{ github.event.issue.title }}"
+        run: |
+          jira=$(echo -n $TITLE | awk -F: '{print $1}')
+          echo ::set-output name=jira::$jira
+      - name: Comment on issue
+        uses: atlassian/gajira-comment@master
+        with: 
+          issue: "${{ steps.extract.outputs.jira }}"
+          comment: "{{ event.comment.user.login }} commented:\n\n{{ event.comment.body }}\n\n{{ event.comment.html_url }}"
