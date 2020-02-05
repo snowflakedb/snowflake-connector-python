@@ -19,10 +19,11 @@ jobs:
         env:
           TITLE: "${{ github.event.issue.title }}"
         run: |
-          jira=$(echo -n $TITLE | awk -F: '{print $1}')
+          jira=$(echo -n $TITLE | awk '{print $1}' | sed -e 's/://')
           echo ::set-output name=jira::$jira
       - name: Comment on issue
         uses: atlassian/gajira-comment@master
+        if: startsWith(steps.extract.outputs.jira, 'SNOW-')
         with: 
           issue: "${{ steps.extract.outputs.jira }}"
           comment: "{{ event.comment.user.login }} commented:\n\n{{ event.comment.body }}\n\n{{ event.comment.html_url }}"
