@@ -21,4 +21,4 @@ outputs:
     description: Key of the newly created issue
 runs:
   using: 'node12'
-  main: 'action.js'
+  main: 'dist/index.js'
