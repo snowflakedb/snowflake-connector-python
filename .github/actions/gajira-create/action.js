@@ -57,6 +57,15 @@ module.exports = class {
       value: argv.summary,
     }]
 
+    if (argv.assignee) {
+      providedFields.push({
+        key: 'assignee',
+        value: {
+            name: argv.assignee
+            }
+      })
+    }
+
     if (argv.area) {
       providedFields.push({
         key: 'customfield_11401',
