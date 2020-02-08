@@ -18,7 +18,8 @@ async function exec () {
         issuetype: process.env.INPUT_TYPE,
         summary: process.env.INPUT_SUMMARY,
         description: process.env.INPUT_DESCRIPTION,
-        area: process.env.INPUT_AREA
+        area: process.env.INPUT_AREA,
+        assignee: process.env.INPUT_ASSIGNEE
     }
 
     console.log("ARGS")
