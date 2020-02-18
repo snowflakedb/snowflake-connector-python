@@ -10,7 +10,7 @@ chardet==3.0.4
 cryptography==2.8
 docutils==0.15.2
 idna==2.8
-ijson==2.5.1
+ijson==2.6.0
 jmespath==0.9.4
 oscrypto==1.2.0
 pycparser==2.19
