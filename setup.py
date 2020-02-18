@@ -189,7 +189,7 @@ setup(
         'cryptography>=1.8.2,<3.0.0',
         'ijson<3.0.0',
         'pyjwt<2.0.0',
-        'idna<3.0.0',
+        'idna<2.9',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
     ],
