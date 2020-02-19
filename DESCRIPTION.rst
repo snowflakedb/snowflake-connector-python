@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.1(February 18,2020)
+  
+    - Fix use DictCursor with execute_string #248
+
 - v2.2.0(January 27,2020)
 
     - Drop Python 2.7 support
