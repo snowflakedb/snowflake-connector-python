@@ -19,13 +19,13 @@
 # Build upon the scripts in https://github.com/matthew-brett/manylinux-builds
 # * Copyright (c) 2013-2016, Matt Terry and Matthew Brett (BSD 2-clause)
 
-PYTHON_VERSIONS="${PYTHON_VERSIONS:-35 36 37}"
+PYTHON_VERSIONS="${PYTHON_VERSIONS:-3.5 3.6 3.7 3.8}"
 
 source /home/user/multibuild/manylinux_utils.sh
 
 for PYTHON in ${PYTHON_VERSIONS}; do
     U_WIDTH=16
-    PYTHON_INTERPRETER="$(cpython_path $PYTHON {U_WIDTH})/bin/python"
+    PYTHON_INTERPRETER="$(cpython_path $PYTHON ${U_WIDTH})/bin/python"
     PIP="$(cpython_path $PYTHON ${U_WIDTH})/bin/pip"
     PATH="$PATH:$(cpython_path $PYTHON ${U_WIDTH})"
 
@@ -35,7 +35,7 @@ for PYTHON in ${PYTHON_VERSIONS}; do
     echo "=== (${PYTHON}, ${U_WIDTH}) Preparing virtualenv for build ==="
     "$(cpython_path $PYTHON ${U_WIDTH})/bin/virtualenv" -p ${PYTHON_INTERPRETER} --no-download /home/user/venv-build-${PYTHON}
     source /home/user/venv-build-${PYTHON}/bin/activate
-    pip install "cython==0.29.8" "setuptools" "flake8" "wheel" "pyarrow==0.15.1"
+    pip install "cython==0.29.15" "setuptools" "flake8" "wheel" "pyarrow==0.16.0"
     deactivate
 done
 

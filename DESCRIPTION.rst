@@ -9,8 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.3.0(February XX,2020)
+
+    - Upgrade Python's arrow lib to 0.15.1
+
 - v2.2.1(February 18,2020)
-  
+
     - Fix use DictCursor with execute_string #248
 
 - v2.2.0(January 27,2020)

@@ -56,14 +56,14 @@ if isBuildExtEnabled == 'true':
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            'linux': ['libarrow.so.15',
-                      'libarrow_python.so.15',
-                      'libarrow_flight.so.15',
+            'linux': ['libarrow.so.16',
+                      'libarrow_python.so.16',
+                      'libarrow_flight.so.16',
                       'libarrow_boost_filesystem.so.1.68.0',
                       'libarrow_boost_system.so.1.68.0',
                       'libarrow_boost_regex.so.1.68.0'],
-            'darwin': ['libarrow.15.dylib',
-                       'libarrow_python.15.dylib',
+            'darwin': ['libarrow.16.dylib',
+                       'libarrow_python.16.dylib',
                        'libarrow_boost_filesystem.dylib',
                        'libarrow_boost_regex.dylib',
                        'libarrow_boost_system.dylib'],
@@ -73,10 +73,10 @@ if isBuildExtEnabled == 'true':
         }
 
         arrow_libs_to_link = {
-            'linux': ['libarrow.so.15',
-                      'libarrow_python.so.15'],
-            'darwin': ['libarrow.15.dylib',
-                       'libarrow_python.15.dylib'],
+            'linux': ['libarrow.so.16',
+                      'libarrow_python.so.16'],
+            'darwin': ['libarrow.16.dylib',
+                       'libarrow_python.16.dylib'],
             'win32': ['arrow.lib',
                       'arrow_python.lib']
         }
@@ -224,7 +224,7 @@ setup(
             'keyring!=16.1.0'
         ],
         "pandas": [
-            'pyarrow>=0.15.1,<0.16.0;python_version>"3.4"',
+            'pyarrow>=0.16.0,<0.17.0;python_version>"3.4"',
             'pandas==0.24.2;python_version=="3.5"',
             'pandas<1.0.0;python_version>"3.5"',
         ],
