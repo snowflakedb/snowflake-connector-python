@@ -13,7 +13,7 @@ idna==2.9
 ijson==2.6.1
 jmespath==0.9.5
 oscrypto==1.2.0
-pycparser==2.19
+pycparser==2.20
 pycryptodomex==3.9.7
 PyJWT==1.7.1
 pyOpenSSL==19.1.0
