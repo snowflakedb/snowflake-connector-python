@@ -11,7 +11,7 @@ cryptography==2.8
 docutils==0.15.2
 idna==2.8
 ijson==2.6.1
-jmespath==0.9.4
+jmespath==0.9.5
 oscrypto==1.2.0
 pycparser==2.19
 pycryptodomex==3.9.7
