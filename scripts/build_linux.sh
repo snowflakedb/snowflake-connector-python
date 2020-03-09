@@ -12,7 +12,7 @@ source "/home/user/venv-build-${PYTHON_VERSION}/bin/activate"
 rm -rf build/
 export ENABLE_EXT_MODULES=true
 rm -f generated_version.py
-CC=g++ python setup.py bdist_wheel -d $THIS_DIR/../dist/docker/$PYTHON_VERSION/
+python setup.py bdist_wheel -d $THIS_DIR/../dist/docker/$PYTHON_VERSION/
 unset ENABLE_EXT_MODULES
 
 mkdir -p $THIS_DIR/../dist/docker/repaired_wheels
