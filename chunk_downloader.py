@@ -5,6 +5,7 @@
 #
 
 import json
+import time
 from collections import namedtuple
 from gzip import GzipFile
 from io import BytesIO
@@ -18,9 +19,9 @@ from snowflake.connector.util_text import split_rows_from_stream
 from .arrow_context import ArrowConverterContext
 from .errorcode import ER_CHUNK_DOWNLOAD_FAILED
 from .errors import Error, OperationalError
-from .time_util import get_time_millis
+from .time_util import get_time_millis, DecorrelateJitterBackoff
 
-DEFAULT_REQUEST_TIMEOUT = 3600
+DEFAULT_REQUEST_TIMEOUT = 7
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -113,41 +114,50 @@ class SnowflakeChunkDownloader(object):
         """
         logger.debug(u'downloading chunk %s/%s', idx + 1, self._chunk_size)
         headers = {}
-        try:
-            if self._chunk_headers is not None:
-                headers = self._chunk_headers
-                logger.debug(u'use chunk headers from result')
-            elif self._qrmk is not None:
-                headers[SSE_C_ALGORITHM] = SSE_C_AES
-                headers[SSE_C_KEY] = self._qrmk
+        if self._chunk_headers is not None:
+            headers = self._chunk_headers
+            logger.debug(u'use chunk headers from result')
+        elif self._qrmk is not None:
+            headers[SSE_C_ALGORITHM] = SSE_C_AES
+            headers[SSE_C_KEY] = self._qrmk
 
-            logger.debug(u"started getting the result set %s: %s",
-                         idx + 1, self._chunks[idx].url)
-            result_data = self._fetch_chunk(self._chunks[idx].url, headers)
-            logger.debug(u"finished getting the result set %s: %s",
-                         idx + 1, self._chunks[idx].url)
+        last_error = None
+        backoff = DecorrelateJitterBackoff(1, 16)
+        sleep_timer = 1
+        for retry in range(10):
+            try:
+                logger.debug(u"started getting the result set %s: %s",
+                             idx + 1, self._chunks[idx].url)
+                result_data = self._fetch_chunk(self._chunks[idx].url, headers)
+                logger.debug(u"finished getting the result set %s: %s",
+                             idx + 1, self._chunks[idx].url)
 
-            if isinstance(result_data, ResultIterWithTimings):
-                metrics = result_data.get_timings()
-                with self._downloading_chunks_lock:
-                    self._total_millis_downloading_chunks += metrics[
-                        ResultIterWithTimings.DOWNLOAD]
-                    self._total_millis_parsing_chunks += metrics[
-                        ResultIterWithTimings.PARSE]
+                if isinstance(result_data, ResultIterWithTimings):
+                    metrics = result_data.get_timings()
+                    with self._downloading_chunks_lock:
+                        self._total_millis_downloading_chunks += metrics[
+                            ResultIterWithTimings.DOWNLOAD]
+                        self._total_millis_parsing_chunks += metrics[
+                            ResultIterWithTimings.PARSE]
 
-            with self._chunk_cond:
-                self._chunks[idx] = self._chunks[idx]._replace(
-                    result_data=result_data,
-                    ready=True)
-                self._chunk_cond.notify_all()
-                logger.debug(
-                    u'added chunk %s/%s to a chunk list.', idx + 1,
-                    self._chunk_size)
-        except Exception as e:
-            logger.exception(
-                u'Failed to fetch the large result set chunk %s/%s',
-                idx + 1, self._chunk_size)
-            self._downloader_error = e
+                with self._chunk_cond:
+                    self._chunks[idx] = self._chunks[idx]._replace(
+                        result_data=result_data,
+                        ready=True)
+                    self._chunk_cond.notify_all()
+                    logger.debug(
+                        u'added chunk %s/%s to a chunk list.', idx + 1,
+                        self._chunk_size)
+                break
+            except Exception as e:
+                last_error = e
+                sleep_timer = backoff.next_sleep(1, sleep_timer)
+                logger.exception(
+                    u'Failed to fetch the large result set chunk %s/%s for the %s th time, backing off for %s s',
+                    idx + 1, self._chunk_size, retry + 1, sleep_timer)
+                time.sleep(sleep_timer)
+        else:
+            self._downloader_error = last_error
 
     def next_chunk(self):
         """
