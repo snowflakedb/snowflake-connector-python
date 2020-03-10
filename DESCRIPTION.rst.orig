@@ -9,11 +9,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
-- v2.2.2(March 9,2020)
-
-    - Fix retry with chunck_downloader.py for stability.
-    - Support Python 3.8 for Linux and Mac.
-
 - v2.2.1(February 18,2020)
   
     - Fix use DictCursor with execute_string #248
