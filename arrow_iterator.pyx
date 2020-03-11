@@ -162,7 +162,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                 cursor,
                 OperationalError,
                 {
-                    u'msg': u'Failed to open arrow stream: ' + ret.message(),
+                    u'msg': u'Failed to open arrow stream: ' + str(ret.message()),
                     u'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
 
@@ -174,7 +174,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                     cursor,
                     OperationalError,
                     {
-                        u'msg': u'Failed to read next arrow batch: ' + ret.message(),
+                        u'msg': u'Failed to read next arrow batch: ' + str(ret.message()),
                         u'errno': ER_FAILED_TO_READ_ARROW_STREAM
                     })
 
