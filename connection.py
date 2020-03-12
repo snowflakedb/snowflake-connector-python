@@ -1121,9 +1121,9 @@ class SnowflakeConnection(object):
         return self.client_session_keep_alive_heartbeat_frequency
 
     def _validate_client_prefetch_threads(self):
-        if self.client_prefetch_threads <= 0:
+        if int(self.client_prefetch_threads) <= 0:
             self._client_prefetch_threads = 1
-        elif self.client_prefetch_threads > MAX_CLIENT_PREFETCH_THREADS:
+        elif int(self.client_prefetch_threads) > MAX_CLIENT_PREFETCH_THREADS:
             self._client_prefetch_threads = MAX_CLIENT_PREFETCH_THREADS
         self._client_prefetch_threads = int(
             self.client_prefetch_threads)
