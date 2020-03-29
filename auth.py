@@ -346,31 +346,32 @@ class Auth(object):
         return session_parameters
 
     def read_temporary_credential(self, host, account, user, session_parameters):
-        if IS_MACOS or IS_WINDOWS:
-            if not keyring:
-                raise MissingDependencyError("Please install keyring module to enable SSO token cache feature.")
-
-            new_target = convert_target(host, user)
-            try:
-                id_token = keyring.get_password(new_target, user.upper())
-            except keyring.errors.KeyringError as ke:
-                logger.debug("Could not retrieve id_token from secure storage : {}".format(str(ke)))
-        elif IS_LINUX and session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL):
-            read_temporary_credential_file()
-            id_token = TEMPORARY_CREDENTIAL.get(
-                account.upper(), {}).get(user.upper())
-        else:
+        if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
             id_token = None
-            logger.debug("connection parameter enable_sso_temporary_credential not set or OS not support")
-        if id_token:
-            self._rest.id_token = id_token
-            try:
-                self._rest._id_token_session()
-                return True
-            except ReauthenticationRequest as ex:
-                # catch token expiration error
-                logger.debug(
-                    "ID token expired. Reauthenticating...: %s", ex)
+            if IS_MACOS or IS_WINDOWS:
+                if not keyring:
+                    # we will leave the exception for write_temporary_credential function to raise
+                    return False
+                new_target = convert_target(host, user)
+                try:
+                    id_token = keyring.get_password(new_target, user.upper())
+                except keyring.errors.KeyringError as ke:
+                    logger.debug("Could not retrieve id_token from secure storage : {}".format(str(ke)))
+            elif IS_LINUX:
+                read_temporary_credential_file()
+                id_token = TEMPORARY_CREDENTIAL.get(
+                    account.upper(), {}).get(user.upper())
+            else:
+                logger.debug("connection parameter enable_sso_temporary_credential not set or OS not support")
+            if id_token:
+                self._rest.id_token = id_token
+                try:
+                    self._rest._id_token_session()
+                    return True
+                except ReauthenticationRequest as ex:
+                    # catch token expiration error
+                    logger.debug(
+                        "ID token expired. Reauthenticating...: %s", ex)
         return False
 
 

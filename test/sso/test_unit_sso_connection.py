@@ -3,12 +3,18 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
+import pytest
 import os
 import snowflake.connector
 from mock import patch
 from snowflake.connector.auth import delete_temporary_credential
+from snowflake.connector.compat import IS_MACOS
 
 
+@pytest.mark.skipif(
+    IS_MACOS,
+    reason="Due to some reason, we need to mock keyring function on Mac. The mock will be done later."
+)
 @patch(
     'snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate')
 @patch(

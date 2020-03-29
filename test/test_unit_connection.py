@@ -23,7 +23,7 @@ def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
                 u'data': {
                     u'token': u'TOKEN',
                     u'masterToken': u'MASTER_TOKEN',
-                    u'idToken': u'ID_TOKEN',
+                    u'idToken': None,
                     u'parameters': [
                         {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
                     ],
@@ -66,7 +66,7 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
                 u'data': {
                     u'token': u'TOKEN',
                     u'masterToken': u'MASTER_TOKEN',
-                    u'idToken': u'ID_TOKEN',
+                    u'idToken': None,
                     u'parameters': [
                         {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
                     ],
