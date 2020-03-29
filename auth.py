@@ -103,22 +103,28 @@ class Auth(object):
     def base_auth_data(user, account, application,
                        internal_application_name,
                        internal_application_version,
-                       ocsp_mode):
+                       ocsp_mode, login_timeout,
+                       network_timeout=None,
+                       store_temp_cred=None):
         return {
-            u'data': {
-                u"CLIENT_APP_ID": internal_application_name,
-                u"CLIENT_APP_VERSION": internal_application_version,
-                u"SVN_REVISION": VERSION[3],
-                u"ACCOUNT_NAME": account,
-                u"LOGIN_NAME": user,
-                u"CLIENT_ENVIRONMENT": {
-                    u"APPLICATION": application,
-                    u"OS": OPERATING_SYSTEM,
-                    u"OS_VERSION": PLATFORM,
-                    u"PYTHON_VERSION": PYTHON_VERSION,
-                    u"PYTHON_RUNTIME": IMPLEMENTATION,
-                    u"PYTHON_COMPILER": COMPILER,
-                    u"OCSP_MODE": ocsp_mode.name,
+            'data': {
+                "CLIENT_APP_ID": internal_application_name,
+                "CLIENT_APP_VERSION": internal_application_version,
+                "SVN_REVISION": VERSION[3],
+                "ACCOUNT_NAME": account,
+                "LOGIN_NAME": user,
+                "CLIENT_ENVIRONMENT": {
+                    "APPLICATION": application,
+                    "OS": OPERATING_SYSTEM,
+                    "OS_VERSION": PLATFORM,
+                    "PYTHON_VERSION": PYTHON_VERSION,
+                    "PYTHON_RUNTIME": IMPLEMENTATION,
+                    "PYTHON_COMPILER": COMPILER,
+                    "OCSP_MODE": ocsp_mode.name,
+                    "TRACING": logger.getEffectiveLevel(),
+                    "LOGIN_TIMEOUT": login_timeout,
+                    "NETWORK_TIMEOUT": network_timeout,
+                    "CLIENT_STORE_TEMPORARY_CREDENTIAL": store_temp_cred,
                 }
             },
         }
@@ -144,11 +150,22 @@ class Auth(object):
             headers[HTTP_HEADER_SERVICE_NAME] = \
                 session_parameters[HTTP_HEADER_SERVICE_NAME]
         url = u"/session/v1/login-request"
+        if session_parameters is not None \
+                and PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL in session_parameters:
+            store_temp_cred = session_parameters[
+                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL]
+        else:
+            store_temp_cred = None
+
         body_template = Auth.base_auth_data(
             user, account, self._rest._connection.application,
             self._rest._connection._internal_application_name,
             self._rest._connection._internal_application_version,
-            self._rest._connection._ocsp_mode())
+            self._rest._connection._ocsp_mode(),
+            self._rest._connection._login_timeout,
+            self._rest._connection._network_timeout,
+            store_temp_cred,
+        )
 
         body = copy.deepcopy(body_template)
         # updating request body

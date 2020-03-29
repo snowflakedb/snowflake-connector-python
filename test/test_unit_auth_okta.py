@@ -247,6 +247,7 @@ def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
 
     connection = MagicMock()
     connection._login_timeout = 120
+    connection._network_timeout = None
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)
