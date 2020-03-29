@@ -866,6 +866,7 @@ class SnowflakeOCSP(object):
         r'(.*\.snowflakecomputing\.com$'
         r'|(?:|.*\.)s3.*\.amazonaws\.com$'  # start with s3 or .s3 in the middle
         r'|.*\.okta\.com$'
+        r'|(?:|.*\.)storage\.googleapis\.com$'
         r'|.*\.blob\.core\.windows\.net$'
         r'|.*\.blob\.core\.usgovcloudapi\.net$)')
 
