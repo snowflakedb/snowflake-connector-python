@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
+import os
 import platform
 import sys
 import warnings
@@ -19,6 +20,10 @@ from asn1crypto.algos import DigestAlgorithm
 from asn1crypto.core import Integer, OctetString
 from asn1crypto.ocsp import CertId, OCSPRequest, OCSPResponse, Request, Requests, TBSRequest, Version
 from asn1crypto.x509 import Certificate
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding, utils
 
 from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE
 from snowflake.connector.errors import RevocationCheckError
@@ -48,6 +53,12 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         'sha256': SHA256,
         'sha384': SHA384,
         'sha512': SHA512,
+    }
+
+    SIGNATURE_ALGORITHM_TO_DIGEST_CLASS_OPENSSL = {
+        'sha256': hashes.SHA256,
+        'sha384': hashes.SHA3_384,
+        'sha512': hashes.SHA3_512,
     }
 
     WILDCARD_CERTID = None
@@ -320,21 +331,48 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             raise RevocationCheckError(msg=debug_msg, errno=op_er.errno)
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
-        pubkey = asymmetric.load_public_key(cert.public_key).unwrap().dump()
-        rsakey = RSA.importKey(pubkey)
-        signer = PKCS1_v1_5.new(rsakey)
-        if signature_algorithm in SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS:
-            digest = \
-                SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS[
+        use_openssl_only = os.getenv('USE_OPENSSL_ONLY', 'False') == 'True'
+        if not use_openssl_only:
+            pubkey = asymmetric.load_public_key(cert.public_key).unwrap().dump()
+            rsakey = RSA.importKey(pubkey)
+            signer = PKCS1_v1_5.new(rsakey)
+            if signature_algorithm in SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS:
+                digest = \
+                    SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS[
                     signature_algorithm].new()
+            else:
+                # the last resort. should not happen.
+                digest = SHA1.new()
+            digest.update(data.dump())
+            if not signer.verify(digest, signature):
+                raise RevocationCheckError(
+                    msg="Failed to verify the signature",
+                    errno=ER_INVALID_OCSP_RESPONSE)
+
         else:
-            # the last resort. should not happen.
-            digest = SHA1.new()
-        digest.update(data.dump())
-        if not signer.verify(digest, signature):
-            raise RevocationCheckError(
-                msg="Failed to verify the signature",
-                errno=ER_INVALID_OCSP_RESPONSE)
+            backend = default_backend()
+            public_key = serialization.load_der_public_key(cert.public_key.dump(), backend=default_backend())
+            if signature_algorithm in SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS:
+                chosen_hash = \
+                    SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS_OPENSSL[
+                        signature_algorithm]()
+            else:
+                # the last resort. should not happen.
+                chosen_hash = hashes.SHA1()
+            hasher = hashes.Hash(chosen_hash, backend)
+            hasher.update(data.dump())
+            digest = hasher.finalize()
+            try:
+                public_key.verify(
+                    signature,
+                    digest,
+                    padding.PKCS1v15(),
+                    utils.Prehashed(chosen_hash)
+                )
+            except InvalidSignature:
+                raise RevocationCheckError(
+                    msg="Failed to verify the signature",
+                    errno=ER_INVALID_OCSP_RESPONSE)
 
     def extract_certificate_chain(self, connection):
         """

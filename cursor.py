@@ -11,6 +11,9 @@ import uuid
 from logging import getLogger
 from threading import (Timer, Lock)
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .connection import SnowflakeConnection
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (
     FIELD_NAME_TO_ID,
@@ -81,7 +84,10 @@ class SnowflakeCursor(object):
         r'alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;',
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
-    def __init__(self, connection, use_dict_result=False, json_result_class=JsonResult):
+    def __init__(self,
+                 connection: 'SnowflakeConnection',
+                 use_dict_result: bool = False,
+                 json_result_class: object = JsonResult):
         """
         :param connection: connection created this cursor
         :param use_dict_result: whether use dict result or not. This variable only applied to

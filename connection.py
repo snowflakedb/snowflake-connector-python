@@ -13,7 +13,6 @@ from logging import getLogger
 from threading import Lock
 from time import strptime
 
-from .incident import IncidentAPI
 from . import errors
 from . import proxy
 from .auth import Auth
@@ -56,6 +55,7 @@ from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
                         ER_NO_NUMPY)
 from .errors import Error, ProgrammingError, DatabaseError
+from .incident import IncidentAPI
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -143,6 +143,7 @@ DEFAULT_CONFIGURATION = {
     u'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
     u'disable_request_pooling': False,  # snowflake
     u'enable_sso_temporary_credential': False if IS_LINUX else True,  # to enable temporary credential file
+    'use_openssl_only': False,  # only use openssl instead of python only crypto modules
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -467,6 +468,13 @@ class SnowflakeConnection(object):
     @property
     def disable_request_pooling(self):
         return self._disable_request_pooling
+
+    @property
+    def use_openssl_only(self):
+        """
+        Use OpenSSL only instead of PYthon libraries for signature verification and encryption purposes
+        """
+        return self._use_openssl_only
 
     @disable_request_pooling.setter
     def disable_request_pooling(self, value):
@@ -822,6 +830,18 @@ class SnowflakeConnection(object):
                 u'MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE '
                 u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
                 u'CHECKED.')
+
+        if 'USE_OPENSSL_ONLY' not in os.environ:
+            logger.info(
+                'Setting use_openssl_only mode to %s', self.use_openssl_only
+            )
+            os.environ['USE_OPENSSL_ONLY'] = str(self.use_openssl_only)
+        else:
+            logger.warning(
+                'Mode use_openssl_only is already set to: %s, ignoring set request to: %s',
+                os.environ['USE_OPENSSL_ONLY'],
+                self.use_openssl_only
+            )
 
     def cmd_query(self, sql, sequence_counter, request_id,
                   binding_params=None,
