@@ -63,7 +63,7 @@ if %errorlevel% neq 0 goto :error
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
-tox -e py%pv%-ci,py%pv%-pandas-ci,py%pv%-sso-ci,coverage --external_wheels ..\..\..\%connector_whl% -- --basetemp=%workspace%\pytest-tmp\
+tox -e py%pv%-ci,py%pv%-pandas-ci,py%pv%-sso-ci,coverage --external_wheels ..\..\..\%connector_whl% -- --basetemp=%workspace%\pytest-tmp\ test
 if %errorlevel% neq 0 goto :error
 
 call deactivate
