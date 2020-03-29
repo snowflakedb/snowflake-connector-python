@@ -16,7 +16,6 @@ import sys
 import time
 
 import pytest
-
 import snowflake.connector
 import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
