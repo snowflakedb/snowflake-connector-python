@@ -142,7 +142,7 @@ DEFAULT_CONFIGURATION = {
     u'support_negative_year': True,  # snowflake
     u'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
     u'disable_request_pooling': False,  # snowflake
-    u'enable_sso_temporary_credential': False if IS_LINUX else True,  # to enable temporary credential file
+    u'client_store_temporary_credential': False,  # enable temporary credential file for Linux, default false. Mac/Win will overlook this
     'use_openssl_only': False,  # only use openssl instead of python only crypto modules
 }
 
@@ -701,7 +701,7 @@ class SnowflakeConnection(object):
             # enable storing temporary credential in a file
             self._session_parameters[
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
-                    True if not IS_LINUX else self._enable_sso_temporary_credential
+                    self._client_store_temporary_credential if IS_LINUX else True
 
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(

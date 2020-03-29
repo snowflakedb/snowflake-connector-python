@@ -110,7 +110,7 @@ def test_connect_externalbrowser(
             authenticator=authenticator,
             database='TESTDB',
             warehouse='TESTWH',
-            enable_sso_temporary_credential='True',
+            client_store_temporary_credential=True,
         )
         assert con._rest.token == u'TOKEN'
         assert con._rest.master_token == u'MASTER_TOKEN'
@@ -124,7 +124,7 @@ def test_connect_externalbrowser(
             authenticator=authenticator,
             database='TESTDB_NEW',  # override the database
             warehouse='TESTWH_NEW',  # override the warehouse
-            enable_sso_temporary_credential='True',
+            client_store_temporary_credential=True,
         )
 
         assert con._rest.token == u'NEW_TOKEN'

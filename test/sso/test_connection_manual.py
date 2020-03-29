@@ -75,7 +75,7 @@ def test_connect_externalbrowser(token_validity_test_values):
             host=CONNECTION_PARAMETERS_SSO['host'],
             user=CONNECTION_PARAMETERS_SSO['user'],
             store_temporary_credential=True)    # delete existing temporary credential
-    CONNECTION_PARAMETERS_SSO['enable_sso_temporary_credential'] = True
+    CONNECTION_PARAMETERS_SSO['client_store_temporary_credential'] = True
 
     # change database and schema to non-default one
     print("[INFO] 1st connection gets id token and stores in the cache file. "

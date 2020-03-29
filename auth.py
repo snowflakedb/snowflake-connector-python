@@ -408,7 +408,7 @@ def write_temporary_credential(host, account, user, id_token, store_temporary_cr
     elif IS_LINUX and store_temporary_credential:
         write_temporary_credential_file(host, account, user, id_token)
     else:
-        logger.debug("connection parameter enable_sso_temporary_credential not set or OS not support")
+        logger.debug("connection parameter client_store_temporary_credential not set or OS not support")
 
 
 def write_temporary_credential_file(host, account, user, id_token):

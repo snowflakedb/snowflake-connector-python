@@ -221,7 +221,7 @@ setup(
     },
     extras_require={
         "secure-local-storage": [
-            'keyring!=16.1.0'
+            'keyring<22.0.0,!=16.1.0',
         ],
         "pandas": [
             'pyarrow>=0.15.1,<0.16.0;python_version=="3.5" and platform_system=="Windows"',
