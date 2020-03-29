@@ -17,6 +17,7 @@ from snowflake.connector.constants import UTF8
 
 IS_LINUX = platform.system() == 'Linux'
 IS_WINDOWS = platform.system() == 'Windows'
+IS_MACOS = platform.system() == 'Darwin'
 
 NUM_DATA_TYPES = []
 try:

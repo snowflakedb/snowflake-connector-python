@@ -8,7 +8,7 @@ THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source "${THIS_DIR}/py_exec.sh"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*.whl | sort -r | head -n 1)
-TEST_ENVLIST=fix_lint,py${PYTHON_ENV}-ci,py${PYTHON_ENV}-pandas-ci,coverage
+TEST_ENVLIST=fix_lint,py${PYTHON_ENV}-ci,py${PYTHON_ENV}-pandas-ci,py${PYTHON_ENV}-sso-ci,coverage
 
 if [[ -n "$PIP_INDEX_URL" ]]; then
   echo "PIP_INDEX_URL before now: ${PIP_INDEX_URL}"

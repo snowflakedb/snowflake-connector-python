@@ -48,7 +48,7 @@ aws s3 cp --only-show-errors \
 log INFO "Testing Connector in python${PYTHON_ENV}"
 
 CONNECTOR_WHL=$(ls ${WORKSPACE}/snowflake_connector_python*cp${PYTHON_ENV}*.whl)
-TEST_ENVLIST=fix_lint,py${PYTHON_ENV}-ci,py${PYTHON_ENV}-pandas-ci,coverage
+TEST_ENVLIST=fix_lint,py${PYTHON_ENV}-ci,py${PYTHON_ENV}-pandas-ci,py${PYTHON_ENV}-sso-ci,coverage
 
 cd $CONNECTOR_DIR
 

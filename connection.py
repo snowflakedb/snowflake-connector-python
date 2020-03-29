@@ -27,7 +27,7 @@ from .chunk_downloader import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     MAX_CLIENT_PREFETCH_THREADS)
 from .compat import (
-    TO_UNICODE, urlencode, PY_ISSUE_23517, IS_WINDOWS)
+    TO_UNICODE, urlencode, PY_ISSUE_23517, IS_LINUX, IS_WINDOWS)
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
@@ -142,6 +142,7 @@ DEFAULT_CONFIGURATION = {
     u'support_negative_year': True,  # snowflake
     u'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
     u'disable_request_pooling': False,  # snowflake
+    u'enable_sso_temporary_credential': False if IS_LINUX else True,  # to enable temporary credential file
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -691,11 +692,13 @@ class SnowflakeConnection(object):
         if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
             self._session_parameters[
-                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = True
+                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
+                    True if not IS_LINUX else self._enable_sso_temporary_credential
 
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(
-                self.account, self.user, self._session_parameters):
+                self.host, self.account, self.user,
+                self._session_parameters):
             self.__authenticate(auth_instance)
         else:
             # set the current objects as the session is derived from the id

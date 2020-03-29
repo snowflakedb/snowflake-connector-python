@@ -19,7 +19,11 @@
 
 import pytest
 import snowflake.connector
-from snowflake.connector.auth import delete_temporary_credential_file
+from snowflake.connector.auth import delete_temporary_credential
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from parameters import (CONNECTION_PARAMETERS_SSO)
@@ -67,12 +71,11 @@ def test_connect_externalbrowser(token_validity_test_values):
     should not create popups.
     """
 
-    delete_temporary_credential_file(True)  # delete secure storage
-    delete_temporary_credential_file(False)  # delete file cache
-    CONNECTION_PARAMETERS_SSO['session_parameters'] = \
-        {
-        "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL": True,
-    }
+    delete_temporary_credential(
+            host=CONNECTION_PARAMETERS_SSO['host'],
+            user=CONNECTION_PARAMETERS_SSO['user'],
+            store_temporary_credential=True)    # delete existing temporary credential
+    CONNECTION_PARAMETERS_SSO['enable_sso_temporary_credential'] = True
 
     # change database and schema to non-default one
     print("[INFO] 1st connection gets id token and stores in the cache file. "
