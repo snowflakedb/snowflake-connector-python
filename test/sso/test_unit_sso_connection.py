@@ -3,18 +3,12 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-import pytest
 import os
 import snowflake.connector
-from mock import patch
+from mock import patch, Mock
 from snowflake.connector.auth import delete_temporary_credential
 from snowflake.connector.compat import IS_MACOS
 
-
-@pytest.mark.skipif(
-    IS_MACOS,
-    reason="Due to some reason, we need to mock keyring function on Mac. The mock will be done later."
-)
 @patch(
     'snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate')
 @patch(
@@ -31,9 +25,9 @@ def test_connect_externalbrowser(
         "WORKSPACE", os.path.expanduser("~"))
 
     def mock_post_request(url, headers, json_body, **kwargs):
-        global mock_cnt
+        global mock_post_req_cnt
         ret = None
-        if mock_cnt == 0:
+        if mock_post_req_cnt == 0:
             # return from /v1/login-request
             ret = {
                 u'success': True,
@@ -43,7 +37,7 @@ def test_connect_externalbrowser(
                     u'masterToken': u'MASTER_TOKEN',
                     u'idToken': u'ID_TOKEN',
                 }}
-        elif mock_cnt == 1:
+        elif mock_post_req_cnt == 1:
             # return from /token-request
             ret = {
                 u'success': True,
@@ -51,7 +45,7 @@ def test_connect_externalbrowser(
                 u'data': {
                     u'sessionToken': u'NEW_TOKEN',
                 }}
-        elif mock_cnt == 2:
+        elif mock_post_req_cnt == 2:
             # return from USE WAREHOUSE TESTWH_NEW
             ret = {
                 u'success': True,
@@ -60,7 +54,7 @@ def test_connect_externalbrowser(
                     u'finalDatabase': 'TESTDB',
                     u'finalWarehouse': 'TESTWH_NEW',
                 }}
-        elif mock_cnt == 3:
+        elif mock_post_req_cnt == 3:
             # return from USE DATABASE TESTDB_NEW
             ret = {
                 u'success': True,
@@ -69,7 +63,7 @@ def test_connect_externalbrowser(
                     u'finalDatabase': 'TESTDB_NEW',
                     u'finalWarehouse': 'TESTWH_NEW',
                 }}
-        elif mock_cnt == 4:
+        elif mock_post_req_cnt == 4:
             # return from SELECT 1
             ret = {
                 u'success': True,
@@ -78,11 +72,20 @@ def test_connect_externalbrowser(
                     u'finalDatabase': 'TESTDB_NEW',
                     u'finalWarehouse': 'TESTWH_NEW',
                 }}
-        mock_cnt += 1
+        mock_post_req_cnt += 1
         return ret
 
-    global mock_cnt
-    mock_cnt = 0
+    def mock_get_password(service, user):
+        global mock_get_pwd_cnt
+        ret = None
+        if mock_get_pwd_cnt == 1:
+            # second connection
+            ret = 'ID_TOKEN'
+        mock_get_pwd_cnt += 1
+        return ret
+
+    global mock_post_req_cnt, mock_get_pwd_cnt
+    mock_post_req_cnt, mock_get_pwd_cnt = 0, 0
 
     # pre-authentication doesn't matter
     mockAuthByBrowserAuthenticate.return_value = None
@@ -90,43 +93,50 @@ def test_connect_externalbrowser(
     # POST requests mock
     mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
 
-    mock_cnt = 0
+    def test_body():
+        account = 'testaccount'
+        user = 'testuser'
+        authenticator = 'externalbrowser'
+        host = 'testaccount.snowflakecomputing.com'
 
-    account = 'testaccount'
-    user = 'testuser'
-    authenticator = 'externalbrowser'
-    host = 'testaccount.snowflakecomputing.com'
+        delete_temporary_credential(
+            host=host, user=user, store_temporary_credential=True)
 
-    delete_temporary_credential(
-        host=host, user=user, store_temporary_credential=True)
+        # first connection
+        con = snowflake.connector.connect(
+            account=account,
+            user=user,
+            host=host,
+            authenticator=authenticator,
+            database='TESTDB',
+            warehouse='TESTWH',
+            enable_sso_temporary_credential='True',
+        )
+        assert con._rest.token == u'TOKEN'
+        assert con._rest.master_token == u'MASTER_TOKEN'
+        assert con._rest.id_token == u'ID_TOKEN'
 
-    # first connection
-    con = snowflake.connector.connect(
-        account=account,
-        user=user,
-        host=host,
-        authenticator=authenticator,
-        database='TESTDB',
-        warehouse='TESTWH',
-        enable_sso_temporary_credential='True',
-    )
-    assert con._rest.token == u'TOKEN'
-    assert con._rest.master_token == u'MASTER_TOKEN'
-    assert con._rest.id_token == u'ID_TOKEN'
+        # second connection that uses the id token to get the session token
+        con = snowflake.connector.connect(
+            account=account,
+            user=user,
+            host=host,
+            authenticator=authenticator,
+            database='TESTDB_NEW',  # override the database
+            warehouse='TESTWH_NEW',  # override the warehouse
+            enable_sso_temporary_credential='True',
+        )
 
-    # second connection that uses the id token to get the session token
-    con = snowflake.connector.connect(
-        account=account,
-        user=user,
-        host=host,
-        authenticator=authenticator,
-        database='TESTDB_NEW',  # override the database
-        warehouse='TESTWH_NEW',  # override the warehouse
-        enable_sso_temporary_credential='True',
-    )
+        assert con._rest.token == u'NEW_TOKEN'
+        assert con._rest.master_token is None
+        assert con._rest.id_token == 'ID_TOKEN'
+        assert con.database == 'TESTDB_NEW'
+        assert con.warehouse == 'TESTWH_NEW'
 
-    assert con._rest.token == u'NEW_TOKEN'
-    assert con._rest.master_token is None
-    assert con._rest.id_token == 'ID_TOKEN'
-    assert con.database == 'TESTDB_NEW'
-    assert con.warehouse == 'TESTWH_NEW'
+    if IS_MACOS:
+        with patch('keyring.delete_password', Mock(return_value=None)
+                   ), patch('keyring.set_password', Mock(return_value=None)
+                            ), patch('keyring.get_password', Mock(side_effect=mock_get_password)):
+            test_body()
+    else:
+        test_body()
