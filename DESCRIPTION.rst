@@ -9,6 +9,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.3(March 30,2020)
+ 
+    - Secure SSO ID Token
+    - Add use_openssl_only connection parameter, which disables the usage of pure Python cryptographic libraries for FIPS
+    - Add manylinux1 as well as manylinux2010
+    - Fix a bug where a certificate file was opened and never closed in snowflake-connector-python.
+    - Fix python connector skips validating GCP URLs
+    - Adds additional client driver config information to in band telemetry.
+
 - v2.2.2(March 9,2020)
 
     - Fix retry with chunck_downloader.py for stability.
