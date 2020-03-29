@@ -38,7 +38,7 @@ if [ "$TRAVIS_OS_NAME" == "osx" ]; then
 else
     pv=${TRAVIS_PYTHON_VERSION}
     $THIS_DIR/build_inside_docker.sh $pv
-    CONNECTOR_WHL=$(ls $THIS_DIR/../dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*.whl | sort -r | head -n 1)
+    CONNECTOR_WHL=$(ls $THIS_DIR/../dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*manylinux2010*.whl | sort -r | head -n 1)
     pip install -U ${CONNECTOR_WHL}[pandas,development]
     cd $THIS_DIR/..
 fi
