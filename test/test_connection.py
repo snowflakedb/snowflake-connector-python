@@ -10,7 +10,6 @@ import threading
 
 import mock
 import pytest
-
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.auth_okta import AuthByOkta
