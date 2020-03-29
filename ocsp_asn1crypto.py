@@ -12,13 +12,14 @@ from datetime import datetime, timezone
 from logging import getLogger
 from os import getenv
 
+from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Signature import PKCS1_v1_5
 from asn1crypto.algos import DigestAlgorithm
 from asn1crypto.core import Integer, OctetString
 from asn1crypto.ocsp import CertId, OCSPRequest, OCSPResponse, Request, Requests, TBSRequest, Version
 from asn1crypto.x509 import Certificate
-from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Signature import PKCS1_v1_5
+
 from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
@@ -88,15 +89,14 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         if storage is None:
             storage = SnowflakeOCSP.ROOT_CERTIFICATES_DICT
         logger.debug('reading certificate bundle: %s', ca_bundle_file)
-        all_certs = open(ca_bundle_file, 'rb').read()
-
-        # don't lock storage
-        from asn1crypto import pem
-        pem_certs = pem.unarmor(all_certs, multiple=True)
-        for type_name, _, der_bytes in pem_certs:
-            if type_name == 'CERTIFICATE':
-                crt = Certificate.load(der_bytes)
-                storage[crt.subject.sha256] = crt
+        with open(ca_bundle_file, 'rb') as all_certs:
+            # don't lock storage
+            from asn1crypto import pem
+            pem_certs = pem.unarmor(all_certs.read(), multiple=True)
+            for type_name, _, der_bytes in pem_certs:
+                if type_name == 'CERTIFICATE':
+                    crt = Certificate.load(der_bytes)
+                    storage[crt.subject.sha256] = crt
 
     def create_ocsp_request(self, issuer, subject):
         """
