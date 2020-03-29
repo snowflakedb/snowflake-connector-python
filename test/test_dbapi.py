@@ -16,6 +16,7 @@ import sys
 import time
 
 import pytest
+
 import snowflake.connector
 import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
@@ -603,7 +604,7 @@ def test_description2(conn_local):
                 # number (FIXED)
                 ('COL1', 0, None, None, 9, 4, False),
                 # decimal
-                ('COL2', 2, None, 16777216, None, None, False),
+                ('COL2', 2, None, 26, None, None, False),
                 # string
                 ('COL3', 3, None, None, None, None, True),
                 # date
