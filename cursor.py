@@ -11,8 +11,8 @@ import uuid
 from logging import getLogger
 from threading import (Timer, Lock)
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
+MYPY = False
+if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from .connection import SnowflakeConnection
 from .compat import (BASE_EXCEPTION_CLASS)
 from .constants import (
