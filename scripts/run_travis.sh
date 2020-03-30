@@ -31,7 +31,7 @@ else
   # shellcheck disable=SC2068
   ${TIMEOUT_CMD[@]} py.test -vvv --cov=snowflake.connector \
   --cov-report=xml:python_connector_${TRAVIS_PYTHON_VERSION}_coverage.xml \
-  --ignore=test/pandas --ignore=test/sso test || ret=$?
+  --ignore=test/sso test || ret=$?
 fi
 
 # TIMEOUT or SUCCESS
