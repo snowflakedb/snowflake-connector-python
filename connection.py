@@ -13,7 +13,6 @@ from logging import getLogger
 from threading import Lock
 from time import strptime
 
-from .incident import IncidentAPI
 from . import errors
 from . import proxy
 from .auth import Auth
@@ -27,7 +26,7 @@ from .chunk_downloader import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     MAX_CLIENT_PREFETCH_THREADS)
 from .compat import (
-    TO_UNICODE, urlencode, PY_ISSUE_23517, IS_WINDOWS)
+    TO_UNICODE, urlencode, PY_ISSUE_23517, IS_LINUX, IS_WINDOWS)
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
@@ -56,6 +55,7 @@ from .errorcode import (ER_CONNECTION_IS_CLOSED,
                         ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
                         ER_NO_NUMPY)
 from .errors import Error, ProgrammingError, DatabaseError
+from .incident import IncidentAPI
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -142,6 +142,8 @@ DEFAULT_CONFIGURATION = {
     u'support_negative_year': True,  # snowflake
     u'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
     u'disable_request_pooling': False,  # snowflake
+    u'client_store_temporary_credential': False,  # enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    'use_openssl_only': False,  # only use openssl instead of python only crypto modules
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -467,6 +469,13 @@ class SnowflakeConnection(object):
     def disable_request_pooling(self):
         return self._disable_request_pooling
 
+    @property
+    def use_openssl_only(self):
+        """
+        Use OpenSSL only instead of PYthon libraries for signature verification and encryption purposes
+        """
+        return self._use_openssl_only
+
     @disable_request_pooling.setter
     def disable_request_pooling(self, value):
         self._disable_request_pooling = True if value else False
@@ -691,11 +700,13 @@ class SnowflakeConnection(object):
         if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
             self._session_parameters[
-                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = True
+                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
+                    self._client_store_temporary_credential if IS_LINUX else True
 
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(
-                self.account, self.user, self._session_parameters):
+                self.host, self.account, self.user,
+                self._session_parameters):
             self.__authenticate(auth_instance)
         else:
             # set the current objects as the session is derived from the id
@@ -819,6 +830,18 @@ class SnowflakeConnection(object):
                 u'MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE '
                 u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
                 u'CHECKED.')
+
+        if 'USE_OPENSSL_ONLY' not in os.environ:
+            logger.info(
+                'Setting use_openssl_only mode to %s', self.use_openssl_only
+            )
+            os.environ['USE_OPENSSL_ONLY'] = str(self.use_openssl_only)
+        else:
+            logger.warning(
+                'Mode use_openssl_only is already set to: %s, ignoring set request to: %s',
+                os.environ['USE_OPENSSL_ONLY'],
+                self.use_openssl_only
+            )
 
     def cmd_query(self, sql, sequence_counter, request_id,
                   binding_params=None,

@@ -10,6 +10,8 @@ from io import open
 from logging import getLogger
 
 from Cryptodome.Hash import SHA256
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
 
 from .constants import UTF8
 
@@ -69,18 +71,30 @@ class SnowflakeFileUtil(object):
         :param file_name: a file name
         :return:
         """
+        use_openssl_only = os.getenv('USE_OPENSSL_ONLY', 'False') == 'True'
         CHUNK_SIZE = 16 * 4 * 1024
         f = open(file_name, 'rb')
-        m = SHA256.new()
+        if not use_openssl_only:
+            m = SHA256.new()
+        else:
+            backend = default_backend()
+            chosen_hash = hashes.SHA256()
+            hasher = hashes.Hash(chosen_hash, backend)
         while True:
             chunk = f.read(CHUNK_SIZE)
             if chunk == b'':
                 break
-            m.update(chunk)
+            if not use_openssl_only:
+                m.update(chunk)
+            else:
+                hasher.update(chunk)
 
         statinfo = os.stat(file_name)
         file_size = statinfo.st_size
-        digest = base64.standard_b64encode(m.digest()).decode(UTF8)
+        if not use_openssl_only:
+            digest = base64.standard_b64encode(m.digest()).decode(UTF8)
+        else:
+            digest = base64.standard_b64encode(hasher.finalize()).decode(UTF8)
         logger = getLogger(__name__)
         logger.debug(u'getting digest and size: %s, %s, file=%s', digest,
                      file_size, file_name)

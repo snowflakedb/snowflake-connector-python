@@ -29,6 +29,8 @@ def test_basic(conn_testaccount):
     Basic Connection test
     """
     assert conn_testaccount, 'invalid cnx'
+    # Test default values
+    assert not conn_testaccount.use_openssl_only
     conn_testaccount._set_current_objects()
 
 
@@ -652,3 +654,31 @@ def test_okta_url(db_parameters):
             authenticator=orig_authenticator,
         )
         assert cnx
+
+
+def test_use_openssl_only(db_parameters):
+    cnx = snowflake.connector.connect(
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        account=db_parameters['account'],
+        protocol=db_parameters['protocol'],
+        use_openssl_only=True,
+    )
+    assert cnx
+    assert 'USE_OPENSSL_ONLY' in os.environ
+    # Note during testing conftest will default this value to False, so if testing this we need to manually clear it
+    # Let's test it again, after clearing it
+    del os.environ['USE_OPENSSL_ONLY']
+    cnx = snowflake.connector.connect(
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        account=db_parameters['account'],
+        protocol=db_parameters['protocol'],
+        use_openssl_only=True,
+    )
+    assert cnx
+    assert os.environ['USE_OPENSSL_ONLY'] == 'True'

@@ -22,7 +22,6 @@ function build_connector_with_python() {
     # audit wheel files
     mkdir -p $CONNECTOR_DIR/dist/docker/repaired_wheels
     auditwheel repair --plat manylinux2010_x86_64 -L connector $CONNECTOR_DIR/dist/docker/$PYTHON/*.whl -w $CONNECTOR_DIR/dist/docker/repaired_wheels
-    rm $CONNECTOR_DIR/dist/docker/repaired_wheels/*manylinux1_x86_64.whl || true
     deactivate
 }
 
