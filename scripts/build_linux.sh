@@ -17,4 +17,3 @@ unset ENABLE_EXT_MODULES
 
 mkdir -p $THIS_DIR/../dist/docker/repaired_wheels
 auditwheel repair --plat manylinux2010_x86_64 -L connector $THIS_DIR/../dist/docker/$PYTHON_VERSION/*.whl -w $THIS_DIR/../dist/docker/repaired_wheels
-rm $THIS_DIR/../dist/docker/repaired_wheels/*manylinux1_x86_64.whl || true

@@ -572,6 +572,8 @@ def test_setoutputsize_basic(
 def test_description2(conn_local):
     try:
         with conn_local() as con:
+            # ENABLE_FIX_67159 changes the column size to the actual size. By default it is disabled at the moment.
+            expected_column_size = 26 if not con.account.startswith("sfctest0") else 16777216
             cur = con.cursor()
             executeDDL1(cur)
             assert len(
@@ -603,7 +605,7 @@ def test_description2(conn_local):
                 # number (FIXED)
                 ('COL1', 0, None, None, 9, 4, False),
                 # decimal
-                ('COL2', 2, None, 16777216, None, None, False),
+                ('COL2', 2, None, expected_column_size, None, None, False),
                 # string
                 ('COL3', 3, None, None, None, None, True),
                 # date
