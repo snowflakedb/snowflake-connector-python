@@ -836,7 +836,7 @@ class SnowflakeConnection(object):
                 'Setting use_openssl_only mode to %s', self.use_openssl_only
             )
             os.environ['USE_OPENSSL_ONLY'] = str(self.use_openssl_only)
-        else:
+        elif (os.environ.get('USE_OPENSSL_ONLY', 'False') == 'True') != self.use_openssl_only:
             logger.warning(
                 'Mode use_openssl_only is already set to: %s, ignoring set request to: %s',
                 os.environ['USE_OPENSSL_ONLY'],
