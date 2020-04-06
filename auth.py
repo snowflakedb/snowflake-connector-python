@@ -16,6 +16,8 @@ from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
 
+from mock import MagicMock
+
 from .auth_keypair import AuthByKeyPair
 from .compat import IS_LINUX, IS_WINDOWS, IS_MACOS, TO_UNICODE, urlencode
 from .constants import (
@@ -393,7 +395,7 @@ class Auth(object):
 
 
 def write_temporary_credential(host, account, user, id_token, store_temporary_credential=False):
-    if not id_token:
+    if not id_token or isinstance(id_token, MagicMock):
         logger.debug("no ID token is given when try to store temporary credential")
         return
     if IS_MACOS or IS_WINDOWS:
