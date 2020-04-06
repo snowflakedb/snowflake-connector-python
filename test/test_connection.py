@@ -10,6 +10,7 @@ import threading
 
 import mock
 import pytest
+
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.auth_okta import AuthByOkta
@@ -682,3 +683,30 @@ def test_use_openssl_only(db_parameters):
     )
     assert cnx
     assert os.environ['USE_OPENSSL_ONLY'] == 'True'
+
+
+def test_dashed_url(db_parameters):
+    """Test whether dashed URLs get created correctly"""
+    with mock.patch("snowflake.connector.network.SnowflakeRestful.fetch") as mocked_fetch:
+        with snowflake.connector.connect(
+                user='test-user',
+                password='test-password',
+                host='test-host',
+                port='443',
+                account='test-account',
+        ) as cnx:
+            assert cnx
+            assert any([c.args[1].startswith('https://test-host:443') for c in mocked_fetch.call_args_list])
+
+
+def test_dashed_url_account_name(db_parameters):
+    """Test whether dashed URLs get created correctly when no hostname is provided"""
+    with mock.patch("snowflake.connector.network.SnowflakeRestful.fetch") as mocked_fetch:
+        with snowflake.connector.connect(
+                user='test-user',
+                password='test-password',
+                port='443',
+                account='test-account',
+        ) as cnx:
+            assert cnx
+            assert any([c.args[1].startswith('https://test-account.snowflakecomputing.com:443') for c in mocked_fetch.call_args_list])
