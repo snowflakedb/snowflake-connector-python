@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.4(April 10,2020)
+
+    - Emit warning only if trying to set different setting of use_openssl_only parameter
+
 - v2.2.3(March 30,2020)
  
     - Secure SSO ID Token
