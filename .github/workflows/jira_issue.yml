@@ -20,7 +20,7 @@ jobs:
         with:
           PROJECT: SNOW
           TYPE: Bug
-          AREA: Ecosystem
+          AREA: "Data Platform: Ecosystem"
           ASSIGNEE: triage-data_platform_drivers_cli-dl
           SUMMARY: "{{ event.issue.title }}"
           DESCRIPTION: "{{ event.issue.body }}\n\n_Created from GitHub Action_"
