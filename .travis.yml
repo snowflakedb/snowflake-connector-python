@@ -19,9 +19,9 @@ matrix:
     python: '3.7'
     env: SNOWFLAKE_GCP=true
 install:
-- "./scripts/install.sh"
+- "./ci/install.sh"
 script:
-- "./scripts/run_travis.sh"
+- "./ci/run_travis.sh"
 after_success:
 - bash <(curl -s https://codecov.io/bash)
 env:

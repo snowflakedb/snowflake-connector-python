@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from mock import patch
 from pytest import fail
+
 from snowflake.connector import ProgrammingError, converter
 from snowflake.connector.incident import Incident
 

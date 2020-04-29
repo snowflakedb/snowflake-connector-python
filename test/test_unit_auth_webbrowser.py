@@ -5,6 +5,7 @@
 #
 
 from mock import MagicMock, Mock, PropertyMock
+
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION

@@ -17,6 +17,7 @@ from os import path
 import pendulum
 import pytest
 import pytz
+
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ProgrammingError
 

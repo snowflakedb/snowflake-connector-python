@@ -11,9 +11,9 @@ environment:
     - PYTHON: "C:\\Python36-x64"
 
 install:
-  - .\scripts\install.bat
+  - .\ci\install.bat
 
 build: off
 
 test_script:
-  - .\scripts\run_appveyor.bat
+  - .\ci\run_appveyor.bat

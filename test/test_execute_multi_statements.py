@@ -10,6 +10,7 @@ from io import BytesIO, StringIO
 
 import pytest
 from mock import patch
+
 from snowflake.connector import DictCursor, ProgrammingError
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))

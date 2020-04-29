@@ -3,8 +3,9 @@
 #
 # Copyright (c) 2018-2019 Snowflake Computing Inc. All right reserved.
 #
-import snowflake.connector.telemetry
 from mock import Mock
+
+import snowflake.connector.telemetry
 
 
 def test_telemetry_data_to_dict():

@@ -6,6 +6,7 @@
 from io import StringIO
 
 import pytest
+
 from snowflake.connector.util_text import split_statements
 
 

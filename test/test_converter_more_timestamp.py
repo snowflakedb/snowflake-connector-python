@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 import pytz
 from dateutil.parser import parse
+
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 
 

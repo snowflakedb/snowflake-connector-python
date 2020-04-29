@@ -8,6 +8,7 @@ from datetime import time, timedelta
 
 import pytest
 import pytz
+
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL

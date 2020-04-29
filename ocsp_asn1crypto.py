@@ -331,7 +331,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             raise RevocationCheckError(msg=debug_msg, errno=op_er.errno)
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
-        use_openssl_only = os.getenv('USE_OPENSSL_ONLY', 'False') == 'True'
+        use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
         if not use_openssl_only:
             pubkey = asymmetric.load_public_key(cert.public_key).unwrap().dump()
             rsakey = RSA.importKey(pubkey)

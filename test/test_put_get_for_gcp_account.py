@@ -15,6 +15,7 @@ from logging import getLogger
 import mock
 import pytest
 import requests
+
 from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 

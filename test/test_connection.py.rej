@@ -1,0 +1,40 @@
+--- test/test_connection.py
++++ test/test_connection.py
+@@ -10,6 +10,7 @@
+ 
+ import mock
+ import pytest
++
+ import snowflake.connector
+ from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
+ from snowflake.connector.auth_okta import AuthByOkta
+@@ -30,7 +31,6 @@
+     """
+     assert conn_testaccount, 'invalid cnx'
+     # Test default values
+-    assert not conn_testaccount.use_openssl_only
+     conn_testaccount._set_current_objects()
+ 
+ 
+@@ -667,10 +667,10 @@
+         use_openssl_only=True,
+     )
+     assert cnx
+-    assert 'USE_OPENSSL_ONLY' in os.environ
++    assert 'SF_USE_OPENSSL_ONLY' in os.environ
+     # Note during testing conftest will default this value to False, so if testing this we need to manually clear it
+     # Let's test it again, after clearing it
+-    del os.environ['USE_OPENSSL_ONLY']
++    del os.environ['SF_USE_OPENSSL_ONLY']
+     cnx = snowflake.connector.connect(
+         user=db_parameters['user'],
+         password=db_parameters['password'],
+@@ -681,7 +681,7 @@
+         use_openssl_only=True,
+     )
+     assert cnx
+-    assert os.environ['USE_OPENSSL_ONLY'] == 'True'
++    assert os.environ['SF_USE_OPENSSL_ONLY'] == 'True'
+ 
+ 
+ def test_dashed_url(db_parameters):

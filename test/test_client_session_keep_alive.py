@@ -8,6 +8,7 @@
 import time
 
 import pytest
+
 import snowflake.connector
 
 try:
