@@ -142,12 +142,12 @@ DEFAULT_CONFIGURATION = {
     u'support_negative_year': True,  # snowflake
     u'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
     u'disable_request_pooling': False,  # snowflake
-    u'client_store_temporary_credential': False,  # enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    # Enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    u'client_store_temporary_credential': False,
     'use_openssl_only': False,  # only use openssl instead of python only crypto modules
 }
 
-APPLICATION_RE = re.compile(r'[\w\d_]+')
-
+APPLICATION_RE = re.compile(r'^[\w.-]+$')
 # adding the exception class to Connection class
 for m in [method for method in dir(errors) if
           callable(getattr(errors, method))]:
@@ -157,6 +157,21 @@ for m in [method for method in dir(errors) if
 strptime('20150102030405', '%Y%m%d%H%M%S')
 
 logger = getLogger(__name__)
+
+
+def verify_application(val: str) -> None:
+    """Raise ProgrammingError if invalid application name"""
+    if len(val) > 50:
+        raise ProgrammingError(
+            msg="Application name is too long: {}".format(val),
+            errno=0
+        )
+
+    if not APPLICATION_RE.match(val):
+        raise ProgrammingError(
+            msg='Invalid application name: {}'.format(val),
+            errno=0
+        )
 
 
 class SnowflakeConnection(object):
@@ -401,6 +416,10 @@ class SnowflakeConnection(object):
         Set this for Snowflake to identify the application by name
         """
         return self._application
+
+    @application.setter
+    def application(self, val: str) -> None:
+        verify_application(val)
 
     @property
     def errorhandler(self):
@@ -701,7 +720,7 @@ class SnowflakeConnection(object):
             # enable storing temporary credential in a file
             self._session_parameters[
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
-                    self._client_store_temporary_credential if IS_LINUX else True
+                self._client_store_temporary_credential if IS_LINUX else True
 
         auth = Auth(self.rest)
         if not auth.read_temporary_credential(
@@ -727,16 +746,10 @@ class SnowflakeConnection(object):
             if name == u'sequence_counter':
                 self.sequence_counter = value
             elif name == u'application':
-                if not APPLICATION_RE.match(value):
-                    msg = u'Invalid application name: {}'.format(value)
-                    raise ProgrammingError(
-                        msg=msg,
-                        errno=0
-                    )
-                else:
-                    setattr(self, u'_' + name, value)
+                verify_application(value)
+                setattr(self, '_' + name, value)
             else:
-                setattr(self, u'_' + name, value)
+                setattr(self, '_' + name, value)
 
         if self._numpy:
             try:
