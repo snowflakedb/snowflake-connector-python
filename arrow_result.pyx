@@ -14,14 +14,14 @@ from .arrow_iterator import PyArrowIterator
 from .arrow_iterator import EmptyPyArrowIterator
 from .arrow_iterator import ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
 from .arrow_context import ArrowConverterContext
+from .options import pandas, installed_pandas
 
 logger = getLogger(__name__)
 
-try:
-    import pandas
+if installed_pandas:
     from pyarrow import concat_tables
-except ImportError as e:
-    logger.info("Failed to import optional packages, %s", e)
+else:
+    logger.info("Failed to import optional packages, pyarrow")
 
 
 cdef class ArrowResult:
