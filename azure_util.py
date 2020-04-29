@@ -1,6 +1,7 @@
 from __future__ import division
 
 import json
+import logging
 import os
 from collections import namedtuple
 from logging import getLogger
@@ -85,6 +86,10 @@ class SnowflakeAzureUtil(object):
         u'result_status'] for status.
         """
         client = meta[u'client']
+        azure_logger = logging.getLogger('azure.storage.common.storageclient')
+        backup_logging_level = azure_logger.level
+        # Critical (50) is the highest level, so we need to set it to something higher to silence logging message
+        azure_logger.setLevel(60)
         azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
             meta[u'stage_info'][u'location'])
         try:
@@ -114,7 +119,8 @@ class SnowflakeAzureUtil(object):
                              azure_location.path)
                 meta[u'result_status'] = ResultStatus.ERROR
                 return None
-
+        finally:
+            azure_logger.setLevel(backup_logging_level)
         meta[u'result_status'] = ResultStatus.UPLOADED
         encryptiondata = json.loads(
             blob.metadata.get(u'encryptiondata', u'null'))
