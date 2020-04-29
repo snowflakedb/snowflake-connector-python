@@ -831,17 +831,18 @@ class SnowflakeConnection(object):
                 u'CERTIFICATE REVOCATION STATUS WILL NOT BE '
                 u'CHECKED.')
 
-        if 'USE_OPENSSL_ONLY' not in os.environ:
+        if 'SF_USE_OPENSSL_ONLY' not in os.environ:
             logger.info(
                 'Setting use_openssl_only mode to %s', self.use_openssl_only
             )
-            os.environ['USE_OPENSSL_ONLY'] = str(self.use_openssl_only)
-        elif (os.environ.get('USE_OPENSSL_ONLY', 'False') == 'True') != self.use_openssl_only:
+            os.environ['SF_USE_OPENSSL_ONLY'] = str(self.use_openssl_only)
+        elif (os.environ.get('SF_USE_OPENSSL_ONLY', 'False') == 'True') != self.use_openssl_only:
             logger.warning(
                 'Mode use_openssl_only is already set to: %s, ignoring set request to: %s',
-                os.environ['USE_OPENSSL_ONLY'],
+                os.environ['SF_USE_OPENSSL_ONLY'],
                 self.use_openssl_only
             )
+            self._use_openssl_only = (os.environ['SF_USE_OPENSSL_ONLY'] == 'True')
 
     def cmd_query(self, sql, sequence_counter, request_id,
                   binding_params=None,

@@ -10,6 +10,7 @@ from logging import getLogger
 from multiprocessing.pool import ThreadPool
 
 import pytest
+
 import snowflake.connector
 from snowflake.connector.compat import TO_UNICODE
 from snowflake.connector.errors import ProgrammingError

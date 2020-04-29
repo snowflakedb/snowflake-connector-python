@@ -7,10 +7,11 @@
 import uuid
 
 import pytest
-import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, rsa
+
+import snowflake.connector
 from snowflake.connector.compat import TO_UNICODE
 
 

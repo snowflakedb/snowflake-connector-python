@@ -5,6 +5,7 @@
 #
 
 import pytest
+
 from snowflake.connector.errorcode import ER_FAILED_TO_REQUEST
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED

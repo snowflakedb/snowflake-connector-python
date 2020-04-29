@@ -12,6 +12,7 @@ import botocore
 import OpenSSL
 from boto3.exceptions import S3UploadFailedError
 from mock import MagicMock, Mock, PropertyMock
+
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from snowflake.connector.remote_storage_util import DEFAULT_MAX_RETRY, SnowflakeRemoteStorageUtil
 from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED, SnowflakeS3Util

@@ -71,7 +71,7 @@ class SnowflakeFileUtil(object):
         :param file_name: a file name
         :return:
         """
-        use_openssl_only = os.getenv('USE_OPENSSL_ONLY', 'False') == 'True'
+        use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
         CHUNK_SIZE = 16 * 4 * 1024
         f = open(file_name, 'rb')
         if not use_openssl_only:

@@ -10,6 +10,7 @@ import os
 
 import boto3
 import pytest
+
 from snowflake.connector.constants import UTF8
 from snowflake.connector.s3_util import SnowflakeS3Util
 

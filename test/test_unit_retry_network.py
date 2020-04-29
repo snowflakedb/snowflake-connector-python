@@ -17,6 +17,7 @@ import pytest
 from mock import MagicMock, Mock, PropertyMock
 from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
 from requests.packages.urllib3.exceptions import ProtocolError, ReadTimeoutError
+
 from snowflake.connector.compat import (
     BAD_GATEWAY,
     BAD_REQUEST,

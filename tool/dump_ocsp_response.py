@@ -8,6 +8,7 @@ from os import path
 from time import gmtime, strftime
 
 from asn1crypto import ocsp as asn1crypto_ocsp
+
 from snowflake.connector.compat import urlsplit
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect

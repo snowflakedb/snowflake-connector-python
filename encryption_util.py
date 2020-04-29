@@ -75,7 +75,7 @@ class SnowflakeEncryptionUtil(object):
         :return: a encrypted file
         """
         logger = getLogger(__name__)
-        use_openssl_only = os.getenv('USE_OPENSSL_ONLY', 'False') == 'True'
+        use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
         decoded_key = base64.standard_b64decode(
             encryption_material.query_stage_master_key)
         key_size = len(decoded_key)
@@ -153,7 +153,7 @@ class SnowflakeEncryptionUtil(object):
         :return: a decrypted file name
         """
         logger = getLogger(__name__)
-        use_openssl_only = os.getenv('USE_OPENSSL_ONLY', 'False') == 'True'
+        use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
         key_base64 = metadata.key
         iv_base64 = metadata.iv
         decoded_key = base64.standard_b64decode(

@@ -13,4 +13,4 @@ docker build -t manylinux:1.0 -f Dockerfile-x86_64_base .
 
 user_id=$(id -u $USER)
 docker run -e LOCAL_USER_ID=$user_id --mount type=bind,source="$THIS_DIR/..",target=/home/user/connector manylinux:1.0 \
-    /home/user/connector/scripts/build_linux.sh $1
+    /home/user/connector/ci/build_linux.sh $1

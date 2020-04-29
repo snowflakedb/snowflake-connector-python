@@ -9,6 +9,7 @@ from logging import getLogger
 from threading import Lock, Thread
 
 import pytest
+
 from snowflake.connector import errors
 
 logger = getLogger(__name__)

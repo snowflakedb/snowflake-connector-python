@@ -5,6 +5,7 @@
 #
 
 from mock import MagicMock, Mock, PropertyMock
+
 from snowflake.connector.network import SnowflakeRestful
 
 

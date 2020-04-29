@@ -13,6 +13,7 @@ from time import gmtime, strftime, time
 from asn1crypto import core, ocsp
 from asn1crypto.x509 import Certificate
 from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
+
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 

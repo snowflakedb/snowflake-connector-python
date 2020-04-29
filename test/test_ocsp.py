@@ -11,6 +11,7 @@ import time
 from os import environ, path
 
 import pytest
+
 from snowflake.connector import OperationalError
 from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE_CODE, ER_SERVER_CERTIFICATE_REVOKED
 from snowflake.connector.errors import RevocationCheckError
