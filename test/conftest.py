@@ -9,6 +9,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from logging import getLogger
+from typing import Callable, Generator
 
 import pytest
 from generate_test_files import generate_k_lines_of_n_files
@@ -17,6 +18,10 @@ import snowflake.connector
 from parameters import CONNECTION_PARAMETERS
 from snowflake.connector.compat import IS_WINDOWS, TO_UNICODE
 from snowflake.connector.connection import DefaultConverterClass
+
+MYPY = False
+if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
+    from snowflake.connector import SnowflakeConnection
 
 try:
     from parameters import CONNECTION_PARAMETERS_S3
@@ -257,7 +262,7 @@ def init_test_schema(request, db_parameters):
     request.addfinalizer(fin)
 
 
-def create_connection(**kwargs):
+def create_connection(**kwargs) -> 'SnowflakeConnection':
     """
     Creates a connection using the parameters defined in JDBC connect string
     """
@@ -268,7 +273,7 @@ def create_connection(**kwargs):
 
 
 @contextmanager
-def db(**kwargs):
+def db(**kwargs) -> Generator['SnowflakeConnection', None, None]:
     if not kwargs.get(u'timezone'):
         kwargs[u'timezone'] = u'UTC'
     if not kwargs.get(u'converter_class'):
@@ -307,7 +312,7 @@ def conn_testaccount(request):
 
 
 @pytest.fixture()
-def conn_cnx():
+def conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
     return db
 
 
