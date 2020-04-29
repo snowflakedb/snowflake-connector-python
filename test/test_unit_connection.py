@@ -4,8 +4,9 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import pytest
-import snowflake.connector
 from mock import patch
+
+import snowflake.connector
 
 
 @patch(

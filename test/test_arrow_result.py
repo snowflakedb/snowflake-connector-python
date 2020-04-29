@@ -10,6 +10,7 @@ from datetime import datetime
 
 import numpy
 import pytest
+
 import snowflake.connector
 
 try:

@@ -12,6 +12,7 @@ import time
 from logging import getLogger
 
 import pytest
+
 from snowflake.connector.constants import UTF8
 
 try:

@@ -14,6 +14,7 @@ from logging import getLogger
 
 import pytest
 import pytz
+
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
 

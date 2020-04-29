@@ -11,8 +11,9 @@ from contextlib import contextmanager
 from logging import getLogger
 
 import pytest
-import snowflake.connector
 from generate_test_files import generate_k_lines_of_n_files
+
+import snowflake.connector
 from parameters import CONNECTION_PARAMETERS
 from snowflake.connector.compat import IS_WINDOWS, TO_UNICODE
 from snowflake.connector.connection import DefaultConverterClass

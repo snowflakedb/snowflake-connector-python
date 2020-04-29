@@ -5,6 +5,7 @@
 #
 import pytest
 from mock import Mock
+
 from snowflake.connector.telemetry import TelemetryField
 
 # Mark every test in this module as a putget test

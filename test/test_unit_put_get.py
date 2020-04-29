@@ -7,6 +7,7 @@ from os import chmod, path
 
 import pytest
 from mock import MagicMock
+
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.errors import Error
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent

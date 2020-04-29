@@ -6,6 +6,7 @@
 import time
 
 from mock import MagicMock, Mock, PropertyMock
+
 from snowflake.connector.auth import Auth
 from snowflake.connector.auth_default import AuthByDefault
 from snowflake.connector.constants import OCSPMode

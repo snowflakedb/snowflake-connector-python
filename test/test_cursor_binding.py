@@ -5,6 +5,7 @@
 #
 
 import pytest
+
 from snowflake.connector.errors import ProgrammingError
 
 

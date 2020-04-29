@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 
 import pytest
+
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.sfdatetime import SnowflakeDateTime, SnowflakeDateTimeFormat
 

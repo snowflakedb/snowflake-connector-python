@@ -4,6 +4,7 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import pytest
+
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 

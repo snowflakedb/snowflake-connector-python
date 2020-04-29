@@ -11,6 +11,7 @@ from datetime import datetime
 
 import pytest
 import pytz
+
 import snowflake.connector
 from snowflake.connector import constants, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
