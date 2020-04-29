@@ -19,6 +19,8 @@ class MissingKeyring(object):
 
 try:
     import pandas
+    # since we enable relative imports without dots this import gives us an issues when ran from test directory
+    from pandas import DataFrame  # NOQA
     import pyarrow
     installed_pandas = True
 except ImportError:
