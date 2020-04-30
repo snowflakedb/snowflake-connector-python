@@ -670,10 +670,10 @@ def test_use_openssl_only(db_parameters):
         use_openssl_only=True,
     )
     assert cnx
-    assert 'USE_OPENSSL_ONLY' in os.environ
+    assert 'SF_USE_OPENSSL_ONLY' in os.environ
     # Note during testing conftest will default this value to False, so if testing this we need to manually clear it
     # Let's test it again, after clearing it
-    del os.environ['USE_OPENSSL_ONLY']
+    del os.environ['SF_USE_OPENSSL_ONLY']
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],
@@ -684,7 +684,7 @@ def test_use_openssl_only(db_parameters):
         use_openssl_only=True,
     )
     assert cnx
-    assert os.environ['USE_OPENSSL_ONLY'] == 'True'
+    assert os.environ['SF_USE_OPENSSL_ONLY'] == 'True'
 
 
 def test_dashed_url(db_parameters):
