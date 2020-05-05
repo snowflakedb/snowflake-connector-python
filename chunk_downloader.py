@@ -10,7 +10,6 @@ from collections import namedtuple
 from gzip import GzipFile
 from io import BytesIO
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
 from threading import Condition, Lock
 
 from snowflake.connector.gzip_decoder import decompress_raw_data
@@ -20,6 +19,7 @@ from .arrow_context import ArrowConverterContext
 from .errorcode import ER_CHUNK_DOWNLOAD_FAILED
 from .errors import Error, OperationalError
 from .time_util import get_time_millis, DecorrelateJitterBackoff
+from .thread_pool import ThreadPool
 
 DEFAULT_REQUEST_TIMEOUT = 7
 

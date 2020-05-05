@@ -12,7 +12,6 @@ import sys
 import tempfile
 import threading
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
 from time import sleep, time
 
 import botocore.exceptions
@@ -38,6 +37,7 @@ from .gcs_util import SnowflakeGCSUtil
 from .local_util import SnowflakeLocalUtil
 from .remote_storage_util import SnowflakeFileEncryptionMaterial, SnowflakeRemoteStorageUtil
 from .s3_util import SnowflakeS3Util
+from .thread_pool import ThreadPool
 
 S3_FS = u'S3'
 AZURE_FS = u'AZURE'
