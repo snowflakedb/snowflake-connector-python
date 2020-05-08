@@ -192,6 +192,7 @@ setup(
         'idna<2.10',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
+        'keyring<21.3.0',
     ],
 
     namespace_packages=['snowflake'],
