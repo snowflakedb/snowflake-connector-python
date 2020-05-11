@@ -9,7 +9,7 @@ call env\Scripts\activate
 # https://github.com/pypa/pip/issues/6566
 python -m pip install --upgrade pip
 :: These versions have to be kept in sync with what is pinned in setup.py manually
-pip install "pyarrow==0.16.0"
+pip install "pyarrow==0.17.0"
 pip install wheel
 pip install Cython
 set ENABLE_EXT_MODULES=true

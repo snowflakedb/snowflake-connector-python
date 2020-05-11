@@ -19,7 +19,7 @@ function build_connector_with_python() {
         rm -f generated_version.py || true
     fi
     # This needs to be kept in sync with setup.py
-    pip install -U pyarrow==0.16.0 Cython flake8
+    pip install -U pyarrow==0.17.0 Cython flake8
     flake8
     MACOSX_DEPLOYMENT_TARGET=10.12 python setup.py bdist_wheel -d $CONNECTOR_DIR/dist/
     unset ENABLE_EXT_MODULES
