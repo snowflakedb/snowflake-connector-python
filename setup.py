@@ -56,27 +56,21 @@ if isBuildExtEnabled == 'true':
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            'linux': ['libarrow.so.16',
-                      'libarrow_python.so.16',
-                      'libarrow_flight.so.16',
-                      'libarrow_boost_filesystem.so.1.68.0',
-                      'libarrow_boost_system.so.1.68.0',
-                      'libarrow_boost_regex.so.1.68.0'],
-            'darwin': ['libarrow.16.dylib',
-                       'libarrow_python.16.dylib',
-                       'libarrow_boost_filesystem.dylib',
-                       'libarrow_boost_regex.dylib',
-                       'libarrow_boost_system.dylib'],
+            'linux': ['libarrow.so.17',
+                      'libarrow_python.so.17',
+                      'libarrow_flight.so.17'],
+            'darwin': ['libarrow.17.dylib',
+                       'libarrow_python.17.dylib'],
             'win32': ['arrow.dll',
                       'arrow_python.dll',
                       'zlib.dll']
         }
 
         arrow_libs_to_link = {
-            'linux': ['libarrow.so.16',
-                      'libarrow_python.so.16'],
-            'darwin': ['libarrow.16.dylib',
-                       'libarrow_python.16.dylib'],
+            'linux': ['libarrow.so.17',
+                      'libarrow_python.so.17'],
+            'darwin': ['libarrow.17.dylib',
+                       'libarrow_python.17.dylib'],
             'win32': ['arrow.lib',
                       'arrow_python.lib']
         }
@@ -224,8 +218,7 @@ setup(
             'keyring<22.0.0,!=16.1.0',
         ],
         "pandas": [
-            'pyarrow>=0.15.1,<0.16.0;python_version=="3.5" and platform_system=="Windows"',
-            'pyarrow>=0.16.0,<0.17.0;python_version!="3.5" or platform_system!="Windows"',
+            'pyarrow>=0.17.0,<0.18.0',
             'pandas==0.24.2;python_version=="3.5"',
             'pandas>=1.0.0,<1.1.0;python_version>"3.5"',
         ],
