@@ -171,8 +171,7 @@ setup(
     install_requires=[
         'azure-common<2.0.0',
         'azure-storage-blob<12.0.0',
-        'boto3>=1.4.4,<1.12',
-        'botocore>=1.5.0,<1.15',
+        'boto3>=1.4.4,<1.14',
         'requests<2.24.0',
         'urllib3>=1.20,<1.26.0',
         'certifi<2021.0.0',
