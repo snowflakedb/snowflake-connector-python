@@ -44,7 +44,7 @@ def test_mask_aws_secret():
               ";"
 
     # Mask an aws key id and secret key
-    masked_sql = SecretDetector.mask_secrets(sql)
+    _, masked_sql, _ = SecretDetector.mask_secrets(sql)
     assert masked_sql == correct
 
 
@@ -74,28 +74,28 @@ def test_mask_sas_token():
                           "&Expires=1555481960&Signature=**********"
 
     # Mask azure token
-    masked_text = SecretDetector.mask_secrets(azure_sas_token)
+    _, masked_text, _ = SecretDetector.mask_secrets(azure_sas_token)
     assert masked_text == masked_azure_sas_token
 
     # Mask s3 token
-    masked_text = SecretDetector.mask_secrets(s3_sas_token)
+    _, masked_text, _ = SecretDetector.mask_secrets(s3_sas_token)
     assert masked_text == masked_s3_sas_token
 
     text = ''.join([random.choice(string.ascii_lowercase) for i in range(200)])
-    masked_text = SecretDetector.mask_secrets(text)
+    _, masked_text, _ = SecretDetector.mask_secrets(text)
     # Randomly generated string should cause no substitutions
     assert masked_text == text
 
     # Mask multiple azure tokens
-    masked_text = SecretDetector.mask_secrets(azure_sas_token + '\n' + azure_sas_token)
+    _, masked_text, _ = SecretDetector.mask_secrets(azure_sas_token + '\n' + azure_sas_token)
     assert masked_text == masked_azure_sas_token + '\n' + masked_azure_sas_token
 
     # Mask multiple s3 tokens
-    masked_text = SecretDetector.mask_secrets(s3_sas_token + '\n' + s3_sas_token)
+    _, masked_text, _ = SecretDetector.mask_secrets(s3_sas_token + '\n' + s3_sas_token)
     assert masked_text == masked_s3_sas_token + '\n' + masked_s3_sas_token
 
     # Mask azure and s3 token
-    masked_text = SecretDetector.mask_secrets(azure_sas_token + '\n' + s3_sas_token)
+    _, masked_text, _ = SecretDetector.mask_secrets(azure_sas_token + '\n' + s3_sas_token)
     assert masked_text == masked_azure_sas_token + '\n' + masked_s3_sas_token
 
 
@@ -123,11 +123,11 @@ def test_mask_secrets():
                     "sig=**********')"
 
     # Test masking all kinds of secrets
-    masked = SecretDetector.mask_secrets(sql)
-    assert masked == masked_sql
+    _, masked_text, _ = SecretDetector.mask_secrets(sql)
+    assert masked_text == masked_sql
 
     text = ''.join([random.choice(string.ascii_lowercase) for i in range(500)])
-    masked_text = SecretDetector.mask_secrets(text)
+    _, masked_text, _ = SecretDetector.mask_secrets(text)
     # Randomly generated string should cause no substitutions
     assert masked_text == text
 
@@ -137,5 +137,5 @@ def test_mask_private_keys():
 
     filtered_text = "\"privateKeyData\": \"XXXX\""
 
-    result = SecretDetector.mask_secrets(text)
+    _, result, _ = SecretDetector.mask_secrets(text)
     assert result == filtered_text

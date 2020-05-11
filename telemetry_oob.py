@@ -491,7 +491,8 @@ class TelemetryService(object):
         except Exception:
             logger.debug("Failed to generate a JSON dump from the passed in telemetry OOB events. String representation of logs: %s" % str(logs), exc_info=True)
             payload = None
-        return SecretDetector.mask_secrets(payload)
+        _, masked_text, _ = SecretDetector.mask_secrets(payload)
+        return masked_text
 
     def close(self):
         """
