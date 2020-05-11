@@ -164,7 +164,6 @@ AWS_KEY_ID={aws_access_key_id}
 AWS_SECRET_KEY={aws_secret_access_key}))
 """.format(aws_access_key_id=test_data.AWS_ACCESS_KEY_ID,
            aws_secret_access_key=test_data.AWS_SECRET_ACCESS_KEY,
-           database=test_data.database_name,
            stage_name=test_data.stage_name, ))
             cur.execute("""
 put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1

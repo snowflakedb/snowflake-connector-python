@@ -9,11 +9,9 @@ from mock import patch, Mock
 from snowflake.connector.auth import delete_temporary_credential
 from snowflake.connector.compat import IS_MACOS
 
-@patch(
-    'snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate')
-@patch(
-    'snowflake.connector.network.SnowflakeRestful._post_request'
-)
+
+@patch('snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate')
+@patch('snowflake.connector.network.SnowflakeRestful._post_request')
 def test_connect_externalbrowser(
         mockSnowflakeRestfulPostRequest,
         mockAuthByBrowserAuthenticate):

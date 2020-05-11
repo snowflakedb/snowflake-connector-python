@@ -30,7 +30,7 @@ select c1 from {name} where c2=2
             # SNOW-15905: boolean support
             results = cnx.cursor().execute("""
 SELECT CASE WHEN (null LIKE trim(null)) THEN null  ELSE null END
-""".format(name=db_parameters['name'])).fetchall()
+""").fetchall()
             assert not results[0][0]
 
     finally:

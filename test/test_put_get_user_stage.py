@@ -371,7 +371,7 @@ PUT file://{file} @{stage_name}
             assert rec[6] == 'UPLOADED'
             rec = cnx.cursor().execute("""
 LIST @{stage_name}
-            """.format(stage_name=stage_name, output_dir=output_dir)).fetchone()
+            """.format(stage_name=stage_name)).fetchone()
             assert rec, 'LIST should return something'
             assert rec[0].startswith('s3://'), "The file location in S3"
             rec = cnx.cursor().execute("""
