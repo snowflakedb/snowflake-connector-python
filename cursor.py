@@ -583,7 +583,7 @@ class SnowflakeCursor(object):
                     u'total'] if u'data' in ret and u'total' in ret[
                     u'data'] else -1
                 return data
-            self._init_result_and_meta(data, _use_ijson)
+            self._init_result_and_meta(data)
         else:
             self._total_rowcount = ret[u'data'][
                 u'total'] if u'data' in ret and u'total' in ret[u'data'] else -1
@@ -611,7 +611,7 @@ class SnowflakeCursor(object):
                and int(data[u'statementTypeId']) in \
                STATEMENT_TYPE_ID_DML_SET
 
-    def _init_result_and_meta(self, data, use_ijson=False):
+    def _init_result_and_meta(self, data):
         is_dml = self._is_dml(data)
         self._query_result_format = data.get(u'queryResultFormat', u'json')
         logger.debug(u"Query result format: %s", self._query_result_format)
@@ -636,7 +636,7 @@ class SnowflakeCursor(object):
             self.check_can_use_arrow_resultset()
             self._result = ArrowResult(data, self, use_dict_result=self._use_dict_result)
         else:
-            self._result = self._json_result_class(data, self, use_ijson)
+            self._result = self._json_result_class(data, self)
 
         if is_dml:
             updated_rows = 0
@@ -694,7 +694,7 @@ class SnowflakeCursor(object):
                 }
             )
 
-    def query_result(self, qid, _use_ijson=False):
+    def query_result(self, qid):
         url = '/queries/{qid}/result'.format(qid=qid)
         ret = self._connection.rest.request(url=url, method='get')
         self._sfqid = ret[u'data'][
@@ -707,7 +707,7 @@ class SnowflakeCursor(object):
 
         if ret.get(u'success'):
             data = ret.get(u'data')
-            self._init_result_and_meta(data, _use_ijson)
+            self._init_result_and_meta(data)
         else:
             logger.info(u'failed')
             logger.debug(ret)
