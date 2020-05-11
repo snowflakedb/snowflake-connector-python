@@ -96,8 +96,7 @@ cdef class ArrowResult:
                 else self._connection._chunk_downloader_class(
                     chunks, self._connection, self._cursor, qrmk, chunk_headers,
                     query_result_format='arrow',
-                    prefetch_threads=self._connection.client_prefetch_threads,
-                    use_ijson=False)
+                    prefetch_threads=self._connection.client_prefetch_threads)
 
     def __iter__(self):
         return self

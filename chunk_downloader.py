@@ -8,13 +8,11 @@ import json
 import time
 from collections import namedtuple
 from gzip import GzipFile
-from io import BytesIO
 from logging import getLogger
 from multiprocessing.pool import ThreadPool
 from threading import Condition, Lock
 
 from snowflake.connector.gzip_decoder import decompress_raw_data
-from snowflake.connector.util_text import split_rows_from_stream
 
 from .arrow_context import ArrowConverterContext
 from .errorcode import ER_CHUNK_DOWNLOAD_FAILED
@@ -51,9 +49,7 @@ class SnowflakeChunkDownloader(object):
 
     def _pre_init(self, chunks, connection, cursor, qrmk, chunk_headers,
                   query_result_format='JSON',
-                  prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
-                  use_ijson=False):
-        self._use_ijson = use_ijson
+                  prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS):
         self._query_result_format = query_result_format
 
         self._downloader_error = None
@@ -97,12 +93,10 @@ class SnowflakeChunkDownloader(object):
 
     def __init__(self, chunks, connection, cursor, qrmk, chunk_headers,
                  query_result_format='JSON',
-                 prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
-                 use_ijson=False):
+                 prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS):
         self._pre_init(chunks, connection, cursor, qrmk, chunk_headers,
                        query_result_format=query_result_format,
-                       prefetch_threads=prefetch_threads,
-                       use_ijson=use_ijson)
+                       prefetch_threads=prefetch_threads)
         logger.debug('Chunk Downloader in memory')
         for idx in range(self._effective_threads):
             self._pool.apply_async(self._download_chunk, [idx])
@@ -257,8 +251,7 @@ class SnowflakeChunkDownloader(object):
         """
         Fetch the chunk from S3.
         """
-        handler = JsonBinaryHandler(is_raw_binary_iterator=True,
-                                    use_ijson=self._use_ijson) \
+        handler = JsonBinaryHandler(is_raw_binary_iterator=True) \
             if self._query_result_format == 'json' else \
             ArrowBinaryHandler(self._cursor, self._connection)
 
@@ -299,9 +292,8 @@ class JsonBinaryHandler(RawBinaryDataHandler):
     """
     Convert result chunk in json format into interator
     """
-    def __init__(self, is_raw_binary_iterator, use_ijson):
+    def __init__(self, is_raw_binary_iterator):
         self._is_raw_binary_iterator = is_raw_binary_iterator
-        self._use_ijson = use_ijson
 
     def to_iterator(self, raw_data_fd, download_time):
         parse_start_time = get_time_millis()
@@ -310,10 +302,7 @@ class JsonBinaryHandler(RawBinaryDataHandler):
         ).decode('utf-8', 'replace')
         if not self._is_raw_binary_iterator:
             ret = json.loads(raw_data)
-        elif not self._use_ijson:
-            ret = iter(json.loads(raw_data))
-        else:
-            ret = split_rows_from_stream(BytesIO(raw_data.encode('utf-8')))
+        ret = iter(json.loads(raw_data))
 
         parse_end_time = get_time_millis()
 

@@ -6,11 +6,6 @@
 import logging
 import re
 
-try:
-    import ijson
-except Exception:
-    ijson = None
-
 COMMENT_PATTERN_RE = re.compile(r'^\s*\-\-')
 EMPTY_LINE_RE = re.compile(r'^\s*$')
 
@@ -168,28 +163,6 @@ def _concatenate_statements(statement_list):
         if is_put_or_get is None and is_statement and len(text.strip()) >= 3:
             is_put_or_get = text[:3].upper() in ('PUT', 'GET')
     return u''.join(valid_statement_list).strip(), is_put_or_get
-
-
-def split_rows_from_stream(stream):
-    """
-    Splits into rows from a stream object. Generator.
-    """
-    if not ijson:
-        raise Exception("install ijson")
-    row = []
-    in_row = False
-    for prefix, event, value in ijson.parse(stream):
-        if prefix == '':
-            continue
-        if in_row:
-            if event == 'end_array':
-                yield row
-                row = []
-                in_row = False
-            else:
-                row.append(value)
-        elif event == 'start_array':
-            in_row = True
 
 
 def construct_hostname(region, account):

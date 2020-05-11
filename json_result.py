@@ -16,13 +16,13 @@ logger = getLogger(__name__)
 
 
 class JsonResult:
-    def __init__(self, raw_response, cursor, use_ijson=False):
+    def __init__(self, raw_response, cursor):
         self._reset()
         self._cursor = cursor
         self._connection = cursor.connection
-        self._init_from_meta(raw_response, use_ijson)
+        self._init_from_meta(raw_response)
 
-    def _init_from_meta(self, data, use_ijson):
+    def _init_from_meta(self, data):
         self._total_row_index = -1  # last fetched number of rows
         self._chunk_index = 0
         self._chunk_count = 0
@@ -59,8 +59,7 @@ class JsonResult:
             self._chunk_downloader = self._connection._chunk_downloader_class(
                 chunks, self._connection, self._cursor, qrmk, chunk_headers,
                 query_result_format='json',
-                prefetch_threads=self._connection.client_prefetch_threads,
-                use_ijson=use_ijson)
+                prefetch_threads=self._connection.client_prefetch_threads)
 
     def __iter__(self):
         return self
@@ -166,8 +165,8 @@ class JsonResult:
 
 class DictJsonResult(JsonResult):
 
-    def __init__(self, raw_response, cursor, use_ijson):
-        JsonResult.__init__(self, raw_response, cursor, use_ijson)
+    def __init__(self, raw_response, cursor):
+        JsonResult.__init__(self, raw_response, cursor)
 
     def _row_to_python(self, row):
         # see the base class
