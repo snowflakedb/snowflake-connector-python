@@ -253,13 +253,11 @@ def test_bogus(db_parameters):
         )
 
 
-@pytest.mark.parametrize('app_name', ['%%%', 'multiple words', 'PythonConnector -p my-password', '', None,
-                                      'VerySuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuperMegaLongName'])
-def test_invalid_application(db_parameters, app_name):
+def test_invalid_application(db_parameters):
     """
     Invalid application
     """
-    with pytest.raises(snowflake.connector.ProgrammingError):
+    with pytest.raises(snowflake.connector.Error):
         snowflake.connector.connect(
             protocol=db_parameters['protocol'],
             user=db_parameters['user'],
@@ -267,21 +265,21 @@ def test_invalid_application(db_parameters, app_name):
             application='%%%')
 
 
-@pytest.mark.parametrize('app_name', ['Special_Client', 'Client-0.0.1_dev_yasdahcsbj'])
-def test_valid_application(db_parameters, app_name):
+def test_valid_application(db_parameters):
     """
     Valid app name
     """
+    application = 'Special_Client'
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],
         host=db_parameters['host'],
         port=db_parameters['port'],
         account=db_parameters['account'],
-        application=app_name,
+        application=application,
         protocol=db_parameters['protocol'],
     )
-    assert cnx.application == app_name, "Must be valid application"
+    assert cnx.application == application, "Must be valid application"
     cnx.close()
 
 
