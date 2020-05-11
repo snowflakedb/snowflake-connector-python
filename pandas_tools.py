@@ -94,7 +94,7 @@ def write_pandas(conn: 'SnowflakeConnection',
                            '"{stage_name}"'.format(stage_name=stage_name), _is_internal=True).fetchall()
             break
         except ProgrammingError as pe:
-            if pe.msg.endswith('already exists.'.format(stage_name)):
+            if pe.msg.endswith('already exists.'):
                 continue
             raise
 
