@@ -103,18 +103,9 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
             datum)
         cnx._telemetry.add_log_to_batch = add_log_mock
 
-        # large result set fetch in the default mode
-        result1 = []
-        for rec in cnx.cursor().execute(sql):
-            result1.append(rec)
-
-        num_rows = len(result1)
-        assert result1[0][0] == ingest_data[0]
-        assert result1[num_rows - 1][8] == ingest_data[1]
-
         # large result set fetch in ijson mode
         result2 = []
-        for rec in cnx.cursor().execute(sql, _use_ijson=True):
+        for rec in cnx.cursor().execute(sql):
             result2.append(rec)
 
         num_rows = len(result2)
@@ -129,11 +120,6 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
         assert result999[0][0] == ingest_data[0]
         assert result999[num_rows - 1][8] == ingest_data[1]
 
-        assert len(result1) == len(result999), (
-            "result length is different: result1, and result999")
-        for i, (x, y) in enumerate(zip(result1, result999)):
-            assert x == y, "element {}".format(i)
-
         assert len(result2) == len(result999), (
             "result length is different: result2, and result999")
         for i, (x, y) in enumerate(zip(result2, result999)):
@@ -146,6 +132,6 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
                     TelemetryField.TIME_DOWNLOADING_CHUNKS]
         for field in expected:
             assert sum([1 if x.message['type'] == field else 0 for x in
-                        telemetry_data]) == 3, \
+                        telemetry_data]) == 2, \
                 "Expected three telemetry logs (one per query) " \
                 "for log type {}".format(field)
