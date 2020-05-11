@@ -62,6 +62,7 @@ def test_mask_token():
     assert err_str is None
     assert masked_str == 'assertion content:****'
 
+
 def test_token_false_positives():
     false_positive_token_str = "2020-04-30 23:06:04,069 - MainThread auth.py:397" \
                                " - write_temporary_credential() - DEBUG - no ID " \
