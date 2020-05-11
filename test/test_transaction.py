@@ -108,7 +108,7 @@ SELECT SUM(cc1) FROM {name}
             assert ret[0] == 21
             cnx.cursor().execute("""
 SELECT WRONG SYNTAX QUERY
-""".format(name=db_parameters['name']))
+""")
             raise Exception("Failed to cause the syntax error")
     except snowflake.connector.Error:
         # syntax error should be caught here

@@ -579,7 +579,7 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     f = gzip.open(fname, 'wb')
     for i in range(n):
         logger.debug("adding a value in {}".format(i))
-        f.write('{"k":"{0}"}'.format(
+        f.write('{{"k":"{}"}}'.format(
             ''.join(
                 random.choice(string.ascii_uppercase + string.digits) for _ in
                 range(value_size))))
