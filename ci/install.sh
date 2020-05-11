@@ -30,7 +30,7 @@ source ./venv/bin/activate
 if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     export ENABLE_EXT_MODULES=true
     cd $THIS_DIR/..
-    pip install Cython pyarrow==0.16.0 wheel
+    pip install Cython pyarrow==0.17.0 wheel
     python setup.py bdist_wheel
     unset ENABLE_EXT_MODULES
     CONNECTOR_WHL=$(ls $THIS_DIR/../dist/snowflake_connector_python*.whl | sort -r | head -n 1)

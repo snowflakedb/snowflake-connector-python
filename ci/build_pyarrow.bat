@@ -31,7 +31,7 @@ if %errorlevel% neq 0 goto :error
 python -m pip install --upgrade pip
 if %errorlevel% neq 0 goto :error
 
-pip install --upgrade setuptools wheel Cython pyarrow==0.16.0 numpy
+pip install --upgrade setuptools wheel Cython pyarrow==0.17.0 numpy
 if %errorlevel% neq 0 goto :error
 
 cd %CONNECTOR_DIR%

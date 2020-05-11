@@ -39,7 +39,7 @@ for PYTHON in ${PYTHON_VERSIONS}; do
     "$(cpython_path $PYTHON ${U_WIDTH})/bin/virtualenv" -p ${PYTHON_INTERPRETER} --no-download /home/user/venv-build-${PYTHON}
     source /home/user/venv-build-${PYTHON}/bin/activate
     pip install -U pip
-    pip install "cython==0.29.15" "setuptools" "flake8" "wheel" "pyarrow==0.16.0"
+    pip install "cython==0.29.15" "setuptools" "flake8" "wheel" "pyarrow==0.17.0"
     deactivate
 done
 
