@@ -48,10 +48,10 @@ def write_pandas(conn: 'SnowflakeConnection',
     :Example:
 
     import pandas
-    from snowflake.connector.pandas_tools import write_pandas_all
+    from snowflake.connector.pandas_tools import write_pandas
 
     df = pandas.DataFrame([('Mark', 10), ('Luke', 20)], columns=['name', 'balance'])
-    success, nchunks, nrows, _ = write_pandas_all(cnx, df, 'customers')
+    success, nchunks, nrows, _ = write_pandas(cnx, df, 'customers')
 
     @param conn: connection to be used to communicate with Snowflake
     @param df: Dataframe we'd like to write back
@@ -68,7 +68,7 @@ def write_pandas(conn: 'SnowflakeConnection',
     @return: tuple of whether all chunks were ingested correctly, # of chunks, # of ingested rows, and ingest's output
     """
     if database is not None and schema is None:
-        raise ProgrammingError("Schema has to be provided to write_pandas_all when a database is provided")
+        raise ProgrammingError("Schema has to be provided to write_pandas when a database is provided")
     # This dictionary maps the compression algorithm to Snowflake put copy into command type
     # https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html#type-parquet
     compression_map = {
@@ -90,7 +90,7 @@ def write_pandas(conn: 'SnowflakeConnection',
     while True:
         try:
             stage_name = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
-            cursor.execute('create temporary stage /* Python:snowflake.connector.pandas_tools.write.pandas_all() */ '
+            cursor.execute('create temporary stage /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
                            '"{stage_name}"'.format(stage_name=stage_name), _is_internal=True).fetchall()
             break
         except ProgrammingError as pe:
@@ -104,7 +104,7 @@ def write_pandas(conn: 'SnowflakeConnection',
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression)
             # Upload parquet file
-            cursor.execute('PUT /* Python:snowflake.connector.pandas_tools.write.pandas_all() */ '
+            cursor.execute('PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
                            'file://{path} @"{stage_name}" PARALLEL={parallel}'.format(
                                 path=chunk_path,
                                 stage_name=stage_name,
@@ -113,7 +113,7 @@ def write_pandas(conn: 'SnowflakeConnection',
             # Remove chunk file
             os.remove(chunk_path)
     copy_results = cursor.execute((
-        'COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write.pandas_all() */ '
+        'COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
         'FROM @"{stage_name}" FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) '
         'MATCH_BY_COLUMN_NAME=CASE_SENSITIVE  PURGE=TRUE ON_ERROR={on_error}'
     ).format(
@@ -134,13 +134,13 @@ def pd_writer(table: pandas.io.sql.SQLTable,
               keys: Iterable,
               data_iter: Iterable) -> None:
     """
-    This is a wrapper on top of write_pandas_all to make it compatible with to_sql method in pandas.
+    This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
     :Example:
 
     import pandas as pd
-    from snowflake.connector.pandas_utils import pf_writer
+    from snowflake.connector.pandas_tools import pd_writer
 
-    sf_connector_version_df = pd.DataFrame([('snowflake-connector-python',)], columns=['NAME', 'NEWEST_VERSION'])
+    sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
     sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
     @param table: Pandas package's table object
     @param conn: SQLAlchemy engine object to talk to Snowflake
@@ -152,6 +152,6 @@ def pd_writer(table: pandas.io.sql.SQLTable,
     df = pandas.DataFrame(data_iter, columns=keys)
     write_pandas(conn=sf_connection,
                  df=df,
-                 # Note: Our sqlalchemy connector creates table in the case insensitive way
+                 # Note: Our sqlalchemy connector creates tables case insensitively
                  table_name=table.name.upper(),
                  schema=table.schema)
