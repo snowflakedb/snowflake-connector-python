@@ -8,6 +8,32 @@ THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 [[ -z "$WHITESOURCE_API_KEY" ]] && echo "[WARNING] No WHITESOURCE_API_KEY is set. No WhiteSource scan will occur." && exit 0
 
+if [[ -z "$VIRTUAL_ENV" ]]; then
+    PY=
+    TMP_VENV=$(mktemp -d)
+    if which python3 >& /dev/null; then
+        PY=python3
+    elif which python3.7 >& /dev/null; then
+        PY=python3.7
+    elif which python3.6 >& /dev/null; then
+        PY=python3.6
+    elif which python3.5 >& /dev/null; then
+        PY=python3.5
+    elif which python >& /dev/null; then
+        if [[ "$(python -c 'import sys; print(sys.version_info.major)')" == "3" ]]; then
+            PY=python
+        fi
+    fi
+    [[ -z "$PY" ]] && echo "[ERROR] Failed to find Python3" && exit 1
+
+    echo "[INFO] Installing Python Virtualenv"
+    $PY -m venv $TMP_VENV >& /dev/null
+    source $TMP_VENV/bin/activate
+else
+    echo "[INFO] Using Python Virtualenv $VIRTUAL_ENV"
+fi
+pip install -U pip virtualenv >& /dev/null
+
 export PRODUCT_NAME=PythonConnector
 export PROJECT_NAME=PythonConnector
 
@@ -139,3 +165,4 @@ if java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
         -requestFiles whitesource/update-request.txt \
         -wss.url https://saas.whitesourcesoftware.com/agent
 fi
+deactivate
