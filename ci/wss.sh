@@ -29,6 +29,7 @@ if [[ -z "$VIRTUAL_ENV" ]]; then
     echo "[INFO] Installing Python Virtualenv"
     $PY -m venv $TMP_VENV >& /dev/null
     source $TMP_VENV/bin/activate
+    IS_IN_CUSTOM_VENV=true
 else
     echo "[INFO] Using Python Virtualenv $VIRTUAL_ENV"
 fi
@@ -165,4 +166,4 @@ if java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
         -requestFiles whitesource/update-request.txt \
         -wss.url https://saas.whitesourcesoftware.com/agent
 fi
-deactivate
+[[ -n "$IS_IN_CUSTOM_VENV" ]] && deactivate || true
