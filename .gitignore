@@ -97,3 +97,8 @@ generated_version.py
 .idea/
 .pytest_cache/
 snowflake_connector_python.egg-info/
+
+# WhiteSource Scan
+wss-*agent.config
+wss-unified-agent.jar
+whitesource/
