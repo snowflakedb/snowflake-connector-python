@@ -35,8 +35,8 @@ else
 fi
 pip install -U pip virtualenv >& /dev/null
 
-export PRODUCT_NAME=PythonConnector
-export PROJECT_NAME=PythonConnector
+export PRODUCT_NAME=snowflake-connector-python
+export PROJECT_NAME=snowflake-connector-python
 
 DATE=$(date +'%m-%d-%Y')
 
