@@ -651,6 +651,15 @@ class SnowflakeRestful(object):
                 return return_object
             self._handle_unknown_error(
                 method, full_url, headers, data, conn)
+            TelemetryService.get_instance().log_http_request_error(
+                "HttpRequestUnknownError",
+                full_url,
+                method,
+                SQLSTATE_IO_ERROR,
+                ER_FAILED_TO_REQUEST,
+                retry_timeout=retry_ctx.total_timeout,
+                retry_count=retry_ctx.cnt
+            )
             return {}
         except RetryRequest as e:
             if retry_ctx.cnt == TelemetryService.get_instance().num_of_retry_to_trigger_telemetry:
