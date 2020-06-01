@@ -42,7 +42,7 @@ DATE=$(date +'%m-%d-%Y')
 
 SCAN_DIRECTORIES=$(cd $THIS_DIR/.. && pwd)
 
-rm -f wss-unified-agent.jar 
+rm -f wss-unified-agent.jar
 curl -LO https://github.com/whitesource/unified-agent-distribution/releases/latest/download/wss-unified-agent.jar
 
 # whitesource will scan the folder and detect the corresponding configuration
@@ -127,7 +127,7 @@ python.resolveHierarchyTree=false
 python.resolveSetupPyFiles=true
 python.runPipenvPreStep=false
 #python.IgnorePipenvInstallErrors=true
-python.resolveGlobalPackages=false  
+python.resolveGlobalPackages=false
 
 ###########################################################################################
 # Includes/Excludes Glob patterns - Please use only one exclude line and one include line #
