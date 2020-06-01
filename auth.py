@@ -33,7 +33,6 @@ from .errors import (
     Error,
     ForbiddenError,
     ServiceUnavailableError,
-    MissingDependencyError,
 )
 from .network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
@@ -398,8 +397,11 @@ def write_temporary_credential(host, account, user, id_token, store_temporary_cr
         return
     if IS_MACOS or IS_WINDOWS:
         if not keyring:
-            raise MissingDependencyError("Please install keyring module to enable SSO token cache feature.")
-
+            logger.debug("Dependency 'keyring' is not installed, cannot cache id token. You might experience "
+                         "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
+                         "this please install keyring module using the following command : pip install "
+                         "snowflake-connector-python[secure-local-storage]")
+            return
         new_target = convert_target(host, user)
         try:
             keyring.set_password(new_target, user.upper(), id_token)
