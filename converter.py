@@ -40,6 +40,7 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
     u'decimal': u'FIXED',
     u'float': u'REAL',
     u'str': u'TEXT',
+    u'str_': u'TEXT',
     u'unicode': u'TEXT',
     u'bytes': u'BINARY',
     u'bytearray': u'BINARY',
