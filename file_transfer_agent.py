@@ -11,8 +11,8 @@ import shutil
 import sys
 import tempfile
 import threading
+from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
 from time import sleep, time
 
 import botocore.exceptions
@@ -327,12 +327,11 @@ class SnowflakeFileTransferAgent(object):
 
             target_meta = file_metas[idx:end_of_idx]
             while True:
-                pool = ThreadPool(processes=len(target_meta))
-                results = pool.map(
+                pool = ThreadPoolExecutor(len(target_meta))
+                results = list(pool.map(
                     SnowflakeFileTransferAgent.upload_one_file,
-                    target_meta)
-                pool.close()
-                pool.join()
+                    target_meta))
+                pool.shutdown()
 
                 # need renew AWS token?
                 retry_meta = []
@@ -483,12 +482,11 @@ class SnowflakeFileTransferAgent(object):
 
             target_meta = file_metas[idx:end_of_idx]
             while True:
-                pool = ThreadPool(processes=len(target_meta))
-                results = pool.map(
+                pool = ThreadPoolExecutor(len(target_meta))
+                results = list(pool.map(
                     SnowflakeFileTransferAgent.download_one_file,
-                    target_meta)
-                pool.close()
-                pool.join()
+                    target_meta))
+                pool.shutdown()
 
                 # need renew AWS token?
                 retry_meta = []

@@ -3,9 +3,8 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-
+from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
 
 import pytest
 
@@ -89,8 +88,8 @@ alter system set
                              'name': db_parameters[
                                          'name'] + 'tbl_5871_' + TO_UNICODE(
                                  i + 1)})
-            pool = ThreadPool(processes=number_of_threads)
-            results = pool.map(_create_a_table, meta)
+            pool = ThreadPoolExecutor(number_of_threads)
+            results = list(pool.map(_create_a_table, meta))
             success = 0
             for r in results:
                 success += 1 if r['success'] else 0

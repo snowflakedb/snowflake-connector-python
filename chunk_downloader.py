@@ -7,9 +7,9 @@
 import json
 import time
 from collections import namedtuple
+from concurrent.futures.thread import ThreadPoolExecutor
 from gzip import GzipFile
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
 from threading import Condition, Lock
 
 from snowflake.connector.gzip_decoder import decompress_raw_data
@@ -83,7 +83,7 @@ class SnowflakeChunkDownloader(object):
                      self._chunk_size,
                      self._effective_threads)
 
-        self._pool = ThreadPool(self._effective_threads)
+        self._pool = ThreadPoolExecutor(self._effective_threads)
 
         self._downloading_chunks_lock = Lock()
         self._total_millis_downloading_chunks = 0
@@ -99,7 +99,7 @@ class SnowflakeChunkDownloader(object):
                        prefetch_threads=prefetch_threads)
         logger.debug('Chunk Downloader in memory')
         for idx in range(self._effective_threads):
-            self._pool.apply_async(self._download_chunk, [idx])
+            self._pool.submit(self._download_chunk, idx)
         self._next_chunk_to_download = self._effective_threads
 
     def _download_chunk(self, idx):
@@ -170,9 +170,7 @@ class SnowflakeChunkDownloader(object):
             self._chunks[n] = self._chunks[n]._replace(result_data=None, ready=False)
 
             if self._next_chunk_to_download < self._chunk_size:
-                self._pool.apply_async(
-                    self._download_chunk,
-                    [self._next_chunk_to_download])
+                self._pool.submit(self._download_chunk, self._next_chunk_to_download)
                 self._next_chunk_to_download += 1
 
         if self._downloader_error is not None:
@@ -206,11 +204,11 @@ class SnowflakeChunkDownloader(object):
                     u'downloader threads',
                     self._next_chunk_to_consume + 1,
                     self._chunk_size)
-                self._pool.terminate()  # terminate the thread pool
-                self._pool = ThreadPool(self._effective_threads)
+                self._pool.shutdown(wait=False)  # terminate the thread pool
+                self._pool = ThreadPoolExecutor(self._effective_threads)
                 for idx0 in range(self._effective_threads):
                     idx = idx0 + self._next_chunk_to_consume
-                    self._pool.apply_async(self._download_chunk, [idx])
+                    self._pool.submit(self._download_chunk, idx)
             if done:
                 break
         else:
@@ -236,8 +234,7 @@ class SnowflakeChunkDownloader(object):
         Terminates downloading the chunks.
         """
         if hasattr(self, u'_pool') and self._pool is not None:
-            self._pool.close()
-            self._pool.join()
+            self._pool.shutdown()
             self._pool = None
 
     def __del__(self):
