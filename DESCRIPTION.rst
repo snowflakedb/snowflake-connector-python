@@ -9,6 +9,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.6(May 11,2020)
+
+    - Update Pyarrow version from 0.16.0 to 0.17.0 for Python connector
+    - Remove more restrictive application name enforcement.
+    - Missing keyring dependency will not raise an exception, only emit a debug log from now on.
+    - Bumping boto3 to <1.14
+    - Fix flake8 3.8.0 new issues
+    - Implement Python log interceptor
+
 - v2.2.5(April 30,2020)
 
     - Added more efficient way to ingest a pandas.Dataframe into Snowflake, located in snowflake.connector.pandas_tools
@@ -34,7 +43,7 @@ Release Notes
     - Support Python 3.8 for Linux and Mac.
 
 - v2.2.1(February 18,2020)
-  
+
     - Fix use DictCursor with execute_string #248
 
 - v2.2.0(January 27,2020)
