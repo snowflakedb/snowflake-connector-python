@@ -1,6 +1,8 @@
-#!/bin/bash -x
+#!/bin/bash -e
+set -o pipefail
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source $THIS_DIR/set_base_image.sh
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
 mkdir -p $CONNECTOR_DIR/dist
@@ -9,7 +11,7 @@ cd $CONNECTOR_DIR/docker/manylinux2010
 CONTAINER_NAME=build_connector
 
 echo "[Info] Start building docker image"
-docker build -t manylinux:1.0 -f Dockerfile-x86_64_base .
+docker build -t manylinux:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX1 -f Dockerfile-x86_64_base .
 
 user_id=$(id -u $USER)
 docker run \
