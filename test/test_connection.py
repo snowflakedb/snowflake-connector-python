@@ -31,7 +31,6 @@ def test_basic(conn_testaccount):
     """
     assert conn_testaccount, 'invalid cnx'
     # Test default values
-    assert not conn_testaccount.use_openssl_only
     conn_testaccount._set_current_objects()
 
 
