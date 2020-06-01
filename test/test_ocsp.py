@@ -8,6 +8,7 @@ import json
 import logging
 import tempfile
 import time
+from concurrent.futures.thread import ThreadPoolExecutor
 from os import environ, path
 
 import pytest
@@ -296,18 +297,14 @@ def test_concurrent_ocsp_requests(tmpdir):
     Run OCSP revocation checks in parallel. The memory and file caches are
     deleted randomly.
     """
-    from multiprocessing.pool import ThreadPool
-
     cache_file_name = path.join(str(tmpdir), 'cache_file.txt')
     SnowflakeOCSP.clear_cache()  # reset the memory cache
 
     target_hosts = TARGET_HOSTS * 5
-    pool = ThreadPool(len(target_hosts))
+    pool = ThreadPoolExecutor(len(target_hosts))
     for hostname in target_hosts:
-        pool.apply_async(_validate_certs_using_ocsp,
-                         [hostname, cache_file_name])
-    pool.close()
-    pool.join()
+        pool.submit(_validate_certs_using_ocsp, hostname, cache_file_name)
+    pool.shutdown()
 
 
 def _validate_certs_using_ocsp(url, cache_file_name):
