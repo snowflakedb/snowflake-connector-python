@@ -6,8 +6,8 @@
 """
 Concurrent test module
 """
+from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
-from multiprocessing.pool import ThreadPool
 
 import pytest
 
@@ -95,10 +95,11 @@ create or replace table {name} (c1 integer, c2 string)
                     'warehouse': db_parameters['name_wh']
                 })
 
-            pool = ThreadPool(processes=number_of_threads)
-            results = pool.map(
+            pool = ThreadPoolExecutor(number_of_threads)
+            results = list(pool.map(
                 _concurrent_insert,
-                cnx_array)
+                cnx_array))
+            pool.shutdown()
             success = 0
             for record in results:
                 success += 1 if record['success'] else 0
@@ -163,8 +164,9 @@ CREATE OR REPLACE TABLE {name} (c1 INTEGER, c2 STRING)
                     'idx': i,
                     'name': db_parameters['name'],
                 })
-            pool = ThreadPool(processes=number_of_threads)
+            pool = ThreadPoolExecutor(number_of_threads)
             pool.map(_concurrent_insert_using_connection, metas)
+            pool.shutdown()
             cnt = 0
             for _ in cnx.cursor().execute(
                     "SELECT * FROM {name} ORDER BY 1".format(

@@ -26,7 +26,7 @@ using the Snowflake JDBC or ODBC drivers.
 
 The connector is a native, pure Python package that has no dependencies on JDBC or
 ODBC. It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
-where Python 3.5.0 (or higher) is installed.
+(Python 3.8 is currently not supported on Windows) where Python 3.5.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
 https://docs.snowflake.net/
