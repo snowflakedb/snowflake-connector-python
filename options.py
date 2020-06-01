@@ -24,12 +24,6 @@ class MissingPandas(object):
         raise MissingDependencyError('pandas')
 
 
-class MissingKeyring(object):
-
-    def __getattr__(self, item):
-        raise MissingDependencyError('keyring')
-
-
 try:
     import pandas
     # since we enable relative imports without dots this import gives us an issues when ran from test directory
@@ -52,4 +46,4 @@ try:
 
     installed_keyring = True
 except ImportError:
-    keyring = MissingKeyring()
+    keyring = None
