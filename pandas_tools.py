@@ -100,7 +100,7 @@ def write_pandas(conn: 'SnowflakeConnection',
 
     with TemporaryDirectory() as tmp_folder:
         for i, chunk in chunk_helper(df, chunk_size):
-            chunk_path = '{}/file{}.txt'.format(tmp_folder, i)
+            chunk_path = os.path.join(tmp_folder, 'file{}.txt'.format(i))
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression)
             # Upload parquet file
