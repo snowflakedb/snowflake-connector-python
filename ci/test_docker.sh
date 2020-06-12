@@ -7,10 +7,10 @@ CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 # In case this is not run locally and not on Jenkins
 WORKSPACE=${WORKSPACE:-$HOME}
 
-cd $CONNECTOR_DIR/docker/python_connector_tests
+cd $THIS_DIR/docker/connector_test
 
 echo "[Info] Start building docker image"
-docker build -t test_connector:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2010 -f Dockerfile-x86_64_base .
+docker build -t test_connector:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2010 -f Dockerfile .
 
 user_id=$(id -u $USER)
 docker run -it --network=host \

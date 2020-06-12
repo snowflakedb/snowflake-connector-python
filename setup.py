@@ -14,10 +14,13 @@ from setuptools import Extension, setup
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
+VERSION = (1, 1, 1, None)  # Default
 try:
-    from generated_version import VERSION
+    with open(path.join(THIS_DIR, 'generated_version.py'), encoding='utf-8') as f:
+        exec(f.read())
 except Exception:
-    from version import VERSION
+    with open(path.join(THIS_DIR, 'version.py'), encoding='utf-8') as f:
+        exec(f.read())
 version = '.'.join([str(v) for v in VERSION if v is not None])
 
 with open(path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
@@ -34,14 +37,23 @@ for flag in options.keys():
 extensions = None
 cmd_class = {}
 
-isBuildExtEnabled = (os.getenv('ENABLE_EXT_MODULES', 'false')).lower()
+pandas_requirements = [
+    # Must be kept in sync with pyproject.toml
+    'pyarrow>=0.17.0,<0.18.0',
+    'pandas==0.24.2;python_version=="3.5"',
+    'pandas>=1.0.0,<1.1.0;python_version>"3.5"',
+]
 
-if isBuildExtEnabled == 'true':
+try:
     from Cython.Distutils import build_ext
     from Cython.Build import cythonize
-    import os
     import pyarrow
     import numpy
+    _ABLE_TO_COMPILE_EXTENSIONS = True
+except ImportError:
+    _ABLE_TO_COMPILE_EXTENSIONS = False
+
+if _ABLE_TO_COMPILE_EXTENSIONS:
 
     extensions = cythonize(
         [
@@ -216,11 +228,7 @@ setup(
         "secure-local-storage": [
             'keyring<22.0.0,!=16.1.0',
         ],
-        "pandas": [
-            'pyarrow>=0.17.0,<0.18.0',
-            'pandas==0.24.2;python_version=="3.5"',
-            'pandas>=1.0.0,<1.1.0;python_version>"3.5"',
-        ],
+        "pandas": pandas_requirements,
         "development": [
             'pytest',
             'pytest-cov',

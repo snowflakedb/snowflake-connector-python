@@ -18,7 +18,7 @@ if [ ! -d "$CONNECTOR_DIR/dist/docker/repaired_wheels/" ] || [ $(ls "$CONNECTOR_
   $THIS_DIR/build_docker.sh
 fi
 
-cd $CONNECTOR_DIR/docker/fips_test
+cd $THIS_DIR/docker/connector_test_fips
 
 echo "[Info] Start building docker image"
 docker build -t test_fips_connector:1.0 -f Dockerfile .
