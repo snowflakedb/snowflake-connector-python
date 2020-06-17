@@ -308,6 +308,7 @@ max_file_size=10000000
         run(cnx, "drop table if exists {name}")
 
 
+@pytest.mark.flaky(reruns=3)
 def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
     """Puts and Copies many_files."""
     # generates N files
