@@ -7,9 +7,7 @@ import snowflake.connector
 
 
 def test_session_parameters(db_parameters):
-    """
-    Set the session parameters in connection time
-    """
+    """Sets the session parameters in connection time."""
     connection = snowflake.connector.connect(
         protocol=db_parameters['protocol'],
         account=db_parameters['account'],

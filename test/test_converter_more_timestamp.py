@@ -7,9 +7,10 @@ from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzof
 
 
 def test_fetch_various_timestamps(conn_cnx):
-    """
-    More coverage of timestamp
-    Currently TIMESTAMP_LTZ is not tested.
+    """More coverage of timestamp.
+
+    Notes:
+        Currently TIMESTAMP_LTZ is not tested.
     """
     PST_TZ = "America/Los_Angeles"
     epoch_times = [

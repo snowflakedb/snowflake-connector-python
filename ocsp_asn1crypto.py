@@ -44,9 +44,7 @@ logger = getLogger(__name__)
 
 
 class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
-    """
-    OCSP checks by asn1crypto
-    """
+    """OCSP checks by asn1crypto."""
 
     # map signature algorithm name to digest class
     SIGNATURE_ALGORITHM_TO_DIGEST_CLASS = {
@@ -74,7 +72,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         serial_number = Integer.load(serial_number)
         cert_id = CertId({
             'hash_algorithm': DigestAlgorithm({
-                'algorithm': u'sha1',
+                'algorithm': 'sha1',
                 'parameters': None}),
             'issuer_name_hash': issuer_name_hash,
             'issuer_key_hash': issuer_key_hash,
@@ -94,9 +92,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         return b64encode(self.encode_cert_id_key(hkey).dump()).decode('ascii')
 
     def read_cert_bundle(self, ca_bundle_file, storage=None):
-        """
-        Reads a certificate file including certificates in PEM format
-        """
+        """Reads a certificate file including certificates in PEM format."""
         if storage is None:
             storage = SnowflakeOCSP.ROOT_CERTIFICATES_DICT
         logger.debug('reading certificate bundle: %s', ca_bundle_file)
@@ -110,12 +106,10 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                     storage[crt.subject.sha256] = crt
 
     def create_ocsp_request(self, issuer, subject):
-        """
-        Create CertId and OCSPRequest
-        """
+        """Creates CertId and OCSPRequest."""
         cert_id = CertId({
             'hash_algorithm': DigestAlgorithm({
-                'algorithm': u'sha1',
+                'algorithm': 'sha1',
                 'parameters': None}),
             'issuer_name_hash': OctetString(subject.issuer.sha1),
             'issuer_key_hash': OctetString(issuer.public_key.sha1),
@@ -146,18 +140,14 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         return b64data
 
     def extract_good_status(self, single_response):
-        """
-        Extract GOOD status
-        """
+        """Extracts GOOD status."""
         this_update_native = single_response['this_update'].native
         next_update_native = single_response['next_update'].native
 
         return this_update_native, next_update_native
 
     def extract_revoked_status(self, single_response):
-        """
-        Extract REVOKED status
-        """
+        """Extracts REVOKED status."""
         revoked_info = single_response['cert_status']
         revocation_time = revoked_info.native['revocation_time']
         revocation_reason = revoked_info.native['revocation_reason']
@@ -375,9 +365,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                     errno=ER_INVALID_OCSP_RESPONSE)
 
     def extract_certificate_chain(self, connection):
-        """
-        Gets certificate chain and extract the key info from OpenSSL connection
-        """
+        """Gets certificate chain and extract the key info from OpenSSL connection."""
         from OpenSSL.crypto import dump_certificate, FILETYPE_ASN1
         cert_map = OrderedDict()
         logger.debug(
@@ -388,16 +376,14 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
             cert = Certificate.load(cert_der)
             logger.debug(
-                u'subject: %s, issuer: %s',
+                'subject: %s, issuer: %s',
                 cert.subject.native, cert.issuer.native)
             cert_map[cert.subject.sha256] = cert
 
         return self.create_pair_issuer_subject(cert_map)
 
     def create_pair_issuer_subject(self, cert_map):
-        """
-        Creates pairs of issuer and subject certificates
-        """
+        """Creates pairs of issuer and subject certificates."""
         issuer_subject = []
         for subject_der in cert_map:
             subject = cert_map[subject_der]

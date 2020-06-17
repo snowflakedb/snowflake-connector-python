@@ -7,10 +7,6 @@
 #
 # and added OCSP validator on the top.
 #
-
-"""
-OCSP Mode: FAIL_OPEN, FAIL_CLOSED or INSECURE
-"""
 from functools import wraps
 
 import certifi
@@ -85,33 +81,32 @@ log = logging.getLogger(__name__)
 
 
 def inject_into_urllib3():
-    """
-    Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP.
-    """
-    log.debug(u'Injecting ssl_wrap_socket_with_ocsp')
+    """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
+    log.debug('Injecting ssl_wrap_socket_with_ocsp')
     connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
 
 
 def _dnsname_to_stdlib(name):
-    """
-    Converts a dNSName SubjectAlternativeName field to the form used by the
-    standard library on the given Python version.
+    """Converts a DNSName SubjectAlternativeName field to the form used by the standard library.
 
     Cryptography produces a dNSName as a unicode string that was idna-decoded
     from ASCII bytes. We need to idna-encode that string to get it back, and
     then on Python 3 we also need to convert to unicode via UTF-8 (the stdlib
     uses PyUnicode_FromStringAndSize on it, which decodes via UTF-8).
+
+    Notes:
+        This depends on the Python version's standard library.
     """
 
     def idna_encode(name):
-        """
-        Borrowed wholesale from the Python Cryptography Project. It turns out
-        that we can't just safely call `idna.encode`: it can explode for
+        """Borrowed wholesale from the Python Cryptography Project.
+
+        It turns out that we can't just safely call `idna.encode`: it can explode for
         wildcard names. This avoids that problem.
         """
         import idna
 
-        for prefix in [u'*.', u'.']:
+        for prefix in ['*.', '.']:
             if name.startswith(prefix):
                 name = name[len(prefix):]
                 return prefix.encode('ascii') + idna.encode(name)
@@ -124,9 +119,7 @@ def _dnsname_to_stdlib(name):
 
 
 def get_subj_alt_name(peer_cert):
-    """
-    Given an PyOpenSSL certificate, provides all the subject alternative names.
-    """
+    """Given an PyOpenSSL certificate, provides all the subject alternative names."""
     # Pass the cert to cryptography, which has much better APIs for this.
     if hasattr(peer_cert, "to_cryptography"):
         cert = peer_cert.to_cryptography()
@@ -175,11 +168,11 @@ def get_subj_alt_name(peer_cert):
 
 
 class WrappedSocket(object):
-    '''API-compatibility wrapper for Python OpenSSL's Connection-class.
+    """API-compatibility wrapper for Python OpenSSL's Connection-class.
 
-    Note: _makefile_refs, _drop() and _reuse() are needed for the garbage
-    collector of pypy.
-    '''
+    Notes:
+        _makefile_refs, _drop() and _reuse() are needed for the garbage collector of pypy.
+    """
 
     def __init__(self, connection, socket, suppress_ragged_eofs=True):
         self.connection = connection
@@ -346,7 +339,7 @@ def ssl_wrap_socket(
     ctx.set_cipher_list(DEFAULT_SSL_CIPHER_LIST)
 
     cnx = OpenSSL.SSL.Connection(ctx, sock)
-    cnx.set_tlsext_host_name(server_hostname.encode(u'utf-8'))
+    cnx.set_tlsext_host_name(server_hostname.encode('utf-8'))
     cnx.set_connect_state()
 
     while True:
@@ -400,8 +393,8 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
 
     from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 
-    log.debug(u'OCSP Mode: %s, '
-              u'OCSP response cache file name: %s',
+    log.debug('OCSP Mode: %s, '
+              'OCSP response cache file name: %s',
               FEATURE_OCSP_MODE.name,
               FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME)
     if FEATURE_OCSP_MODE != OCSPMode.INSECURE:
@@ -412,23 +405,23 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
         if not v:
             raise OperationalError(
                 msg=(
-                    u'The certificate is revoked or '
-                    u'could not be validated: hostname={}'.format(
+                    'The certificate is revoked or '
+                    'could not be validated: hostname={}'.format(
                         server_hostname)),
                 errno=ER_SERVER_CERTIFICATE_REVOKED)
     else:
-        log.info(u'THIS CONNECTION IS IN INSECURE '
-                 u'MODE. IT MEANS THE CERTIFICATE WILL BE '
-                 u'VALIDATED BUT THE CERTIFICATE REVOCATION '
-                 u'STATUS WILL NOT BE CHECKED.')
+        log.info('THIS CONNECTION IS IN INSECURE '
+                 'MODE. IT MEANS THE CERTIFICATE WILL BE '
+                 'VALIDATED BUT THE CERTIFICATE REVOCATION '
+                 'STATUS WILL NOT BE CHECKED.')
 
     return ret
 
 
 def _openssl_connect(hostname, port=443, max_retry=20):
-    """
-    OpenSSL connection without validating certificates. This is used to diagnose
-    SSL issues.
+    """The OpenSSL connection without validating certificates.
+
+    This is used to diagnose SSL issues.
     """
     err = None
     sleeping_time = 1

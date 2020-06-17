@@ -154,7 +154,7 @@ if isBuildExtEnabled == 'true':
 setup(
     name='snowflake-connector-python',
     version=version,
-    description=u"Snowflake Connector for Python",
+    description="Snowflake Connector for Python",
     ext_modules=extensions,
     cmdclass=cmd_class,
     long_description=long_description,

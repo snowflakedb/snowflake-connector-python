@@ -3,10 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-u"""
-This module implements some constructors and singletons as required by the
-DB API v2.0 (PEP-249).
-"""
+"""This module implements some constructors and singletons as required by the DB API v2.0 (PEP-249)."""
 
 import datetime
 import json
@@ -56,9 +53,7 @@ ROWID = _DBAPITypeObject()
 
 
 class Json(UnicodeMixin):
-    """
-    JSON adapter
-    """
+    """JSON adapter."""
 
     def __init__(self, value):
         self._value = json.dump(value)

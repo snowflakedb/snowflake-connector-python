@@ -10,9 +10,7 @@ from snowflake.connector.errors import ProgrammingError
 
 
 def test_binding_security(conn_cnx, db_parameters):
-    """
-    SQL Injection Tests
-    """
+    """SQL Injection Tests."""
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute(
@@ -68,9 +66,7 @@ def test_binding_security(conn_cnx, db_parameters):
 
 
 def test_binding_list(conn_cnx, db_parameters):
-    """
-    SQL binding list type for IN
-    """
+    """SQL binding list type for IN."""
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute(
@@ -114,9 +110,7 @@ SELECT * FROM {name} WHERE aa IN (%s) ORDER BY 1 DESC
 
 
 def test_unsupported_binding(negative_conn_cnx, db_parameters):
-    """
-    Unsupported data binding
-    """
+    """Unsupported data binding."""
     try:
         with negative_conn_cnx() as cnx:
             cnx.cursor().execute(

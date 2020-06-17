@@ -9,9 +9,10 @@ import platform
 from datetime import datetime
 from sys import exc_info
 from traceback import format_exc
+from typing import Optional
 from uuid import uuid4
 
-from .compat import TO_UNICODE, urlencode
+from .compat import urlencode
 from .constants import HTTP_HEADER_ACCEPT, HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_SERVICE_NAME, HTTP_HEADER_USER_AGENT
 from .errors import ForbiddenError, ProgrammingError, ServiceUnavailableError
 from .network import (
@@ -22,7 +23,7 @@ from .network import (
 )
 
 logger = logging.getLogger(__name__)
-URL = u'/incidents/v2/create-incident'
+URL = '/incidents/v2/create-incident'
 CLS_BLACKLIST = frozenset({ProgrammingError})
 
 current_os_release = platform.system()
@@ -32,92 +33,95 @@ current_os_version = platform.release()
 class Incident(object):
 
     def __init__(self,
-                 job_id,
-                 request_id,
-                 driver,
-                 driver_version,
-                 error_message,
-                 error_stack_trace,
-                 os=current_os_release,
-                 os_version=current_os_version):
-        self.uuid = TO_UNICODE(uuid4())
-        self.createdOn = TO_UNICODE(datetime.utcnow())[:-3]  # utcnow returns 6 ms digits, we only want 3
-        self.jobId = TO_UNICODE(job_id) if job_id is not None else None
-        self.requestId = TO_UNICODE(request_id) if request_id is not None else None
-        self.errorMessage = TO_UNICODE(error_message)
-        self.errorStackTrace = TO_UNICODE(error_stack_trace)
-        self.os = TO_UNICODE(os) if os is not None else None
-        self.osVersion = TO_UNICODE(os_version) if os_version is not None else None
-        self.signature = TO_UNICODE(self.__generate_signature(error_message, error_stack_trace))
-        self.driver = TO_UNICODE(driver)
-        self.driverVersion = TO_UNICODE(driver_version)
+                 job_id: Optional[str],
+                 request_id: Optional[str],
+                 driver: Optional[str],
+                 driver_version: Optional[str],
+                 error_message: Optional[str],
+                 error_stack_trace: Optional[str],
+                 os: str = current_os_release,
+                 os_version: str = current_os_version):
+        self.uuid = str(uuid4())
+        self.createdOn = str(datetime.utcnow())[:-3]  # utcnow returns 6 ms digits, we only want 3
+        self.jobId = str(job_id)
+        self.requestId = str(request_id)
+        self.errorMessage = str(error_message)
+        self.errorStackTrace = str(error_stack_trace)
+        self.os = str(os)
+        self.osVersion = str(os_version)
+        self.signature = str(self.__generate_signature(error_message, error_stack_trace))
+        self.driver = str(driver)
+        self.driverVersion = str(driver_version)
 
     def to_dict(self):
-        ret = {u"Tags": [{u"Name": u"driver", u"Value": self.driver},
-                         {u"Name": u"version", u"Value": self.driverVersion}],
-               u"Name": self.signature,
-               u"UUID": self.uuid,
-               u"Created_On": self.createdOn,
-               u"Value": {
-                   u"exceptionMessage": self.errorMessage,
-                   u"exceptionStackTrace": self.errorStackTrace
+        ret = {"Tags": [{"Name": "driver", "Value": self.driver},
+                         {"Name": "version", "Value": self.driverVersion}],
+               "Name": self.signature,
+               "UUID": self.uuid,
+               "Created_On": self.createdOn,
+               "Value": {
+                   "exceptionMessage": self.errorMessage,
+                   "exceptionStackTrace": self.errorStackTrace
                }}
         # Add optional values
         if self.os:
-            ret[u"Tags"].append({u"Name": u"os", u"Value": self.os})
+            ret["Tags"].append({"Name": "os", "Value": self.os})
         if self.osVersion:
-            ret[u"Tags"].append({u"Name": u"osVersion", u"Value": self.osVersion})
+            ret["Tags"].append({"Name": "osVersion", "Value": self.osVersion})
         if self.requestId:
-            ret[u"Value"][u"requestId"] = self.requestId
+            ret["Value"]["requestId"] = self.requestId
         if self.jobId:
-            ret[u"Value"][u"jobId"] = self.jobId
+            ret["Value"]["jobId"] = self.jobId
         return ret
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.to_dict())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Incident {id}".format(id=self.uuid)
 
     @staticmethod
-    def __generate_signature(error_message, error_stack_trace):
-        """Automatically generate signature of Incident"""
+    def __generate_signature(error_message: Optional[str], error_stack_trace: Optional[str]) -> Optional[str]:
+        """Automatically generates signature of Incident."""
         return error_message
-
-    @classmethod
-    def from_exception(cls, exc):
-        """Generate an incident from an Exception"""
-        pass
 
 
 class IncidentAPI(object):
-    """Snowflake Incident"""
+    """Snowflake Incident API."""
 
     def __init__(self, rest):
         self._rest = rest
 
     def report_incident(self, incident=None, job_id=None, request_id=None, session_parameters=None):
-        """
-        Report an incident created
+        """Reports an incident created.
 
-        Example usage:
+            Example usage:
 
-        from traceback import format_exc
+            from traceback import format_exc
 
-        try:
-            doing_my_thing()
-        except Exception as e:
-            incident = Incident(None, requestId, e.message, format_exc)
-            incidentAPI.report_automatic_incident(incident)
-            raise
+            try:
+                doing_my_thing()
+            except Exception as e:
+                incident = Incident(None, requestId, e.message, format_exc)
+                incidentAPI.report_automatic_incident(incident)
+                raise
 
-        -- or --
+            -- or --
 
-        try:
-            doing_my_thing()
-        except Exception:
-            incidentAPI.report_incident()
-            raise
+            try:
+                doing_my_thing()
+            except Exception:
+                incidentAPI.report_incident()
+
+        Args:
+            incident: Incident to be reported, if not provided we assume that it is being raised right now
+                (Default value = None).
+            job_id: Job id during which the incident was observed if available (Default value = None).
+            request_id: Request id during which the incident was observed if available (Default value = None).
+            session_parameters: Dictionary of session parameters (Default value = None).
+
+        Raises:
+            Any error that comes from not being to reach back-end services to report incident to.
         """
         if incident is None:
             cls, exc, trace = exc_info()
@@ -137,13 +141,12 @@ class IncidentAPI(object):
                    HTTP_HEADER_ACCEPT: ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
                    HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
         if HTTP_HEADER_SERVICE_NAME in session_parameters:
-            headers[HTTP_HEADER_SERVICE_NAME] = \
-                session_parameters[HTTP_HEADER_SERVICE_NAME]
+            headers[HTTP_HEADER_SERVICE_NAME] = session_parameters[HTTP_HEADER_SERVICE_NAME]
         body = incident.to_dict()
-        logger.debug(u"Going to report incident with body: {}".format(body))
+        logger.debug("Going to report incident with body: {}".format(body))
         try:
             ret = self._rest.request(
-                u'/incidents/v2/create-incident?' + urlencode({REQUEST_ID: uuid4()}),
+                '/incidents/v2/create-incident?' + urlencode({REQUEST_ID: uuid4()}),
                 body, _include_retry_params=True)
         except (ForbiddenError, ServiceUnavailableError):
             logger.error("Unable to reach endpoint to report incident at url: '{url}' with headers='{headers}' "
@@ -151,12 +154,12 @@ class IncidentAPI(object):
                                                      headers=headers,
                                                      body=body))
             raise
-        if not ret[u'success']:
-            logger.warning(u"Reporting incident failed for reason: '{reason}'".format(reason=ret))
+        if not ret['success']:
+            logger.warning("Reporting incident failed for reason: '{reason}'".format(reason=ret))
             return
-        new_incident_id = ret[u'data'][u'incidentId'] if ret.get(u'data') else None
+        new_incident_id = ret['data']['incidentId'] if ret.get('data') else None
         if not new_incident_id:
-            logger.debug(u"Reported incident was ignored")
+            logger.debug("Reported incident was ignored")
         else:
-            logger.info(u"Incident has been reported with new incident id: {}".format(ret[u'data'][u'incidentId']))
+            logger.info("Incident has been reported with new incident id: {}".format(ret['data']['incidentId']))
         return new_incident_id

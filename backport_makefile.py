@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-backports.makefile
-~~~~~~~~~~~~~~~~~~
-Backports the Python 3 ``socket.makefile`` method for use with anything that
-wants to create a "fake" socket object.
+"""Backports the Python 3 ``socket.makefile`` method for use with anything that wants to create a "fake" socket object.
 
 Copied from:
 https://github.com/kennethreitz/requests/blob/master/requests/packages/urllib3/packages/backports/makefile.py
@@ -14,9 +10,7 @@ from socket import SocketIO
 
 def backport_makefile(self, mode="r", buffering=None, encoding=None,
                       errors=None, newline=None):
-    """
-    Backport of ``socket.makefile`` from Python 3.5.
-    """
+    """Backport of socket.makefile from Python 3.5."""
     if not set(mode) <= {"r", "w", "b"}:
         raise ValueError(
             "invalid mode {!r} (only r, w, b allowed)".format(mode)

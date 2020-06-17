@@ -16,21 +16,19 @@ from Cryptodome.Cipher import AES
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD, TO_UNICODE
+from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
 from .constants import UTF8
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
 
 def matdesc_to_unicode(matdesc):
-    """
-    Convert Material Descriptor to Unicode String
-    """
-    return TO_UNICODE(
+    """Convert Material Descriptor to Unicode String."""
+    return str(
         json.dumps({
-            u'queryId': matdesc.query_id,
-            u'smkId': str(matdesc.smk_id),
-            u'keySize': str(matdesc.key_size)
+            'queryId': matdesc.query_id,
+            'smkId': str(matdesc.smk_id),
+            'keySize': str(matdesc.key_size)
         },
             separators=(',', ':')))
 
@@ -66,20 +64,23 @@ class SnowflakeEncryptionUtil(object):
     @staticmethod
     def encrypt_file(encryption_material, in_filename,
                      chunk_size=block_size * 4 * 1024, tmp_dir=None):
-        """
-        Encrypts a file
-        :param encryption_material: encryption material
-        :param in_filename: input file name
-        :param chunk_size: read chunk size
-        :param tmp_dir: temporary directory, optional
-        :return: a encrypted file
+        """Encrypts a file in a temporary directory.
+
+        Args:
+            encryption_material: The encryption material for file.
+            in_filename: The input file's name.
+            chunk_size: The size of read chunks (Default value = block_size * 4 * 1024).
+            tmp_dir: Temporary directory to use, optional (Default value = None).
+
+        Returns:
+            The encrypted file's location.
         """
         logger = getLogger(__name__)
         use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
         decoded_key = base64.standard_b64decode(
             encryption_material.query_stage_master_key)
         key_size = len(decoded_key)
-        logger.debug(u'key_size = %s', key_size)
+        logger.debug('key_size = %s', key_size)
 
         # Generate key for data encryption
         iv_data = SnowflakeEncryptionUtil.get_secure_random(block_size)
@@ -95,10 +96,10 @@ class SnowflakeEncryptionUtil(object):
             text=False, dir=tmp_dir,
             prefix=os.path.basename(in_filename) + "#")
         padded = False
-        logger.debug(u'unencrypted file: %s, temp file: %s, tmp_dir: %s',
+        logger.debug('unencrypted file: %s, temp file: %s, tmp_dir: %s',
                      in_filename, temp_output_file, tmp_dir)
-        with open(in_filename, u'rb') as infile:
-            with os.fdopen(temp_output_fd, u'wb') as outfile:
+        with open(in_filename, 'rb') as infile:
+            with os.fdopen(temp_output_fd, 'wb') as outfile:
                 while True:
                     chunk = infile.read(chunk_size)
                     if len(chunk) == 0:
@@ -143,14 +144,17 @@ class SnowflakeEncryptionUtil(object):
     @staticmethod
     def decrypt_file(metadata, encryption_material, in_filename,
                      chunk_size=block_size * 4 * 1024, tmp_dir=None):
-        """
-        Decrypts a file and stores the output in the temporary directory
-        :param metadata: metadata input
-        :param encryption_material: encryption material
-        :param in_filename: input file name
-        :param chunk_size: read chunk size
-        :param tmp_dir: temporary directory, optional
-        :return: a decrypted file name
+        """Decrypts a file and stores the output in the temporary directory.
+
+        Args:
+            metadata: The file's metadata input.
+            encryption_material: The file's encryption material.
+            in_filename: The name of the input file.
+            chunk_size: The size of read chunks (Default value = block_size * 4 * 1024).
+            tmp_dir: Temporary directory to use, optional (Default value = None).
+
+        Returns:
+            The decrypted file's location.
         """
         logger = getLogger(__name__)
         use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
@@ -178,10 +182,10 @@ class SnowflakeEncryptionUtil(object):
             prefix=os.path.basename(in_filename) + "#")
         total_file_size = 0
         prev_chunk = None
-        logger.debug(u'encrypted file: %s, tmp file: %s',
+        logger.debug('encrypted file: %s, tmp file: %s',
                      in_filename, temp_output_file)
-        with open(in_filename, u'rb') as infile:
-            with os.fdopen(temp_output_fd, u'wb') as outfile:
+        with open(in_filename, 'rb') as infile:
+            with os.fdopen(temp_output_fd, 'wb') as outfile:
                 while True:
                     chunk = infile.read(chunk_size)
                     if len(chunk) == 0:

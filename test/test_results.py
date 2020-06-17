@@ -10,9 +10,7 @@ from snowflake.connector import ProgrammingError
 
 
 def test_results(conn_cnx):
-    """
-    Gets results for the given qid
-    """
+    """Gets results for the given qid."""
     with conn_cnx() as cnx:
         cur = cnx.cursor()
         cur.execute("select * from values(1,2),(3,4)")
@@ -24,9 +22,7 @@ def test_results(conn_cnx):
 
 
 def test_results_with_error(conn_cnx):
-    """
-    Gets results with error
-    """
+    """Gets results with error."""
     with conn_cnx() as cnx:
         cur = cnx.cursor()
         sfqid = None

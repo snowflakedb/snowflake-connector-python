@@ -26,24 +26,18 @@ except ImportError:
     from azure.storage.common.retry import ExponentialRetry
 
     class RawBodyReadingClient(_HTTPClient):
-        '''
-        This class is needed because the Azure storage Python library has a bug that doesn't
-        allow it to download files with content-encoding=gzip compressed. See
-        https://github.com/Azure/azure-storage-python/issues/509. This client overrides the
-        default HTTP client and downloads uncompressed. This workaround was provided by
-        Microsoft.
-        '''
+        """Class that allows Azure to download files with content-encoding=gzip compressed.
+
+        For more information see: https://github.com/Azure/azure-storage-python/issues/509. This client overrides the
+        default HTTP client and downloads uncompressed. This workaround was provided by Microsoft.
+        """
 
         def perform_request(self, request):
-            '''
-            Sends an HTTPRequest to Azure Storage and returns an HTTPResponse. If
-            the response code indicates an error, raise an HTTPError.
-            :param HTTPRequest request:
-                The request to serialize and send.
-            :return: An HTTPResponse containing the parsed HTTP response.
-            :rtype: :class:`~azure.storage.common._http.HTTPResponse`
-            '''
-            # Verify the body is in bytes or either a file-like/stream object
+            """Sends an HTTPRequest to Azure Storage and returns an HTTPResponse.
+
+            If the response code indicates an error, raise an HTTPError.
+            """
+            # Verify whether the body is in bytes or either a file-like/stream object
             if request.body:
                 request.body = _get_data_bytes_or_stream_only('request.body', request.body)
 
@@ -89,20 +83,20 @@ AzureLocation = namedtuple(
 
 
 class SnowflakeAzureUtil(object):
-    """
-    Azure Utility class
-    """
+    """Azure Utility class."""
     # max_connections works over this size
     DATA_SIZE_THRESHOLD = 67108864
 
     @staticmethod
-    def create_client(stage_info,
-                      use_accelerate_endpoint: bool = False):
-        """
-        Creates a client object with a stage credential
-        :param stage_credentials: a stage credential
-        :param use_accelerate_endpoint: is accelerate endpoint?
-        :return: client
+    def create_client(stage_info, use_accelerate_endpoint: bool = False):
+        """Creates a client object with a stage credential.
+
+        Args:
+            stage_info: Information about the stage.
+            use_accelerate_endpoint: Not used for Azure client.
+
+        Returns:
+            The client to communicate with GCS.
         """
         stage_credentials = stage_info['creds']
         sas_token = stage_credentials['AZURE_SAS_TOKEN']
@@ -125,7 +119,7 @@ class SnowflakeAzureUtil(object):
                 random_jitter_range=2
             )
         else:
-            client = BlockBlobService(account_name=stage_info[u'storageAccount'],
+            client = BlockBlobService(account_name=stage_info['storageAccount'],
                                       sas_token=sas_token,
                                       endpoint_suffix=end_point)
             client._httpclient = RawBodyReadingClient(session=requests.session(), protocol="https", timeout=2000)
@@ -138,14 +132,14 @@ class SnowflakeAzureUtil(object):
     def extract_container_name_and_path(stage_location):
         stage_location = os.path.expanduser(stage_location)
         container_name = stage_location
-        path = u''
+        path = ''
 
         # split stage location as bucket name and path
-        if u'/' in stage_location:
-            container_name = stage_location[0:stage_location.index(u'/')]
-            path = stage_location[stage_location.index(u'/') + 1:]
-            if path and not path.endswith(u'/'):
-                path += u'/'
+        if '/' in stage_location:
+            container_name = stage_location[0:stage_location.index('/')]
+            path = stage_location[stage_location.index('/') + 1:]
+            if path and not path.endswith('/'):
+                path += '/'
 
         return AzureLocation(
             container_name=container_name,
@@ -153,13 +147,8 @@ class SnowflakeAzureUtil(object):
 
     @staticmethod
     def get_file_header(meta, filename):
-        """
-        Gets Azure file properties
-        :param meta: file meta object
-        :return:  FileHeader if no error,
-        u'result_status'] for status.
-        """
-        client = meta[u'client']
+        """Gets Azure file properties."""
+        client = meta['client']
         azure_logger = None
         backup_logging_level = None
         if not use_new_azure_api:
@@ -168,7 +157,7 @@ class SnowflakeAzureUtil(object):
             # Critical (50) is the highest level, so we need to set it to something higher to silence logging message
             azure_logger.setLevel(60)
         azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
-            meta[u'stage_info'][u'location'])
+            meta['stage_info']['location'])
         if use_new_azure_api:
             try:
                 # HTTP HEAD request
@@ -176,26 +165,26 @@ class SnowflakeAzureUtil(object):
                                               azure_location.path + filename)
                 blob_details = blob.get_blob_properties()
             except ResourceNotFoundError:
-                meta[u'result_status'] = ResultStatus.NOT_FOUND_FILE
+                meta['result_status'] = ResultStatus.NOT_FOUND_FILE
                 return FileHeader(
                     digest=None,
                     content_length=None,
                     encryption_metadata=None
                 )
             except HttpResponseError as err:
-                logger.debug(u"Caught exception's status code: {status_code} and message: {ex_representation}".format(
+                logger.debug("Caught exception's status code: {status_code} and message: {ex_representation}".format(
                     status_code=err.status_code,
                     ex_representation=str(err)
                 ))
                 if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
-                    logger.debug(u"AZURE Token expired. Renew and retry")
-                    meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                    logger.debug("AZURE Token expired. Renew and retry")
+                    meta['result_status'] = ResultStatus.RENEW_TOKEN
                 else:
-                    logger.debug(u'Unexpected Azure error: %s'
-                                 u'container: %s, path: %s',
+                    logger.debug('Unexpected Azure error: %s'
+                                 'container: %s, path: %s',
                                  err, azure_location.container_name,
                                  azure_location.path)
-                    meta[u'result_status'] = ResultStatus.ERROR
+                    meta['result_status'] = ResultStatus.ERROR
                 return
         else:
             try:
@@ -203,53 +192,53 @@ class SnowflakeAzureUtil(object):
                 blob = client.get_blob_properties(azure_location.container_name,
                                                   azure_location.path + filename)
             except AzureMissingResourceHttpError:
-                meta[u'result_status'] = ResultStatus.NOT_FOUND_FILE
+                meta['result_status'] = ResultStatus.NOT_FOUND_FILE
                 return FileHeader(
                     digest=None,
                     content_length=None,
                     encryption_metadata=None
                 )
             except AzureHttpError as err:
-                logger.debug(u"Caught exception's status code: {status_code} and message: {ex_representation}".format(
+                logger.debug("Caught exception's status code: {status_code} and message: {ex_representation}".format(
                     status_code=err.status_code,
                     ex_representation=str(err)
                 ))
                 if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
-                    logger.debug(u"AZURE Token expired. Renew and retry")
-                    meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                    logger.debug("AZURE Token expired. Renew and retry")
+                    meta['result_status'] = ResultStatus.RENEW_TOKEN
                 else:
-                    logger.debug(u'Unexpected Azure error: %s'
-                                 u'container: %s, path: %s',
+                    logger.debug('Unexpected Azure error: %s'
+                                 'container: %s, path: %s',
                                  err, azure_location.container_name,
                                  azure_location.path)
-                    meta[u'result_status'] = ResultStatus.ERROR
+                    meta['result_status'] = ResultStatus.ERROR
                 return
             finally:
                 azure_logger.setLevel(backup_logging_level)
-        meta[u'result_status'] = ResultStatus.UPLOADED
+        meta['result_status'] = ResultStatus.UPLOADED
         if use_new_azure_api:
-            encryptiondata = json.loads(blob_details.metadata.get(u'encryptiondata', u'null'))
+            encryptiondata = json.loads(blob_details.metadata.get('encryptiondata', 'null'))
             encryption_metadata = EncryptionMetadata(
-                key=encryptiondata[u'WrappedContentKey'][u'EncryptedKey'],
-                iv=encryptiondata[u'ContentEncryptionIV'],
-                matdesc=blob_details.metadata[u'matdesc'],
+                key=encryptiondata['WrappedContentKey']['EncryptedKey'],
+                iv=encryptiondata['ContentEncryptionIV'],
+                matdesc=blob_details.metadata['matdesc'],
             ) if encryptiondata else None
 
             return FileHeader(
-                digest=blob_details.metadata.get(u'sfcdigest'),
+                digest=blob_details.metadata.get('sfcdigest'),
                 content_length=blob_details.size,
                 encryption_metadata=encryption_metadata
             )
         else:
-            encryptiondata = json.loads(blob.metadata.get(u'encryptiondata', u'null'))
+            encryptiondata = json.loads(blob.metadata.get('encryptiondata', 'null'))
             encryption_metadata = EncryptionMetadata(
-                key=encryptiondata[u'WrappedContentKey'][u'EncryptedKey'],
-                iv=encryptiondata[u'ContentEncryptionIV'],
-                matdesc=blob.metadata[u'matdesc'],
+                key=encryptiondata['WrappedContentKey']['EncryptedKey'],
+                iv=encryptiondata['ContentEncryptionIV'],
+                matdesc=blob.metadata['matdesc'],
             ) if encryptiondata else None
 
             return FileHeader(
-                digest=blob.metadata.get(u'sfcdigest'),
+                digest=blob.metadata.get('sfcdigest'),
                 content_length=blob.properties.content_length,
                 encryption_metadata=encryption_metadata
             )
@@ -265,40 +254,40 @@ class SnowflakeAzureUtil(object):
     @staticmethod
     def upload_file(data_file, meta, encryption_metadata, max_concurrency):
         azure_metadata = {
-            u'sfcdigest': meta[SHA256_DIGEST],
+            'sfcdigest': meta[SHA256_DIGEST],
         }
         if (encryption_metadata):
             azure_metadata.update({
-                u'encryptiondata': json.dumps({
-                    u'EncryptionMode': u'FullBlob',
-                    u'WrappedContentKey': {
-                        u'KeyId': u'symmKey1',
-                        u'EncryptedKey': encryption_metadata.key,
-                        u'Algorithm': u'AES_CBC_256'
+                'encryptiondata': json.dumps({
+                    'EncryptionMode': 'FullBlob',
+                    'WrappedContentKey': {
+                        'KeyId': 'symmKey1',
+                        'EncryptedKey': encryption_metadata.key,
+                        'Algorithm': 'AES_CBC_256'
                     },
-                    u'EncryptionAgent': {
-                        u'Protocol': '1.0',
-                        u'EncryptionAlgorithm': u'AES_CBC_128',
+                    'EncryptionAgent': {
+                        'Protocol': '1.0',
+                        'EncryptionAlgorithm': 'AES_CBC_128',
                     },
-                    u'ContentEncryptionIV': encryption_metadata.iv,
-                    u'KeyWrappingMetadata': {
-                        u'EncryptionLibrary': u'Java 5.3.0'
+                    'ContentEncryptionIV': encryption_metadata.iv,
+                    'KeyWrappingMetadata': {
+                        'EncryptionLibrary': 'Java 5.3.0'
                     }
                 }),
-                u'matdesc': encryption_metadata.matdesc
+                'matdesc': encryption_metadata.matdesc
             })
         azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
-            meta[u'stage_info'][u'location'])
-        path = azure_location.path + meta[u'dst_file_name'].lstrip('/')
+            meta['stage_info']['location'])
+        path = azure_location.path + meta['dst_file_name'].lstrip('/')
 
-        client = meta[u'client']
+        client = meta['client']
         callback = None
-        if meta[u'put_azure_callback']:
-            callback = meta[u'put_azure_callback'](
+        if meta['put_azure_callback']:
+            callback = meta['put_azure_callback'](
                 data_file,
                 os.path.getsize(data_file),
-                output_stream=meta[u'put_callback_output_stream'],
-                show_progress_bar=meta[u'show_progress_bar'])
+                output_stream=meta['put_callback_output_stream'],
+                show_progress_bar=meta['show_progress_bar'])
 
         if use_new_azure_api:
             def azure_callback(response):
@@ -321,23 +310,23 @@ class SnowflakeAzureUtil(object):
                         metadata=azure_metadata,
                         overwrite=True,
                         max_concurrency=max_concurrency,
-                        raw_response_hook=azure_callback if meta[u'put_azure_callback'] else None,
+                        raw_response_hook=azure_callback if meta['put_azure_callback'] else None,
                         content_settings=ContentSettings(
                             content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
-                            content_encoding=u'utf-8',
+                            content_encoding='utf-8',
                         )
                     )
             except HttpResponseError as err:
-                logger.debug(u"Caught exception's status code: {status_code} and message: {ex_representation}".format(
+                logger.debug("Caught exception's status code: {status_code} and message: {ex_representation}".format(
                     status_code=err.status_code,
                     ex_representation=str(err)
                 ))
                 if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
-                    logger.debug(u"AZURE Token expired. Renew and retry")
-                    meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                    logger.debug("AZURE Token expired. Renew and retry")
+                    meta['result_status'] = ResultStatus.RENEW_TOKEN
                 else:
-                    meta[u'last_error'] = err
-                    meta[u'result_status'] = ResultStatus.NEED_RETRY
+                    meta['last_error'] = err
+                    meta['result_status'] = ResultStatus.NEED_RETRY
                 return
         else:
             def azure_callback(current, total):
@@ -352,47 +341,47 @@ class SnowflakeAzureUtil(object):
                     path,
                     data_file,
                     progress_callback=azure_callback if
-                    meta[u'put_azure_callback'] else None,
+                    meta['put_azure_callback'] else None,
                     metadata=azure_metadata,
                     max_connections=max_concurrency,
                     content_settings=ContentSettings(
                         content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
-                        content_encoding=u'utf-8'
+                        content_encoding='utf-8'
                     )
                 )
             except AzureHttpError as err:
-                logger.debug(u"Caught exception's status code: {status_code} and message: {ex_representation}".format(
+                logger.debug("Caught exception's status code: {status_code} and message: {ex_representation}".format(
                     status_code=err.status_code,
                     ex_representation=str(err)
                 ))
                 if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
-                    logger.debug(u"AZURE Token expired. Renew and retry")
-                    meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                    logger.debug("AZURE Token expired. Renew and retry")
+                    meta['result_status'] = ResultStatus.RENEW_TOKEN
                 else:
-                    meta[u'last_error'] = err
-                    meta[u'result_status'] = ResultStatus.NEED_RETRY
+                    meta['last_error'] = err
+                    meta['result_status'] = ResultStatus.NEED_RETRY
                 return
 
-        logger.debug(u'DONE putting a file')
-        meta[u'dst_file_size'] = meta[u'upload_size']
-        meta[u'result_status'] = ResultStatus.UPLOADED
+        logger.debug('DONE putting a file')
+        meta['dst_file_size'] = meta['upload_size']
+        meta['result_status'] = ResultStatus.UPLOADED
         # Comparing with s3, azure haven't experienced OpenSSL.SSL.SysCallError,
         # so we will add logic to catch it only when it happens
 
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
         azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
-            meta[u'stage_info'][u'location'])
-        path = azure_location.path + meta[u'src_file_name'].lstrip('/')
-        client = meta[u'client']
+            meta['stage_info']['location'])
+        path = azure_location.path + meta['src_file_name'].lstrip('/')
+        client = meta['client']
 
         callback = None
-        if meta[u'get_azure_callback']:
-            callback = meta[u'get_azure_callback'](
-                meta[u'src_file_name'],
-                meta[u'src_file_size'],
-                output_stream=meta[u'get_callback_output_stream'],
-                show_progress_bar=meta[u'show_progress_bar'])
+        if meta['get_azure_callback']:
+            callback = meta['get_azure_callback'](
+                meta['src_file_name'],
+                meta['src_file_size'],
+                output_stream=meta['get_callback_output_stream'],
+                show_progress_bar=meta['show_progress_bar'])
 
         if use_new_azure_api:
             def azure_callback(response):
@@ -411,21 +400,21 @@ class SnowflakeAzureUtil(object):
                 with open(full_dst_file_name, 'wb') as download_f:
                     download = blob.download_blob(
                         max_concurrency=max_concurrency,
-                        raw_response_hook=azure_callback if meta[u'put_azure_callback'] else None,
+                        raw_response_hook=azure_callback if meta['put_azure_callback'] else None,
                     )
                     download.readinto(download_f)
 
             except HttpResponseError as err:
-                logger.debug(u"Caught exception's status code: {status_code} and message: {ex_representation}".format(
+                logger.debug("Caught exception's status code: {status_code} and message: {ex_representation}".format(
                     status_code=err.status_code,
                     ex_representation=str(err)
                 ))
                 if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
-                    logger.debug(u"AZURE Token expired. Renew and retry")
-                    meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                    logger.debug("AZURE Token expired. Renew and retry")
+                    meta['result_status'] = ResultStatus.RENEW_TOKEN
                 else:
-                    meta[u'last_error'] = err
-                    meta[u'result_status'] = ResultStatus.NEED_RETRY
+                    meta['last_error'] = err
+                    meta['result_status'] = ResultStatus.NEED_RETRY
                 return
         else:
             def azure_callback(current, total):
@@ -439,19 +428,19 @@ class SnowflakeAzureUtil(object):
                     path,
                     full_dst_file_name,
                     progress_callback=azure_callback if
-                    meta[u'get_azure_callback'] else None,
+                    meta['get_azure_callback'] else None,
                     max_connections=max_concurrency
                 )
             except AzureHttpError as err:
-                logger.debug(u"Caught exception's status code: {status_code} and message: {ex_representation}".format(
+                logger.debug("Caught exception's status code: {status_code} and message: {ex_representation}".format(
                     status_code=err.status_code,
                     ex_representation=str(err)
                 ))
                 if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
-                    logger.debug(u"AZURE Token expired. Renew and retry")
-                    meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                    logger.debug("AZURE Token expired. Renew and retry")
+                    meta['result_status'] = ResultStatus.RENEW_TOKEN
                 else:
-                    meta[u'last_error'] = err
-                    meta[u'result_status'] = ResultStatus.NEED_RETRY
+                    meta['last_error'] = err
+                    meta['result_status'] = ResultStatus.NEED_RETRY
                 return
-        meta[u'result_status'] = ResultStatus.DOWNLOADED
+        meta['result_status'] = ResultStatus.DOWNLOADED

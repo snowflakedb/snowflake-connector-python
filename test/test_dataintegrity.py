@@ -1,10 +1,9 @@
 #!/usr/bin/env python -O
 
-""" Script to test database capabilities and the DB-API interface
-    for functionality and data integrity for some of the basic data types.
+"""Script to test database capabilities and the DB-API interface.
 
-    Adapted from a script taken from the MySQL python driver.
-
+It tests for functionality and data integrity for some of the basic data types. Adapted from a script
+taken from the MySQL python driver.
 """
 
 import random

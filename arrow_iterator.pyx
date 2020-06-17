@@ -162,8 +162,8 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                 cursor,
                 OperationalError,
                 {
-                    u'msg': u'Failed to open arrow stream: ' + str(ret.message()),
-                    u'errno': ER_FAILED_TO_READ_ARROW_STREAM
+                    'msg': 'Failed to open arrow stream: ' + str(ret.message()),
+                    'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
 
         while True:
@@ -174,8 +174,8 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                     cursor,
                     OperationalError,
                     {
-                        u'msg': u'Failed to read next arrow batch: ' + str(ret.message()),
-                        u'errno': ER_FAILED_TO_READ_ARROW_STREAM
+                        'msg': 'Failed to read next arrow batch: ' + str(ret.message()),
+                        'errno': ER_FAILED_TO_READ_ARROW_STREAM
                     })
 
             if record_batch.get() is NULL:
@@ -199,11 +199,11 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.cret = self.cIterator.next()
 
         if not self.cret.get().successObj:
-            msg = u'Failed to convert current row, cause: ' + str(<object>self.cret.get().exception)
+            msg = 'Failed to convert current row, cause: ' + str(<object>self.cret.get().exception)
             Error.errorhandler_wrapper(self.cursor.connection, self.cursor, InterfaceError,
                                        {
-                                           u'msg': msg,
-                                           u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
+                                           'msg': msg,
+                                           'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
                                        })
             # it looks like this line can help us get into python and detect the global variable immediately
             # however, this log will not show up for unclear reason

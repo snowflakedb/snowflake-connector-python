@@ -100,7 +100,7 @@ def test_reporting_values(app_name, db_parameters):
     snowflake.connector.paramstyle = 'qmark'
     original_blacklist = snowflake.connector.incident.CLS_BLACKLIST
     snowflake.connector.incident.CLS_BLACKLIST = frozenset()
-    converter.PYTHON_TO_SNOWFLAKE_TYPE[u'nonetype'] = None
+    converter.PYTHON_TO_SNOWFLAKE_TYPE['nonetype'] = None
     db_parameters['internal_application_name'] = app_name
     con = None
     try:
@@ -113,11 +113,11 @@ def test_reporting_values(app_name, db_parameters):
     except ProgrammingError:
         pass  # ignore, should be thrown
     finally:
-        converter.PYTHON_TO_SNOWFLAKE_TYPE[u'nonetype'] = u'ANY'
+        converter.PYTHON_TO_SNOWFLAKE_TYPE['nonetype'] = 'ANY'
         snowflake.connector.paramstyle = original_paramstyle
         snowflake.connector.incident.CLS_BLACKLIST = original_blacklist
-        for tag in incident_report.call_args[0][1][u'Tags']:
-            if tag[u'Name'] == u'driver':
-                assert tag[u'Value'] == app_name
+        for tag in incident_report.call_args[0][1]['Tags']:
+            if tag['Name'] == 'driver':
+                assert tag['Value'] == app_name
         if con is not None:
             con.close()

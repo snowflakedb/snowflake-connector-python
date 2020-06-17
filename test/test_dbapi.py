@@ -4,12 +4,9 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-"""
-Script to test database capabilities and the DB-API interface
-    for functionality and data integrity.
+"""Script to test database capabilities and the DB-API interface for functionality and data integrity.
 
-    Adapted from a script by M-A Lemburg and taken from the MySQL python driver.
-
+Adapted from a script by M-A Lemburg and taken from the MySQL python driver.
 """
 
 import sys
@@ -365,9 +362,7 @@ SAMPLES = [
 
 
 def _populate():
-    ''' Return a list of sql commands to setup the DB for the fetch
-        tests.
-    '''
+    """Returns a list of sql commands to setup the DB for the fetch tests."""
     populate = [
         # NOTE NO GOOD using format to bind data
         "insert into {} values ('{}')".format(

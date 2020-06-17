@@ -28,9 +28,7 @@ except ImportError:
     reason="Snowflake admin account is not accessible."
 )
 def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
-    """
-    [s3] Put and Get a small text using AWS S3
-    """
+    """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt.gz'))
     f = gzip.open(fname, 'wb')
@@ -66,8 +64,8 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
             rec = c.fetchone()
             assert rec[0].startswith('snow9144'), 'A file downloaded by GET'
             assert rec[1] == 36, 'Return right file size'
-            assert rec[2] == u'DOWNLOADED', 'Return DOWNLOADED status'
-            assert rec[3] == u'', 'Return no error message'
+            assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
+            assert rec[3] == '', 'Return no error message'
             cnx.cursor().execute("rm @%snow9144")
             cnx.cursor().execute("rm @~/snow9144")
     finally:
@@ -92,9 +90,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
     reason="Snowflake admin account is not accessible."
 )
 def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
-    """
-    [s3] SNOW-6154: Use invalid combination of AWS credential
-    """
+    """[s3] SNOW-6154: Uses invalid combination of AWS credential."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt.gz'))
     f = gzip.open(fname, 'wb')
@@ -146,11 +142,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
 
 
 def _s3bucket_list(self, client, s3bucket):
-    """
-    Attempts to get the keys from the list.
-
-    Must raise an exception
-    """
+    """Attempts to get the keys from the list. Must raise an exception."""
     s3bucket = client.Bucket(s3bucket)
     return [key for key in s3bucket.objects]
 
@@ -160,9 +152,7 @@ def _s3bucket_list(self, client, s3bucket):
     reason="Snowflake admin account is not accessible."
 )
 def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
-    """
-    [s3] SNOW-6154: pretend to PUT but LIST
-    """
+    """[s3] SNOW-6154: Pretends to PUT but LIST."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt'))
     f = gzip.open(fname, 'wb')

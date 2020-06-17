@@ -15,9 +15,9 @@ NUMERIC_VALUES = re.compile(r'-?[\d.]*\d$')
 
 
 def test_converter_no_converter_to_python(db_parameters):
-    """
-    Test a converter that doesn't translate the Snowflake internal data
-    representation to the Python native types.
+    """Tests no converter.
+
+    This should not translate the Snowflake internal data representation to the Python native types.
     """
     con = snowflake.connector.connect(
         user=db_parameters['user'],

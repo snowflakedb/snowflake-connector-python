@@ -45,7 +45,7 @@ class ArrowConverterContext(object):
         self._timezone = tz
 
     def _get_session_tz(self):
-        """ Get the session timezone or use the local computer's timezone. """
+        """Get the session timezone or use the local computer's timezone."""
         try:
             tz = 'UTC' if not self.timezone else self.timezone
             return pytz.timezone(tz)
@@ -59,16 +59,11 @@ class ArrowConverterContext(object):
                 except AttributeError:
                     return pytz.timezone('UTC')
 
-    def TIMESTAMP_TZ_to_python(self, microseconds, tz):
+    def TIMESTAMP_TZ_to_python(self, microseconds: float, tz: int):
+        """Timestamp TZ to datetime.
+
+        The timezone offset is piggybacked.
         """
-        TIMESTAMP TZ to datetime
-
-        The timezone offset is piggybacked
-
-        @para microseconds : float
-        @para tz : int
-        """
-
         tzinfo = _generate_tzinfo_from_tzoffset(tz - 1440)
         return datetime.fromtimestamp(microseconds, tz=tzinfo)
 

@@ -9,9 +9,7 @@ from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 
 
 class AuthByPlugin(object):
-    """
-    External Authenticator interface.
-    """
+    """External Authenticator interface."""
 
     @property
     def assertion_content(self):
@@ -25,20 +23,16 @@ class AuthByPlugin(object):
         raise NotImplementedError
 
     def handle_failure(self, ret):
-        """ Handles a failure when connecting to Snowflake
-
-        Args:
-            ret: dictionary returned from Snowflake.
-        """
+        """Handles a failure when connecting to Snowflake."""
         Error.errorhandler_wrapper(
             self._rest._connection, None, DatabaseError,
             {
-                u'msg': (u"Failed to connect to DB: {host}:{port}, "
-                         u"{message}").format(
+                'msg': ("Failed to connect to DB: {host}:{port}, "
+                         "{message}").format(
                     host=self._rest._host,
                     port=self._rest._port,
-                    message=ret[u'message'],
+                    message=ret['message'],
                 ),
-                u'errno': int(ret.get(u'code', -1)),
-                u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                'errno': int(ret.get('code', -1)),
+                'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
             })

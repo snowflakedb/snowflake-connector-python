@@ -28,10 +28,7 @@ BUF_SIZE = 16384
 
 
 class AuthByWebBrowser(AuthByPlugin):
-    """
-    Authenticate user by web browser. Only used for SAML based
-    authentication.
-    """
+    """Authenticates user by web browser. Only used for SAML based authentication."""
 
     def __init__(self, rest, application,
                  webbrowser_pkg=None, socket_pkg=None,
@@ -54,26 +51,23 @@ class AuthByWebBrowser(AuthByPlugin):
 
     @property
     def assertion_content(self):
-        """ Returns the token."""
+        """Returns the token."""
         return self._token
 
     def update_body(self, body):
-        """ Used by Auth to update the request that gets sent to
-        /v1/login-request.
+        """Used by Auth to update the request that gets sent to /v1/login-request.
 
         Args:
             body: existing request dictionary
         """
-        body[u'data'][u'AUTHENTICATOR'] = EXTERNAL_BROWSER_AUTHENTICATOR
-        body[u'data'][u'TOKEN'] = self._token
-        body[u'data'][u'PROOF_KEY'] = self._proof_key
+        body['data']['AUTHENTICATOR'] = EXTERNAL_BROWSER_AUTHENTICATOR
+        body['data']['TOKEN'] = self._token
+        body['data']['PROOF_KEY'] = self._proof_key
 
     def authenticate(
             self, authenticator, service_name, account, user, password):
-        """
-        Web Browser based Authentication.
-        """
-        logger.debug(u'authenticating by Web Browser')
+        """Web Browser based Authentication."""
+        logger.debug('authenticating by Web Browser')
 
         # ignore password. user is still needed by GS to verify
         # the assertion.
@@ -86,8 +80,8 @@ class AuthByWebBrowser(AuthByPlugin):
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
-                        msg=u'localhost is not found. Ensure /etc/hosts has '
-                            u'localhost entry.',
+                        msg='localhost is not found. Ensure /etc/hosts has '
+                            'localhost entry.',
                         errno=ER_NO_HOSTNAME_FOUND
                     )
                 else:
@@ -100,30 +94,28 @@ class AuthByWebBrowser(AuthByPlugin):
                   "login. If you can't see it, check existing browser windows, "
                   "or your OS settings. Press CTRL+C to abort and try again...")
 
-            logger.debug(u'step 1: query GS to obtain SSO url')
+            logger.debug('step 1: query GS to obtain SSO url')
             sso_url = self._get_sso_url(
                 authenticator, service_name, account, callback_port, user)
 
-            logger.debug(u'step 2: open a browser')
+            logger.debug('step 2: open a browser')
             if not self._webbrowser.open_new(sso_url):
                 logger.error(
-                    u'Unable to open a browser in this environment.',
+                    'Unable to open a browser in this environment.',
                     exc_info=True)
                 self.handle_failure({
-                    u'code': ER_UNABLE_TO_OPEN_BROWSER,
-                    u'message': u"Unable to open a browser in this environment."
+                    'code': ER_UNABLE_TO_OPEN_BROWSER,
+                    'message': "Unable to open a browser in this environment."
                 })
                 return  # required for test case
 
-            logger.debug(u'step 3: accept SAML token')
+            logger.debug('step 3: accept SAML token')
             self._receive_saml_token(socket_connection)
         finally:
             socket_connection.close()
 
     def _receive_saml_token(self, socket_connection):
-        """
-        Receives SAML token from web browser
-        """
+        """Receives SAML token from web browser."""
         while True:
             socket_client, _ = socket_connection.accept()
             try:
@@ -139,9 +131,7 @@ class AuthByWebBrowser(AuthByPlugin):
                 socket_client.close()
 
     def _process_options(self, data, socket_client):
-        """
-        Allows JS Ajax access to this endpoint
-        """
+        """Allows JS Ajax access to this endpoint."""
         for line in data:
             if line.startswith("OPTIONS "):
                 break
@@ -177,7 +167,7 @@ class AuthByWebBrowser(AuthByPlugin):
         netloc = ret.netloc.split(':')
         host_got = netloc[0]
         port_got = netloc[1] if len(netloc) > 1 else (
-            443 if self._protocol == u'https' else 80)
+            443 if self._protocol == 'https' else 80)
 
         return ret.scheme == self._protocol \
                and host_got == self._host and port_got == self._port
@@ -248,9 +238,9 @@ You can close this window now and go back where you started from.
                 break
         else:
             self.handle_failure({
-                u'code': ER_IDP_CONNECTION_ERROR,
-                u'message': u"Invalid HTTP request from web browser. Idp "
-                            u"authentication could have failed."
+                'code': ER_IDP_CONNECTION_ERROR,
+                'message': "Invalid HTTP request from web browser. Idp "
+                            "authentication could have failed."
             })
             return False
 
@@ -275,9 +265,7 @@ You can close this window now and go back where you started from.
 
     def _get_sso_url(
             self, authenticator, service_name, account, callback_port, user):
-        """
-        Gets SSO URL from Snowflake
-        """
+        """Gets SSO URL from Snowflake."""
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -286,7 +274,7 @@ You can close this window now and go back where you started from.
         if service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = service_name
 
-        url = u"/session/authenticator-request"
+        url = "/session/authenticator-request"
         body = Auth.base_auth_data(
             user, account,
             self._rest._connection.application,
@@ -297,9 +285,9 @@ You can close this window now and go back where you started from.
             self._rest._connection._network_timeout,
         )
 
-        body[u'data'][u'AUTHENTICATOR'] = authenticator
-        body[u'data'][u"BROWSER_MODE_REDIRECT_PORT"] = str(callback_port)
-        logger.debug(u'account=%s, authenticator=%s, user=%s',
+        body['data']['AUTHENTICATOR'] = authenticator
+        body['data']["BROWSER_MODE_REDIRECT_PORT"] = str(callback_port)
+        logger.debug('account=%s, authenticator=%s, user=%s',
                      account, authenticator, user)
         ret = self._rest._post_request(
             url,
@@ -307,9 +295,9 @@ You can close this window now and go back where you started from.
             json.dumps(body),
             timeout=self._rest._connection.login_timeout,
             socket_timeout=self._rest._connection.login_timeout)
-        if not ret[u'success']:
+        if not ret['success']:
             self.handle_failure(ret)
-        data = ret[u'data']
-        sso_url = data[u'ssoUrl']
-        self._proof_key = data[u'proofKey']
+        data = ret['data']
+        sso_url = data['ssoUrl']
+        self._proof_key = data['proofKey']
         return sso_url

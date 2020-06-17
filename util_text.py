@@ -13,12 +13,14 @@ _logger = logging.getLogger(__name__)
 
 
 def split_statements(buf, remove_comments=False):
-    """
-    Splits a stream into SQL statements (ends with a semicolon) or
-    commands (!...)
-    :param buf: Unicode data stream
-    :param remove_comments: True removes all comments
-    :return: yields a SQL statement or a command
+    """Splits a stream into SQL statements (ends with a semicolon) or commands (!...).
+
+    Args:
+        buf: Unicode data stream.
+        remove_comments: Whether or not to remove all comments (Default value = False).
+
+    Yields:
+        A SQL statement or a command.
     """
     in_quote = False
     ch_quote = None
@@ -148,13 +150,18 @@ def split_statements(buf, remove_comments=False):
 
 
 def _concatenate_statements(statement_list):
-    """
-    concatenate statements
+    """Concatenate statements.
 
-    is_put_or_get is set to True if the statement is PUT or GET otherwise
-    False for valid statement. None is set if the statement is empty or
-    comment only.
-    :return: a statement, is_put_or_get
+    Each statement should be a tuple of statement and is_put_or_get.
+
+    The is_put_or_get is set to True if the statement is PUT or GET otherwise False for valid statement.
+    None is set if the statement is empty or comment only.
+
+    Args:
+        statement_list: List of statement parts.
+
+    Returns:
+        Tuple of statements and whether they are PUT or GET.
     """
     valid_statement_list = []
     is_put_or_get = None
@@ -162,32 +169,30 @@ def _concatenate_statements(statement_list):
         valid_statement_list.append(text)
         if is_put_or_get is None and is_statement and len(text.strip()) >= 3:
             is_put_or_get = text[:3].upper() in ('PUT', 'GET')
-    return u''.join(valid_statement_list).strip(), is_put_or_get
+    return ''.join(valid_statement_list).strip(), is_put_or_get
 
 
 def construct_hostname(region, account):
-    """
-    Constructs hostname from region and account
-    """
-    if region == u'us-west-2':
+    """Constructs hostname from region and account."""
+    if region == 'us-west-2':
         region = ''
     if region:
-        if account.find(u'.') > 0:
-            account = account[0:account.find(u'.')]
-        host = u'{}.{}.snowflakecomputing.com'.format(account, region)
+        if account.find('.') > 0:
+            account = account[0:account.find('.')]
+        host = '{}.{}.snowflakecomputing.com'.format(account, region)
     else:
-        host = u'{}.snowflakecomputing.com'.format(account)
+        host = '{}.snowflakecomputing.com'.format(account)
     return host
 
 
 def parse_account(account):
-    url_parts = account.split(u'.')
+    url_parts = account.split('.')
     # if this condition is true, then we have some extra
     # stuff in the account field.
     if len(url_parts) > 1:
-        if url_parts[1] == u'global':
+        if url_parts[1] == 'global':
             # remove external ID from account
-            parsed_account = url_parts[0][0:url_parts[0].rfind(u'-')]
+            parsed_account = url_parts[0][0:url_parts[0].rfind('-')]
         else:
             # remove region subdomain
             parsed_account = url_parts[0]

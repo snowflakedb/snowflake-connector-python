@@ -12,10 +12,11 @@ def exe0(cnx, sql):
 
 
 def _run_autocommit_off(cnx, db_parameters):
-    """
-    Runs autocommit off test
-    :param cnx: database connection context
-    :param db_parameters: database parameters
+    """Runs autocommit off test.
+
+    Args:
+        cnx: The database connection context.
+        db_parameters: Database parameters.
     """
     def exe(cnx, sql):
         return cnx.cursor().execute(sql.format(name=db_parameters['name']))
@@ -60,10 +61,11 @@ SELECT COUNT(*) FROM {name} WHERE NOT c1
 
 
 def _run_autocommit_on(cnx, db_parameters):
-    """
-    Run autocommit on test
-    :param cnx: database connection context
-    :param db_parameters: database parameters
+    """Run autocommit on test.
+
+    Args:
+        cnx: The database connection context.
+        db_parameters: Database parameters.
     """
     def exe(cnx, sql):
         return cnx.cursor().execute(sql.format(name=db_parameters['name']))
@@ -79,10 +81,11 @@ SELECT COUNT(*) FROM {name} WHERE NOT c1
 
 
 def test_autocommit_attribute(conn_cnx, db_parameters):
-    """
-    Tests autocommit attribute
-    :param conn_cnx: database connection context
-    :param db_parameters: database parameters
+    """Tests autocommit attribute.
+
+    Args:
+        conn_cnx: The database connection context.
+        db_parameters: Database parameters.
     """
     def exe(cnx, sql):
         return cnx.cursor().execute(sql.format(name=db_parameters['name']))
@@ -103,9 +106,10 @@ DROP TABLE IF EXISTS {name}
 
 
 def test_autocommit_parameters(db_parameters):
-    """
-    Tests autocommit parameter
-    :param db_parameters: database parameters
+    """Tests autocommit parameter.
+
+    Args:
+        db_parameters: Database parameters.
     """
     def exe(cnx, sql):
         return cnx.cursor().execute(sql.format(name=db_parameters['name']))

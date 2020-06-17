@@ -44,9 +44,7 @@ def conn_cnx(request, conn_cnx):
 
 
 def _query_run(conn, shared, expectedCanceled=True):
-    """
-    Run a query, and wait for possible cancellation.
-    """
+    """Runs a query, and wait for possible cancellation."""
     with conn(user='magicuser1', password='xxx') as cnx:
         cnx.cursor().execute('use warehouse regress')
 
@@ -82,9 +80,7 @@ select count(*) from table(generator(timeLimit => 10))""")
 
 
 def _query_cancel(conn, shared, user, password, expectedCanceled):
-    """
-    Cancel the query running in another thread
-    """
+    """Tests cancelling the query running in another thread."""
     with conn(user=user, password=password) as cnx:
         cnx.cursor().execute('use warehouse regress')
         # .use_warehouse_database_schema(cnx)
@@ -119,8 +115,8 @@ def _query_cancel(conn, shared, user, password, expectedCanceled):
 
 
 def _test_helper(conn, expectedCanceled, cancelUser, cancelPass):
-    """
-    Helper function with the actual test.
+    """Helper function for the actual tests.
+
     queryRun is always run with magicuser1/xxx.
     queryCancel is run with cancelUser/cancelPass
     """
@@ -147,9 +143,7 @@ def _test_helper(conn, expectedCanceled, cancelUser, cancelPass):
     reason="Snowflake admin account is not accessible."
 )
 def test_same_user_canceling(conn_cnx):
-    """
-    Test that the same user CAN cancel his query
-    """
+    """Tests that the same user CAN cancel his own query."""
     _test_helper(conn_cnx, True, 'magicuser1', 'xxx')
 
 
@@ -158,7 +152,5 @@ def test_same_user_canceling(conn_cnx):
     reason="Snowflake admin account is not accessible."
 )
 def test_other_user_canceling(conn_cnx):
-    """
-    Test that the other user CAN NOT cancel his query
-    """
+    """Tests that the other user CAN NOT cancel his own query."""
     _test_helper(conn_cnx, False, 'magicuser2', 'xxx')

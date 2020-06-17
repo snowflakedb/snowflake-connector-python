@@ -23,9 +23,9 @@ logger = getLogger(__name__)
 
 @pytest.fixture()
 def test_data(request, conn_cnx, db_parameters):
-    assert u'AWS_ACCESS_KEY_ID' in os.environ, u'AWS_ACCESS_KEY_ID is missing'
-    assert u'AWS_SECRET_ACCESS_KEY' in os.environ, \
-        u'AWS_SECRET_ACCESS_KEY is missing'
+    assert 'AWS_ACCESS_KEY_ID' in os.environ, 'AWS_ACCESS_KEY_ID is missing'
+    assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
+        'AWS_SECRET_ACCESS_KEY is missing'
 
     unique_name = db_parameters['name']
     database_name = "{}_db".format(unique_name)
@@ -42,9 +42,9 @@ def test_data(request, conn_cnx, db_parameters):
     class TestData(object):
         def __init__(self):
             self.AWS_ACCESS_KEY_ID = "'{}'".format(
-                os.environ[u'AWS_ACCESS_KEY_ID'])
+                os.environ['AWS_ACCESS_KEY_ID'])
             self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
-                os.environ[u'AWS_SECRET_ACCESS_KEY'])
+                os.environ['AWS_SECRET_ACCESS_KEY'])
             self.SF_PROJECT_ROOT = os.getenv('SF_PROJECT_ROOT')
             if self.SF_PROJECT_ROOT is None:
                 self.SF_PROJECT_ROOT = path.realpath(

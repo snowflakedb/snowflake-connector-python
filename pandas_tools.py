@@ -20,7 +20,7 @@ T = TypeVar('T', bound=Sequence)
 
 
 def chunk_helper(lst: T, n: int) -> Iterator[Tuple[int, T]]:
-    """Helper generator to chunk a sequence efficiently with current index like if enumerate was called on sequence"""
+    """Helper generator to chunk a sequence efficiently with current index like if enumerate was called on sequence."""
     for i in range(0, len(lst), n):
         yield int(i / n), lst[i:i + n]
 
@@ -37,35 +37,39 @@ def write_pandas(conn: 'SnowflakeConnection',
                  ) -> Tuple[bool, int, int,
                             Sequence[Tuple[str, str, int, int, int, int, Optional[str], Optional[int],
                                            Optional[int], Optional[str]]]]:
-    """
-    Allows users to most efficiently write back a pandas DataFrame to Snowflake by dumping the DataFrame into Parquet
-    files, uploading them and finally copying their data into the table. Returns the COPY INTO command's results to
-    verify ingestion.
+    """Allows users to most efficiently write back a pandas DataFrame to Snowflake.
+
+    It works by dumping the DataFrame into Parquet files, uploading them and finally copying their data into the table.
 
     Returns whether all files were ingested correctly, number of chunks uploaded, and number of rows ingested
     with all of the COPY INTO command's output for debugging purposes.
 
-    :Example:
+        Example usage:
+            import pandas
+            from snowflake.connector.pandas_tools import write_pandas
 
-    import pandas
-    from snowflake.connector.pandas_tools import write_pandas
+            df = pandas.DataFrame([('Mark', 10), ('Luke', 20)], columns=['name', 'balance'])
+            success, nchunks, nrows, _ = write_pandas(cnx, df, 'customers')
 
-    df = pandas.DataFrame([('Mark', 10), ('Luke', 20)], columns=['name', 'balance'])
-    success, nchunks, nrows, _ = write_pandas(cnx, df, 'customers')
+    Args:
+        conn: Connection to be used to communicate with Snowflake.
+        df: Dataframe we'd like to write back.
+        table_name: Table name where we want to insert into.
+        database: Database schema and table is in, if not provided the default one will be used (Default value = None).
+        schema: Schema table is in, if not provided the default one will be used (Default value = None).
+        chunk_size: Number of elements to be inserted once, if not provided all elements will be dumped once
+            (Default value = None).
+        compression: The compression used on the Parquet files, can only be gzip, or snappy. Gzip gives supposedly a
+            better compression, while snappy is faster. Use whichever is more appropriate (Default value = 'gzip').
+        on_error: Action to take when COPY INTO statements fail, default follows documentation at:
+            https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html#copy-options-copyoptions
+            (Default value = 'abort_statement').
+        parallel: Number of threads to be used when uploading chunks, default follows documentation at:
+            https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters (Default value = 4).
 
-    @param conn: connection to be used to communicate with Snowflake
-    @param df: Dataframe we'd like to write back
-    @param table_name: Table name where we want to insert into
-    @param database: Database schema and table is in, if not provided the default one will be used
-    @param schema: Schema table is in, if not provided the default one will be used
-    @param chunk_size: Number of elements to be inserted once, if not provided all elements will be dumped once
-    @param compression: The compression used on the Parquet files, can only be gzip, or snappy. Gzip gives supposedly a
-    better compression, while snappy is faster. Use whichever is more appropriate.
-    @param on_error: Action to take when COPY INTO statements fail, default follows documentation at:
-    https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html#copy-options-copyoptions
-    @param parallel: Number of threads to be used when uploading chunks, default follows documentation at:
-    https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters
-    @return: tuple of whether all chunks were ingested correctly, # of chunks, # of ingested rows, and ingest's output
+    Returns:
+        Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
+        ingested correctly, # of chunks, # of ingested rows, and ingest's output.
     """
     if database is not None and schema is None:
         raise ProgrammingError("Schema has to be provided to write_pandas when a database is provided")
@@ -133,20 +137,20 @@ def pd_writer(table: pandas.io.sql.SQLTable,
               conn: Union['sqlalchemy.engine.Engine', 'sqlalchemy.engine.Connection'],
               keys: Iterable,
               data_iter: Iterable) -> None:
-    """
-    This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
-    :Example:
+    """This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
 
-    import pandas as pd
-    from snowflake.connector.pandas_tools import pd_writer
+        Example usage:
+            import pandas as pd
+            from snowflake.connector.pandas_tools import pd_writer
 
-    sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
-    sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
-    @param table: Pandas package's table object
-    @param conn: SQLAlchemy engine object to talk to Snowflake
-    @param keys: Column names that we are trying to insert
-    @param data_iter: Iterator over the rows
-    @return: None
+            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
+            sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
+
+    Args:
+        table: Pandas package's table object.
+        conn: SQLAlchemy engine object to talk to Snowflake.
+        keys: Column names that we are trying to insert.
+        data_iter: Iterator over the rows.
     """
     sf_connection = conn.connection.connection
     df = pandas.DataFrame(data_iter, columns=keys)

@@ -12,19 +12,18 @@ from boto3.exceptions import RetriesExceededError, S3UploadFailedError
 from boto3.s3.transfer import TransferConfig
 from botocore.client import Config
 
-from .compat import TO_UNICODE
 from .constants import HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_VALUE_OCTET_STREAM, SHA256_DIGEST, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 
-SFC_DIGEST = u'sfc-digest'
+SFC_DIGEST = 'sfc-digest'
 
-AMZ_MATDESC = u"x-amz-matdesc"
-AMZ_KEY = u"x-amz-key"
-AMZ_IV = u"x-amz-iv"
+AMZ_MATDESC = "x-amz-matdesc"
+AMZ_KEY = "x-amz-key"
+AMZ_IV = "x-amz-iv"
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
-EXPIRED_TOKEN = u'ExpiredToken'
-ADDRESSING_STYLE = u'virtual'  # explicit force to use virtual addressing style
+EXPIRED_TOKEN = 'ExpiredToken'
+ADDRESSING_STYLE = 'virtual'  # explicit force to use virtual addressing style
 
 """
 S3 Location: S3 bucket name + path
@@ -38,40 +37,41 @@ S3Location = namedtuple(
 
 
 class SnowflakeS3Util:
-    """
-    S3 Utility class
-    """
+    """S3 Utility class."""
     # magic number, given from  error message.
     DATA_SIZE_THRESHOLD = 67108864
 
     @staticmethod
     def create_client(stage_info, use_accelerate_endpoint=False):
-        """
-        Creates a client object with a stage credential
-        :param stage_credentials: a stage credential
-        :param use_accelerate_endpoint: is accelerate endpoint?
-        :return: client
+        """Creates a client object with a stage credential.
+
+        Args:
+            stage_info: Information about the stage.
+            use_accelerate_endpoint: Whether or not to use accelerated endpoint (Default value = False).
+
+        Returns:
+            The client to communicate with S3.
         """
         logger = getLogger(__name__)
-        stage_credentials = stage_info[u'creds']
-        security_token = stage_credentials.get(u'AWS_TOKEN', None)
+        stage_credentials = stage_info['creds']
+        security_token = stage_credentials.get('AWS_TOKEN', None)
         end_point = stage_info['endPoint']
-        logger.debug(u"AWS_KEY_ID: %s", stage_credentials[u'AWS_KEY_ID'])
+        logger.debug("AWS_KEY_ID: %s", stage_credentials['AWS_KEY_ID'])
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
-        end_point = (u'https://' + stage_info['endPoint']) if stage_info['endPoint'] else None
+        end_point = ('https://' + stage_info['endPoint']) if stage_info['endPoint'] else None
 
         config = Config(
-            signature_version=u's3v4',
+            signature_version='s3v4',
             s3={
                 'use_accelerate_endpoint': use_accelerate_endpoint,
                 'addressing_style': ADDRESSING_STYLE
             })
         client = boto3.resource(
-            u's3',
+            's3',
             region_name=stage_info['region'],
-            aws_access_key_id=stage_credentials[u'AWS_KEY_ID'],
-            aws_secret_access_key=stage_credentials[u'AWS_SECRET_KEY'],
+            aws_access_key_id=stage_credentials['AWS_KEY_ID'],
+            aws_secret_access_key=stage_credentials['AWS_SECRET_KEY'],
             aws_session_token=security_token,
             endpoint_url=end_point,
             config=config,
@@ -82,14 +82,14 @@ class SnowflakeS3Util:
     def extract_bucket_name_and_path(stage_location):
         stage_location = os.path.expanduser(stage_location)
         bucket_name = stage_location
-        s3path = u''
+        s3path = ''
 
         # split stage location as bucket name and path
-        if u'/' in stage_location:
-            bucket_name = stage_location[0:stage_location.index(u'/')]
-            s3path = stage_location[stage_location.index(u'/') + 1:]
-            if s3path and not s3path.endswith(u'/'):
-                s3path += u'/'
+        if '/' in stage_location:
+            bucket_name = stage_location[0:stage_location.index('/')]
+            s3path = stage_location[stage_location.index('/') + 1:]
+            if s3path and not s3path.endswith('/'):
+                s3path += '/'
 
         return S3Location(
             bucket_name=bucket_name,
@@ -98,9 +98,9 @@ class SnowflakeS3Util:
     @staticmethod
     def _get_s3_object(meta, filename):
         logger = getLogger(__name__)
-        client = meta[u'client']
+        client = meta['client']
         s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-            meta[u'stage_info'][u'location'])
+            meta['stage_info']['location'])
         s3path = s3location.s3path + filename.lstrip('/')
 
         if logger.getEffectiveLevel() == logging.DEBUG:
@@ -109,10 +109,10 @@ class SnowflakeS3Util:
                 if k != 'stage_credentials':
                     tmp_meta[k] = v
             logger.debug(
-                u"s3location.bucket_name: %s, "
-                u"s3location.s3path: %s, "
-                u"s3fullpath: %s, "
-                u'meta: %s',
+                "s3location.bucket_name: %s, "
+                "s3location.s3path: %s, "
+                "s3fullpath: %s, "
+                'meta: %s',
                 s3location.bucket_name,
                 s3location.s3path,
                 s3path, tmp_meta)
@@ -120,46 +120,49 @@ class SnowflakeS3Util:
 
     @staticmethod
     def get_file_header(meta, filename):
-        """
-        Gets S3 file object
-        :param meta: file meta object
-        :return: S3 object if no error, otherwise None. Check meta[
-        u'result_status'] for status.
-        """
+        """Gets the remote file's metadata.
 
+        Args:
+            meta: Remote file's metadata info.
+            filename: Name of remote file.
+
+        Returns:
+            The file header, with expected properties populated or None, based on how the request goes with the
+            storage provider.
+        """
         logger = getLogger(__name__)
         akey = SnowflakeS3Util._get_s3_object(meta, filename)
         try:
             # HTTP HEAD request
             akey.load()
         except botocore.exceptions.ClientError as e:
-            if e.response[u'Error'][u'Code'] == EXPIRED_TOKEN:
-                logger.debug(u"AWS Token expired. Renew and retry")
-                meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+            if e.response['Error']['Code'] == EXPIRED_TOKEN:
+                logger.debug("AWS Token expired. Renew and retry")
+                meta['result_status'] = ResultStatus.RENEW_TOKEN
                 return None
-            elif e.response[u'Error'][u'Code'] == u'404':
-                logger.debug(u'not found. bucket: %s, path: %s',
+            elif e.response['Error']['Code'] == '404':
+                logger.debug('not found. bucket: %s, path: %s',
                              akey.bucket_name, akey.key)
-                meta[u'result_status'] = ResultStatus.NOT_FOUND_FILE
+                meta['result_status'] = ResultStatus.NOT_FOUND_FILE
                 return FileHeader(
                     digest=None,
                     content_length=None,
                     encryption_metadata=None,
                 )
-            elif e.response[u'Error'][u'Code'] == u'400':
-                logger.debug(u'Bad request, token needs to be renewed: %s. '
-                             u'bucket: %s, path: %s',
-                             e.response[u'Error'][u'Message'],
+            elif e.response['Error']['Code'] == '400':
+                logger.debug('Bad request, token needs to be renewed: %s. '
+                             'bucket: %s, path: %s',
+                             e.response['Error']['Message'],
                              akey.bucket_name, akey.key)
-                meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                meta['result_status'] = ResultStatus.RENEW_TOKEN
                 return None
             logger.debug(
-                u"Failed to get metadata for %s, %s: %s",
+                "Failed to get metadata for %s, %s: %s",
                 akey.bucket_name, akey.key, e)
-            meta[u'result_status'] = ResultStatus.ERROR
+            meta['result_status'] = ResultStatus.ERROR
             return None
 
-        meta[u'result_status'] = ResultStatus.UPLOADED
+        meta['result_status'] = ResultStatus.UPLOADED
         encryption_metadata = EncryptionMetadata(
             key=akey.metadata.get(AMZ_KEY),
             iv=akey.metadata.get(AMZ_IV),
@@ -187,20 +190,20 @@ class SnowflakeS3Util:
                     AMZ_MATDESC: encryption_metadata.matdesc,
                 })
             s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-                meta[u'stage_info'][u'location'])
-            s3path = s3location.s3path + meta[u'dst_file_name'].lstrip('/')
+                meta['stage_info']['location'])
+            s3path = s3location.s3path + meta['dst_file_name'].lstrip('/')
 
-            akey = meta[u'client'].Object(s3location.bucket_name, s3path)
+            akey = meta['client'].Object(s3location.bucket_name, s3path)
             akey.upload_file(
                 data_file,
-                Callback=meta[u'put_callback'](
+                Callback=meta['put_callback'](
                     data_file,
                     os.path.getsize(data_file),
-                    output_stream=meta[u'put_callback_output_stream'],
-                    show_progress_bar=meta[u'show_progress_bar']) if
-                meta[u'put_callback'] else None,
+                    output_stream=meta['put_callback_output_stream'],
+                    show_progress_bar=meta['show_progress_bar']) if
+                meta['put_callback'] else None,
                 ExtraArgs={
-                    u'Metadata': s3_metadata,
+                    'Metadata': s3_metadata,
                 },
                 Config=TransferConfig(
                     multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
@@ -209,20 +212,20 @@ class SnowflakeS3Util:
                 )
             )
 
-            logger.debug(u'DONE putting a file')
-            meta[u'dst_file_size'] = meta[u'upload_size']
-            meta[u'result_status'] = ResultStatus.UPLOADED
+            logger.debug('DONE putting a file')
+            meta['dst_file_size'] = meta['upload_size']
+            meta['result_status'] = ResultStatus.UPLOADED
         except botocore.exceptions.ClientError as err:
-            if err.response[u'Error'][u'Code'] == EXPIRED_TOKEN:
-                logger.debug(u"AWS Token expired. Renew and retry")
-                meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+            if err.response['Error']['Code'] == EXPIRED_TOKEN:
+                logger.debug("AWS Token expired. Renew and retry")
+                meta['result_status'] = ResultStatus.RENEW_TOKEN
                 return
             logger.debug(
-                u"Failed to upload a file: %s, err: %s",
+                "Failed to upload a file: %s, err: %s",
                 data_file, err, exc_info=True)
             raise err
         except S3UploadFailedError as err:
-            if EXPIRED_TOKEN in TO_UNICODE(err):
+            if EXPIRED_TOKEN in str(err):
                 # Since AWS token expiration error can be encapsulated in
                 # S3UploadFailedError, the text match is required to
                 # identify the case.
@@ -230,61 +233,61 @@ class SnowflakeS3Util:
                     'Failed to upload a file: %s, err: %s. Renewing '
                     'AWS Token and Retrying',
                     data_file, err)
-                meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+                meta['result_status'] = ResultStatus.RENEW_TOKEN
                 return
 
-            meta[u'last_error'] = err
-            meta[u'result_status'] = ResultStatus.NEED_RETRY
+            meta['last_error'] = err
+            meta['result_status'] = ResultStatus.NEED_RETRY
         except OpenSSL.SSL.SysCallError as err:
-            meta[u'last_error'] = err
+            meta['last_error'] = err
             if err.args[0] == ERRORNO_WSAECONNABORTED:
                 # connection was disconnected by S3
                 # because of too many connections. retry with
                 # less concurrency to mitigate it
                 meta[
-                    u'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
+                    'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
             else:
-                meta[u'result_status'] = ResultStatus.NEED_RETRY
+                meta['result_status'] = ResultStatus.NEED_RETRY
 
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
         logger = getLogger(__name__)
         try:
-            akey = SnowflakeS3Util._get_s3_object(meta, meta[u'src_file_name'])
+            akey = SnowflakeS3Util._get_s3_object(meta, meta['src_file_name'])
             akey.download_file(
                 full_dst_file_name,
-                Callback=meta[u'get_callback'](
-                    meta[u'src_file_name'],
-                    meta[u'src_file_size'],
-                    output_stream=meta[u'get_callback_output_stream'],
-                    show_progress_bar=meta[u'show_progress_bar']) if
-                meta[u'get_callback'] else None,
+                Callback=meta['get_callback'](
+                    meta['src_file_name'],
+                    meta['src_file_size'],
+                    output_stream=meta['get_callback_output_stream'],
+                    show_progress_bar=meta['show_progress_bar']) if
+                meta['get_callback'] else None,
                 Config=TransferConfig(
                     multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
                     max_concurrency=max_concurrency,
                     num_download_attempts=10,
                 )
             )
-            meta[u'result_status'] = ResultStatus.DOWNLOADED
+            meta['result_status'] = ResultStatus.DOWNLOADED
         except botocore.exceptions.ClientError as err:
-            if err.response[u'Error'][u'Code'] == EXPIRED_TOKEN:
-                meta[u'result_status'] = ResultStatus.RENEW_TOKEN
+            if err.response['Error']['Code'] == EXPIRED_TOKEN:
+                meta['result_status'] = ResultStatus.RENEW_TOKEN
             else:
                 logger.debug(
-                    u"Failed to download a file: %s, err: %s",
+                    "Failed to download a file: %s, err: %s",
                     full_dst_file_name, err, exc_info=True)
                 raise err
         except RetriesExceededError as err:
-            meta[u'result_status'] = ResultStatus.NEED_RETRY
-            meta[u'last_error'] = err
+            meta['result_status'] = ResultStatus.NEED_RETRY
+            meta['last_error'] = err
         except OpenSSL.SSL.SysCallError as err:
-            meta[u'last_error'] = err
+            meta['last_error'] = err
             if err.args[0] == ERRORNO_WSAECONNABORTED:
                 # connection was disconnected by S3
                 # because of too many connections. retry with
                 # less concurrency to mitigate it
 
                 meta[
-                    u'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
+                    'result_status'] = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
             else:
-                meta[u'result_status'] = ResultStatus.NEED_RETRY
+                meta['result_status'] = ResultStatus.NEED_RETRY

@@ -31,7 +31,7 @@ from .compat import (
     METHOD_NOT_ALLOWED, BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
     FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
     UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
-from .compat import (TO_UNICODE, urlencode, urlparse, IncompleteRead)
+from .compat import (urlencode, urlparse, IncompleteRead)
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_ACCEPT,
@@ -75,38 +75,38 @@ Monkey patch for PyOpenSSL Socket wrapper
 ssl_wrap_socket.inject_into_urllib3()
 
 # known applications
-APPLICATION_SNOWSQL = u'SnowSQL'
+APPLICATION_SNOWSQL = 'SnowSQL'
 
 # requests parameters
 REQUESTS_RETRY = 1  # requests library builtin retry
 DEFAULT_SOCKET_CONNECT_TIMEOUT = 1 * 60  # don't reduce less than 45 seconds
 
 # return codes
-QUERY_IN_PROGRESS_CODE = u'333333'  # GS code: the query is in progress
-QUERY_IN_PROGRESS_ASYNC_CODE = u'333334'  # GS code: the query is detached
+QUERY_IN_PROGRESS_CODE = '333333'  # GS code: the query is in progress
+QUERY_IN_PROGRESS_ASYNC_CODE = '333334'  # GS code: the query is detached
 
-ID_TOKEN_EXPIRED_GS_CODE = u'390110'
-SESSION_EXPIRED_GS_CODE = u'390112'  # GS code: session expired. need to renew
-MASTER_TOKEN_NOTFOUND_GS_CODE = u'390113'
-MASTER_TOKEN_EXPIRED_GS_CODE = u'390114'
-MASTER_TOKEN_INVALD_GS_CODE = u'390115'
-BAD_REQUEST_GS_CODE = u'390400'
+ID_TOKEN_EXPIRED_GS_CODE = '390110'
+SESSION_EXPIRED_GS_CODE = '390112'  # GS code: session expired. need to renew
+MASTER_TOKEN_NOTFOUND_GS_CODE = '390113'
+MASTER_TOKEN_EXPIRED_GS_CODE = '390114'
+MASTER_TOKEN_INVALD_GS_CODE = '390115'
+BAD_REQUEST_GS_CODE = '390400'
 
 # other constants
-CONTENT_TYPE_APPLICATION_JSON = u'application/json'
-ACCEPT_TYPE_APPLICATION_SNOWFLAKE = u'application/snowflake'
+CONTENT_TYPE_APPLICATION_JSON = 'application/json'
+ACCEPT_TYPE_APPLICATION_SNOWFLAKE = 'application/snowflake'
 
-REQUEST_TYPE_RENEW = u'RENEW'
-REQUEST_TYPE_ISSUE = u'ISSUE'
+REQUEST_TYPE_RENEW = 'RENEW'
+REQUEST_TYPE_ISSUE = 'ISSUE'
 
-UPDATED_BY_ID_TOKEN = u'updated_by_id_token'
+UPDATED_BY_ID_TOKEN = 'updated_by_id_token'
 
-HEADER_AUTHORIZATION_KEY = u"Authorization"
-HEADER_SNOWFLAKE_TOKEN = u'Snowflake Token="{token}"'
+HEADER_AUTHORIZATION_KEY = "Authorization"
+HEADER_SNOWFLAKE_TOKEN = 'Snowflake Token="{token}"'
 
-REQUEST_ID = u'requestId'
-REQUEST_GUID = u'request_guid'
-SNOWFLAKE_HOST_SUFFIX = u'.snowflakecomputing.com'
+REQUEST_ID = 'requestId'
+REQUEST_GUID = 'request_guid'
+SNOWFLAKE_HOST_SUFFIX = '.snowflakecomputing.com'
 
 SNOWFLAKE_CONNECTOR_VERSION = SNOWFLAKE_CONNECTOR_VERSION
 PYTHON_VERSION = PYTHON_VERSION
@@ -118,14 +118,14 @@ COMPILER = COMPILER
 CLIENT_NAME = CLIENT_NAME  # don't change!
 CLIENT_VERSION = CLIENT_VERSION
 PYTHON_CONNECTOR_USER_AGENT = \
-    u'{name}/{version} ({platform}) {python_implementation}/{python_version}'.format(
+    '{name}/{version} ({platform}) {python_implementation}/{python_version}'.format(
         name=CLIENT_NAME,
         version=SNOWFLAKE_CONNECTOR_VERSION,
         python_implementation=IMPLEMENTATION,
         python_version=PYTHON_VERSION,
         platform=PLATFORM)
 
-NO_TOKEN = u'no-token'
+NO_TOKEN = 'no-token'
 
 STATUS_TO_EXCEPTION = {
     INTERNAL_SERVER_ERROR: InternalServerError,
@@ -137,16 +137,14 @@ STATUS_TO_EXCEPTION = {
     METHOD_NOT_ALLOWED: MethodNotAllowed,
 }
 
-DEFAULT_AUTHENTICATOR = u'SNOWFLAKE'  # default authenticator name
-EXTERNAL_BROWSER_AUTHENTICATOR = u'EXTERNALBROWSER'
-KEY_PAIR_AUTHENTICATOR = u'SNOWFLAKE_JWT'
-OAUTH_AUTHENTICATOR = u'OAUTH'
+DEFAULT_AUTHENTICATOR = 'SNOWFLAKE'  # default authenticator name
+EXTERNAL_BROWSER_AUTHENTICATOR = 'EXTERNALBROWSER'
+KEY_PAIR_AUTHENTICATOR = 'SNOWFLAKE_JWT'
+OAUTH_AUTHENTICATOR = 'OAUTH'
 
 
-def is_retryable_http_code(code):
-    """
-    Is retryable HTTP code?
-    """
+def is_retryable_http_code(code: int) -> bool:
+    """Decides whether code is a retryable HTTP issue."""
     return 500 <= code < 600 or code in (
         BAD_REQUEST,  # 400
         FORBIDDEN,  # 403
@@ -156,32 +154,26 @@ def is_retryable_http_code(code):
 
 
 class RetryRequest(Exception):
-    """
-    Signal to retry request
-    """
+    """Signal to retry request."""
     pass
 
 
 class ReauthenticationRequest(Exception):
-    """
-    Signal to reauthenticate
-    """
+    """Signal to reauthenticate."""
 
     def __init__(self, cause):
         self.cause = cause
 
 
 class SnowflakeAuth(AuthBase):
-    """
-    Attaches HTTP Authorization header for Snowflake
-    """
+    """Attaches HTTP Authorization header for Snowflake."""
 
     def __init__(self, token):
         # setup any auth-related data here
         self.token = token
 
     def __call__(self, r):
-        # modify and return the request
+        """Modifies and returns the request."""
         if HEADER_AUTHORIZATION_KEY in r.headers:
             del r.headers[HEADER_AUTHORIZATION_KEY]
         if self.token != NO_TOKEN:
@@ -192,12 +184,10 @@ class SnowflakeAuth(AuthBase):
 
 
 class SnowflakeRestful(object):
-    """
-    Snowflake Restful class
-    """
+    """Snowflake Restful class."""
 
-    def __init__(self, host=u'127.0.0.1', port=8080,
-                 protocol=u'http',
+    def __init__(self, host='127.0.0.1', port=8080,
+                 protocol='http',
                  inject_client_pause=0,
                  connection=None):
         self._host = host
@@ -221,16 +211,16 @@ class SnowflakeRestful(object):
 
     @property
     def token(self):
-        return self._token if hasattr(self, u'_token') else None
+        return self._token if hasattr(self, '_token') else None
 
     @property
     def master_token(self):
-        return self._master_token if hasattr(self, u'_master_token') else None
+        return self._master_token if hasattr(self, '_master_token') else None
 
     @property
     def master_validity_in_seconds(self):
         return self._master_validity_in_seconds \
-            if hasattr(self, u'_master_validity_in_seconds') and \
+            if hasattr(self, '_master_validity_in_seconds') and \
                self._master_validity_in_seconds \
             else DEFAULT_MASTER_VALIDITY_IN_SECONDS
 
@@ -241,18 +231,18 @@ class SnowflakeRestful(object):
 
     @property
     def id_token(self):
-        return self._id_token if hasattr(self, u'_id_token') else None
+        return self._id_token if hasattr(self, '_id_token') else None
 
     @id_token.setter
     def id_token(self, value):
         self._id_token = value
 
     def close(self):
-        if hasattr(self, u'_token'):
+        if hasattr(self, '_token'):
             del self._token
-        if hasattr(self, u'_master_token'):
+        if hasattr(self, '_master_token'):
             del self._master_token
-        if hasattr(self, u'_id_token'):
+        if hasattr(self, '_id_token'):
             del self._id_token
         sessions = list(self._active_sessions)
         if sessions:
@@ -266,7 +256,7 @@ class SnowflakeRestful(object):
             except Exception as e:
                 logger.info("Session cleanup failed: %s", e)
 
-    def request(self, url, body=None, method=u'post', client=u'sfsql',
+    def request(self, url, body=None, method='post', client='sfsql',
                 _no_results=False, timeout=None, _include_retry_params=False):
         if body is None:
             body = {}
@@ -274,12 +264,12 @@ class SnowflakeRestful(object):
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
                 {
-                    u'msg': u"Connection is closed",
-                    u'errno': ER_CONNECTION_IS_CLOSED,
-                    u'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
+                    'msg': "Connection is closed",
+                    'errno': ER_CONNECTION_IS_CLOSED,
+                    'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
                 })
 
-        if client == u'sfsql':
+        if client == 'sfsql':
             accept_type = ACCEPT_TYPE_APPLICATION_SNOWFLAKE
         else:
             accept_type = CONTENT_TYPE_APPLICATION_JSON
@@ -294,7 +284,7 @@ class SnowflakeRestful(object):
         }
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
-        if method == u'post':
+        if method == 'post':
             return self._post_request(
                 url, headers, json.dumps(body),
                 token=self.token, _no_results=_no_results,
@@ -307,9 +297,7 @@ class SnowflakeRestful(object):
     def update_tokens(self, session_token, master_token,
                       master_validity_in_seconds=None,
                       id_token=None):
-        """
-        Update session and master tokens and optionally temporary credential
-        """
+        """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
             self._token = session_token
             self._master_token = master_token
@@ -317,9 +305,7 @@ class SnowflakeRestful(object):
             self._master_validity_in_seconds = master_validity_in_seconds
 
     def _renew_session(self):
-        """
-        Renew a session and master token.
-        """
+        """Renews a session and master token."""
         try:
             return self._token_request(REQUEST_TYPE_RENEW)
         except ReauthenticationRequest as ex:
@@ -328,17 +314,17 @@ class SnowflakeRestful(object):
             return self._token_request(REQUEST_TYPE_ISSUE)
 
     def _id_token_session(self):
-        """
-        Issue a session token by the id token. No master token is returned.
+        """Issue a session token by the id token. No master token is returned.
+
         As a result, the session token is not renewable.
         """
         return self._token_request(REQUEST_TYPE_ISSUE)
 
     def _token_request(self, request_type):
         logger.debug(
-            u'updating session. master_token: %s, id_token: %s',
-            u'****' if self.master_token else None,
-            u'****' if self.id_token else None)
+            'updating session. master_token: %s, id_token: %s',
+            '****' if self.master_token else None,
+            '****' if self.id_token else None)
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -346,46 +332,46 @@ class SnowflakeRestful(object):
         }
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
-        request_id = TO_UNICODE(uuid.uuid4())
-        logger.debug(u'request_id: %s', request_id)
-        url = u'/session/token-request?' + urlencode({
+        request_id = str(uuid.uuid4())
+        logger.debug('request_id: %s', request_id)
+        url = '/session/token-request?' + urlencode({
             REQUEST_ID: request_id})
 
         if request_type == REQUEST_TYPE_ISSUE:
             header_token = self.id_token
             body = {
-                u"idToken": self.id_token,
-                u"requestType": REQUEST_TYPE_ISSUE,
+                "idToken": self.id_token,
+                "requestType": REQUEST_TYPE_ISSUE,
             }
         else:
             # NOTE: ensure an empty key if master token is not set.
             # This avoids HTTP 400.
             header_token = self.master_token or ""
             body = {
-                u"oldSessionToken": self.token,
-                u"requestType": request_type,
+                "oldSessionToken": self.token,
+                "requestType": request_type,
             }
         ret = self._post_request(
             url, headers, json.dumps(body),
             token=header_token,
             timeout=self._connection.network_timeout)
-        if ret.get(u'success') and ret.get(u'data', {}).get(u'sessionToken'):
-            logger.debug(u'success: %s', ret)
+        if ret.get('success') and ret.get('data', {}).get('sessionToken'):
+            logger.debug('success: %s', ret)
             self.update_tokens(
-                ret[u'data'][u'sessionToken'],
-                ret[u'data'].get(u'masterToken'),
-                master_validity_in_seconds=ret[u'data'].get(
-                    u'masterValidityInSeconds'),
+                ret['data']['sessionToken'],
+                ret['data'].get('masterToken'),
+                master_validity_in_seconds=ret['data'].get(
+                    'masterValidityInSeconds'),
                 id_token=self.id_token)
-            logger.debug(u'updating session completed')
+            logger.debug('updating session completed')
             ret[UPDATED_BY_ID_TOKEN] = request_type == REQUEST_TYPE_ISSUE
             return ret
         else:
-            logger.debug(u'failed: %s', ret)
-            err = ret.get(u'message')
-            if err is not None and ret.get(u'data'):
-                err += ret[u'data'].get(u'errorMessage', '')
-            errno = ret.get(u'code') or ER_FAILED_TO_RENEW_SESSION
+            logger.debug('failed: %s', ret)
+            err = ret.get('message')
+            if err is not None and ret.get('data'):
+                err += ret['data'].get('errorMessage', '')
+            errno = ret.get('code') or ER_FAILED_TO_RENEW_SESSION
             if errno in (
                     ID_TOKEN_EXPIRED_GS_CODE,
                     SESSION_EXPIRED_GS_CODE,
@@ -401,9 +387,9 @@ class SnowflakeRestful(object):
             Error.errorhandler_wrapper(
                 self._connection, None, ProgrammingError,
                 {
-                    u'msg': err,
-                    u'errno': int(errno),
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    'msg': err,
+                    'errno': int(errno),
+                    'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 })
 
     def _heartbeat(self):
@@ -414,32 +400,30 @@ class SnowflakeRestful(object):
         }
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
-        request_id = TO_UNICODE(uuid.uuid4())
-        logger.debug(u'request_id: %s', request_id)
-        url = u'/session/heartbeat?' + urlencode({
+        request_id = str(uuid.uuid4())
+        logger.debug('request_id: %s', request_id)
+        url = '/session/heartbeat?' + urlencode({
             REQUEST_ID: request_id})
         ret = self._post_request(
             url, headers, None,
             token=self.token,
             timeout=self._connection.network_timeout)
-        if not ret.get(u'success'):
+        if not ret.get('success'):
             logger.error("Failed to heartbeat. code: %s, url: %s",
-                         ret.get(u'code'), url)
+                         ret.get('code'), url)
 
     def delete_session(self, retry=False):
-        """
-        Deletes the session
-        """
+        """Deletes the session."""
         if self.master_token is None:
             Error.errorhandler_wrapper(
                 self._connection, None, DatabaseError,
                 {
-                    u'msg': u"Connection is closed",
-                    u'errno': ER_CONNECTION_IS_CLOSED,
-                    u'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
+                    'msg': "Connection is closed",
+                    'errno': ER_CONNECTION_IS_CLOSED,
+                    'sqlstate': SQLSTATE_CONNECTION_NOT_EXISTS,
                 })
 
-        url = u'/session?' + urlencode({u'delete': u'true'})
+        url = '/session?' + urlencode({'delete': 'true'})
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -463,11 +447,11 @@ class SnowflakeRestful(object):
                         should_retry = True
                     else:
                         return
-                elif ret.get(u'success'):
+                elif ret.get('success'):
                     return
-                err = ret.get(u'message')
-                if err is not None and ret.get(u'data'):
-                    err += ret[u'data'].get(u'errorMessage', '')
+                err = ret.get('message')
+                if err is not None and ret.get('data'):
+                    err += ret['data'].get('errorMessage', '')
                     # no exception is raised
                 logger.debug('error in deleting session. ignoring...: %s', err)
             except Exception as e:
@@ -483,15 +467,15 @@ class SnowflakeRestful(object):
         if 'Content-Length' in headers:
             del headers['Content-Length']
 
-        full_url = u'{protocol}://{host}:{port}{url}'.format(
+        full_url = '{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
             port=self._port,
             url=url,
         )
-        ret = self.fetch(u'get', full_url, headers, timeout=timeout,
+        ret = self.fetch('get', full_url, headers, timeout=timeout,
                          token=token, socket_timeout=socket_timeout)
-        if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
+        if ret.get('code') == SESSION_EXPIRED_GS_CODE:
             try:
                 ret = self._renew_session()
                 if ret.get(UPDATED_BY_ID_TOKEN):
@@ -502,9 +486,9 @@ class SnowflakeRestful(object):
                     raise ex.cause
                 ret = self._connection._reauthenticate_by_webbrowser()
             logger.debug(
-                u'ret[code] = {code} after renew_session'.format(
-                    code=(ret.get(u'code', u'N/A'))))
-            if ret.get(u'success'):
+                'ret[code] = {code} after renew_session'.format(
+                    code=(ret.get('code', 'N/A'))))
+            if ret.get('success'):
                 return self._get_request(url, headers, token=self.token)
 
         return ret
@@ -513,7 +497,7 @@ class SnowflakeRestful(object):
                       timeout=None, _no_results=False, no_retry=False,
                       socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
                       _include_retry_params=False):
-        full_url = u'{protocol}://{host}:{port}{url}'.format(
+        full_url = '{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
             port=self._port,
@@ -524,15 +508,15 @@ class SnowflakeRestful(object):
             ret = probe_connection(full_url)
             pprint(ret)
 
-        ret = self.fetch(u'post', full_url, headers, data=body,
+        ret = self.fetch('post', full_url, headers, data=body,
                          timeout=timeout, token=token,
                          no_retry=no_retry, socket_timeout=socket_timeout,
                          _include_retry_params=_include_retry_params)
         logger.debug(
-            u'ret[code] = {code}, after post request'.format(
-                code=(ret.get(u'code', u'N/A'))))
+            'ret[code] = {code}, after post request'.format(
+                code=(ret.get('code', 'N/A'))))
 
-        if ret.get(u'code') == SESSION_EXPIRED_GS_CODE:
+        if ret.get('code') == SESSION_EXPIRED_GS_CODE:
             try:
                 ret = self._renew_session()
                 if ret.get(UPDATED_BY_ID_TOKEN):
@@ -543,34 +527,34 @@ class SnowflakeRestful(object):
                     raise ex.cause
                 ret = self._connection._reauthenticate_by_webbrowser()
             logger.debug(
-                u'ret[code] = {code} after renew_session'.format(
-                    code=(ret.get(u'code', u'N/A'))))
-            if ret.get(u'success'):
+                'ret[code] = {code} after renew_session'.format(
+                    code=(ret.get('code', 'N/A'))))
+            if ret.get('success'):
                 return self._post_request(
                     url, headers, body, token=self.token, timeout=timeout)
 
-        if ret.get(u'code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
+        if ret.get('code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
             return ret
 
-        while ret.get(u'code') in \
+        while ret.get('code') in \
                 (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
             if self._inject_client_pause > 0:
                 logger.debug(
-                    u'waiting for %s...', self._inject_client_pause)
+                    'waiting for %s...', self._inject_client_pause)
                 time.sleep(self._inject_client_pause)
             # ping pong
-            result_url = ret[u'data'][u'getResultUrl']
-            logger.debug(u'ping pong starting...')
+            result_url = ret['data']['getResultUrl']
+            logger.debug('ping pong starting...')
             ret = self._get_request(
                 result_url, headers, token=self.token, timeout=timeout)
-            logger.debug(u'ret[code] = %s', ret.get(u'code', u'N/A'))
-            logger.debug(u'ping pong done')
+            logger.debug('ret[code] = %s', ret.get('code', 'N/A'))
+            logger.debug('ping pong done')
 
         return ret
 
     def fetch(self, method, full_url, headers, data=None, timeout=None,
               **kwargs):
-        """ Curried API request with session management. """
+        """Carry ouyt API request with session management."""
 
         class RetryCtx(object):
             def __init__(self, timeout, _include_retry_params=False):
@@ -612,14 +596,12 @@ class SnowflakeRestful(object):
 
     @staticmethod
     def add_request_guid(full_url):
-        """
-        Add request_guid parameter for HTTP request tracing
-        """
+        """Adds request_guid parameter for HTTP request tracing."""
         parsed_url = urlparse(full_url)
         if not parsed_url.hostname.endswith(SNOWFLAKE_HOST_SUFFIX):
             return full_url
         suffix = urlencode({
-            REQUEST_GUID: TO_UNICODE(uuid.uuid4())
+            REQUEST_GUID: str(uuid.uuid4())
         })
         sep = '&' if parsed_url.query else '?'
         # url has query string already, just add fields
@@ -702,10 +684,10 @@ class SnowflakeRestful(object):
                     return {}  # required for tests
             sleeping_time = retry_ctx.next_sleep()
             logger.debug(
-                u'retrying: errorclass=%s, '
-                u'error=%s, '
-                u'counter=%s, '
-                u'sleeping=%s(s)',
+                'retrying: errorclass=%s, '
+                'error=%s, '
+                'counter=%s, '
+                'sleeping=%s(s)',
                 type(cause),
                 cause,
                 retry_ctx.cnt + 1,
@@ -726,16 +708,13 @@ class SnowflakeRestful(object):
         Error.errorhandler_wrapper(
             conn, None, OperationalError,
             {
-                u'msg': u'Failed to execute request: {}'.format(
+                'msg': 'Failed to execute request: {}'.format(
                     cause),
-                u'errno': ER_FAILED_TO_REQUEST,
+                'errno': ER_FAILED_TO_REQUEST,
             })
 
-    def _handle_unknown_error(
-            self, method, full_url, headers, data, conn):
-        """
-        Handle unknown error
-        """
+    def _handle_unknown_error(self, method, full_url, headers, data, conn):
+        """Handles unknown errors."""
         if data:
             try:
                 decoded_data = json.loads(data)
@@ -747,9 +726,9 @@ class SnowflakeRestful(object):
             except Exception:
                 logger.info("data is not JSON")
         logger.error(
-            u'Failed to get the response. Hanging? '
-            u'method: {method}, url: {url}, headers:{headers}, '
-            u'data: {data}'.format(
+            'Failed to get the response. Hanging? '
+            'method: {method}, url: {url}, headers:{headers}, '
+            'data: {data}'.format(
                 method=method,
                 url=full_url,
                 headers=headers,
@@ -759,12 +738,12 @@ class SnowflakeRestful(object):
         Error.errorhandler_wrapper(
             conn, None, OperationalError,
             {
-                u'msg': u'Failed to get the response. Hanging? '
-                        u'method: {method}, url: {url}'.format(
+                'msg': 'Failed to get the response. Hanging? '
+                        'method: {method}, url: {url}'.format(
                     method=method,
                     url=full_url,
                 ),
-                u'errno': ER_FAILED_TO_REQUEST,
+                'errno': ER_FAILED_TO_REQUEST,
             })
 
     def _request_exec(
@@ -785,8 +764,8 @@ class SnowflakeRestful(object):
         try:
             if not catch_okta_unauthorized_error and data and len(data) > 0:
                 gzdata = BytesIO()
-                gzip.GzipFile(fileobj=gzdata, mode=u'wb').write(
-                    data.encode(u'utf-8'))
+                gzip.GzipFile(fileobj=gzdata, mode='wb').write(
+                    data.encode('utf-8'))
                 gzdata.seek(0, 0)
                 headers['Content-Encoding'] = 'gzip'
                 input_data = gzdata
@@ -811,7 +790,7 @@ class SnowflakeRestful(object):
 
             try:
                 if raw_ret.status_code == OK:
-                    logger.debug(u'SUCCESS')
+                    logger.debug('SUCCESS')
                     if is_raw_text:
                         ret = raw_ret.text
                     elif is_raw_binary:
@@ -835,12 +814,12 @@ class SnowflakeRestful(object):
                     Error.errorhandler_wrapper(
                         self._connection, None, DatabaseError,
                         {
-                            u'msg': (u'Failed to get authentication by OKTA: '
-                                     u'{status}: {reason}').format(
+                            'msg': ('Failed to get authentication by OKTA: '
+                                     '{status}: {reason}').format(
                                 status=raw_ret.status_code,
                                 reason=raw_ret.reason),
-                            u'errno': ER_FAILED_TO_CONNECT_TO_DB,
-                            u'sqlstate': SQLSTATE_CONNECTION_REJECTED
+                            'errno': ER_FAILED_TO_CONNECT_TO_DB,
+                            'sqlstate': SQLSTATE_CONNECTION_REJECTED
                         }
                     )
                     return None  # required for tests
@@ -856,14 +835,14 @@ class SnowflakeRestful(object):
                     Error.errorhandler_wrapper(
                         self._connection, None, InterfaceError,
                         {
-                            u'msg': (u"{status} {reason}: "
-                                     u"{method} {url}").format(
+                            'msg': ("{status} {reason}: "
+                                     "{method} {url}").format(
                                 status=raw_ret.status_code,
                                 reason=raw_ret.reason,
                                 method=method,
                                 url=full_url),
-                            u'errno': ER_FAILED_TO_REQUEST,
-                            u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                            'errno': ER_FAILED_TO_REQUEST,
+                            'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
                         }
                     )
                     return None  # required for tests
@@ -914,16 +893,18 @@ class SnowflakeRestful(object):
 
     def make_requests_session(self):
         s = requests.Session()
-        s.mount(u'http://', HTTPAdapter(max_retries=REQUESTS_RETRY))
-        s.mount(u'https://', HTTPAdapter(max_retries=REQUESTS_RETRY))
+        s.mount('http://', HTTPAdapter(max_retries=REQUESTS_RETRY))
+        s.mount('https://', HTTPAdapter(max_retries=REQUESTS_RETRY))
         s._reuse_count = itertools.count()
         return s
 
     @contextlib.contextmanager
     def _use_requests_session(self):
-        """ Session caching context manager.  Note that the session is not
-        closed until close() is called so each session may be used multiple
-        times. """
+        """Session caching context manager.
+
+        Notes:
+            The session is not closed until close() is called so each session may be used multiple times.
+        """
         if self._connection.disable_request_pooling:
             session = self.make_requests_session()
             try:

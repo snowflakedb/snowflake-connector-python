@@ -27,35 +27,35 @@ class JsonResult:
         self._chunk_index = 0
         self._chunk_count = 0
 
-        self._current_chunk_row = iter(data.get(u'rowset'))
-        self._current_chunk_row_count = len(data.get(u'rowset'))
+        self._current_chunk_row = iter(data.get('rowset'))
+        self._current_chunk_row_count = len(data.get('rowset'))
 
         self._column_converter = []
         self._column_idx_to_name = {}
-        for idx, column in enumerate(data[u'rowtype']):
-            self._column_idx_to_name[idx] = column[u'name']
+        for idx, column in enumerate(data['rowtype']):
+            self._column_idx_to_name[idx] = column['name']
             self._column_converter.append(
                 self._connection.converter.to_python_method(
-                    column[u'type'].upper(), column))
+                    column['type'].upper(), column))
 
-        if u'chunks' in data:
-            chunks = data[u'chunks']
+        if 'chunks' in data:
+            chunks = data['chunks']
             self._chunk_count = len(chunks)
-            logger.debug(u'chunk size=%s', self._chunk_count)
+            logger.debug('chunk size=%s', self._chunk_count)
             # prepare the downloader for further fetch
-            qrmk = data[u'qrmk'] if u'qrmk' in data else None
+            qrmk = data['qrmk'] if 'qrmk' in data else None
             chunk_headers = None
-            if u'chunkHeaders' in data:
+            if 'chunkHeaders' in data:
                 chunk_headers = {}
                 for header_key, header_value in data[
-                    u'chunkHeaders'].items():
+                    'chunkHeaders'].items():
                     chunk_headers[header_key] = header_value
                     logger.debug(
-                        u'added chunk header: key=%s, value=%s',
+                        'added chunk header: key=%s, value=%s',
                         header_key,
                         header_value)
 
-            logger.debug(u'qrmk=%s', qrmk)
+            logger.debug('qrmk=%s', qrmk)
             self._chunk_downloader = self._connection._chunk_downloader_class(
                 chunks, self._connection, self._cursor, qrmk, chunk_headers,
                 query_result_format='json',
@@ -77,7 +77,7 @@ class JsonResult:
             except StopIteration:
                 if self._chunk_index < self._chunk_count:
                     logger.debug(
-                        u"chunk index: %s, chunk_count: %s",
+                        "chunk index: %s, chunk_count: %s",
                         self._chunk_index, self._chunk_count)
                     next_chunk = self._chunk_downloader.next_chunk()
                     self._current_chunk_row_count = next_chunk.row_count
@@ -120,8 +120,7 @@ class JsonResult:
                     time_consume_last_result)
 
     def _row_to_python(self, row):
-        """
-        Converts data in row if required.
+        """Converts data in row if required.
 
         NOTE: surprisingly using idx+1 is faster than enumerate here. Also
         removing generator improved performance even better.
@@ -133,9 +132,9 @@ class JsonResult:
                 row[idx] = col if conv is None or col is None else conv(col)
             except Exception as e:
                 col_desc = self._cursor.description[idx]
-                msg = u'Failed to convert: ' \
-                      u'field {name}: {type}::{value}, Error: ' \
-                      u'{error}'.format(
+                msg = 'Failed to convert: ' \
+                      'field {name}: {type}::{value}, Error: ' \
+                      '{error}'.format(
                             name=col_desc[0],
                             type=FIELD_ID_TO_NAME[col_desc[1]],
                             value=col,
@@ -143,8 +142,8 @@ class JsonResult:
                 logger.exception(msg)
                 Error.errorhandler_wrapper(
                     self._connection, self._cursor, InterfaceError, {
-                        u'msg': msg,
-                        u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                        'msg': msg,
+                        'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
                     })
             idx += 1
         return tuple(row)
@@ -155,7 +154,7 @@ class JsonResult:
         self._current_chunk_row = iter(())
         self._chunk_index = 0
 
-        if hasattr(self, u'_chunk_count') and self._chunk_count > 0 and \
+        if hasattr(self, '_chunk_count') and self._chunk_count > 0 and \
                 self._chunk_downloader is not None:
             self._chunk_downloader.terminate()
 
@@ -180,9 +179,9 @@ class DictJsonResult(JsonResult):
                     col)
             except Exception as e:
                 col_desc = self._cursor.description[idx]
-                msg = u'Failed to convert: ' \
-                      u'field {name}: {type}::{value}, Error: ' \
-                      u'{error}'.format(
+                msg = 'Failed to convert: ' \
+                      'field {name}: {type}::{value}, Error: ' \
+                      '{error}'.format(
                     name=col_desc[0],
                     type=FIELD_ID_TO_NAME[col_desc[1]],
                     value=col,
@@ -191,8 +190,8 @@ class DictJsonResult(JsonResult):
                 logger.exception(msg)
                 Error.errorhandler_wrapper(
                     self._connection, self._cursor, InterfaceError, {
-                        u'msg': msg,
-                        u'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                        'msg': msg,
+                        'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
                     })
             idx += 1
         return res

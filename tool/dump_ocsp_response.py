@@ -15,9 +15,7 @@ from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 
 def main():
-    """
-    Internal Tool: OCSP response dumper
-    """
+    """Internal Tool: OCSP response dumper."""
 
     def help():
         print(

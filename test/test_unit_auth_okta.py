@@ -13,9 +13,7 @@ from snowflake.connector.network import SnowflakeRestful
 
 
 def test_auth_okta():
-    """
-    Authentication by OKTA positive test case
-    """
+    """Authentication by OKTA positive test case."""
     authenticator = 'https://testsso.snowflake.net/'
     application = 'testapplication'
     account = 'testaccount'
@@ -80,9 +78,7 @@ def test_auth_okta():
 
 
 def test_auth_okta_step1_negative():
-    """
-    Authentication by OKTA step1 negative test case
-    """
+    """Authentication by OKTA step1 negative test case."""
     authenticator = 'https://testsso.snowflake.net/'
     application = 'testapplication'
     account = 'testaccount'
@@ -102,9 +98,7 @@ def test_auth_okta_step1_negative():
 
 
 def test_auth_okta_step2_negative():
-    """
-    Authentication by OKTA step2 negative test case
-    """
+    """Authentication by OKTA step2 negative test case."""
     authenticator = 'https://testsso.snowflake.net/'
     application = 'testapplication'
     account = 'testaccount'
@@ -139,9 +133,7 @@ def test_auth_okta_step2_negative():
 
 
 def test_auth_okta_step3_negative():
-    """
-    Authentication by OKTA step3 negative test case
-    """
+    """Authentication by OKTA step3 negative test case."""
     authenticator = 'https://testsso.snowflake.net/'
     application = 'testapplication'
     account = 'testaccount'
@@ -173,9 +165,7 @@ def test_auth_okta_step3_negative():
 
 
 def test_auth_okta_step5_negative():
-    """
-    Authentication by OKTA step5 negative test case
-    """
+    """Authentication by OKTA step5 negative test case."""
     authenticator = 'https://testsso.snowflake.net/'
     application = 'testapplication'
     account = 'testaccount'
