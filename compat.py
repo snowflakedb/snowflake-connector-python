@@ -31,6 +31,7 @@ except Exception:
 
 GET_CWD = os.getcwd
 BASE_EXCEPTION_CLASS = Exception
+TO_UNICODE = str
 ITERATOR = collections.abc.Iterator
 MAPPING = collections.abc.Mapping
 
