@@ -181,7 +181,6 @@ setup(
         'pyOpenSSL>=16.2.0,<21.0.0',
         'cffi>=1.9,<1.14',
         'cryptography>=2.5.0,<3.0.0',
-        'ijson<3.0.0',
         'pyjwt<2.0.0',
         'idna<2.10',
         'oscrypto<2.0.0',

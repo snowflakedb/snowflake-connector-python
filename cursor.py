@@ -447,7 +447,7 @@ class SnowflakeCursor(object):
             _statement_params: Extra information that should be sent to Snowflake with query.
             _no_results: This flag tells the back-end to not return the result, just fire the query and return the
                 query id of the running query.
-            _use_ijson: Use ijson to load results. This will use less memory, but it will make execution a lot slower.
+            _use_ijson: This flag doesn't do anything as ijson support has ended.
             _is_put_get: Force decision of this SQL query being a PUT, or GET command. This is detected otherwise.
             _raise_put_get_error: Whether to raise PUT and GET errors.
             _force_put_overwrite: If the SQL query is a PUT, then this flag can force overwriting of an already
