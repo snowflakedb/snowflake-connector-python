@@ -632,7 +632,24 @@ class SnowflakeConnection(object):
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
         logger.debug('__config')
-        for name, value in kwargs.items():
+        # Handle special cases first
+        if 'sequence_counter' in kwargs:
+            self.sequence_counter = kwargs['sequence_counter']
+        if 'application' in kwargs:
+            value = kwargs['application']
+            if not APPLICATION_RE.match(value):
+                msg = 'Invalid application name: {}'.format(value)
+                raise ProgrammingError(
+                    msg=msg,
+                    errno=0
+                )
+            else:
+                self._application = value
+        if 'validate_default_parameters' in kwargs:
+            self._validate_default_parameters = kwargs['validate_default_parameters']
+        # Handle rest of arguments
+        skip_list = ['validate_default_parameters', 'sequence_counter', 'application']
+        for name, value in filter(lambda e: e[0] not in skip_list, kwargs.items()):
             if self.validate_default_parameters:
                 if name not in DEFAULT_CONFIGURATION.keys():
                     close_matches = get_close_matches(name, DEFAULT_CONFIGURATION.keys(), n=1, cutoff=0.8)
@@ -650,19 +667,7 @@ class SnowflakeConnection(object):
                         else accepted_types.__name__,
                         type(value).__name__
                     ))
-            if name == 'sequence_counter':
-                self.sequence_counter = value
-            elif name == 'application':
-                if not APPLICATION_RE.match(value):
-                    msg = 'Invalid application name: {}'.format(value)
-                    raise ProgrammingError(
-                        msg=msg,
-                        errno=0
-                    )
-                else:
-                    setattr(self, '_' + name, value)
-            else:
-                setattr(self, '_' + name, value)
+            setattr(self, '_' + name, value)
 
         if self._numpy:
             try:
