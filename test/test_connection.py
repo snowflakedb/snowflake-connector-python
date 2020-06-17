@@ -7,7 +7,6 @@
 import os
 import queue
 import threading
-import warnings
 
 import mock
 import pytest
@@ -697,90 +696,3 @@ def test_dashed_url_account_name(db_parameters):
             assert cnx
             cnx.commit = cnx.rollback = lambda: None  # Skip tear down, there's only a mocked rest api
             assert any([c.args[1].startswith('https://test-account.snowflakecomputing.com:443') for c in mocked_fetch.call_args_list])
-
-
-@pytest.mark.parametrize('name,value,exc_warn', [
-    # Not existing parameter
-    ('no_such_parameter', True, UserWarning("'no_such_parameter' is an unknown connection parameter")),
-    # Typo in parameter name
-    ('applucation', True, UserWarning("'applucation' is an unknown connection parameter, did you mean 'application'?")),
-    # Single type error
-    ('support_negative_year', "True", UserWarning("'support_negative_year' connection parameter should be of type "
-                                                  "'bool', but is a 'str'")),
-    # Multiple possible type error
-    ('autocommit', "True", UserWarning("'autocommit' connection parameter should be of type "
-                                       "'(NoneType, bool)', but is a 'str'")),
-])
-def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
-    with warnings.catch_warnings(record=True) as w:
-        conn_params = {
-            'account': db_parameters['account'],
-            'user': db_parameters['user'],
-            'password': db_parameters['password'],
-            'schema': db_parameters['schema'],
-            'database': db_parameters['database'],
-            'protocol': db_parameters['protocol'],
-            'host': db_parameters['host'],
-            'port': db_parameters['port'],
-            'validate_default_parameters': True,
-            name: value
-        }
-        try:
-            conn = snowflake.connector.connect(**conn_params)
-            assert getattr(conn, '_' + name) == value
-            assert len(w) == 1
-            assert str(w[0].message) == str(exc_warn)
-        finally:
-            conn.close()
-
-
-def test_invalid_connection_parameters_turned_off(db_parameters):
-    """Makes sure parameter checking can be turned off."""
-    with warnings.catch_warnings(record=True) as w:
-        conn_params = {
-            'account': db_parameters['account'],
-            'user': db_parameters['user'],
-            'password': db_parameters['password'],
-            'schema': db_parameters['schema'],
-            'database': db_parameters['database'],
-            'protocol': db_parameters['protocol'],
-            'host': db_parameters['host'],
-            'port': db_parameters['port'],
-            'validate_default_parameters': False,
-            'autocommit': "True",  # Wrong type
-            'applucation': "this is a typo or my own variable",  # Wrong name
-        }
-        try:
-            conn = snowflake.connector.connect(**conn_params)
-            assert conn._autocommit == conn_params['autocommit']
-            assert conn._applucation == conn_params['applucation']
-            assert len(w) == 0
-        finally:
-            conn.close()
-
-
-def test_invalid_connection_parameters_only_warns(db_parameters):
-    """This test supresses warnings to only have warehouse, database and schema checking."""
-    with warnings.catch_warnings(record=True) as w:
-        conn_params = {
-            'account': db_parameters['account'],
-            'user': db_parameters['user'],
-            'password': db_parameters['password'],
-            'schema': db_parameters['schema'],
-            'database': db_parameters['database'],
-            'protocol': db_parameters['protocol'],
-            'host': db_parameters['host'],
-            'port': db_parameters['port'],
-            'validate_default_parameters': True,
-            'autocommit': "True",  # Wrong type
-            'applucation': "this is a typo or my own variable",  # Wrong name
-        }
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                conn = snowflake.connector.connect(**conn_params)
-            assert conn._autocommit == conn_params['autocommit']
-            assert conn._applucation == conn_params['applucation']
-            assert len(w) == 0
-        finally:
-            conn.close()
