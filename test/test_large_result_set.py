@@ -101,7 +101,6 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
             datum)
         cnx._telemetry.add_log_to_batch = add_log_mock
 
-        # large result set fetch in ijson mode
         result2 = []
         for rec in cnx.cursor().execute(sql):
             result2.append(rec)
