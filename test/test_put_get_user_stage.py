@@ -137,6 +137,7 @@ credentials=(
                     name=db_parameters['name']))
 
 
+@pytest.mark.flaky(reruns=3)
 def test_put_get_duplicated_data_user_stage(is_public_test, tmpdir, test_files, conn_cnx,
                                             db_parameters,
                                             number_of_files=5,
