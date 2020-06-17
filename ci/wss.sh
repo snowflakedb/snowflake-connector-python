@@ -38,19 +38,16 @@ pip install -U pip virtualenv >& /dev/null
 export PRODUCT_NAME=snowflake-connector-python
 
 export PROD_BRANCH=master
-export PROJECT_VERSION=$GITHUB_SHA
+export PROJECT_VERSION=$TRAVIS_COMMIT
 
 env | grep TRAVIS | sort
 
-if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+if [[ "$TRAVIS_PULL_REQUEST" != "false" ]]; then
     echo "[INFO] Pull Request"
-    IFS="/"
-    read -ra GITHUB_REF_ELEMS <<<"$GITHUB_REF"
-    IFS=" "
-    export PROJECT_NAME=PR-${GITHUB_REF_ELEMS[2]}
-elif [[ "$GITHUB_HEAD_REF" == "$PROD_BRANCH" ]]; then
+    export PROJECT_NAME=PR-$TRAVIS_PULL_REQUEST
+elif [[ "$TRAVIS_BRANCH" == "$PROD_BRANCH" ]]; then
     echo "[INFO] Production branch"
-    export PROJECT_NAME=$GITHUB_HEAD_REF
+    export PROJECT_NAME=$PROD_BRANCH
 else
     echo "[INFO] Non Production branch. Skipping wss..."
     export PROJECT_NAME=
@@ -154,20 +151,7 @@ CONFIG
 
 set +e
 echo "[INFO] Running wss.sh for ${PRODUCT_NAME}-${PROJECT_NAME} under ${SCAN_DIRECTORIES}"
-if [[ -n "$PROJECT_NAME" ]] && [[ "$PROJECT_NAME" != "$PROD_BRANCH" ]]; then
-    # PR
-    java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
-        -c ${SCAN_CONFIG} \
-        -d ${SCAN_DIRECTORIES} \
-        -product ${PRODUCT_NAME} \
-        -project ${PROJECT_NAME} \
-        -projectVersion ${PROJECT_VERSION}
-    ERR=$?
-    if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
-        echo "failed to run wss for $PRODUCT_VERSION_${PROJECT_VERSION} in ${PROJECT_VERSION}..."
-        exit 1
-    fi
-elif [[ -n "$PROJECT_NAME" ]]; then
+if [[ "$PROJECT_NAME" == "$PROD_BRANCH" ]]; then
     # Prod branch
     java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
         -c ${SCAN_CONFIG} \
@@ -202,6 +186,19 @@ elif [[ -n "$PROJECT_NAME" ]]; then
     ERR=$?
     if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
         echo "failed to run wss for $PRODUCT_VERSION_${PROJECT_VERSION} in ${PROJECT_VERSION}"
+        exit 1
+    fi
+elif [[ -n "$PROJECT_NAME" ]]; then
+    # PR
+    java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
+        -c ${SCAN_CONFIG} \
+        -d ${SCAN_DIRECTORIES} \
+        -product ${PRODUCT_NAME} \
+        -project ${PROJECT_NAME} \
+        -projectVersion ${PROJECT_VERSION}
+    ERR=$?
+    if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
+        echo "failed to run wss for $PRODUCT_VERSION_${PROJECT_VERSION} in ${PROJECT_VERSION}..."
         exit 1
     fi
 fi
