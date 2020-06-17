@@ -64,8 +64,7 @@ def test_simple_sql():
 
 
 def test_multiple_line_sql():
-    s = """select /* test */ 1; -- test comment
-select 23;"""
+    s = "select /* test */ 1; -- test comment\nselect 23;"
 
     with StringIO(s) as f:
         itr = split_statements(f)
@@ -164,8 +163,7 @@ select 23; /* test comment 2
 
 
 def test_quotes():
-    s = """select 'hello', 1; -- test comment
-select 23,'hello"""
+    s = "select 'hello', 1; -- test comment\nselect 23,'hello"
 
     with StringIO(s) as f:
         itr = split_statements(f)
@@ -236,9 +234,7 @@ select "23,'','hello" """
 
 
 def test_quotes_in_comments():
-    s = """select 'hello'; -- test comment 'hello2' in comment
-/* comment 'quote'*/ select true
-"""
+    s = "select 'hello'; -- test comment 'hello2' in comment\n/* comment 'quote'*/ select true\n"
     with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
@@ -250,13 +246,13 @@ def test_quotes_in_comments():
 
 
 def test_backslash():
+    """Tests backslash in a literal.
+
+    Notes:
+        The backslash is escaped in a Python string literal. Double backslashes in a string literal represents a
+        single backslash.
     """
-    Test backslash in a literal.
-    Note the backslash is escaped in a Python string literal. Double backslashes
-    in a string literal represents a single backslash.
-    """
-    s = """select 'hello\\\\', 1; -- test comment
-select 23,'\nhello"""
+    s = "select 'hello\\\\', 1; -- test comment\nselect 23,'\nhello"
 
     with StringIO(s) as f:
         itr = split_statements(f)
@@ -274,8 +270,7 @@ select 23,'\nhello"""
 
 
 def test_file_with_slash_star():
-    s = """put file:///tmp/* @%tmp;
-ls @%tmp;"""
+    s = "put file:///tmp/* @%tmp;\nls @%tmp;"
 
     with StringIO(s) as f:
         itr = split_statements(f)
@@ -458,9 +453,7 @@ select 1;
 
 
 def test_comment_in_values():
-    """
-    SNOW-51297: SnowSQL -o remove_comments=True breaks the query
-    """
+    """SNOW-51297: SnowSQL -o remove_comments=True breaks the query."""
     # no space before a comment
     s = """INSERT INTO foo
 VALUES (/*TIMEOUT*/ 10);"""

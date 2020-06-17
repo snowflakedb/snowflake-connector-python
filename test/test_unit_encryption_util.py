@@ -17,10 +17,7 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 
 
 def test_encrypt_decrypt_file():
-    """
-    Encrypt and Decrypt a file
-    """
-
+    """Encrypts and Decrypts a file."""
     encryption_material = SnowflakeFileEncryptionMaterial(
         query_stage_master_key='ztke8tIdVt1zmlQIZm0BMA==',
         query_id='123873c7-3a66-40c4-ab89-e3722fbccce1',
@@ -53,9 +50,7 @@ def test_encrypt_decrypt_file():
 
 
 def test_encrypt_decrypt_large_file(tmpdir, test_files):
-    """
-    Encrypt and Decrypt a large file
-    """
+    """Encrypts and Decrypts a large file."""
     encryption_material = SnowflakeFileEncryptionMaterial(
         query_stage_master_key='ztke8tIdVt1zmlQIZm0BMA==',
         query_id='123873c7-3a66-40c4-ab89-e3722fbccce1',

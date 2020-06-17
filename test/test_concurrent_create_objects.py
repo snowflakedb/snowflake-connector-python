@@ -9,7 +9,6 @@ from logging import getLogger
 import pytest
 
 from snowflake.connector import ProgrammingError
-from snowflake.connector.compat import TO_UNICODE
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -56,9 +55,7 @@ def _test_snow5871(conn_cnx,
                    rt_max_burst_size=1,
                    rt_max_borrowing_limt=1000,
                    rt_reset_period=10000):
-    """
-    SNOW-5871: rate limiting for creation of non-recycable objects
-    """
+    """SNOW-5871: rate limiting for creation of non-recycable objects."""
     logger.debug((
         'number_of_threads = %s, rt_max_outgoing_rate = %s, '
         'rt_max_burst_size = %s, rt_max_borrowing_limt = %s, '
@@ -83,10 +80,10 @@ alter system set
                     name=db_parameters['name']))
             meta = []
             for i in range(number_of_threads):
-                meta.append({'idx': TO_UNICODE(i + 1),
+                meta.append({'idx': str(i + 1),
                              'cnx': cnx,
                              'name': db_parameters[
-                                         'name'] + 'tbl_5871_' + TO_UNICODE(
+                                         'name'] + 'tbl_5871_' + str(
                                  i + 1)})
             pool = ThreadPoolExecutor(number_of_threads)
             results = list(pool.map(_create_a_table, meta))

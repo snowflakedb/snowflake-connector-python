@@ -36,9 +36,7 @@ def _init_rest(application, post_requset):
 
 
 def _mock_auth_mfa_rest_response(url, headers, body, **kwargs):
-    """
-    Success case
-    """
+    """Tests successful case."""
     global mock_cnt
     _ = url
     _ = headers
@@ -46,20 +44,20 @@ def _mock_auth_mfa_rest_response(url, headers, body, **kwargs):
     _ = kwargs.get('dummy')
     if mock_cnt == 0:
         ret = {
-            u'success': True,
-            u'message': None,
-            u'data': {
-                u'nextAction': u'EXT_AUTHN_DUO_ALL',
-                u'inFlightCtx': u'inFlightCtx',
+            'success': True,
+            'message': None,
+            'data': {
+                'nextAction': 'EXT_AUTHN_DUO_ALL',
+                'inFlightCtx': 'inFlightCtx',
             }
         }
     elif mock_cnt == 1:
         ret = {
-            u'success': True,
-            u'message': None,
-            u'data': {
-                u'token': u'TOKEN',
-                u'masterToken': u'MASTER_TOKEN',
+            'success': True,
+            'message': None,
+            'data': {
+                'token': 'TOKEN',
+                'masterToken': 'MASTER_TOKEN',
             }
         }
 
@@ -68,9 +66,7 @@ def _mock_auth_mfa_rest_response(url, headers, body, **kwargs):
 
 
 def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
-    """
-    Failure case
-    """
+    """Tests failed case."""
     global mock_cnt
     _ = url
     _ = headers
@@ -79,20 +75,20 @@ def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
 
     if mock_cnt == 0:
         ret = {
-            u'success': True,
-            u'message': None,
-            u'data': {
-                u'nextAction': u'EXT_AUTHN_DUO_ALL',
-                u'inFlightCtx': u'inFlightCtx',
+            'success': True,
+            'message': None,
+            'data': {
+                'nextAction': 'EXT_AUTHN_DUO_ALL',
+                'inFlightCtx': 'inFlightCtx',
             }
         }
     elif mock_cnt == 1:
         ret = {
-            u'success': True,
-            u'message': None,
-            u'data': {
-                u'nextAction': u'BAD',
-                u'inFlightCtx': u'inFlightCtx',
+            'success': True,
+            'message': None,
+            'data': {
+                'nextAction': 'BAD',
+                'inFlightCtx': 'inFlightCtx',
             }
         }
 
@@ -101,9 +97,7 @@ def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
 
 
 def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
-    """
-    Timeout case
-    """
+    """Tests timeout case."""
     global mock_cnt
     _ = url
     _ = headers
@@ -111,11 +105,11 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
     _ = kwargs.get('dummy')
     if mock_cnt == 0:
         ret = {
-            u'success': True,
-            u'message': None,
-            u'data': {
-                u'nextAction': u'EXT_AUTHN_DUO_ALL',
-                u'inFlightCtx': u'inFlightCtx',
+            'success': True,
+            'message': None,
+            'data': {
+                'nextAction': 'EXT_AUTHN_DUO_ALL',
+                'inFlightCtx': 'inFlightCtx',
             }
         }
     elif mock_cnt == 1:
@@ -127,9 +121,7 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
 
 
 def test_auth_mfa():
-    """
-    Authentication by MFA
-    """
+    """Authentication by MFA."""
     global mock_cnt
     application = 'testapplication'
     account = 'testaccount'
@@ -164,9 +156,7 @@ def test_auth_mfa():
 
 
 def _mock_auth_password_change_rest_response(url, headers, body, **kwargs):
-    """
-    Success case
-    """
+    """Test successful case."""
     global mock_cnt
     _ = url
     _ = headers
@@ -174,20 +164,20 @@ def _mock_auth_password_change_rest_response(url, headers, body, **kwargs):
     _ = kwargs.get('dummy')
     if mock_cnt == 0:
         ret = {
-            u'success': True,
-            u'message': None,
-            u'data': {
-                u'nextAction': u'PWD_CHANGE',
-                u'inFlightCtx': u'inFlightCtx',
+            'success': True,
+            'message': None,
+            'data': {
+                'nextAction': 'PWD_CHANGE',
+                'inFlightCtx': 'inFlightCtx',
             }
         }
     elif mock_cnt == 1:
         ret = {
-            u'success': True,
-            u'message': None,
-            u'data': {
-                u'token': u'TOKEN',
-                u'masterToken': u'MASTER_TOKEN',
+            'success': True,
+            'message': None,
+            'data': {
+                'token': 'TOKEN',
+                'masterToken': 'MASTER_TOKEN',
             }
         }
 
@@ -196,9 +186,7 @@ def _mock_auth_password_change_rest_response(url, headers, body, **kwargs):
 
 
 def test_auth_password_change():
-    """
-    Password change
-    """
+    """Tests password change."""
     global mock_cnt
 
     def _password_callback():

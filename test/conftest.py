@@ -12,11 +12,11 @@ from logging import getLogger
 from typing import Callable, Generator
 
 import pytest
-from generate_test_files import generate_k_lines_of_n_files
 
 import snowflake.connector
+from generate_test_files import generate_k_lines_of_n_files
 from parameters import CONNECTION_PARAMETERS
-from snowflake.connector.compat import IS_WINDOWS, TO_UNICODE
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DefaultConverterClass
 
 MYPY = False
@@ -51,7 +51,7 @@ if os.getenv('TRAVIS') == 'true':
 elif os.getenv('APPVEYOR') == 'True':
     TEST_SCHEMA = 'APPVEYOR_JOB_{}'.format(os.getenv('APPVEYOR_BUILD_ID'))
 else:
-    TEST_SCHEMA = 'python_connector_tests_' + TO_UNICODE(uuid.uuid4()).replace(
+    TEST_SCHEMA = 'python_connector_tests_' + str(uuid.uuid4()).replace(
         '-', '_')
 
 DEFAULT_PARAMETERS = {
@@ -97,9 +97,7 @@ def db_parameters():
 
 
 def get_db_parameters():
-    """
-    Sets the db connection parameters
-    """
+    """Sets the db connection parameters."""
     ret = {}
     os.environ['TZ'] = 'UTC'
     if not IS_WINDOWS:
@@ -149,7 +147,7 @@ def get_db_parameters():
         sys.exit(2)
 
     # a unique table name
-    ret['name'] = 'python_tests_' + TO_UNICODE(uuid.uuid4()).replace('-', '_')
+    ret['name'] = 'python_tests_' + str(uuid.uuid4()).replace('-', '_')
     ret['name_wh'] = ret['name'] + 'wh'
 
     ret['schema'] = TEST_SCHEMA
@@ -177,10 +175,7 @@ def get_db_parameters():
 
 @pytest.fixture(scope='session', autouse=True)
 def init_test_schema(request, db_parameters):
-    """
-    Initializes and Deinitializes the test schema
-    This is automatically called per test session.
-    """
+    """Initializes and Deinitializes the test schema. This is automatically called per test session."""
     ret = db_parameters
     with snowflake.connector.connect(
             user=ret['user'],
@@ -263,9 +258,7 @@ def init_test_schema(request, db_parameters):
 
 
 def create_connection(**kwargs) -> 'SnowflakeConnection':
-    """
-    Creates a connection using the parameters defined in JDBC connect string
-    """
+    """Creates a connection using the parameters defined in parameters.py."""
     ret = get_db_parameters()
     ret.update(kwargs)
     connection = snowflake.connector.connect(**ret)
@@ -274,10 +267,10 @@ def create_connection(**kwargs) -> 'SnowflakeConnection':
 
 @contextmanager
 def db(**kwargs) -> Generator['SnowflakeConnection', None, None]:
-    if not kwargs.get(u'timezone'):
-        kwargs[u'timezone'] = u'UTC'
-    if not kwargs.get(u'converter_class'):
-        kwargs[u'converter_class'] = DefaultConverterClass()
+    if not kwargs.get('timezone'):
+        kwargs['timezone'] = 'UTC'
+    if not kwargs.get('converter_class'):
+        kwargs['converter_class'] = DefaultConverterClass()
     cnx = create_connection(**kwargs)
     try:
         yield cnx
@@ -287,10 +280,10 @@ def db(**kwargs) -> Generator['SnowflakeConnection', None, None]:
 
 @contextmanager
 def negative_db(**kwargs):
-    if not kwargs.get(u'timezone'):
-        kwargs[u'timezone'] = u'UTC'
-    if not kwargs.get(u'converter_class'):
-        kwargs[u'converter_class'] = DefaultConverterClass()
+    if not kwargs.get('timezone'):
+        kwargs['timezone'] = 'UTC'
+    if not kwargs.get('converter_class'):
+        kwargs['converter_class'] = DefaultConverterClass()
     cnx = create_connection(**kwargs)
     if not is_public_testaccount():
         cnx.cursor().execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
@@ -318,9 +311,7 @@ def conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
 
 @pytest.fixture()
 def negative_conn_cnx():
-    """
-    Use this if an incident is expected and we don't want GS to create a
-    dump file about the incident"""
+    """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
     return negative_db
 
 

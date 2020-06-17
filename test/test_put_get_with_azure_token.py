@@ -31,9 +31,7 @@ pytestmark = [pytest.mark.azure, pytest.mark.putget]
     reason="Snowflake admin account is not accessible."
 )
 def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
-    """
-    [azure] Put and Get a small text using Azure
-    """
+    """[azure] Puts and Gets a small text using Azure."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_azure_token.txt.gz'))
     with gzip.open(fname, 'wb') as f:
@@ -55,7 +53,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
                     "put file://{} @%snow32806 auto_compress=true parallel=30".format(
                         fname))
                 rec = csr.fetchone()
-                assert rec[6] == u'UPLOADED'
+                assert rec[6] == 'UPLOADED'
                 csr.execute("copy into snow32806")
                 csr.execute(
                     "copy into @~/snow32806 from snow32806 "
@@ -68,8 +66,8 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
                 assert rec[0].startswith(
                     'snow32806'), 'A file downloaded by GET'
                 assert rec[1] == 36, 'Return right file size'
-                assert rec[2] == u'DOWNLOADED', 'Return DOWNLOADED status'
-                assert rec[3] == u'', 'Return no error message'
+                assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
+                assert rec[3] == '', 'Return no error message'
             finally:
                 csr.execute("drop table snow32806")
                 csr.execute("rm @~/snow32806")
@@ -86,9 +84,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    [azure] Put and Copy many files
-    """
+    """[azure] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
@@ -120,7 +116,7 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
             """)
             try:
                 all_recs = run(csr, "put file://{files} @%{name}")
-                assert all([rec[6] == u'UPLOADED' for rec in all_recs])
+                assert all([rec[6] == 'UPLOADED' for rec in all_recs])
                 run(csr, "copy into {name}")
 
                 rows = sum([rec[0] for rec in run(csr, "select count(*) from "
@@ -137,9 +133,7 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
 )
 def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
                                          db_parameters):
-    """
-    [azure] Put and Copy duplicated files
-    """
+    """[azure] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
     number_of_lines = 100
@@ -218,9 +212,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
     reason="Snowflake admin account is not accessible."
 )
 def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    [azure] Put and Get Large files
-    """
+    """[azure] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
     tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
@@ -253,7 +245,7 @@ def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
             password=db_parameters['azure_password']) as cnx:
         try:
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
-            assert all([rec[6] == u'UPLOADED' for rec in all_recs])
+            assert all([rec[6] == 'UPLOADED' for rec in all_recs])
 
             for _ in range(60):
                 for _ in range(100):

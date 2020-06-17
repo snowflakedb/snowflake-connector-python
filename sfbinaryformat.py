@@ -12,9 +12,7 @@ binary_to_python = b16decode
 
 
 def binary_to_snowflake(binary_value):
-    """
-    Encodes a "bytes" object for passing to Snowflake.
-    """
+    """Encodes a "bytes" object for passing to Snowflake."""
     result = b16encode(binary_value)
 
     if isinstance(binary_value, bytearray):
@@ -23,22 +21,18 @@ def binary_to_snowflake(binary_value):
 
 
 class SnowflakeBinaryFormat(object):
-    """
-    Formats binary values ("bytes" objects) in hex or base64.
-    """
+    """Formats binary values ("bytes" objects) in hex or base64."""
 
     def __init__(self, name):
         name = name.upper()
-        if name == u'HEX':
+        if name == 'HEX':
             self._encode = b16encode
-        elif name == u'BASE64':
+        elif name == 'BASE64':
             self._encode = standard_b64encode
         else:
             raise InternalError(
-                u'Unrecognized binary format {}'.format(name))
+                'Unrecognized binary format {}'.format(name))
 
     def format(self, binary_value):
-        """
-        Formats a "bytes" object, returning a string.
-        """
+        """Formats a "bytes" object, returning a string."""
         return self._encode(binary_value).decode('ascii')

@@ -15,10 +15,7 @@ from snowflake.connector.compat import IS_MACOS
 def test_connect_externalbrowser(
         mockSnowflakeRestfulPostRequest,
         mockAuthByBrowserAuthenticate):
-    """
-    Connect with authentictor=externalbrowser mock.
-    """
-
+    """Connects with authentictor=externalbrowser mock."""
     os.environ['SF_TEMPORARY_CREDENTIAL_CACHE_DIR'] = os.getenv(
         "WORKSPACE", os.path.expanduser("~"))
 
@@ -28,47 +25,47 @@ def test_connect_externalbrowser(
         if mock_post_req_cnt == 0:
             # return from /v1/login-request
             ret = {
-                u'success': True,
-                u'message': None,
-                u'data': {
-                    u'token': u'TOKEN',
-                    u'masterToken': u'MASTER_TOKEN',
-                    u'idToken': u'ID_TOKEN',
+                'success': True,
+                'message': None,
+                'data': {
+                    'token': 'TOKEN',
+                    'masterToken': 'MASTER_TOKEN',
+                    'idToken': 'ID_TOKEN',
                 }}
         elif mock_post_req_cnt == 1:
             # return from /token-request
             ret = {
-                u'success': True,
-                u'message': None,
-                u'data': {
-                    u'sessionToken': u'NEW_TOKEN',
+                'success': True,
+                'message': None,
+                'data': {
+                    'sessionToken': 'NEW_TOKEN',
                 }}
         elif mock_post_req_cnt == 2:
             # return from USE WAREHOUSE TESTWH_NEW
             ret = {
-                u'success': True,
-                u'message': None,
-                u'data': {
-                    u'finalDatabase': 'TESTDB',
-                    u'finalWarehouse': 'TESTWH_NEW',
+                'success': True,
+                'message': None,
+                'data': {
+                    'finalDatabase': 'TESTDB',
+                    'finalWarehouse': 'TESTWH_NEW',
                 }}
         elif mock_post_req_cnt == 3:
             # return from USE DATABASE TESTDB_NEW
             ret = {
-                u'success': True,
-                u'message': None,
-                u'data': {
-                    u'finalDatabase': 'TESTDB_NEW',
-                    u'finalWarehouse': 'TESTWH_NEW',
+                'success': True,
+                'message': None,
+                'data': {
+                    'finalDatabase': 'TESTDB_NEW',
+                    'finalWarehouse': 'TESTWH_NEW',
                 }}
         elif mock_post_req_cnt == 4:
             # return from SELECT 1
             ret = {
-                u'success': True,
-                u'message': None,
-                u'data': {
-                    u'finalDatabase': 'TESTDB_NEW',
-                    u'finalWarehouse': 'TESTWH_NEW',
+                'success': True,
+                'message': None,
+                'data': {
+                    'finalDatabase': 'TESTDB_NEW',
+                    'finalWarehouse': 'TESTWH_NEW',
                 }}
         mock_post_req_cnt += 1
         return ret
@@ -110,9 +107,9 @@ def test_connect_externalbrowser(
             warehouse='TESTWH',
             client_store_temporary_credential=True,
         )
-        assert con._rest.token == u'TOKEN'
-        assert con._rest.master_token == u'MASTER_TOKEN'
-        assert con._rest.id_token == u'ID_TOKEN'
+        assert con._rest.token == 'TOKEN'
+        assert con._rest.master_token == 'MASTER_TOKEN'
+        assert con._rest.id_token == 'ID_TOKEN'
 
         # second connection that uses the id token to get the session token
         con = snowflake.connector.connect(
@@ -125,7 +122,7 @@ def test_connect_externalbrowser(
             client_store_temporary_credential=True,
         )
 
-        assert con._rest.token == u'NEW_TOKEN'
+        assert con._rest.token == 'NEW_TOKEN'
         assert con._rest.master_token is None
         assert con._rest.id_token == 'ID_TOKEN'
         assert con.database == 'TESTDB_NEW'

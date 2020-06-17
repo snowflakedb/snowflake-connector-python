@@ -63,9 +63,7 @@ def _check_results(cursor, results):
 
 
 def test_insert_select(conn, db_parameters):
-    """
-    Inserts and selects integer data
-    """
+    """Inserts and selects integer data."""
     with conn() as cnx:
         c = cnx.cursor()
         try:
@@ -102,9 +100,7 @@ def test_insert_select(conn, db_parameters):
 
 def test_insert_and_select_by_separate_connection(
         conn, db_parameters):
-    """
-    Insert a record and select it by a separate connection.
-    """
+    """Inserts a record and select it by a separate connection."""
     with conn() as cnx:
         result = cnx.cursor().execute(
             "insert into {name}(aa) values({value})".format(
@@ -140,25 +136,21 @@ def test_insert_and_select_by_separate_connection(
 
 
 def _total_milliseconds_from_timedelta(td):
-    """
-    Returns the total number of milliseconds contained in the duration object.
-    """
+    """Returns the total number of milliseconds contained in the duration object."""
     return (td.microseconds + (
         td.seconds + td.days * 24 * 3600) * 10 ** 6) // 10 ** 3
 
 
 def _total_seconds_from_timedelta(td):
-    """
-    Returns the total number of seconds contained in the duration object.
-    """
+    """Returns the total number of seconds contained in the duration object."""
     return _total_milliseconds_from_timedelta(td) // 10 ** 3
 
 
 def test_insert_timestamp_select(conn, db_parameters):
-    """
-    Insert and get timestamp, timestamp with tz, date, and time.
+    """Inserts and gets timestamp, timestamp with tz, date, and time.
 
-    Currently the session parameter TIMEZONE is ignored
+    Notes:
+        Currently the session parameter TIMEZONE is ignored.
     """
     PST_TZ = "America/Los_Angeles"
     JST_TZ = "Asia/Tokyo"
@@ -271,9 +263,7 @@ def test_insert_timestamp_select(conn, db_parameters):
 
 
 def test_insert_timestamp_ltz(conn, db_parameters):
-    """
-    Inserts and retrieve timestamp ltz
-    """
+    """Inserts and retrieve timestamp ltz."""
     tzstr = 'America/New_York'
     # sync with the session parameter
     with conn() as cnx:
@@ -316,9 +306,7 @@ def test_insert_timestamp_ltz(conn, db_parameters):
 
 
 def test_struct_time(conn, db_parameters):
-    """
-    Binds struct_time object for updating timestamp
-    """
+    """Binds struct_time object for updating timestamp."""
     tzstr = 'America/New_York'
     os.environ['TZ'] = tzstr
     if not IS_WINDOWS:
@@ -365,9 +353,7 @@ def test_struct_time(conn, db_parameters):
 
 
 def test_insert_binary_select(conn, db_parameters):
-    """
-    Insert and get a binary value.
-    """
+    """Inserts and get a binary value."""
     value = b'\x00\xFF\xA1\xB2\xC3'
 
     with conn() as cnx:
@@ -408,9 +394,7 @@ def test_insert_binary_select(conn, db_parameters):
 
 
 def test_insert_binary_select_with_bytearray(conn, db_parameters):
-    """
-    Insert and get a binary value using the bytearray type.
-    """
+    """Inserts and get a binary value using the bytearray type."""
     value = bytearray(b'\x00\xFF\xA1\xB2\xC3')
 
     with conn() as cnx:
@@ -451,9 +435,7 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
 
 
 def test_variant(conn, db_parameters):
-    """Variant including JSON object
-    """
-
+    """Variant including JSON object."""
     name_variant = db_parameters['name'] + "_variant"
     with conn() as cnx:
         cnx.cursor().execute("""
@@ -498,7 +480,10 @@ created_at timestamp, data variant)
 
 
 def test_callproc(conn_cnx):
-    """Callproc. nop as of now
+    """Callproc test.
+
+    Notes:
+        It's a nop as of now.
     """
     with conn_cnx() as cnx:
         with pytest.raises(errors.NotSupportedError):
@@ -506,8 +491,7 @@ def test_callproc(conn_cnx):
 
 
 def test_invalid_bind_data_type(conn_cnx):
-    """Invalid bind data type
-    """
+    """Invalid bind data type."""
     with conn_cnx() as cnx:
         with pytest.raises(errors.ProgrammingError):
             cnx.cursor().execute(
@@ -515,8 +499,6 @@ def test_invalid_bind_data_type(conn_cnx):
 
 
 def test_timeout_query(conn_cnx):
-    """Timeout
-    """
     with conn_cnx() as cnx:
         cnx.cursor().execute("select 1")
         c = cnx.cursor()
@@ -535,10 +517,10 @@ def test_timeout_query(conn_cnx):
 
 
 def test_executemany(conn, db_parameters):
-    """Executes many statements. Client binding is supported by either
-    dictor list data types.
+    """Executes many statements. Client binding is supported by either dict, or list data types.
 
-    NOTE the binding data type is dict and tuple, respectively
+    Notes:
+        The binding data type is dict and tuple, respectively.
     """
     with conn() as cnx:
         c = cnx.cursor()
@@ -574,10 +556,10 @@ def test_executemany(conn, db_parameters):
 
 
 def test_closed_cursor(conn, db_parameters):
-    """
-    Attempt to use the closed cursor. It should raise errors
+    """Attempts to use the closed cursor. It should raise errors.
 
-    NOTE the binding data type is scalar
+    Notes:
+        The binding data type is scalar.
     """
     with conn() as cnx:
         c = cnx.cursor()
@@ -604,9 +586,6 @@ def test_closed_cursor(conn, db_parameters):
 
 
 def test_fetchmany(conn, db_parameters):
-    """
-    Fetches many
-    """
     with conn() as cnx:
         c = cnx.cursor()
         fmt = 'insert into {name}(aa) values(%(value)s)'.format(
@@ -650,8 +629,7 @@ def test_fetchmany(conn, db_parameters):
 
 
 def test_process_params(conn, db_parameters):
-    """Binds variables for insert and other queries
-    """
+    """Binds variables for insert and other queries."""
     with conn() as cnx:
         c = cnx.cursor()
         fmt = 'insert into {name}(aa) values(%(value)s)'.format(
@@ -691,8 +669,6 @@ def test_process_params(conn, db_parameters):
 
 
 def test_real_decimal(conn, db_parameters):
-    """Uses Real and Decimal type
-    """
     with conn() as cnx:
         c = cnx.cursor()
         fmt = ('insert into {name}(aa, pct, ratio) '
@@ -726,18 +702,12 @@ def test_real_decimal(conn, db_parameters):
 
 
 def test_none_errorhandler(conn_testaccount):
-    """
-    None errorhandler for Cursor
-    """
     c = conn_testaccount.cursor()
     with pytest.raises(errors.ProgrammingError):
         c.errorhandler = None
 
 
 def test_nope_errorhandler(conn_testaccount):
-    """
-    NOOP errorhandler for Cursor
-    """
 
     def user_errorhandler(connection, cursor, errorclass, errorvalue):
         pass
@@ -753,9 +723,6 @@ def test_nope_errorhandler(conn_testaccount):
 
 
 def test_binding_negative(negative_conn_cnx, db_parameters):
-    """
-    Negative binding tests
-    """
     with negative_conn_cnx() as cnx:
         with pytest.raises(TypeError):
             cnx.cursor().execute(
@@ -772,9 +739,7 @@ def test_binding_negative(negative_conn_cnx, db_parameters):
 
 
 def test_execute_after_close(conn_testaccount):
-    """
-    SNOW-13588: raises an error if executing after the connection is closed
-    """
+    """SNOW-13588: Raises an error if executing after the connection is closed."""
     cursor = conn_testaccount.cursor()
     conn_testaccount.close()
     with pytest.raises(errors.Error):
@@ -819,9 +784,7 @@ DROP TABLE IF EXISTS {name}_bar
 Negative test case.
 """)
 def test_fetch_before_execute(conn_testaccount):
-    """
-    SNOW-13574: fetch before execute
-    """
+    """SNOW-13574: Fetch before execute."""
     cursor = conn_testaccount.cursor()
     with pytest.raises(errors.DataError):
         cursor.fetchone()

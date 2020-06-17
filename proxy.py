@@ -6,13 +6,9 @@
 
 import os
 
-from .compat import TO_UNICODE
-
 
 def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
-    """
-    Set proxy dict for requests
-    """
+    """Sets proxy dict for requests."""
     PREFIX_HTTP = 'http://'
     PREFIX_HTTPS = 'https://'
     proxies = None
@@ -22,25 +18,25 @@ def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
         elif proxy_host.startswith(PREFIX_HTTPS):
             proxy_host = proxy_host[len(PREFIX_HTTPS):]
         if proxy_user or proxy_password:
-            proxy_auth = u'{proxy_user}:{proxy_password}@'.format(
+            proxy_auth = '{proxy_user}:{proxy_password}@'.format(
                 proxy_user=proxy_user if proxy_user is not None else '',
                 proxy_password=proxy_password if proxy_password is not
                                                  None else ''
             )
         else:
-            proxy_auth = u''
+            proxy_auth = ''
         proxies = {
-            u'http': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
+            'http': 'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
                 proxy_host=proxy_host,
-                proxy_port=TO_UNICODE(proxy_port),
+                proxy_port=str(proxy_port),
                 proxy_auth=proxy_auth,
             ),
-            u'https': u'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
+            'https': 'http://{proxy_auth}{proxy_host}:{proxy_port}'.format(
                 proxy_host=proxy_host,
-                proxy_port=TO_UNICODE(proxy_port),
+                proxy_port=str(proxy_port),
                 proxy_auth=proxy_auth,
             ),
         }
-        os.environ['HTTP_PROXY'] = proxies[u'http']
-        os.environ['HTTPS_PROXY'] = proxies[u'https']
+        os.environ['HTTP_PROXY'] = proxies['http']
+        os.environ['HTTPS_PROXY'] = proxies['https']
     return proxies

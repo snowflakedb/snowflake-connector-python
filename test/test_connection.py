@@ -26,18 +26,14 @@ except ImportError:
 
 
 def test_basic(conn_testaccount):
-    """
-    Basic Connection test
-    """
+    """Basic Connection test."""
     assert conn_testaccount, 'invalid cnx'
     # Test default values
     conn_testaccount._set_current_objects()
 
 
 def test_connection_without_schema(db_parameters):
-    """
-    Basic Connection test without schema
-    """
+    """Basic Connection test without schema."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],
@@ -53,9 +49,7 @@ def test_connection_without_schema(db_parameters):
 
 
 def test_connection_without_database_schema(db_parameters):
-    """
-    Basic Connection test without database and schema
-    """
+    """Basic Connection test without database and schema."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],
@@ -70,9 +64,7 @@ def test_connection_without_database_schema(db_parameters):
 
 
 def test_connection_without_database2(db_parameters):
-    """
-    Basic Connection test without database
-    """
+    """Basic Connection test without database."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],
@@ -88,9 +80,7 @@ def test_connection_without_database2(db_parameters):
 
 
 def test_with_config(db_parameters):
-    """
-    Creates a connection with the config parameter
-    """
+    """Creates a connection with the config parameter."""
     config = {
         'user': db_parameters['user'],
         'password': db_parameters['password'],
@@ -111,9 +101,7 @@ def test_with_config(db_parameters):
 
 
 def test_keep_alive_true(db_parameters):
-    """
-    Creates a connection with client_session_keep_alive parameter.
-    """
+    """Creates a connection with client_session_keep_alive parameter."""
     config = {
         'user': db_parameters['user'],
         'password': db_parameters['password'],
@@ -134,7 +122,8 @@ def test_keep_alive_true(db_parameters):
 
 
 def test_keep_alive_heartbeat_frequency(db_parameters):
-    """
+    """Tests heartbeat setting.
+
     Creates a connection with client_session_keep_alive_heartbeat_frequency
     parameter.
     """
@@ -159,9 +148,9 @@ def test_keep_alive_heartbeat_frequency(db_parameters):
 
 
 def test_keep_alive_heartbeat_frequency_min(db_parameters):
-    """
-    Creates a connection with client_session_keep_alive_heartbeat_frequency
-    parameter and set the minimum frequency
+    """Tests heartbeat setting with custom frequency.
+
+    Creates a connection with client_session_keep_alive_heartbeat_frequency parameter and set the minimum frequency.
     """
     config = {
         'user': db_parameters['user'],
@@ -186,9 +175,7 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
 
 
 def test_bad_db(db_parameters):
-    """
-    Attempts to use a bad DB
-    """
+    """Attempts to use a bad DB."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],
@@ -203,9 +190,10 @@ def test_bad_db(db_parameters):
 
 
 def test_bogus(db_parameters):
-    """
-    Attempts to login with invalid user name and password
-    NOTE: this takes long time.
+    """Attempts to login with invalid user name and password.
+
+    Notes:
+        This takes a long time.
     """
     with pytest.raises(DatabaseError):
         snowflake.connector.connect(
@@ -253,9 +241,7 @@ def test_bogus(db_parameters):
 
 
 def test_invalid_application(db_parameters):
-    """
-    Invalid application
-    """
+    """Invalid application name."""
     with pytest.raises(snowflake.connector.Error):
         snowflake.connector.connect(
             protocol=db_parameters['protocol'],
@@ -265,9 +251,7 @@ def test_invalid_application(db_parameters):
 
 
 def test_valid_application(db_parameters):
-    """
-    Valid app name
-    """
+    """Valid application name."""
     application = 'Special_Client'
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -283,9 +267,7 @@ def test_valid_application(db_parameters):
 
 
 def test_invalid_default_parameters(db_parameters):
-    """
-    Invalid database, schema, warehouse and role name
-    """
+    """Invalid database, schema, warehouse and role name."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],
@@ -363,10 +345,7 @@ def test_invalid_default_parameters(db_parameters):
     reason="The user needs a privilege of create warehouse."
 )
 def test_drop_create_user(conn_cnx, db_parameters):
-    """
-    Drops and creates user
-    """
-
+    """Drops and creates user."""
     with conn_cnx() as cnx:
         def exe(sql):
             return cnx.cursor().execute(sql)
@@ -387,8 +366,8 @@ def test_drop_create_user(conn_cnx, db_parameters):
             return cnx2.cursor().execute(sql)
 
         exe('use role snowdog_role')
-        exe(u"use {}".format(db_parameters['database']))
-        exe(u"use schema {}".format(db_parameters['schema']))
+        exe("use {}".format(db_parameters['database']))
+        exe("use schema {}".format(db_parameters['schema']))
         exe('create or replace table friends(name varchar(100))')
         exe('drop table friends')
     with conn_cnx() as cnx:
@@ -435,10 +414,13 @@ def test_invalid_proxy(db_parameters):
 
 @pytest.mark.timeout(15)
 def test_eu_connection(tmpdir):
-    """
-    If region is specified to eu-central-1, the URL will become
-    https://testaccount1234.eu-central-1.snowflakecomputing.com/
-    NOTE: region is deprecated.
+    """Tests setting custom region.
+
+    If region is specified to eu-central-1, the URL should become
+    https://testaccount1234.eu-central-1.snowflakecomputing.com/ .
+
+    Notes:
+        Region is deprecated.
     """
     import os
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
@@ -456,10 +438,13 @@ def test_eu_connection(tmpdir):
 
 
 def test_us_west_connection(tmpdir):
-    """
-    region='us-west-2' indicates no region is included in the hostname, i.e.,
+    """Tests default region setting.
+
+    Region='us-west-2' indicates no region is included in the hostname, i.e.,
     https://testaccount1234.snowflakecomputing.com.
-    NOTE: region is deprecated.
+
+    Notes:
+        Region is deprecated.
     """
     with pytest.raises(ForbiddenError):
         # must reach Snowflake
@@ -474,10 +459,7 @@ def test_us_west_connection(tmpdir):
 
 @pytest.mark.timeout(60)
 def test_privatelink(db_parameters):
-    """
-    Ensure the OCSP cache server URL is overridden if privatelink
-    connection is used.
-    """
+    """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""
     try:
         os.environ['SF_OCSP_FAIL_OPEN'] = 'false'
         os.environ['SF_OCSP_DO_RETRY'] = 'false'
@@ -515,9 +497,7 @@ def test_privatelink(db_parameters):
 
 
 def test_disable_request_pooling(db_parameters):
-    """
-    Creates a connection with client_session_keep_alive parameter.
-    """
+    """Creates a connection with client_session_keep_alive parameter."""
     config = {
         'user': db_parameters['user'],
         'password': db_parameters['password'],
@@ -685,7 +665,7 @@ def test_use_openssl_only(db_parameters):
 
 
 def test_dashed_url(db_parameters):
-    """Test whether dashed URLs get created correctly"""
+    """Test whether dashed URLs get created correctly."""
     with mock.patch("snowflake.connector.network.SnowflakeRestful.fetch",
                     return_value={'data': {'token': None,
                                            'masterToken': None},
@@ -703,7 +683,7 @@ def test_dashed_url(db_parameters):
 
 
 def test_dashed_url_account_name(db_parameters):
-    """Test whether dashed URLs get created correctly when no hostname is provided"""
+    """Tests whether dashed URLs get created correctly when no hostname is provided."""
     with mock.patch("snowflake.connector.network.SnowflakeRestful.fetch",
                     return_value={'data': {'token': None,
                                            'masterToken': None},

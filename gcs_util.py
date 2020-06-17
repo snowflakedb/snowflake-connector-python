@@ -13,71 +13,79 @@ import requests
 from .constants import HTTP_HEADER_CONTENT_ENCODING, SHA256_DIGEST, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 
-GCS_METADATA_PREFIX = u'x-goog-meta-'
-GCS_METADATA_SFC_DIGEST = GCS_METADATA_PREFIX + u'sfc-digest'
-GCS_METADATA_MATDESC_KEY = GCS_METADATA_PREFIX + u'matdesc'
-GCS_METADATA_ENCRYPTIONDATAPROP = GCS_METADATA_PREFIX + u'encryptiondata'
-GCS_FILE_HEADER_DIGEST = u'gcs-file-header-digest'
-GCS_FILE_HEADER_CONTENT_LENGTH = u'gcs-file-header-content-length'
-GCS_FILE_HEADER_ENCRYPTION_METADATA = u'gcs-file-header-encryption-metadata'
+GCS_METADATA_PREFIX = 'x-goog-meta-'
+GCS_METADATA_SFC_DIGEST = GCS_METADATA_PREFIX + 'sfc-digest'
+GCS_METADATA_MATDESC_KEY = GCS_METADATA_PREFIX + 'matdesc'
+GCS_METADATA_ENCRYPTIONDATAPROP = GCS_METADATA_PREFIX + 'encryptiondata'
+GCS_FILE_HEADER_DIGEST = 'gcs-file-header-digest'
+GCS_FILE_HEADER_CONTENT_LENGTH = 'gcs-file-header-content-length'
+GCS_FILE_HEADER_ENCRYPTION_METADATA = 'gcs-file-header-encryption-metadata'
 CONTENT_CHUNK_SIZE = 10 * 1024
 
 
 class SnowflakeGCSUtil:
-    """
-    GCS Utility class
-    """
+    """GCS Utility class."""
 
     @staticmethod
-    def create_client(stage_info, use_accelerate_endpoint=False):
-        """
-        Creates a client object with a stage credential
-        :param stage_credentials: a stage credential
-        :param use_accelerate_endpoint: is accelerate endpoint? (inapplicable to GCS)
-        :return: client
+    def create_client(stage_info,
+                      use_accelerate_endpoint: bool = False):
+        """Creates a client object with given stage credentials.
+
+        Args:
+            stage_info: Access credentials and info of a stage.
+            use_accelerate_endpoint: Whether to use an accelerated endpoint? This is not applicable to GCS.
+
+        Returns:
+            The client to communicate with GCS.
         """
         logger = getLogger(__name__)
-        stage_credentials = stage_info[u'creds']
-        security_token = stage_credentials.get(u'GCS_ACCESS_TOKEN')
+        stage_credentials = stage_info['creds']
+        security_token = stage_credentials.get('GCS_ACCESS_TOKEN')
 
         if security_token:
-            logger.debug(u"len(GCS_ACCESS_TOKEN): %s", len(security_token))
-            logger.debug(u"GCS operations with an access token are currently "
-                         u"unsupported")
+            logger.debug("len(GCS_ACCESS_TOKEN): %s", len(security_token))
+            logger.debug("GCS operations with an access token are currently "
+                         "unsupported")
             client = None
 
         else:
-            logger.debug(u"No access token received from GS, constructing "
-                         u"anonymous client")
+            logger.debug("No access token received from GS, constructing "
+                         "anonymous client")
             client = None
 
         return client
 
     @staticmethod
     def upload_file(data_file, meta, encryption_metadata, max_concurrency):
-        """
-        Uploads the local file to remote storage
-        :param data_file: file path on local system
-        :param meta: file meta object (contains credentials and remote location)
-        :param encryption_metadata: encryption metadata to be set on object
-        :param max_concurrency: (inapplicable to GCS)
-        :return: None, if successful. Otherwise, throws Exception.
+        """Uploads the local file to remote storage.
+
+        Args:
+            data_file: File path on local system.
+            meta: The File meta object (contains credentials and remote location).
+            encryption_metadata: Encryption metadata to be set on object.
+            max_concurrency: Not applicable to GCS.
+
+        Raises:
+            HTTPError if some http errors occurred.
+
+        Returns:
+            None, if uploading was successful.
         """
         logger = getLogger(__name__)
 
-        if meta.get(u'presigned_url', None):
+        if meta.get('presigned_url', None):
             # Use presigned url to upload the object
 
             content_encoding = ""
-            if meta.get(u'dst_compression_type') is not None:
-                content_encoding = meta[u'dst_compression_type'][u'name'].lower()
+            if meta.get('dst_compression_type') is not None:
+                content_encoding = meta['dst_compression_type']['name'].lower()
 
             # We set the contentEncoding to blank for GZIP files. We don't
             # want GCS to think our gzip files are gzips because it makes
             # them download uncompressed, and none of the other providers do
             # that. There's essentially no way for us to prevent that
             # behavior. Bad Google.
-            if content_encoding and content_encoding == u'gzip':
+            if content_encoding and content_encoding == 'gzip':
                 content_encoding = ""
 
             gcs_headers = {
@@ -88,19 +96,19 @@ class SnowflakeGCSUtil:
             if encryption_metadata:
                 gcs_headers.update({
                     GCS_METADATA_ENCRYPTIONDATAPROP: json.dumps({
-                        u'EncryptionMode': u'FullBlob',
-                        u'WrappedContentKey': {
-                            u'KeyId': u'symmKey1',
-                            u'EncryptedKey': encryption_metadata.key,
-                            u'Algorithm': u'AES_CBC_256'
+                        'EncryptionMode': 'FullBlob',
+                        'WrappedContentKey': {
+                            'KeyId': 'symmKey1',
+                            'EncryptedKey': encryption_metadata.key,
+                            'Algorithm': 'AES_CBC_256'
                         },
-                        u'EncryptionAgent': {
-                            u'Protocol': '1.0',
-                            u'EncryptionAlgorithm': u'AES_CBC_256',
+                        'EncryptionAgent': {
+                            'Protocol': '1.0',
+                            'EncryptionAlgorithm': 'AES_CBC_256',
                         },
-                        u'ContentEncryptionIV': encryption_metadata.iv,
-                        u'KeyWrappingMetadata': {
-                            u'EncryptionLibrary': u'Java 5.3.0'
+                        'ContentEncryptionIV': encryption_metadata.iv,
+                        'KeyWrappingMetadata': {
+                            'EncryptionLibrary': 'Java 5.3.0'
                         }
                     }),
                     GCS_METADATA_MATDESC_KEY: encryption_metadata.matdesc
@@ -109,7 +117,7 @@ class SnowflakeGCSUtil:
             with open(data_file, 'rb') as fd:
                 try:
                     response = requests.put(
-                        meta[u'presigned_url'],
+                        meta['presigned_url'],
                         data=fd,
                         headers=gcs_headers)
                     response.raise_for_status()
@@ -123,62 +131,68 @@ class SnowflakeGCSUtil:
                     # According to the above resource, GCS recommends retrying
                     # for the following error codes.
                     if errh.response.status_code in [403, 408, 429, 500, 503]:
-                        meta[u'last_error'] = errh
-                        meta[u'result_status'] = ResultStatus.NEED_RETRY
+                        meta['last_error'] = errh
+                        meta['result_status'] = ResultStatus.NEED_RETRY
                         return
                     elif (errh.response.status_code == 400 and
-                          (u'last_error' not in meta or meta[u'last_error'].response.status_code != 400)):
+                          ('last_error' not in meta or meta['last_error'].response.status_code != 400)):
                         # Only attempt to renew urls if this isn't the second time this happens
-                        meta[u'last_error'] = errh
-                        meta[u'result_status'] = ResultStatus.RENEW_PRESIGNED_URL
+                        meta['last_error'] = errh
+                        meta['result_status'] = ResultStatus.RENEW_PRESIGNED_URL
                         return
                     # raise anything else
                     raise errh
                 except requests.exceptions.Timeout as errt:
                     logger.debug("GCS file upload Timeout Error: %s", errt)
-                    meta[u'last_error'] = errt
-                    meta[u'result_status'] = ResultStatus.NEED_RETRY
+                    meta['last_error'] = errt
+                    meta['result_status'] = ResultStatus.NEED_RETRY
                     return
 
-            if meta[u'put_callback']:
-                meta[u'put_callback'](
+            if meta['put_callback']:
+                meta['put_callback'](
                     data_file,
-                    meta[u'src_file_size'],
-                    output_stream=meta[u'put_callback_output_stream'],
-                    show_progress_bar=meta[u'show_progress_bar'])(
-                    meta[u'src_file_size'])
+                    meta['src_file_size'],
+                    output_stream=meta['put_callback_output_stream'],
+                    show_progress_bar=meta['show_progress_bar'])(
+                    meta['src_file_size'])
 
-            logger.debug(u'DONE putting a file')
-            meta[u'dst_file_size'] = meta[u'upload_size']
-            meta[u'result_status'] = ResultStatus.UPLOADED
+            logger.debug('DONE putting a file')
+            meta['dst_file_size'] = meta['upload_size']
+            meta['result_status'] = ResultStatus.UPLOADED
 
             meta[GCS_FILE_HEADER_DIGEST] = gcs_headers[GCS_METADATA_SFC_DIGEST]
-            meta[GCS_FILE_HEADER_CONTENT_LENGTH] = meta[u'upload_size']
+            meta[GCS_FILE_HEADER_CONTENT_LENGTH] = meta['upload_size']
             meta[GCS_FILE_HEADER_ENCRYPTION_METADATA] = \
                 gcs_headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None)
         else:
             # Use the storage client to upload the object
             # Currently not supported, given that we can't obtain
             # location-scoped access tokens
-            logger.error(u"GCS upload operation with an access token is "
-                         u"currently unsupported")
-            meta[u'result_status'] = ResultStatus.ERROR
+            logger.error("GCS upload operation with an access token is "
+                         "currently unsupported")
+            meta['result_status'] = ResultStatus.ERROR
 
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
-        """
-        Downloads the remote object to local file
-        :param meta: file meta object (contains credentials and remote location)
-        :param full_dst_file_name: path of the local file to download to
-        :param max_concurrency: (inapplicable to GCS)
-        :return: None, if successful. Otherwise, throws Exception.
+        """Downloads the remote object to local file.
+
+        Args:
+            meta: File meta object (contains credentials and remote location).
+            full_dst_file_name: Local path of the file to download to.
+            max_concurrency: Not applicable to GCS.
+
+        Raises:
+            HTTPError if some http errors occurred.
+
+        Returns:
+            None, if downloading was successful.
         """
         logger = getLogger(__name__)
 
-        if meta.get(u'presigned_url', None):
+        if meta.get('presigned_url', None):
             # Use presigned url to download the object
             try:
-                response = requests.get(meta[u'presigned_url'], stream=True)
+                response = requests.get(meta['presigned_url'], stream=True)
                 response.raise_for_status()
 
                 with open(full_dst_file_name, 'wb') as fd:
@@ -195,21 +209,21 @@ class SnowflakeGCSUtil:
                 # According to the above resource, GCS recommends retrying
                 # for the following error codes.
                 if errh.response.status_code in [403, 408, 429, 500, 503]:
-                    meta[u'last_error'] = errh
-                    meta[u'result_status'] = ResultStatus.NEED_RETRY
+                    meta['last_error'] = errh
+                    meta['result_status'] = ResultStatus.NEED_RETRY
                     return
                 elif (errh.response.status_code == 400 and
-                      (u'last_error' not in meta or meta[u'last_error'].errh.response.status_code != 400)):
+                      ('last_error' not in meta or meta['last_error'].errh.response.status_code != 400)):
                     # Only attempt to renew urls if this isn't the second time this happens
-                    meta[u'last_error'] = errh
-                    meta[u'result_status'] = ResultStatus.RENEW_PRESIGNED_URL
+                    meta['last_error'] = errh
+                    meta['result_status'] = ResultStatus.RENEW_PRESIGNED_URL
                     return
                 # raise anything else
                 raise errh
             except requests.exceptions.Timeout as errt:
                 logger.debug("GCS file download Timeout Error: %s", errt)
-                meta[u'last_error'] = errt
-                meta[u'result_status'] = ResultStatus.NEED_RETRY
+                meta['last_error'] = errt
+                meta['result_status'] = ResultStatus.NEED_RETRY
                 return
 
             encryption_metadata = None
@@ -220,8 +234,8 @@ class SnowflakeGCSUtil:
 
                 if encryptiondata:
                     encryption_metadata = EncryptionMetadata(
-                        key=encryptiondata[u'WrappedContentKey'][u'EncryptedKey'],
-                        iv=encryptiondata[u'ContentEncryptionIV'],
+                        key=encryptiondata['WrappedContentKey']['EncryptedKey'],
+                        iv=encryptiondata['ContentEncryptionIV'],
                         matdesc=response.headers[GCS_METADATA_MATDESC_KEY]
                         if GCS_METADATA_MATDESC_KEY in response.headers
                         else None,
@@ -230,18 +244,18 @@ class SnowflakeGCSUtil:
             # Sadly, we can only determine the src file size after we've
             # downloaded it, unlike the other cloud providers where the
             # metadata can be read beforehand.
-            meta[u'src_file_size'] = os.path.getsize(full_dst_file_name)
+            meta['src_file_size'] = os.path.getsize(full_dst_file_name)
 
-            if meta[u'get_callback']:
-                meta[u'get_callback'](
-                    meta[u'src_file_name'],
-                    meta[u'src_file_size'],
-                    output_stream=meta[u'get_callback_output_stream'],
-                    show_progress_bar=meta[u'show_progress_bar'])(
-                    meta[u'src_file_size'])
+            if meta['get_callback']:
+                meta['get_callback'](
+                    meta['src_file_name'],
+                    meta['src_file_size'],
+                    output_stream=meta['get_callback_output_stream'],
+                    show_progress_bar=meta['show_progress_bar'])(
+                    meta['src_file_size'])
 
-            logger.debug(u'DONE getting a file')
-            meta[u'result_status'] = ResultStatus.DOWNLOADED
+            logger.debug('DONE getting a file')
+            meta['result_status'] = ResultStatus.DOWNLOADED
 
             meta[GCS_FILE_HEADER_DIGEST] = response.headers.get(
                 GCS_METADATA_SFC_DIGEST, None)
@@ -251,26 +265,30 @@ class SnowflakeGCSUtil:
             # Use the storage client to download the object
             # Currently not supported, given that we can't obtain
             # location-scoped access tokens
-            logger.error(u"GCS download operation with an access token is "
-                         u"currently unsupported")
-            meta[u'result_status'] = ResultStatus.ERROR
+            logger.error("GCS download operation with an access token is "
+                         "currently unsupported")
+            meta['result_status'] = ResultStatus.ERROR
 
     @staticmethod
     def get_file_header(meta, filename):
-        """
-        Gets the remote file metadata.
-        :param meta: file meta object
-        :return: the file header, with expected properties populated or None,
-        based on how the request goes with the storage provider.
-        """
+        """Gets the remote file's metadata.
 
-        # Sometimes this method is called to verify that the file has indeed
-        # been uploaded. In cases of presigned url, we have no way of verifying
-        # that, except with the http status code of 200 which we have already
-        # confirmed and set the meta[u'result_status'] = UPLOADED/DOWNLOADED.
-        if meta.get(u'presigned_url', None):
-            if meta.get(u'result_status', None) == ResultStatus.UPLOADED \
-                    or meta.get(u'result_status', None) == ResultStatus.DOWNLOADED:
+        Args:
+            meta: Remote file's metadata info.
+            filename: Not applicable to GCS.
+
+        Returns:
+            The file header, with expected properties populated or None, based on how the request goes with the
+            storage provider.
+
+        Notes:
+            Sometimes this method is called to verify that the file has indeed been uploaded. In cases of presigned
+            url, we have no way of verifying that, except with the http status code of 200 which we have already
+            confirmed and set the meta['result_status'] = UPLOADED/DOWNLOADED.
+        """
+        if meta.get('presigned_url', None):
+            if meta.get('result_status', None) == ResultStatus.UPLOADED \
+                    or meta.get('result_status', None) == ResultStatus.DOWNLOADED:
                 return FileHeader(
                     digest=meta.get(
                         GCS_FILE_HEADER_DIGEST, None),
@@ -280,7 +298,7 @@ class SnowflakeGCSUtil:
                         GCS_FILE_HEADER_ENCRYPTION_METADATA, None),
                 )
             else:
-                meta[u'result_status'] = ResultStatus.NOT_FOUND_FILE
+                meta['result_status'] = ResultStatus.NOT_FOUND_FILE
 
         return FileHeader(
             digest=None,

@@ -8,9 +8,7 @@ import pickle
 
 
 def test_pickle_timestamp_tz(tmpdir, conn_cnx):
-    """
-    Ensure the timestamp_tz result is pickle-able.
-    """
+    """Ensures the timestamp_tz result is pickle-able."""
     tmp_dir = str(tmpdir.mkdir('pickles'))
     output = os.path.join(tmp_dir, 'tz.pickle')
     expected_tz = None

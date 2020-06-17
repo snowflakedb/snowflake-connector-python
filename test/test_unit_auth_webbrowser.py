@@ -28,9 +28,7 @@ def mock_webserver(target_instance, application, port):
 
 
 def test_auth_webbrowser_get():
-    """
-    Authentication by WebBrowser positive test case
-    """
+    """Authentication by WebBrowser positive test case."""
     ref_token = "MOCK_TOKEN"
 
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
@@ -45,8 +43,8 @@ def test_auth_webbrowser_get():
 
     mock_socket_client = MagicMock()
     mock_socket_client.recv.return_value = ('\r\n'.join([
-        u"GET /?token={}&confirm=true HTTP/1.1".format(ref_token),
-        u"User-Agent: snowflake-agent"
+        "GET /?token={}&confirm=true HTTP/1.1".format(ref_token),
+        "User-Agent: snowflake-agent"
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)
@@ -58,17 +56,15 @@ def test_auth_webbrowser_get():
         AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
-    body = {u'data': {}}
+    body = {'data': {}}
     auth.update_body(body)
-    assert body[u'data'][u'TOKEN'] == ref_token
-    assert body[u'data'][u'PROOF_KEY'] == REF_PROOF_KEY
-    assert body[u'data'][u'AUTHENTICATOR'] == EXTERNAL_BROWSER_AUTHENTICATOR
+    assert body['data']['TOKEN'] == ref_token
+    assert body['data']['PROOF_KEY'] == REF_PROOF_KEY
+    assert body['data']['AUTHENTICATOR'] == EXTERNAL_BROWSER_AUTHENTICATOR
 
 
 def test_auth_webbrowser_post():
-    """
-    Authentication by WebBrowser positive test case with POST
-    """
+    """Authentication by WebBrowser positive test case with POST."""
     ref_token = "MOCK_TOKEN"
 
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
@@ -83,11 +79,11 @@ def test_auth_webbrowser_post():
 
     mock_socket_client = MagicMock()
     mock_socket_client.recv.return_value = ('\r\n'.join([
-        u"POST / HTTP/1.1",
-        u"User-Agent: snowflake-agent",
-        u"Host: localhost:12345",
-        u"",
-        u"token={}&confirm=true".format(ref_token)
+        "POST / HTTP/1.1",
+        "User-Agent: snowflake-agent",
+        "Host: localhost:12345",
+        "",
+        "token={}&confirm=true".format(ref_token)
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)
@@ -99,17 +95,15 @@ def test_auth_webbrowser_post():
         AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
-    body = {u'data': {}}
+    body = {'data': {}}
     auth.update_body(body)
-    assert body[u'data'][u'TOKEN'] == ref_token
-    assert body[u'data'][u'PROOF_KEY'] == REF_PROOF_KEY
-    assert body[u'data'][u'AUTHENTICATOR'] == EXTERNAL_BROWSER_AUTHENTICATOR
+    assert body['data']['TOKEN'] == ref_token
+    assert body['data']['PROOF_KEY'] == REF_PROOF_KEY
+    assert body['data']['AUTHENTICATOR'] == EXTERNAL_BROWSER_AUTHENTICATOR
 
 
 def test_auth_webbrowser_fail_webbrowser():
-    """
-    Authentication by WebBrowser. fail to start web browser
-    """
+    """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock webbrowser
@@ -122,8 +116,8 @@ def test_auth_webbrowser_fail_webbrowser():
 
     mock_socket_client = MagicMock()
     mock_socket_client.recv.return_value = ('\r\n'.join([
-        u"GET /?token=MOCK_TOKEN HTTP/1.1",
-        u"User-Agent: snowflake-agent"
+        "GET /?token=MOCK_TOKEN HTTP/1.1",
+        "User-Agent: snowflake-agent"
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)
@@ -138,9 +132,7 @@ def test_auth_webbrowser_fail_webbrowser():
 
 
 def test_auth_webbrowser_fail_webserver():
-    """
-    Authentication by WebBrowser. fail to start web browser
-    """
+    """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock webbrowser
@@ -153,8 +145,8 @@ def test_auth_webbrowser_fail_webserver():
 
     mock_socket_client = MagicMock()
     mock_socket_client.recv.return_value = ('\r\n'.join([
-        u"GARBAGE",
-        u"User-Agent: snowflake-agent"
+        "GARBAGE",
+        "User-Agent: snowflake-agent"
     ])).encode('utf-8')
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)

@@ -5,9 +5,7 @@ import numpy as np
 
 
 def test_numpy_datatype_binding(conn_cnx, db_parameters):
-    """
-    Tests numpy data type binding
-    """
+    """Tests numpy data type bindings."""
     epoch_time = time.time()
     current_datetime = datetime.datetime.fromtimestamp(epoch_time)
     current_datetime64 = np.datetime64(current_datetime)

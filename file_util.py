@@ -20,19 +20,22 @@ class SnowflakeFileUtil(object):
 
     @staticmethod
     def compress_file_with_gzip(file_name, tmp_dir):
-        """
-        Compresses a file by GZIP
-        :param file_name: a file name
-        :param tmp_dir: temprary directory where an GZIP file will be created
-        :return: a pair of gzip file name and size
+        """Compresses a file with GZIP.
+
+        Args:
+            file_name: Local path to file to be compressed.
+            tmp_dir: Temporary directory where an GZIP file will be created.
+
+        Returns:
+            A tuple of gzip file name and size.
         """
         logger = getLogger(__name__)
         base_name = os.path.basename(file_name)
-        gzip_file_name = os.path.join(tmp_dir, base_name + u'_c.gz')
-        logger.debug(u'gzip file: %s, original file: %s', gzip_file_name,
+        gzip_file_name = os.path.join(tmp_dir, base_name + '_c.gz')
+        logger.debug('gzip file: %s, original file: %s', gzip_file_name,
                      file_name)
-        fr = open(file_name, u'rb')
-        fw = gzip.GzipFile(gzip_file_name, u'wb')
+        fr = open(file_name, 'rb')
+        fw = gzip.GzipFile(gzip_file_name, 'wb')
         shutil.copyfileobj(fr, fw)
         fw.close()
         fr.close()
@@ -43,12 +46,14 @@ class SnowflakeFileUtil(object):
 
     @staticmethod
     def normalize_gzip_header(gzip_file_name):
+        """Normalizes GZIP file header.
+
+        For consistent file digest, this removes creation timestamp from the header.
+
+        Args:
+            gzip_file_name: Local path of gzip file.
         """
-        Normalize GZIP file header. For consistent file digest, this removes
-        creation timestamp from the header.
-        :param gzip_file_name: gzip file name
-        """
-        with open(gzip_file_name, u'r+b') as f:
+        with open(gzip_file_name, 'r+b') as f:
             # reset the timestamp in gzip header
             f.seek(4, 0)
             f.write(struct.pack('<L', 0))
@@ -57,7 +62,7 @@ class SnowflakeFileUtil(object):
             byte = f.read(1)
             while byte:
                 value = struct.unpack('B', byte)[0]
-                # logger.debug(u'ch=%s, byte=%s', value, byte)
+                # logger.debug('ch=%s, byte=%s', value, byte)
                 if value == 0:
                     break
                 f.seek(-1, 1)  # current_pos - 1
@@ -66,10 +71,13 @@ class SnowflakeFileUtil(object):
 
     @staticmethod
     def get_digest_and_size_for_file(file_name):
-        """
-        Gets file digest and size
-        :param file_name: a file name
-        :return:
+        """Gets file digest and size.
+
+        Args:
+            file_name: Local path to a file.
+
+        Returns:
+            Tuple of file's digest and file size in bytes.
         """
         use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
         CHUNK_SIZE = 16 * 4 * 1024
@@ -96,6 +104,6 @@ class SnowflakeFileUtil(object):
         else:
             digest = base64.standard_b64encode(hasher.finalize()).decode(UTF8)
         logger = getLogger(__name__)
-        logger.debug(u'getting digest and size: %s, %s, file=%s', digest,
+        logger.debug('getting digest and size: %s, %s, file=%s', digest,
                      file_size, file_name)
         return digest, file_size

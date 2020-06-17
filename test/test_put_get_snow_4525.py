@@ -13,9 +13,7 @@ pytestmark = pytest.mark.putget
 
 
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
-    """
-    SNOW-4525: Load Bogus file and should fail
-    """
+    """SNOW-4525: Loads Bogus file and should fail."""
     with conn_cnx() as cnx:
         cnx.cursor().execute("""
 create table {name} (
@@ -48,10 +46,7 @@ ratio number(5,2))
 
 
 def test_load_bogus_json_file(tmpdir, conn_cnx, db_parameters):
-    """
-    SNOW-4525: Load Bogus JSON file and should fail
-    """
-
+    """SNOW-4525: Loads Bogus JSON file and should fail."""
     with conn_cnx() as cnx:
         json_table = db_parameters['name'] + "_json"
         cnx.cursor().execute(

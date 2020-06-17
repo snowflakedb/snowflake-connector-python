@@ -17,7 +17,7 @@ from os.path import expanduser
 from threading import Lock, Thread
 
 from .auth_keypair import AuthByKeyPair
-from .compat import IS_LINUX, IS_WINDOWS, IS_MACOS, TO_UNICODE, urlencode
+from .compat import IS_LINUX, IS_WINDOWS, IS_MACOS, urlencode
 from .constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -91,9 +91,7 @@ KEYRING_DRIVER_NAME = "SNOWFLAKE-PYTHON-DRIVER"
 
 
 class Auth(object):
-    """
-    Snowflake Authenticator
-    """
+    """Snowflake Authenticator."""
 
     def __init__(self, rest):
         self._rest = rest
@@ -134,12 +132,12 @@ class Auth(object):
                      passcode_in_password=False,
                      mfa_callback=None, password_callback=None,
                      session_parameters=None, timeout=120):
-        logger.debug(u'authenticate')
+        logger.debug('authenticate')
 
         if session_parameters is None:
             session_parameters = {}
 
-        request_id = TO_UNICODE(uuid.uuid4())
+        request_id = str(uuid.uuid4())
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
@@ -148,7 +146,7 @@ class Auth(object):
         if HTTP_HEADER_SERVICE_NAME in session_parameters:
             headers[HTTP_HEADER_SERVICE_NAME] = \
                 session_parameters[HTTP_HEADER_SERVICE_NAME]
-        url = u"/session/v1/login-request"
+        url = "/session/v1/login-request"
         if session_parameters is not None \
                 and PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL in session_parameters:
             store_temp_cred = session_parameters[
@@ -168,13 +166,13 @@ class Auth(object):
 
         body = copy.deepcopy(body_template)
         # updating request body
-        logger.debug(u'assertion content: %s',
+        logger.debug('assertion content: %s',
                      auth_instance.assertion_content)
         auth_instance.update_body(body)
 
         logger.debug(
-            u'account=%s, user=%s, database=%s, schema=%s, '
-            u'warehouse=%s, role=%s, request_id=%s',
+            'account=%s, user=%s, database=%s, schema=%s, '
+            'warehouse=%s, role=%s, request_id=%s',
             account,
             user,
             database,
@@ -183,31 +181,31 @@ class Auth(object):
             role,
             request_id,
         )
-        url_parameters = {u'request_id': request_id}
+        url_parameters = {'request_id': request_id}
         if database is not None:
-            url_parameters[u'databaseName'] = database
+            url_parameters['databaseName'] = database
         if schema is not None:
-            url_parameters[u'schemaName'] = schema
+            url_parameters['schemaName'] = schema
         if warehouse is not None:
-            url_parameters[u'warehouse'] = warehouse
+            url_parameters['warehouse'] = warehouse
         if role is not None:
-            url_parameters[u'roleName'] = role
+            url_parameters['roleName'] = role
 
-        url = url + u'?' + urlencode(url_parameters)
+        url = url + '?' + urlencode(url_parameters)
 
         # first auth request
         if passcode_in_password:
-            body[u'data'][u'EXT_AUTHN_DUO_METHOD'] = u'passcode'
+            body['data']['EXT_AUTHN_DUO_METHOD'] = 'passcode'
         elif passcode:
-            body[u'data'][u'EXT_AUTHN_DUO_METHOD'] = u'passcode'
-            body[u'data'][u'PASSCODE'] = passcode
+            body['data']['EXT_AUTHN_DUO_METHOD'] = 'passcode'
+            body['data']['PASSCODE'] = passcode
 
         if session_parameters:
-            body[u'data'][u'SESSION_PARAMETERS'] = session_parameters
+            body['data']['SESSION_PARAMETERS'] = session_parameters
 
         logger.debug(
             "body['data']: %s",
-            {k: v for (k, v) in body[u'data'].items() if k != u'PASSWORD'})
+            {k: v for (k, v) in body['data'].items() if k != 'PASSWORD'})
 
         try:
             ret = self._rest._post_request(
@@ -217,33 +215,33 @@ class Auth(object):
         except ForbiddenError as err:
             # HTTP 403
             raise err.__class__(
-                msg=(u"Failed to connect to DB. "
-                     u"Verify the account name is correct: {host}:{port}. "
-                     u"{message}").format(
+                msg=("Failed to connect to DB. "
+                     "Verify the account name is correct: {host}:{port}. "
+                     "{message}").format(
                     host=self._rest._host,
                     port=self._rest._port,
-                    message=TO_UNICODE(err)
+                    message=str(err)
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
                 sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
         except (ServiceUnavailableError, BadGatewayError) as err:
             # HTTP 502/504
             raise err.__class__(
-                msg=(u"Failed to connect to DB. "
-                     u"Service is unavailable: {host}:{port}. "
-                     u"{message}").format(
+                msg=("Failed to connect to DB. "
+                     "Service is unavailable: {host}:{port}. "
+                     "{message}").format(
                     host=self._rest._host,
                     port=self._rest._port,
-                    message=TO_UNICODE(err)
+                    message=str(err)
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
                 sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED)
 
         # waiting for MFA authentication
-        if ret[u'data'].get(u'nextAction') == u'EXT_AUTHN_DUO_ALL':
-            body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
-            body[u'data'][u'EXT_AUTHN_DUO_METHOD'] = u'push'
-            self.ret = {u'message': "Timeout", u'data': {}}
+        if ret['data'].get('nextAction') == 'EXT_AUTHN_DUO_ALL':
+            body['inFlightCtx'] = ret['data']['inFlightCtx']
+            body['data']['EXT_AUTHN_DUO_METHOD'] = 'push'
+            self.ret = {'message': "Timeout", 'data': {}}
 
             def post_request_wrapper(self, url, headers, body):
                 # get the MFA response
@@ -258,54 +256,54 @@ class Auth(object):
             t.start()
             if callable(mfa_callback):
                 c = mfa_callback()
-                while not self.ret or self.ret.get(u'message') == u'Timeout':
+                while not self.ret or self.ret.get('message') == 'Timeout':
                     next(c)
             else:
                 t.join(timeout=timeout)
 
             ret = self.ret
-            if ret and ret[u'data'].get(u'nextAction') == u'EXT_AUTHN_SUCCESS':
+            if ret and ret['data'].get('nextAction') == 'EXT_AUTHN_SUCCESS':
                 body = copy.deepcopy(body_template)
-                body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
+                body['inFlightCtx'] = ret['data']['inFlightCtx']
                 # final request to get tokens
                 ret = self._rest._post_request(
                     url, headers, json.dumps(body),
                     timeout=self._rest._connection.login_timeout,
                     socket_timeout=self._rest._connection.login_timeout)
-            elif not ret or not ret[u'data'].get(u'token'):
+            elif not ret or not ret['data'].get('token'):
                 # not token is returned.
                 Error.errorhandler_wrapper(
                     self._rest._connection, None, DatabaseError,
                     {
-                        u'msg': (u"Failed to connect to DB. MFA "
-                                 u"authentication failed: {"
-                                 u"host}:{port}. {message}").format(
+                        'msg': ("Failed to connect to DB. MFA "
+                                 "authentication failed: {"
+                                 "host}:{port}. {message}").format(
                             host=self._rest._host,
                             port=self._rest._port,
-                            message=ret[u'message'],
+                            message=ret['message'],
                         ),
-                        u'errno': ER_FAILED_TO_CONNECT_TO_DB,
-                        u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                        'errno': ER_FAILED_TO_CONNECT_TO_DB,
+                        'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     })
                 return session_parameters  # required for unit test
 
-        elif ret[u'data'].get(u'nextAction') == u'PWD_CHANGE':
+        elif ret['data'].get('nextAction') == 'PWD_CHANGE':
             if callable(password_callback):
                 body = copy.deepcopy(body_template)
-                body[u'inFlightCtx'] = ret[u'data'][u'inFlightCtx']
-                body[u'data'][u"LOGIN_NAME"] = user
-                body[u'data'][u"PASSWORD"] = \
+                body['inFlightCtx'] = ret['data']['inFlightCtx']
+                body['data']["LOGIN_NAME"] = user
+                body['data']["PASSWORD"] = \
                     auth_instance.password if hasattr(
                         auth_instance, 'password') else None
-                body[u'data'][u'CHOSEN_NEW_PASSWORD'] = password_callback()
+                body['data']['CHOSEN_NEW_PASSWORD'] = password_callback()
                 # New Password input
                 ret = self._rest._post_request(
                     url, headers, json.dumps(body),
                     timeout=self._rest._connection.login_timeout,
                     socket_timeout=self._rest._connection.login_timeout)
 
-        logger.debug(u'completed authentication')
-        if not ret[u'success']:
+        logger.debug('completed authentication')
+        if not ret['success']:
             if type(auth_instance) is AuthByKeyPair:
                 logger.debug(
                     "JWT Token authentication failed. "
@@ -317,46 +315,46 @@ class Auth(object):
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
                 {
-                    u'msg': (u"Failed to connect to DB: {host}:{port}. "
-                             u"{message}").format(
+                    'msg': ("Failed to connect to DB: {host}:{port}. "
+                             "{message}").format(
                         host=self._rest._host,
                         port=self._rest._port,
-                        message=ret[u'message'],
+                        message=ret['message'],
                     ),
-                    u'errno': ER_FAILED_TO_CONNECT_TO_DB,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    'errno': ER_FAILED_TO_CONNECT_TO_DB,
+                    'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 })
         else:
-            logger.debug(u'token = %s',
-                         '******' if ret[u'data'][u'token'] is not None else
+            logger.debug('token = %s',
+                         '******' if ret['data']['token'] is not None else
                          'NULL')
-            logger.debug(u'master_token = %s',
-                         '******' if ret[u'data'][
-                                         u'masterToken'] is not None else
+            logger.debug('master_token = %s',
+                         '******' if ret['data'][
+                                         'masterToken'] is not None else
                          'NULL')
-            logger.debug(u'id_token = %s',
-                         '******' if ret[u'data'].get(
-                             u'id_token') is not None else
+            logger.debug('id_token = %s',
+                         '******' if ret['data'].get(
+                             'id_token') is not None else
                          'NULL')
             self._rest.update_tokens(
-                ret[u'data'][u'token'], ret[u'data'][u'masterToken'],
-                master_validity_in_seconds=ret[u'data'].get(
-                    u'masterValidityInSeconds'),
-                id_token=ret[u'data'].get(u'idToken')
+                ret['data']['token'], ret['data']['masterToken'],
+                master_validity_in_seconds=ret['data'].get(
+                    'masterValidityInSeconds'),
+                id_token=ret['data'].get('idToken')
             )
             if self._rest._connection.consent_cache_id_token:
                 write_temporary_credential(
                     self._rest._host, account, user, self._rest.id_token,
                     session_parameters.get(
                         PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL))
-            if u'sessionId' in ret[u'data']:
-                self._rest._connection._session_id = ret[u'data'][u'sessionId']
-            if u'sessionInfo' in ret[u'data']:
-                session_info = ret[u'data'][u'sessionInfo']
-                self._rest._connection._database = session_info.get(u'databaseName')
-                self._rest._connection._schema = session_info.get(u'schemaName')
-                self._rest._connection._warehouse = session_info.get(u'warehouseName')
-                self._rest._connection._role = session_info.get(u'roleName')
+            if 'sessionId' in ret['data']:
+                self._rest._connection._session_id = ret['data']['sessionId']
+            if 'sessionInfo' in ret['data']:
+                session_info = ret['data']['sessionInfo']
+                self._rest._connection._database = session_info.get('databaseName')
+                self._rest._connection._schema = session_info.get('schemaName')
+                self._rest._connection._warehouse = session_info.get('warehouseName')
+                self._rest._connection._role = session_info.get('roleName')
             self._rest._connection._set_parameters(ret, session_parameters)
 
         return session_parameters
@@ -414,9 +412,7 @@ def write_temporary_credential(host, account, user, id_token, store_temporary_cr
 
 
 def write_temporary_credential_file(host, account, user, id_token):
-    """
-    Write temporary credential file when OS is Linux
-    """
+    """Writes temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
         return
@@ -448,9 +444,7 @@ def write_temporary_credential_file(host, account, user, id_token):
 
 
 def read_temporary_credential_file():
-    """
-    Read temporary credential file when OS is Linux
-    """
+    """Reads temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
         return
@@ -515,9 +509,7 @@ def delete_temporary_credential(host, user, store_temporary_credential=False):
 
 
 def delete_temporary_credential_file():
-    """
-    Delete temporary credential file and its lock file
-    """
+    """Deletes temporary credential file and its lock file."""
     global TEMPORARY_CREDENTIAL_FILE
     try:
         remove(TEMPORARY_CREDENTIAL_FILE)

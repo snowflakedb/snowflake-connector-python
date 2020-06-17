@@ -10,15 +10,21 @@ import time
 IS_WINDOWS = platform.system() == 'Windows'
 
 
-def generate_k_lines_of_n_files(k, n, compress=False, tmp_dir=None):
-    """
-    Create testing files
-    BEWARE returned path has to be deleted by caller
-    :param k: number of lines per file to generate
-    :param n: number of files to generate
-    :param compress: whether to compress the files
-    :param tmp_dir: location where the files should be generated, if not supplied a temp directory will be created
-    :return: path to parent folder to newly generated files
+def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir: bool = None):
+    """Creates testing files.
+
+    Notes:
+        Returned path has to be deleted by caller.
+
+    Args:
+        k: Number of lines per file to generate.
+        n: Number of files to generate.
+        compress: Whether to compress the files (Default value = False).
+        tmp_dir: Location where the files should be generated, if not supplied a temp directory will be created
+        (Default value = None).
+
+    Returns:
+        Path to parent folder to newly generated files.
     """
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp(prefix='data')
@@ -47,8 +53,8 @@ def generate_k_lines_of_n_files(k, n, compress=False, tmp_dir=None):
                            int(random.random() * 12.0),
                            int(random.random() * 60.0))
                 pct = random.random() * 1000.0
-                ratio = u"{:5.2f}".format(random.random() * 1000.0)
-                rec = u"{:d},{:s},{:s},{:s},{:s},{:s},{:f},{:s}".format(
+                ratio = "{:5.2f}".format(random.random() * 1000.0)
+                rec = "{:d},{:s},{:s},{:s},{:s},{:s},{:f},{:s}".format(
                     num, dt, ts, tsltz, tsntz, tstz,
                     pct,
                     ratio)

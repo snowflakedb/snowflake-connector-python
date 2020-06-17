@@ -10,9 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelemetryField(object):
-    """
-    Fields which can be logged to telemetry
-    """
+    # Fields which can be logged to telemetry
     TIME_CONSUME_FIRST_RESULT = "client_time_consume_first_result"
     TIME_CONSUME_LAST_RESULT = "client_time_consume_last_result"
     TIME_DOWNLOADING_CHUNKS = "client_time_downloading_chunks"
@@ -20,9 +18,7 @@ class TelemetryField(object):
 
 
 class TelemetryData(object):
-    """
-    An instance of telemetry data which can be sent to the server
-    """
+    """An instance of telemetry data which can be sent to the server."""
     def __init__(self, message, timestamp):
         self.message = message
         self.timestamp = timestamp
@@ -38,9 +34,7 @@ class TelemetryData(object):
 
 
 class TelemetryClient(object):
-    """
-    Client to enqueue and send metrics to the telemetry endpoint in batch
-    """
+    """Client to enqueue and send metrics to the telemetry endpoint in batch."""
     SF_PATH_TELEMETRY = "/telemetry/send"
     DEFAULT_FORCE_FLUSH_SIZE = 100
 
@@ -94,7 +88,7 @@ class TelemetryClient(object):
         try:
             ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
                                      method='post', client=None, timeout=5)
-            if not ret[u'success']:
+            if not ret['success']:
                 logger.info(
                     "Non-success response from telemetry server: %s. "
                     "Disabling telemetry.", str(ret))

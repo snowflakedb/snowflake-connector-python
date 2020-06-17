@@ -39,24 +39,20 @@ JST_TZ = "Asia/Tokyo"
 
 
 def test_invalid_binding_option(conn_cnx):
-    """
-    Invalid paramstyle parameters
-    """
+    """Invalid paramstyle parameters."""
     with pytest.raises(ProgrammingError):
-        with conn_cnx(paramstyle=u'hahaha'):
+        with conn_cnx(paramstyle='hahaha'):
             pass
 
     # valid cases
-    for s in [u'format', u'pyformat', u'qmark', u'numeric']:
+    for s in ['format', 'pyformat', 'qmark', 'numeric']:
         with conn_cnx(paramstyle=s):
             pass
 
 
 def test_binding(conn_cnx, db_parameters):
-    """
-    Paramstyle qmark basic tests
-    """
-    with conn_cnx(paramstyle=u'qmark') as cnx:
+    """Paramstyle qmark basic tests."""
+    with conn_cnx(paramstyle='qmark') as cnx:
         cnx.cursor().execute("""
 create or replace table {name} (
     c1 BOOLEAN,
@@ -99,7 +95,7 @@ create or replace table {name} (
     tdelta = timedelta(seconds=tm.hour * 3600 + tm.minute * 60 + tm.second,
                        microseconds=tm.microsecond)
     try:
-        with conn_cnx(paramstyle=u'qmark', timezone=PST_TZ) as cnx:
+        with conn_cnx(paramstyle='qmark', timezone=PST_TZ) as cnx:
             cnx.cursor().execute("""
 insert into {name} values(
 ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?)
@@ -116,19 +112,19 @@ insert into {name} values(
                 current_localtime,
                 current_localtime_without_tz,
                 current_localtime_with_other_tz,
-                (u"TIMESTAMP_LTZ", current_utctime),
-                (u"TIMESTAMP_LTZ", current_localtime),
-                (u"TIMESTAMP_LTZ", current_localtime_without_tz),
-                (u"TIMESTAMP_LTZ", current_localtime_with_other_tz),
-                (u"TIMESTAMP_TZ", current_utctime),
-                (u"TIMESTAMP_TZ", current_localtime),
-                (u"TIMESTAMP_TZ", current_localtime_without_tz),
-                (u"TIMESTAMP_TZ", current_localtime_with_other_tz),
+                ("TIMESTAMP_LTZ", current_utctime),
+                ("TIMESTAMP_LTZ", current_localtime),
+                ("TIMESTAMP_LTZ", current_localtime_without_tz),
+                ("TIMESTAMP_LTZ", current_localtime_with_other_tz),
+                ("TIMESTAMP_TZ", current_utctime),
+                ("TIMESTAMP_TZ", current_localtime),
+                ("TIMESTAMP_TZ", current_localtime_without_tz),
+                ("TIMESTAMP_TZ", current_localtime_with_other_tz),
                 dt,
                 tm,
-                (u"TIMESTAMP_NTZ", struct_time_v),
-                (u"TIME", tdelta),
-                (u"TEXT", None)
+                ("TIMESTAMP_NTZ", struct_time_v),
+                ("TIME", tdelta),
+                ("TEXT", None)
             ))
             ret = cnx.cursor().execute("""
 select * from {name} where c1=? and c2=?
@@ -202,11 +198,11 @@ def test_pendulum_binding(conn_cnx, db_parameters):
             assert len(cnx.cursor().execute(
                 "select count(*) from {name}".format(
                     name=db_parameters['name'])).fetchall()) == 1
-        with conn_cnx(paramstyle=u'qmark') as cnx:
+        with conn_cnx(paramstyle='qmark') as cnx:
             cnx.cursor().execute("""
             create or replace table {name} (c1 timestamp, c2 timestamp)
     """.format(name=db_parameters['name']))
-        with conn_cnx(paramstyle=u'qmark') as cnx:
+        with conn_cnx(paramstyle='qmark') as cnx:
             cnx.cursor().execute("""
             insert into {name} values(?, ?)
             """.format(name=db_parameters['name']), (pendulum_test, pendulum_test))
@@ -223,27 +219,24 @@ def test_pendulum_binding(conn_cnx, db_parameters):
 
 
 def test_binding_with_numeric(conn_cnx, db_parameters):
-    """
-    Paramstyle numeric tests. Both qmark and numeric leverages server side
-    bindings.
-    """
-    with conn_cnx(paramstyle=u'numeric') as cnx:
+    """Paramstyle numeric tests. Both qmark and numeric leverages server side bindings."""
+    with conn_cnx(paramstyle='numeric') as cnx:
         cnx.cursor().execute("""
 create or replace table {name} (c1 integer, c2 string)
 """.format(name=db_parameters['name']))
 
     try:
-        with conn_cnx(paramstyle=u'numeric') as cnx:
+        with conn_cnx(paramstyle='numeric') as cnx:
             cnx.cursor().execute("""
 insert into {name}(c1, c2) values(:2, :1)
             """.format(name=db_parameters['name']), (
-                u'str1',
+                'str1',
                 123
             ))
             cnx.cursor().execute("""
 insert into {name}(c1, c2) values(:2, :1)
             """.format(name=db_parameters['name']), (
-                u'str2',
+                'str2',
                 456
             ))
             # numeric and qmark can be used in the same session
@@ -252,7 +245,7 @@ select * from {name} where c1=?
 """.format(name=db_parameters['name']), (123,)).fetchall()
             assert len(rec) == 1
             assert rec[0][0] == 123
-            assert rec[0][1] == u'str1'
+            assert rec[0][1] == 'str1'
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""
@@ -261,10 +254,10 @@ drop table if exists {name}
 
 
 def test_binding_timestamps(conn_cnx, db_parameters):
-    """
-    Binding datetime object with TIMESTAMP_LTZ. The value is bound
-    as TIMESTAMP_NTZ, but since it is converted to UTC in the backend,
-    the returned value must be
+    """Binding datetime object with TIMESTAMP_LTZ.
+
+    The value is bound as TIMESTAMP_NTZ, but since it is converted to UTC in the backend,
+    the returned value must be ???.
     """
     with conn_cnx() as cnx:
         cnx.cursor().execute("""
@@ -274,7 +267,7 @@ create or replace table {name} (
 """.format(name=db_parameters['name']))
 
     try:
-        with conn_cnx(paramstyle=u'numeric', timezone=PST_TZ) as cnx:
+        with conn_cnx(paramstyle='numeric', timezone=PST_TZ) as cnx:
             current_localtime = datetime.now()
             cnx.cursor().execute("""
 insert into {name}(c1, c2) values(:1, :2)
@@ -297,9 +290,7 @@ drop table if exists {name}
 
 
 def test_binding_bulk_insert(conn_cnx, db_parameters):
-    """
-    Bulk insert test.
-    """
+    """Bulk insert test."""
     with conn_cnx() as cnx:
         cnx.cursor().execute("""
 create or replace table {name} (
@@ -308,7 +299,7 @@ create or replace table {name} (
 )
 """.format(name=db_parameters['name']))
     try:
-        with conn_cnx(paramstyle=u'qmark') as cnx:
+        with conn_cnx(paramstyle='qmark') as cnx:
             # short list
             c = cnx.cursor()
             fmt = 'insert into {name}(c1,c2) values(?,?)'.format(
@@ -337,11 +328,11 @@ drop table if exists {name}
 
 
 def test_binding_bulk_update(conn_cnx, db_parameters):
-    """
-    Bulk update test.
+    """Bulk update test.
 
-    NOTE: UPDATE,MERGE and DELETE are not supported for actual bulk operation
-    but executemany accepts the multiple rows and iterate DMLs
+    Notes:
+        UPDATE,MERGE and DELETE are not supported for actual bulk operation
+        but executemany accepts the multiple rows and iterate DMLs.
     """
     with conn_cnx() as cnx:
         cnx.cursor().execute("""
@@ -351,7 +342,7 @@ create or replace table {name} (
 )
 """.format(name=db_parameters['name']))
     try:
-        with conn_cnx(paramstyle=u'qmark') as cnx:
+        with conn_cnx(paramstyle='qmark') as cnx:
             # short list
             c = cnx.cursor()
             fmt = 'insert into {name}(c1,c2) values(?,?)'.format(
@@ -387,16 +378,14 @@ drop table if exists {name}
 
 
 def test_binding_identifier(conn_cnx, db_parameters):
-    """
-    Binding a table name
-    """
+    """Binding a table name."""
     try:
-        with conn_cnx(paramstyle=u'qmark') as cnx:
-            data = u'test'
+        with conn_cnx(paramstyle='qmark') as cnx:
+            data = 'test'
             cnx.cursor().execute("""
 create or replace table identifier(?) (c1 string)
 """, (db_parameters['name'],))
-        with conn_cnx(paramstyle=u'qmark') as cnx:
+        with conn_cnx(paramstyle='qmark') as cnx:
             cnx.cursor().execute("""
 insert into identifier(?) values(?)
 """, (db_parameters['name'], data))
@@ -406,7 +395,7 @@ select * from identifier(?)
             assert len(ret) == 1
             assert ret[0][0] == data
     finally:
-        with conn_cnx(paramstyle=u'qmark') as cnx:
+        with conn_cnx(paramstyle='qmark') as cnx:
             cnx.cursor().execute("""
 drop table if exists identifier(?)
 """, (db_parameters['name'],))

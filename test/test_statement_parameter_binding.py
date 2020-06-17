@@ -19,9 +19,7 @@ except ImportError:
     reason="Snowflake admin account is not accessible."
 )
 def test_binding_security(conn_cnx):
-    """
-    Binding statement parameters
-    """
+    """Tests binding statement parameters."""
     expected_qa_mode_datetime = datetime(1967, 6, 23, 7, 0, 0, 123000, pytz.UTC)
 
     with conn_cnx() as cnx:

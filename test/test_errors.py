@@ -10,9 +10,7 @@ from snowflake.connector import errors
 
 
 def test_error_classes(conn_cnx):
-    u"""
-    Error classes in Connector module, object
-    """
+    """Error classes in Connector module, object."""
     # class
     assert snowflake.connector.ProgrammingError == errors.ProgrammingError
     assert snowflake.connector.OperationalError == errors.OperationalError
@@ -23,12 +21,10 @@ def test_error_classes(conn_cnx):
 
 
 def test_error_code(conn_cnx):
-    u"""
-    Error code is included in the exception
-    """
+    """Error code is included in the exception."""
     with conn_cnx() as ctx:
         try:
-            ctx.cursor().execute(u"SELECT * FROOOM TEST")
+            ctx.cursor().execute("SELECT * FROOOM TEST")
             raise Exception('Failed to detect Syntax error')
         except errors.ProgrammingError as e:
-            assert e.errno == 1003, u"Syntax error code"
+            assert e.errno == 1003, "Syntax error code"

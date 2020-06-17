@@ -48,9 +48,7 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 
 
 def test_ocsp():
-    """
-    OCSP tests
-    """
+    """OCSP tests."""
     # reset the memory cache
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
@@ -61,9 +59,7 @@ def test_ocsp():
 
 
 def test_ocsp_wo_cache_server():
-    """
-    OCSP Tests with Cache Server Disabled
-    """
+    """OCSP Tests with Cache Server Disabled."""
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     for url in TARGET_HOSTS:
@@ -73,9 +69,10 @@ def test_ocsp_wo_cache_server():
 
 
 def test_ocsp_wo_cache_file():
-    """
-    OCSP tests without File cache.
-    NOTE: Use /etc as a readonly directory such that no cache file is used.
+    """OCSP tests without File cache.
+
+    Notes:
+        Use /etc as a readonly directory such that no cache file is used.
     """
     # reset the memory cache
     SnowflakeOCSP.clear_cache()
@@ -168,9 +165,7 @@ def test_ocsp_single_endpoint():
 
 
 def test_ocsp_by_post_method():
-    """
-    OCSP tests
-    """
+    """OCSP tests."""
     # reset the memory cache
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(use_post_method=True)
@@ -181,9 +176,7 @@ def test_ocsp_by_post_method():
 
 
 def test_ocsp_with_file_cache(tmpdir):
-    """
-    OCSP tests and the cache server and file
-    """
+    """OCSP tests and the cache server and file."""
     tmp_dir = str(tmpdir.mkdir('ocsp_response_cache'))
     cache_file_name = path.join(tmp_dir, 'cache_file.txt')
 
@@ -198,10 +191,7 @@ def test_ocsp_with_file_cache(tmpdir):
 
 
 def test_ocsp_with_bogus_cache_files(tmpdir):
-    """
-    Attempt to use bogus OCSP response data
-    """
-
+    """Attempts to use bogus OCSP response data."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
     ocsp = SFOCSP(
@@ -230,9 +220,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
 
 
 def test_ocsp_with_outdated_cache(tmpdir):
-    """
-    Attempt to use outdated OCSP response cache file
-    """
+    """Attempts to use outdated OCSP response cache file."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
     ocsp = SFOCSP(
@@ -281,9 +269,7 @@ def _store_cache_in_file(
 
 
 def test_ocsp_with_invalid_cache_file():
-    """
-    OCSP tests with an invalid cache file
-    """
+    """OCSP tests with an invalid cache file."""
     SnowflakeOCSP.clear_cache()  # reset the memory cache
     ocsp = SFOCSP(ocsp_response_cache_uri="NEVER_EXISTS")
     for url in TARGET_HOSTS[0:1]:
@@ -293,10 +279,7 @@ def test_ocsp_with_invalid_cache_file():
 
 
 def test_concurrent_ocsp_requests(tmpdir):
-    """
-    Run OCSP revocation checks in parallel. The memory and file caches are
-    deleted randomly.
-    """
+    """Run OCSP revocation checks in parallel. The memory and file caches are deleted randomly."""
     cache_file_name = path.join(str(tmpdir), 'cache_file.txt')
     SnowflakeOCSP.clear_cache()  # reset the memory cache
 
@@ -308,9 +291,7 @@ def test_concurrent_ocsp_requests(tmpdir):
 
 
 def _validate_certs_using_ocsp(url, cache_file_name):
-    """
-    Validate OCSP response. Deleting memory cache and file cache randomly
-    """
+    """Validate OCSP response. Deleting memory cache and file cache randomly."""
     logger = logging.getLogger('test')
     import time
     import random
@@ -330,9 +311,7 @@ def _validate_certs_using_ocsp(url, cache_file_name):
 
 @pytest.mark.skip(reason="certificate expired.")
 def test_ocsp_revoked_certificate():
-    """
-    Test Revoked certificate.
-    """
+    """Tests revoked certificate."""
     revoked_cert = path.join(
         THIS_DIR, 'data', 'cert_tests', 'revoked_certs.pem')
 
@@ -345,9 +324,7 @@ def test_ocsp_revoked_certificate():
 
 
 def test_ocsp_incomplete_chain():
-    """
-    Test incomplete chained certificate
-    """
+    """Tests incomplete chained certificate."""
     incomplete_chain_cert = path.join(
         THIS_DIR, 'data', 'cert_tests', 'incomplete-chain.pem')
 
@@ -360,9 +337,7 @@ def test_ocsp_incomplete_chain():
 
 
 def test_ocsp_cache_merge(tmpdir):
-    """
-    Merge two OCSP response cache files
-    """
+    """Merges two OCSP response cache files."""
     previous_cache_filename = path.join(str(tmpdir), 'cache_file1.txt')
     _store_cache_in_file(
         tmpdir,

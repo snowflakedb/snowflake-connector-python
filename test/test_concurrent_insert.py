@@ -3,16 +3,12 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-"""
-Concurrent test module
-"""
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 
 import pytest
 
 import snowflake.connector
-from snowflake.connector.compat import TO_UNICODE
 from snowflake.connector.errors import ProgrammingError
 
 try:
@@ -24,9 +20,7 @@ logger = getLogger(__name__)
 
 
 def _concurrent_insert(meta):
-    """
-    Concurrent insert method
-    """
+    """Concurrent insert method."""
     cnx = snowflake.connector.connect(
         user=meta['user'],
         password=meta['password'],
@@ -63,9 +57,7 @@ def _concurrent_insert(meta):
     reason="The user needs a privilege of create warehouse."
 )
 def test_concurrent_insert(conn_cnx, db_parameters):
-    """
-    Concurrent insert tests. Inserts block on the one that's running.
-    """
+    """Concurrent insert tests. Inserts block on the one that's running."""
     number_of_threads = 22  # change this to increase the concurrency
     expected_success_runs = number_of_threads - 1
     cnx_array = []
@@ -91,7 +83,7 @@ create or replace table {name} (c1 integer, c2 string)
                     'database': db_parameters['database'],
                     'schema': db_parameters['schema'],
                     'table': db_parameters['name'],
-                    'idx': TO_UNICODE(i),
+                    'idx': str(i),
                     'warehouse': db_parameters['name_wh']
                 })
 
@@ -142,9 +134,7 @@ def _concurrent_insert_using_connection(meta):
     reason="The user needs a privilege of create warehouse."
 )
 def test_concurrent_insert_using_connection(conn_cnx, db_parameters):
-    """
-    Concurrent insert tests using the same connection
-    """
+    """Concurrent insert tests using the same connection."""
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""

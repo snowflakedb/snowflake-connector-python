@@ -7,14 +7,13 @@
 #
 # Python Db API v2
 #
-apilevel = u'2.0'
+apilevel = '2.0'
 threadsafety = 2
-paramstyle = u'pyformat'
+paramstyle = 'pyformat'
 
 import logging
 from logging import NullHandler
 
-from .compat import TO_UNICODE
 from .connection import SnowflakeConnection
 from .cursor import DictCursor
 from .dbapi import (
@@ -55,37 +54,37 @@ def Connect(**kwargs):
 
 connect = Connect
 
-SNOWFLAKE_CONNECTOR_VERSION = u'.'.join(TO_UNICODE(v) for v in VERSION[0:3])
+SNOWFLAKE_CONNECTOR_VERSION = '.'.join(str(v) for v in VERSION[0:3])
 __version__ = SNOWFLAKE_CONNECTOR_VERSION
 
 __all__ = [
     # Error handling
-    u'Error', u'Warning',
-    u'InterfaceError', u'DatabaseError',
-    u'NotSupportedError', u'DataError', u'IntegrityError', u'ProgrammingError',
-    u'OperationalError', u'InternalError',
+    'Error', 'Warning',
+    'InterfaceError', 'DatabaseError',
+    'NotSupportedError', 'DataError', 'IntegrityError', 'ProgrammingError',
+    'OperationalError', 'InternalError',
 
     # Extended cursor
-    u'DictCursor',
+    'DictCursor',
 
     # DBAPI PEP 249 required exports
-    u'connect',
-    u'apilevel',
-    u'threadsafety',
-    u'paramstyle',
-    u'Date',
-    u'Time',
-    u'Timestamp',
-    u'Binary',
-    u'DateFromTicks',
-    u'TimeFromTicks',
-    u'TimestampFromTicks',
-    u'STRING',
-    u'BINARY',
-    u'NUMBER',
-    u'DATETIME',
-    u'ROWID',
+    'connect',
+    'apilevel',
+    'threadsafety',
+    'paramstyle',
+    'Date',
+    'Time',
+    'Timestamp',
+    'Binary',
+    'DateFromTicks',
+    'TimeFromTicks',
+    'TimestampFromTicks',
+    'STRING',
+    'BINARY',
+    'NUMBER',
+    'DATETIME',
+    'ROWID',
 
     # Extended data type (experimental)
-    u'Json',
+    'Json',
 ]

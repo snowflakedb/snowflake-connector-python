@@ -23,9 +23,7 @@ OCSP_CACHE_SERVER_INTERVAL = 20 * 60 * 60  # seconds
 
 
 def main():
-    """
-    Internal Tool: Dump OCSP response cache file.
-    """
+    """Internal Tool: Dump OCSP response cache file."""
 
     def help():
         print(
@@ -84,12 +82,9 @@ def raise_outdated_validity_exception(
             SFOCSP.OUTPUT_TIMESTAMP_FORMAT)))
 
 
-def dump_ocsp_response_cache(
-        ocsp_response_cache_file, hostname_file, cert_glob_pattern):
-    """
-    Dump OCSP response cache contents. Show the subject name as well if
-    the subject is included in the certificate files.
-    """
+def dump_ocsp_response_cache(ocsp_response_cache_file, hostname_file, cert_glob_pattern):
+    """Dump OCSP response cache contents. Show the subject name as well if the subject is included in the
+    certificate files."""
     sfocsp = SFOCSP()
     s_to_n = _fetch_certs(hostname_file)
     s_to_n1 = _serial_to_name(sfocsp, cert_glob_pattern)
@@ -155,9 +150,7 @@ def dump_ocsp_response_cache(
 
 
 def _serial_to_name(sfocsp, cert_glob_pattern):
-    """
-    Create a map table from serial number to name
-    """
+    """Creates a map table from serial number to name."""
     map_serial_to_name = {}
     for cert_file in glob(cert_glob_pattern):
         cert_map = {}

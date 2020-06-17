@@ -12,14 +12,13 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, rsa
 
 import snowflake.connector
-from snowflake.connector.compat import TO_UNICODE
 
 
 def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
     if is_public_test:
         pytest.skip('This test requires ACCOUNTADMIN privilege to set the public key')
 
-    test_user = "python_test_keypair_user_" + TO_UNICODE(uuid.uuid4()).replace('-', '_')
+    test_user = "python_test_keypair_user_" + str(uuid.uuid4()).replace('-', '_')
 
     db_config = {
         'protocol': db_parameters['protocol'],
@@ -68,7 +67,7 @@ def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
     if is_public_test:
         pytest.skip('This test requires ACCOUNTADMIN privilege to set the public key')
 
-    test_user = "python_test_keypair_user_" + TO_UNICODE(uuid.uuid4()).replace('-', '_')
+    test_user = "python_test_keypair_user_" + str(uuid.uuid4()).replace('-', '_')
 
     db_config = {
         'protocol': db_parameters['protocol'],

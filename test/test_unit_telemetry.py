@@ -9,9 +9,7 @@ import snowflake.connector.telemetry
 
 
 def test_telemetry_data_to_dict():
-    """
-    Test that TelemetryData instances are properly converted to dicts
-    """
+    """Tests that TelemetryData instances are properly converted to dicts."""
     assert snowflake.connector.telemetry.TelemetryData({}, 2000).to_dict() == {'message': {}, 'timestamp': '2000'}
 
     d = {'type': 'test', 'query_id': '1', 'value': 20}
@@ -20,7 +18,7 @@ def test_telemetry_data_to_dict():
 
 def get_client_and_mock():
     rest_call = Mock()
-    rest_call.return_value = {u'success': True}
+    rest_call.return_value = {'success': True}
     rest = Mock()
     rest.attach_mock(rest_call, 'request')
     client = snowflake.connector.telemetry.TelemetryClient(rest, 2)
@@ -28,9 +26,7 @@ def get_client_and_mock():
 
 
 def test_telemetry_simple_flush():
-    """
-    Test that metrics are properly enqueued and sent to telemetry
-    """
+    """Tests that metrics are properly enqueued and sent to telemetry."""
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
@@ -41,9 +37,7 @@ def test_telemetry_simple_flush():
 
 
 def test_telemetry_close():
-    """
-    Test that remaining metrics are flushed on close
-    """
+    """Tests that remaining metrics are flushed on close."""
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
@@ -55,9 +49,7 @@ def test_telemetry_close():
 
 
 def test_telemetry_close_empty():
-    """
-    Test that no calls are made on close if there are no metrics to flush
-    """
+    """Tests that no calls are made on close if there are no metrics to flush."""
     client, rest_call = get_client_and_mock()
 
     client.close()
@@ -66,9 +58,7 @@ def test_telemetry_close_empty():
 
 
 def test_telemetry_send_batch():
-    """
-    Test that metrics are sent with the send_batch method
-    """
+    """Tests that metrics are sent with the send_batch method."""
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
@@ -79,9 +69,7 @@ def test_telemetry_send_batch():
 
 
 def test_telemetry_send_batch_empty():
-    """
-    Test that send_batch does nothing when there are no metrics to send
-    """
+    """Tests that send_batch does nothing when there are no metrics to send."""
     client, rest_call = get_client_and_mock()
 
     client.send_batch()
@@ -89,10 +77,7 @@ def test_telemetry_send_batch_empty():
 
 
 def test_telemetry_send_batch_clear():
-    """
-    Test that send_batch clears the first batch and will not send anything
-    on a second call
-    """
+    """Tests that send_batch clears the first batch and will not send anything on a second call."""
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
@@ -106,11 +91,9 @@ def test_telemetry_send_batch_clear():
 
 
 def test_telemetry_auto_disable():
-    """
-    Test that the client will automatically disable itself if a request fails
-    """
+    """Tests that the client will automatically disable itself if a request fails."""
     client, rest_call = get_client_and_mock()
-    rest_call.return_value = {u'success': False}
+    rest_call.return_value = {'success': False}
 
     client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert client.is_enabled()
@@ -120,9 +103,7 @@ def test_telemetry_auto_disable():
 
 
 def test_telemetry_add_batch_disabled():
-    """
-    Test that the client will not add logs if disabled
-    """
+    """Tests that the client will not add logs if disabled."""
     client, _ = get_client_and_mock()
 
     client.disable()
@@ -132,9 +113,7 @@ def test_telemetry_add_batch_disabled():
 
 
 def test_telemetry_send_batch_disabled():
-    """
-    Test that the client will not send logs if disabled
-    """
+    """Tests that the client will not send logs if disabled."""
     client, rest_call = get_client_and_mock()
 
     client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))

@@ -8,30 +8,22 @@ from .auth_by_plugin import AuthByPlugin
 
 
 class AuthByDefault(AuthByPlugin):
-    """
-    Default username and password authenticator
-    """
+    """Default username and password authenticator."""
 
     @property
     def assertion_content(self):
         return "*********"
 
     def __init__(self, password):
-        """
-        Initializes an instance with a password
-        """
+        """Initializes an instance with a password."""
         self._password = password
 
     def authenticate(
             self, authenticator, service_name, account, user, password):
-        """
-        NOP.
-        """
+        """NOOP."""
         pass
 
     def update_body(self, body):
-        """
-        Set the password if available
-        """
+        """Sets the password if available."""
         if self._password:
-            body[u'data'][u"PASSWORD"] = self._password
+            body['data']["PASSWORD"] = self._password

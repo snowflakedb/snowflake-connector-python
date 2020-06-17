@@ -13,9 +13,7 @@ pytestmark = pytest.mark.putget
 
 
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
-    """
-    [s3] Put and Copy large files
-    """
+    """[s3] Puts and Copies into large files."""
     # generates N files
     number_of_files = 2
     number_of_lines = 200000

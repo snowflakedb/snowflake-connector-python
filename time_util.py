@@ -18,10 +18,7 @@ DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 
 
 class HeartBeatTimer(Timer):
-    """
-    A thread which executes a function every
-    client_session_keep_alive_heartbeat_frequency seconds
-    """
+    """A thread which executes a function every client_session_keep_alive_heartbeat_frequency seconds."""
 
     def __init__(self, client_session_keep_alive_heartbeat_frequency, f):
         interval = client_session_keep_alive_heartbeat_frequency
@@ -38,9 +35,7 @@ class HeartBeatTimer(Timer):
 
 
 def get_time_millis():
-    """
-    Return the current time in millis
-    """
+    """Returns the current time in millis."""
     return int(time.time() * 1000)
 
 

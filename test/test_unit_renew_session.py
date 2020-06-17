@@ -28,10 +28,10 @@ def test_renew_session():
 
     # inject a fake method (success)
     def fake_request_exec(**_):
-        return {u'success': True,
-                u'data': {
-                    u"sessionToken": NEW_SESSION_TOKEN,
-                    u"masterToken": NEW_MASTER_TOKEN}}
+        return {'success': True,
+                'data': {
+                    "sessionToken": NEW_SESSION_TOKEN,
+                    "masterToken": NEW_MASTER_TOKEN}}
 
     rest._request_exec = fake_request_exec
 
@@ -42,9 +42,9 @@ def test_renew_session():
 
     # inject a fake method (failure)
     def fake_request_exec(**_):
-        return {u'success': False,
-                u'message': "failed to renew session",
-                u'code': 987654}
+        return {'success': False,
+                'message': "failed to renew session",
+                'code': 987654}
 
     rest._request_exec = fake_request_exec
 
