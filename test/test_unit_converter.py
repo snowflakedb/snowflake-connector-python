@@ -6,7 +6,6 @@
 
 from logging import getLogger
 
-from snowflake.connector.compat import TO_UNICODE
 from snowflake.connector.connection import DefaultConverterClass
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
@@ -16,10 +15,7 @@ ConverterSnowSQL = SnowflakeConverterSnowSQL
 
 
 def test_is_dst():
-    """
-    SNOW-6020: Failed to convert to local time during DST is being
-    changed
-    """
+    """SNOW-6020: Failed to convert to local time during DST is being changed."""
     # DST to non-DST
     convClass = DefaultConverterClass()
     conv = convClass()
@@ -36,7 +32,7 @@ def test_is_dst():
     m = conv.to_python_method('TIMESTAMP_LTZ', col_meta)
     ret = m('1414890189.000')
 
-    assert TO_UNICODE(ret) == u'2014-11-01 18:03:09-07:00', \
+    assert str(ret) == '2014-11-01 18:03:09-07:00', \
         'Timestamp during from DST to non-DST'
 
     # non-DST to DST
@@ -51,7 +47,7 @@ def test_is_dst():
     m = conv.to_python_method('TIMESTAMP_LTZ', col_meta)
     ret = m('1425780189.000')
 
-    assert TO_UNICODE(ret) == u'2015-03-07 18:03:09-08:00', \
+    assert str(ret) == '2015-03-07 18:03:09-08:00', \
         'Timestamp during from non-DST to DST'
 
 

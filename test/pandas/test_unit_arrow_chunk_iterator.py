@@ -560,7 +560,7 @@ def iterate_over_test_chunk(pyarrow_type, column_meta, source_data_generator, ex
 
 
 def get_timezone(timezone=None):
-    """ Get the session timezone or use the local computer's timezone. """
+    """Gets, or uses the session timezone or use the local computer's timezone."""
     try:
         tz = 'UTC' if not timezone else timezone
         return pytz.timezone(tz)

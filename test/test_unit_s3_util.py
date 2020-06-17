@@ -21,9 +21,7 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 
 
 def test_extract_bucket_name_and_path():
-    """
-    Extract bucket name and S3 path
-    """
+    """Extracts bucket name and S3 path."""
     s3_util = SnowflakeS3Util
 
     s3_loc = s3_util.extract_bucket_name_and_path(
@@ -53,9 +51,10 @@ def test_extract_bucket_name_and_path():
 
 
 def test_upload_one_file_to_s3_wsaeconnaborted():
-    """
-    Tests Upload one file to S3 with retry on ERRORNO_WSAECONNABORTED.
-    The last attempted max_currency should be (initial_parallel/max_retry)
+    """Tests Upload one file to S3 with retry on ERRORNO_WSAECONNABORTED.
+
+    Notes:
+        The last attempted max_currency should be (initial_parallel/max_retry).
     """
     upload_file = MagicMock(
         side_effect=OpenSSL.SSL.SysCallError(
@@ -65,23 +64,23 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     client.Object.return_value = s3object
     initial_parallel = 100
     upload_meta = {
-        u'no_sleeping_time': True,
-        u'parallel': initial_parallel,
-        u'put_callback': None,
-        u'put_callback_output_stream': None,
-        u'existing_files': [],
-        u'client': client,
+        'no_sleeping_time': True,
+        'parallel': initial_parallel,
+        'put_callback': None,
+        'put_callback_output_stream': None,
+        'existing_files': [],
+        'client': client,
         SHA256_DIGEST: '123456789abcdef',
-        u'stage_info': {
-            u'location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
-            u'locationType': 'S3',
+        'stage_info': {
+            'location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+            'locationType': 'S3',
         },
-        u'dst_file_name': 'data1.txt.gz',
-        u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
-        u'overwrite': True,
+        'dst_file_name': 'data1.txt.gz',
+        'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        'overwrite': True,
     }
-    upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
-    upload_meta[u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+    upload_meta['real_src_file_name'] = upload_meta['src_file_name']
+    upload_meta['upload_size'] = os.stat(upload_meta['src_file_name']).st_size
     tmp_upload_meta = upload_meta.copy()
     try:
         SnowflakeRemoteStorageUtil.upload_one_file(tmp_upload_meta)
@@ -96,7 +95,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     # min parallel == 1
     upload_file.reset_mock()
     initial_parallel = 4
-    upload_meta[u'parallel'] = initial_parallel
+    upload_meta['parallel'] = initial_parallel
     tmp_upload_meta = upload_meta.copy()
     try:
         SnowflakeRemoteStorageUtil.upload_one_file(tmp_upload_meta)
@@ -108,9 +107,10 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
 
 
 def test_upload_one_file_to_s3_econnreset():
-    """
-    Tests Upload one file to S3 with retry on errno.ECONNRESET.
-    The last attempted max_currency should not be changed.
+    """Tests Upload one file to S3 with retry on errno.ECONNRESET.
+
+    Notes:
+        The last attempted max_currency should not be changed.
     """
     for error_code in [errno.ECONNRESET,
                        errno.ETIMEDOUT,
@@ -124,24 +124,24 @@ def test_upload_one_file_to_s3_econnreset():
         client.Object.return_value = s3object
         initial_parallel = 100
         upload_meta = {
-            u'no_sleeping_time': True,
-            u'parallel': initial_parallel,
-            u'put_callback': None,
-            u'put_callback_output_stream': None,
-            u'existing_files': [],
+            'no_sleeping_time': True,
+            'parallel': initial_parallel,
+            'put_callback': None,
+            'put_callback_output_stream': None,
+            'existing_files': [],
             SHA256_DIGEST: '123456789abcdef',
-            u'stage_info': {
-                u'location': 'sfc-teststage/rwyitestacco/users/1234/',
-                u'locationType': 'S3',
+            'stage_info': {
+                'location': 'sfc-teststage/rwyitestacco/users/1234/',
+                'locationType': 'S3',
             },
-            u'client': client,
-            u'dst_file_name': 'data1.txt.gz',
-            u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
-            u'overwrite': True,
+            'client': client,
+            'dst_file_name': 'data1.txt.gz',
+            'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+            'overwrite': True,
         }
-        upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
+        upload_meta['real_src_file_name'] = upload_meta['src_file_name']
         upload_meta[
-            u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+            'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
         try:
             SnowflakeRemoteStorageUtil.upload_one_file(upload_meta)
             raise Exception("Should fail with OpenSSL.SSL.SysCallError")
@@ -151,13 +151,13 @@ def test_upload_one_file_to_s3_econnreset():
 
 
 def test_get_s3_file_object_http_400_error():
-    """
-    Tests Get S3 file object with HTTP 400 error. Looks like HTTP 400 is
-    returned when AWS token expires and S3.Object.load is called.
+    """Tests Get S3 file object with HTTP 400 error.
+
+    Looks like HTTP 400 is returned when AWS token expires and S3.Object.load is called.
     """
     load_method = MagicMock(
         side_effect=botocore.exceptions.ClientError(
-            {'Error': {'Code': u'400', 'Message': 'Bad Request'}},
+            {'Error': {'Code': '400', 'Message': 'Bad Request'}},
             operation_name='mock load'))
     s3object = MagicMock(load=load_method)
     client = Mock()
@@ -165,10 +165,10 @@ def test_get_s3_file_object_http_400_error():
     client.load.return_value = None
     type(client).s3path = PropertyMock(return_value='s3://testbucket/')
     meta = {
-        u'client': client,
-        u'stage_info': {
-            u'location': 'sfc-teststage/rwyitestacco/users/1234/',
-            u'locationType': 'S3',
+        'client': client,
+        'stage_info': {
+            'location': 'sfc-teststage/rwyitestacco/users/1234/',
+            'locationType': 'S3',
         }
     }
     filename = "/path1/file2.txt"
@@ -178,10 +178,7 @@ def test_get_s3_file_object_http_400_error():
 
 
 def test_upload_file_with_s3_upload_failed_error():
-    """
-    Tests Upload file with S3UploadFailedError, which could indicate AWS
-    token expires.
-    """
+    """Tests Upload file with S3UploadFailedError, which could indicate AWS token expires."""
     upload_file = MagicMock(
         side_effect=S3UploadFailedError(
             "An error occurred (ExpiredToken) when calling the "
@@ -191,24 +188,24 @@ def test_upload_file_with_s3_upload_failed_error():
         metadata=defaultdict(str), upload_file=upload_file)
     initial_parallel = 100
     upload_meta = {
-        u'no_sleeping_time': True,
-        u'parallel': initial_parallel,
-        u'put_callback': None,
-        u'put_callback_output_stream': None,
-        u'existing_files': [],
+        'no_sleeping_time': True,
+        'parallel': initial_parallel,
+        'put_callback': None,
+        'put_callback_output_stream': None,
+        'existing_files': [],
         SHA256_DIGEST: '123456789abcdef',
-        u'stage_info': {
-            u'location': 'sfc-teststage/rwyitestacco/users/1234/',
-            u'locationType': 'S3',
+        'stage_info': {
+            'location': 'sfc-teststage/rwyitestacco/users/1234/',
+            'locationType': 'S3',
         },
-        u'client': client,
-        u'dst_file_name': 'data1.txt.gz',
-        u'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
-        u'overwrite': True,
+        'client': client,
+        'dst_file_name': 'data1.txt.gz',
+        'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        'overwrite': True,
     }
-    upload_meta[u'real_src_file_name'] = upload_meta['src_file_name']
+    upload_meta['real_src_file_name'] = upload_meta['src_file_name']
     upload_meta[
-        u'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+        'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
 
     akey = SnowflakeRemoteStorageUtil.upload_one_file(upload_meta)
     assert akey is None

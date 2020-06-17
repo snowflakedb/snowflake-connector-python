@@ -23,9 +23,7 @@ logger = getLogger(__name__)
 
 
 class AuthByKeyPair(AuthByPlugin):
-    """
-        Key pair based authentication
-    """
+    """Key pair based authentication."""
     LIFETIME = timedelta(seconds=120)
     ALGORITHM = 'RS256'
     ISSUER = 'iss'
@@ -34,8 +32,10 @@ class AuthByKeyPair(AuthByPlugin):
     ISSUE_TIME = 'iat'
 
     def __init__(self, private_key):
-        """
-        :param private_key: a byte array of der formats of private key
+        """Inits AuthByKeyPair class with private key.
+
+        Args:
+            private_key: a byte array of der formats of private key
         """
         self._private_key = private_key
         self._jwt_token = ''
@@ -52,15 +52,15 @@ class AuthByKeyPair(AuthByPlugin):
             private_key = load_der_private_key(data=self._private_key, password=None, backend=default_backend())
         except Exception as e:
             raise ProgrammingError(
-                msg=u'Failed to load private key: {}\nPlease provide a valid unencrypted rsa private '
-                    u'key in DER format as bytes object'.format(str(e)),
+                msg='Failed to load private key: {}\nPlease provide a valid unencrypted rsa private '
+                    'key in DER format as bytes object'.format(str(e)),
                 errno=ER_INVALID_PRIVATE_KEY
             )
 
         if not isinstance(private_key, RSAPrivateKey):
             raise ProgrammingError(
-                msg=u'Private key type ({}) not supported.\nPlease provide a valid rsa private '
-                    u'key in DER format as bytes object'.format(private_key.__class__.__name__),
+                msg='Private key type ({}) not supported.\nPlease provide a valid rsa private '
+                    'key in DER format as bytes object'.format(private_key.__class__.__name__),
                 errno=ER_INVALID_PRIVATE_KEY
             )
 
@@ -94,8 +94,8 @@ class AuthByKeyPair(AuthByPlugin):
         return public_key_fp
 
     def update_body(self, body):
-        body[u'data'][u'AUTHENTICATOR'] = KEY_PAIR_AUTHENTICATOR
-        body[u'data'][u'TOKEN'] = self._jwt_token
+        body['data']['AUTHENTICATOR'] = KEY_PAIR_AUTHENTICATOR
+        body['data']['TOKEN'] = self._jwt_token
 
     def assertion_content(self):
         return self._jwt_token

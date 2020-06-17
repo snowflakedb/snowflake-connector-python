@@ -1,19 +1,14 @@
-#
-# SSL wrap util for PyOpenSSL.
+"""SSL wrap util for PyOpenSSL.
 
-# Copied from:
-#
-# https://github.com/shazow/urllib3/tree/master/urllib3/util
-#
-# to support ssl_wrap_socket.
-#
+Copied from: https://github.com/shazow/urllib3/tree/master/urllib3/util to support ssl_wrap_socket.
 
-# Backport of selectors.py from Python 3.5+ to support Python < 3.4
-# Also has the behavior specified in PEP 475 which is to retry syscalls
-# in the case of an EINTR error. This module is required because selectors34
-# does not follow this behavior and instead returns that no dile descriptor
-# events have occurred rather than retry the syscall. The decision to drop
-# support for select.devpoll is made to maintain 100% test coverage.
+Backport of selectors.py from Python 3.5+ to support Python < 3.4
+Also has the behavior specified in PEP 475 which is to retry syscalls
+in the case of an EINTR error. This module is required because selectors34
+does not follow this behavior and instead returns that no dile descriptor
+events have occurred rather than retry the syscall. The decision to drop
+support for select.devpoll is made to maintain 100% test coverage.
+"""
 
 import errno
 import math
@@ -51,8 +46,7 @@ class SelectorError(Exception):
 
 
 def _fileobj_to_fd(fileobj):
-    """ Return a file descriptor from a file object. If
-    given an integer will simply return that integer back. """
+    """Returns a file descriptor from a file object. If given an integer will simply return that integer back."""
     if isinstance(fileobj, int):
         fd = fileobj
     else:
@@ -69,9 +63,11 @@ def _fileobj_to_fd(fileobj):
 # already handles the case when system calls are interrupted.
 if sys.version_info >= (3, 5):
     def _syscall_wrapper(func, _, *args, **kwargs):
-        """ This is the short-circuit version of the below logic
-        because in Python 3.5+ all system calls automatically restart
-        and recalculate their timeouts. """
+        """This is the short-circuit version of the below logic.
+
+        This is required because in Python 3.5+ all system calls automatically restart and recalculate
+        their timeouts.
+        """
         try:
             return func(*args, **kwargs)
         except (OSError, IOError, select.error) as e:
@@ -81,9 +77,10 @@ if sys.version_info >= (3, 5):
             raise SelectorError(errcode)
 else:
     def _syscall_wrapper(func, recalc_timeout, *args, **kwargs):
-        """ Wrapper function for syscalls that could fail due to EINTR.
-        All functions should be retried if there is time left in the timeout
-        in accordance with PEP 475. """
+        """Wrapper function for syscalls that could fail due to EINTR.
+
+        All functions should be retried if there is time left in the timeout in accordance with PEP 475.
+        """
         timeout = kwargs.get("timeout", None)
         if timeout is None:
             expires = None
@@ -139,7 +136,7 @@ SelectorKey = namedtuple('SelectorKey', ['fileobj', 'fd', 'events', 'data'])
 
 
 class _SelectorMapping(MAPPING):
-    """ Mapping of file objects to selector keys """
+    """Mapping of file objects to selector keys."""
 
     def __init__(self, selector):
         self._selector = selector
@@ -159,19 +156,15 @@ class _SelectorMapping(MAPPING):
 
 
 class BaseSelector(object):
-    """ Abstract Selector class
+    """Abstract Selector class.
 
-    A selector supports registering file objects to be monitored
-    for specific I/O events.
+    A selector supports registering file objects to be monitored for specific I/O events.
 
-    A file object is a file descriptor or any object with a
-    `fileno()` method. An arbitrary object can be attached to the
-    file object which can be used for example to store context info,
-    a callback, etc.
+    A file object is a file descriptor or any object with a `fileno()` method. An arbitrary object can be
+    attached to the file object which can be used for example to store context info, a callback, etc.
 
-    A selector can use various implementations (select(), poll(), epoll(),
-    and kqueue()) depending on the platform. The 'DefaultSelector' class uses
-    the most efficient implementation for the current platform.
+    A selector can use various implementations (select(), poll(), epoll(), and kqueue()) depending on the platform.
+    The 'DefaultSelector' class uses the most efficient implementation for the current platform.
     """
     def __init__(self):
         # Maps file descriptors to keys.
@@ -181,12 +174,11 @@ class BaseSelector(object):
         self._map = _SelectorMapping(self)
 
     def _fileobj_lookup(self, fileobj):
-        """ Return a file descriptor from a file object.
-        This wraps _fileobj_to_fd() to do an exhaustive
-        search in case the object is invalid but we still
-        have it in our map. Used by unregister() so we can
-        unregister an object that was previously registered
-        even if it is closed. It is also used by _SelectorMapping
+        """Return a file descriptor from a file object.
+
+        This wraps _fileobj_to_fd() to do an exhaustive search in case the object is invalid but we still
+        have it in our map. Used by unregister() so we can unregister an object that was previously registered
+        even if it is closed. It is also used by _SelectorMapping.
         """
         try:
             return _fileobj_to_fd(fileobj)
@@ -201,7 +193,7 @@ class BaseSelector(object):
             raise
 
     def register(self, fileobj, events, data=None):
-        """ Register a file object for a set of events to monitor. """
+        """Registers a file object for a set of events to monitor."""
         if (not events) or (events & ~(EVENT_READ | EVENT_WRITE)):
             raise ValueError("Invalid events: {!r}".format(events))
 
@@ -215,7 +207,7 @@ class BaseSelector(object):
         return key
 
     def unregister(self, fileobj):
-        """ Unregister a file object from being monitored. """
+        """Unregisters a file object from being monitored."""
         try:
             key = self._fd_to_key.pop(self._fileobj_lookup(fileobj))
         except KeyError:
@@ -235,8 +227,11 @@ class BaseSelector(object):
         return key
 
     def modify(self, fileobj, events, data=None):
-        """ Change a registered file object monitored events and data. """
-        # NOTE: Some subclasses optimize this operation even further.
+        """Changes a registered file object monitored events and data.
+
+        Notes:
+            Some subclasses optimize this operation even further.
+        """
         try:
             key = self._fd_to_key[self._fileobj_lookup(fileobj)]
         except KeyError:
@@ -254,18 +249,19 @@ class BaseSelector(object):
         return key
 
     def select(self, timeout=None):
-        """ Perform the actual selection until some monitored file objects
-        are ready or the timeout expires. """
+        """Performs the actual selection until some monitored file objects are ready or the timeout expires."""
         raise NotImplementedError()
 
     def close(self):
-        """ Close the selector. This must be called to ensure that all
-        underlying resources are freed. """
+        """Closes the selector.
+
+        This must be called to ensure that all underlying resources are freed.
+        """
         self._fd_to_key.clear()
         self._map = None
 
     def get_key(self, fileobj):
-        """ Return the key associated with a registered file object. """
+        """Returns the key associated with a registered file object."""
         mapping = self.get_map()
         if mapping is None:
             raise RuntimeError("Selector is closed")
@@ -275,12 +271,11 @@ class BaseSelector(object):
             raise KeyError("{!r} is not registered".format(fileobj))
 
     def get_map(self):
-        """ Return a mapping of file objects to selector keys """
+        """Returns a mapping of file objects to selector keys."""
         return self._map
 
     def _key_from_fd(self, fd):
-        """ Return the key associated to a given file descriptor
-         Return None if it is not found. """
+        """Returns the key associated to a given file descriptor."""
         try:
             return self._fd_to_key[fd]
         except KeyError:
@@ -296,7 +291,7 @@ class BaseSelector(object):
 # Almost all platforms have select.select()
 if hasattr(select, "select"):
     class SelectSelector(BaseSelector):
-        """ Select-based selector. """
+        """Select-based selector."""
         def __init__(self):
             super(SelectSelector, self).__init__()
             self._readers = set()
@@ -317,11 +312,11 @@ if hasattr(select, "select"):
             return key
 
         def _select(self, r, w, timeout=None):
-            """ Wrapper for select.select because timeout is a positional arg """
+            """Wrapper for select.select because timeout is a positional arg."""
             return select.select(r, w, [], timeout)
 
         def select(self, timeout=None):
-            # Selecting on empty lists on Windows errors out.
+            """Selecting on empty lists on Windows errors out."""
             if not len(self._readers) and not len(self._writers):
                 return []
 
@@ -346,7 +341,7 @@ if hasattr(select, "select"):
 
 if hasattr(select, "poll"):
     class PollSelector(BaseSelector):
-        """ Poll-based selector """
+        """Poll-based selector."""
         def __init__(self):
             super(PollSelector, self).__init__()
             self._poll = select.poll()
@@ -367,8 +362,7 @@ if hasattr(select, "poll"):
             return key
 
         def _wrap_poll(self, timeout=None):
-            """ Wrapper function for select.poll.poll() so that
-            _syscall_wrapper can work with only seconds. """
+            """Wrapper function for select.poll.poll() so that _syscall_wrapper can work with only seconds."""
             if timeout is not None:
                 if timeout <= 0:
                     timeout = 0
@@ -399,7 +393,7 @@ if hasattr(select, "poll"):
 
 if hasattr(select, "epoll"):
     class EpollSelector(BaseSelector):
-        """ Epoll-based selector """
+        """Epoll-based selector."""
         def __init__(self):
             super(EpollSelector, self).__init__()
             self._epoll = select.epoll()
@@ -466,7 +460,7 @@ if hasattr(select, "epoll"):
 
 if hasattr(select, "kqueue"):
     class KqueueSelector(BaseSelector):
-        """ Kqueue / Kevent-based selector """
+        """Kqueue / Kevent-based selector."""
         def __init__(self):
             super(KqueueSelector, self).__init__()
             self._kqueue = select.kqueue()
@@ -552,10 +546,11 @@ if not hasattr(select, 'select'):  # Platform-specific: AppEngine
 
 
 def _can_allocate(struct):
-    """ Checks that select structs can be allocated by the underlying
-    operating system, not just advertised by the select module. We don't
-    check select() because we'll be hopeful that most platforms that
-    don't have it available will not advertise it. (ie: GAE) """
+    """Checks that select structs can be allocated by the underlying operating system.
+
+    Otherwise it could be just advertised by the select module. We don't check select() because we'll be hopeful
+    that most platforms that don't have it available will not advertise it. (ie: GAE).
+    """
     try:
         # select.poll() objects won't fail until used.
         if struct == 'poll':
@@ -574,9 +569,11 @@ def _can_allocate(struct):
 # kqueue == epoll > poll > select. Devpoll not supported. (See above)
 # select() also can't accept a FD > FD_SETSIZE (usually around 1024)
 def DefaultSelector():
-    """ This function serves as a first call for DefaultSelector to
-    detect if the select module is being monkey-patched incorrectly
-    by eventlet, greenlet, and preserve proper behavior. """
+    """This function serves as a first call for DefaultSelector to detect.
+
+    It is for when the select module is being monkey-patched incorrectly by eventlet, greenlet,
+    and preserve proper behavior.
+    """
     global _DEFAULT_SELECTOR
     if _DEFAULT_SELECTOR is None:
         if _can_allocate('kqueue'):
@@ -593,9 +590,11 @@ def DefaultSelector():
 
 
 def _wait_for_io_events(socks, events, timeout=None):
-    """ Waits for IO events to be available from a list of sockets
-    or optionally a single socket if passed in. Returns a list of
-    sockets that can be interacted with immediately. """
+    """Waits for IO events to be available from a list of sockets or optionally a single socket if passed in.
+
+    Returns:
+        A list of sockets that can be interacted with immediately.
+    """
     if not HAS_SELECT:
         raise ValueError('Platform does not have a selector')
     if not isinstance(socks, list):
@@ -613,14 +612,18 @@ def _wait_for_io_events(socks, events, timeout=None):
 
 
 def wait_for_read(socks, timeout=None):
-    """ Waits for reading to be available from a list of sockets
-    or optionally a single socket if passed in. Returns a list of
-    sockets that can be read from immediately. """
+    """Waits for reading to be available from a list of sockets or optionally a single socket if passed in.
+
+    Returns:
+        A list of sockets that can be read from immediately.
+    """
     return _wait_for_io_events(socks, EVENT_READ, timeout)
 
 
 def wait_for_write(socks, timeout=None):
-    """ Waits for writing to be available from a list of sockets
-    or optionally a single socket if passed in. Returns a list of
-    sockets that can be written to immediately. """
+    """Waits for writing to be available from a list of sockets`or optionally a single socket if passed in.
+
+    Returns:
+        A list of sockets that can be written to immediately.
+    """
     return _wait_for_io_events(socks, EVENT_WRITE, timeout)

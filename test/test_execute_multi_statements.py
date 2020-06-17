@@ -183,7 +183,7 @@ def test_execute_stream(conn_cnx):
     expected_results = [3, 4, 5, 6]
     with conn_cnx() as cnx:
         for idx, rec in enumerate(cnx.execute_stream(
-                StringIO(u"SELECT 3; SELECT 4; SELECT 5;\nSELECT 6;"))):
+                StringIO("SELECT 3; SELECT 4; SELECT 5;\nSELECT 6;"))):
             assert rec.fetchall()[0][0] == expected_results[idx]
 
 

@@ -434,21 +434,20 @@ def test_timestampltz(conn_cnx, scale, timezone):
 
 
 def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='float', epsilon=None, scale=0, timezone=None):
-    """
-        test parameters can be customized
-        @param conn_cnx: connection
-        @param sql: SQL command for execution
-        @param cases: test cases
-        @param col_count: # of columns in dataframe
-        @param method:
-            1. If method is 'batch', we fetch dataframes in batch.
-            2. If method is 'one', we fetch a single dataframe containing all data
-        @param data_type: defines how to compare values
-        @param epsilon: for compare double values
-        @param scale: for compare time values with scale
-        @param timezone: for timestamp ltz
-    """
+    """Tests that parameters can be customized.
 
+    Args:
+        conn_cnx: Connection object.
+        sql: SQL command for execution.
+        cases: Test cases.
+        col_count: Number of columns in dataframe.
+        method: If method is 'batch', we fetch dataframes in batch. If method is 'one', we fetch a single dataframe
+            containing all data (Default value = 'one').
+        data_type: Defines how to compare values (Default value = 'float').
+        epsilon: For comparing double values (Default value = None).
+        scale: For comparing time values with scale (Default value = 0).
+        timezone: For comparing timestamp ltz (Default value = None).
+    """
     row_count = len(cases)
     assert col_count != 0, '# of columns should be larger than 0'
     with conn_cnx() as cnx_table:
@@ -569,17 +568,16 @@ def get_random_seed():
 
 
 def fetch_pandas(conn_cnx, sql, row_count, col_count, method='one'):
-    """
-        test parameters can be customized
-        @param conn_cnx: connection
-        @param sql: SQL command for execution
-        @param row_count: # of total rows combining all dataframes
-        @param col_count: # of columns in dataframe
-        @param method:
-            1. If method is 'batch', we fetch dataframes in batch.
-            2. If method is 'one', we fetch a single dataframe containing all data
-    """
+    """Tests that parameters can be customized.
 
+    Args:
+        conn_cnx: Connection object.
+        sql: SQL command for execution.
+        row_count: Number of total rows combining all dataframes.
+        col_count: Number of columns in dataframe.
+        method: If method is 'batch', we fetch dataframes in batch. If method is 'one', we fetch a single dataframe
+            containing all data (Default value = 'one').
+    """
     assert row_count != 0, '# of rows should be larger than 0'
     assert col_count != 0, '# of columns should be larger than 0'
 

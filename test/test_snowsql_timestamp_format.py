@@ -14,9 +14,7 @@ from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
     reason="SnowSQL runs on Python 35+. "
            "Windows doesn't support more than 9999 yeers")
 def test_snowsql_timestamp_format(conn_cnx):
-    """
-    In SnowSQL, OverflowError should not happen
-    """
+    """In SnowSQL, OverflowError should not happen."""
     with conn_cnx(
             converter_class=SnowflakeConverterSnowSQL
     ) as cnx:

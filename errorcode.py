@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-u"""This module contains Snowflake error codes"""
+"""This module contains Snowflake error codes."""
 
 # network
 ER_FAILED_TO_CONNECT_TO_DB = 250001

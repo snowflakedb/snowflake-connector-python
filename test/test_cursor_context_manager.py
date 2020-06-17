@@ -7,9 +7,7 @@ from logging import getLogger
 
 
 def test_context_manager(conn_testaccount, db_parameters):
-    """
-    Context Manager support in Cursor
-    """
+    """Tests context Manager support in Cursor."""
     logger = getLogger(__name__)
 
     def tables(conn):
@@ -26,7 +24,7 @@ def test_context_manager(conn_testaccount, db_parameters):
         all_tables = [rec for rec in tables(conn_testaccount)
                       if rec == db_parameters['name'].upper()]
         logger.info('tables: %s', all_tables)
-        assert len(all_tables) == 1, u'number of tables'
+        assert len(all_tables) == 1, 'number of tables'
     finally:
         conn_testaccount.cursor().execute(
             'drop table if exists {}'.format(db_parameters['name']))

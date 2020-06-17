@@ -8,7 +8,7 @@ from snowflake.connector.auth_oauth import AuthByOAuth
 
 
 def test_auth_oauth():
-    """ Simple OAuth test."""
+    """Simple OAuth test."""
     token = "oAuthToken"
     auth = AuthByOAuth(token)
     auth.authenticate(None, None, None, None, None)

@@ -330,9 +330,7 @@ ALTER SESSION SET
 
 
 def test_fetch_timestamps_negative_epoch(conn_cnx):
-    """
-    Negative epoch
-    """
+    """Negative epoch."""
     r0 = _compose_ntz('-602594703.876544')
     r1 = _compose_ntz('1325594096.123456')
     with conn_cnx() as cnx:
@@ -348,9 +346,7 @@ SELECT
 
 
 def test_date_0001_9999(conn_cnx):
-    """
-    Test 0001 and 9999 for all platforms
-    """
+    """Test 0001 and 9999 for all platforms."""
     with conn_cnx(
             converter_class=SnowflakeConverterSnowSQL,
             support_negative_year=True) as cnx:
@@ -379,9 +375,7 @@ SELECT
 
 @pytest.mark.skipif(IS_WINDOWS, reason="year out of range error")
 def test_five_or_more_digit_year_date_converter(conn_cnx):
-    """
-    Past and future dates
-    """
+    """Past and future dates."""
     with conn_cnx(
             converter_class=SnowflakeConverterSnowSQL,
             support_negative_year=True) as cnx:
@@ -432,10 +426,7 @@ SELECT
 
 
 def test_franction_followed_by_year_format(conn_cnx):
-    """
-    Both year and franctions are included but fraction shows up followed by
-    year.
-    """
+    """Both year and franctions are included but fraction shows up followed by year."""
     with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
         cnx.cursor().execute("""
 alter session set python_connector_query_result_format='JSON'
@@ -453,10 +444,7 @@ SELECT
 
 
 def test_fetch_fraction_timestamp(conn_cnx):
-    """
-    Additional fetch timestamp tests. Mainly used for SnowSQL
-    which converts to string representations.
-    """
+    """Additional fetch timestamp tests. Mainly used for SnowSQL which converts to string representations."""
     PST_TZ = "America/Los_Angeles"
 
     converter_class = SnowflakeConverterSnowSQL

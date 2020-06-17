@@ -3,10 +3,11 @@
 #
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
-"""
-Detects and Masks Secrets that might be leaked from two potential avenues
-1. Out of Band Telemetry
-2. Logging
+"""The secret detector detects sensitive information.
+
+It masks secrets that might be leaked from two potential avenues
+    1. Out of Band Telemetry
+    2. Logging
 """
 import logging
 import re
@@ -68,12 +69,14 @@ class SecretDetector(logging.Formatter):
         return SecretDetector.PRIVATE_KEY_DATA_PATTERN.sub('"privateKeyData": "XXXX"', text)
 
     @staticmethod
-    def mask_secrets(text):
-        """
-        Masks any secrets. This is the method that should be used by outside classes
+    def mask_secrets(text: str) -> str:
+        """Masks any secrets. This is the method that should be used by outside classes.
 
-        :param text: a string which may contain a secret
-        :return: the masked string
+        Args:
+            text: A string which may contain a secret.
+
+        Returns:
+            The masked string.
         """
         if text is None:
             return None
@@ -109,12 +112,15 @@ class SecretDetector(logging.Formatter):
         return masked, masked_text, err_str
 
     def format(self, record: logging.LogRecord) -> str:
-        """
-        Wrapper around logging module's formatter.
-        This will ensure that the formatted message is
-        free from sensitive credentials.
-        :param record: the logging record
-        :return: formatted desensitized log string
+        """Wrapper around logging module's formatter.
+
+        This will ensure that the formatted message is free from sensitive credentials.
+
+        Args:
+            record: The logging record.
+
+        Returns:
+            Formatted desensitized log string.
         """
         try:
             unsanitized_log = super().format(record)

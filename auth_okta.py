@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 def _is_prefix_equal(url1, url2):
-    """
-    Checks if URL prefixes are identical. The scheme, hostname and port number
-    are compared. If the port number is not specified and the scheme is https,
+    """Checks if URL prefixes are identical.
+
+    The scheme, hostname and port number are compared. If the port number is not specified and the scheme is https,
     the port number is assumed to be 443.
     """
     parsed_url1 = urlsplit(url1)
@@ -41,8 +41,7 @@ def _is_prefix_equal(url1, url2):
 
 
 def _get_post_back_url_from_html(html):
-    """
-    Gets the post back URL.
+    """Gets the post back URL.
 
     Since the HTML is not well formed, minidom cannot be used to convert to
     DOM. The first discovered form is assumed to be the form to post back
@@ -57,9 +56,7 @@ def _get_post_back_url_from_html(html):
 
 
 class AuthByOkta(AuthByPlugin):
-    """
-    Authenticate user by OKTA
-    """
+    """Authenticate user by OKTA."""
 
     def __init__(self, rest, application):
         self._rest = rest
@@ -71,12 +68,13 @@ class AuthByOkta(AuthByPlugin):
         return self._saml_response
 
     def update_body(self, body):
-        body[u'data'][u'RAW_SAML_RESPONSE'] = self._saml_response
+        body['data']['RAW_SAML_RESPONSE'] = self._saml_response
 
     def authenticate(
             self, authenticator, service_name, account, user, password):
-        """
-        SAML Authentication
+        """SAML Authentication.
+
+        Steps are:
         1.  query GS to obtain IDP token and SSO url
         2.  IMPORTANT Client side validation:
             validate both token url and sso url contains same prefix
@@ -98,7 +96,7 @@ class AuthByOkta(AuthByPlugin):
             preventing a SAML assertion issued to one SP from being sent to
             another SP.
         """
-        logger.debug(u'authenticating by SAML')
+        logger.debug('authenticating by SAML')
         headers, sso_url, token_url = self._step1(
             authenticator, service_name, account, user)
         self._step2(authenticator, sso_url, token_url)
@@ -107,7 +105,7 @@ class AuthByOkta(AuthByPlugin):
         self._step5(response_html)
 
     def _step1(self, authenticator, service_name, account, user):
-        logger.debug(u'step 1: query GS to obtain IDP token and SSO url')
+        logger.debug('step 1: query GS to obtain IDP token and SSO url')
 
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
@@ -116,7 +114,7 @@ class AuthByOkta(AuthByPlugin):
         }
         if service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = service_name
-        url = u"/session/authenticator-request"
+        url = "/session/authenticator-request"
         body = Auth.base_auth_data(
             user, account,
             self._rest._connection.application,
@@ -127,9 +125,9 @@ class AuthByOkta(AuthByPlugin):
             self._rest._connection._network_timeout,
         )
 
-        body[u"data"][u"AUTHENTICATOR"] = authenticator
+        body["data"]["AUTHENTICATOR"] = authenticator
         logger.debug(
-            u'account=%s, authenticator=%s',
+            'account=%s, authenticator=%s',
             account, authenticator,
         )
         ret = self._rest._post_request(
@@ -137,85 +135,85 @@ class AuthByOkta(AuthByPlugin):
             timeout=self._rest._connection.login_timeout,
             socket_timeout=self._rest._connection.login_timeout)
 
-        if not ret[u'success']:
+        if not ret['success']:
             self.handle_failure(ret)
 
-        data = ret[u'data']
-        token_url = data[u'tokenUrl']
-        sso_url = data[u'ssoUrl']
+        data = ret['data']
+        token_url = data['tokenUrl']
+        sso_url = data['ssoUrl']
         return headers, sso_url, token_url
 
     def _step2(self, authenticator, sso_url, token_url):
-        logger.debug(u'step 2: validate Token and SSO URL has the same prefix '
-                     u'as authenticator')
+        logger.debug('step 2: validate Token and SSO URL has the same prefix '
+                     'as authenticator')
         if not _is_prefix_equal(authenticator, token_url) or \
                 not _is_prefix_equal(authenticator, sso_url):
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
                 {
-                    u'msg': (u"The specified authenticator is not supported: "
-                             u"{authenticator}, token_url: {token_url}, "
-                             u"sso_url: {sso_url}".format(
+                    'msg': ("The specified authenticator is not supported: "
+                             "{authenticator}, token_url: {token_url}, "
+                             "sso_url: {sso_url}".format(
                         authenticator=authenticator,
                         token_url=token_url,
                         sso_url=sso_url,
                     )),
-                    u'errno': ER_IDP_CONNECTION_ERROR,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                    'errno': ER_IDP_CONNECTION_ERROR,
+                    'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
                 }
             )
 
     def _step3(self, headers, token_url, user, password):
-        logger.debug(u'step 3: query IDP token url to authenticate and '
-                     u'retrieve access token')
+        logger.debug('step 3: query IDP token url to authenticate and '
+                     'retrieve access token')
         data = {
-            u'username': user,
-            u'password': password,
+            'username': user,
+            'password': password,
         }
         ret = self._rest.fetch(
-            u'post', token_url, headers,
+            'post', token_url, headers,
             data=json.dumps(data),
             timeout=self._rest._connection.login_timeout,
             socket_timeout=self._rest._connection.login_timeout,
             catch_okta_unauthorized_error=True)
-        one_time_token = ret.get(u'cookieToken')
+        one_time_token = ret.get('cookieToken')
         if not one_time_token:
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
                 {
-                    u'msg': (u"The authentication failed for {user} "
-                             u"by {token_url}.".format(
+                    'msg': ("The authentication failed for {user} "
+                             "by {token_url}.".format(
                         token_url=token_url,
                         user=user,
                     )),
-                    u'errno': ER_IDP_CONNECTION_ERROR,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                    'errno': ER_IDP_CONNECTION_ERROR,
+                    'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
                 }
             )
         return one_time_token
 
     def _step4(self, one_time_token, sso_url):
-        logger.debug(u'step 4: query IDP URL snowflake app to get SAML '
-                     u'response')
+        logger.debug('step 4: query IDP URL snowflake app to get SAML '
+                     'response')
         url_parameters = {
-            u'RelayState': u"/some/deep/link",
-            u'onetimetoken': one_time_token,
+            'RelayState': "/some/deep/link",
+            'onetimetoken': one_time_token,
         }
-        sso_url = sso_url + u'?' + urlencode(url_parameters)
+        sso_url = sso_url + '?' + urlencode(url_parameters)
         headers = {
-            HTTP_HEADER_ACCEPT: u'*/*',
+            HTTP_HEADER_ACCEPT: '*/*',
         }
         response_html = self._rest.fetch(
-            u'get', sso_url, headers,
+            'get', sso_url, headers,
             timeout=self._rest._connection.login_timeout,
             socket_timeout=self._rest._connection.login_timeout,
             is_raw_text=True)
         return response_html
 
     def _step5(self, response_html):
-        logger.debug(u'step 5: validate post_back_url matches Snowflake URL')
+        logger.debug('step 5: validate post_back_url matches Snowflake URL')
         post_back_url = _get_post_back_url_from_html(response_html)
-        full_url = u'{protocol}://{host}:{port}'.format(
+        full_url = '{protocol}://{host}:{port}'.format(
             protocol=self._rest._protocol,
             host=self._rest._host,
             port=self._rest._port,
@@ -224,15 +222,15 @@ class AuthByOkta(AuthByPlugin):
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
                 {
-                    u'msg': (u"The specified authenticator and destination "
-                             u"URL in the SAML assertion do not match: "
-                             u"expected: {url}, "
-                             u"post back: {post_back_url}".format(
+                    'msg': ("The specified authenticator and destination "
+                             "URL in the SAML assertion do not match: "
+                             "expected: {url}, "
+                             "post back: {post_back_url}".format(
                         url=full_url,
                         post_back_url=post_back_url,
                     )),
-                    u'errno': ER_INCORRECT_DESTINATION,
-                    u'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+                    'errno': ER_INCORRECT_DESTINATION,
+                    'sqlstate': SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
                 }
             )
         self._saml_response = response_html

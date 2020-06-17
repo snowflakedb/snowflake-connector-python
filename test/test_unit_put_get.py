@@ -18,9 +18,7 @@ pytestmark = pytest.mark.putget
 
 @pytest.mark.skipif(IS_WINDOWS, reason='permission model is different')
 def test_put_error(tmpdir):
-    """
-    Test for raise_put_get_error flag (now turned on by default) in SnowflakeFileTransferAgent
-    """
+    """Tests for raise_put_get_error flag (now turned on by default) in SnowflakeFileTransferAgent."""
     tmp_dir = str(tmpdir.mkdir('putfiledir'))
     file1 = path.join(tmp_dir, 'file1')
     remote_location = path.join(tmp_dir, 'remote_loc')

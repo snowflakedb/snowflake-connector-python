@@ -11,9 +11,7 @@ from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 
 def main():
-    """
-    Internal Tool: Extract certificate files in PEM
-    """
+    """Internal Tool: Extract certificate files in PEM."""
 
     def help():
         print(

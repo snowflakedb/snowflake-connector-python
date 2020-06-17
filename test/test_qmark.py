@@ -11,9 +11,7 @@ from snowflake.connector import errors
 
 
 def test_qmark_paramstyle(conn_cnx, db_parameters):
-    """
-    Binding question marks is not supported by default
-    """
+    """Tests that binding question marks is not supported by default."""
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute(
@@ -38,9 +36,7 @@ def test_qmark_paramstyle(conn_cnx, db_parameters):
 
 
 def test_numeric_paramstyle(conn_cnx, db_parameters):
-    """
-    Binding numeric positional style is not supported
-    """
+    """Tests that binding numeric positional style is not supported."""
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute(
@@ -65,11 +61,9 @@ def test_numeric_paramstyle(conn_cnx, db_parameters):
 
 
 def test_qmark_paramstyle_enabled(negative_conn_cnx, db_parameters):
-    """
-    Enable qmark binding
-    """
+    """Enable qmark binding."""
     import snowflake.connector
-    snowflake.connector.paramstyle = u'qmark'
+    snowflake.connector.paramstyle = 'qmark'
     try:
         with negative_conn_cnx() as cnx:
             cnx.cursor().execute(
@@ -88,7 +82,7 @@ def test_qmark_paramstyle_enabled(negative_conn_cnx, db_parameters):
             cnx.cursor().execute(
                 "DROP TABLE IF EXISTS {name}".format(
                     name=db_parameters['name']))
-        snowflake.connector.paramstyle = u'pyformat'
+        snowflake.connector.paramstyle = 'pyformat'
 
     # After changing back to pyformat, binding qmark should fail.
     try:
@@ -109,12 +103,10 @@ def test_qmark_paramstyle_enabled(negative_conn_cnx, db_parameters):
 
 
 def test_binding_datetime_qmark(conn_cnx, db_parameters):
-    """
-    Ensures datetime can bind
-    """
+    """Ensures datetime can bound."""
     import datetime
     import snowflake.connector
-    snowflake.connector.paramstyle = u'qmark'
+    snowflake.connector.paramstyle = 'qmark'
     try:
         with conn_cnx() as cnx:
             cnx.cursor().execute(

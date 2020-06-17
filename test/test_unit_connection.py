@@ -19,13 +19,13 @@ def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
         if mock_cnt == 0:
             # return from /v1/login-request
             ret = {
-                u'success': True,
-                u'message': None,
-                u'data': {
-                    u'token': u'TOKEN',
-                    u'masterToken': u'MASTER_TOKEN',
-                    u'idToken': None,
-                    u'parameters': [
+                'success': True,
+                'message': None,
+                'data': {
+                    'token': 'TOKEN',
+                    'masterToken': 'MASTER_TOKEN',
+                    'idToken': None,
+                    'parameters': [
                         {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
                     ],
                 }}
@@ -62,22 +62,22 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
         if mock_cnt == 0:
             # return from /v1/login-request
             ret = {
-                u'success': True,
-                u'message': None,
-                u'data': {
-                    u'token': u'TOKEN',
-                    u'masterToken': u'MASTER_TOKEN',
-                    u'idToken': None,
-                    u'parameters': [
+                'success': True,
+                'message': None,
+                'data': {
+                    'token': 'TOKEN',
+                    'masterToken': 'MASTER_TOKEN',
+                    'idToken': None,
+                    'parameters': [
                         {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
                     ],
                 }}
         elif mock_cnt == 1:
             ret = {
-                u'success': False,
-                u'message': "Session gone",
-                u'data': None,
-                u'code': 390111
+                'success': False,
+                'message': "Session gone",
+                'data': None,
+                'code': 390111
             }
         mock_cnt += 1
         return ret

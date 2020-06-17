@@ -26,8 +26,8 @@ logger = getLogger(__name__)
 
 @pytest.fixture()
 def test_data(request, conn_cnx, db_parameters):
-    assert u'AWS_ACCESS_KEY_ID' in os.environ
-    assert u'AWS_SECRET_ACCESS_KEY' in os.environ
+    assert 'AWS_ACCESS_KEY_ID' in os.environ
+    assert 'AWS_SECRET_ACCESS_KEY' in os.environ
 
     unique_name = db_parameters['name']
     database_name = "{}_db".format(unique_name)
@@ -44,9 +44,9 @@ def test_data(request, conn_cnx, db_parameters):
     class TestData(object):
         def __init__(self):
             self.AWS_ACCESS_KEY_ID = "'{}'".format(
-                os.environ[u'AWS_ACCESS_KEY_ID'])
+                os.environ['AWS_ACCESS_KEY_ID'])
             self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
-                os.environ[u'AWS_SECRET_ACCESS_KEY'])
+                os.environ['AWS_SECRET_ACCESS_KEY'])
             self.SF_PROJECT_ROOT = os.getenv('SF_PROJECT_ROOT')
             if self.SF_PROJECT_ROOT is None:
                 self.SF_PROJECT_ROOT = path.realpath(
@@ -447,9 +447,7 @@ union
     reason="Snowflake admin account is not accessible."
 )
 def test_put_with_auto_compress_false(tmpdir, db_parameters):
-    """
-    Test PUT command with auto_compress=False
-    """
+    """Tests PUT command with auto_compress=False."""
     import snowflake.connector
     cnx = snowflake.connector.connect(
         user=db_parameters['s3_user'],
@@ -488,9 +486,7 @@ LS @~/test_put_uncompress_file
     reason="Snowflake admin account is not accessible."
 )
 def test_put_overwrite(tmpdir, db_parameters):
-    """
-    Test whether _force_put_overwrite and overwrite=true works as intended
-    """
+    """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     import snowflake.connector
     cnx = snowflake.connector.connect(
         user=db_parameters['s3_user'],
@@ -512,13 +508,13 @@ def test_put_overwrite(tmpdir, db_parameters):
         with cnx.cursor() as cur:
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
                 cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
-                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'UPLOADED'
+                assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
                 cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
-                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'SKIPPED'
+                assert mock_result.call_args[0][0]['rowset'][0][-2] == 'SKIPPED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
                 cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
-                assert mock_result.call_args[0][0][u'rowset'][0][-2] == 'UPLOADED'
+                assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
 
         ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
         assert "test_put_overwrite/data.txt" in ret[0]

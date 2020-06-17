@@ -32,9 +32,7 @@ logger = getLogger(__name__)
 
 
 def test_put_copy0(conn_cnx, db_parameters):
-    """
-    Put and Copy a file
-    """
+    """Puts and Copies a file."""
     data_file = os.path.join(THIS_DIR, "data", "put_get_1.txt")
 
     def run(cnx, sql):
@@ -78,9 +76,7 @@ ratio number(5,2))
 
 
 def test_put_copy_compressed(conn_cnx, db_parameters):
-    """
-    Put and Copy compressed files
-    """
+    """Puts and Copies compressed files."""
     data_file = os.path.join(THIS_DIR, "data", "gzip_sample.txt.gz")
 
     def run(cnx, sql):
@@ -110,9 +106,7 @@ def test_put_copy_compressed(conn_cnx, db_parameters):
     reason="BZ2 is not detected in this test case. Need investigation"
 )
 def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
-    """
-    Put and Copy bz2 compressed files
-    """
+    """Put and Copy bz2 compressed files."""
     data_file = os.path.join(THIS_DIR, "data", "bzip2_sample.txt.bz2")
 
     def run(cnx, sql):
@@ -134,9 +128,7 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
 
 
 def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
-    """
-    Put and Copy brotli compressed files
-    """
+    """Puts and Copies brotli compressed files."""
     data_file = os.path.join(THIS_DIR, "data", "brotli_sample.txt.br")
 
     def run(cnx, sql):
@@ -159,9 +151,7 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
 
 
 def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
-    """
-    Put and Copy zstd compressed files
-    """
+    """Puts and Copies zstd compressed files."""
     data_file = os.path.join(THIS_DIR, "data", "zstd_sample.txt.zst")
 
     def run(cnx, sql):
@@ -188,9 +178,7 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_parquet_compressed(conn_cnx, db_parameters):
-    """
-    Put and Copy parquet compressed files
-    """
+    """Puts and Copies parquet compressed files."""
     data_file = os.path.join(
         THIS_DIR, "data", "nation.impala.parquet")
 
@@ -221,9 +209,7 @@ stage_file_format=(type='parquet')
 
 
 def test_put_copy_orc_compressed(conn_cnx, db_parameters):
-    """
-    Put and Copy ORC compressed files
-    """
+    """Puts and Copies ORC compressed files."""
     data_file = os.path.join(THIS_DIR, "data", "TestOrcFile.test1.orc")
 
     def run(cnx, sql):
@@ -253,9 +239,7 @@ create or replace table {name} (value variant) stage_file_format=(type='orc')
     reason="Snowflake admin account is not accessible."
 )
 def test_copy_get(tmpdir, conn_cnx, db_parameters):
-    """
-    Copy and Get a file
-    """
+    """Copies and Gets a file."""
     name_unload = db_parameters['name'] + "_unload"
     tmp_dir = str(tmpdir.mkdir('copy_get_stage'))
     tmp_dir_user = str(tmpdir.mkdir('user_get'))
@@ -325,9 +309,7 @@ max_file_size=10000000
 
 
 def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    Put and Copy many_files
-    """
+    """Puts and Copies many_files."""
     # generates N files
     number_of_files = 100
     number_of_lines = 1000
@@ -364,9 +346,7 @@ ratio number(6,2))
 
 
 def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    [s3] Put and Copy many files
-    """
+    """[s3] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
@@ -419,9 +399,7 @@ ratio number(6,2))
 @pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="GCS doesn't skip even if the same file exist ")
 def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
                                       db_parameters):
-    """
-    [s3] Put and Copy duplicated files
-    """
+    """[s3] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
     number_of_lines = 100
@@ -504,9 +482,7 @@ ratio number(6,2))
 
 @pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="GCS doesn't skip even if the same file exist ")
 def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    File name collision test. The data set have the same file names but contents are different.
-    """
+    """File name collision test. The data set have the same file names but contents are different."""
     number_of_files = 5
     number_of_lines = 10
     # data set 1
@@ -588,9 +564,7 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
 
 
 def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
-    """
-    (WIP) Huge json value data
-    """
+    """(WIP) Huge json value data."""
     with conn_cnx() as cnx:
         json_table = db_parameters['name'] + "_json"
         cnx.cursor().execute(
@@ -654,9 +628,7 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
     reason="Flaky tests. Need further investigation"
 )
 def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    [s3] Put and Get Large files
-    """
+    """[s3] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
     tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
@@ -709,9 +681,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
 
 @pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="PUT and GET  is not supportd for GCP yet")
 def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
-    """
-    SNOW-15153: PUT and GET with hint
-    """
+    """SNOW-15153: PUTs and GETs with hint."""
     tmp_dir = str(tmpdir.mkdir('put_get_with_hint'))
     data_file = os.path.join(THIS_DIR, "data", "put_get_1.txt")
 

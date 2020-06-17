@@ -17,9 +17,7 @@ pytestmark = pytest.mark.putget
 
 def test_put_get_small_data_via_user_stage(
         is_public_test, tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    [s3] Put and Get Small Data via User Stage
-    """
+    """[s3] Puts and Gets Small Data via User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
     _put_get_user_stage(tmpdir, test_files, conn_cnx, db_parameters,
@@ -28,9 +26,7 @@ def test_put_get_small_data_via_user_stage(
 
 def test_put_get_large_data_via_user_stage(
         is_public_test, tmpdir, test_files, conn_cnx, db_parameters):
-    """
-    [s3] Put and Get Large Data via User Stage
-    """
+    """[s3] Puts and Gets Large Data via User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
     _put_get_user_stage(tmpdir, test_files, conn_cnx, db_parameters,
@@ -145,9 +141,7 @@ def test_put_get_duplicated_data_user_stage(is_public_test, tmpdir, test_files, 
                                             db_parameters,
                                             number_of_files=5,
                                             number_of_lines=100):
-    """
-    [s3] Put and Get Duplicated Data using User Stage
-    """
+    """[s3] Puts and Gets Duplicated Data using User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
 
@@ -301,9 +295,7 @@ credentials=(
 
 
 def test_get_data_user_stage(is_public_test, tmpdir, conn_cnx, db_parameters):
-    """
-    SNOW-20927: get failed with 404 error
-    """
+    """SNOW-20927: Tests Get failure with 404 error."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
 
@@ -329,12 +321,12 @@ def _put_list_rm_files_in_stage(tmpdir, conn_cnx, db_parameters, elem):
     data_file_name = elem['data_file_name']
 
     from io import open
-    from snowflake.connector.compat import (UTF8, TO_UNICODE)
+    from snowflake.connector.compat import UTF8
     tmp_dir = str(tmpdir.mkdir('data'))
     data_file = os.path.join(tmp_dir, data_file_name)
     with open(data_file, 'w', encoding=UTF8) as f:
-        f.write(TO_UNICODE("123,456,string1\n"))
-        f.write(TO_UNICODE("789,012,string2\n"))
+        f.write(str("123,456,string1\n"))
+        f.write(str("789,012,string2\n"))
 
     output_dir = str(tmpdir.mkdir('output'))
     with conn_cnx(

@@ -64,13 +64,11 @@ ALTER SYSTEM SET
     reason="SSO and ADMIN connection parameters must be provided."
 )
 def test_connect_externalbrowser(token_validity_test_values):
-    """
-    SSO Id Token Cache tests. This is disabled by default.
-    In order to run this test, remove the above pytest.mark.skip annotation
-    and run it. It will popup a windows once but the rest connections
-    should not create popups.
-    """
+    """SSO Id Token Cache tests. This test should only be ran if keyring optional dependency is installed.
 
+    In order to run this test, remove the above pytest.mark.skip annotation and run it. It will popup a windows once
+    but the rest connections should not create popups.
+    """
     delete_temporary_credential(
             host=CONNECTION_PARAMETERS_SSO['host'],
             user=CONNECTION_PARAMETERS_SSO['user'],

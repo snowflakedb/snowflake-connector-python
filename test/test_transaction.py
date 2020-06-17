@@ -8,60 +8,58 @@ import snowflake.connector
 
 
 def test_transaction(conn_cnx, db_parameters):
-    u"""
-    Transaction API
-    """
+    """Tests transaction API."""
     with conn_cnx() as cnx:
-        cnx.cursor().execute(u"create table {name} (c1 int)".format(
+        cnx.cursor().execute("create table {name} (c1 int)".format(
             name=db_parameters['name']))
-        cnx.cursor().execute(u"insert into {name}(c1) "
-                             u"values(1234),(3456)".format(
+        cnx.cursor().execute("insert into {name}(c1) "
+                             "values(1234),(3456)".format(
             name=db_parameters['name']))
         c = cnx.cursor()
-        c.execute(u"select * from {name}".format(name=db_parameters['name']))
+        c.execute("select * from {name}".format(name=db_parameters['name']))
         total = 0
         for rec in c:
             total += rec[0]
-        assert total == 4690, u'total integer'
+        assert total == 4690, 'total integer'
 
         #
-        cnx.cursor().execute(u"begin")
+        cnx.cursor().execute("begin")
         cnx.cursor().execute(
-            u"insert into {name}(c1) values(5678),(7890)".format(
+            "insert into {name}(c1) values(5678),(7890)".format(
                 name=db_parameters['name']))
         c = cnx.cursor()
-        c.execute(u"select * from {name}".format(name=db_parameters['name']))
+        c.execute("select * from {name}".format(name=db_parameters['name']))
         total = 0
         for rec in c:
             total += rec[0]
-        assert total == 18258, u'total integer'
+        assert total == 18258, 'total integer'
         cnx.rollback()
 
-        c.execute(u"select * from {name}".format(name=db_parameters['name']))
+        c.execute("select * from {name}".format(name=db_parameters['name']))
         total = 0
         for rec in c:
             total += rec[0]
-        assert total == 4690, u'total integer'
+        assert total == 4690, 'total integer'
 
         #
-        cnx.cursor().execute(u"begin")
+        cnx.cursor().execute("begin")
         cnx.cursor().execute(
-            u"insert into {name}(c1) values(2345),(6789)".format(
+            "insert into {name}(c1) values(2345),(6789)".format(
                 name=db_parameters['name']))
         c = cnx.cursor()
-        c.execute(u"select * from {name}".format(name=db_parameters['name']))
+        c.execute("select * from {name}".format(name=db_parameters['name']))
         total = 0
         for rec in c:
             total += rec[0]
-        assert total == 13824, u'total integer'
+        assert total == 13824, 'total integer'
         cnx.commit()
         cnx.rollback()
         c = cnx.cursor()
-        c.execute(u"select * from {name}".format(name=db_parameters['name']))
+        c.execute("select * from {name}".format(name=db_parameters['name']))
         total = 0
         for rec in c:
             total += rec[0]
-        assert total == 13824, u'total integer'
+        assert total == 13824, 'total integer'
 
 
 def test_connection_context_manager(request, db_parameters):

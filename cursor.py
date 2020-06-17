@@ -10,6 +10,7 @@ import sys
 import uuid
 from logging import getLogger
 from threading import (Timer, Lock)
+from typing import Optional
 
 MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
@@ -40,14 +41,14 @@ logger = getLogger(__name__)
 try:
     import pyarrow
 except ImportError:
-    logger.debug(u"Failed to import pyarrow. Cannot use pandas fetch API")
+    logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
     pyarrow = None
 
 try:
     from .arrow_result import ArrowResult
     CAN_USE_ARROW_RESULT = True
 except ImportError as e:
-    logger.debug(u"Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s", e)
+    logger.debug("Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s", e)
     CAN_USE_ARROW_RESULT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
@@ -70,9 +71,31 @@ LOG_MAX_QUERY_LENGTH = 80
 
 
 class SnowflakeCursor(object):
-    u"""
-    Implementation of Cursor object that is returned from Connection.cursor()
-    method.
+    """Implementation of Cursor object that is returned from Connection.cursor() method.
+
+    Attributes:
+        description: tuple of name, type_code, display_size, internal_size, precisio, scale, null_ok
+        rowcount: The number of records updated or selected. If not clear, -1 is returned.
+        rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
+            determined.
+        sfqid: Snowflake query id in UUID form. Include this in the problem report to the customer support.
+        sqlstate: Snowflake SQL State code.
+        timestamp_output_format: Snowflake timestamp_output_format for timestamps.
+        timestamp_ltz_output_format: Snowflake output format for LTZ timestamps.
+        timestamp_tz_output_format: Snowflake output format for TZ timestamps.
+        timestamp_ntz_output_format: Snowflake output format for NTZ timestamps.
+        date_output_format: Snowflake output format for dates.
+        time_output_format: Snowflake output format for times.
+        timezone: Snowflake timezone.
+        binary_output_format: Snowflake output format for binary fields.
+        arrayszize: The default number of rows fetched by fetchmany.
+        connection: The connection object by which the cursor was created.
+        errorhandle: The class that handles error handling.
+        is_file_transfer: Whether, or not the current command is a put, or get.
+
+    TODO:
+        Most of these attributes have no reason to be properties, we could just store them in public variables.
+        Calling a function is expensive in Python and most of these getters are unnecessary.
     """
     PUT_SQL_RE = re.compile(r'^(?:/\*.*\*/\s*)*put\s+', flags=re.IGNORECASE)
     GET_SQL_RE = re.compile(r'^(?:/\*.*\*/\s*)*get\s+', flags=re.IGNORECASE)
@@ -88,12 +111,13 @@ class SnowflakeCursor(object):
                  connection: 'SnowflakeConnection',
                  use_dict_result: bool = False,
                  json_result_class: object = JsonResult):
-        """
-        :param connection: connection created this cursor
-        :param use_dict_result: whether use dict result or not. This variable only applied to
-                                arrow result. When result in json, json_result_class will be
-                                honored
-        :param json_result_class: class that used in json result
+        """Inits a SnowflakeCursor with a connection.
+
+        Args:
+            connection: The connection that created this cursor.
+            use_dict_result: Decides whether to use dict result or not. This variable only applied to
+                arrow result. When result in json, json_result_class will be honored.
+            json_result_class: The class that used in json result.
         """
         self._connection = connection
 
@@ -140,116 +164,64 @@ class SnowflakeCursor(object):
 
     @property
     def description(self):
-        u"""
-        Columns information in a tuple:
-        - name
-        - type_code
-        - display_size
-        - internal_size
-        - precision
-        - scale
-        - null_ok
-        """
         return self._description
 
     @property
     def rowcount(self):
-        u"""
-        The number of records updated or selected.
-        If not clear, -1 is returned
-        """
         return self._total_rowcount if self._total_rowcount >= 0 else None
 
     @property
     def rownumber(self):
-        u"""
-        The current 0-based index of the cursor in the result set or None if
-        the index cannot be determined.
-        """
         return self._result.total_row_index if self._result.total_row_index >= 0 else None
 
     @property
     def sfqid(self):
-        u"""
-        Snowflake query id in UUID form. Include this in the problem report to
-        the customer support
-        """
         return self._sfqid
 
     @property
     def sqlstate(self):
-        u"""
-        SQL State code
-        """
         return self._sqlstate
 
     @property
     def timestamp_output_format(self):
-        u"""
-        Snowflake timestamp_output_format
-        """
         return self._timestamp_output_format
 
     @property
     def timestamp_ltz_output_format(self):
-        u"""
-        Snowflake timestamp_output_format
-        """
         return self._timestamp_ltz_output_format if \
             self._timestamp_ltz_output_format else \
             self._timestamp_output_format
 
     @property
     def timestamp_tz_output_format(self):
-        u"""
-        Snowflake timestamp_output_format
-        """
         return self._timestamp_tz_output_format if \
             self._timestamp_tz_output_format else \
             self._timestamp_output_format
 
     @property
     def timestamp_ntz_output_format(self):
-        u"""
-        Snowflake timestamp_output_format
-        """
         return self._timestamp_ntz_output_format if \
             self._timestamp_ntz_output_format else \
             self._timestamp_output_format
 
     @property
     def date_output_format(self):
-        u"""
-        Snowflake date_output_format
-        """
         return self._date_output_format
 
     @property
     def time_output_format(self):
-        u"""
-        Snowflake time_output_format
-        """
         return self._time_output_format
 
     @property
     def timezone(self):
-        u"""
-        Snowflake timezone
-        """
         return self._timezone
 
     @property
     def binary_output_format(self):
-        u"""
-        Snowflake binary_output_format
-        """
         return self._binary_output_format
 
     @property
     def arraysize(self):
-        u"""
-        The default number of rows fetched in fetchmany
-        """
         return self._arraysize
 
     @arraysize.setter
@@ -258,9 +230,6 @@ class SnowflakeCursor(object):
 
     @property
     def connection(self):
-        u"""
-        The connection object on which the cursor was created
-        """
         return self._connection
 
     @property
@@ -269,34 +238,28 @@ class SnowflakeCursor(object):
 
     @errorhandler.setter
     def errorhandler(self, value):
-        logger.debug(u'setting errorhandler: %s', value)
+        logger.debug('setting errorhandler: %s', value)
         if value is None:
-            raise ProgrammingError(u'Invalid errorhandler is specified')
+            raise ProgrammingError('Invalid errorhandler is specified')
         self._errorhandler = value
 
     @property
     def is_file_transfer(self):
-        """
-        Is PUT or GET command?
-        """
+        """Is PUT or GET command?"""
         return hasattr(self, '_is_file_transfer') and self._is_file_transfer
 
     def callproc(self, procname, args=()):
-        u"""
-        Not supported
-        """
+        """Not supported."""
         Error.errorhandler_wrapper(
             self.connection, self,
             NotSupportedError,
             {
-                u'msg': u"callproc is not supported.",
-                u'errno': ER_UNSUPPORTED_METHOD,
-                u'sqlstate': SQLSTATE_FEATURE_NOT_SUPPORTED})
+                'msg': "callproc is not supported.",
+                'errno': ER_UNSUPPORTED_METHOD,
+                'sqlstate': SQLSTATE_FEATURE_NOT_SUPPORTED})
 
     def close(self):
-        u"""
-        Closes the cursor object
-        """
+        """Closes the cursor object."""
         try:
             if self.is_closed():
                 return False
@@ -324,20 +287,20 @@ class SnowflakeCursor(object):
                 self.connection, self,
                 ProgrammingError,
                 {
-                    u'msg': u"The data type of statement params is invalid. "
-                            u"It must be dict.",
-                    u'errno': ER_INVALID_VALUE,
+                    'msg': "The data type of statement params is invalid. "
+                            "It must be dict.",
+                    'errno': ER_INVALID_VALUE,
                 })
 
         # check if current installation include arrow extension or not,
         # if not, we set statement level query result format to be JSON
         if not CAN_USE_ARROW_RESULT:
-            logger.debug(u"Cannot use arrow result format, fallback to json format")
+            logger.debug("Cannot use arrow result format, fallback to json format")
             if statement_params is None:
                 statement_params = {PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: 'JSON'}
             else:
                 result_format_val = statement_params.get(PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT)
-                if str(result_format_val).upper() == u'ARROW':
+                if str(result_format_val).upper() == 'ARROW':
                     self.check_can_use_arrow_resultset()
                 elif result_format_val is None:
                     statement_params[PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT] = 'JSON'
@@ -347,7 +310,7 @@ class SnowflakeCursor(object):
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
-                u'running query [%s]', self._format_query_for_log(query))
+                'running query [%s]', self._format_query_for_log(query))
         if _is_put_get is not None:
             # if told the query is PUT or GET, use the information
             self._is_file_transfer = _is_put_get
@@ -355,7 +318,7 @@ class SnowflakeCursor(object):
             # or detect it.
             self._is_file_transfer = self.PUT_SQL_RE.match(
                 query) or self.GET_SQL_RE.match(query)
-        logger.debug(u'is_file_transfer: %s',
+        logger.debug('is_file_transfer: %s',
                      self._is_file_transfer is not None)
 
         real_timeout = timeout if timeout and timeout > 0 \
@@ -365,7 +328,7 @@ class SnowflakeCursor(object):
             self._timebomb = Timer(
                 real_timeout, self.__cancel_query, [query])
             self._timebomb.start()
-            logger.debug(u'started timebomb in %ss', real_timeout)
+            logger.debug('started timebomb in %ss', real_timeout)
         else:
             self._timebomb = None
 
@@ -380,7 +343,7 @@ class SnowflakeCursor(object):
             try:
                 if self._timebomb is not None:
                     self._timebomb.cancel()
-                    logger.debug(u'cancelled timebomb in finally')
+                    logger.debug('cancelled timebomb in finally')
                     self._timebomb = None
                 self.__cancel_query(query)
             finally:
@@ -396,9 +359,9 @@ class SnowflakeCursor(object):
             signal.signal(signal.SIGINT, abort_exit)
         except ValueError:
             logger.debug(
-                u'Failed to set SIGINT handler. '
-                u'Not in main thread. Ignored...')
-        ret = {u'data': {}}
+                'Failed to set SIGINT handler. '
+                'Not in main thread. Ignored...')
+        ret = {'data': {}}
         try:
             ret = self._connection.cmd_query(
                 query,
@@ -415,71 +378,97 @@ class SnowflakeCursor(object):
                     signal.signal(signal.SIGINT, original_sigint)
             except (ValueError, TypeError):
                 logger.debug(
-                    u'Failed to reset SIGINT handler. Not in main '
-                    u'thread. Ignored...')
+                    'Failed to reset SIGINT handler. Not in main '
+                    'thread. Ignored...')
             except Exception:
                 self.connection.incident.report_incident()
                 raise
             if self._timebomb is not None:
                 self._timebomb.cancel()
-                logger.debug(u'cancelled timebomb in finally')
+                logger.debug('cancelled timebomb in finally')
 
-        if u'data' in ret and u'parameters' in ret[u'data']:
-            for kv in ret[u'data'][u'parameters']:
-                if u'TIMESTAMP_OUTPUT_FORMAT' in kv[u'name']:
-                    self._timestamp_output_format = kv[u'value']
-                if u'TIMESTAMP_NTZ_OUTPUT_FORMAT' in kv[u'name']:
-                    self._timestamp_ntz_output_format = kv[u'value']
-                if u'TIMESTAMP_LTZ_OUTPUT_FORMAT' in kv[u'name']:
-                    self._timestamp_ltz_output_format = kv[u'value']
-                if u'TIMESTAMP_TZ_OUTPUT_FORMAT' in kv[u'name']:
-                    self._timestamp_tz_output_format = kv[u'value']
-                if u'DATE_OUTPUT_FORMAT' in kv[u'name']:
-                    self._date_output_format = kv[u'value']
-                if u'TIME_OUTPUT_FORMAT' in kv[u'name']:
-                    self._time_output_format = kv[u'value']
-                if u'TIMEZONE' in kv[u'name']:
-                    self._timezone = kv[u'value']
-                if u'BINARY_OUTPUT_FORMAT' in kv[u'name']:
-                    self._binary_output_format = kv[u'value']
+        if 'data' in ret and 'parameters' in ret['data']:
+            for kv in ret['data']['parameters']:
+                if 'TIMESTAMP_OUTPUT_FORMAT' in kv['name']:
+                    self._timestamp_output_format = kv['value']
+                if 'TIMESTAMP_NTZ_OUTPUT_FORMAT' in kv['name']:
+                    self._timestamp_ntz_output_format = kv['value']
+                if 'TIMESTAMP_LTZ_OUTPUT_FORMAT' in kv['name']:
+                    self._timestamp_ltz_output_format = kv['value']
+                if 'TIMESTAMP_TZ_OUTPUT_FORMAT' in kv['name']:
+                    self._timestamp_tz_output_format = kv['value']
+                if 'DATE_OUTPUT_FORMAT' in kv['name']:
+                    self._date_output_format = kv['value']
+                if 'TIME_OUTPUT_FORMAT' in kv['name']:
+                    self._time_output_format = kv['value']
+                if 'TIMEZONE' in kv['name']:
+                    self._timezone = kv['value']
+                if 'BINARY_OUTPUT_FORMAT' in kv['name']:
+                    self._binary_output_format = kv['value']
             self._connection._set_parameters(
                 ret, self._connection._session_parameters)
 
         self._sequence_counter = -1
         return ret
 
-    def execute(self, command, params=None, timeout=None,
-                _do_reset=True,
+    def execute(self,
+                command,
+                params=None,
+                timeout: Optional[int] = None,
+                _do_reset: bool = True,
                 _put_callback=None,
                 _put_azure_callback=None,
                 _put_callback_output_stream=sys.stdout,
                 _get_callback=None,
                 _get_azure_callback=None,
                 _get_callback_output_stream=sys.stdout,
-                _show_progress_bar=True,
+                _show_progress_bar: bool = True,
                 _statement_params=None,
-                _is_internal=False,
-                _no_results=False,
-                _use_ijson=False,
-                _is_put_get=None,
-                _raise_put_get_error=True,
-                _force_put_overwrite=False):
-        u"""
-        Executes a command/query
+                _is_internal: bool = False,
+                _no_results: bool = False,
+                _use_ijson: bool = False,
+                _is_put_get: Optional[bool] = None,
+                _raise_put_get_error: bool = True,
+                _force_put_overwrite: bool = False):
+        """Executes a command/query.
+
+        Args:
+            command: The SQL command to be executed.
+            params: Parameters to be bound into the SQL statement.
+            timeout: Number of seconds after which to abort the query.
+            _do_reset: Whether or not the result set needs to be reset before executing query.
+            _put_callback: Function to which GET command should call back to.
+            _put_azure_callback: Function to which an Azure GET command should call back to.
+            _put_callback_output_stream: The output stream a PUT command's callback should report on.
+            _get_callback: Function to which GET command should call back to.
+            _get_azure_callback: Function to which an Azure GET command should call back to.
+            _get_callback_output_stream: The output stream a GET command's callback should report on.
+            _show_progress_bar: Whether or not to show progress bar.
+            _statement_params: Extra information that should be sent to Snowflake with query.
+            _no_results: This flag tells the back-end to not return the result, just fire the query and return the
+                query id of the running query.
+            _use_ijson: Use ijson to load results. This will use less memory, but it will make execution a lot slower.
+            _is_put_get: Force decision of this SQL query being a PUT, or GET command. This is detected otherwise.
+            _raise_put_get_error: Whether to raise PUT and GET errors.
+            _force_put_overwrite: If the SQL query is a PUT, then this flag can force overwriting of an already
+                existing file on stage.
+
+        Returns:
+            A result class with the results in it. This can either be json, or an arrow result class.
         """
-        logger.debug(u'executing SQL/command')
+        logger.debug('executing SQL/command')
         if self.is_closed():
             Error.errorhandler_wrapper(
                 self.connection, self,
                 DatabaseError,
-                {u'msg': u"Cursor is closed in execute.",
-                 u'errno': ER_CURSOR_IS_CLOSED})
+                {'msg': "Cursor is closed in execute.",
+                 'errno': ER_CURSOR_IS_CLOSED})
 
         if _do_reset:
             self.reset()
-        command = command.strip(u' \t\n\r') if command else None
+        command = command.strip(' \t\n\r') if command else None
         if not command:
-            logger.warning(u'execute: no query is given to execute')
+            logger.warning('execute: no query is given to execute')
             return
 
         try:
@@ -488,7 +477,7 @@ class SnowflakeCursor(object):
                 # client side binding
                 processed_params = self._connection._process_params(params, self)
                 if logger.getEffectiveLevel() <= logging.DEBUG:
-                    logger.debug(u'binding: [%s] with input=[%s], processed=[%s]',
+                    logger.debug('binding: [%s] with input=[%s], processed=[%s]',
                                  self._format_query_for_log(command),
                                  params, processed_params)
                 if len(processed_params) > 0:
@@ -511,18 +500,18 @@ class SnowflakeCursor(object):
 
         m = DESC_TABLE_RE.match(query)
         if m:
-            query1 = u'describe table {}'.format(m.group(1))
+            query1 = 'describe table {}'.format(m.group(1))
             if logger.getEffectiveLevel() <= logging.WARNING:
                 logger.info(
-                    u'query was rewritten: org=%s, new=%s',
-                    u' '.join(line.strip() for line in query.split(u'\n')),
+                    'query was rewritten: org=%s, new=%s',
+                    ' '.join(line.strip() for line in query.split('\n')),
                     query1
                 )
             query = query1
 
         if logger.getEffectiveLevel() <= logging.INFO:
             logger.info(
-                u'query: [%s]', self._format_query_for_log(query))
+                'query: [%s]', self._format_query_for_log(query))
         ret = self._execute_helper(
             query,
             timeout=timeout,
@@ -531,30 +520,30 @@ class SnowflakeCursor(object):
             is_internal=_is_internal,
             _no_results=_no_results,
             _is_put_get=_is_put_get)
-        self._sfqid = ret[u'data'][
-            u'queryId'] if u'data' in ret and u'queryId' in ret[
-            u'data'] else None
-        self._sqlstate = ret[u'data'][
-            u'sqlState'] if u'data' in ret and u'sqlState' in ret[
-            u'data'] else None
+        self._sfqid = ret['data'][
+            'queryId'] if 'data' in ret and 'queryId' in ret[
+            'data'] else None
+        self._sqlstate = ret['data'][
+            'sqlState'] if 'data' in ret and 'sqlState' in ret[
+            'data'] else None
         self._first_chunk_time = get_time_millis()
 
         # if server gives a send time, log the time it took to arrive
-        if u'data' in ret and u'sendResultTime' in ret[u'data']:
-            time_consume_first_result = self._first_chunk_time - ret[u'data'][
-                u'sendResultTime']
+        if 'data' in ret and 'sendResultTime' in ret['data']:
+            time_consume_first_result = self._first_chunk_time - ret['data'][
+                'sendResultTime']
             self._log_telemetry_job_data(
                 TelemetryField.TIME_CONSUME_FIRST_RESULT,
                 time_consume_first_result)
         logger.debug('sfqid: %s', self.sfqid)
 
         logger.info('query execution done')
-        if ret[u'success']:
-            logger.debug(u'SUCCESS')
-            data = ret[u'data']
+        if ret['success']:
+            logger.debug('SUCCESS')
+            data = ret['data']
 
             # logger.debug(ret)
-            logger.debug(u"PUT OR GET: %s", self.is_file_transfer)
+            logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
                 sf_file_transfer_agent = SnowflakeFileTransferAgent(
                     self, query, ret,
@@ -569,8 +558,8 @@ class SnowflakeCursor(object):
                     force_put_overwrite=_force_put_overwrite or data.get('overwrite', False))
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
-                self._total_rowcount = len(data[u'rowset']) if \
-                    u'rowset' in data else -1
+                self._total_rowcount = len(data['rowset']) if \
+                    'rowset' in data else -1
             m = self.ALTER_SESSION_RE.match(query)
             if m:
                 # session parameters
@@ -579,24 +568,24 @@ class SnowflakeCursor(object):
                 self._connection.converter.set_parameter(param, value)
 
             if _no_results:
-                self._total_rowcount = ret[u'data'][
-                    u'total'] if u'data' in ret and u'total' in ret[
-                    u'data'] else -1
+                self._total_rowcount = ret['data'][
+                    'total'] if 'data' in ret and 'total' in ret[
+                    'data'] else -1
                 return data
             self._init_result_and_meta(data)
         else:
-            self._total_rowcount = ret[u'data'][
-                u'total'] if u'data' in ret and u'total' in ret[u'data'] else -1
+            self._total_rowcount = ret['data'][
+                'total'] if 'data' in ret and 'total' in ret['data'] else -1
             logger.debug(ret)
-            err = ret[u'message']
-            code = ret.get(u'code', -1)
-            if u'data' in ret:
-                err += ret[u'data'].get(u'errorMessage', '')
+            err = ret['message']
+            code = ret.get('code', -1)
+            if 'data' in ret:
+                err += ret['data'].get('errorMessage', '')
             errvalue = {
-                u'msg': err,
-                u'errno': int(code),
-                u'sqlstate': self._sqlstate,
-                u'sfqid': self._sfqid
+                'msg': err,
+                'errno': int(code),
+                'sqlstate': self._sqlstate,
+                'sfqid': self._sfqid
             }
             Error.errorhandler_wrapper(self.connection, self,
                                        ProgrammingError,
@@ -607,30 +596,30 @@ class SnowflakeCursor(object):
         return self._connection._format_query_for_log(query)
 
     def _is_dml(self, data):
-        return u'statementTypeId' in data \
-               and int(data[u'statementTypeId']) in \
+        return 'statementTypeId' in data \
+               and int(data['statementTypeId']) in \
                STATEMENT_TYPE_ID_DML_SET
 
     def _init_result_and_meta(self, data):
         is_dml = self._is_dml(data)
-        self._query_result_format = data.get(u'queryResultFormat', u'json')
-        logger.debug(u"Query result format: %s", self._query_result_format)
+        self._query_result_format = data.get('queryResultFormat', 'json')
+        logger.debug("Query result format: %s", self._query_result_format)
 
-        if self._total_rowcount == -1 and not is_dml and data.get(u'total') \
+        if self._total_rowcount == -1 and not is_dml and data.get('total') \
                 is not None:
             self._total_rowcount = data['total']
 
         self._description = []
 
-        for column in data[u'rowtype']:
-            type_value = FIELD_NAME_TO_ID[column[u'type'].upper()]
-            self._description.append((column[u'name'],
+        for column in data['rowtype']:
+            type_value = FIELD_NAME_TO_ID[column['type'].upper()]
+            self._description.append((column['name'],
                                       type_value,
                                       None,
-                                      column[u'length'],
-                                      column[u'precision'],
-                                      column[u'scale'],
-                                      column[u'nullable']))
+                                      column['length'],
+                                      column['precision'],
+                                      column['scale'],
+                                      column['nullable']))
 
         if self._query_result_format == 'arrow':
             self.check_can_use_arrow_resultset()
@@ -642,11 +631,11 @@ class SnowflakeCursor(object):
             updated_rows = 0
             for idx, desc in enumerate(self._description):
                 if desc[0] in (
-                        u'number of rows updated',
-                        u'number of multi-joined rows updated',
-                        u'number of rows deleted') or \
-                        desc[0].startswith(u'number of rows inserted'):
-                    updated_rows += int(data[u'rowset'][0][idx])
+                        'number of rows updated',
+                        'number of multi-joined rows updated',
+                        'number of rows deleted') or \
+                        desc[0].startswith('number of rows inserted'):
+                    updated_rows += int(data['rowset'][0][idx])
             if self._total_rowcount == -1:
                 self._total_rowcount = updated_rows
             else:
@@ -671,8 +660,8 @@ class SnowflakeCursor(object):
                 self.connection, self,
                 ProgrammingError,
                 {
-                    u'msg': msg,
-                    u'errno': errno,
+                    'msg': msg,
+                    'errno': errno,
                 }
             )
 
@@ -689,37 +678,37 @@ class SnowflakeCursor(object):
                 self.connection, self,
                 ProgrammingError,
                 {
-                    u'msg': msg,
-                    u'errno': errno,
+                    'msg': msg,
+                    'errno': errno,
                 }
             )
 
     def query_result(self, qid):
         url = '/queries/{qid}/result'.format(qid=qid)
         ret = self._connection.rest.request(url=url, method='get')
-        self._sfqid = ret[u'data'][
-            u'queryId'] if u'data' in ret and u'queryId' in ret[
-            u'data'] else None
-        self._sqlstate = ret[u'data'][
-            u'sqlState'] if u'data' in ret and u'sqlState' in ret[
-            u'data'] else None
-        logger.debug(u'sfqid=%s', self._sfqid)
+        self._sfqid = ret['data'][
+            'queryId'] if 'data' in ret and 'queryId' in ret[
+            'data'] else None
+        self._sqlstate = ret['data'][
+            'sqlState'] if 'data' in ret and 'sqlState' in ret[
+            'data'] else None
+        logger.debug('sfqid=%s', self._sfqid)
 
-        if ret.get(u'success'):
-            data = ret.get(u'data')
+        if ret.get('success'):
+            data = ret.get('data')
             self._init_result_and_meta(data)
         else:
-            logger.info(u'failed')
+            logger.info('failed')
             logger.debug(ret)
-            err = ret[u'message']
-            code = ret.get(u'code', -1)
-            if u'data' in ret:
-                err += ret[u'data'].get(u'errorMessage', '')
+            err = ret['message']
+            code = ret.get('code', -1)
+            if 'data' in ret:
+                err += ret['data'].get('errorMessage', '')
             errvalue = {
-                u'msg': err,
-                u'errno': int(code),
-                u'sqlstate': self._sqlstate,
-                u'sfqid': self._sfqid
+                'msg': err,
+                'errno': int(code),
+                'sqlstate': self._sqlstate,
+                'sfqid': self._sfqid
             }
             Error.errorhandler_wrapper(self.connection, self,
                                        ProgrammingError,
@@ -727,10 +716,7 @@ class SnowflakeCursor(object):
         return self
 
     def fetch_pandas_batches(self, **kwargs):
-        u"""
-        Fetch a single Arrow Table
-        @param kwargs: will be passed to pyarrow.Table.to_pandas() method
-        """
+        """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
         if self._query_result_format != 'arrow':  # TODO: or pandas isn't imported
             raise NotSupportedError
@@ -738,10 +724,7 @@ class SnowflakeCursor(object):
             yield df
 
     def fetch_pandas_all(self, **kwargs):
-        u"""
-        Fetch Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk
-        @param kwargs: will be passed to pyarrow.Table.to_pandas() method
-        """
+        """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
         self.check_can_use_pandas()
         if self._query_result_format != 'arrow':
             raise NotSupportedError
@@ -750,20 +733,18 @@ class SnowflakeCursor(object):
     def abort_query(self, qid):
         url = '/queries/{qid}/abort-request'.format(qid=qid)
         ret = self._connection.rest.request(url=url, method='post')
-        return ret.get(u'success')
+        return ret.get('success')
 
     def executemany(self, command, seqparams):
-        u"""
-        Executes a command/query with the given set of parameters sequentially.
-        """
-        logger.debug(u'executing many SQLs/commands')
-        command = command.strip(u' \t\n\r') if command else None
+        """Executes a command/query with the given set of parameters sequentially."""
+        logger.debug('executing many SQLs/commands')
+        command = command.strip(' \t\n\r') if command else None
 
         if len(seqparams) == 0:
             errorvalue = {
-                u'msg': u"No parameters are specified for the command: "
-                        u"{}".format(command),
-                u'errno': ER_INVALID_VALUE,
+                'msg': "No parameters are specified for the command: "
+                        "{}".format(command),
+                'errno': ER_INVALID_VALUE,
             }
             Error.errorhandler_wrapper(
                 self.connection, self, InterfaceError, errorvalue
@@ -772,13 +753,13 @@ class SnowflakeCursor(object):
 
         if self.INSERT_SQL_RE.match(command):
             if self._connection.is_pyformat:
-                logger.debug(u'rewriting INSERT query')
-                command_wo_comments = re.sub(self.COMMENT_SQL_RE, u'', command)
+                logger.debug('rewriting INSERT query')
+                command_wo_comments = re.sub(self.COMMENT_SQL_RE, '', command)
                 m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
                 if not m:
                     errorvalue = {
-                        u'msg': u"Failed to rewrite multi-row insert",
-                        u'errno': ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT
+                        'msg': "Failed to rewrite multi-row insert",
+                        'errno': ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT
                     }
                     Error.errorhandler_wrapper(
                         self.connection, self, InterfaceError, errorvalue
@@ -787,14 +768,14 @@ class SnowflakeCursor(object):
                 fmt = m.group(1)
                 values = []
                 for param in seqparams:
-                    logger.debug(u'parameter: %s', param)
+                    logger.debug('parameter: %s', param)
                     values.append(fmt % self._connection._process_params(
                         param, self))
-                command = command.replace(fmt, u','.join(values), 1)
+                command = command.replace(fmt, ','.join(values), 1)
                 self.execute(command)
                 return self
             else:
-                logger.debug(u'bulk insert')
+                logger.debug('bulk insert')
                 num_params = len(seqparams[0])
                 pivot_param = []
                 for _ in range(num_params):
@@ -802,11 +783,11 @@ class SnowflakeCursor(object):
                 for row in seqparams:
                     if len(row) != num_params:
                         errorvalue = {
-                            u'msg':
-                                u"Bulk data size don't match. expected: {}, "
-                                u"got: {}, command: {}".format(
+                            'msg':
+                                "Bulk data size don't match. expected: {}, "
+                                "got: {}, command: {}".format(
                                     num_params, len(row), command),
-                            u'errno': ER_INVALID_VALUE,
+                            'errno': ER_INVALID_VALUE,
                         }
                         Error.errorhandler_wrapper(
                             self.connection, self, InterfaceError, errorvalue
@@ -823,27 +804,23 @@ class SnowflakeCursor(object):
         return self
 
     def fetchone(self):
-        """
-        Fetch one row
-        """
+        """Fetches one row."""
         try:
             return next(self._result)
         except StopIteration:
             return None
 
     def fetchmany(self, size=None):
-        u"""
-        Fetch the number of specified rows
-        """
+        """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
 
         if size < 0:
             errorvalue = {
-                u'msg': (u"The number of rows is not zero or "
-                         u"positive number: {0}").format(
+                'msg': ("The number of rows is not zero or "
+                         "positive number: {0}").format(
                     size),
-                u'errno': ER_NOT_POSITIVE_SIZE}
+                'errno': ER_NOT_POSITIVE_SIZE}
             Error.errorhandler_wrapper(
                 self.connection, self, ProgrammingError, errorvalue)
         ret = []
@@ -858,9 +835,7 @@ class SnowflakeCursor(object):
         return ret
 
     def fetchall(self):
-        u"""
-        Fetch all data
-        """
+        """Fetches all of the results."""
         ret = []
         while True:
             row = self.fetchone()
@@ -870,59 +845,47 @@ class SnowflakeCursor(object):
         return ret
 
     def nextset(self):
-        u"""
-        Not supporeted
-        """
-        logger.debug(u'nop')
+        """Not supported."""
+        logger.debug('nop')
         return None
 
     def setinputsizes(self, _):
-        u"""
-        Not supported
-        """
-        logger.debug(u'nop')
+        """Not supported."""
+        logger.debug('nop')
 
     def setoutputsize(self, _, column=None):
-        u"""
-        Not supported
-        """
+        """Not supported."""
         del column
-        logger.debug(u'nop')
+        logger.debug('nop')
 
-    def scroll(self, value, mode=u'relative'):
+    def scroll(self, value, mode='relative'):
         Error.errorhandler_wrapper(
             self.connection, self,
             NotSupportedError,
             {
-                u'msg': u"scroll is not supported.",
-                u'errno': ER_UNSUPPORTED_METHOD,
-                u'sqlstate': SQLSTATE_FEATURE_NOT_SUPPORTED})
+                'msg': "scroll is not supported.",
+                'errno': ER_UNSUPPORTED_METHOD,
+                'sqlstate': SQLSTATE_FEATURE_NOT_SUPPORTED})
 
     def reset(self):
-        u"""
-        Reset the result set
-        """
+        """Resets the result set."""
         self._total_rowcount = -1  # reset the rowcount
         if self._result is not None:
             self._result._reset()
 
     def __iter__(self):
-        u"""
-        Iteration over the result set
-        """
+        """Iteration over the result set."""
         return iter(self._result)
 
     def __cancel_query(self, query):
         if self._sequence_counter >= 0 and not self.is_closed():
-            logger.debug(u'canceled. %s, request_id: %s',
+            logger.debug('canceled. %s, request_id: %s',
                          query, self._request_id)
             with self._lock_canceling:
                 self._connection._cancel_query(query, self._request_id)
 
     def _log_telemetry_job_data(self, telemetry_field, value):
-        u"""
-        Builds an instance of TelemetryData with the given field and logs it
-        """
+        """Builds an instance of TelemetryData with the given field and logs it."""
         obj = {
             'type': telemetry_field,
             'query_id': self._sfqid,
@@ -937,22 +900,16 @@ class SnowflakeCursor(object):
                 exc_info=True)
 
     def __enter__(self):
-        """
-        context manager
-        """
+        """Context manager."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        context manager with commit or rollback
-        """
+        """Context manager with commit or rollback."""
         self.close()
 
 
 class DictCursor(SnowflakeCursor):
-    """
-    Cursor returning results in a dictionary
-    """
+    """Cursor returning results in a dictionary."""
 
     def __init__(self, connection):
         SnowflakeCursor.__init__(self, connection, use_dict_result=True, json_result_class=DictJsonResult)

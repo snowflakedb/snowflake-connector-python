@@ -10,7 +10,7 @@ from logging import getLogger
 
 import pytz
 
-from .compat import IS_WINDOWS, TO_UNICODE
+from .compat import IS_WINDOWS
 from .constants import is_date_type_name, is_timestamp_type_name
 from .converter import (
     ZERO_EPOCH,
@@ -31,12 +31,11 @@ def format_sftimestamp(ctx, value, franction_of_nanoseconds):
         nanosecond=franction_of_nanoseconds,
         scale=ctx.get('scale'))
     return ctx['fmt'].format(sf_datetime) if ctx.get('fmt') else \
-        TO_UNICODE(sf_datetime)
+        str(sf_datetime)
 
 
 class SnowflakeConverterSnowSQL(SnowflakeConverter):
-    """
-    Snowflake Converter for SnowSQL.
+    """Snowflake Converter for SnowSQL.
 
     Format data instead of just converting the values into native
     Python objects.
@@ -47,22 +46,20 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         self._support_negative_year = kwargs.get('support_negative_year', True)
 
     def _get_format(self, type_name):
-        """
-        Gets the format
-        """
+        """Gets the format."""
         fmt = None
-        if type_name == u'DATE':
-            fmt = self._parameters.get(u'DATE_OUTPUT_FORMAT')
+        if type_name == 'DATE':
+            fmt = self._parameters.get('DATE_OUTPUT_FORMAT')
             if not fmt:
-                fmt = u'YYYY-MM-DD'
-        elif type_name == u'TIME':
-            fmt = self._parameters.get(u'TIME_OUTPUT_FORMAT')
-        elif type_name + u'_OUTPUT_FORMAT' in self._parameters:
-            fmt = self._parameters[type_name + u'_OUTPUT_FORMAT']
+                fmt = 'YYYY-MM-DD'
+        elif type_name == 'TIME':
+            fmt = self._parameters.get('TIME_OUTPUT_FORMAT')
+        elif type_name + '_OUTPUT_FORMAT' in self._parameters:
+            fmt = self._parameters[type_name + '_OUTPUT_FORMAT']
             if not fmt:
-                fmt = self._parameters[u'TIMESTAMP_OUTPUT_FORMAT']
-        elif type_name == u'BINARY':
-            fmt = self._parameters.get(u'BINARY_OUTPUT_FORMAT')
+                fmt = self._parameters['TIMESTAMP_OUTPUT_FORMAT']
+        elif type_name == 'BINARY':
+            fmt = self._parameters.get('BINARY_OUTPUT_FORMAT')
         return fmt
 
     #
@@ -86,11 +83,11 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 data_type=type_name,
                 support_negative_year=self._support_negative_year,
                 datetime_class=SnowflakeDateTime)
-        elif type_name == u'BINARY':
+        elif type_name == 'BINARY':
             fmt = SnowflakeBinaryFormat(self._get_format(type_name))
         logger.debug('Type: %s, Format: %s', type_name, fmt)
         ctx['fmt'] = fmt
-        converters = [u'_{type_name}_to_python'.format(type_name=type_name)]
+        converters = ['_{type_name}_to_python'.format(type_name=type_name)]
         for conv in converters:
             try:
                 return getattr(self, conv)(ctx)
@@ -100,36 +97,26 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         return None  # Skip conversion
 
     def _BOOLEAN_to_python(self, ctx):
-        """
-        No conversion for SnowSQL
-        """
-        return lambda value: "True" if value in (u'1', u"True") else u"False"
+        """No conversion for SnowSQL."""
+        return lambda value: "True" if value in ('1', "True") else "False"
 
     def _FIXED_to_python(self, ctx):
-        """
-        No conversion for SnowSQL
-        """
+        """No conversion for SnowSQL."""
         return None
 
     def _REAL_to_python(self, ctx):
-        """
-        No conversion for SnowSQL
-        """
+        """No conversion for SnowSQL."""
         return None
 
     def _BINARY_to_python(self, ctx):
-        """
-        BINARY to a string formatted by BINARY_OUTPUT_FORMAT
-        """
+        """BINARY to a string formatted by BINARY_OUTPUT_FORMAT."""
         return lambda value: ctx['fmt'].format(binary_to_python(value))
 
     def _DATE_to_python(self, ctx):
-        """
-        DATE to struct_time/date
+        """Converts DATE to struct_time/date.
 
         No timezone is attached.
         """
-
         def conv(value):
             return ctx['fmt'].format(time.gmtime(int(value) * (24 * 60 * 60)))
 
@@ -140,12 +127,10 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         return conv if not IS_WINDOWS else conv_windows
 
     def _TIMESTAMP_TZ_to_python(self, ctx):
-        """
-        TIMESTAMP TZ to datetime
+        """Converts TIMESTAMP TZ to datetime.
 
         The timezone offset is piggybacked.
         """
-
         scale = ctx['scale']
         max_fraction = ctx.get('max_fraction')
 
@@ -197,12 +182,10 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         return conv
 
     def _TIMESTAMP_NTZ_to_python(self, ctx):
-        """
-        TIMESTAMP NTZ to Snowflake Formatted String
+        """Converts TIMESTAMP NTZ to Snowflake Formatted String.
 
         No timezone info is attached.
         """
-
         def conv(value):
             microseconds, fraction_of_nanoseconds = \
                 _extract_timestamp(value, ctx)
