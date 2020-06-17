@@ -8,13 +8,10 @@ import os
 import re
 import sys
 import uuid
-import warnings
-from difflib import get_close_matches
 from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
-from typing import Callable
 
 from . import errors
 from . import proxy
@@ -43,7 +40,6 @@ from .constants import (
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     OCSPMode
 )
-from .converter import SnowflakeConverter
 from .cursor import SnowflakeCursor, LOG_MAX_QUERY_LENGTH
 from .description import (
     SNOWFLAKE_CONNECTOR_VERSION,
@@ -89,66 +85,66 @@ def DefaultConverterClass():
 
 
 SUPPORTED_PARAMSTYLES = {
-    'qmark',
+    "qmark",
     'numeric',
     'format',
     'pyformat',
 }
-# Default configs, tuple of default variable and accepted types
+# default configs
 DEFAULT_CONFIGURATION = {
-    'dsn': (None, (type(None), str)),  # standard
-    'user': ('', str),  # standard
-    'password': ('', str),  # standard
-    'host': ('127.0.0.1', str),  # standard
-    'port': (8080, (int, str)),  # standard
-    'database': (None, (type(None), str)),  # standard
-    'proxy_host': (None, (type(None), str)),  # snowflake
-    'proxy_port': (None, (type(None), str)),  # snowflake
-    'proxy_user': (None, (type(None), str)),  # snowflake
-    'proxy_password': (None, (type(None), str)),  # snowflake
-    'protocol': (u'http', str),  # snowflake
-    'warehouse': (None, (type(None), str)),  # snowflake
-    'region': (None, (type(None), str)),  # snowflake
-    'account': (None, (type(None), str)),  # snowflake
-    'schema': (None, (type(None), str)),  # snowflake
-    'role': (None, (type(None), str)),  # snowflake
-    'session_id': (None, (type(None), str)),  # snowflake
-    'login_timeout': (120, int),  # login timeout
-    'network_timeout': (None, (type(None), int)),  # network timeout (infinite by default)
-    'passcode_in_password': (False, bool),  # Snowflake MFA
-    'passcode': (None, (type(None), str)),  # Snowflake MFA
-    'private_key': (None, (type(None), str)),
-    'token': (None, (type(None), str)),  # OAuth or JWT Token
-    'authenticator': (DEFAULT_AUTHENTICATOR, (type(None), str)),
-    'mfa_callback': (None, (type(None), Callable)),
-    'password_callback': (None, (type(None), Callable)),
-    'application': (CLIENT_NAME, (type(None), str)),
-    'internal_application_name': (CLIENT_NAME, (type(None), str)),
-    'internal_application_version': (CLIENT_VERSION, (type(None), str)),
-    'insecure_mode': (False, bool),  # Error security fix requirement
-    'ocsp_fail_open': (True, bool),  # fail open on ocsp issues, default true
-    'inject_client_pause': (0, int),  # snowflake internal
-    'session_parameters': (None, (type(None), dict)),  # snowflake session parameters
-    'autocommit': (None, (type(None), bool)),  # snowflake
-    'client_session_keep_alive': (False, bool),  # snowflake
-    'client_session_keep_alive_heartbeat_frequency': (None, (type(None), int)),  # snowflake
-    'client_prefetch_threads': (4, int),  # snowflake
-    'numpy': (False, bool),  # snowflake
-    'ocsp_response_cache_filename': (None, (type(None), str)),  # snowflake internal
-    'converter_class': (DefaultConverterClass(), SnowflakeConverter),
-    'chunk_downloader_class': (SnowflakeChunkDownloader, object),  # snowflake internal
-    'validate_default_parameters': (False, bool),  # snowflake
-    'probe_connection': (False, bool),  # snowflake
-    'paramstyle': (None, (type(None), str)),  # standard/snowflake
-    'timezone': (None, (type(None), str)),  # snowflake
-    'consent_cache_id_token': (True, bool),  # snowflake
-    'service_name': (None, (type(None), str)),  # snowflake,
-    'support_negative_year': (True, bool),  # snowflake
-    'log_max_query_length': (LOG_MAX_QUERY_LENGTH, int),  # snowflake
-    'disable_request_pooling': (False, bool),  # snowflake
-    # enable temporary credential file for Linux, default false. Mac/Win will overlook this
-    'client_store_temporary_credential': (False, bool),
-    'use_openssl_only': (False, bool),  # only use openssl instead of python only crypto modules
+    'dsn': None,  # standard
+    'user': '',  # standard
+    'password': '',  # standard
+    'host': '127.0.0.1',  # standard
+    'port': 8080,  # standard
+    'database': None,  # standard
+    'proxy_host': None,  # snowflake
+    'proxy_port': None,  # snowflake
+    'proxy_user': None,  # snowflake
+    'proxy_password': None,  # snowflake
+    'protocol': 'http',  # snowflake
+    'warehouse': None,  # snowflake
+    'region': None,  # snowflake
+    'account': None,  # snowflake
+    'schema': None,  # snowflake
+    'role': None,  # snowflake
+    'session_id': None,  # snowflake
+    'login_timeout': 120,  # login timeout
+    'network_timeout': None,  # network timeout (infinite by default)
+    'passcode_in_password': False,  # Snowflake MFA
+    'passcode': None,  # Snowflake MFA
+    'private_key': None,
+    'token': None,  # OAuth or JWT Token
+    'authenticator': DEFAULT_AUTHENTICATOR,
+    'mfa_callback': None,
+    'password_callback': None,
+    'application': CLIENT_NAME,
+    'internal_application_name': CLIENT_NAME,
+    'internal_application_version': CLIENT_VERSION,
+
+    'insecure_mode': False,  # Error security fix requirement
+    'ocsp_fail_open': True,  # fail open on ocsp issues, default true
+    'inject_client_pause': 0,  # snowflake internal
+    'session_parameters': None,  # snowflake session parameters
+    'autocommit': None,  # snowflake
+    'client_session_keep_alive': False,  # snowflake
+    'client_session_keep_alive_heartbeat_frequency': None,  # snowflake
+    'client_prefetch_threads': 4,  # snowflake
+    'numpy': False,  # snowflake
+    'ocsp_response_cache_filename': None,  # snowflake internal
+    'converter_class': DefaultConverterClass(),
+    'chunk_downloader_class': SnowflakeChunkDownloader,  # snowflake internal
+    'validate_default_parameters': False,  # snowflake
+    'probe_connection': False,  # snowflake
+    'paramstyle': None,  # standard/snowflake
+    'timezone': None,  # snowflake
+    'consent_cache_id_token': True,  # snowflake
+    'service_name': None,  # snowflake,
+    'support_negative_year': True,  # snowflake
+    'log_max_query_length': LOG_MAX_QUERY_LENGTH,  # snowflake
+    'disable_request_pooling': False,  # snowflake
+    'client_store_temporary_credential': False,  # enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    'use_openssl_only': False,  # only use openssl instead of python only crypto modules
 }
 
 APPLICATION_RE = re.compile(r'[\w\d_]+')
@@ -218,7 +214,7 @@ class SnowflakeConnection(object):
             PYTHON_VERSION, PLATFORM)
 
         self._rest = None
-        for name, (value, _) in DEFAULT_CONFIGURATION.items():
+        for name, value in DEFAULT_CONFIGURATION.items():
             setattr(self, '_' + name, value)
 
         self.heartbeat_thread = None
@@ -632,42 +628,20 @@ class SnowflakeConnection(object):
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
         logger.debug('__config')
-        # Handle special cases first
-        if 'sequence_counter' in kwargs:
-            self.sequence_counter = kwargs['sequence_counter']
-        if 'application' in kwargs:
-            value = kwargs['application']
-            if not APPLICATION_RE.match(value):
-                msg = 'Invalid application name: {}'.format(value)
-                raise ProgrammingError(
-                    msg=msg,
-                    errno=0
-                )
+        for name, value in kwargs.items():
+            if name == 'sequence_counter':
+                self.sequence_counter = value
+            elif name == 'application':
+                if not APPLICATION_RE.match(value):
+                    msg = 'Invalid application name: {}'.format(value)
+                    raise ProgrammingError(
+                        msg=msg,
+                        errno=0
+                    )
+                else:
+                    setattr(self, '_' + name, value)
             else:
-                self._application = value
-        if 'validate_default_parameters' in kwargs:
-            self._validate_default_parameters = kwargs['validate_default_parameters']
-        # Handle rest of arguments
-        skip_list = ['validate_default_parameters', 'sequence_counter', 'application']
-        for name, value in filter(lambda e: e[0] not in skip_list, kwargs.items()):
-            if self.validate_default_parameters:
-                if name not in DEFAULT_CONFIGURATION.keys():
-                    close_matches = get_close_matches(name, DEFAULT_CONFIGURATION.keys(), n=1, cutoff=0.8)
-                    guess = close_matches[0] if len(close_matches) > 0 else None
-                    warnings.warn("'{}' is an unknown connection parameter{}".format(
-                        name,
-                        ", did you mean '{}'?".format(guess) if guess else ''
-                    ))
-                elif not isinstance(value, DEFAULT_CONFIGURATION[name][1]):
-                    accepted_types = DEFAULT_CONFIGURATION[name][1]
-                    warnings.warn("'{}' connection parameter should be of type '{}', but is a '{}'".format(
-                        name,
-                        str(tuple(e.__name__ for e in accepted_types)).replace("'", '')
-                        if isinstance(accepted_types, tuple)
-                        else accepted_types.__name__,
-                        type(value).__name__
-                    ))
-            setattr(self, '_' + name, value)
+                setattr(self, '_' + name, value)
 
         if self._numpy:
             try:
