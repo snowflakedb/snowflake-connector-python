@@ -90,6 +90,7 @@ SESSION_EXPIRED_GS_CODE = '390112'  # GS code: session expired. need to renew
 MASTER_TOKEN_NOTFOUND_GS_CODE = '390113'
 MASTER_TOKEN_EXPIRED_GS_CODE = '390114'
 MASTER_TOKEN_INVALD_GS_CODE = '390115'
+ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE = '390195'
 BAD_REQUEST_GS_CODE = '390400'
 
 # other constants
@@ -97,9 +98,6 @@ CONTENT_TYPE_APPLICATION_JSON = 'application/json'
 ACCEPT_TYPE_APPLICATION_SNOWFLAKE = 'application/snowflake'
 
 REQUEST_TYPE_RENEW = 'RENEW'
-REQUEST_TYPE_ISSUE = 'ISSUE'
-
-UPDATED_BY_ID_TOKEN = 'updated_by_id_token'
 
 HEADER_AUTHORIZATION_KEY = "Authorization"
 HEADER_SNOWFLAKE_TOKEN = 'Snowflake Token="{token}"'
@@ -141,6 +139,7 @@ DEFAULT_AUTHENTICATOR = 'SNOWFLAKE'  # default authenticator name
 EXTERNAL_BROWSER_AUTHENTICATOR = 'EXTERNALBROWSER'
 KEY_PAIR_AUTHENTICATOR = 'SNOWFLAKE_JWT'
 OAUTH_AUTHENTICATOR = 'OAUTH'
+ID_TOKEN_AUTHENTICATOR = 'ID_TOKEN'
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -305,20 +304,8 @@ class SnowflakeRestful(object):
             self._master_validity_in_seconds = master_validity_in_seconds
 
     def _renew_session(self):
-        """Renews a session and master token."""
-        try:
-            return self._token_request(REQUEST_TYPE_RENEW)
-        except ReauthenticationRequest as ex:
-            if not self.id_token:
-                raise ex.cause
-            return self._token_request(REQUEST_TYPE_ISSUE)
-
-    def _id_token_session(self):
-        """Issue a session token by the id token. No master token is returned.
-
-        As a result, the session token is not renewable.
-        """
-        return self._token_request(REQUEST_TYPE_ISSUE)
+        """Renew a session and master token."""
+        return self._token_request(REQUEST_TYPE_RENEW)
 
     def _token_request(self, request_type):
         logger.debug(
@@ -337,20 +324,13 @@ class SnowflakeRestful(object):
         url = '/session/token-request?' + urlencode({
             REQUEST_ID: request_id})
 
-        if request_type == REQUEST_TYPE_ISSUE:
-            header_token = self.id_token
-            body = {
-                "idToken": self.id_token,
-                "requestType": REQUEST_TYPE_ISSUE,
-            }
-        else:
-            # NOTE: ensure an empty key if master token is not set.
-            # This avoids HTTP 400.
-            header_token = self.master_token or ""
-            body = {
-                "oldSessionToken": self.token,
-                "requestType": request_type,
-            }
+        # NOTE: ensure an empty key if master token is not set.
+        # This avoids HTTP 400.
+        header_token = self.master_token or ""
+        body = {
+            u"oldSessionToken": self.token,
+            u"requestType": request_type,
+        }
         ret = self._post_request(
             url, headers, json.dumps(body),
             token=header_token,
@@ -364,7 +344,6 @@ class SnowflakeRestful(object):
                     'masterValidityInSeconds'),
                 id_token=self.id_token)
             logger.debug('updating session completed')
-            ret[UPDATED_BY_ID_TOKEN] = request_type == REQUEST_TYPE_ISSUE
             return ret
         else:
             logger.debug('failed: %s', ret)
@@ -478,8 +457,6 @@ class SnowflakeRestful(object):
         if ret.get('code') == SESSION_EXPIRED_GS_CODE:
             try:
                 ret = self._renew_session()
-                if ret.get(UPDATED_BY_ID_TOKEN):
-                    self._connection._set_current_objects()
             except ReauthenticationRequest as ex:
                 if self._connection._authenticator != \
                         EXTERNAL_BROWSER_AUTHENTICATOR:
@@ -519,8 +496,6 @@ class SnowflakeRestful(object):
         if ret.get('code') == SESSION_EXPIRED_GS_CODE:
             try:
                 ret = self._renew_session()
-                if ret.get(UPDATED_BY_ID_TOKEN):
-                    self._connection._set_current_objects()
             except ReauthenticationRequest as ex:
                 if self._connection._authenticator != \
                         EXTERNAL_BROWSER_AUTHENTICATOR:

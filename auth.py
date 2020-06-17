@@ -33,12 +33,14 @@ from .errors import (
     Error,
     ForbiddenError,
     ServiceUnavailableError,
+    ProgrammingError,
 )
 from .network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
+    ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
 )
 from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from .version import VERSION
@@ -304,6 +306,18 @@ class Auth(object):
 
         logger.debug('completed authentication')
         if not ret['success']:
+            errno = ret.get('code', ER_FAILED_TO_CONNECT_TO_DB)
+            if errno == ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE:
+                # clear stored id_token if failed to connect because of id_token
+                # raise an exception for reauthing without id_token
+                self._rest.id_token = None
+                delete_temporary_credential(self._rest._host, user, True)
+                raise ReauthenticationRequest(
+                    ProgrammingError(
+                        msg=ret['message'],
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED))
+
             if type(auth_instance) is AuthByKeyPair:
                 logger.debug(
                     "JWT Token authentication failed. "
@@ -365,7 +379,7 @@ class Auth(object):
             if IS_MACOS or IS_WINDOWS:
                 if not keyring:
                     # we will leave the exception for write_temporary_credential function to raise
-                    return False
+                    return
                 new_target = convert_target(host, user)
                 try:
                     id_token = keyring.get_password(new_target, user.upper())
@@ -377,16 +391,8 @@ class Auth(object):
                     account.upper(), {}).get(user.upper())
             else:
                 logger.debug("connection parameter enable_sso_temporary_credential not set or OS not support")
-            if id_token:
-                self._rest.id_token = id_token
-                try:
-                    self._rest._id_token_session()
-                    return True
-                except ReauthenticationRequest as ex:
-                    # catch token expiration error
-                    logger.debug(
-                        "ID token expired. Reauthenticating...: %s", ex)
-        return False
+            self._rest.id_token = id_token
+        return
 
 
 def write_temporary_credential(host, account, user, id_token, store_temporary_credential=False):

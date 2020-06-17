@@ -45,6 +45,10 @@ ALTER SYSTEM SET
     SESSION_TOKEN_VALIDITY=5,
     ID_TOKEN_VALIDITY=60
 """)
+        # ALLOW_UNPROTECTED_ID_TOKEN is going to be deprecated in the future
+        # cnx.cursor().execute("alter account testaccount set ALLOW_UNPROTECTED_ID_TOKEN=true;")
+        cnx.cursor().execute("alter account testaccount set ALLOW_ID_TOKEN=true;")
+        cnx.cursor().execute("alter account testaccount set ID_TOKEN_FEATURE_ENABLED=true;")
 
     def fin():
         with snowflake.connector.connect(**CONNECTION_PARAMETERS_ADMIN) as cnx:
@@ -76,7 +80,7 @@ def test_connect_externalbrowser(token_validity_test_values):
     CONNECTION_PARAMETERS_SSO['client_store_temporary_credential'] = True
 
     # change database and schema to non-default one
-    print("[INFO] 1st connection gets id token and stores in the cache file. "
+    print("[INFO] 1st connection gets id token and stores in the local cache (keychain/credential manager/cache file). "
           "This popup a browser to SSO login")
     cnx = snowflake.connector.connect(**CONNECTION_PARAMETERS_SSO)
     assert cnx.database == 'TESTDB'
@@ -92,7 +96,7 @@ def test_connect_externalbrowser(token_validity_test_values):
     assert ret[0][3] == 'REGRESS'
     cnx.close()
 
-    print("[INFO] 2nd connection reads the cache file and uses the id token. "
+    print("[INFO] 2nd connection reads the local cache and uses the id token. "
           "This should not popups a browser.")
     CONNECTION_PARAMETERS_SSO['database'] = 'testdb'
     CONNECTION_PARAMETERS_SSO['schema'] = 'testschema'
@@ -106,7 +110,7 @@ def test_connect_externalbrowser(token_validity_test_values):
     assert cnx.role == 'SYSADMIN'
     assert cnx.warehouse == 'REGRESS'
 
-    print("[INFO] Running a 1 seconds query. ")
+    print("[INFO] Running a 1 second query. ")
     cnx.cursor().execute("select seq8() from table(generator(timelimit=>1))")
     assert cnx.database == 'TESTDB'
     assert cnx.schema == 'TESTSCHEMA'
@@ -121,6 +125,8 @@ def test_connect_externalbrowser(token_validity_test_values):
     assert cnx.role == 'SYSADMIN'
     assert cnx.warehouse == 'REGRESS'
 
+    cnx.close()
+
     # change database and schema again to ensure they are overridden
     CONNECTION_PARAMETERS_SSO['database'] = 'testdb'
     CONNECTION_PARAMETERS_SSO['schema'] = 'testschema'
@@ -129,4 +135,12 @@ def test_connect_externalbrowser(token_validity_test_values):
     assert cnx.schema == 'TESTSCHEMA'
     assert cnx.role == 'SYSADMIN'
     assert cnx.warehouse == 'REGRESS'
+    cnx.close()
+
+    with snowflake.connector.connect(**CONNECTION_PARAMETERS_ADMIN) as cnx_admin:
+        # cnx_admin.cursor().execute("alter account testaccount set ALLOW_UNPROTECTED_ID_TOKEN=false;")
+        cnx_admin.cursor().execute("alter account testaccount set ALLOW_ID_TOKEN=false;")
+        cnx_admin.cursor().execute("alter account testaccount set ID_TOKEN_FEATURE_ENABLED=false;")
+    print("[INFO] Login again with ALLOW_UNPROTECTED_ID_TOKEN unset. Please make sure this pops up the browser")
+    cnx = snowflake.connector.connect(**CONNECTION_PARAMETERS_SSO)
     cnx.close()

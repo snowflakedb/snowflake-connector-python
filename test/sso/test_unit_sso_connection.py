@@ -33,12 +33,13 @@ def test_connect_externalbrowser(
                     'idToken': 'ID_TOKEN',
                 }}
         elif mock_post_req_cnt == 1:
-            # return from /token-request
+            # return from /v1/login-request
             ret = {
                 'success': True,
                 'message': None,
                 'data': {
-                    'sessionToken': 'NEW_TOKEN',
+                    'token': 'NEW_TOKEN',
+                    'masterToken': 'NEW_MASTER_TOKEN',
                 }}
         elif mock_post_req_cnt == 2:
             # return from USE WAREHOUSE TESTWH_NEW
@@ -123,8 +124,8 @@ def test_connect_externalbrowser(
         )
 
         assert con._rest.token == 'NEW_TOKEN'
-        assert con._rest.master_token is None
-        assert con._rest.id_token == 'ID_TOKEN'
+        assert con._rest.master_token == 'NEW_MASTER_TOKEN'
+        assert con._rest.id_token is None
         assert con.database == 'TESTDB_NEW'
         assert con.warehouse == 'TESTWH_NEW'
 
