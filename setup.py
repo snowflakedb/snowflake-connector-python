@@ -179,7 +179,7 @@ setup(
         'pytz<2021.0',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
         'pyOpenSSL>=16.2.0,<21.0.0',
-        'cffi>=1.9,<1.14',
+        'cffi>=1.9,<1.15',
         'cryptography>=2.5.0,<3.0.0',
         'pyjwt<2.0.0',
         'idna<2.10',
