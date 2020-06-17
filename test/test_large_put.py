@@ -12,6 +12,7 @@ import pytest
 pytestmark = pytest.mark.putget
 
 
+@pytest.mark.flaky(reruns=3)
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
     """[s3] Puts and Copies into large files."""
     # generates N files
