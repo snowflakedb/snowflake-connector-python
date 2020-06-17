@@ -5,6 +5,7 @@
 #
 import logging
 import re
+from typing import Optional
 
 COMMENT_PATTERN_RE = re.compile(r'^\s*\-\-')
 EMPTY_LINE_RE = re.compile(r'^\s*$')
@@ -12,20 +13,35 @@ EMPTY_LINE_RE = re.compile(r'^\s*$')
 _logger = logging.getLogger(__name__)
 
 
-def split_statements(buf, remove_comments=False):
+class SQLDelimiter(object):
+    """Class that wraps a SQL delimiter string.
+
+    Since split_statements is a generator this mutable object will allow it change while executing.
+    """
+
+    def __init__(self, sql_delimiter: str = ';'):
+        """Initalizes SQLDelimiter with a string."""
+        self.sql_delimiter = sql_delimiter
+
+
+def split_statements(buf, remove_comments: bool = False, delimiter: Optional[SQLDelimiter] = None):
     """Splits a stream into SQL statements (ends with a semicolon) or commands (!...).
 
     Args:
         buf: Unicode data stream.
         remove_comments: Whether or not to remove all comments (Default value = False).
+        delimiter: The delimiter string that separates SQL commands from each other.
 
     Yields:
         A SQL statement or a command.
     """
+    if delimiter is None:
+        delimiter = SQLDelimiter()  # Use default delimiter if none was given.
     in_quote = False
     ch_quote = None
     in_comment = False
     in_double_dollars = False
+    previous_delimiter = None
 
     line = buf.readline()
     if isinstance(line, bytes):
@@ -36,6 +52,21 @@ def split_statements(buf, remove_comments=False):
         col = 0
         col0 = 0
         len_line = len(line)
+        sql_delimiter = delimiter.sql_delimiter
+        if not previous_delimiter or sql_delimiter != previous_delimiter:
+            # Only (re)compile new Regexes if they should be
+            escaped_delim = re.escape(sql_delimiter)
+            # Special characters possible in the sql delimiter are '_', '/' and ';'. If a delimiter does not end, or
+            # start with a special character then look for word separation with \b regex.
+            if re.match(r'\w', sql_delimiter[0]):
+                RE_START = re.compile(r"^[^\w$]?{}".format(escaped_delim))
+            else:
+                RE_START = re.compile(r"^.?{}".format(escaped_delim))
+            if re.match(r'\w', sql_delimiter[-1]):
+                RE_END = re.compile(r"{}[^\w$]?$".format(escaped_delim))
+            else:
+                RE_END = re.compile(r"{}.?$".format(escaped_delim))
+            previous_delimiter = sql_delimiter
         while True:
             if col >= len_line:
                 if col0 < col:
@@ -114,9 +145,11 @@ def split_statements(buf, remove_comments=False):
                     col += 2
                     col0 = col
                     in_double_dollars = True
-                elif line[col] == ';':
-                    statement.append((line[col0:col + 1], True))
-                    col += 1
+                elif (RE_START.match(line[col - 1:col + len(sql_delimiter)]) if col > 0 else (
+                RE_START.match(line[col:col + len(sql_delimiter)]))) and (
+                RE_END.match(line[col:col + len(sql_delimiter) + 1])):
+                    statement.append((line[col0:col] + ';', True))
+                    col += len(sql_delimiter)
                     try:
                         if line[col] == '>':
                             col += 1
@@ -139,7 +172,8 @@ def split_statements(buf, remove_comments=False):
                     if len(statement) > 0:
                         yield _concatenate_statements(statement)
                         statement = []
-                    yield line.rstrip(';').strip(), False
+                    yield (line.strip()[:-len(sql_delimiter)] if line.strip().endswith(sql_delimiter)
+                           else line.strip()).strip(), False
                     break
                 else:
                     col += 1
