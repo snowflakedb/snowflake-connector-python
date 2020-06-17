@@ -24,6 +24,7 @@ from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
+from .auth_idtoken import AuthByIdToken
 from .chunk_downloader import (
     SnowflakeChunkDownloader,
     DEFAULT_CLIENT_PREFETCH_THREADS,
@@ -66,6 +67,7 @@ from .network import (
     OAUTH_AUTHENTICATOR,
     REQUEST_ID,
     SnowflakeRestful,
+    ReauthenticationRequest,
 )
 from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
                        SQLSTATE_FEATURE_NOT_SUPPORTED)
@@ -613,19 +615,19 @@ class SnowflakeConnection(object):
                     self._client_store_temporary_credential if IS_LINUX else True
 
         auth = Auth(self.rest)
-        if not auth.read_temporary_credential(
-                self.host, self.account, self.user,
-                self._session_parameters):
-            self.__authenticate(auth_instance)
-        else:
-            # set the current objects as the session is derived from the id
-            # token, and the current objects may be different.
-            self._set_current_objects()
+        auth.read_temporary_credential(self.host, self.account, self.user, self._session_parameters)
+        self._authenticate(auth_instance)
 
         self._password = None  # ensure password won't persist
 
         if self.client_session_keep_alive:
             self._add_heartbeat()
+
+    def __preprocess_auth_instance(self, auth_instance):
+        if type(auth_instance) is AuthByWebBrowser:
+            if self._rest.id_token is not None:
+                return AuthByIdToken(self._rest.id_token)
+        return auth_instance
 
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
@@ -825,41 +827,21 @@ class SnowflakeConnection(object):
 
         return ret
 
-    def _set_current_objects(self):
-        """Sets the current objects to the specified ones.
-
-        This is mainly used when a session token is derived from an id token.
-        """
-
-        def cmd(sql, params, _update_current_object=False):
-            processed_params = self._process_params_qmarks(params)
-            sequence_counter = self._next_sequence_counter()
-            request_id = uuid.uuid4()
-            self.cmd_query(
-                sql,
-                sequence_counter,
-                request_id,
-                binding_params=processed_params,
-                is_internal=True,
-                _update_current_object=_update_current_object)
-
-        if self._role:
-            cmd("USE ROLE IDENTIFIER(?)", (self._role,))
-        if self._warehouse:
-            cmd("USE WAREHOUSE IDENTIFIER(?)", (self._warehouse,))
-        if self._database:
-            cmd("USE DATABASE IDENTIFIER(?)", (self._database,))
-        if self._schema:
-            cmd('USE SCHEMA IDENTIFIER(?)', (self._schema,))
-        cmd("SELECT 1", (), _update_current_object=True)
-
     def _reauthenticate_by_webbrowser(self):
         auth_instance = AuthByWebBrowser(
             self.rest, self.application, protocol=self._protocol,
             host=self.host, port=self.port)
-        self.__authenticate(auth_instance)
-        self._set_current_objects()
+        self._authenticate(auth_instance)
         return {'success': True}
+
+    def _authenticate(self, auth_instance):
+        # make some changes if needed before real __authenticate
+        try:
+            self.__authenticate(self.__preprocess_auth_instance(auth_instance))
+        except ReauthenticationRequest as ex:
+            # cached id_token expiration error, we have cleaned id_token and try to authenticate again
+            logger.debug("ID token expired. Reauthenticating...: %s", ex)
+            self.__authenticate(self.__preprocess_auth_instance(auth_instance))
 
     def __authenticate(self, auth_instance):
         auth_instance.authenticate(
