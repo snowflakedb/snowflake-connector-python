@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.7(June 1,2020)
+
+    - Support azure-storage-blob v12 as well as v2 (for Python 3.5.0-3.5.1) by Python Connector
+    - Fixed a bug where temporary directory path was not Windows compatible in write_pandas function
+    - Added out of band telemetry error reporting of unknown errors
+
 - v2.2.6(May 11,2020)
 
     - Update Pyarrow version from 0.16.0 to 0.17.0 for Python connector
