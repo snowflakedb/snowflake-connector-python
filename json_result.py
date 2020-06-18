@@ -175,8 +175,7 @@ class DictJsonResult(JsonResult):
             col_name = self._column_idx_to_name[idx]
             conv = self._column_converter[idx]
             try:
-                res[col_name] = col if conv is None or col is None else conv(
-                    col)
+                res[col_name] = col if conv is None or col is None else conv(col)
             except Exception as e:
                 col_desc = self._cursor.description[idx]
                 msg = 'Failed to convert: ' \
