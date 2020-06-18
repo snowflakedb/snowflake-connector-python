@@ -27,7 +27,7 @@ public:
   /**
    * Desctructor
    */
-  ~CArrowChunkIterator() = default;
+  virtual ~CArrowChunkIterator() = default;
 
   /**
    * @return a python tuple object which contains all data in current row
