@@ -397,6 +397,7 @@ ratio number(6,2))
             run(cnx, "drop table if exists {name}")
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.skipif(os.getenv("SNOWFLAKE_GCP") is not None, reason="GCS doesn't skip even if the same file exist ")
 def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
                                       db_parameters):
