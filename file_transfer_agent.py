@@ -835,12 +835,9 @@ class SnowflakeFileTransferAgent(object):
 
         if self._command_type == CMD_TYPE_UPLOAD:
             self._src_files = list(self._expand_filenames(self._src_locations))
-            self._auto_compress = \
-                'autoCompress' not in self._ret['data'] or \
-                self._ret['data']['autoCompress']
-            self._source_compression = self._ret['data'][
-                'sourceCompression'].lower() \
-                if 'sourceCompression' in self._ret['data'] else ''
+            self._auto_compress = 'autoCompress' not in self._ret['data'] or self._ret['data']['autoCompress']
+            self._source_compression = self._ret['data']['sourceCompression'].lower() if 'sourceCompression' in \
+                                                                                         self._ret['data'] else ''
         else:
             self._src_files = list(self._src_locations)
             self._src_file_to_encryption_material = {}
