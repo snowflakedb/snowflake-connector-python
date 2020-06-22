@@ -31,7 +31,9 @@ jobs:
         run: tox -e fix_lint
 
   build-manylinux:
+    needs: lint
     name: Build Linux-py${{ matrix.python-version }}
+    runs-on: ubuntu-latest
     conatiner: quay.io/pypa/manylinux1_x86_64
     strategy:
       matrix:
