@@ -724,12 +724,11 @@ class SnowflakeConnection(object):
         if self.client_session_keep_alive:
             self._add_heartbeat()
 
-    def password_not_required_list(self):
+    def get_password_not_required_list(self):
         return [
             EXTERNAL_BROWSER_AUTHENTICATOR,
             OAUTH_AUTHENTICATOR,
-            KEY_PAIR_AUTHENTICATOR,
-            CUSTOM_AUTHENTICATOR
+            KEY_PAIR_AUTHENTICATOR
         ]
 
     def __config(self, **kwargs):
@@ -805,7 +804,7 @@ class SnowflakeConnection(object):
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
         # when self._authenticator would be in this list it is always upper'd before
-        if self._authenticator not in self.password_not_required_list():
+        if self._authenticator not in self.get_password_not_required_list():
             # authentication is done by the browser if the authenticator
             # is externalbrowser
             if not self._password:
