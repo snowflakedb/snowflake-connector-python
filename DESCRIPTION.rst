@@ -12,7 +12,7 @@ Release Notes
 - v2.2.8(June 22,2020)
 
     - Switched docstring style to Google from Epydoc and added automated tests to enforce the standard.
-    - Fixed a memory leak in DIctCursor's Arrow format code.
+    - Fixed a memory leak in DictCursor's Arrow format code.
 
 - v2.2.7(June 1,2020)
 
