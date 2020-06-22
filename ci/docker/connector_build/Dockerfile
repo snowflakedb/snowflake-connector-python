@@ -1,5 +1,5 @@
 # We use manylinux1 base image because pyarrow_manylinux2010 has a bug and wheel failed to be audited
-ARG BASE_IMAGE
+ARG BASE_IMAGE=quay.io/pypa/manylinux1_x86_64
 FROM $BASE_IMAGE
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/

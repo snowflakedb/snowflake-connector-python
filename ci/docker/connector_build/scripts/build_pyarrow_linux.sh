@@ -39,7 +39,7 @@ PYTHON_VERSION=$1
 
 # if no arguments provided to this script, by default we will build using all versions
 # of python connector
-if [[ -z $PYTHON_VERSION ]]; then
+if [[ -z $PYTHON_VERSION ]] || [[ $PYTHON_VERSION == 'all' ]]; then
     PYTHON_VERSIONS=("3.5" "3.6" "3.7" "3.8")
 else
     PYTHON_VERSIONS=($PYTHON_VERSION)

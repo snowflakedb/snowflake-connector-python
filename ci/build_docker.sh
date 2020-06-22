@@ -11,7 +11,7 @@ cd $THIS_DIR/docker/connector_build
 CONTAINER_NAME=build_connector
 
 echo "[Info] Start building docker image"
-docker build -t manylinux:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX1 -f Dockerfile .
+docker build -t build_connector:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX1 -f Dockerfile .
 
 user_id=$(id -u $USER)
 docker run \
