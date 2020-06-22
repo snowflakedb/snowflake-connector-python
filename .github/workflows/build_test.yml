@@ -34,7 +34,7 @@ jobs:
     needs: lint
     name: Build Linux-py${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    conatiner: quay.io/pypa/manylinux1_x86_64
+    container: quay.io/pypa/manylinux1_x86_64
     strategy:
       matrix:
         python-version: [3.5.1, 3.6, 3.7, 3.8]
