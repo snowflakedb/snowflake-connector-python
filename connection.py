@@ -61,6 +61,7 @@ from .network import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    CUSTOM_AUTHENTICATOR,
     REQUEST_ID,
     SnowflakeRestful,
 )
@@ -626,6 +627,9 @@ class SnowflakeConnection(object):
         logger.debug(u"OCSP Cache Server is updated: %s", ocsp_cache_server)
         SnowflakeConnection.OCSP_ENV_LOCK.release()
 
+    def get_custom_authenticator(self):
+        raise NotImplementedError()
+
     def __open_connection(self):
         u"""
         Opens a new network connection
@@ -669,6 +673,8 @@ class SnowflakeConnection(object):
             auth_instance = AuthByKeyPair(self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
             auth_instance = AuthByOAuth(self._token)
+        elif self._authenticator == CUSTOM_AUTHENTICATOR:
+            auth_instance = self.get_custom_authenticator()
         else:
             # okta URL, e.g., https://<account>.okta.com/
             auth_instance = AuthByOkta(self.rest, self.application)
@@ -717,6 +723,14 @@ class SnowflakeConnection(object):
 
         if self.client_session_keep_alive:
             self._add_heartbeat()
+
+    def password_not_required_list(self):
+        return [
+            EXTERNAL_BROWSER_AUTHENTICATOR,
+            OAUTH_AUTHENTICATOR,
+            KEY_PAIR_AUTHENTICATOR,
+            CUSTOM_AUTHENTICATOR
+        ]
 
     def __config(self, **kwargs):
         u"""
@@ -773,7 +787,8 @@ class SnowflakeConnection(object):
                 DEFAULT_AUTHENTICATOR,
                 EXTERNAL_BROWSER_AUTHENTICATOR,
                 KEY_PAIR_AUTHENTICATOR,
-                OAUTH_AUTHENTICATOR
+                OAUTH_AUTHENTICATOR,
+                CUSTOM_AUTHENTICATOR
             ]:
                 self._authenticator = auth_tmp
 
@@ -789,12 +804,8 @@ class SnowflakeConnection(object):
         if self._private_key:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if self._authenticator not in [
-            # when self._authenticator would be in this list it is always upper'd before
-            EXTERNAL_BROWSER_AUTHENTICATOR,
-            OAUTH_AUTHENTICATOR,
-            KEY_PAIR_AUTHENTICATOR,
-        ]:
+        # when self._authenticator would be in this list it is always upper'd before
+        if self._authenticator not in self.password_not_required_list():
             # authentication is done by the browser if the authenticator
             # is externalbrowser
             if not self._password:

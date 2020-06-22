@@ -35,7 +35,8 @@ class AuthByWebBrowser(AuthByPlugin):
 
     def __init__(self, rest, application,
                  webbrowser_pkg=None, socket_pkg=None,
-                 protocol=None, host=None, port=None):
+                 protocol=None, host=None, port=None,
+                 enable_print=True):
         self._rest = rest
         self._token = None
         self._consent_cache_id_token = True
@@ -47,6 +48,7 @@ class AuthByWebBrowser(AuthByPlugin):
         self._host = host
         self._port = port
         self._origin = None
+        self._enable_print = enable_print
 
     @property
     def consent_cache_id_token(self):
@@ -95,10 +97,11 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
-            print("Initiating login request with your identity provider. A "
-                  "browser window should have opened for you to complete the "
-                  "login. If you can't see it, check existing browser windows, "
-                  "or your OS settings. Press CTRL+C to abort and try again...")
+            if self._enable_print:
+                print("Initiating login request with your identity provider. A "
+                      "browser window should have opened for you to complete the "
+                      "login. If you can't see it, check existing browser windows, "
+                      "or your OS settings. Press CTRL+C to abort and try again...")
 
             logger.debug(u'step 1: query GS to obtain SSO url')
             sso_url = self._get_sso_url(
