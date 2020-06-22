@@ -520,12 +520,8 @@ class SnowflakeCursor(object):
             is_internal=_is_internal,
             _no_results=_no_results,
             _is_put_get=_is_put_get)
-        self._sfqid = ret['data'][
-            'queryId'] if 'data' in ret and 'queryId' in ret[
-            'data'] else None
-        self._sqlstate = ret['data'][
-            'sqlState'] if 'data' in ret and 'sqlState' in ret[
-            'data'] else None
+        self._sfqid = ret['data']['queryId'] if 'data' in ret and 'queryId' in ret['data'] else None
+        self._sqlstate = ret['data']['sqlState'] if 'data' in ret and 'sqlState' in ret['data'] else None
         self._first_chunk_time = get_time_millis()
 
         # if server gives a send time, log the time it took to arrive

@@ -4,12 +4,16 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import os
+import random
+import string
 from getpass import getuser
 from logging import getLogger
 from os import path
 
 import pytest
 from mock import patch
+
+import snowflake.connector
 
 # Mark every test in this module as a putget test
 pytestmark = pytest.mark.putget
@@ -449,7 +453,6 @@ union
 )
 def test_put_with_auto_compress_false(tmpdir, db_parameters):
     """Tests PUT command with auto_compress=False."""
-    import snowflake.connector
     cnx = snowflake.connector.connect(
         user=db_parameters['s3_user'],
         password=db_parameters['s3_password'],
@@ -488,7 +491,6 @@ LS @~/test_put_uncompress_file
 )
 def test_put_overwrite(tmpdir, db_parameters):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
-    import snowflake.connector
     cnx = snowflake.connector.connect(
         user=db_parameters['s3_user'],
         password=db_parameters['s3_password'],
@@ -522,3 +524,24 @@ def test_put_overwrite(tmpdir, db_parameters):
         assert "data.txt.gz" in ret[0]
     finally:
         cnx.cursor().execute("RM @~/test_put_overwrite")
+
+
+def test_utf8_filename(tmpdir, db_parameters):
+    test_file = tmpdir.join("utf卡豆.csv")
+    with open(str(test_file).encode('utf-8'), 'w') as f:
+        f.write("1,2,3\n")
+    stage_name = ''.join([random.choice(string.ascii_lowercase) for i in range(5)])
+    with snowflake.connector.connect(
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        database=db_parameters['database'],
+        schema=db_parameters['schema'],
+        account=db_parameters['account'],
+        protocol=db_parameters['protocol']) as con:
+        with con.cursor() as cur:
+            cur.execute("create temporary stage {}".format(stage_name))
+            cur.execute("PUT 'file://{}' @{}".format(test_file, stage_name))
+            cur.execute("select $1, $2, $3 from  @{}".format(stage_name))
+            assert cur.fetchone() == ('1', '2', '3')

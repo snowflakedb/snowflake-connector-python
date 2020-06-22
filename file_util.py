@@ -34,11 +34,9 @@ class SnowflakeFileUtil(object):
         gzip_file_name = os.path.join(tmp_dir, base_name + '_c.gz')
         logger.debug('gzip file: %s, original file: %s', gzip_file_name,
                      file_name)
-        fr = open(file_name, 'rb')
-        fw = gzip.GzipFile(gzip_file_name, 'wb')
-        shutil.copyfileobj(fr, fw)
-        fw.close()
-        fr.close()
+        with open(file_name, 'rb') as fr:
+            with gzip.GzipFile(gzip_file_name, 'wb') as fw:
+                shutil.copyfileobj(fr, fw)
         SnowflakeFileUtil.normalize_gzip_header(gzip_file_name)
 
         statinfo = os.stat(gzip_file_name)
@@ -48,26 +46,37 @@ class SnowflakeFileUtil(object):
     def normalize_gzip_header(gzip_file_name):
         """Normalizes GZIP file header.
 
-        For consistent file digest, this removes creation timestamp from the header.
+        For consistent file digest, this removes creation timestamp and file name from the header.
+        For more information see http://www.zlib.org/rfc-gzip.html#file-format
 
         Args:
             gzip_file_name: Local path of gzip file.
         """
         with open(gzip_file_name, 'r+b') as f:
             # reset the timestamp in gzip header
+            f.seek(3, 0)
+            # Read flags bit
+            flag_byte = f.read(1)
+            flags = struct.unpack('B', flag_byte)[0]
             f.seek(4, 0)
             f.write(struct.pack('<L', 0))
-            # reset the file name in gzip header
-            f.seek(10, 0)
-            byte = f.read(1)
-            while byte:
-                value = struct.unpack('B', byte)[0]
-                # logger.debug('ch=%s, byte=%s', value, byte)
-                if value == 0:
-                    break
-                f.seek(-1, 1)  # current_pos - 1
-                f.write(struct.pack('B', 0x20))  # replace with a space
+            # Reset the file name in gzip header if included
+            if flags & 8:
+                f.seek(10, 0)
+                # Skip through xlen bytes and length if included
+                if flags & 4:
+                    xlen_bytes = f.read(2)
+                    xlen = struct.unpack('<H', xlen_bytes)[0]
+                    f.seek(10 + 2 + xlen)
                 byte = f.read(1)
+                while byte:
+                    value = struct.unpack('B', byte)[0]
+                    # logger.debug('ch=%s, byte=%s', value, byte)
+                    if value == 0:
+                        break
+                    f.seek(-1, 1)  # current_pos - 1
+                    f.write(struct.pack('B', 0x20))  # replace with a space
+                    byte = f.read(1)
 
     @staticmethod
     def get_digest_and_size_for_file(file_name):
