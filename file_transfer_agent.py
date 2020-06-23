@@ -1005,7 +1005,6 @@ class SnowflakeFileTransferAgent(object):
                 _, encoding = mimetypes.guess_type(file_name)
 
                 if encoding is None:
-                    test = None
                     with open(file_name, 'rb') as f:
                         test = f.read(4)
                     if file_name.endswith('.br'):
