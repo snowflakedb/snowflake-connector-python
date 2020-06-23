@@ -528,20 +528,20 @@ def test_put_overwrite(tmpdir, db_parameters):
 
 def test_utf8_filename(tmpdir, db_parameters):
     test_file = tmpdir.join("utf卡豆.csv")
-    with open(str(test_file).encode('utf-8'), 'w') as f:
+    with open(str(test_file), 'w') as f:
         f.write("1,2,3\n")
     stage_name = ''.join([random.choice(string.ascii_lowercase) for i in range(5)])
     with snowflake.connector.connect(
-        user=db_parameters['user'],
-        password=db_parameters['password'],
-        host=db_parameters['host'],
-        port=db_parameters['port'],
-        database=db_parameters['database'],
-        schema=db_parameters['schema'],
-        account=db_parameters['account'],
-        protocol=db_parameters['protocol']) as con:
+        user=db_parameters['s3_user'],
+        password=db_parameters['s3_password'],
+        host=db_parameters['s3_host'],
+        port=db_parameters['s3_port'],
+        database=db_parameters['s3_database'],
+        schema=db_parameters['s3_schema'],
+        account=db_parameters['s3_account'],
+        protocol=db_parameters['s3_protocol']) as con:
         with con.cursor() as cur:
             cur.execute("create temporary stage {}".format(stage_name))
-            cur.execute("PUT 'file://{}' @{}".format(test_file, stage_name))
+            cur.execute("PUT 'file://{}' @{}".format(str(test_file).replace('\\', '/'), stage_name)).fetchall()
             cur.execute("select $1, $2, $3 from  @{}".format(stage_name))
             assert cur.fetchone() == ('1', '2', '3')
