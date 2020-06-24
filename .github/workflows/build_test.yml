@@ -14,6 +14,7 @@ on:
 
 jobs:
   lint:
+    name: Check linting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -32,7 +33,7 @@ jobs:
 
   build-manylinux:
     needs: lint
-    name: Build Linux-py${{ matrix.python-version }}
+    name: Build linux-py${{ matrix.python-version }}
     runs-on: ubuntu-latest
     container: quay.io/pypa/manylinux1_x86_64
     strategy:
@@ -63,7 +64,7 @@ jobs:
 
   build-macos:
     needs: lint
-    name: Build MacOS-py${{ matrix.python-version }}
+    name: Build macos-py${{ matrix.python-version }}
     runs-on: macos-latest
     strategy:
       matrix:
@@ -80,8 +81,6 @@ jobs:
         run: python -m pip install -U setuptools pip auditwheel
       - name: Generate wheel
         run: python -m pip wheel -v -w dist_tmp --no-binary snowflake-connector-python .
-      - name: Run auditwheel
-        run: auditwheel repair --plat manylinux2010_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
       - name: Show wheels generated
         run: ls -lh dist
       - uses: actions/upload-artifact@v2
