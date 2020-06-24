@@ -703,7 +703,7 @@ class SnowflakeConnection(object):
             self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = \
                 self._validate_client_prefetch_threads()
 
-        if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+        if self.supports_temporary_credentails():
             # enable storing temporary credential in a file
             self._session_parameters[
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
@@ -723,6 +723,9 @@ class SnowflakeConnection(object):
 
         if self.client_session_keep_alive:
             self._add_heartbeat()
+
+    def supports_temporary_credentails(self):
+        return self._authenticator in (EXTERNAL_BROWSER_AUTHENTICATOR,)
 
     def supports_reauth(self):
         return self._authenticator in (EXTERNAL_BROWSER_AUTHENTICATOR,)
