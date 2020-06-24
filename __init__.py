@@ -49,13 +49,7 @@ from .version import VERSION
 logging.getLogger(__name__).addHandler(NullHandler())
 
 
-CUSTOM_CONNECTION_CLASS = "CustomConnectionClass"
-
-
 def Connect(**kwargs):
-    if CUSTOM_CONNECTION_CLASS in kwargs:
-        klass = kwargs.pop(CUSTOM_CONNECTION_CLASS)
-        return klass(**kwargs)
     return SnowflakeConnection(**kwargs)
 
 

@@ -498,8 +498,7 @@ class SnowflakeRestful(object):
                 if ret.get(UPDATED_BY_ID_TOKEN):
                     self._connection._set_current_objects()
             except ReauthenticationRequest as ex:
-                if self._connection._authenticator != \
-                        EXTERNAL_BROWSER_AUTHENTICATOR:
+                if self._connection.supports_reauth() is False:
                     raise ex.cause
                 ret = self._connection._reauthenticate_by_webbrowser()
             logger.debug(

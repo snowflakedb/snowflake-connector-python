@@ -724,6 +724,9 @@ class SnowflakeConnection(object):
         if self.client_session_keep_alive:
             self._add_heartbeat()
 
+    def supports_reauth(self):
+        return self._authenticator in (EXTERNAL_BROWSER_AUTHENTICATOR,)
+
     def get_password_not_required_list(self):
         return [
             EXTERNAL_BROWSER_AUTHENTICATOR,
