@@ -84,9 +84,9 @@ def write_pandas(conn: 'SnowflakeConnection',
             compression,
             compression_map.keys()
         ))
-    location = (('"' + database + '".') if database else '' +
-                                                         ('"' + schema + '".') if schema else '' +
-                                                                                              ('"' + table_name + '"'))
+    location = ((('"' + database + '".') if database else '') +
+                (('"' + schema + '".') if schema else '') +
+                ('"' + table_name + '"'))
     if chunk_size is None:
         chunk_size = len(df)
     cursor = conn.cursor()
@@ -110,10 +110,10 @@ def write_pandas(conn: 'SnowflakeConnection',
             # Upload parquet file
             cursor.execute('PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
                            'file://{path} @"{stage_name}" PARALLEL={parallel}'.format(
-                                path=chunk_path,
-                                stage_name=stage_name,
-                                parallel=parallel
-                           ), _is_internal=True)
+                path=chunk_path,
+                stage_name=stage_name,
+                parallel=parallel
+            ), _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
     copy_results = cursor.execute((

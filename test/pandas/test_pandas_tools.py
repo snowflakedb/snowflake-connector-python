@@ -1,5 +1,7 @@
 import math
 from typing import Callable, Generator
+
+import mock
 import pandas
 
 import pytest
@@ -57,3 +59,53 @@ def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', N
             assert nchunks == num_of_chunks
         finally:
             cnx.execute_string("DROP TABLE IF EXISTS {}".format(table_name))
+
+
+def test_location_building_db_schema(conn_cnx):
+    """This tests that write_pandas constructs location correctly with database, schema and table name."""
+    from snowflake.connector.cursor import SnowflakeCursor
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        def mocked_execute(*args, **kwargs):
+            if len(args) >= 1 and args[0].startswith('COPY INTO'):
+                location = args[0].split(' ')[2]
+                assert location == '"database"."schema"."table"'
+            cur = SnowflakeCursor(cnx)
+            cur._result = iter([])
+            return cur
+        with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute', side_effect=mocked_execute) as m_execute:
+            success, nchunks, nrows, _ = write_pandas(cnx, sf_connector_version_df, "table",
+                                                      database='database', schema='schema')
+            assert m_execute.called and any(map(lambda e: 'COPY INTO' in str(e.args), m_execute.call_args_list))
+
+
+def test_location_building_schema(conn_cnx):
+    """This tests that write_pandas constructs location correctly with schema and table name."""
+    from snowflake.connector.cursor import SnowflakeCursor
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        def mocked_execute(*args, **kwargs):
+            if len(args) >= 1 and args[0].startswith('COPY INTO'):
+                location = args[0].split(' ')[2]
+                assert location == '"schema"."table"'
+            cur = SnowflakeCursor(cnx)
+            cur._result = iter([])
+            return cur
+        with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute', side_effect=mocked_execute) as m_execute:
+            success, nchunks, nrows, _ = write_pandas(cnx, sf_connector_version_df, "table",
+                                                      schema='schema')
+            assert m_execute.called and any(map(lambda e: 'COPY INTO' in str(e.args), m_execute.call_args_list))
+
+
+def test_location_building(conn_cnx):
+    """This tests that write_pandas constructs location correctly with schema and table name."""
+    from snowflake.connector.cursor import SnowflakeCursor
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        def mocked_execute(*args, **kwargs):
+            if len(args) >= 1 and args[0].startswith('COPY INTO'):
+                location = args[0].split(' ')[2]
+                assert location == '"teble.table"'
+            cur = SnowflakeCursor(cnx)
+            cur._result = iter([])
+            return cur
+        with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute', side_effect=mocked_execute) as m_execute:
+            success, nchunks, nrows, _ = write_pandas(cnx, sf_connector_version_df, "teble.table")
+            assert m_execute.called and any(map(lambda e: 'COPY INTO' in str(e.args), m_execute.call_args_list))
