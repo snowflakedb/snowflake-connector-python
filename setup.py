@@ -5,6 +5,7 @@
 #
 import os
 import sys
+import warnings
 from codecs import open
 from os import path
 from shutil import copy
@@ -51,6 +52,7 @@ try:
     import numpy
     _ABLE_TO_COMPILE_EXTENSIONS = True
 except ImportError:
+    warnings.warn("Cannot compile native C code, because of a missing build dependency")
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
