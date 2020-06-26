@@ -34,8 +34,8 @@ def test_mask_aws_secret():
               ", random() , random(), random(), random()\n" \
               "\tfrom table(generator(rowcount => 10000)))\n" \
               "credentials=(\n" \
-              "  aws_key_id='**********'\n" \
-              "  aws_secret_key='**********'\n" \
+              "  aws_key_id='****'\n" \
+              "  aws_secret_key='****'\n" \
               "  )\n" \
               "OVERWRITE = TRUE \n" \
               "MAX_FILE_SIZE = 500000000 \n" \
@@ -57,7 +57,7 @@ def test_mask_sas_token():
 
     masked_azure_sas_token = "https://someaccounts.blob.core.windows.net/results/018b90ab-0033-" \
                              "5f8e-0000-14f1000bd376_0/main/data_0_0_1?sv=2015-07-08&amp;" \
-                             "sig=**********&amp;" \
+                             "sig=****&amp;" \
                              "spr=https&amp;st=2016-04-12T03%3A24%3A31Z&amp;" \
                              "se=2016-04-13T03%3A29%3A31Z&amp;srt=s&amp;ss=bf&amp;sp=rwl"
 
@@ -70,8 +70,8 @@ def test_mask_sas_token():
     masked_s3_sas_token = "https://somebucket.s3.amazonaws.com/vzy1-s-va_demo0/results/018b92f3" \
                           "-01c2-02dd-0000-03d5000c8066_0/main/data_0_0_1?" \
                           "x-amz-server-side-encryption-customer-algorithm=AES256&" \
-                          "response-content-encoding=gzip&AWSAccessKeyId=**********" \
-                          "&Expires=1555481960&Signature=**********"
+                          "response-content-encoding=gzip&AWSAccessKeyId=****" \
+                          "&Expires=1555481960&Signature=****"
 
     # Mask azure token
     _, masked_text, _ = SecretDetector.mask_secrets(azure_sas_token)
@@ -113,14 +113,14 @@ def test_mask_secrets():
 
     masked_sql = "create stage mystage " \
                     "URL = 's3://mybucket/mypath/' " \
-                    "credentials = (aws_key_id='**********' " \
-                    "aws_secret_key='**********'); " \
+                    "credentials = (aws_key_id='****' " \
+                    "aws_secret_key='****'); " \
                     "create stage mystage2 " \
                     "URL = 'azure//mystorage.blob.core.windows.net/cont' " \
                     "credentials = (azure_sas_token = " \
                     "'?sv=2016-05-31&ss=b&srt=sco&sp=rwdl&se=2018-06-27T10:05:50Z&" \
                     "st=2017-06-27T02:05:50Z&spr=https,http&" \
-                    "sig=**********')"
+                    "sig=****')"
 
     # Test masking all kinds of secrets
     _, masked_text, _ = SecretDetector.mask_secrets(sql)
