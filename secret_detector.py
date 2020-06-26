@@ -49,11 +49,11 @@ class SecretDetector(logging.Formatter):
 
     @staticmethod
     def mask_aws_keys(text):
-        return SecretDetector.AWS_KEY_PATTERN.sub(r"\1='**********'", text)
+        return SecretDetector.AWS_KEY_PATTERN.sub(r"\1='****'", text)
 
     @staticmethod
     def mask_sas_tokens(text):
-        return SecretDetector.SAS_TOKEN_PATTERN.sub(r'\1=**********', text)
+        return SecretDetector.SAS_TOKEN_PATTERN.sub(r'\1=****', text)
 
     @staticmethod
     def mask_aws_tokens(text):
