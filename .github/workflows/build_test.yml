@@ -145,6 +145,7 @@ jobs:
       - name: Setup parameters file
         shell: bash
         run: |
+          gpg --version
           gpg --quiet --batch --yes --decrypt --passphrase=${{ secrets.PARAMETERS_SECRET }} \
           .github/workflows/parameters_${{ matrix.cloud-provider }}.json.gpg | python3 -c \
           "import json;i=json.loads(open(0).read());i={k.rsplit('_', 1)[1].lower(): v for k,v in i['testconnection'].items()};print('CONNECTION_PARAMETERS='+str(i))" > test/parameters.py
