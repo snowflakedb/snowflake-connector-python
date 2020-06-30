@@ -181,7 +181,9 @@ jobs:
       - name: Install tox
         run: python -m pip install tox tox-external-wheels
       - name: Run tests
-        run: tox -e "py${PYTHON_VERSION/\./}{,-pandas,-sso}-ci"
+        run: |
+          echo ${PYTHON_VERSION/\./}
+#          tox -e "py${PYTHON_VERSION/\./}{,-pandas,-sso}-ci"
         env:
-          PYTHON_VERSION: ${{ matrix.python_version }}
+          PYTHON_VERSION: ${{ matrix.python-version }}
         shell: bash
