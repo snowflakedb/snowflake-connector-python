@@ -1,6 +1,7 @@
 import os
 import string
 import random
+from logging import getLogger
 from tempfile import TemporaryDirectory
 from typing import Optional, Sequence, TypeVar, Iterator, Tuple, Union, Iterable
 
@@ -17,6 +18,8 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
         sqlalchemy = None
 
 T = TypeVar('T', bound=Sequence)
+
+logger = getLogger(__name__)
 
 
 def chunk_helper(lst: T, n: int) -> Iterator[Tuple[int, T]]:
@@ -94,8 +97,10 @@ def write_pandas(conn: 'SnowflakeConnection',
     while True:
         try:
             stage_name = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
-            cursor.execute('create temporary stage /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
-                           '"{stage_name}"'.format(stage_name=stage_name), _is_internal=True).fetchall()
+            create_stage_sql = ('create temporary stage /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
+                                '"{stage_name}"').format(stage_name=stage_name)
+            logger.debug("creating stage with '{}'".format(create_stage_sql))
+            cursor.execute(create_stage_sql, _is_internal=True).fetchall()
             break
         except ProgrammingError as pe:
             if pe.msg.endswith('already exists.'):
@@ -108,24 +113,26 @@ def write_pandas(conn: 'SnowflakeConnection',
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression)
             # Upload parquet file
-            cursor.execute('PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
-                           'file://{path} @"{stage_name}" PARALLEL={parallel}'.format(
+            upload_sql = ('PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
+                          'file://{path} @"{stage_name}" PARALLEL={parallel}').format(
                 path=chunk_path,
                 stage_name=stage_name,
                 parallel=parallel
-            ), _is_internal=True)
+            )
+            logger.debug("uploading files with '{}'".format(upload_sql))
+            cursor.execute(upload_sql, _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
-    copy_results = cursor.execute((
-        'COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
-        'FROM @"{stage_name}" FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) '
-        'MATCH_BY_COLUMN_NAME=CASE_SENSITIVE  PURGE=TRUE ON_ERROR={on_error}'
-    ).format(
+    copy_into_sql = ('COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
+                     'FROM @"{stage_name}" FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) '
+                     'MATCH_BY_COLUMN_NAME=CASE_SENSITIVE  PURGE=TRUE ON_ERROR={on_error}').format(
         location=location,
         stage_name=stage_name,
         compression=compression_map[compression],
         on_error=on_error
-    ), _is_internal=True).fetchall()
+    )
+    logger.debug("copying into with '{}'".format(copy_into_sql))
+    copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
     cursor.close()
     return (all((e[1] == 'LOADED' for e in copy_results)),
             len(copy_results),
