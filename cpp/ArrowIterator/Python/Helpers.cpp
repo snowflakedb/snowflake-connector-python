@@ -30,7 +30,7 @@ void importPythonModule(const std::string& moduleName, UniqueRef& ref,
   PyObject* module = PyImport_ImportModule(moduleName.c_str());
   if (checkPyError())
   {
-    logger.error("import python module '%s' failed", moduleName.c_str());
+    logger.error(__FILE__, __func__, __LINE__, "import python module '%s' failed", moduleName.c_str());
     return;
   }
   ref.reset(module);
@@ -55,7 +55,7 @@ void importFromModule(const UniqueRef& moduleRef, const std::string& name,
   PyObject* attr = PyObject_GetAttrString(moduleRef.get(), name.c_str());
   if (checkPyError())
   {
-    logger.error("import python attribute '%s' failed", name.c_str());
+    logger.error(__FILE__, __func__, __LINE__, "import python attribute '%s' failed", name.c_str());
     return;
   }
   ref.reset(attr);

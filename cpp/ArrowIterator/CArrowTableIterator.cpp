@@ -51,7 +51,7 @@ void CArrowTableIterator::reconstructRecordBatches()
                           : 0;
           if (scale > 0 && dt->id() != arrow::Type::type::DECIMAL)
           {
-            logger.debug("Convert fixed number column to double column, column scale %d, column type id: %d",
+            logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
                          scale, dt->id());
             convertScaledFixedNumberColumnToDoubleColumn(batchIdx, colIdx, field, columnArray, scale);
           }
@@ -122,7 +122,7 @@ void CArrowTableIterator::reconstructRecordBatches()
           std::string errorInfo = Logger::formatString(
               "[Snowflake Exception] unknown snowflake data type : %s",
               metaData->value(metaData->FindKey("logicalType")).c_str());
-          logger.error(errorInfo.c_str());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
           PyErr_SetString(PyExc_Exception, errorInfo.c_str());
           return;
         }
@@ -254,7 +254,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
               "[Snowflake Exception] unknown arrow internal data type(%d) "
               "for FIXED data",
               dt->id());
-          logger.error(errorInfo.c_str());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
           return;
       }
       ret = builder.Append(val);
@@ -384,7 +384,7 @@ void CArrowTableIterator::convertTimeColumn(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for FIXED data",
                 dt->id());
-            logger.error(errorInfo.c_str());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             return;
         }
         val *= sf::internal::powTenSB4[6 - scale];
@@ -433,7 +433,7 @@ void CArrowTableIterator::convertTimeColumn(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for FIXED data",
                 dt->id());
-            logger.error(errorInfo.c_str());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             return;
         }
         val /= sf::internal::powTenSB4[scale - 6];
@@ -582,7 +582,7 @@ void CArrowTableIterator::convertTimestampColumn(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for FIXED data",
                 dt->id());
-            logger.error(errorInfo.c_str());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             return;
         }
         val *= sf::internal::powTenSB4[6 - scale];
@@ -647,7 +647,7 @@ void CArrowTableIterator::convertTimestampColumn(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for FIXED data",
                 dt->id());
-            logger.error(errorInfo.c_str());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             return;
         }
         // unit is nanosecond
@@ -781,7 +781,7 @@ void CArrowTableIterator::convertTimestampTZColumn(
           "[Snowflake Exception] unknown arrow internal data type(%d) "
           "for TIMESTAMP_TZ data",
           dt->id());
-        logger.error(errorInfo.c_str());
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
       }

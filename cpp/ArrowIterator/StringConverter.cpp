@@ -5,7 +5,7 @@
 
 namespace sf
 {
-Logger StringConverter::logger("snowflake.connector.StringConverter");
+Logger* StringConverter::logger = new Logger("snowflake.connector.StringConverter");
 
 StringConverter::StringConverter(std::shared_ptr<arrow::Array> array)
 : m_array(std::dynamic_pointer_cast<arrow::StringArray>(array))

@@ -18,13 +18,34 @@ std::string Logger::formatString(const char *format, ...)
 Logger::Logger(const char *name)
 {
   py::UniqueRef pyLoggingModule;
-  py::importPythonModule("logging", pyLoggingModule);
+
+  py::importPythonModule("snowflake.connector.snow_logging", pyLoggingModule);
   PyObject *logger =
-      PyObject_CallMethod(pyLoggingModule.get(), "getLogger", "s", name);
+      PyObject_CallMethod(pyLoggingModule.get(), "getSnowLogger", "s", name);
+
   m_pyLogger.reset(logger);
 }
 
-void Logger::debug(const char *format, ...)
+void Logger::log(int level, const char *path_name, const char *func_name, int line_num, const char *msg)
+{
+
+  PyObject *logger = m_pyLogger.get();
+  py::UniqueRef keywords(PyDict_New());
+  py::UniqueRef call_log(PyObject_GetAttrString(logger, "log"));
+
+  // prepare keyword args for snow_logger
+  PyDict_SetItemString(keywords.get(), "level", Py_BuildValue("i", level));
+  PyDict_SetItemString(keywords.get(), "path_name", Py_BuildValue("s", path_name));
+  PyDict_SetItemString(keywords.get(), "func_name", Py_BuildValue("s", func_name));
+  PyDict_SetItemString(keywords.get(), "line_num", Py_BuildValue("i", line_num));
+  PyDict_SetItemString(keywords.get(), "msg", Py_BuildValue("s", msg));
+
+  // call snow_logging.SnowLogger.log()
+  PyObject_Call(call_log.get(), Py_BuildValue("()"), keywords.get());
+}
+
+
+void Logger::debug(const char *path_name, const char *func_name, int line_num, const char *format, ...)
 {
   char msg[1000] = {0};
   va_list args;
@@ -32,10 +53,10 @@ void Logger::debug(const char *format, ...)
   vsnprintf(msg, sizeof(msg), format, args);
   va_end(args);
 
-  PyObject_CallMethod(m_pyLogger.get(), "debug", "s", msg);
+  Logger::log(DEBUG, path_name, func_name, line_num, msg);
 }
 
-void Logger::info(const char *format, ...)
+void Logger::info(const char *path_name, const char *func_name, int line_num, const char *format, ...)
 {
   char msg[1000] = {0};
   va_list args;
@@ -43,10 +64,10 @@ void Logger::info(const char *format, ...)
   vsnprintf(msg, sizeof(msg), format, args);
   va_end(args);
 
-  PyObject_CallMethod(m_pyLogger.get(), "info", "s", msg);
+  Logger::log(INFO, path_name, func_name, line_num, msg);
 }
 
-void Logger::warn(const char *format, ...)
+void Logger::warn(const char *path_name, const char *func_name, int line_num, const char *format, ...)
 {
   char msg[1000] = {0};
   va_list args;
@@ -54,10 +75,10 @@ void Logger::warn(const char *format, ...)
   vsnprintf(msg, sizeof(msg), format, args);
   va_end(args);
 
-  PyObject_CallMethod(m_pyLogger.get(), "warn", "s", msg);
+  Logger::log(WARN, path_name, func_name, line_num, msg);
 }
 
-void Logger::error(const char *format, ...)
+void Logger::error(const char *path_name, const char *func_name, int line_num, const char *format, ...)
 {
   char msg[1000] = {0};
   va_list args;
@@ -65,6 +86,8 @@ void Logger::error(const char *format, ...)
   vsnprintf(msg, sizeof(msg), format, args);
   va_end(args);
 
-  PyObject_CallMethod(m_pyLogger.get(), "error", "s", msg);
+
+  Logger::log(ERROR, path_name, func_name, line_num, msg);
 }
+
 }
