@@ -5,7 +5,7 @@
 
 namespace sf
 {
-Logger BinaryConverter::logger("snowflake.connector.BinaryConverter");
+Logger* BinaryConverter::logger = new Logger("snowflake.connector.BinaryConverter");
 
 BinaryConverter::BinaryConverter(std::shared_ptr<arrow::Array> array)
 : m_array(std::dynamic_pointer_cast<arrow::BinaryArray>(array))

@@ -7,7 +7,6 @@
 
 from base64 import b64decode
 import io
-from logging import getLogger
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
 from .arrow_iterator import PyArrowIterator
@@ -16,12 +15,14 @@ from .arrow_iterator import ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
 from .arrow_context import ArrowConverterContext
 from .options import pandas, installed_pandas
 
-logger = getLogger(__name__)
+from snowflake.connector.snow_logging import getSnowLogger
+
+snow_logger = getSnowLogger(__name__)
 
 if installed_pandas:
     from pyarrow import concat_tables
 else:
-    logger.info("Failed to import optional packages, pyarrow")
+    snow_logger.info(path_name="arrow_result.pyx", msg="Failed to import optional packages, pyarrow")
 
 
 cdef class ArrowResult:
@@ -70,14 +71,16 @@ cdef class ArrowResult:
                                                       self._arrow_context, self._use_dict_result,
                                                       self._use_numpy)
         else:
-            logger.debug("Data from first gs response is empty")
+            snow_logger.debug(path_name="arrow_result.pyx", func_name="_chunk_info",
+                              msg="Data from first gs response is empty")
             self._current_chunk_row = EmptyPyArrowIterator()
         self._iter_unit = EMPTY_UNIT
 
         if 'chunks' in data:
             chunks = data['chunks']
             self._chunk_count = len(chunks)
-            logger.debug('chunk size=%s', self._chunk_count)
+            snow_logger.debug(path_name="arrow_result.pyx", func_name="_chunk_info",
+                              msg='chunk size={}'.format(self._chunk_count))
             # prepare the downloader for further fetch
             qrmk = data['qrmk'] if 'qrmk' in data else None
             chunk_headers = None
@@ -86,12 +89,11 @@ cdef class ArrowResult:
                 for header_key, header_value in data[
                     'chunkHeaders'].items():
                     chunk_headers[header_key] = header_value
-                    logger.debug(
-                        'added chunk header: key=%s, value=%s',
-                        header_key,
-                        header_value)
+                    snow_logger.debug(path_name="arrow_result.pyx", func_name="_chunk_info",
+                                      msg="added chunk header: key={}, value={}".format(header_key, header_value))
 
-            logger.debug('qrmk=%s', qrmk)
+            snow_logger.debug(path_name="arrow_result.pyx", func_name="_chunk_info",
+                                 msg='qrmk={}'.format(qrmk))
             self._chunk_downloader = _chunk_downloader if _chunk_downloader \
                 else self._connection._chunk_downloader_class(
                     chunks, self._connection, self._cursor, qrmk, chunk_headers,
@@ -106,7 +108,8 @@ cdef class ArrowResult:
             self._iter_unit = ROW_UNIT
             self._current_chunk_row.init(self._iter_unit)
         elif self._iter_unit == TABLE_UNIT:
-            logger.debug('The iterator has been built for fetching arrow table')
+            snow_logger.debug(path_name="arrow_result.pyx", func_name="__next__",
+                              msg='The iterator has been built for fetching arrow table')
             raise RuntimeError
 
         is_done = False
@@ -117,9 +120,8 @@ cdef class ArrowResult:
                 row = self._current_chunk_row.__next__()
             except StopIteration:
                 if self._chunk_index < self._chunk_count:
-                    logger.debug(
-                        "chunk index: %s, chunk_count: %s",
-                        self._chunk_index, self._chunk_count)
+                    snow_logger.debug(path_name="arrow_result.pyx", func_name="__next__",
+                                      msg="chunk index:{}, chunk_count:{}".format(self._chunk_index, self._chunk_count))
                     next_chunk = self._chunk_downloader.next_chunk()
                     self._current_chunk_row = next_chunk.result_data
                     self._current_chunk_row.init(self._iter_unit)
@@ -154,7 +156,7 @@ cdef class ArrowResult:
             return None
         finally:
             if is_done and self._cursor._first_chunk_time:
-                logger.info("fetching data done")
+                snow_logger.info(path_name="arrow_result.pyx", func_name="__next__", msg="fetching data done")
                 time_consume_last_result = get_time_millis() - self._cursor._first_chunk_time
                 self._cursor._log_telemetry_job_data(
                     TelemetryField.TIME_CONSUME_LAST_RESULT,
@@ -181,13 +183,15 @@ cdef class ArrowResult:
         if self._iter_unit == EMPTY_UNIT:
             self._iter_unit = TABLE_UNIT
         elif self._iter_unit == ROW_UNIT:
-            logger.debug('The iterator has been built for fetching row')
+            snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
+                              msg="The iterator has been built for fetching row")
             raise RuntimeError
 
         try:
             self._current_chunk_row.init(self._iter_unit)
-            logger.debug('Init table iterator successfully, current chunk index: %s, '
-                         'chunk count: %s', self._chunk_index, self._chunk_count)
+            snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
+                              msg='Init table iterator successfully, current chunk index: {},'
+                                  'chunk count: {}'.format(self._chunk_index, self._chunk_count))
             while self._chunk_index <= self._chunk_count:
                 stop_iteration_except = False
                 try:
@@ -196,9 +200,8 @@ cdef class ArrowResult:
                     stop_iteration_except = True
 
                 if self._chunk_index < self._chunk_count: # multiple chunks
-                    logger.debug(
-                        "chunk index: %s, chunk_count: %s",
-                        self._chunk_index, self._chunk_count)
+                    snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
+                                    msg="chunk index: {}, chunk_count: {}".format(self._chunk_index, self._chunk_count))
                     next_chunk = self._chunk_downloader.next_chunk()
                     self._current_chunk_row = next_chunk.result_data
                     self._current_chunk_row.init(self._iter_unit)
@@ -223,7 +226,8 @@ cdef class ArrowResult:
                 self._current_chunk_row = EmptyPyArrowIterator()
         finally:
             if self._cursor._first_chunk_time:
-                logger.info("fetching data into pandas dataframe done")
+                snow_logger.info(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
+                                 msg="fetching data into pandas dataframe done")
                 time_consume_last_result = get_time_millis() - self._cursor._first_chunk_time
                 self._cursor._log_telemetry_job_data(
                     TelemetryField.TIME_CONSUME_LAST_RESULT,

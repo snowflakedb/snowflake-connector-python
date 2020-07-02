@@ -15,7 +15,7 @@
   if (!arrow_status.ok()) \
   { \
     std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
-    logger.error(errorInfo.c_str()); \
+    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
     PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
     return; \
   }
@@ -24,7 +24,7 @@
   if (!arrow_status.ok()) \
   { \
     std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
-    logger.error(errorInfo.c_str()); \
+    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
     PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
     return ret_val; \
   }
@@ -69,7 +69,7 @@ protected:
    /** list of all record batch in current chunk */
   std::vector<std::shared_ptr<arrow::RecordBatch>> *m_cRecordBatches;
 
-  static Logger logger;
+  static Logger* logger;
 };
 }
 
