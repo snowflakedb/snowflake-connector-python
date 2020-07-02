@@ -20,7 +20,7 @@ public:
 private:
   std::shared_ptr<arrow::BinaryArray> m_array;
 
-  static Logger logger;
+  static Logger* logger;
 };
 
 }  // namespace sf

@@ -5,7 +5,6 @@
 # distutils: language = c++
 # cython: language_level=3
 
-from logging import getLogger
 from cpython.ref cimport PyObject
 from libc.stdint cimport *
 from libcpp cimport bool as c_bool
@@ -15,7 +14,10 @@ from libcpp.vector cimport vector
 from .errors import (Error, OperationalError, InterfaceError)
 from .errorcode import (ER_FAILED_TO_READ_ARROW_STREAM, ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE)
 
-logger = getLogger(__name__)
+from snowflake.connector.snow_logging import getSnowLogger
+
+snow_logger = getSnowLogger(__name__)
+
 
 '''
 the unit in this iterator
@@ -183,7 +185,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
 
             self.batches.push_back(record_batch)
 
-        logger.debug("Batches read: %d", self.batches.size())
+        snow_logger.debug(msg="Batches read: {}".format(self.batches.size()), path_name=__file__, func_name="__cinit__")
 
         self.context = arrow_context
         self.cIterator = NULL

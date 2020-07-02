@@ -6,7 +6,7 @@
 
 namespace sf
 {
-Logger DateConverter::logger("snowflake.connector.DateConverter");
+Logger* DateConverter::logger = new Logger("snowflake.connector.DateConverter");
 
 py::UniqueRef& DateConverter::initPyDatetimeDate()
 {

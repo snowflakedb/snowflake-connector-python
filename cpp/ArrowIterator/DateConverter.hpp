@@ -26,7 +26,7 @@ private:
   /** from Python Ordinal to 1970-01-01 */
   static constexpr int epochDay = 719163;
 
-  static Logger logger;
+  static Logger* logger;
 
   py::UniqueRef& m_pyDatetimeDate;
 };
