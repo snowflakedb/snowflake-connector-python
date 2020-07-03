@@ -69,8 +69,8 @@ jobs:
     strategy:
       matrix:
         python:
-#          - version: 3.5
-#            link: https://www.python.org/ftp/python/3.5.4/python-3.5.4-macosx10.6.pkg
+          - version: 3.5
+            link: https://www.python.org/ftp/python/3.5.0/python-3.5.0-macosx10.6.pkg
           - version: 3.6
             link: https://www.python.org/ftp/python/3.6.8/python-3.6.8-macosx10.9.pkg
           - version: 3.7
@@ -83,6 +83,8 @@ jobs:
         run: |
           curl "${{ matrix.python.link }}" -o python.pkg
           sudo installer -pkg python.pkg -target /
+          curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+          python3 get-pip.py
       - name: Display Python version
         run: python3 -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
@@ -144,9 +146,6 @@ jobs:
         cloud-provider: [aws]
 #        cloud-provider: [aws, azure, gcp]
         exclude:
-          - python-version: 3.5
-            os:
-              download_name: macos
           - python-version: 3.8
             os:
               download_name: windows
