@@ -78,9 +78,9 @@ jobs:
           curl "https://www.python.org/ftp/python/3.8.2/python-3.8.2-macosx10.9.pkg" -o python38.pkg
           sudo installer -pkg python38.pkg -target /
       - name: Display Python version
-        run: python -c "import sys; print(sys.version)"
+        run: $python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
-        run: python -m pip install -U setuptools pip auditwheel
+        run: $python -m pip install -U setuptools pip
       - name: Generate wheel
         run: |
           $python -m pip install -r build_reqs.txt
@@ -91,7 +91,6 @@ jobs:
           fi
         env:
           MACOSX_DEPLOYMENT_TARGET: 10.12
-          CFLAGS: -mmacosx-version-min=10.12
           PYTHON_VERSION: ${{ matrix.python-version }}
       - name: Show wheels generated
         run: ls -lh dist/
@@ -136,8 +135,8 @@ jobs:
         os:
          - image_name: ubuntu-latest
            download_name: linux
-#         - image_name: macos-latest
-#           download_name: macos
+         - image_name: macos-latest
+           download_name: macos
          - image_name: windows-latest
            download_name: windows
         python-version: [3.5, 3.6, 3.7, 3.8]
