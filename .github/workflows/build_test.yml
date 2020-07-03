@@ -64,39 +64,40 @@ jobs:
 
   build-macos:
     needs: lint
-    name: Build macos-py${{ matrix.python-version }}
+    name: Build macos-py${{ matrix.python.version }}
     runs-on: macos-latest
-    env:
-      python: '/Library/Frameworks/Python.framework/Versions/3.8/bin/python3'
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python:
+          - version: 3.5
+            link: https://www.python.org/ftp/python/3.5.4/python-3.5.4-macosx10.6.pkg
+          - version: 3.6
+            link: https://www.python.org/ftp/python/3.6.8/python-3.6.8-macosx10.9.pkg
+          - version: 3.7
+            link: https://www.python.org/ftp/python/3.7.0/python-3.7.0-macosx10.9.pkg
+          - version: 3.8
+            link: https://www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg
     steps:
       - uses: actions/checkout@v2
-      - name: Download Python 3.8
+      - name: Setup Python
         run: |
-          curl "https://www.python.org/ftp/python/3.8.2/python-3.8.2-macosx10.9.pkg" -o python38.pkg
-          sudo installer -pkg python38.pkg -target /
+          curl "${{ matrix.python.link }}" -o python.pkg
+          sudo installer -pkg python.pkg -target /
       - name: Display Python version
-        run: $python -c "import sys; print(sys.version)"
+        run: python3 -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
-        run: $python -m pip install -U setuptools pip
+        run: python3 -m pip install -U setuptools pip
+      - name: Installing build dependencies
+        run: python3 -m pip install -r build_reqs.txt
       - name: Generate wheel
-        run: |
-          $python -m pip install -r build_reqs.txt
-          if [[ "$PYTHON_VERSION" =~ ^3\.([0-9])* ]]; then
-            $python setup.py bdist_wheel -d dist/ --py-limited-api=cp3${BASH_REMATCH[1]}
-          else
-            exit 1
-          fi
+        run: python3 setup.py bdist_wheel -d dist/
         env:
           MACOSX_DEPLOYMENT_TARGET: 10.12
-          PYTHON_VERSION: ${{ matrix.python-version }}
       - name: Show wheels generated
         run: ls -lh dist/
       - uses: actions/upload-artifact@v2
         with:
-          name: macos_py${{ matrix.python-version }}
+          name: macos_py${{ matrix.python.version }}
           path: dist/
 
   build-windows:
