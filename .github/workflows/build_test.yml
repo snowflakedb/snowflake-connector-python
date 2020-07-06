@@ -89,10 +89,8 @@ jobs:
         run: python3 -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
         run: python3 -m pip install -U setuptools pip
-      - name: Installing build dependencies
-        run: python3 -m pip install -r build_reqs.txt
       - name: Generate wheel
-        run: python3 setup.py bdist_wheel -d dist/
+        run: python3 -m pip wheel -v -w dist --no-deps .
         env:
           MACOSX_DEPLOYMENT_TARGET: 10.12
       - name: Show wheels generated
@@ -143,7 +141,8 @@ jobs:
          - image_name: windows-latest
            download_name: windows
         python-version: [3.5, 3.6, 3.7, 3.8]
-        cloud-provider: [aws, azure, gcp]
+        cloud-provider: [aws]
+#        cloud-provider: [aws, azure, gcp]
         exclude:
           - python-version: 3.8
             os:
@@ -185,4 +184,5 @@ jobs:
         run: tox -e "py${PYTHON_VERSION/\./}{,-pandas,-sso}-ci"
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
+          CLOUD_PROVIDER: ${{ matrix.cloud-provider }}
         shell: bash
