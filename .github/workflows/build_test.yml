@@ -143,8 +143,7 @@ jobs:
          - image_name: windows-latest
            download_name: windows
         python-version: [3.5, 3.6, 3.7, 3.8]
-        cloud-provider: [aws]
-#        cloud-provider: [aws, azure, gcp]
+        cloud-provider: [aws, azure, gcp]
         exclude:
           - python-version: 3.8
             os:
