@@ -114,8 +114,8 @@ def write_pandas(conn: 'SnowflakeConnection',
             chunk.to_parquet(chunk_path, compression=compression)
             # Upload parquet file
             upload_sql = ('PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
-                          'file://{path} @"{stage_name}" PARALLEL={parallel}').format(
-                path=chunk_path,
+                          '\'file://{path}\' @"{stage_name}" PARALLEL={parallel}').format(
+                path=chunk_path.replace('\\', '\\\\').replace('\'', '\\\''),
                 stage_name=stage_name,
                 parallel=parallel
             )
