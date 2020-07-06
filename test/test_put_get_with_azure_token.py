@@ -80,7 +80,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
 
 
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
+    not CONNECTION_PARAMETERS_ADMIN or os.getenv("CLOUD_PROVIDER") == 'gcp',
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
@@ -128,7 +128,7 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
 
 
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
+    not CONNECTION_PARAMETERS_ADMIN or os.getenv("CLOUD_PROVIDER") == 'gcp',
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
