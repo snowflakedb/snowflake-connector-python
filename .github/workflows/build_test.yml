@@ -136,13 +136,14 @@ jobs:
     strategy:
       matrix:
         os:
-         - image_name: ubuntu-latest
-           download_name: linux
-         - image_name: macos-latest
-           download_name: macos
+#         - image_name: ubuntu-latest
+#           download_name: linux
+#         - image_name: macos-latest
+#           download_name: macos
          - image_name: windows-latest
            download_name: windows
-        python-version: [3.5, 3.6, 3.7, 3.8]
+#        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.5]
         cloud-provider: [aws]
 #        cloud-provider: [aws, azure, gcp]
         exclude:
