@@ -681,7 +681,7 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             run(cnx, "RM @~/{dir}")
 
 
-@pytest.mark.skipif(os.getenv("CLOUD_PROVIDE") == 'gcp', reason="PUT and GET  is not supportd for GCP yet")
+@pytest.mark.skipif(os.getenv("CLOUD_PROVIDER") == 'gcp', reason="PUT and GET  is not supportd for GCP yet")
 def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
     """SNOW-15153: PUTs and GETs with hint."""
     tmp_dir = str(tmpdir.mkdir('put_get_with_hint'))
