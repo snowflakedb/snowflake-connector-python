@@ -660,3 +660,17 @@ def finish(conn_cnx, table):
     with conn_cnx() as json_cnx:
         cursor_json = json_cnx.cursor()
         cursor_json.execute("drop table if exists {};".format(table))
+
+
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.")
+def test_arrow_fetch_result_scan(conn_cnx):
+    with conn_cnx() as cnx:
+        cur = cnx.cursor()
+        cur.execute("alter session set query_result_format='ARROW_FORCE'")
+        cur.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
+        res = cur.execute("select 1, 2, 3").fetch_pandas_all()
+        assert tuple(res) == ('1', '2', '3')
+        result_scan_res = cur.execute("select * from table(result_scan('{}'));".format(cur.sfqid)).fetch_pandas_all()
+        assert tuple(result_scan_res) == ('1', '2', '3')

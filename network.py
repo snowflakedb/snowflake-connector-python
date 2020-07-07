@@ -529,7 +529,7 @@ class SnowflakeRestful(object):
 
     def fetch(self, method, full_url, headers, data=None, timeout=None,
               **kwargs):
-        """Carry ouyt API request with session management."""
+        """Carry out API request with session management."""
 
         class RetryCtx(object):
             def __init__(self, timeout, _include_retry_params=False):
