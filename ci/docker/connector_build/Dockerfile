@@ -9,13 +9,9 @@ RUN chmod +x /usr/local/bin/gosu
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-
 WORKDIR /home/user
 RUN chmod 777 /home/user
 RUN git clone https://github.com/matthew-brett/multibuild.git && cd /home/user/multibuild && git checkout b943f33a92772fd52c2fa38c03d08aac974c53bd
-
-ADD scripts/build_virtualenvs.sh /home/user
-RUN /home/user/build_virtualenvs.sh
 
 ENV PATH="${PATH}:/opt/python/cp35-cp35m/bin:/opt/python/cp36-cp36m/bin:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin"
 

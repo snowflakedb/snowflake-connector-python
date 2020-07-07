@@ -2,8 +2,8 @@
 #
 # Build Snowflake Connector for Python with extension on mac
 #
-THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
+THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 source $THIS_DIR/build_init.sh
 
 function build_connector_with_python() {
@@ -26,16 +26,13 @@ function build_connector_with_python() {
     deactivate
 }
 
-PYTHON_VERSION=$1
+PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
 
-if [[ -z $PYTHON_VERSION ]]; then
-    PYTHON_VERSIONS=("python3.5" "python3.6" "python3.7" "python3.8")
-else
-    PYTHON_VERSIONS=($PYTHON_VERSION)
-fi
-
-for PYTHON_TUPLE in ${PYTHON_VERSIONS[@]}; do
-    build_connector_with_python $PYTHON_TUPLE
+for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
+    PYTHON="python${PYTHON_VERSION}"
+    build_connector_with_python $PYTHON_VERSION
+    log INFO "Creating a wheel: snowflake_connector using $PYTHON"
+    cd $CONNECTOR_DIR
 done
 
 # build source distribution as well
