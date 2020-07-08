@@ -34,9 +34,9 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Clean up possible build artifacts
     rm -rf build/
     rm -f generated_version.py
-    # Update PEP-517 dependencies
+    # Update PEP-517 dependencies and flake8
     ${PYTHON} -m pip install -U pip setuptools flake8
-    flake8
+    ${PYTHON} -m flake8
     # Use new PEP-517 build
     ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
     # On Linux we should repair wheel(s) generated
@@ -49,6 +49,6 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
     ${PYTHON} -m pip install ${BUILD_DIR}/${WHL_FILE}
     echo "# Generated on: $(${PYTHON} --version)" >${REQS_FILE}
-    echo "# With snowflake-connector-python version: $(pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}
+    echo "# With snowflake-connector-python version: $(${PYTHON} -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}
     ${PYTHON} -m pip freeze | grep -v snowflake-connector-python 1>>${REQS_FILE} 2>/dev/null
 done

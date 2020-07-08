@@ -8,8 +8,6 @@ SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 set pv=%1
 
-:: set PIP_INDEX_URL=https://nexus.int.snowflakecomputing.com/repository/pypi/simple
-
 :: first download wheel file from s3 bucket
 cd %workspace%
 cmd /c aws s3 cp s3://sfc-jenkins/repository/python_connector/win64/%branch%/%svn_revision% %workspace% ^
@@ -49,21 +47,17 @@ if %errorlevel% neq 0 goto :error
 call %venv_dir%\scripts\activate
 if %errorlevel% neq 0 goto :error
 
-python -m pip install --upgrade pip
-if %errorlevel% neq 0 goto :error
-
-pip install tox tox-external-wheels>=0.1.4
+python -m pip install -U pip tox tox-external-wheels
 if %errorlevel% neq 0 goto :error
 
 cd %CONNECTOR_DIR%
 :: check code style
-:: should be switched to fix_lint when ticket SNOW-133050 is closed
-tox -e flake8
+tox -e fix_lint
 if %errorlevel% neq 0 goto :error
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
-tox -e py%pv%-ci,py%pv%-pandas-ci,py%pv%-sso-ci,coverage --external_wheels ..\..\..\%connector_whl% -- --basetemp=%workspace%\pytest-tmp\
+tox -e py%pv%-ci,py%pv%-pandas-ci,py%pv%-sso-ci --external_wheels ..\..\..\%connector_whl% -- --basetemp=%workspace%\pytest-tmp\
 if %errorlevel% neq 0 goto :error
 
 call deactivate
