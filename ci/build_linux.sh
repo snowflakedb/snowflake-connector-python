@@ -11,7 +11,7 @@ PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 DIST_DIR="${CONNECTOR_DIR}/dist"
-REPAIRED_DIR=${DIST_DIR}/docker/repaired_wheels
+REPAIRED_DIR=${DIST_DIR}/repaired_wheels
 
 cd "$CONNECTOR_DIR"
 # Clean up previously built DIST_DIR
@@ -27,7 +27,7 @@ source /home/user/multibuild/manylinux_utils.sh
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
-    BUILD_DIR="${DIST_DIR}/docker/$PYTHON_VERSION/"
+    BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION/"
 
     # Build
     echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"

@@ -17,7 +17,7 @@ Install Python 3.5.0 or higher. Clone the Snowflake Connector for Python reposit
 
 Find the ``snowflake_connector_python*.whl`` package in the ``./dist`` directory.
 
-Or use our Dockerized build script ``ci/build_docker.sh`` and find the built wheel files in ``dist/docker/repaired_wheels``.
+Or use our Dockerized build script ``ci/build_docker.sh`` and find the built wheel files in ``dist/repaired_wheels``.
 
 
 Testing
