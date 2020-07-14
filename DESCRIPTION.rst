@@ -9,6 +9,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.9(July 13,2020)
+
+    - Connection parameter validate_default_parameters now verifies known connection parameter names and types. It emits warnings for anything unexpected types or names.
+    - Correct logging messages for compiled C++ code.
+    - Fixed an issue in write_pandas with location determination when database, or schema name was included.
+    - Bumped boto3 dependency version.
+    - Fixed an issue where uploading a file with special UTF-8 characters in their names corrupted file.
+
 - v2.2.8(June 22,2020)
 
     - Switched docstring style to Google from Epydoc and added automated tests to enforce the standard.
