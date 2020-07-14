@@ -6,9 +6,9 @@ CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
 # If running on Jenkins then default to AWS and change to others if cloud_provider is set
 if [[ -n $JENKINS_URL ]]; then
-  PARAMS_FILE="${CONNECTOR_DIR}/.github/workflows/parameters_aws_python.json.gpg"
-  [ $cloud_provider == azure ] && PARAMS_FILE="${CONNECTOR_DIR}/.github/workflows/parameters_azure_python.json.gpg"
-  [ $cloud_provider == gcp ] && PARAMS_FILE="${CONNECTOR_DIR}/.github/workflows/parameters_gcp_python.json.gpg"
+  PARAMS_FILE="${CONNECTOR_DIR}/.github/workflows/parameters/parameters_aws_python.json.gpg"
+  [ $cloud_provider == azure ] && PARAMS_FILE="${CONNECTOR_DIR}/.github/workflows/parameters/parameters_azure_python.json.gpg"
+  [ $cloud_provider == gcp ] && PARAMS_FILE="${CONNECTOR_DIR}/.github/workflows/parameters/parameters_gcp_python.json.gpg"
   gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" $PARAMS_FILE | jq '{account: .testconnection.SNOWFLAKE_TEST_ACCOUNT, user: .testconnection.SNOWFLAKE_TEST_USER, password: .testconnection.SNOWFLAKE_TEST_PASSWORD, schema: .testconnection.SNOWFLAKE_TEST_SCHEMA, database: .testconnection.SNOWFLAKE_TEST_DATABASE, protocol: "https", host: (.testconnection.SNOWFLAKE_TEST_ACCOUNT + ".snowflakecomputing.com"), warehouse: .testconnection.SNOWFLAKE_TEST_WAREHOUSE, port: 443, role: .testconnection.SNOWFLAKE_TEST_ROLE}' | sed '1s;^;CONNECTION_PARAMETERS = ;' > test/parameters.py
 fi
 
