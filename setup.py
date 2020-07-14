@@ -232,7 +232,7 @@ setup(
             'pytz',
             'pytzdata',
             'Cython',
-            'pendulum',
+            'pendulum!=2.1.1',
             'more-itertools',
             'numpy',
         ],
