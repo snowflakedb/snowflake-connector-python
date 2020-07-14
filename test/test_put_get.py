@@ -526,7 +526,9 @@ def test_put_overwrite(tmpdir, db_parameters):
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
-def test_utf8_filename(tmpdir, db_parameters):
+def test_utf8_filename(tmpdir, db_parameters, is_public_test):
+    if is_public_test:
+        pytest.skip('account missing on public CI')
     test_file = tmpdir.join("utf卡豆.csv")
     with open(str(test_file), 'w') as f:
         f.write("1,2,3\n")

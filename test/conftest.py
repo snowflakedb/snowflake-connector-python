@@ -104,9 +104,8 @@ def is_public_test():
 
 def is_public_testaccount():
     db_parameters = get_db_parameters()
-    return os.getenv('TRAVIS') == 'true' or \
-           os.getenv('APPVEYOR') == 'True' or \
-           db_parameters.get('account').startswith('sfctest0')
+    return (os.getenv('GITHUB_ACTIONS') == 'true' or
+           db_parameters.get('account').startswith('sfctest0'))
 
 
 @pytest.fixture(scope='session')
