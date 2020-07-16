@@ -5,6 +5,7 @@
 #
 
 import os
+import pathlib
 from getpass import getuser
 from logging import getLogger
 from os import path
@@ -23,6 +24,23 @@ logger = getLogger(__name__)
 
 @pytest.fixture()
 def test_data(request, conn_cnx, db_parameters):
+    def connection():
+        """Abstracting away connection creation."""
+        return conn_cnx()
+    return create_test_data(request, db_parameters, connection)
+
+
+@pytest.fixture()
+def s3_test_data(request, conn_cnx, db_parameters):
+    def connection():
+        """Abstracting away connection creation."""
+        return conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password'])
+    return create_test_data(request, db_parameters, connection)
+
+
+def create_test_data(request, db_parameters, connection):
     assert 'AWS_ACCESS_KEY_ID' in os.environ, 'AWS_ACCESS_KEY_ID is missing'
     assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
         'AWS_SECRET_ACCESS_KEY is missing'
@@ -32,7 +50,7 @@ def test_data(request, conn_cnx, db_parameters):
     warehouse_name = "{}_wh".format(unique_name)
 
     def fin():
-        with conn_cnx() as cnx:
+        with connection() as cnx:
             with cnx.cursor() as cur:
                 cur.execute("drop database {}".format(database_name))
                 cur.execute("drop warehouse {}".format(warehouse_name))
@@ -41,23 +59,22 @@ def test_data(request, conn_cnx, db_parameters):
 
     class TestData(object):
         def __init__(self):
+            self.test_data_dir = (pathlib.Path(__file__).parent / 'data').absolute()
             self.AWS_ACCESS_KEY_ID = "'{}'".format(
                 os.environ['AWS_ACCESS_KEY_ID'])
             self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
                 os.environ['AWS_SECRET_ACCESS_KEY'])
-            self.SF_PROJECT_ROOT = os.getenv('SF_PROJECT_ROOT')
-            if self.SF_PROJECT_ROOT is None:
-                self.SF_PROJECT_ROOT = path.realpath(
-                    path.join(THIS_DIR, '..', '..', '..', '..', ))
             self.stage_name = "{}_stage".format(unique_name)
             self.warehouse_name = warehouse_name
             self.database_name = database_name
+            self.connection = connection
             self.user_bucket = os.getenv(
                 'SF_AWS_USER_BUCKET',
                 "sfc-dev1-regression/{}/reg".format(getuser()))
 
     ret = TestData()
-    with conn_cnx() as cnx:
+
+    with connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute("use role sysadmin")
             cur.execute("""
@@ -82,8 +99,8 @@ field_delimiter='|' error_on_column_count_mismatch=false
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_load_s3(test_data, conn_cnx):
-    with conn_cnx() as cnx:
+def test_load_s3(test_data):
+    with test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute("use warehouse {}".format(test_data.warehouse_name))
             cur.execute("""
@@ -145,8 +162,8 @@ file_format=(skip_header=1 null_if=('') field_optionally_enclosed_by='"')
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_local_file(conn_cnx, test_data):
-    with conn_cnx() as cnx:
+def test_put_local_file(test_data):
+    with test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute("use warehouse {}".format(test_data.warehouse_name))
@@ -165,9 +182,9 @@ AWS_SECRET_KEY={aws_secret_access_key}))
 """.format(aws_access_key_id=test_data.AWS_ACCESS_KEY_ID,
            aws_secret_access_key=test_data.AWS_SECRET_ACCESS_KEY,
            stage_name=test_data.stage_name, ))
-            cur.execute("""
-put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
-""".format(test_data.SF_PROJECT_ROOT))
+            cur.execute("""put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1""".format(
+                str(test_data.test_data_dir)
+            ))
             cur.execute("ls @%pytest_putget_t1")
             _ = cur.fetchall()
             assert cur.rowcount == 2, \
@@ -199,8 +216,8 @@ put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_load_from_user_stage(conn_cnx, test_data):
-    with conn_cnx() as cnx:
+def test_put_load_from_user_stage(test_data):
+    with test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute(
                 "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
@@ -224,12 +241,9 @@ AWS_SECRET_KEY={aws_secret_access_key})
 create or replace table pytest_putget_t2 (c1 STRING, c2 STRING, c3 STRING,
 c4 STRING, c5 STRING, c6 STRING, c7 STRING, c8 STRING, c9 STRING)
 """)
-            cur.execute("""
-put file://{sf_project_root}/ExecPlatform/Database/data/orders_10*.csv
-@{stage_name}
-""".format(
-                sf_project_root=test_data.SF_PROJECT_ROOT,
-                stage_name=test_data.stage_name
+            cur.execute("""put file://{}/ExecPlatform/Database/data/orders_10*.csv @{}""".format(
+                test_data.test_data_dir,
+                test_data.stage_name
             ))
             # two files should have been put in the staging are
             results = cur.fetchall()
@@ -276,14 +290,14 @@ purge=true
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_unload(conn_cnx, test_data):
-    with conn_cnx() as cnx:
+def test_unload(db_parameters, s3_test_data):
+    with s3_test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute(
-                """use warehouse {}""".format(test_data.warehouse_name))
+                """use warehouse {}""".format(s3_test_data.warehouse_name))
             cur.execute(
                 """use schema {}.pytesting_schema""".format(
-                    test_data.database_name))
+                    s3_test_data.database_name))
             cur.execute("""
 create or replace stage {stage_name}
 url='s3://{user_bucket}/{stage_name}/unload/'
@@ -291,10 +305,10 @@ credentials = (
 AWS_KEY_ID={aws_access_key_id}
 AWS_SECRET_KEY={aws_secret_access_key})
 """.format(
-                aws_access_key_id=test_data.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=test_data.AWS_SECRET_ACCESS_KEY,
-                user_bucket=test_data.user_bucket,
-                stage_name=test_data.stage_name,
+                aws_access_key_id=s3_test_data.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=s3_test_data.AWS_SECRET_ACCESS_KEY,
+                user_bucket=s3_test_data.user_bucket,
+                stage_name=s3_test_data.stage_name,
             ))
 
             cur.execute("""
@@ -305,16 +319,16 @@ error_on_column_count_mismatch=false)
 """)
             cur.execute("""
 alter stage {stage_name} set file_format = (format_name = 'VSV' )
-""".format(stage_name=test_data.stage_name))
+""".format(stage_name=s3_test_data.stage_name))
 
             # make sure its clean
             cur.execute(
-                "rm @{stage_name}".format(stage_name=test_data.stage_name))
+                "rm @{stage_name}".format(stage_name=s3_test_data.stage_name))
 
             # put local file
-            cur.execute("""
-put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_t3
-        """.format(test_data.SF_PROJECT_ROOT))
+            cur.execute("put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_t3".format(
+                s3_test_data.test_data_dir
+            ))
 
             # copy into table
             cur.execute("""
@@ -327,7 +341,7 @@ purge=true
 copy into @{stage_name}/pytest_t3/data_
 from pytest_t3 file_format=(format_name='VSV' compression='gzip')
 max_file_size=10000000
-""".format(stage_name=test_data.stage_name))
+""".format(stage_name=s3_test_data.stage_name))
 
             # load the data back to another table
             cur.execute("""
@@ -341,7 +355,7 @@ stage_file_format = (format_name = 'VSV' )
 copy into pytest_t3_copy
 from @{stage_name}/pytest_t3/data_ return_failed_only=true
 """.format(
-                stage_name=test_data.stage_name))
+                stage_name=s3_test_data.stage_name))
 
             # check to make sure they are equal
             cur.execute("""
@@ -354,7 +368,7 @@ union
                 'unloaded/reloaded data were not the same'
             # clean stage
             cur.execute("rm @{stage_name}/pytest_t3/data_".format(
-                stage_name=test_data.stage_name))
+                stage_name=s3_test_data.stage_name))
             assert cur.rowcount == 1, \
                 'only one file was expected to be removed'
 
@@ -363,7 +377,7 @@ union
 copy into @{stage_name}/pytest_t3/data_
 from pytest_t3 file_format=(format_name='VSV' compression='deflate')
 max_file_size=10000000
-""".format(stage_name=test_data.stage_name))
+""".format(stage_name=s3_test_data.stage_name))
             results = cur.fetchall()
             assert results[0][0] == 73, '73 rows were expected to be loaded'
 
@@ -381,14 +395,14 @@ compression='deflate')
 
             cur.execute("""
 alter stage {stage_name} set file_format = (format_name = 'VSV'
-     compression='deflate')""".format(stage_name=test_data.stage_name)
+     compression='deflate')""".format(stage_name=s3_test_data.stage_name)
                         )
 
             cur.execute("""
 copy into pytest_t3_copy from @{stage_name}/pytest_t3/data_
 return_failed_only=true
 """.format(
-                stage_name=test_data.stage_name)
+                stage_name=s3_test_data.stage_name)
             )
             results = cur.fetchall()
             assert results[0][2] == "LOADED"
@@ -401,15 +415,15 @@ return_failed_only=true
             assert cur.rowcount == 0, \
                 'unloaded/reloaded data were not the same'
             cur.execute("rm @{stage_name}/pytest_t3/data_".format(
-                stage_name=test_data.stage_name))
+                stage_name=s3_test_data.stage_name))
             assert cur.rowcount == 1, \
                 'only one file was expected to be removed'
 
             # clean stage
             cur.execute("rm @{stage_name}/pytest_t3/data_".format(
-                stage_name=test_data.stage_name))
+                stage_name=s3_test_data.stage_name))
 
             cur.execute("drop table pytest_t3_copy")
             cur.execute(
                 "drop stage {stage_name}".format(
-                    stage_name=test_data.stage_name))
+                    stage_name=s3_test_data.stage_name))
