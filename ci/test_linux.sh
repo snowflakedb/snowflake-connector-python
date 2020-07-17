@@ -24,5 +24,3 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
 
     python3 -m tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
 done
-
-deactivate
