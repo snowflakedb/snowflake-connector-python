@@ -48,7 +48,9 @@ def test_put_copy0(conn_cnx, db_parameters):
         c = cnx.cursor(DictCursor)
         return c, c.execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, """
 create table {name} (
 aa int,
@@ -85,7 +87,9 @@ def test_put_copy_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor(DictCursor).execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         file_size = os.stat(data_file).st_size
         ret = run(cnx, "put 'file://{file}' @%{name}")
@@ -101,8 +105,7 @@ def test_put_copy_compressed(conn_cnx, db_parameters):
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.skipif(
-    True,
+@pytest.mark.skip(
     reason="BZ2 is not detected in this test case. Need investigation"
 )
 def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
@@ -115,7 +118,9 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
@@ -137,7 +142,9 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
@@ -160,7 +167,9 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
@@ -188,7 +197,9 @@ def test_put_copy_parquet_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, "alter session set enable_parquet_filetype=true")
         run(cnx, """
 create or replace table {name}
@@ -218,7 +229,9 @@ def test_put_copy_orc_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, """
 create or replace table {name} (value variant) stage_file_format=(type='orc')
 """)
@@ -252,7 +265,9 @@ def test_copy_get(tmpdir, conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx,
             "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
         run(cnx, """
@@ -324,7 +339,9 @@ def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         run(cnx, """
 create or replace table {name} (
 aa int,
@@ -694,7 +711,9 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
                 file=data_file.replace('\\', '\\\\'),
                 name=db_parameters['name']), _is_put_get=_is_put_get).fetchone()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['s3_user'],
+                        account=db_parameters['s3_account'],
+                        password=db_parameters['s3_password']) as cnx:
         # regular PUT case
         ret = run(cnx, "PUT 'file://{file}' @~/{name}")
         assert ret[0] == 'put_get_1.txt', 'PUT filename'
