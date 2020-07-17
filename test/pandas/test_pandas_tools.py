@@ -1,5 +1,5 @@
 import math
-from typing import Callable, Generator
+from typing import Callable, Generator, Dict
 
 import mock
 import pandas
@@ -28,12 +28,15 @@ sf_connector_version_df = pandas.DataFrame(sf_connector_version_data, columns=['
 # Note: since the file will to small to chunk, this is only testing the put command's syntax
 @pytest.mark.parametrize('parallel', [4, 99])
 def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', None, None]],
+                      db_parameters: Dict[str, str],
                       compression: str,
                       parallel: int,
                       chunk_size: int):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
 
-    with conn_cnx() as cnx:  # type: SnowflakeConnection
+    with conn_cnx(user=db_parameters['s3_user'],
+                  account=db_parameters['s3_account'],
+                  password=db_parameters['s3_password']) as cnx:  # type: SnowflakeConnection
         table_name = 'driver_versions'
         cnx.execute_string('CREATE OR REPLACE TABLE "{}"("name" STRING, "newest_version" STRING)'.format(table_name))
         try:
