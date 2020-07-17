@@ -1,6 +1,7 @@
 #!/bin/bash -e
 # Test Snowflake Python Connector in Docker
 # NOTES:
+#   - By default this script runs Python 3.6 tests, as these are installed in dev vms
 #   - To compile only a specific version(s) pass in versions like: `./test_docker.sh "3.5 3.6"`
 
 set -o pipefail
