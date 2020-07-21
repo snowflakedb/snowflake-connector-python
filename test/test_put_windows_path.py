@@ -7,9 +7,6 @@ import os
 
 import pytest
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
-
 
 def test_abc(conn_cnx, tmpdir, db_parameters):
     """Tests PUTing a file on Windows using the URI and Windows path."""
@@ -23,9 +20,9 @@ def test_abc(conn_cnx, tmpdir, db_parameters):
     fileURI = pathlib.Path(test_data).as_uri()
 
     subdir = db_parameters['name']
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as con:
+    with conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password']) as con:
         rec = con.cursor().execute("put {} @~/{}0/".format(
             fileURI, subdir)).fetchall()
         assert rec[0][6] == 'UPLOADED'

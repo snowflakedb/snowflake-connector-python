@@ -34,9 +34,9 @@ def test_data(request, conn_cnx, db_parameters):
 def s3_test_data(request, conn_cnx, db_parameters):
     def connection():
         """Abstracting away connection creation."""
-        return conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password'])
+        return conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password'])
     return create_test_data(request, db_parameters, connection)
 
 
@@ -103,9 +103,7 @@ def test_load_s3(test_data):
     with test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute("use warehouse {}".format(test_data.warehouse_name))
-            cur.execute("""
-use schema {}.pytesting_schema
-""".format(test_data.database_name))
+            cur.execute("use schema {}.pytesting_schema".format(test_data.database_name))
             cur.execute("""
 create or replace table tweets(created_at timestamp,
 id number, id_str string, text string, source string,
@@ -286,6 +284,7 @@ purge=true
                 stage_name=test_data.stage_name))
 
 
+@pytest.mark.aws
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."

@@ -26,8 +26,8 @@ except ImportError:
 
 logger = getLogger(__name__)
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
+# Mark every test in this module as a gcp test
+pytestmark = pytest.mark.gcp
 
 
 @pytest.mark.skipif(
@@ -44,9 +44,9 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
 
     with conn_cnx(
-            user=db_parameters['gcp_user'],
-            account=db_parameters['gcp_account'],
-            password=db_parameters['gcp_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         with cnx.cursor() as csr:
             csr.execute("rm @~/snow32806")
             csr.execute(
@@ -103,9 +103,9 @@ def test_put_copy_many_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
         return csr.execute(sql).fetchall()
 
     with conn_cnx(
-            user=db_parameters['gcp_user'],
-            account=db_parameters['gcp_account'],
-            password=db_parameters['gcp_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -152,9 +152,9 @@ def test_put_copy_duplicated_files_gcp(tmpdir, test_files, conn_cnx,
         return csr.execute(sql).fetchall()
 
     with conn_cnx(
-            user=db_parameters['gcp_user'],
-            account=db_parameters['gcp_account'],
-            password=db_parameters['gcp_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -244,9 +244,9 @@ def test_put_get_large_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
             _put_callback=cb).fetchall()
 
     with conn_cnx(
-            user=db_parameters['gcp_user'],
-            account=db_parameters['gcp_account'],
-            password=db_parameters['gcp_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         try:
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == 'UPLOADED' for rec in all_recs])
@@ -290,9 +290,9 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
 
     with conn_cnx(
-            user=db_parameters['gcp_user'],
-            account=db_parameters['gcp_account'],
-            password=db_parameters['gcp_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         with cnx.cursor() as csr:
             csr.execute("rm @~/snow32807")
             csr.execute(
@@ -381,9 +381,9 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data', 'example.json'))
     with conn_cnx(
-            user=db_parameters['gcp_user'],
-            account=db_parameters['gcp_account'],
-            password=db_parameters['gcp_password'],
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password'],
     ) as cnx:
         with cnx.cursor() as cursor:
             try:

@@ -23,9 +23,6 @@ try:
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
-
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
@@ -48,9 +45,9 @@ def test_put_copy0(conn_cnx, db_parameters):
         c = cnx.cursor(DictCursor)
         return c, c.execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, """
 create table {name} (
 aa int,
@@ -87,9 +84,9 @@ def test_put_copy_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor(DictCursor).execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         file_size = os.stat(data_file).st_size
         ret = run(cnx, "put 'file://{file}' @%{name}")
@@ -118,9 +115,9 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
@@ -142,9 +139,9 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
@@ -167,9 +164,9 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in run(cnx, "put 'file://{file}' @%{name}"):
             print(rec)
@@ -197,9 +194,9 @@ def test_put_copy_parquet_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, "alter session set enable_parquet_filetype=true")
         run(cnx, """
 create or replace table {name}
@@ -229,9 +226,9 @@ def test_put_copy_orc_compressed(conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, """
 create or replace table {name} (value variant) stage_file_format=(type='orc')
 """)
@@ -265,9 +262,9 @@ def test_copy_get(tmpdir, conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx,
             "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
         run(cnx, """
@@ -339,9 +336,9 @@ def test_put_copy_many_files(tmpdir, test_files, conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, """
 create or replace table {name} (
 aa int,
@@ -363,6 +360,7 @@ ratio number(6,2))
         run(cnx, "drop table if exists {name}")
 
 
+@pytest.mark.aws
 def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     """[s3] Puts and Copies many files."""
     # generates N files
@@ -378,10 +376,9 @@ def test_put_copy_many_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, """
 create or replace table {name} (
 aa int,
@@ -395,9 +392,9 @@ ratio number(6,2))
 """)
     try:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             run(cnx, "put 'file://{files}' @%{name}")
             run(cnx, "copy into {name}")
 
@@ -408,14 +405,15 @@ ratio number(6,2))
                 'Number of rows'
     finally:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             run(cnx, "drop table if exists {name}")
 
 
+@pytest.mark.aws
+@pytest.mark.azure
 @pytest.mark.flaky(reruns=3)
-@pytest.mark.skipif(os.getenv("CLOUD_PROVIDER") == 'gcp', reason="GCS doesn't skip even if the same file exist ")
 def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
                                       db_parameters):
     """[s3] Puts and Copies duplicated files."""
@@ -433,9 +431,9 @@ def test_put_copy_duplicated_files_s3(tmpdir, test_files, conn_cnx,
         return cnx.cursor().execute(sql, _raise_put_get_error=False).fetchall()
 
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         run(cnx, """
 create or replace table {name} (
 aa int,
@@ -450,9 +448,9 @@ ratio number(6,2))
 
     try:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             success_cnt = 0
             skipped_cnt = 0
             for rec in run(cnx, "put 'file://{files}' @%{name}"):
@@ -493,13 +491,14 @@ ratio number(6,2))
                 'Number of rows'
     finally:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(os.getenv("CLOUD_PROVIDER") == 'gcp', reason="GCS doesn't skip even if the same file exist ")
+@pytest.mark.aws
+@pytest.mark.azure
 def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
     """File name collision test. The data set have the same file names but contents are different."""
     number_of_files = 5
@@ -514,9 +513,9 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
 
     stage_name = "test_put_collision/{}".format(db_parameters['name'])
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         cnx.cursor().execute("RM @~/{}".format(stage_name))
         try:
             # upload all files
@@ -563,9 +562,9 @@ def test_put_collision(tmpdir, test_files, conn_cnx, db_parameters):
 
         finally:
             with conn_cnx(
-                    user=db_parameters['s3_user'],
-                    account=db_parameters['s3_account'],
-                    password=db_parameters['s3_password']) as cnx:
+                    user=db_parameters['user'],
+                    account=db_parameters['account'],
+                    password=db_parameters['password']) as cnx:
                 cnx.cursor().execute("RM @~/{}".format(stage_name))
 
 
@@ -642,10 +641,8 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
             os.unlink(tmp_file)
 
 
-@pytest.mark.skipif(
-    os.getenv('TRAVIS') == 'true' or os.getenv('APPVEYOR'),
-    reason="Flaky tests. Need further investigation"
-)
+@pytest.mark.aws
+@pytest.mark.flaky(reruns=3)
 def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
     """[s3] Puts and Gets Large files."""
     number_of_files = 3
@@ -675,9 +672,9 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             _put_callback=cb).fetchall()
 
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         try:
             run(cnx, "PUT 'file://{files}' @~/{dir}")
             # run(cnx, "PUT 'file://{files}' @~/{dir}")  # retry
@@ -698,7 +695,8 @@ def test_put_get_large_files_s3(tmpdir, test_files, conn_cnx, db_parameters):
             run(cnx, "RM @~/{dir}")
 
 
-@pytest.mark.skipif(os.getenv("CLOUD_PROVIDER") == 'gcp', reason="PUT and GET  is not supportd for GCP yet")
+@pytest.mark.aws
+@pytest.mark.azure
 def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
     """SNOW-15153: PUTs and GETs with hint."""
     tmp_dir = str(tmpdir.mkdir('put_get_with_hint'))
@@ -711,9 +709,9 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
                 file=data_file.replace('\\', '\\\\'),
                 name=db_parameters['name']), _is_put_get=_is_put_get).fetchone()
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password']) as cnx:
         # regular PUT case
         ret = run(cnx, "PUT 'file://{file}' @~/{name}")
         assert ret[0] == 'put_get_1.txt', 'PUT filename'

@@ -16,9 +16,6 @@ from mock import patch
 
 import snowflake.connector
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
-
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:
@@ -41,9 +38,9 @@ def test_data(request, conn_cnx, db_parameters):
 def s3_test_data(request, conn_cnx, db_parameters):
     def connection():
         """Abstracting away connection creation."""
-        return conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password'])
+        return conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password'])
     return create_test_data(request, db_parameters, connection)
 
 
@@ -169,6 +166,7 @@ file_format=(
             cur.execute("drop table tweets")
 
 
+@pytest.mark.aws
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
@@ -314,6 +312,7 @@ purge=true
                     stage_name=test_data.stage_name))
 
 
+@pytest.mark.aws
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
@@ -459,6 +458,7 @@ union
             cur.close()
 
 
+@pytest.mark.aws
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
@@ -466,13 +466,13 @@ union
 def test_put_with_auto_compress_false(tmpdir, db_parameters):
     """Tests PUT command with auto_compress=False."""
     cnx = snowflake.connector.connect(
-        user=db_parameters['s3_user'],
-        password=db_parameters['s3_password'],
-        host=db_parameters['s3_host'],
-        port=db_parameters['s3_port'],
-        database=db_parameters['s3_database'],
-        account=db_parameters['s3_account'],
-        protocol=db_parameters['s3_protocol'])
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        database=db_parameters['database'],
+        account=db_parameters['account'],
+        protocol=db_parameters['protocol'])
 
     tmp_dir = str(tmpdir.mkdir('data'))
     test_data = os.path.join(tmp_dir, 'data.txt')
@@ -504,13 +504,13 @@ LS @~/test_put_uncompress_file
 def test_put_overwrite(tmpdir, db_parameters):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     cnx = snowflake.connector.connect(
-        user=db_parameters['s3_user'],
-        password=db_parameters['s3_password'],
-        host=db_parameters['s3_host'],
-        port=db_parameters['s3_port'],
-        database=db_parameters['s3_database'],
-        account=db_parameters['s3_account'],
-        protocol=db_parameters['s3_protocol'])
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        database=db_parameters['database'],
+        account=db_parameters['account'],
+        protocol=db_parameters['protocol'])
 
     tmp_dir = str(tmpdir.mkdir('data'))
     test_data = os.path.join(tmp_dir, 'data.txt')
@@ -546,14 +546,14 @@ def test_utf8_filename(tmpdir, db_parameters, is_public_test):
         f.write("1,2,3\n")
     stage_name = ''.join([random.choice(string.ascii_lowercase) for i in range(5)])
     with snowflake.connector.connect(
-        user=db_parameters['s3_user'],
-        password=db_parameters['s3_password'],
-        host=db_parameters['s3_host'],
-        port=db_parameters['s3_port'],
-        database=db_parameters['s3_database'],
-        schema=db_parameters['s3_schema'],
-        account=db_parameters['s3_account'],
-        protocol=db_parameters['s3_protocol']) as con:
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        host=db_parameters['host'],
+        port=db_parameters['port'],
+        database=db_parameters['database'],
+        schema=db_parameters['schema'],
+        account=db_parameters['account'],
+        protocol=db_parameters['protocol']) as con:
         with con.cursor() as cur:
             cur.execute("create temporary stage {}".format(stage_name))
             cur.execute("PUT 'file://{}' @{}".format(str(test_file).replace('\\', '/'), stage_name)).fetchall()

@@ -8,10 +8,8 @@ import os
 
 import pytest
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
 
-
+@pytest.mark.aws
 @pytest.mark.flaky(reruns=3)
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
     """[s3] Puts and Copies into large files."""
@@ -22,9 +20,9 @@ def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
 
     files = os.path.join(tmp_dir, 'file*')
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         cnx.cursor().execute("""
 create table {name} (
 aa int,
@@ -38,8 +36,8 @@ ratio number(6,2))
 """.format(name=db_parameters['name']))
     try:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
+                user=db_parameters['user'],
+                account=db_parameters['account'],
                 password=db_parameters['password']) as cnx:
             files = files.replace('\\', '\\\\')
             cnx.cursor().execute("put 'file://{file}' @%{name}".format(
@@ -67,8 +65,8 @@ ratio number(6,2))
                 c.close()
     finally:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             cnx.cursor().execute("drop table if exists {table}".format(
                 table=db_parameters['name']))

@@ -34,9 +34,9 @@ def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', N
                       chunk_size: int):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
 
-    with conn_cnx(user=db_parameters['s3_user'],
-                  account=db_parameters['s3_account'],
-                  password=db_parameters['s3_password']) as cnx:  # type: SnowflakeConnection
+    with conn_cnx(user=db_parameters['user'],
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:  # type: SnowflakeConnection
         table_name = 'driver_versions'
         cnx.execute_string('CREATE OR REPLACE TABLE "{}"("name" STRING, "newest_version" STRING)'.format(table_name))
         try:

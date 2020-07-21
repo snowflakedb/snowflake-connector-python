@@ -31,6 +31,7 @@ docker run --network=host \
     -e AWS_SECRET_ACCESS_KEY \
     -e SF_REGRESS_LOGS \
     -e SF_PROJECT_ROOT \
+    -e cloud_provider \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
     /home/user/snowflake-connector-python/ci/test_linux.sh ${PYTHON_ENV}

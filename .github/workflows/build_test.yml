@@ -160,8 +160,7 @@ jobs:
           PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
-          .github/workflows/parameters/parameters_${{ matrix.cloud-provider }}.json.gpg | python -c \
-          "import json;i=json.loads(open(0).read());i={k.rsplit('_', 1)[1].lower(): v for k,v in i['testconnection'].items()};print('CONNECTION_PARAMETERS='+str(i))" > test/parameters.py
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
       - name: Download wheel(s)
         uses: actions/download-artifact@v2
         with:
@@ -183,5 +182,5 @@ jobs:
         run: tox -e "py${PYTHON_VERSION/\./}{,-pandas,-sso}-ci"
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
-          CLOUD_PROVIDER: ${{ matrix.cloud-provider }}
+          cloud_provider: ${{ matrix.cloud-provider }}
         shell: bash

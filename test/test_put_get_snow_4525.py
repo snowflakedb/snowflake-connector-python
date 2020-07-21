@@ -8,15 +8,11 @@ import os
 
 import pytest
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
-
-
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus file and should fail."""
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password']) as cnx:
         cnx.cursor().execute("""
 create or replace table {name} (
 aa int,
@@ -49,9 +45,9 @@ ratio number(5,2))
 
 def test_load_bogus_json_file(tmpdir, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus JSON file and should fail."""
-    with conn_cnx(user=db_parameters['s3_user'],
-                        account=db_parameters['s3_account'],
-                        password=db_parameters['s3_password']) as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password']) as cnx:
         json_table = db_parameters['name'] + "_json"
         cnx.cursor().execute(
             "create or replace table {name} (v variant)".format(name=json_table))
