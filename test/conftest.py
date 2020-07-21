@@ -20,8 +20,9 @@ from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DefaultConverterClass
 
 CLOUD_PROVIDERS = {'aws', 'azure', 'gcp'}
+PUBLIC_SKIP_TAGS = {'internal'}
 
-RUNNING_ON_GH = os.getenv('GITHUB_ACTIONS') == 'true'
+RUNNING_ON_GH = (os.getenv('GITHUB_ACTIONS') == 'true')
 
 MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
@@ -36,7 +37,7 @@ except ImportError:
 logger = getLogger(__name__)
 
 if RUNNING_ON_GH:
-    TEST_SCHEMA = 'GH_JOB_{}'.format(os.getenv('TRAVIS_JOB_ID'))
+    TEST_SCHEMA = 'GH_JOB_{}'.format(os.getenv('GITHUB_ACTION'))
 else:
     TEST_SCHEMA = 'python_connector_tests_' + str(uuid.uuid4()).replace(
         '-', '_')
@@ -249,12 +250,12 @@ def test_files():
 
 def pytest_runtest_setup(item):
     """Ran before calling each test, used to decide whether a test should be skipped."""
+    test_tags = [mark.name for mark in item.iter_markers()]
+
     # Get what cloud providers the test is marked for if any
-    supported_providers = CLOUD_PROVIDERS.intersection(mark.name for mark in item.iter_markers())
-    # Get what cloud provider we are currently running against, if not defined default to aws
-    provider = os.getenv('cloud_provider', 'aws')
-    if supported_providers and provider not in supported_providers:
-        pytest.skip("cannot run against cloud provider {}".format(provider))
-    for _ in item.iter_markers(name="internal"):
-        if is_public_testaccount():
-            pytest.skip("cannot run on public CI")
+    supported_providers = CLOUD_PROVIDERS.intersection(test_tags)
+    current_provider = os.getenv('cloud_provider', 'aws')
+    if supported_providers and current_provider not in supported_providers:
+        pytest.skip("cannot run against cloud provider {}".format(current_provider))
+    if PUBLIC_SKIP_TAGS.intersection(test_tags) and is_public_testaccount():
+        pytest.skip("cannot run on public CI")

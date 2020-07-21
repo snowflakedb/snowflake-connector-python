@@ -109,6 +109,7 @@ SELECT * FROM {name} WHERE aa IN (%s) ORDER BY 1 DESC
                     name=db_parameters['name']))
 
 
+@pytest.mark.internal
 def test_unsupported_binding(negative_conn_cnx, db_parameters):
     """Unsupported data binding."""
     try:
