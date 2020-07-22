@@ -4,14 +4,15 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import datetime
-import pytest
-import random
 import math
+import random
 from io import BytesIO
 
-from snowflake.connector.options import installed_pandas
+import pytest
+
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.cursor import SnowflakeCursor
+from snowflake.connector.options import installed_pandas
 
 try:
     from pyarrow import RecordBatchStreamReader  # NOQA

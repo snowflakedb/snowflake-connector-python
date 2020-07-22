@@ -4,16 +4,16 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-import pytest
-import time
-
-from pandas import DataFrame
-
-from snowflake.connector.options import pandas as pd, installed_pandas
+import itertools
 import random
+import time
 from datetime import datetime
 from decimal import Decimal
-import itertools
+
+import pytest
+
+from snowflake.connector.options import installed_pandas
+from snowflake.connector.options import pandas as pd
 
 try:
     import pyarrow  # NOQA

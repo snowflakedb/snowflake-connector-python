@@ -24,6 +24,6 @@ jobs:
       - name: Comment on issue
         uses: atlassian/gajira-comment@master
         if: startsWith(steps.extract.outputs.jira, 'SNOW-')
-        with: 
+        with:
           issue: "${{ steps.extract.outputs.jira }}"
           comment: "{{ event.comment.user.login }} commented:\n\n{{ event.comment.body }}\n\n{{ event.comment.html_url }}"

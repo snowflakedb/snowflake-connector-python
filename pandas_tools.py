@@ -1,9 +1,9 @@
 import os
-import string
 import random
+import string
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import Optional, Sequence, TypeVar, Iterator, Tuple, Union, Iterable
+from typing import Iterable, Iterator, Optional, Sequence, Tuple, TypeVar, Union
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
@@ -134,9 +134,9 @@ def write_pandas(conn: 'SnowflakeConnection',
     logger.debug("copying into with '{}'".format(copy_into_sql))
     copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
     cursor.close()
-    return (all((e[1] == 'LOADED' for e in copy_results)),
+    return (all(e[1] == 'LOADED' for e in copy_results),
             len(copy_results),
-            sum((e[3] for e in copy_results)),
+            sum(e[3] for e in copy_results),
             copy_results)
 
 

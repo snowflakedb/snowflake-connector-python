@@ -1,9 +1,8 @@
 import math
-from typing import Callable, Generator, Dict
+from typing import Callable, Dict, Generator
 
 import mock
 import pandas
-
 import pytest
 
 from snowflake.connector.pandas_tools import write_pandas

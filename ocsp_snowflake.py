@@ -24,6 +24,7 @@ from time import gmtime, strftime
 
 import jwt
 import requests as generic_requests
+
 from snowflake.connector.compat import OK, urlsplit
 from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
 from snowflake.connector.errorcode import (

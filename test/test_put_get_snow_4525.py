@@ -6,7 +6,6 @@
 
 import os
 
-import pytest
 
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus file and should fail."""

@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
-from datetime import timedelta, datetime, time
+from datetime import datetime, time, timedelta
 from logging import getLogger
 
 import pytz

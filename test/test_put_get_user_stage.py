@@ -21,6 +21,7 @@ def test_put_get_small_data_via_user_stage(
     _put_get_user_stage(tmpdir, test_files, conn_cnx, db_parameters,
                         number_of_files=5, number_of_lines=10)
 
+
 @pytest.mark.aws
 def test_put_get_large_data_via_user_stage(
         is_public_test, tmpdir, test_files, conn_cnx, db_parameters):

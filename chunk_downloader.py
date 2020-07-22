@@ -17,7 +17,7 @@ from snowflake.connector.gzip_decoder import decompress_raw_data
 from .arrow_context import ArrowConverterContext
 from .errorcode import ER_CHUNK_DOWNLOAD_FAILED
 from .errors import Error, OperationalError
-from .time_util import get_time_millis, DecorrelateJitterBackoff
+from .time_util import DecorrelateJitterBackoff, get_time_millis
 
 DEFAULT_REQUEST_TIMEOUT = 7
 
@@ -269,12 +269,14 @@ class ResultIterWithTimings:
 
 class RawBinaryDataHandler:
     """Abstract class being passed to network.py to handle raw binary data."""
+
     def to_iterator(self, raw_data_fd, download_time):
         pass
 
 
 class JsonBinaryHandler(RawBinaryDataHandler):
     """Convert result chunk in json format into interator."""
+
     def __init__(self, is_raw_binary_iterator):
         self._is_raw_binary_iterator = is_raw_binary_iterator
 

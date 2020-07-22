@@ -4,18 +4,19 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-from io import BytesIO
-import random
-import pytest
-import decimal
 import datetime
-import pytz
+import decimal
 import os
 import platform
+import random
+from io import BytesIO
+
+import pytest
+import pytz
+
 from snowflake.connector.arrow_context import ArrowConverterContext
+from snowflake.connector.converter import _generate_tzinfo_from_tzoffset
 from snowflake.connector.options import installed_pandas
-from snowflake.connector.converter import (
-    _generate_tzinfo_from_tzoffset)
 
 try:
     import tzlocal

@@ -33,5 +33,3 @@ else
     echo "[Info] Going to run regular tests for Python ${python_env}"
     ${THIS_DIR}/test_docker.sh ${python_env}
 fi
-
-

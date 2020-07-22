@@ -17,11 +17,13 @@
 #
 # CONNECTION_PARAMETERS_ADMIN = { ... Snowflake admin ... }
 
-import pytest
-import snowflake.connector
-from snowflake.connector.auth import delete_temporary_credential
 import os
 import sys
+
+import pytest
+
+import snowflake.connector
+from snowflake.connector.auth import delete_temporary_credential
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

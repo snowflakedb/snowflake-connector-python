@@ -8,7 +8,6 @@ from mock import Mock
 
 from snowflake.connector.telemetry import TelemetryField
 
-
 NUMBER_OF_ROWS = 50000
 
 PREFETCH_THREADS = [8, 3, 1]
