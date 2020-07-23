@@ -37,10 +37,9 @@ except ImportError:
 logger = getLogger(__name__)
 
 if RUNNING_ON_GH:
-    TEST_SCHEMA = 'GH_JOB_{}'.format(os.getenv('GITHUB_ACTION'))
+    TEST_SCHEMA = 'GH_JOB_{}'.format(str(uuid.uuid4()).replace('-', '_'))
 else:
-    TEST_SCHEMA = 'python_connector_tests_' + str(uuid.uuid4()).replace(
-        '-', '_')
+    TEST_SCHEMA = 'python_connector_tests_' + str(uuid.uuid4()).replace('-', '_')
 
 DEFAULT_PARAMETERS = {
     'account': '<account_name>',
