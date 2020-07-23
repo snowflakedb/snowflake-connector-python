@@ -19,14 +19,15 @@ from parameters import CONNECTION_PARAMETERS
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DefaultConverterClass
 
+MYPY = False
+if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
+    from snowflake.connector import SnowflakeConnection
+
 CLOUD_PROVIDERS = {'aws', 'azure', 'gcp'}
 PUBLIC_SKIP_TAGS = {'internal'}
 
 RUNNING_ON_GH = (os.getenv('GITHUB_ACTIONS') == 'true')
 
-MYPY = False
-if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
-    from snowflake.connector import SnowflakeConnection
 
 try:
     from parameters import CONNECTION_PARAMETERS_ADMIN
@@ -90,7 +91,8 @@ def is_public_test():
 
 
 def is_public_testaccount():
-    return RUNNING_ON_GH
+    db_parameters = get_db_parameters()
+    return RUNNING_ON_GH or db_parameters.get('account').startswith('sfctest0')
 
 
 @pytest.fixture(scope='session')
