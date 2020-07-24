@@ -3,26 +3,17 @@
 :: NOTES:
 ::   - This is designed to ONLY be called in our Windows workers in Jenkins
 ::   - To restrict what version gets created edit this file
-
-@echo off
-
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 
 set python_versions= 3.5 3.6 3.7 3.8
 
-(for %%v in (%python_versions%) do (
-   call :build_wheel_file %%v || goto :error
-))
 cd %CONNECTOR_DIR%
 
-EXIT /B %ERRORLEVEL%
+set venv_dir=%WORKSPACE%\venv-flake8
+if %errorlevel% neq 0 goto :error
 
-:build_wheel_file
-set pv=%~1
-set venv_dir=%WORKSPACE%\venv-build-python%pv%
-
-py -%pv% -m venv %venv_dir%
+py -3.6 -m venv %venv_dir%
 if %errorlevel% neq 0 goto :error
 
 call %venv_dir%\scripts\activate
@@ -31,15 +22,26 @@ if %errorlevel% neq 0 goto :error
 python -m pip install --upgrade pip setuptools flake8
 if %errorlevel% neq 0 goto :error
 
-cd %CONNECTOR_DIR%
-
 flake8
 if %errorlevel% neq 0 goto :error
 
-python -m pip wheel -w dist --no-deps .
-if %errorlevel% neq 0 goto :error
+(for %%v in (%python_versions%) do (
+   call :build_wheel_file %%v || goto :error
+))
 
 call deactivate
+
+dir dist
+
+EXIT /B %ERRORLEVEL%
+
+:build_wheel_file
+set pv=%~1
+
+echo Going to compile wheel for Python %pv%
+py -%pv% -m pip wheel -w dist --no-deps .
+if %errorlevel% neq 0 goto :error
+
 EXIT /B 0
 
 :error
