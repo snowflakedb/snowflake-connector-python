@@ -39,6 +39,9 @@ EXIT /B %ERRORLEVEL%
 set pv=%~1
 
 echo Going to compile wheel for Python %pv%
+py -%pv% -m pip install -U pip setuptools
+if %errorlevel% neq 0 goto :error
+
 py -%pv% -m pip wheel -w dist --no-deps .
 if %errorlevel% neq 0 goto :error
 
