@@ -25,7 +25,7 @@ if "%connector_whl%"=="" (
 echo %connector_whl%
 
 :: create tox execution virtual env
-set venv_dir=%WORKSPACE%\tox_env
+set venv_dir=%WORKSPACE%\tox_venv
 py -3.6 -m venv %venv_dir%
 if %errorlevel% neq 0 goto :error
 
