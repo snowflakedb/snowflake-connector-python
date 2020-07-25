@@ -36,9 +36,6 @@ python -m pip install -U pip tox tox-external-wheels
 if %errorlevel% neq 0 goto :error
 
 cd %CONNECTOR_DIR%
-:: check code style
-tox -e fix_lint
-if %errorlevel% neq 0 goto :error
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
