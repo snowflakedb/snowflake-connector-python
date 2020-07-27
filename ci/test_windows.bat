@@ -2,7 +2,6 @@
 :: Test PythonConnector on Windows
 ::
 
-@echo off
 
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
