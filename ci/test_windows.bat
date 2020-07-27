@@ -6,6 +6,9 @@
 
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
+:: E.g.: 35
+set spv=%1
+:: E.g.: 3.5
 set pv=%1
 
 :: first download wheel file from s3 bucket
@@ -39,7 +42,7 @@ cd %CONNECTOR_DIR%
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
-tox -e py%pv%-ci,py%pv%-pandas-ci,py%pv%-sso-ci --external_wheels ..\..\..\%connector_whl% -- --basetemp=%workspace%\pytest-tmp\
+tox -e py%spv%-ci,py%spv%-pandas-ci,py%spv%-sso-ci --external_wheels ..\..\..\%connector_whl% -- --basetemp=%workspace%\pytest-tmp\
 if %errorlevel% neq 0 goto :error
 
 call deactivate
