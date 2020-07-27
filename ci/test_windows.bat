@@ -7,15 +7,9 @@
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 :: E.g.: 35
-set spv=%1
-:: E.g.: 3.5
 set pv=%1
 
-:: first download wheel file from s3 bucket
 cd %workspace%
-cmd /c aws s3 cp s3://sfc-jenkins/repository/python_connector/win64/%GIT_BRANCH%/%GIT_COMMIT% %workspace% ^
-    --recursive --only-show-errors ^
-    --include "*.whl"
 
 dir /b * | findstr ^snowflake_connector_python.*%pv%.*whl$ > whl_name
 if %errorlevel% neq 0 goto :error
@@ -26,6 +20,14 @@ if "%connector_whl%"=="" (
     exit /b 1
 )
 echo %connector_whl%
+
+:: Decrypt parameters file
+:: Default to aws as cloud provider
+set PARAMETERS_DIR=%CONNECTOR_DIR%\.github\workflows\parameters\private
+set PARAMS_FILE=%PARAMETERS_DIR%\parameters_aws.py.gpg
+if "%cloud_provider%"=="azure" set PARAMS_FILE=%PARAMETERS_DIR%\parameters_azure.py.gpg
+if "%cloud_provider%"=="gcp" set PARAMS_FILE=%PARAMETERS_DIR%\parameters_gcp.py.gpg
+gpg --quiet --batch --yes --decrypt --passphrase="%PARAMETERS_SECRET%" %PARAMS_FILE% > test\parameters.py
 
 :: create tox execution virtual env
 set venv_dir=%WORKSPACE%\tox_venv
@@ -42,7 +44,7 @@ cd %CONNECTOR_DIR%
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
-tox -e py%spv%-ci,py%spv%-pandas-ci,py%spv%-sso-ci --external_wheels %connector_whl% -- --basetemp=%workspace%\pytest-tmp\
+tox -e py%pv%-ci,py%pv%-pandas-ci,py%pv%-sso-ci --external_wheels %connector_whl% -- --basetemp=%workspace%\pytest-tmp\
 if %errorlevel% neq 0 goto :error
 
 call deactivate
