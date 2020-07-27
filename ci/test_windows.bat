@@ -8,7 +8,7 @@ SET CONNECTOR_DIR=%~dp0\..\
 :: E.g.: 35
 set pv=%1
 
-cd %workspace%
+cd %CONNECTOR_DIR%
 
 dir /b * | findstr ^snowflake_connector_python.*%pv%.*whl$ > whl_name
 if %errorlevel% neq 0 goto :error
@@ -22,7 +22,7 @@ echo %connector_whl%
 
 :: Decrypt parameters file
 :: Default to aws as cloud provider
-set PARAMETERS_DIR=%CONNECTOR_DIR%\.github\workflows\parameters\private
+set PARAMETERS_DIR=%CONNECTOR_DIR%\.github\workflows\parameters\public
 set PARAMS_FILE=%PARAMETERS_DIR%\parameters_aws.py.gpg
 if "%cloud_provider%"=="azure" set PARAMS_FILE=%PARAMETERS_DIR%\parameters_azure.py.gpg
 if "%cloud_provider%"=="gcp" set PARAMS_FILE=%PARAMETERS_DIR%\parameters_gcp.py.gpg
