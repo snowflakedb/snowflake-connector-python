@@ -25,7 +25,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION/"
 
     # Build
-    log INFO "Creating a wheel: snowflake_connector using $PYTHON"
+    echo "[Info] Creating a wheel: snowflake_connector using $PYTHON"
     # Clean up possible build artifacts
     rm -rf build generated_version.py
     # Update PEP-517 dependencies
