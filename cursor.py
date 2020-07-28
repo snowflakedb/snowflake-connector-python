@@ -673,9 +673,8 @@ class SnowflakeCursor(object):
         global pyarrow
 
         if pyarrow is None:
-            msg = (
-                "pyarrow package is missing. Install using pip if the platform is supported."
-            )
+            msg = ("Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+                   "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation")
             errno = ER_NO_PYARROW
 
             Error.errorhandler_wrapper(
