@@ -32,15 +32,12 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Build
     echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"
     # Clean up possible build artifacts
-    rm -rf build/
-    rm -f generated_version.py
+    rm -rf build generated_version.py
     # Update PEP-517 dependencies and flake8
-    ${PYTHON} -m pip install -U pip setuptools flake8
-    ${PYTHON} -m flake8
+    ${PYTHON} -m pip install -U pip setuptools
     # Use new PEP-517 build
     ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
     # On Linux we should repair wheel(s) generated
-    mkdir -p ${REPAIRED_DIR}
     auditwheel repair --plat manylinux2010_x86_64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 
     # Generate reqs files
