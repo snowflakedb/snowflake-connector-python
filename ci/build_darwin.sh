@@ -3,7 +3,6 @@
 # Build Snowflake Python Connector on Mac
 # NOTES:
 #   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.5 3.6"`
-export PATH=/usr/local/bin:$PATH  # This is where Python binaries are installed to
 PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
@@ -40,4 +39,6 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Use new PEP-517 build
     python -m pip wheel -w ${BUILD_DIR} --no-deps .
     deactivate
+    echo "[Info] Deleting venv at ${VENV_DIR}"
+    rm -rf ${VENV_DIR}
 done
