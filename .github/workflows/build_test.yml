@@ -4,7 +4,6 @@ on:
     push:
         branches:
             - master
-            - mkeller-SNOW-155318-migration
         tags:
             - v*
     pull_request:
