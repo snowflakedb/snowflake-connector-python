@@ -24,13 +24,20 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="python${PYTHON_VERSION}"
     BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION/"
+    VENV_DIR="${CONNECTOR_DIR}/venv-${PYTHON_VERSION}"
+
+    # Need to create a venv to update build dependencies
+    ${PYTHON} -m venv ${VENV_DIR}
+    source ${VENV_DIR}/bin/activate
+    echo "[Info] Created and activated new venv at ${VENV_DIR}"
 
     # Build
     echo "[Info] Creating a wheel: snowflake_connector using $PYTHON"
     # Clean up possible build artifacts
     rm -rf build generated_version.py
     # Update PEP-517 dependencies
-    ${PYTHON} -m pip install -U pip setuptools
+    python -m pip install -U pip setuptools
     # Use new PEP-517 build
-    ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
+    python -m pip wheel -w ${BUILD_DIR} --no-deps .
+    deactivate
 done
