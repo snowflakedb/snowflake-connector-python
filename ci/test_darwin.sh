@@ -5,6 +5,7 @@
 #   - Versions to be tested should be passed in as the first argument, e.g: "3.5 3.6". If omitted 3.5-3.8 will be assumed.
 #   - This script uses .. to download the newest wheel files from S3
 
+export PATH=/usr/local/bin:$PATH  # This is where Python binaries are installed to
 PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
