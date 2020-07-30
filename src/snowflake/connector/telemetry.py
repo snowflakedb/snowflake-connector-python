@@ -4,6 +4,7 @@
 # Copyright (c) 2018-2019 Snowflake Computing Inc. All right reserved.
 #
 import logging
+import test_util
 from threading import Lock
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,9 @@ class TelemetryClient(object):
 
         body = {'logs': [x.to_dict() for x in to_send]}
         logger.debug("Sending %d logs to telemetry.", len(body))
+        if test_util.RUNNING_ON_GH:
+            # This logger guarantees the payload won't be masked. Testing purpose.
+            test_util.rt_plain_logger.debug("Inband telemetry data being sent is {}".format(payload))
         try:
             ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
                                      method='post', client=None, timeout=5)

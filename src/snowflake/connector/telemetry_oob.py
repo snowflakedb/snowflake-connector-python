@@ -6,6 +6,7 @@
 import datetime
 import json
 import logging
+import test_util
 import uuid
 from collections import namedtuple
 from queue import Queue
@@ -391,7 +392,11 @@ class TelemetryService(object):
             if not self.is_deployment_enabled():
                 logger.debug("Skip the disabled deployment: %s", self.deployment.name)
                 return
-            logger.debug("Sending OOB telemetry data")
+            logger.debug("Sending OOB telemetry data. Payload: {}".format(payload))
+            if test_util.RUNNING_ON_GH:
+                # This logger guarantees the payload won't be masked. Testing purpose.
+                test_util.rt_plain_logger.debug("OOB telemetry data being sent is {}".format(payload))
+
             with requests.Session() as session:
                 headers = {
                     'Content-type': 'application/json',
