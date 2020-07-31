@@ -6,6 +6,9 @@
 
 import pytest
 import time
+
+from pandas import DataFrame
+
 from snowflake.connector.options import pandas as pd, installed_pandas
 import random
 from datetime import datetime
@@ -674,3 +677,34 @@ def test_arrow_fetch_result_scan(conn_cnx):
         assert tuple(res) == ('1', '2', '3')
         result_scan_res = cur.execute("select * from table(result_scan('{}'));".format(cur.sfqid)).fetch_pandas_all()
         assert tuple(result_scan_res) == ('1', '2', '3')
+
+
+@pytest.mark.parametrize('query_format', ('JSON', 'ARROW'))
+@pytest.mark.parametrize('resultscan_format', ('JSON', 'ARROW'))
+def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
+    with conn_cnx() as cnx:
+        sfqid = None
+        results = None
+        scanned_results = None
+        with cnx.cursor() as query_cur:
+            query_cur.execute("alter session set python_connector_query_result_format='{}'".format(query_format))
+            query_cur.execute("select seq8(), randstr(1000,random()) from table(generator(rowcount=>100))")
+            sfqid = query_cur.sfqid
+            assert query_cur._query_result_format.upper() == query_format
+            if query_format == 'JSON':
+                results = query_cur.fetchall()
+            else:
+                results = query_cur.fetch_pandas_all()
+        with cnx.cursor() as resultscan_cur:
+            resultscan_cur.execute("alter session set python_connector_query_result_format='{}'".format(resultscan_format))
+            resultscan_cur.execute("select * from table(result_scan('{}'))".format(sfqid))
+            if resultscan_format == 'JSON':
+                scanned_results = resultscan_cur.fetchall()
+            else:
+                scanned_results = resultscan_cur.fetch_pandas_all()
+            assert resultscan_cur._query_result_format.upper() == resultscan_format
+        if isinstance(results, DataFrame):
+            results = [tuple(e) for e in results.values.tolist()]
+        if isinstance(scanned_results, DataFrame):
+            scanned_results = [tuple(e) for e in scanned_results.values.tolist()]
+        assert results == scanned_results
