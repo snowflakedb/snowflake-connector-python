@@ -70,6 +70,13 @@ DESC_TABLE_RE = re.compile(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$',
 LOG_MAX_QUERY_LENGTH = 80
 
 
+def exit_handler(*_):
+    """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
+    print("\nForce exit")
+    logger.info("Force exit")
+    sys.exit(1)
+
+
 class SnowflakeCursor(object):
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
@@ -334,9 +341,9 @@ class SnowflakeCursor(object):
 
         original_sigint = signal.getsignal(signal.SIGINT)
 
-        def abort_exit(*_):
+        def interrupt_handler(*_):
             try:
-                signal.signal(signal.SIGINT, signal.SIG_IGN)
+                signal.signal(signal.SIGINT, exit_handler)
             except (ValueError, TypeError):
                 # ignore failures
                 pass
@@ -356,7 +363,8 @@ class SnowflakeCursor(object):
             raise KeyboardInterrupt
 
         try:
-            signal.signal(signal.SIGINT, abort_exit)
+            if not original_sigint == exit_handler:
+                signal.signal(signal.SIGINT, interrupt_handler)
         except ValueError:
             logger.debug(
                 'Failed to set SIGINT handler. '
@@ -665,9 +673,8 @@ class SnowflakeCursor(object):
         global pyarrow
 
         if pyarrow is None:
-            msg = (
-                "pyarrow package is missing. Install using pip if the platform is supported."
-            )
+            msg = ("Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+                   "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation")
             errno = ER_NO_PYARROW
 
             Error.errorhandler_wrapper(
