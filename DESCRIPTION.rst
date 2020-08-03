@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.2.10(August 03,2020)
+
+    - Improved an error message for when "pandas" optional dependency group is not installed and user tries to fetch data into a pandas DataFrame. It'll now point user to our online documentation.
+
 - v2.2.9(July 13,2020)
 
     - Connection parameter validate_default_parameters now verifies known connection parameter names and types. It emits warnings for anything unexpected types or names.
