@@ -24,6 +24,9 @@ mkdir -p ${REPAIRED_DIR}
 # Necessary for cpython_path
 source /home/user/multibuild/manylinux_utils.sh
 
+# Source distribution
+python3.6 setup.py sdist -d dist/src
+
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
