@@ -11,6 +11,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
+from pandas import DataFrame
 
 from snowflake.connector.options import installed_pandas
 from snowflake.connector.options import pandas as pd
