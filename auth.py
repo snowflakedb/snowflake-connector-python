@@ -17,7 +17,7 @@ from os.path import expanduser
 from threading import Lock, Thread
 
 from .auth_keypair import AuthByKeyPair
-from .compat import IS_LINUX, IS_WINDOWS, IS_MACOS, urlencode
+from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
 from .constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -27,20 +27,13 @@ from .constants import (
 )
 from .description import COMPILER, IMPLEMENTATION, OPERATING_SYSTEM, PLATFORM, PYTHON_VERSION
 from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
-from .errors import (
-    BadGatewayError,
-    DatabaseError,
-    Error,
-    ForbiddenError,
-    ServiceUnavailableError,
-    ProgrammingError,
-)
+from .errors import BadGatewayError, DatabaseError, Error, ForbiddenError, ProgrammingError, ServiceUnavailableError
 from .network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
+    ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
-    ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
 )
 from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from .version import VERSION

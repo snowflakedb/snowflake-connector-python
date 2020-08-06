@@ -7,39 +7,27 @@
 #
 # and added OCSP validator on the top.
 #
-from functools import wraps
-
-import certifi
-from urllib3.contrib.pyopenssl import PyOpenSSLContext
-
-from .constants import OCSPMode
-
-FEATURE_OCSP_MODE = OCSPMode.FAIL_OPEN
-
-"""
-OCSP Response cache file name
-"""
-FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
-
 import logging
 import ssl
 import sys
 import time
+from functools import wraps
+from inspect import getfullargspec as get_args
 from socket import error as SocketError
-from socket import (socket, timeout)
+from socket import socket, timeout
 
+import certifi
 import OpenSSL.SSL
-
+import requests.packages.urllib3.connection as connection_
+import requests.packages.urllib3.util.ssl_ as ssl_
 from cryptography import x509
 from cryptography.hazmat.backends.openssl import backend as openssl_backend
 from cryptography.hazmat.backends.openssl.x509 import _Certificate
+from urllib3.contrib.pyopenssl import PyOpenSSLContext
 
-import requests.packages.urllib3.util.ssl_ as ssl_
-import requests.packages.urllib3.connection as connection_
-
-from inspect import getfullargspec as get_args
-from .errorcode import (ER_SERVER_CERTIFICATE_REVOKED)
-from .errors import (OperationalError)
+from .constants import OCSPMode
+from .errorcode import ER_SERVER_CERTIFICATE_REVOKED
+from .errors import OperationalError
 from .ssl_wrap_util import wait_for_read, wait_for_write
 
 try:  # Platform-specific: Python 2

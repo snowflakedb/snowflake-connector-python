@@ -8,7 +8,6 @@ from logging import getLogger
 from .constants import HTTP_HEADER_VALUE_OCTET_STREAM, SHA256_DIGEST, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 
-
 use_new_azure_api = False
 
 try:
@@ -84,6 +83,7 @@ AzureLocation = namedtuple(
 
 class SnowflakeAzureUtil(object):
     """Azure Utility class."""
+
     # max_connections works over this size
     DATA_SIZE_THRESHOLD = 67108864
 

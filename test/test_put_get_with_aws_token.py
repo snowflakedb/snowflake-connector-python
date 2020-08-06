@@ -14,8 +14,8 @@ import pytest
 from snowflake.connector.constants import UTF8
 from snowflake.connector.s3_util import SnowflakeS3Util
 
-# Mark every test in this module as an aws and a putget test
-pytestmark = [pytest.mark.aws, pytest.mark.putget]
+# Mark every test in this module as an aws test
+pytestmark = pytest.mark.aws
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -38,17 +38,17 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_aws_token'))
 
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         cnx.cursor().execute("rm @~/snow9144")
         cnx.cursor().execute(
             "create or replace table snow9144 (a int, b string)")
     try:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             cnx.cursor().execute(
                 "put file://{} @%snow9144 auto_compress=true parallel=30".format(
                     fname))
@@ -70,9 +70,9 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
             cnx.cursor().execute("rm @~/snow9144")
     finally:
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             cnx.cursor().execute("drop table snow9144")
 
     files = glob.glob(os.path.join(tmp_dir, 'snow9144*'))
@@ -98,9 +98,9 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
     f.close()
 
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         cnx.cursor().execute(
             "create or replace table snow6154 (a int, b string)")
         ret = cnx.cursor()._execute_helper(
@@ -160,9 +160,9 @@ def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
     f.close()
 
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         cnx.cursor().execute(
             "create or replace table snow6154 (a int, b string)")
         ret = cnx.cursor()._execute_helper(

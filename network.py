@@ -20,52 +20,69 @@ import OpenSSL.SSL
 import requests
 from requests.adapters import HTTPAdapter
 from requests.auth import AuthBase
-from requests.exceptions import (
-    ConnectionError, ConnectTimeout, ReadTimeout, SSLError)
-from requests.packages.urllib3.exceptions import (
-    ProtocolError, ReadTimeoutError)
+from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout, SSLError
+from requests.packages.urllib3.exceptions import ProtocolError, ReadTimeoutError
 
 from snowflake.connector.time_util import get_time_millis
+
 from . import ssl_wrap_socket
 from .compat import (
-    METHOD_NOT_ALLOWED, BAD_REQUEST, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT,
-    FORBIDDEN, BAD_GATEWAY, REQUEST_TIMEOUT,
-    UNAUTHORIZED, INTERNAL_SERVER_ERROR, OK, BadStatusLine)
-from .compat import (urlencode, urlparse, IncompleteRead)
-from .constants import (
-    HTTP_HEADER_CONTENT_TYPE,
-    HTTP_HEADER_ACCEPT,
-    HTTP_HEADER_USER_AGENT,
-    HTTP_HEADER_SERVICE_NAME
+    BAD_GATEWAY,
+    BAD_REQUEST,
+    FORBIDDEN,
+    GATEWAY_TIMEOUT,
+    INTERNAL_SERVER_ERROR,
+    METHOD_NOT_ALLOWED,
+    OK,
+    REQUEST_TIMEOUT,
+    SERVICE_UNAVAILABLE,
+    UNAUTHORIZED,
+    BadStatusLine,
+    IncompleteRead,
+    urlencode,
+    urlparse,
 )
+from .constants import HTTP_HEADER_ACCEPT, HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_SERVICE_NAME, HTTP_HEADER_USER_AGENT
 from .description import (
-    SNOWFLAKE_CONNECTOR_VERSION,
-    PYTHON_VERSION,
+    CLIENT_NAME,
+    CLIENT_VERSION,
+    COMPILER,
+    IMPLEMENTATION,
     OPERATING_SYSTEM,
     PLATFORM,
-    IMPLEMENTATION,
-    COMPILER,
-    CLIENT_NAME,
-    CLIENT_VERSION
+    PYTHON_VERSION,
+    SNOWFLAKE_CONNECTOR_VERSION,
 )
-from .errorcode import (ER_FAILED_TO_CONNECT_TO_DB, ER_CONNECTION_IS_CLOSED,
-                        ER_FAILED_TO_REQUEST, ER_FAILED_TO_RENEW_SESSION)
-from .errors import (Error, OperationalError, DatabaseError, ProgrammingError,
-                     GatewayTimeoutError, ServiceUnavailableError,
-                     InterfaceError, InternalServerError, ForbiddenError,
-                     BadGatewayError, BadRequest, MethodNotAllowed,
-                     OtherHTTPRetryableError)
-from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
-                       SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                       SQLSTATE_CONNECTION_REJECTED,
-                       SQLSTATE_IO_ERROR)
+from .errorcode import (
+    ER_CONNECTION_IS_CLOSED,
+    ER_FAILED_TO_CONNECT_TO_DB,
+    ER_FAILED_TO_RENEW_SESSION,
+    ER_FAILED_TO_REQUEST,
+)
+from .errors import (
+    BadGatewayError,
+    BadRequest,
+    DatabaseError,
+    Error,
+    ForbiddenError,
+    GatewayTimeoutError,
+    InterfaceError,
+    InternalServerError,
+    MethodNotAllowed,
+    OperationalError,
+    OtherHTTPRetryableError,
+    ProgrammingError,
+    ServiceUnavailableError,
+)
+from .sqlstate import (
+    SQLSTATE_CONNECTION_NOT_EXISTS,
+    SQLSTATE_CONNECTION_REJECTED,
+    SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+    SQLSTATE_IO_ERROR,
+)
 from .telemetry_oob import TelemetryService
-from .time_util import (
-    DecorrelateJitterBackoff,
-    DEFAULT_MASTER_VALIDITY_IN_SECONDS
-)
+from .time_util import DEFAULT_MASTER_VALIDITY_IN_SECONDS, DecorrelateJitterBackoff
 from .tool.probe_connection import probe_connection
-
 
 logger = logging.getLogger(__name__)
 

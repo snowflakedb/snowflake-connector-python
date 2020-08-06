@@ -10,8 +10,8 @@ It masks secrets that might be leaked from two potential avenues
     2. Logging
 """
 import logging
-import re
 import os
+import re
 
 MIN_TOKEN_LEN = os.getenv("MIN_TOKEN_LEN", 32)
 MIN_PWD_LEN = os.getenv("MIN_PWD_LEN", 8)

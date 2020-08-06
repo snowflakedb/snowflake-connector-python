@@ -6,17 +6,14 @@
 
 import os
 
-import pytest
-
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
-
 
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus file and should fail."""
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password']) as cnx:
         cnx.cursor().execute("""
-create table {name} (
+create or replace table {name} (
 aa int,
 dt date,
 ts timestamp,
@@ -47,10 +44,12 @@ ratio number(5,2))
 
 def test_load_bogus_json_file(tmpdir, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus JSON file and should fail."""
-    with conn_cnx() as cnx:
+    with conn_cnx(user=db_parameters['user'],
+                        account=db_parameters['account'],
+                        password=db_parameters['password']) as cnx:
         json_table = db_parameters['name'] + "_json"
         cnx.cursor().execute(
-            "create table {name} (v variant)".format(name=json_table))
+            "create or replace table {name} (v variant)".format(name=json_table))
 
         temp_file = str(tmpdir.join('bogus_json_files'))
         with open(temp_file, 'wb') as random_binary_file:

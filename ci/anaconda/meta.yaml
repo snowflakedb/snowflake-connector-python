@@ -1,10 +1,10 @@
 package:
     name: snowflake_connector_python
     version: "1.2.3"
- 
+
 source:
     path: /tmp/anaconda_workspace/src
- 
+
 requirements:
     build:
         - python
@@ -21,7 +21,7 @@ requirements:
         - pyopenssl ==0.15.1
         - cryptography ==1.2.3
         - cffi ==1.6.0
- 
+
 about:
     home: https://www.snowflake.net/
     license: Apache 2.0

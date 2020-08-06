@@ -1,4 +1,5 @@
 import warnings
+
 import pkg_resources
 
 from .errors import MissingDependencyError

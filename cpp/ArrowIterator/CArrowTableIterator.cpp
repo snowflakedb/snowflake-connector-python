@@ -263,20 +263,20 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
     {
       ret = builder.AppendNull();
     }
-    SF_CHECK_ARROW_RC(ret, 
-      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
       dt->id(),  ret.message().c_str());
   }
 
   std::shared_ptr<arrow::Array> doubleArray;
   ret = builder.Finish(&doubleArray);
-  SF_CHECK_ARROW_RC(ret, 
+  SF_CHECK_ARROW_RC(ret,
     "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
     ret.message().c_str());
 
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, doubleField, doubleArray);
-  SF_CHECK_ARROW_RC(ret, 
+  SF_CHECK_ARROW_RC(ret,
     "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
     ", errorInfo: %s",
     dt->id(), ret.message().c_str());
@@ -315,14 +315,14 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
+      SF_CHECK_ARROW_RC(ret,
         "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
         ", errorInfo: %s",
         dt->id(), ret.message().c_str());
     }
 
     ret = builder.Finish(&tsArray);
-    SF_CHECK_ARROW_RC(ret, 
+    SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
@@ -347,14 +347,14 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
+      SF_CHECK_ARROW_RC(ret,
         "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
         ", errorInfo: %s",
         dt->id(), ret.message().c_str());
     }
 
     ret = builder.Finish(&tsArray);
-    SF_CHECK_ARROW_RC(ret, 
+    SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
@@ -395,13 +395,13 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
-        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
         dt->id(),  ret.message().c_str());
     }
 
     ret = builder.Finish(&tsArray);
-    SF_CHECK_ARROW_RC(ret, 
+    SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
@@ -444,20 +444,20 @@ void CArrowTableIterator::convertTimeColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
-        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
         dt->id(),  ret.message().c_str());
     }
 
     ret = builder.Finish(&tsArray);
-    SF_CHECK_ARROW_RC(ret, 
+    SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
 
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  SF_CHECK_ARROW_RC(ret, 
+  SF_CHECK_ARROW_RC(ret,
     "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
     ", errorInfo: %s",
     dt->id(), ret.message().c_str());
@@ -505,12 +505,12 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
-        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
         dt->id(),  ret.message().c_str());
     }
 
-    ret = builder.Finish(&tsArray); SF_CHECK_ARROW_RC(ret, 
+    ret = builder.Finish(&tsArray); SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
@@ -542,13 +542,13 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
-        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
         dt->id(),  ret.message().c_str());
     }
 
     ret = builder.Finish(&tsArray);
-    SF_CHECK_ARROW_RC(ret, 
+    SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
@@ -593,13 +593,13 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
-        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
         dt->id(),  ret.message().c_str());
     }
 
     ret = builder.Finish(&tsArray);
-    SF_CHECK_ARROW_RC(ret, 
+    SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
@@ -657,20 +657,20 @@ void CArrowTableIterator::convertTimestampColumn(
       {
         ret = builder.AppendNull();
       }
-      SF_CHECK_ARROW_RC(ret, 
-        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
         dt->id(),  ret.message().c_str());
     }
 
     ret = builder.Finish(&tsArray);
-    SF_CHECK_ARROW_RC(ret, 
+    SF_CHECK_ARROW_RC(ret,
       "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
       ret.message().c_str());
   }
 
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  SF_CHECK_ARROW_RC(ret, 
+  SF_CHECK_ARROW_RC(ret,
     "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
     ", errorInfo: %s",
     dt->id(), ret.message().c_str());
@@ -790,19 +790,19 @@ void CArrowTableIterator::convertTimestampTZColumn(
     {
       ret = builder.AppendNull();
     }
-    SF_CHECK_ARROW_RC(ret, 
-      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s", 
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
       dt->id(),  ret.message().c_str());
   }
 
   ret = builder.Finish(&tsArray);
-  SF_CHECK_ARROW_RC(ret, 
+  SF_CHECK_ARROW_RC(ret,
     "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
     ret.message().c_str());
 
   // replace the targeted column
   ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  SF_CHECK_ARROW_RC(ret, 
+  SF_CHECK_ARROW_RC(ret,
     "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
     ", errorInfo: %s",
     dt->id(), ret.message().c_str());

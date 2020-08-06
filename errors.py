@@ -8,6 +8,7 @@ from logging import getLogger
 from typing import Dict
 
 from snowflake.connector.constants import UTF8
+
 from .compat import BASE_EXCEPTION_CLASS
 
 MYPY = False

@@ -60,6 +60,7 @@ def test_numeric_paramstyle(conn_cnx, db_parameters):
                     name=db_parameters['name']))
 
 
+@pytest.mark.internal
 def test_qmark_paramstyle_enabled(negative_conn_cnx, db_parameters):
     """Enable qmark binding."""
     import snowflake.connector

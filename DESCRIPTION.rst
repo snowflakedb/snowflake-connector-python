@@ -52,7 +52,7 @@ Release Notes
     - Emit warning only if trying to set different setting of use_openssl_only parameter
 
 - v2.2.3(March 30,2020)
- 
+
     - Secure SSO ID Token
     - Add use_openssl_only connection parameter, which disables the usage of pure Python cryptographic libraries for FIPS
     - Add manylinux1 as well as manylinux2010

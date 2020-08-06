@@ -3,16 +3,17 @@
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
+import collections.abc
 import decimal
+import html
+import http.client
 import os
 import platform
+import queue
 import sys
 import urllib.parse
-import http.client
 import urllib.request
-import queue
-import html
-import collections.abc
+
 from snowflake.connector.constants import UTF8
 
 IS_LINUX = platform.system() == 'Linux'
