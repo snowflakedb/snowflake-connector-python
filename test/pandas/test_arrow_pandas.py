@@ -683,6 +683,8 @@ def test_arrow_fetch_result_scan(conn_cnx):
 @pytest.mark.parametrize('query_format', ('JSON', 'ARROW'))
 @pytest.mark.parametrize('resultscan_format', ('JSON', 'ARROW'))
 def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
+    if query_format == 'JSON' and resultscan_format == 'ARROW':
+        pytest.xfail("fix not yet released to test deployment")
     with conn_cnx() as cnx:
         sfqid = None
         results = None
