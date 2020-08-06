@@ -12,9 +12,6 @@ from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.errors import Error
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
-
 
 @pytest.mark.skipif(IS_WINDOWS, reason='permission model is different')
 def test_put_error(tmpdir):

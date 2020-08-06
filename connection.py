@@ -16,49 +16,43 @@ from threading import Lock
 from time import strptime
 from typing import Callable
 
-from . import errors
-from . import proxy
+from . import errors, proxy
 from .auth import Auth
 from .auth_default import AuthByDefault
+from .auth_idtoken import AuthByIdToken
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
-from .auth_idtoken import AuthByIdToken
-from .chunk_downloader import (
-    SnowflakeChunkDownloader,
-    DEFAULT_CLIENT_PREFETCH_THREADS,
-    MAX_CLIENT_PREFETCH_THREADS)
-from .compat import urlencode, PY_ISSUE_23517, IS_LINUX, IS_WINDOWS
+from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
+from .compat import IS_LINUX, IS_WINDOWS, PY_ISSUE_23517, urlencode
 from .constants import (
     PARAMETER_AUTOCOMMIT,
-    PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
+    PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE,
+    PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
+    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
     PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
-    PARAMETER_TIMEZONE,
-    PARAMETER_SERVICE_NAME,
-    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
-    PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
-    OCSPMode
+    PARAMETER_SERVICE_NAME,
+    PARAMETER_TIMEZONE,
+    OCSPMode,
 )
 from .converter import SnowflakeConverter
-from .cursor import SnowflakeCursor, LOG_MAX_QUERY_LENGTH
-from .description import (
-    SNOWFLAKE_CONNECTOR_VERSION,
-    PYTHON_VERSION,
-    PLATFORM,
-    CLIENT_NAME,
-    CLIENT_VERSION
+from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
+from .description import CLIENT_NAME, CLIENT_VERSION, PLATFORM, PYTHON_VERSION, SNOWFLAKE_CONNECTOR_VERSION
+from .errorcode import (
+    ER_CONNECTION_IS_CLOSED,
+    ER_FAILED_PROCESSING_PYFORMAT,
+    ER_INVALID_VALUE,
+    ER_NO_ACCOUNT_NAME,
+    ER_NO_NUMPY,
+    ER_NO_PASSWORD,
+    ER_NO_USER,
+    ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errorcode import (ER_CONNECTION_IS_CLOSED,
-                        ER_NO_ACCOUNT_NAME, ER_NO_USER,
-                        ER_NO_PASSWORD, ER_INVALID_VALUE,
-                        ER_FAILED_PROCESSING_PYFORMAT,
-                        ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
-                        ER_NO_NUMPY)
-from .errors import Error, ProgrammingError, DatabaseError
+from .errors import DatabaseError, Error, ProgrammingError
 from .incident import IncidentAPI
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -66,17 +60,14 @@ from .network import (
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     REQUEST_ID,
-    SnowflakeRestful,
     ReauthenticationRequest,
+    SnowflakeRestful,
 )
-from .sqlstate import (SQLSTATE_CONNECTION_NOT_EXISTS,
-                       SQLSTATE_FEATURE_NOT_SUPPORTED)
-from .telemetry import (TelemetryClient)
+from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
+from .telemetry import TelemetryClient
 from .telemetry_oob import TelemetryService
-from .time_util import (
-    DEFAULT_MASTER_VALIDITY_IN_SECONDS,
-    HeartBeatTimer, get_time_millis)
-from .util_text import split_statements, construct_hostname, parse_account
+from .time_util import DEFAULT_MASTER_VALIDITY_IN_SECONDS, HeartBeatTimer, get_time_millis
+from .util_text import construct_hostname, parse_account, split_statements
 
 
 def DefaultConverterClass():

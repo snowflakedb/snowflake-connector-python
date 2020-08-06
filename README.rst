@@ -1,11 +1,8 @@
 Snowflake Connector for Python
 ********************************************************************************
 
-.. image:: https://travis-ci.org/snowflakedb/snowflake-connector-python.svg?branch=master
-    :target: https://travis-ci.org/snowflakedb/snowflake-connector-python
-
-.. image:: https://ci.appveyor.com/api/projects/status/xb70i4jt8mingig0/branch/master?svg=true
-    :target: https://ci.appveyor.com/project/smtakeda/snowflake-connector-python/branch/master
+.. image:: https://github.com/snowflakedb/snowflake-connector-python/workflows/Build%20and%20Test/badge.svg?branch=master
+    :target: https://github.com/snowflakedb/snowflake-connector-python/actions?query=workflow%3A%22Build+and+Test%22+branch%3Amaster
 
 .. image:: https://codecov.io/gh/snowflakedb/snowflake-connector-python/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/snowflakedb/snowflake-connector-python

@@ -9,8 +9,7 @@ import logging
 from .auth import Auth
 from .auth_by_plugin import AuthByPlugin
 from .compat import unescape, urlencode, urlsplit
-from .constants import HTTP_HEADER_ACCEPT, HTTP_HEADER_CONTENT_TYPE, \
-    HTTP_HEADER_SERVICE_NAME, HTTP_HEADER_USER_AGENT
+from .constants import HTTP_HEADER_ACCEPT, HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_SERVICE_NAME, HTTP_HEADER_USER_AGENT
 from .errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
 from .errors import DatabaseError, Error
 from .network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT

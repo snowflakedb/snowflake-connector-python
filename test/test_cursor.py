@@ -722,6 +722,7 @@ def test_nope_errorhandler(conn_testaccount):
     assert len(c.messages) == 1, 'should be one error'
 
 
+@pytest.mark.internal
 def test_binding_negative(negative_conn_cnx, db_parameters):
     with negative_conn_cnx() as cnx:
         with pytest.raises(TypeError):

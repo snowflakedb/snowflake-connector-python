@@ -4,16 +4,17 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-import pytest
-import time
-
-from pandas import DataFrame
-
-from snowflake.connector.options import pandas as pd, installed_pandas
+import itertools
 import random
+import time
 from datetime import datetime
 from decimal import Decimal
-import itertools
+
+import pytest
+from pandas import DataFrame
+
+from snowflake.connector.options import installed_pandas
+from snowflake.connector.options import pandas as pd
 
 try:
     import pyarrow  # NOQA
@@ -682,6 +683,8 @@ def test_arrow_fetch_result_scan(conn_cnx):
 @pytest.mark.parametrize('query_format', ('JSON', 'ARROW'))
 @pytest.mark.parametrize('resultscan_format', ('JSON', 'ARROW'))
 def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
+    if query_format == 'JSON' and resultscan_format == 'ARROW':
+        pytest.xfail("fix not yet released to test deployment")
     with conn_cnx() as cnx:
         sfqid = None
         results = None

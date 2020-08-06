@@ -1,59 +1,34 @@
 #!/bin/bash -e
 #
-# Test Snowflake Connector
-# NOTE: this job uses WORKSPACE to download the newest wheel file, this is set by build_init if not set on outside
-#
-export TERM=vt100
-export PATH=/usr/local/bin:$PATH
+# Test Snowflake Connector on a Darwin Jenkins slave
+# NOTES:
+#   - Versions to be tested should be passed in as the first argument, e.g: "3.5 3.6". If omitted 3.5-3.8 will be assumed.
+#   - This script uses .. to download the newest wheel files from S3
 
+PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-source $THIS_DIR/py_exec.sh
-source $THIS_DIR/test_init.sh
+PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/public"
 
-sf_password=${sf_password:-test}
+export JUNIT_REPORT_DIR=${SF_REGRESS_LOGS:-$CONNECTOR_DIR}
+export COV_REPORT_DIR=${CONNECTOR_DIR}
 
-cd $WORKSPACE
-cat << PARAM > $CONNECTOR_DIR/test/parameters.py
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
-#
+# Decrypt parameters file
+PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
+[ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure.py.gpg"
+[ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
+gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
-#
-# DON'T PUBLISH THIS CODE. THIS IS INTERNAL USE ONLY.
-#
-
-CONNECTION_PARAMETERS = {
-    'account': '$sf_account',
-    'user': '$sf_user',
-    'password': '$sf_password',
-    'schema': '$sf_schema',
-    'database': '$sf_database',
-    'protocol': 'https',
-    'host': '${sf_account}.snowflakecomputing.com',
-    'port': '443',
-    'warehouse': '${sf_warehouse}',
-}
-
-PARAM
-
-log INFO "Downloading wheel file from s3"
-aws s3 cp --only-show-errors \
-    s3://sfc-jenkins/repository/python_connector/mac64/$branch/$base_svn_revision/ . \
-    --exclude "*" \
-    --include "*.whl" --recursive
-
-log INFO "Testing Connector in python${PYTHON_ENV}"
-
-CONNECTOR_WHL=$(ls ${WORKSPACE}/snowflake_connector_python*cp${PYTHON_ENV}*.whl)
-TEST_ENVLIST=fix_lint,py${PYTHON_ENV}-ci,py${PYTHON_ENV}-pandas-ci,py${PYTHON_ENV}-sso-ci,coverage
-
+# Run tests
 cd $CONNECTOR_DIR
+for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
+    echo "[Info] Testing with ${PYTHON_VERSION}"
+    SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
+    CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/${PYTHON_VERSION}/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
+    TEST_ENVLIST=py${SHORT_VERSION}{,-pandas,-sso}-ci
+    echo "[Info] Running tox for ${TEST_ENVLIST}"
 
-export JUNIT_REPORT_DIR=$SF_REGRESS_LOGS
-export COV_REPORT_DIR=$WORKSPACE
-# https://github.com/tox-dev/tox/issues/1485
-# tox seems does not work inside virtualenv, so manually installed tox and trigger system default tox
-/Library/Frameworks/Python.framework/Versions/3.5/bin/tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
+    # https://github.com/tox-dev/tox/issues/1485
+    # tox seems to not work inside virtualenv, so manually installed tox and trigger system default tox
+    /Library/Frameworks/Python.framework/Versions/3.5/bin/tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
+done

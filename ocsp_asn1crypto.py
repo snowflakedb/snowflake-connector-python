@@ -13,16 +13,16 @@ from datetime import datetime, timezone
 from logging import getLogger
 from os import getenv
 
-from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Signature import PKCS1_v1_5
 from asn1crypto.algos import DigestAlgorithm
 from asn1crypto.core import Integer, OctetString
 from asn1crypto.ocsp import CertId, OCSPRequest, OCSPResponse, Request, Requests, TBSRequest, Version
 from asn1crypto.x509 import Certificate
+from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Signature import PKCS1_v1_5
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
 
 from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE

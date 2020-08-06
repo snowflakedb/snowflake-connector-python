@@ -9,32 +9,31 @@ import signal
 import sys
 import uuid
 from logging import getLogger
-from threading import (Timer, Lock)
+from threading import Lock, Timer
 from typing import Optional
+
+from .compat import BASE_EXCEPTION_CLASS
+from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
+from .errorcode import (
+    ER_CURSOR_IS_CLOSED,
+    ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
+    ER_INVALID_VALUE,
+    ER_NO_ARROW_RESULT,
+    ER_NO_PYARROW,
+    ER_NO_PYARROW_SNOWSQL,
+    ER_NOT_POSITIVE_SIZE,
+    ER_UNSUPPORTED_METHOD,
+)
+from .errors import DatabaseError, Error, InterfaceError, NotSupportedError, ProgrammingError
+from .file_transfer_agent import SnowflakeFileTransferAgent
+from .json_result import DictJsonResult, JsonResult
+from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
+from .telemetry import TelemetryData, TelemetryField
+from .time_util import get_time_millis
 
 MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from .connection import SnowflakeConnection
-from .compat import (BASE_EXCEPTION_CLASS)
-from .constants import (
-    FIELD_NAME_TO_ID,
-    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
-)
-from .errorcode import (ER_UNSUPPORTED_METHOD,
-                        ER_CURSOR_IS_CLOSED,
-                        ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
-                        ER_NOT_POSITIVE_SIZE,
-                        ER_INVALID_VALUE,
-                        ER_NO_PYARROW,
-                        ER_NO_ARROW_RESULT,
-                        ER_NO_PYARROW_SNOWSQL)
-from .errors import (Error, ProgrammingError, NotSupportedError,
-                     DatabaseError, InterfaceError)
-from .file_transfer_agent import (SnowflakeFileTransferAgent)
-from .json_result import JsonResult, DictJsonResult
-from .sqlstate import (SQLSTATE_FEATURE_NOT_SUPPORTED)
-from .telemetry import (TelemetryData, TelemetryField)
-from .time_util import get_time_millis
 
 logger = getLogger(__name__)
 
@@ -252,7 +251,7 @@ class SnowflakeCursor(object):
 
     @property
     def is_file_transfer(self):
-        """Is PUT or GET command?"""
+        """Whether the command is PUT or GET."""
         return hasattr(self, '_is_file_transfer') and self._is_file_transfer
 
     def callproc(self, procname, args=()):

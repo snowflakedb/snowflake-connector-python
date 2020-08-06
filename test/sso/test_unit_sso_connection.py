@@ -4,8 +4,10 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 import os
+
+from mock import Mock, patch
+
 import snowflake.connector
-from mock import patch, Mock
 from snowflake.connector.auth import delete_temporary_credential
 from snowflake.connector.compat import IS_MACOS
 

@@ -83,8 +83,10 @@ def raise_outdated_validity_exception(
 
 
 def dump_ocsp_response_cache(ocsp_response_cache_file, hostname_file, cert_glob_pattern):
-    """Dump OCSP response cache contents. Show the subject name as well if the subject is included in the
-    certificate files."""
+    """Dump OCSP response cache contents.
+
+    Show the subject name as well if the subject is included in the certificate files.
+    """
     sfocsp = SFOCSP()
     s_to_n = _fetch_certs(hostname_file)
     s_to_n1 = _serial_to_name(sfocsp, cert_glob_pattern)
@@ -109,7 +111,7 @@ def dump_ocsp_response_cache(ocsp_response_cache_file, hostname_file, cert_glob_
         else:
             name = "Unknown"
         output[json_key] = {
-            'serial_number': format(serial_number,'d'),
+            'serial_number': format(serial_number, 'd'),
             'name': name,
         }
         value = ocsp_validation_cache[hkey]
@@ -157,7 +159,7 @@ def _serial_to_name(sfocsp, cert_glob_pattern):
         sfocsp.read_cert_bundle(cert_file, cert_map)
         cert_data = sfocsp.create_pair_issuer_subject(cert_map)
 
-        for issuer, subject in cert_data:
+        for _, subject in cert_data:
             map_serial_to_name[subject.serial_number] = subject.subject.native
 
     return map_serial_to_name

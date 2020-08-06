@@ -8,10 +8,6 @@ from mock import Mock
 
 from snowflake.connector.telemetry import TelemetryField
 
-# Mark every test in this module as a putget test
-pytestmark = pytest.mark.putget
-
-
 NUMBER_OF_ROWS = 50000
 
 PREFETCH_THREADS = [8, 3, 1]
@@ -20,9 +16,9 @@ PREFETCH_THREADS = [8, 3, 1]
 @pytest.fixture()
 def ingest_data(request, conn_cnx, db_parameters):
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         cnx.cursor().execute("""
     create or replace table {name} (
         c0 int,
@@ -59,9 +55,9 @@ def ingest_data(request, conn_cnx, db_parameters):
 
     def fin():
         with conn_cnx(
-                user=db_parameters['s3_user'],
-                account=db_parameters['s3_account'],
-                password=db_parameters['s3_password']) as cnx:
+                user=db_parameters['user'],
+                account=db_parameters['account'],
+                password=db_parameters['password']) as cnx:
             cnx.cursor().execute("drop table if exists {name}".format(
                 name=db_parameters['name']))
 
@@ -69,14 +65,15 @@ def ingest_data(request, conn_cnx, db_parameters):
     return first_val, last_val
 
 
+@pytest.mark.aws
 @pytest.mark.parametrize('num_threads', PREFETCH_THREADS)
 def test_query_large_result_set_n_threads(
         conn_cnx, db_parameters, ingest_data, num_threads):
     sql = "select * from {name} order by 1".format(name=db_parameters['name'])
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password'],
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password'],
             client_prefetch_threads=num_threads) as cnx:
         assert cnx.client_prefetch_threads == num_threads
         results = []
@@ -88,13 +85,14 @@ def test_query_large_result_set_n_threads(
         assert results[num_rows - 1][8] == ingest_data[1]
 
 
+@pytest.mark.aws
 def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
     """[s3] Gets Large Result set."""
     sql = "select * from {name} order by 1".format(name=db_parameters['name'])
     with conn_cnx(
-            user=db_parameters['s3_user'],
-            account=db_parameters['s3_account'],
-            password=db_parameters['s3_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         telemetry_data = []
         add_log_mock = Mock()
         add_log_mock.side_effect = lambda datum: telemetry_data.append(

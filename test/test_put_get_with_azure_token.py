@@ -23,7 +23,7 @@ except ImportError:
 logger = getLogger(__name__)
 
 # Mark every test in this module as an azure and a putget test
-pytestmark = [pytest.mark.azure, pytest.mark.putget]
+pytestmark = pytest.mark.azure
 
 
 @pytest.mark.skipif(
@@ -40,9 +40,9 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_azure_token'))
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         with cnx.cursor() as csr:
             csr.execute("rm @~/snow32806")
             csr.execute(
@@ -79,8 +79,10 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
         'Output is different from the original file')
 
 
+@pytest.mark.aws
+@pytest.mark.azure
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
+    not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
@@ -99,9 +101,9 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
         return csr.execute(sql).fetchall()
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -127,8 +129,10 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
                 run(csr, "drop table if exists {name}")
 
 
+@pytest.mark.aws
+@pytest.mark.azure
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN or os.getenv("SNOWFLAKE_GCP") is not None,
+    not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
 def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
@@ -148,9 +152,9 @@ def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
         return csr.execute(sql, _raise_put_get_error=False).fetchall()
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -240,9 +244,9 @@ def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
             _put_callback=cb).fetchall()
 
     with conn_cnx(
-            user=db_parameters['azure_user'],
-            account=db_parameters['azure_account'],
-            password=db_parameters['azure_password']) as cnx:
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
         try:
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == 'UPLOADED' for rec in all_recs])
