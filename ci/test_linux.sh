@@ -13,6 +13,18 @@ CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 # Install one copy of tox
 python3 -m pip install -U tox tox-external-wheels
 
+source ${THIS_DIR}/log_analyze_setup.sh
+
+if [[ -d ${CLIENT_LOG_DIR_PATH_DOCKER} ]]; then
+    rm -rf ${CLIENT_LOG_DIR_PATH_DOCKER}/*
+else
+    mkdir ${CLIENT_LOG_DIR_PATH_DOCKER}
+fi
+
+# replace test password with a more complex one, and generate known ssm file
+python3 ${THIS_DIR}/change_snowflake_test_pwd.py
+mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
+
 # Run tests
 cd $CONNECTOR_DIR
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
