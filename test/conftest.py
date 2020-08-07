@@ -78,11 +78,10 @@ def filter_log():
     # the directory of this conftest file
     this_dir = str(pathlib.Path(__file__).parent.absolute())
     log_dir = os.getenv('CLIENT_KNOWN_SSM_FILE_PATH_DOCKER')
-    log_dir = log_dir if log_dir else this_dir
 
     _logger = getLogger('snowflake.connector')
     _logger.setLevel(logging.DEBUG)
-    sd = logging.FileHandler(os.path.join(log_dir, 'snowflake_ssm_rt.log'))
+    sd = logging.FileHandler(os.path.join(log_dir if log_dir else this_dir, 'snowflake_ssm_rt.log'))
     sd.setLevel(logging.DEBUG)
     sd.setFormatter(SecretDetector('%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
     _logger.addHandler(sd)
