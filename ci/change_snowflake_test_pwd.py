@@ -30,8 +30,6 @@ def change_password():
     # if not IS_WINDOWS:
     #     time.tzset()
 
-    from parameters import CONNECTION_PARAMETERS
-
     for k, v in CONNECTION_PARAMETERS.items():
         params[k] = v
 
@@ -44,12 +42,13 @@ def change_password():
 
 
 def generate_known_ssm_file():
-    from jenkins_test_parameters import SNOWFLAKE_TEST_PASSWORD_NEW
     # generate ssm file
     with open(os.getenv(CLIENT_KNOWN_SSM_FILE_PATH_DOCKER), 'w') as f:
         f.write(SNOWFLAKE_TEST_PASSWORD_NEW + '\n')
 
 
 if __name__ == '__main__':
+    from parameters import CONNECTION_PARAMETERS
+    from jenkins_test_parameters import SNOWFLAKE_TEST_PASSWORD_NEW
     change_password()
     generate_known_ssm_file()
