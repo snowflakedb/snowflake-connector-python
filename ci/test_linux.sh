@@ -15,9 +15,12 @@ python3 -m pip install -U tox tox-external-wheels
 
 source ${THIS_DIR}/log_analyze_setup.sh
 
+echo "[WUFAN DEBUG] CLIENT_LOG_DIR_PATH_DOCKER get from log_analyze_setup.sh is ${CLIENT_LOG_DIR_PATH_DOCKER}"
 if [[ -d ${CLIENT_LOG_DIR_PATH_DOCKER} ]]; then
+    echo "[WUFAN DEBUG] dir exists"
     rm -rf ${CLIENT_LOG_DIR_PATH_DOCKER}/*
 else
+    echo "[WUFAN DEBUG] dir doesn't exist, making dir"
     mkdir ${CLIENT_LOG_DIR_PATH_DOCKER}
 fi
 
