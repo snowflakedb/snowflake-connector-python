@@ -4,11 +4,13 @@
 #
 import os
 import sys
+
+from jenkins_test_parameters import SNOWFLAKE_TEST_PASSWORD_NEW
+
 import snowflake.connector
+from parameters import CONNECTION_PARAMETERS
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'test'))
-from parameters import CONNECTION_PARAMETERS
-from jenkins_test_parameters import SNOWFLAKE_TEST_PASSWORD_NEW
 
 params = {
     'account': '<account_name>',
@@ -29,7 +31,7 @@ params = {
 
 for k, v in CONNECTION_PARAMETERS.items():
     params[k] = v
-  
+
 conn = snowflake.connector.connect(**params)
 conn.cursor().execute("use role accountadmin")
 cmd = "alter user set password = '{}'".format(SNOWFLAKE_TEST_PASSWORD_NEW)
@@ -39,4 +41,4 @@ conn.close()
 
 # generate ssm file
 with open(os.getenv('CLIENT_KNOWN_SSM_FILE_PATH_DOCKER'), 'w') as f:
-    f.write(SNOWFLAKE_TEST_PASSWORD_NEW + '\n') 
+    f.write(SNOWFLAKE_TEST_PASSWORD_NEW + '\n')
