@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
 #
 
-import os
-
 
 def format_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
     """Sets proxy dict for requests."""
