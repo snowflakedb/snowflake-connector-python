@@ -10,6 +10,9 @@ PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
+echo "[WUFAN DEBUG] THIS_DIR for ci/test_linux.sh is ${THIS_DIR}"
+echo "[WUFAN DEBUG] CONNECTOR_DIR is ${CONNECTOR_DIR}"
+
 # Install one copy of tox
 python3 -m pip install -U tox tox-external-wheels
 
