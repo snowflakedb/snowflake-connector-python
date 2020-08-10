@@ -6,7 +6,7 @@
 # DOCKER ROOT /home/user/snowflake-connector-python
 
 export CLIENT_LOG_DIR_PATH_DOCKER=/home/user/snowflake-connector-python/ssm_rt_log
-export CLIENT_LOG_DIR_PATH=$WORKSPACE/target/ssm_rt_log
+export CLIENT_LOG_DIR_PATH=$WORKSPACE/target_client/ssm_rt_log
 echo "[INFO] CLIENT_LOG_DIR_PATH=$CLIENT_LOG_DIR_PATH"
 echo "[INFO] CLIENT_LOG_DIR_PATH_DOCKER=$CLIENT_LOG_DIR_PATH_DOCKER"
 
