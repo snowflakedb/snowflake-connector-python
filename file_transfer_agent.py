@@ -346,9 +346,9 @@ class SnowflakeFileTransferAgent(object):
                 if len(retry_meta) == 0:
                     # no new AWS token is required
                     break
+                client = self.renew_expired_client()
                 if any([result_meta['result_status'] == ResultStatus.RENEW_TOKEN
                         for result_meta in results]):
-                    client = self.renew_expired_client()
                     for result_meta in retry_meta:
                         result_meta['client'] = client
                 if any([result_meta['result_status'] == ResultStatus.RENEW_PRESIGNED_URL
