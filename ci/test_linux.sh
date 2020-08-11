@@ -10,20 +10,14 @@ PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
-echo "[WUFAN DEBUG] THIS_DIR for ci/test_linux.sh is ${THIS_DIR}"
-echo "[WUFAN DEBUG] CONNECTOR_DIR is ${CONNECTOR_DIR}"
-
 # Install one copy of tox
 python3 -m pip install -U tox tox-external-wheels
 
 source ${THIS_DIR}/log_analyze_setup.sh
 
-echo "[WUFAN DEBUG] CLIENT_LOG_DIR_PATH_DOCKER get from log_analyze_setup.sh is ${CLIENT_LOG_DIR_PATH_DOCKER}"
 if [[ -d ${CLIENT_LOG_DIR_PATH_DOCKER} ]]; then
-    echo "[WUFAN DEBUG] dir exists"
     rm -rf ${CLIENT_LOG_DIR_PATH_DOCKER}/*
 else
-    echo "[WUFAN DEBUG] dir doesn't exist, making dir"
     mkdir ${CLIENT_LOG_DIR_PATH_DOCKER}
 fi
 

@@ -78,7 +78,6 @@ def filter_log():
     # the directory of this conftest file
     this_dir = str(pathlib.Path(__file__).parent.absolute())
     log_dir = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER')
-    print("[WUFAN DEBUG] log_dir for pytest is {}".format(log_dir))
 
     _logger = getLogger('snowflake.connector')
     _logger.setLevel(logging.DEBUG)

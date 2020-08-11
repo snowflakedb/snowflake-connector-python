@@ -15,9 +15,6 @@ CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 WORKSPACE=${WORKSPACE:-${CONNECTOR_DIR}}
 source $THIS_DIR/set_base_image.sh
 
-echo "[WUFAN DEBUG test_docker.sh 0] CONNECTOR_DIR is ${CONNECTOR_DIR}"
-echo "[WUFAN DEBUG test_docker.sh 0] WORKSPACE is ${WORKSPACE}"
-
 cd $THIS_DIR/docker/connector_test
 
 CONTAINER_NAME=test_pyconnector
@@ -38,10 +35,3 @@ docker run --network=host \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
     /home/user/snowflake-connector-python/ci/test_linux.sh ${PYTHON_ENV}
-
-# start DEBUG
-echo "[WUFAN DEBUG test_docker.sh 1] CONNECTOR_DIR is ${CONNECTOR_DIR}"
-echo "[WUFAN DEBUG test_docker.sh 1] WORKSPACE is ${WORKSPACE}"
-
-echo "[WUFAN DEBUG] run find WORKSPACE -name snowflake_ssm_rt.log"
-find $WORKSPACE -name snowflake_ssm_rt.log
