@@ -6,7 +6,6 @@
 import datetime
 import json
 import logging
-import test_util
 import uuid
 from collections import namedtuple
 from queue import Queue
@@ -16,6 +15,7 @@ import requests
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
+from .test_util import RUNNING_ON_GH, rt_plain_logger
 
 logger = logging.getLogger(__name__)
 
@@ -393,9 +393,9 @@ class TelemetryService(object):
                 logger.debug("Skip the disabled deployment: %s", self.deployment.name)
                 return
             logger.debug("Sending OOB telemetry data. Payload: {}".format(payload))
-            if test_util.RUNNING_ON_GH:
+            if RUNNING_ON_GH:
                 # This logger guarantees the payload won't be masked. Testing purpose.
-                test_util.rt_plain_logger.debug("OOB telemetry data being sent is {}".format(payload))
+                rt_plain_logger.debug("OOB telemetry data being sent is {}".format(payload))
 
             with requests.Session() as session:
                 headers = {

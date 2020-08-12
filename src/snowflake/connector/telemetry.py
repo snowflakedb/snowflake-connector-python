@@ -4,8 +4,10 @@
 # Copyright (c) 2018-2019 Snowflake Computing Inc. All right reserved.
 #
 import logging
-import test_util
 from threading import Lock
+
+from .secret_detector import SecretDetector
+from .test_util import RUNNING_ON_GH, rt_plain_logger
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +87,10 @@ class TelemetryClient(object):
             return
 
         body = {'logs': [x.to_dict() for x in to_send]}
-        logger.debug("Sending %d logs to telemetry.", len(body))
-        if test_util.RUNNING_ON_GH:
+        logger.debug("Sending %d logs to telemetry. Data is %s.", len(body), SecretDetector.mask_secrets(str(body)))
+        if RUNNING_ON_GH:
             # This logger guarantees the payload won't be masked. Testing purpose.
-            test_util.rt_plain_logger.debug("Inband telemetry data being sent is {}".format(payload))
+            rt_plain_logger.debug("Inband telemetry data being sent is {}".format(body))
         try:
             ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
                                      method='post', client=None, timeout=5)
