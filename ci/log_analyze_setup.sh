@@ -18,7 +18,6 @@ echo "[INFO] CLIENT_KNOWN_SSM_FILE_PATH_DOCKER=$CLIENT_KNOWN_SSM_FILE_PATH_DOCKE
 # [required envs]
 # To close log analyze, just set ENABLE_CLIENT_LOG_ANALYZE to not "true", e.g. "false".
 export ENABLE_CLIENT_LOG_ANALYZE="true"
-# export ENABLE_CLIENT_LOG_ANALYZE="false"
 
 # The environment variable used by log analyze module
 export CLIENT_DRIVER_NAME=PYTHON

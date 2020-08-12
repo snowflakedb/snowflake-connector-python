@@ -24,12 +24,6 @@ def change_password():
         'port': '443',
     }
 
-    # do we need to set time zone?
-    # import time
-    # os.environ['TZ'] = 'UTC'
-    # if not IS_WINDOWS:
-    #     time.tzset()
-
     for k, v in CONNECTION_PARAMETERS.items():
         params[k] = v
 
@@ -42,7 +36,6 @@ def change_password():
 
 
 def generate_known_ssm_file():
-    # generate ssm file
     with open(os.getenv(CLIENT_KNOWN_SSM_FILE_PATH_DOCKER), 'w') as f:
         f.write(SNOWFLAKE_TEST_PASSWORD_NEW + '\n')
 
