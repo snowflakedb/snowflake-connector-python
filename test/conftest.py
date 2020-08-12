@@ -69,17 +69,17 @@ CONNECTION_PARAMETERS = {
 
 @pytest.fixture(scope='session', autouse=True)
 def filter_log():
-    # TODO: maybe we can use env variable to control whether doing this or not (this should be done)
     # A workround to use our custom Formatter in pytest.
     # Based on the discussion here 'https://github.com/pytest-dev/pytest/issues/2987'
     from snowflake.connector.secret_detector import SecretDetector
     import logging
     import pathlib
-    # the directory of this conftest file
-    this_dir = pathlib.Path(__file__).parent.absolute()
+    # the directory that is going to contain test logs, default is THIS_DIR
+    log_dir = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER', str(pathlib.Path(__file__).parent.absolute()))
+
     _logger = getLogger('snowflake.connector')
     _logger.setLevel(logging.DEBUG)
-    sd = logging.FileHandler(os.path.join(str(this_dir), 'snowflake_ssm_rt.log'))
+    sd = logging.FileHandler(os.path.join(log_dir, 'snowflake_ssm_rt.log'))
     sd.setLevel(logging.DEBUG)
     sd.setFormatter(SecretDetector('%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
     _logger.addHandler(sd)
