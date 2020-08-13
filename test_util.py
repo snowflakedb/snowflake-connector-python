@@ -18,3 +18,5 @@ if RUNNING_ON_GH:
     ch.setLevel(logging.DEBUG)
     ch.setFormatter(logging.Formatter('%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
     rt_plain_logger.addHandler(ch)
+
+    print("[WUFAN DEBUG] telemetry_log init with path: '{}'".format(os.path.join(REGRESSION_TEST_LOG_DIR, 'snowflake_ssm_rt_telemetry.log')))
