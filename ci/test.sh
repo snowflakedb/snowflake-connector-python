@@ -33,6 +33,9 @@ gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAME
 # Download artifacts made by build
 aws s3 cp --recursive --only-show-errors s3://sfc-jenkins/repository/python_connector/linux/${client_git_branch}/${client_git_commit}/ dist
 
+echo "[WUFAN DEBUG] GITHUB_ACTIONS = ${GITHUB_ACTIONS}"
+echo "[WUFAN DEBUG] JENKINS_HOME = ${JENKINS_HOME}"
+
 # Run one of the tests
 if [ "${py_test}" = "fips" ]; then
     echo "[Info] Going to run FIPS tests"
