@@ -27,7 +27,6 @@ CLOUD_PROVIDERS = {'aws', 'azure', 'gcp'}
 PUBLIC_SKIP_TAGS = {'internal'}
 
 RUNNING_ON_GH = (os.getenv('GITHUB_ACTIONS') == 'true')
-print('[WUFAN DEBUG conftest] RUNNING_ON_GH = {}'.format(RUNNING_ON_GH))
 
 
 try:

@@ -37,7 +37,3 @@ docker run --network=host \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
     /home/user/snowflake-connector-python/ci/test_linux.sh ${PYTHON_ENV}
-
-echo "[WUFAN DEBUG] try to find log files"
-find ${WORKSPACE} -name snowflake_ssm_rt.log
-find ${WORKSPACE} -name snowflake_ssm_rt_telemetry.log
