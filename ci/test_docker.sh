@@ -32,7 +32,6 @@ docker run --network=host \
     -e SF_REGRESS_LOGS \
     -e SF_PROJECT_ROOT \
     -e cloud_provider \
-    -e GITHUB_ACTIONS \
     -e JENKINS_HOME \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \

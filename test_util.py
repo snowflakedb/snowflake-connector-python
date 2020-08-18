@@ -7,7 +7,6 @@ import logging
 import os
 import pathlib
 
-RUNNING_ON_GH = os.getenv('GITHUB_ACTIONS') == 'true'
 RUNNING_ON_JENKINS = os.getenv('JENKINS_HOME') is not None
 REGRESSION_TEST_LOG_DIR = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER', str(pathlib.Path(__file__).parent.absolute()))
 rt_plain_logger = None
