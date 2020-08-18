@@ -40,7 +40,8 @@ def write_pandas(conn: 'SnowflakeConnection',
                  chunk_size: Optional[int] = None,
                  compression: str = 'gzip',
                  on_error: str = 'abort_statement',
-                 parallel: int = 4
+                 parallel: int = 4,
+                 quote_identifiers: bool = False
                  ) -> Tuple[bool, int, int,
                             Sequence[Tuple[str, str, int, int, int, int, Optional[str], Optional[int],
                                            Optional[int], Optional[str]]]]:
@@ -73,6 +74,9 @@ def write_pandas(conn: 'SnowflakeConnection',
             (Default value = 'abort_statement').
         parallel: Number of threads to be used when uploading chunks, default follows documentation at:
             https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters (Default value = 4).
+        quote_identifiers: By default, identifiers are passed on to Snowflake without quoting. I.e. identifiers
+            will be coerced to uppercase by Snowflake. If set to True, identifiers, specifically database, schema,
+            table and column names (from df.columns) will be quoted. (Default value = False)
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
@@ -91,9 +95,14 @@ def write_pandas(conn: 'SnowflakeConnection',
             compression,
             compression_map.keys()
         ))
-    location = ((('"' + database + '".') if database else '') +
-                (('"' + schema + '".') if schema else '') +
-                ('"' + table_name + '"'))
+    if quote_identifiers:
+        location = ((('"' + database + '".') if database else '') +
+                    (('"' + schema + '".') if schema else '') +
+                    ('"' + table_name + '"'))
+    else:
+        location = ((database + '.' if database else '') +
+                    (schema + '.' if schema else '') +
+                    (table_name))
     if chunk_size is None:
         chunk_size = len(df)
     cursor = conn.cursor()
@@ -127,10 +136,22 @@ def write_pandas(conn: 'SnowflakeConnection',
             cursor.execute(upload_sql, _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
+    if quote_identifiers:
+        columns = '"' + '","'.join(list(df.columns)) + '"'
+    else:
+        columns = ','.join(list(df.columns))
+
+    # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
+    # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
+    parquet_columns = '$1:' + ',$1:'.join(df.columns)
     copy_into_sql = ('COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
-                     'FROM @"{stage_name}" FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) '
-                     'MATCH_BY_COLUMN_NAME=CASE_SENSITIVE  PURGE=TRUE ON_ERROR={on_error}').format(
+                     '({columns}) '
+                     'FROM (SELECT {parquet_columns} FROM @"{stage_name}") '
+                     'FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) '
+                     'PURGE=TRUE ON_ERROR={on_error}').format(
         location=location,
+        columns=columns,
+        parquet_columns=parquet_columns,
         stage_name=stage_name,
         compression=compression_map[compression],
         on_error=on_error
