@@ -422,6 +422,7 @@ class SnowflakeCursor(object):
                 command,
                 params=None,
                 timeout: Optional[int] = None,
+                exec_async: bool = False,
                 _do_reset: bool = True,
                 _put_callback=None,
                 _put_azure_callback=None,
@@ -443,6 +444,7 @@ class SnowflakeCursor(object):
             command: The SQL command to be executed.
             params: Parameters to be bound into the SQL statement.
             timeout: Number of seconds after which to abort the query.
+            exec_async: Whether to execute this query asynchronously.
             _do_reset: Whether or not the result set needs to be reset before executing query.
             _put_callback: Function to which GET command should call back to.
             _put_azure_callback: Function to which an Azure GET command should call back to.
