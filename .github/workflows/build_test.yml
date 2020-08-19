@@ -175,7 +175,7 @@ jobs:
 
   test:
     name: Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-    needs: ${{ matrix.os.needs }}
+    needs: [build-manylinux, build-macos, build-windows]
     runs-on: ${{ matrix.os.image_name }}
     strategy:
       fail-fast: false
@@ -183,13 +183,10 @@ jobs:
         os:
          - image_name: ubuntu-latest
            download_name: linux
-           needs: build-manylinux
          - image_name: macos-latest
            download_name: macos
-           needs: build-macos
          - image_name: windows-latest
            download_name: windows
-           needs: build-windows
         python-version: [3.5, 3.6, 3.7, 3.8]
         cloud-provider: [aws, azure, gcp]
         exclude:
