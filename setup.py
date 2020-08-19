@@ -7,24 +7,25 @@ import os
 import sys
 import warnings
 from codecs import open
-from os import path
 from shutil import copy
 from sys import platform
 
 from setuptools import Extension, setup
 
-THIS_DIR = path.dirname(path.realpath(__file__))
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+SRC_DIR = os.path.join(THIS_DIR, 'src')
+CONNECTOR_SRC_DIR = os.path.join(SRC_DIR, 'snowflake', 'connector')
 
 VERSION = (1, 1, 1, None)  # Default
 try:
-    with open(path.join(THIS_DIR, 'generated_version.py'), encoding='utf-8') as f:
+    with open(os.path.join(CONNECTOR_SRC_DIR, 'generated_version.py'), encoding='utf-8') as f:
         exec(f.read())
 except Exception:
-    with open(path.join(THIS_DIR, 'version.py'), encoding='utf-8') as f:
+    with open(os.path.join(CONNECTOR_SRC_DIR, 'version.py'), encoding='utf-8') as f:
         exec(f.read())
 version = '.'.join([str(v) for v in VERSION if v is not None])
 
-with open(path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
+with open(os.path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 
@@ -59,8 +60,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
     extensions = cythonize(
         [
-            Extension(name='snowflake.connector.arrow_iterator', sources=['arrow_iterator.pyx']),
-            Extension(name='snowflake.connector.arrow_result', sources=['arrow_result.pyx'])
+            Extension(name='snowflake.connector.arrow_iterator',
+                      sources=[os.path.join(CONNECTOR_SRC_DIR, 'arrow_iterator.pyx')]),
+            Extension(name='snowflake.connector.arrow_result',
+                      sources=[os.path.join(CONNECTOR_SRC_DIR, 'arrow_result.pyx')])
         ],
         build_dir=os.path.join('build', 'cython'))
 
@@ -94,26 +97,29 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             if ext.name == 'snowflake.connector.arrow_iterator':
                 self._copy_arrow_lib()
+                CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, 'cpp')
+                ARROW_ITERATOR_SRC_DIR = os.path.join(CPP_SRC_DIR, 'ArrowIterator')
+                LOGGING_SRC_DIR = os.path.join(CPP_SRC_DIR, 'Logging')
 
-                ext.sources += ['cpp/ArrowIterator/CArrowIterator.cpp',
-                                'cpp/ArrowIterator/CArrowChunkIterator.cpp',
-                                'cpp/ArrowIterator/CArrowTableIterator.cpp',
-                                'cpp/ArrowIterator/SnowflakeType.cpp',
-                                'cpp/ArrowIterator/BinaryConverter.cpp',
-                                'cpp/ArrowIterator/BooleanConverter.cpp',
-                                'cpp/ArrowIterator/DecimalConverter.cpp',
-                                'cpp/ArrowIterator/DateConverter.cpp',
-                                'cpp/ArrowIterator/FloatConverter.cpp',
-                                'cpp/ArrowIterator/IntConverter.cpp',
-                                'cpp/ArrowIterator/StringConverter.cpp',
-                                'cpp/ArrowIterator/TimeConverter.cpp',
-                                'cpp/ArrowIterator/TimeStampConverter.cpp',
-                                'cpp/ArrowIterator/Python/Common.cpp',
-                                'cpp/ArrowIterator/Python/Helpers.cpp',
-                                'cpp/ArrowIterator/Util/time.cpp',
-                                'cpp/Logging/logging.cpp']
-                ext.include_dirs.append('cpp/ArrowIterator/')
-                ext.include_dirs.append('cpp/Logging')
+                ext.sources += [os.path.join(ARROW_ITERATOR_SRC_DIR, 'CArrowIterator.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'CArrowChunkIterator.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'CArrowTableIterator.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'SnowflakeType.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'BinaryConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'BooleanConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'DecimalConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'DateConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'FloatConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'IntConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'StringConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'TimeConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'TimeStampConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'Python', 'Common.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'Python', 'Helpers.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'Util', 'time.cpp'),
+                                LOGGING_SRC_DIR + '/logging.cpp']
+                ext.include_dirs.append(ARROW_ITERATOR_SRC_DIR)
+                ext.include_dirs.append(LOGGING_SRC_DIR)
 
                 if platform == 'win32':
                     ext.include_dirs.append(pyarrow.get_include())
@@ -147,7 +153,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             for lib in libs_to_bundle:
                 source = '{}/{}'.format(self._get_arrow_lib_dir(), lib)
-                build_dir = path.join(self.build_lib, 'snowflake', 'connector')
+                build_dir = os.path.join(self.build_lib, 'snowflake', 'connector')
                 copy(source, build_dir)
 
         def _get_arrow_lib_as_linker_input(self):
@@ -156,7 +162,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             for lib in link_lib:
                 source = '{}/{}'.format(self._get_arrow_lib_dir(), lib)
-                assert path.exists(source)
+                assert os.path.exists(source)
                 ret.append(source)
 
             return ret
@@ -207,8 +213,8 @@ setup(
         'snowflake.connector.tool',
     ],
     package_dir={
-        'snowflake.connector': '.',
-        'snowflake.connector.tool': 'tool',
+        'snowflake.connector': os.path.join('src', 'snowflake', 'connector'),
+        'snowflake.connector.tool': os.path.join('src', 'snowflake', 'connector', 'tool'),
     },
     package_data={
         'snowflake.connector': ['*.pem', '*.json', '*.rst', 'LICENSE.txt'],
