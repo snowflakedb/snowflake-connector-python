@@ -19,6 +19,9 @@ class SQLDelimiter(object):
     Since split_statements is a generator this mutable object will allow it change while executing.
     """
 
+    def __str__(self):
+        return self.sql_delimiter
+
     def __init__(self, sql_delimiter: str = ';'):
         """Initalizes SQLDelimiter with a string."""
         self.sql_delimiter = sql_delimiter
