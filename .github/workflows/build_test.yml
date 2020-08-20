@@ -269,7 +269,7 @@ jobs:
           dst_dir = Path(".") / ".tox"
           dst_dir.mkdir()
           for src_file in src_dir.glob("*/.coverage"):
-              dst_file = destination_folder / ".coverage.{}".format(src_file.parent.name[9:])"
+              dst_file = dst_dir / ".coverage.{}".format(src_file.parent.name[9:])
               print("{} copy to {}".format(src_file, dst_file))
               shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
