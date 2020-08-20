@@ -245,7 +245,7 @@ jobs:
         with:
           path: artifacts
       - name: Collect all coverages to one dir
-        run: mkdir covs && cp artifacts/**/junit.*.xml
+        run: mkdir covs && cp artifacts/**/junit.*.xml covs
       - name: Show collected coverages
         run: ls -la covs
       - name: Set up Python
