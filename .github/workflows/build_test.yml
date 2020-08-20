@@ -231,3 +231,37 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
         shell: bash
+      - uses: actions/upload-artifact@v1
+        with:
+          name: cov_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: .tox/junit.*.xml
+
+  combine-coverage:
+    name: Combine coverage
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          path: artifacts
+      - name: Collect all coverages to one dir
+        run: mkdir covs && cp artifacts/**/junit.*.xml
+      - name: Show collected coverages
+        run: ls -la covs
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.6'
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip
+      - name: Install coverage
+        run: python -m pip install coverage
+      - name: Combine coverages
+        run: coverage combine covs
+      - name: Report overall coverage
+        run: coverage report -m
+      - name: Write coverage to a file
+        run: coverage xml -o python_connector_coverage.xml
+      # TODO add uploading to codecov.io
