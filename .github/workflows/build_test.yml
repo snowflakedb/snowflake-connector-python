@@ -48,7 +48,7 @@ jobs:
         run: python setup.py sdist
       - name: Show sdist generated
         run: ls -lh dist
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v2
         with:
           name: sdist
           path: dist/
@@ -231,7 +231,7 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
         shell: bash
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v2
         with:
           name: cov_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: .tox/junit.*.xml
