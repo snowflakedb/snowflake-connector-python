@@ -246,6 +246,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
         with:
           path: artifacts
@@ -274,4 +275,6 @@ jobs:
               shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
         run: python -m tox -e coverage
-      # TODO add uploading to codecov.io
+      - uses: codecov/codecov-action@v1
+        with:
+          file: .tox/coverage.xml
