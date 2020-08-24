@@ -10,7 +10,7 @@ Release Notes
 -------------------------------------------------------------------------------
 
 - v2.3.0(August 24,2020)
- 
+
    - Added the OOB telemetry entries that are sent to Snowflake to the log files.
    - Fixed a bug in the PUT command where long running PUTs would fail to re-authenticate to GCP for storage.
    - Updated the minimum build target MacOS version to 10.13.
