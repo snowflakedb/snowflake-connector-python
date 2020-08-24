@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.3.0(August 24,2020)
+ 
+   - Added the OOB telemetry entries that are sent to Snowflake to the log files.
+   - Fixed a bug in the PUT command where long running PUTs would fail to re-authenticate to GCP for storage.
+   - Updated the minimum build target MacOS version to 10.13.
+
 - v2.2.10(August 03,2020)
 
     - Improved an error message for when "pandas" optional dependency group is not installed and user tries to fetch data into a pandas DataFrame. It'll now point user to our online documentation.
