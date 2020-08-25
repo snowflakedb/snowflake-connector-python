@@ -16,7 +16,7 @@ from threading import Lock
 from time import strptime
 from typing import Callable
 
-from . import errors, proxy
+from . import errors
 from .auth import Auth
 from .auth_default import AuthByDefault
 from .auth_idtoken import AuthByIdToken
@@ -93,7 +93,7 @@ DEFAULT_CONFIGURATION = {
     'host': ('127.0.0.1', str),  # standard
     'port': (8080, (int, str)),  # standard
     'database': (None, (type(None), str)),  # standard
-    'proxies' : (None, (type(None), dict)),  # standard
+    'proxies': (None, (type(None), dict)),  # standard
     'protocol': (u'http', str),  # snowflake
     'warehouse': (None, (type(None), str)),  # snowflake
     'region': (None, (type(None), str)),  # snowflake
@@ -536,8 +536,7 @@ class SnowflakeConnection(object):
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
-            proxies=self._proxies
-            )
+            proxies=self._proxies)
         logger.debug('REST API object was created: %s:%s',
                      self.host,
                      self.port)
