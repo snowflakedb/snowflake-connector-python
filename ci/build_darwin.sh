@@ -22,7 +22,6 @@ export MACOSX_DEPLOYMENT_TARGET="10.13"
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="python${PYTHON_VERSION}"
-    BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION/"
     VENV_DIR="${CONNECTOR_DIR}/venv-${PYTHON_VERSION}"
 
     # Need to create a venv to update build dependencies
@@ -37,7 +36,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Update PEP-517 dependencies
     python -m pip install -U pip setuptools
     # Use new PEP-517 build
-    python -m pip wheel -w ${BUILD_DIR} --no-deps .
+    python -m pip wheel -w ${DIST_DIR} --no-deps .
     deactivate
     echo "[Info] Deleting venv at ${VENV_DIR}"
     rm -rf ${VENV_DIR}
