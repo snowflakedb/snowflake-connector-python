@@ -16,7 +16,7 @@ from threading import Lock
 from time import strptime
 from typing import Callable
 
-from . import errors, proxy
+from . import errors
 from .auth import Auth
 from .auth_default import AuthByDefault
 from .auth_idtoken import AuthByIdToken
@@ -533,10 +533,6 @@ class SnowflakeConnection(object):
         self.converter = self._converter_class(
             use_numpy=self._numpy,
             support_negative_year=self._support_negative_year)
-
-        proxy.set_proxies(
-            self.proxy_host, self.proxy_port, self.proxy_user,
-            self.proxy_password)
 
         self._rest = SnowflakeRestful(
             host=self.host,
