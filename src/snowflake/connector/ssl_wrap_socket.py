@@ -36,6 +36,14 @@ except ImportError:  # Platform-specific: Python 3
     _fileobject = None
     from .backport_makefile import backport_makefile
 
+FEATURE_OCSP_MODE = OCSPMode.FAIL_OPEN
+
+"""
+OCSP Response cache file name
+"""
+FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
+
+
 # Map from urllib3 to PyOpenSSL compatible parameter-values.
 _openssl_versions = {
     ssl.PROTOCOL_SSLv23: OpenSSL.SSL.SSLv23_METHOD,
