@@ -205,7 +205,8 @@ class SnowflakeRestful(object):
     def __init__(self, host='127.0.0.1', port=8080,
                  protocol='http',
                  inject_client_pause=0,
-                 connection=None):
+                 connection=None,
+                 proxies=None):
         self._host = host
         self._port = port
         self._protocol = protocol
@@ -214,6 +215,7 @@ class SnowflakeRestful(object):
         self._lock_token = Lock()
         self._idle_sessions = collections.deque()
         self._active_sessions = set()
+        self._proxies = proxies
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = \
@@ -777,6 +779,7 @@ class SnowflakeRestful(object):
                 verify=True,
                 stream=is_raw_binary,
                 auth=SnowflakeAuth(token),
+                proxies=self._proxies
             )
             download_end_time = get_time_millis()
 

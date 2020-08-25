@@ -93,10 +93,7 @@ DEFAULT_CONFIGURATION = {
     'host': ('127.0.0.1', str),  # standard
     'port': (8080, (int, str)),  # standard
     'database': (None, (type(None), str)),  # standard
-    'proxy_host': (None, (type(None), str)),  # snowflake
-    'proxy_port': (None, (type(None), str)),  # snowflake
-    'proxy_user': (None, (type(None), str)),  # snowflake
-    'proxy_password': (None, (type(None), str)),  # snowflake
+    'proxies' : (None, (type(None), dict)),  # standard
     'protocol': (u'http', str),  # snowflake
     'warehouse': (None, (type(None), str)),  # snowflake
     'region': (None, (type(None), str)),  # snowflake
@@ -170,10 +167,7 @@ class SnowflakeConnection(object):
         host: The host name the connection attempts to connect to.
         port: The port to communicate with on the host.
         region: Region name if not the default Snowflake Database deployment.
-        proxy_host: The hostname used proxy server.
-        proxy_port: Port on proxy server to communicate with.
-        proxy_user: User name to login with on the proxy sever.
-        proxy_password: Password to be used to authenticate with proxy server.
+        proxies: Proxies attribute to use in requests.
         account: Account name to be used to authenticate with Snowflake.
         database: Database to use on Snowflake.
         schema: Schema in use on Snowflake.
@@ -536,16 +530,14 @@ class SnowflakeConnection(object):
             use_numpy=self._numpy,
             support_negative_year=self._support_negative_year)
 
-        proxy.set_proxies(
-            self.proxy_host, self.proxy_port, self.proxy_user,
-            self.proxy_password)
-
         self._rest = SnowflakeRestful(
             host=self.host,
             port=self.port,
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
-            connection=self)
+            connection=self,
+            proxies=self._proxies
+            )
         logger.debug('REST API object was created: %s:%s',
                      self.host,
                      self.port)
