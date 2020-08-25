@@ -97,6 +97,7 @@ DEFAULT_CONFIGURATION = {
     'proxy_port': (None, (type(None), str)),  # snowflake
     'proxy_user': (None, (type(None), str)),  # snowflake
     'proxy_password': (None, (type(None), str)),  # snowflake
+    'proxies': (None, (type(None), dict)),  # standard
     'protocol': (u'http', str),  # snowflake
     'warehouse': (None, (type(None), str)),  # snowflake
     'region': (None, (type(None), str)),  # snowflake
@@ -170,10 +171,7 @@ class SnowflakeConnection(object):
         host: The host name the connection attempts to connect to.
         port: The port to communicate with on the host.
         region: Region name if not the default Snowflake Database deployment.
-        proxy_host: The hostname used proxy server.
-        proxy_port: Port on proxy server to communicate with.
-        proxy_user: User name to login with on the proxy sever.
-        proxy_password: Password to be used to authenticate with proxy server.
+        proxies: Proxies attribute to use in requests.
         account: Account name to be used to authenticate with Snowflake.
         database: Database to use on Snowflake.
         schema: Schema in use on Snowflake.
@@ -545,7 +543,8 @@ class SnowflakeConnection(object):
             port=self.port,
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
-            connection=self)
+            connection=self,
+            proxies=self._proxies)
         logger.debug('REST API object was created: %s:%s',
                      self.host,
                      self.port)
