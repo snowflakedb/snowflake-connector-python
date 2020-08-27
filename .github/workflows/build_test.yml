@@ -28,7 +28,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox
       - name: Run fix_lint
-        run: tox -e fix_lint
+        run: python -m tox -e fix_lint
 
   build-sdist:
     needs: lint
@@ -48,7 +48,7 @@ jobs:
         run: python setup.py sdist
       - name: Show sdist generated
         run: ls -lh dist
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v2
         with:
           name: sdist
           path: dist/
@@ -226,8 +226,55 @@ jobs:
       - name: Install tox
         run: python -m pip install tox tox-external-wheels
       - name: Run tests
-        run: tox -e "py${PYTHON_VERSION/\./}{-extras,,-pandas,-sso}-ci"
+        run: python -m tox -e "py${PYTHON_VERSION/\./}{-extras,,-pandas,-sso}-ci"
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
         shell: bash
+      - name: Combine coverages
+        run: python -m tox -e coverage --skip-missing-interpreters false
+        shell: bash
+      - uses: actions/upload-artifact@v2
+        with:
+          name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .tox/.coverage
+            .tox/coverage.xml
+
+  combine-coverage:
+    name: Combine coverage
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/download-artifact@v2
+        with:
+          path: artifacts
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.6'
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip
+      - name: Install tox
+        run: python -m pip install tox
+      - name: Collect all coverages to one dir
+        run: |
+          python -c '
+          from pathlib import Path
+          import shutil
+
+          src_dir = Path("artifacts")
+          dst_dir = Path(".") / ".tox"
+          dst_dir.mkdir()
+          for src_file in src_dir.glob("*/.coverage"):
+              dst_file = dst_dir / ".coverage.{}".format(src_file.parent.name[9:])
+              print("{} copy to {}".format(src_file, dst_file))
+              shutil.copy(str(src_file), str(dst_file))'
+      - name: Combine coverages
+        run: python -m tox -e coverage
+      - uses: codecov/codecov-action@v1
+        with:
+          file: .tox/coverage.xml
