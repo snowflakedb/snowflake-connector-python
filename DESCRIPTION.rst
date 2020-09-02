@@ -2,7 +2,7 @@ This package includes the Snowflake Connector for Python, which conforms to the 
 https://www.python.org/dev/peps/pep-0249/
 
 Snowflake Documentation is available at:
-https://docs.snowflake.net/
+https://docs.snowflake.com/
 
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
