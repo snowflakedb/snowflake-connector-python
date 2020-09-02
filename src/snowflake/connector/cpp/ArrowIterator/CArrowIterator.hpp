@@ -4,6 +4,9 @@
 #ifndef PC_ARROWITERATOR_HPP
 #define PC_ARROWITERATOR_HPP
 
+#include <memory>
+#include <string>
+
 #include <Python.h>
 #include <vector>
 #include <arrow/python/platform.h>

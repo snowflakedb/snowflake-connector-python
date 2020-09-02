@@ -4,6 +4,8 @@
 #ifndef PC_STRINGCONVERTER_HPP
 #define PC_STRINGCONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 #include "logging.hpp"
 

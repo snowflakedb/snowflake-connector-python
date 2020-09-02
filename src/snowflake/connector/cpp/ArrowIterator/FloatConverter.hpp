@@ -4,6 +4,8 @@
 #ifndef PC_FLOATCONVERTER_HPP
 #define PC_FLOATCONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 
 namespace sf

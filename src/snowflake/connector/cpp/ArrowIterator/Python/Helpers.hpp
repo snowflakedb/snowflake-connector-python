@@ -6,6 +6,8 @@
 
 /** this two header files will be removed when we replace arrow::Status with our
  * own status data structure */
+#include <string>
+
 #include <arrow/python/platform.h>
 #include <arrow/api.h>
 #include "logging.hpp"

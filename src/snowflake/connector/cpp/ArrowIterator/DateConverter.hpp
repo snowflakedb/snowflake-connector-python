@@ -4,6 +4,8 @@
 #ifndef PC_DATECONVERTER_HPP
 #define PC_DATECONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
 #include "logging.hpp"

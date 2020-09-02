@@ -4,6 +4,8 @@
 #ifndef PC_BINARYCONVERTER_HPP
 #define PC_BINARYCONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 #include "logging.hpp"
 

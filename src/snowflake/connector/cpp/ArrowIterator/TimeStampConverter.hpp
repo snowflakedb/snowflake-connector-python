@@ -4,6 +4,8 @@
 #ifndef PC_TIMESTAMPCONVERTER_HPP
 #define PC_TIMESTAMPCONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
 #include "Python/Helpers.hpp"

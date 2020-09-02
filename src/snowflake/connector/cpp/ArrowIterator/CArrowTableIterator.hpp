@@ -4,6 +4,10 @@
 #ifndef PC_ARROWTABLEITERATOR_HPP
 #define PC_ARROWTABLEITERATOR_HPP
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include <arrow/table.h>
 #include "CArrowIterator.hpp"
 
