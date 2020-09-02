@@ -1,22 +1,24 @@
-asn1crypto==1.3.0
+# Generated on: Python 3.6.10
+# With snowflake-connector-python version: 2.3.0
+asn1crypto==1.4.0
 azure-common==1.1.25
-azure-core==1.6.0
-azure-storage-blob==12.3.2
-boto3==1.13.26
-botocore==1.16.26
-certifi==2020.4.5.2
-cffi==1.14.0
+azure-core==1.8.0
+azure-storage-blob==12.4.0
+boto3==1.14.47
+botocore==1.17.47
+certifi==2020.6.20
+cffi==1.14.2
 chardet==3.0.4
 cryptography==2.9.2
 docutils==0.15.2
 idna==2.9
 isodate==0.6.0
 jmespath==0.10.0
-msrest==0.6.16
+msrest==0.6.18
 oauthlib==3.1.0
-oscrypto==1.2.0
+oscrypto==1.2.1
 pycparser==2.20
-pycryptodomex==3.9.7
+pycryptodomex==3.9.8
 PyJWT==1.7.1
 pyOpenSSL==19.1.0
 python-dateutil==2.8.1
@@ -25,5 +27,4 @@ requests==2.23.0
 requests-oauthlib==1.3.0
 s3transfer==0.3.3
 six==1.15.0
-snowflake-connector-python @ file:///home/user/trunk/Python/dist/docker/3.6/snowflake_connector_python-2.2.7-cp36-cp36m-linux_x86_64.whl
-urllib3==1.25.9
+urllib3==1.25.10

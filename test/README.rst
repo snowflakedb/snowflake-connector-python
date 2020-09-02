@@ -4,20 +4,20 @@ Building and Testing Snowflake Connector for Python
 Building
 ================================================================================
 
-Install Python 3.5.0 or higher. Clone the Snowflake Connector for Python repository, then run the following command to create a wheel package:
+Install Python 3.5.0 or higher. Clone the Snowflake Connector for Python repository, then run the following commands to create a wheel package using PEP-517 build:
 
     .. code-block:: bash
 
         git clone git@github.com:snowflakedb/snowflake-connector-python.git
         cd snowflake-connector-python
-        pyvenv /tmp/test_snowflake_connector_python
-        source /tmp/test_snowflake_connector_python/bin/activate
         pip install -U pip setuptools wheel
-        python setup.py bdist_wheel
+        pip wheel -w dist --no-deps .
 
 Find the ``snowflake_connector_python*.whl`` package in the ``./dist`` directory.
 
 Or use our Dockerized build script ``ci/build_docker.sh`` and find the built wheel files in ``dist/repaired_wheels``.
+
+Note: ``ci/build_docker.sh`` can be used to compile only certain versions, like this: ``ci/build_docker.sh "3.6 3.7"``
 
 
 Testing
@@ -48,4 +48,4 @@ Run the test:
 
     .. code-block:: bash
 
-        py.test test
+        tox -e py36{,-pandas,-sso}
