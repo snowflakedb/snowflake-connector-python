@@ -90,21 +90,21 @@ class SnowflakeFileUtil(object):
         """
         use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
         CHUNK_SIZE = 16 * 4 * 1024
-        f = open(file_name, 'rb')
-        if not use_openssl_only:
-            m = SHA256.new()
-        else:
-            backend = default_backend()
-            chosen_hash = hashes.SHA256()
-            hasher = hashes.Hash(chosen_hash, backend)
-        while True:
-            chunk = f.read(CHUNK_SIZE)
-            if chunk == b'':
-                break
+        with open(file_name, 'rb') as f:
             if not use_openssl_only:
-                m.update(chunk)
+                m = SHA256.new()
             else:
-                hasher.update(chunk)
+                backend = default_backend()
+                chosen_hash = hashes.SHA256()
+                hasher = hashes.Hash(chosen_hash, backend)
+            while True:
+                chunk = f.read(CHUNK_SIZE)
+                if chunk == b'':
+                    break
+                if not use_openssl_only:
+                    m.update(chunk)
+                else:
+                    hasher.update(chunk)
 
         statinfo = os.stat(file_name)
         file_size = statinfo.st_size
