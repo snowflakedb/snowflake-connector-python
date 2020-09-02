@@ -87,7 +87,7 @@ def test_apilevel():
 def test_threadsafety():
     try:
         threadsafety = snowflake.connector.threadsafety
-        assert threadsafety == 2, 'check value of threadsaftey is 2'
+        assert threadsafety == 2, 'check value of threadsafety is 2'
     except errors.AttributeError:
         raise Exception("AttributeError: not defined in Snowflake.connector")
 

@@ -828,8 +828,8 @@ class SnowflakeOCSP(object):
         r'|.*\.blob\.core\.usgovcloudapi\.net$)')
 
     # Tolerable validity date range ratio. The OCSP response is valid up
-    # to (next update timestap) + (next update timestamp -
-    # this update timestap) * TOLERABLE_VALIDITY_RANGE_RATIO. This buffer
+    # to (next update timestamp) + (next update timestamp -
+    # this update timestamp) * TOLERABLE_VALIDITY_RANGE_RATIO. This buffer
     # yields some time for Root CA to update intermediate CA's certificate
     # OCSP response. In fact, they don't update OCSP response in time. In Dec
     # 2016, they left OCSP response expires for 5 hours at least, and it

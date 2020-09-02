@@ -94,7 +94,7 @@ class SnowflakeCursor(object):
         time_output_format: Snowflake output format for times.
         timezone: Snowflake timezone.
         binary_output_format: Snowflake output format for binary fields.
-        arrayszize: The default number of rows fetched by fetchmany.
+        arraysize: The default number of rows fetched by fetchmany.
         connection: The connection object by which the cursor was created.
         errorhandle: The class that handles error handling.
         is_file_transfer: Whether, or not the current command is a put, or get.

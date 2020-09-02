@@ -71,7 +71,7 @@ private:
   /** arrow format convert context for the current session */
   PyObject* m_context;
 
-  /** true if return numnpy int64 float64 datetime*/
+  /** true if return numpy int64 float64 datetime*/
   bool m_useNumpy;
 
   void initColumnConverters();

@@ -13,7 +13,7 @@ namespace sf
 {
 
 // correspond to python datetime.time and datetime.time has only support 6 bit
-// precision, which is milisecond
+// precision, which is millisecond
 
 class TimeStampBaseConverter : public IColumnConverter
 {
