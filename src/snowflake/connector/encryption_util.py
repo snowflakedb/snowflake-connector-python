@@ -45,7 +45,7 @@ MaterialDescriptor = namedtuple(
 )
 
 """
-Metadata for encrpytion
+Metadata for encryption
 """
 EncryptionMetadata = namedtuple(
     "EncryptionMetadata", [

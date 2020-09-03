@@ -85,7 +85,7 @@ def inject_into_urllib3():
 def _dnsname_to_stdlib(name):
     """Converts a DNSName SubjectAlternativeName field to the form used by the standard library.
 
-    Cryptography produces a dNSName as a unicode string that was idna-decoded
+    Cryptography produces a DNSName as a unicode string that was idna-decoded
     from ASCII bytes. We need to idna-encode that string to get it back, and
     then on Python 3 we also need to convert to unicode via UTF-8 (the stdlib
     uses PyUnicode_FromStringAndSize on it, which decodes via UTF-8).
@@ -145,7 +145,7 @@ def get_subj_alt_name(peer_cert):
         )
         return []
 
-    # We want to return dNSName and iPAddress fields. We need to cast the IPs
+    # We want to return DNSName and IPAddress fields. We need to cast the IPs
     # back to strings because the match_hostname function wants them as
     # strings.
     # Sadly the DNS names need to be idna encoded and then, on Python 3, UTF-8
