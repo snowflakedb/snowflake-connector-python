@@ -82,7 +82,7 @@ def dump_ocsp_response(urls, output_filename):
         print("Current Time: {}".format(
             strftime('%Y%m%d%H%M%SZ', gmtime(current_time))))
         for issuer, subject in cert_data:
-            cert_id, _ = ocsp.create_ocsp_request(issuer, subject)
+            _, _ = ocsp.create_ocsp_request(issuer, subject)
             _, _, _, cert_id, ocsp_response_der = \
                 ocsp.validate_by_direct_connection(issuer, subject)
             ocsp_response = asn1crypto_ocsp.OCSPResponse.load(ocsp_response_der)

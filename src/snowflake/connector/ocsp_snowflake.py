@@ -95,7 +95,7 @@ class OCSPTelemetryData(object):
         self.insecure_mode = insecure_mode
 
     def generate_telemetry_data(self, event_type, urgent=False):
-        cls, exception, stack_trace = sys.exc_info()
+        _, exception, _ = sys.exc_info()
         telemetry_data = {}
         telemetry_data.update({"eventType": event_type})
         telemetry_data.update({"sfcPeerHost": self.sfc_peer_host})
@@ -1152,7 +1152,7 @@ class SnowflakeOCSP(object):
         for issuer, subject in cert_data:
             # check if any OCSP response is NOT in cache
             cert_id, _ = self.create_ocsp_request(issuer, subject)
-            in_cache, cache = SnowflakeOCSP.OCSP_CACHE.find_cache(
+            in_cache, _ = SnowflakeOCSP.OCSP_CACHE.find_cache(
                 self, cert_id, subject)
             if not in_cache:
                 # not found any
