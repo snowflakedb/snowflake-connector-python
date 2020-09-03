@@ -148,7 +148,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     # is passed from the constructor of SnowflakeConnection class. Note, only FIXED, REAL
     # and TIMESTAMP_NTZ will be converted into numpy data types, all other sql types will
     # still be converted into native python types.
-    # https://docs.snowflake.net/manuals/user-guide/sqlalchemy.html#numpy-data-type-support
+    # https://docs.snowflake.com/en/user-guide/sqlalchemy.html#numpy-data-type-support
     cdef object use_numpy
 
     def __cinit__(self, object cursor, object py_inputstream, object arrow_context, object use_dict_result,
