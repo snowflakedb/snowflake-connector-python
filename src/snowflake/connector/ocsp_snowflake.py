@@ -412,9 +412,8 @@ class OCSPCache(object):
                     ocsp,
                     path.join(parsed_url.netloc, parsed_url.path))
             else:
-                raise Exception(
-                    "Unsupported OCSP URI: %s",
-                    OCSPCache.OCSP_RESPONSE_CACHE_URI)
+                msg = "Unsupported OCSP URI: {}".format(OCSPCache.OCSP_RESPONSE_CACHE_URI)
+                raise Exception(msg)
         except Exception as e:
             logger.debug(
                 "Failed to read OCSP response cache file %s: %s, "
