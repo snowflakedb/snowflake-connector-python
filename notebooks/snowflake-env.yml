@@ -1,0 +1,28 @@
+name: snowflake
+channels:
+- defaults
+- saturncloud
+- conda-forge
+dependencies:
+- blas=*=mkl
+- bokeh
+- dask-ml
+- dask-saturn==0.0.4
+- dask-xgboost
+- dask==2.20.0
+- distributed==2.20.0
+- graphviz
+- ipykernel
+- ipywidgets
+- numba
+- numpy
+- pandas
+- pip
+- pyarrow
+- python=3.7
+- s3fs
+- scikit-learn
+- scipy
+- snowflake-connector-python
+- snowflake-sqlalchemy
+- xgboost
