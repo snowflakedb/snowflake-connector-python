@@ -9,14 +9,14 @@ installed_pandas = False
 installed_keyring = False
 
 
-def _warn_incompatible_dep(dep_name: str,
-                           expected_ver: 'pkg_resources.Requirement') -> None:
-    msg = (
-         "You have an incompatible version of '{}' installed, please install a version that "
-         "adheres to: '{}'"
-    )
-    msg = msg.format(dep_name, expected_ver)
-    warnings.warn(msg, stacklevel=2)
+def warn_incompatible_dep(dep_name: str,
+                          expected_ver: 'pkg_resources.Requirement') -> None:
+    warnings.warn(
+        "You have an incompatible version of '{}' installed, please install a version that "
+        "adheres to: '{}'".format(dep_name,
+                                  expected_ver),
+        stacklevel=2)
+
 
 class MissingPandas(object):
 
@@ -36,7 +36,7 @@ try:
     _expected_version = [dep for dep in _pandas_extras if dep.name == 'pyarrow'][0]
     _installed_pyarrow = pkg_resources.working_set.by_key['pyarrow']
     if _installed_pyarrow and _installed_pyarrow.version not in _expected_version:
-        _warn_incompatible_dep('pyarrow', _expected_version)
+        warn_incompatible_dep('pyarrow', _expected_version)
 except ImportError:
     pandas = MissingPandas()
     pyarrow = MissingPandas()
