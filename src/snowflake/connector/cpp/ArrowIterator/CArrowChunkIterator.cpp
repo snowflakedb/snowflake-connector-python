@@ -79,7 +79,7 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
   }
 
   /** It looks like no one will decrease the ref of this Py_None, so we don't
-   * increament the ref count here */
+   * increment the ref count here */
   return std::make_shared<ReturnVal>(Py_None, nullptr);
 }
 

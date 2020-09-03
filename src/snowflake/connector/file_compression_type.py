@@ -19,84 +19,84 @@ class FileCompressionType():
         },
         'DEFLATE': {
             'name': 'DEFLATE',
-            'file_extention': '.deflate',
+            'file_extension': '.deflate',
             'mime_type': 'application',
             'mime_subtypes': ['zlib', 'deflate'],
             'is_supported': True,
         },
         'RAW_DEFLATE': {
             'name': 'RAW_DEFLATE',
-            'file_extention': '.raw_deflate',
+            'file_extension': '.raw_deflate',
             'mime_type': 'application',
             'mime_subtypes': ['raw_deflate'],
             'is_supported': True,
         },
         'BZIP2': {
             'name': 'BZIP2',
-            'file_extention': '.bz2',
+            'file_extension': '.bz2',
             'mime_type': 'application',
             'mime_subtypes': ['bzip2', 'x-bzip2', 'x-bz2', 'x-bzip', 'bz2'],
             'is_supported': True,
         },
         'LZIP': {
             'name': 'LZIP',
-            'file_extention': '.lz',
+            'file_extension': '.lz',
             'mime_type': 'application',
             'mime_subtypes': ['lzip', 'x-lzip'],
             'is_supported': False,
         },
         'LZMA': {
             'name': 'LZMA',
-            'file_extention': '.lzma',
+            'file_extension': '.lzma',
             'mime_type': 'application',
             'mime_subtypes': ['lzma', 'x-lzma'],
             'is_supported': False,
         },
         'LZO': {
             'name': 'LZO',
-            'file_extention': '.lzo',
+            'file_extension': '.lzo',
             'mime_type': 'application',
             'mime_subtypes': ['lzo', 'x-lzo'],
             'is_supported': False,
         },
         'XZ': {
             'name': 'XZ',
-            'file_extention': '.xz',
+            'file_extension': '.xz',
             'mime_type': 'application',
             'mime_subtypes': ['xz', 'x-xz'],
             'is_supported': False,
         },
         'COMPRESS': {
             'name': 'COMPRESS',
-            'file_extention': '.Z',
+            'file_extension': '.Z',
             'mime_type': 'application',
             'mime_subtypes': ['compress', 'x-compress'],
             'is_supported': False,
         },
         'PARQUET': {
                 'name': 'PARQUET',
-                'file_extention': '.parquet',
+                'file_extension': '.parquet',
                 'mime_type': 'snowflake',
                 'mime_subtypes': ['parquet'],
                 'is_supported': True,
         },
         'ZSTD': {
             'name': 'ZSTD',
-            'file_extention': '.zst',
+            'file_extension': '.zst',
             'mime_type': 'application',
             'mime_subtypes': ['zstd', 'x-zstd'],
             'is_supported': True,
         },
         'BROTLI': {
             'name': 'BROTLI',
-            'file_extention': '.br',
+            'file_extension': '.br',
             'mime_type': 'application',
             'mime_subtypes': ['br', 'x-br'],
             'is_supported': True,
         },
         'ORC': {
             'name': 'ORC',
-            'file_extention': '.orc',
+            'file_extension': '.orc',
             'mime_type': 'snowflake',
             'mime_subtypes': ['orc'],
             'is_supported': True,
@@ -105,7 +105,7 @@ class FileCompressionType():
 
     subtype_to_meta = {}
 
-    # TODO: Snappy avro doen't need to be compressed again
+    # TODO: Snappy avro doesn't need to be compressed again
 
     @classmethod
     def init(cls):

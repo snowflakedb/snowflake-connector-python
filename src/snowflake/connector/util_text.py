@@ -23,7 +23,7 @@ class SQLDelimiter(object):
         return self.sql_delimiter
 
     def __init__(self, sql_delimiter: str = ';'):
-        """Initalizes SQLDelimiter with a string."""
+        """Initializes SQLDelimiter with a string."""
         self.sql_delimiter = sql_delimiter
 
 
