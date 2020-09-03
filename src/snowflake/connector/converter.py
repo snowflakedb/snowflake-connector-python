@@ -282,7 +282,7 @@ class SnowflakeConverter(object):
 
     _TIMESTAMP_to_python = _TIMESTAMP_LTZ_to_python
 
-    def _TIMESTAMP_NTZ_to_python(self):
+    def _TIMESTAMP_NTZ_to_python(self, ctx):
         """TIMESTAMP NTZ to datetime with no timezone info is attached."""
         scale = ctx['scale']
 
