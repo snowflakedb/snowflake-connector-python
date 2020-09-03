@@ -26,7 +26,7 @@ ODBC. It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
 (Python 3.8 is currently not supported on Windows) where Python 3.5.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
-https://docs.snowflake.net/
+https://docs.snowflake.com/
 
 Feel free to file an issue or submit a PR here for general cases. For official support, contact Snowflake support at:
 https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge
