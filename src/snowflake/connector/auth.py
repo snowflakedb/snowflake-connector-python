@@ -405,12 +405,12 @@ def write_temporary_credential(host, account, user, id_token, store_temporary_cr
         except keyring.errors.KeyringError as ke:
             logger.debug("Could not store id_token to keyring, %s", str(ke))
     elif IS_LINUX and store_temporary_credential:
-        write_temporary_credential_file(host, account, user, id_token)
+        write_temporary_credential_file(account, user, id_token)
     else:
         logger.debug("connection parameter client_store_temporary_credential not set or OS not support")
 
 
-def write_temporary_credential_file(host, account, user, id_token):
+def write_temporary_credential_file(account, user, id_token):
     """Writes temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled

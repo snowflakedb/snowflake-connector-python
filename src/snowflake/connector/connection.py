@@ -520,7 +520,7 @@ class SnowflakeConnection(object):
             setattr(self, m, getattr(errors, m))
 
     @staticmethod
-    def setup_ocsp_privatelink(app, hostname):
+    def setup_ocsp_privatelink(hostname):
         SnowflakeConnection.OCSP_ENV_LOCK.acquire()
         ocsp_cache_server = \
             'http://ocsp.{}/ocsp_response_cache.json'.format(

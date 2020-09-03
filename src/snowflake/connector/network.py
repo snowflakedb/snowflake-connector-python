@@ -672,7 +672,7 @@ class SnowflakeRestful(object):
                         Error.errorhandler_wrapper(conn, None, cause)
                     else:
                         self.handle_invalid_certificate_error(
-                            conn, full_url, cause)
+                            conn, cause)
                     return {}  # required for tests
             sleeping_time = retry_ctx.next_sleep()
             logger.debug(
@@ -695,7 +695,7 @@ class SnowflakeRestful(object):
             logger.debug("Ignored error", exc_info=True)
             return {}
 
-    def handle_invalid_certificate_error(self, conn, full_url, cause):
+    def handle_invalid_certificate_error(self, conn, cause):
         # all other errors raise exception
         Error.errorhandler_wrapper(
             conn, None, OperationalError,

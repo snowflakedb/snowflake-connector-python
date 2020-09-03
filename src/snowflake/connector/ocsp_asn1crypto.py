@@ -219,7 +219,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         try:
             if cert_status == 'good':
-                self._process_good_status(single_response, cert_id, ocsp_response)
+                self._process_good_status(single_response)
         except Exception as ex:
             logger.debug("Failed to validate ocsp response %s", ex)
             return False
@@ -300,7 +300,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         try:
             if cert_status == 'good':
-                self._process_good_status(single_response, cert_id, ocsp_response)
+                self._process_good_status(single_response)
                 SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
             elif cert_status == 'revoked':
                 self._process_revoked_status(single_response, cert_id)

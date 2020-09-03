@@ -49,7 +49,7 @@ class Incident(object):
         self.errorStackTrace = str(error_stack_trace)
         self.os = str(os)
         self.osVersion = str(os_version)
-        self.signature = str(self.__generate_signature(error_message, error_stack_trace))
+        self.signature = str(self.__generate_signature(error_message))
         self.driver = str(driver)
         self.driverVersion = str(driver_version)
 
@@ -81,7 +81,7 @@ class Incident(object):
         return "Incident {id}".format(id=self.uuid)
 
     @staticmethod
-    def __generate_signature(error_message: Optional[str], error_stack_trace: Optional[str]) -> Optional[str]:
+    def __generate_signature(error_message: Optional[str]) -> Optional[str]:
         """Automatically generates signature of Incident."""
         return error_message
 

@@ -1375,7 +1375,7 @@ class SnowflakeOCSP(object):
 
         return ret
 
-    def _process_good_status(self, single_response, cert_id, ocsp_response):
+    def _process_good_status(self, single_response):
         """Processes GOOD status."""
         current_time = int(time.time())
         this_update_native, next_update_native = \
