@@ -23,6 +23,7 @@ from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
+    PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
 )
 from .description import COMPILER, IMPLEMENTATION, OPERATING_SYSTEM, PLATFORM, PYTHON_VERSION
@@ -79,6 +80,9 @@ KEYRING_SERVICE_NAME = "net.snowflake.temporary_token"
 KEYRING_USER = "temp_token"
 KEYRING_DRIVER_NAME = "SNOWFLAKE-PYTHON-DRIVER"
 
+ID_TOKEN = "ID_TOKEN"
+MFA_TOKEN = "MFATOKEN"
+
 
 class Auth(object):
     """Snowflake Authenticator."""
@@ -91,8 +95,7 @@ class Auth(object):
                        internal_application_name,
                        internal_application_version,
                        ocsp_mode, login_timeout,
-                       network_timeout=None,
-                       store_temp_cred=None):
+                       network_timeout=None):
         return {
             'data': {
                 "CLIENT_APP_ID": internal_application_name,
@@ -111,7 +114,6 @@ class Auth(object):
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
-                    "CLIENT_STORE_TEMPORARY_CREDENTIAL": store_temp_cred,
                 }
             },
         }
@@ -137,12 +139,6 @@ class Auth(object):
             headers[HTTP_HEADER_SERVICE_NAME] = \
                 session_parameters[HTTP_HEADER_SERVICE_NAME]
         url = "/session/v1/login-request"
-        if session_parameters is not None \
-                and PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL in session_parameters:
-            store_temp_cred = session_parameters[
-                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL]
-        else:
-            store_temp_cred = None
 
         body_template = Auth.base_auth_data(
             user, account, self._rest._connection.application,
@@ -151,7 +147,6 @@ class Auth(object):
             self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
-            store_temp_cred,
         )
 
         body = copy.deepcopy(body_template)
@@ -342,13 +337,15 @@ class Auth(object):
                 ret['data']['token'], ret['data']['masterToken'],
                 master_validity_in_seconds=ret['data'].get(
                     'masterValidityInSeconds'),
-                id_token=ret['data'].get('idToken')
+                id_token=ret['data'].get('idToken'),
+                mfa_token=ret['data'].get('mfaToken')
             )
-            if self._rest._connection.consent_cache_id_token:
-                write_temporary_credential(
-                    self._rest._host, account, user, self._rest.id_token,
-                    session_parameters.get(
-                        PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL))
+            #if self._rest._connection.consent_cache_id_token:
+            #    write_temporary_credential(
+            #        self._rest._host, account, user, self._rest.id_token,
+            #        session_parameters.get(
+            #            PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL))
+            self.write_temporary_credentials(self._rest._host, user, session_parameters, ret)
             if 'sessionId' in ret['data']:
                 self._rest._connection._session_id = ret['data']['sessionId']
             if 'sessionInfo' in ret['data']:
@@ -359,53 +356,120 @@ class Auth(object):
                 self._rest._connection._role = session_info.get('roleName')
             self._rest._connection._set_parameters(ret, session_parameters)
 
+            auth_instance.post_auth(ret)
+
         return session_parameters
 
-    def read_temporary_credential(self, host, account, user, session_parameters):
+    # WUFAN TODO, to be deleted
+    #def read_temporary_credential(self, host, account, user, session_parameters):
+    #    if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
+    #        id_token = None
+    #        if IS_MACOS or IS_WINDOWS:
+    #            if not keyring:
+    #                # we will leave the exception for write_temporary_credential function to raise
+    #                return
+    #            new_target = convert_target(host, user)
+    #            try:
+    #                id_token = keyring.get_password(new_target, user.upper())
+    #            except keyring.errors.KeyringError as ke:
+    #                logger.debug("Could not retrieve id_token from secure storage : {}".format(str(ke)))
+    #        elif IS_LINUX:
+    #            read_temporary_credential_file()
+    #            id_token = TEMPORARY_CREDENTIAL.get(
+    #                account.upper(), {}).get(user.upper())
+    #        else:
+    #            logger.debug("OS not support for Local Secure Storage")
+    #        self._rest.id_token = id_token
+    #    return
+
+    def _read_temporary_credential(self, host, user, cred_type):
+        cred = None
+        if IS_MACOS or IS_WINDOWS:
+            if not keyring:
+                return
+            try:
+                cred = keyring.get_password(self.build_credential_name(host, user, cred_type), user.upper())
+            except keyring.errors.KeyringError as ke:
+                logger.debug("Could not retrieve {} from secure storage : {}".format(cred_type, str(ke)))
+        elif IS_LINUX:
+            read_temporary_credential_file()
+            cred = TEMPORARY_CREDENTIAL.get(
+                    host.upper(), {}).get(self.build_credential_name(host, user, cred_type))
+        else:
+            logger.debug("OS not support for Local Secure Storage")
+        return cred
+
+    def read_temporary_credentials(self, host, user, session_parameters):
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
-            id_token = None
-            if IS_MACOS or IS_WINDOWS:
-                if not installed_keyring:
-                    # we will leave the exception for write_temporary_credential function to raise
-                    return
-                new_target = convert_target(host, user)
-                try:
-                    id_token = keyring.get_password(new_target, user.upper())
-                except keyring.errors.KeyringError as ke:
-                    logger.debug("Could not retrieve id_token from secure storage : {}".format(str(ke)))
-            elif IS_LINUX:
-                read_temporary_credential_file()
-                id_token = TEMPORARY_CREDENTIAL.get(
-                    account.upper(), {}).get(user.upper())
-            else:
-                logger.debug("connection parameter enable_sso_temporary_credential not set or OS not support")
-            self._rest.id_token = id_token
-        return
+            self._rest.id_token = self._read_temporary_credential(host, user, ID_TOKEN)
+
+        if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
+            self._rest.mfa_token = self._read_temporary_credential(host, user, MFA_TOKEN)
+    return
 
 
-def write_temporary_credential(host, account, user, id_token, store_temporary_credential=False):
-    if not id_token:
-        logger.debug("no ID token is given when try to store temporary credential")
-        return
-    if IS_MACOS or IS_WINDOWS:
-        if not installed_keyring:
-            logger.debug("Dependency 'keyring' is not installed, cannot cache id token. You might experience "
-                         "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
-                         "this please install keyring module using the following command : pip install "
-                         "snowflake-connector-python[secure-local-storage]")
+    def build_credential_name(self, host, user, cred_type):
+        return "{host}:{user}:{driver}:{cred}".format(
+                host=host.upper(),
+                user=user.upper(),
+                driver=KEYRING_DRIVER_NAME,
+                cred=cred_type)
+
+
+    def _write_temporary_credential(self, host, user, cred_type, cred):
+        if not cred:
+            logger.debug("no credential is given when try to store temporary credential")
             return
-        new_target = convert_target(host, user)
-        try:
-            keyring.set_password(new_target, user.upper(), id_token)
-        except keyring.errors.KeyringError as ke:
-            logger.debug("Could not store id_token to keyring, %s", str(ke))
-    elif IS_LINUX and store_temporary_credential:
-        write_temporary_credential_file(host, account, user, id_token)
-    else:
-        logger.debug("connection parameter client_store_temporary_credential not set or OS not support")
+        if IS_MACOS or IS_WINDOWS:
+            if not installed_keyring:
+                logger.debug("Dependency 'keyring' is not installed, cannot cache id token. You might experience "
+                             "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
+                             "this please install keyring module using the following command : pip install "
+                             "snowflake-connector-python[secure-local-storage]")
+                return
+            try:
+                keyring.set_password(self.build_credential_name(host, user, cred_type), cred)
+            except keyring.errors.KeyringError as ke:
+                logger.debug("Could not store id_token to keyring, %s", str(ke))
+        elif IS_LINUX:
+            write_temporary_credential_file(host, self.build_credential_name(host, user, cred_type))
+        else:
+            logger.debug("OS not support for Local Secure Storage")
 
 
-def write_temporary_credential_file(host, account, user, id_token):
+    def write_temporary_credentials(self, host, user, session_parameters, response):
+        if self._rest._connection.consent_cache_id_token and session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
+            self._write_temporary_credential(host, user, ID_TOKEN, response['data'].get('idToken'))
+
+        if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
+            self._write_temporary_credential(host, user, MFA_TOKEN, response['data'].get('mfaToken'))
+        return
+
+# WUFAN TODO, to be deleted
+#def write_temporary_credential(host, account, user, id_token, store_temporary_credential=False):
+#    if not id_token:
+#        logger.debug("no ID token is given when try to store temporary credential")
+#        return
+#    if IS_MACOS or IS_WINDOWS:
+#        if not keyring:
+#            logger.debug("Dependency 'keyring' is not installed, cannot cache id token. You might experience "
+#                         "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
+#                         "this please install keyring module using the following command : pip install "
+#                         "snowflake-connector-python[secure-local-storage]")
+#            return
+#        new_target = convert_target(host, user)
+#        try:
+#            keyring.set_password(new_target, user.upper(), id_token)
+#        except keyring.errors.KeyringError as ke:
+#            logger.debug("Could not store id_token to keyring, %s", str(ke))
+#    elif IS_LINUX and store_temporary_credential:
+#        write_temporary_credential_file(host, account, user, id_token)
+#    else:
+#        logger.debug("connection parameter client_store_temporary_credential not set or OS not support")
+
+
+
+def write_temporary_credential_file(host, cred_name, cred):
     """Writes temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -415,9 +479,9 @@ def write_temporary_credential_file(host, account, user, id_token):
     global TEMPORARY_CREDENTIAL_FILE
     with TEMPORARY_CREDENTIAL_LOCK:
         # update the cache
-        account_data = TEMPORARY_CREDENTIAL.get(account.upper(), {})
-        account_data[user.upper()] = id_token
-        TEMPORARY_CREDENTIAL[account.upper()] = account_data
+        host_data = TEMPORARY_CREDENTIAL.get(host.upper(), {})
+        host_data[cred_name] = cred
+        TEMPORARY_CREDENTIAL[host.upper()] = host_data
         for _ in range(10):
             if lock_temporary_credential_file():
                 break
