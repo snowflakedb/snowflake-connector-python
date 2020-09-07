@@ -4,6 +4,7 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
+import copy
 import logging
 import os
 import re
@@ -15,7 +16,7 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
-from typing import Callable, Dict, Generator, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
 from . import errors, proxy
 from .auth import Auth
@@ -26,7 +27,7 @@ from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
-from .compat import IS_LINUX, IS_WINDOWS, urlencode
+from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -39,6 +40,7 @@ from .constants import (
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
     OCSPMode,
+    QueryStatus,
 )
 from .converter import SnowflakeConverter
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
@@ -203,6 +205,8 @@ class SnowflakeConnection(object):
         self._errorhandler = Error.default_errorhandler
         self._lock_converter = Lock()
         self.messages = []
+        self._async_sfqids = set()
+        self._done_async_sfqids = set()
         logger.info(
             "Snowflake Connector for Python Version: %s, "
             "Python Version: %s, Platform: %s",
@@ -429,7 +433,13 @@ class SnowflakeConnection(object):
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
             self._telemetry.close(send_on_close=retry)
-            self.rest.delete_session(retry=retry)
+            if self.safe_to_close():
+                logger.info('No async queries seem to be running, deleting session')
+                self.rest.delete_session(retry=retry)
+            else:
+                logger.info('There are {} async queries still running, not deleting session'.format(
+                    len(self._async_sfqids)
+                ))
             self.rest.close()
             self._rest = None
             del self.messages[:]
@@ -1103,3 +1113,101 @@ class SnowflakeConnection(object):
         else:
             self.rollback()
         self.close()
+
+    def _get_query_status(self, sf_qid: str) -> Tuple[QueryStatus, Dict[str, Any]]:
+        """Retrieves the status of query with sf_qid and returns it with the raw response.
+
+        This is the underlying function used by the public get_status functions.
+
+        Args:
+            sf_qid: Snowflake query id of interest.
+        """
+        logger.debug('get_query_status sf_qid=\'{}\''.format(sf_qid))
+
+        status = 'NO_DATA'
+        status_resp = self.rest.request('/monitoring/queries/' + quote(sf_qid),
+                                        method='get',
+                                        client='rest')
+        queries = status_resp['data']['queries']
+        if len(queries) > 0:
+            status = queries[0]['status']
+        status_ret = QueryStatus[status]
+        # If query was started by us and it has finished let's cache this info
+        if sf_qid in self._async_sfqids and not self.is_still_running(status_ret):
+            self._async_sfqids.remove(sf_qid)
+            self._done_async_sfqids.add(sf_qid)
+        return status_ret, status_resp
+
+    def get_query_status(self, sf_qid: str) -> QueryStatus:
+        """Retrieves the status of query with sf_qid.
+
+        Query status is returned as a QueryStatus.
+
+        Args:
+            sf_qid: Snowflake query id of interest.
+        """
+        status, status_resp = self._get_query_status(sf_qid)
+        return status
+
+    def get_query_status_throw_if_error(self, sf_qid: str) -> QueryStatus:
+        """Retrieves the status of query with sf_qid as a QueryStatus and raises an exception if the query terminated with an error.
+
+        Query status is returned as a QueryStatus.
+
+        Args:
+            sf_qid: Snowflake query id of interest.
+        """
+        status, status_resp = self._get_query_status(sf_qid)
+        queries = status_resp['data']['queries']
+        if self.is_an_error(status):
+            if sf_qid in self._async_sfqids:
+                self._async_sfqids.remove(sf_qid)
+            message = status_resp.get('message')
+            if message is None:
+                message = ''
+            code = status_resp.get('code')
+            if code is None:
+                code = -1
+            sql_state = None
+            if 'data' in status_resp:
+                message += queries[0].get('errorMessage', '') if len(queries) > 0 else ''
+                sql_state = status_resp['data'].get('sqlState')
+            Error.errorhandler_wrapper(self, None,
+                                       ProgrammingError,
+                                       {'msg': message,
+                                        'errno': int(code),
+                                        'sqlstate': sql_state,
+                                        'sfqid': sf_qid})
+            return status
+
+    @staticmethod
+    def is_still_running(status: QueryStatus) -> bool:
+        """Checks whether given status is currently running."""
+        return status in (
+                QueryStatus.RUNNING,
+                QueryStatus.RESUMING_WAREHOUSE,
+                QueryStatus.QUEUED,
+                QueryStatus.QUEUED_REPAIRING_WAREHOUSE,
+                QueryStatus.NO_DATA,
+        )
+
+    @staticmethod
+    def is_an_error(status: QueryStatus) -> bool:
+        """Checks whether given status means that there has been an error."""
+        return status in (
+            QueryStatus.ABORTING,
+            QueryStatus.FAILED_WITH_ERROR,
+            QueryStatus.ABORTED,
+            QueryStatus.FAILED_WITH_INCIDENT,
+            QueryStatus.DISCONNECTED,
+            QueryStatus.BLOCKED,
+        )
+
+    def safe_to_close(self) -> bool:
+        """Checks whether this connection is safe to close.
+
+        A connection is safe to close if all of its async queries are not running anymore.
+        """
+        queries = copy.copy(self._async_sfqids)  # get_query_status might update _async_sfqids, let's copy the list
+        finished_async_queries = (not self.is_still_running(self.get_query_status(q)) for q in queries)
+        return all(finished_async_queries)

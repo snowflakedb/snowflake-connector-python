@@ -8,13 +8,14 @@ import logging
 import re
 import signal
 import sys
+import time
 import uuid
 from logging import getLogger
 from threading import Lock, Timer
 from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from .compat import BASE_EXCEPTION_CLASS
-from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
+from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT, QueryStatus
 from .errorcode import (
     ER_CURSOR_IS_CLOSED,
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
@@ -68,6 +69,9 @@ DESC_TABLE_RE = re.compile(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$',
                            flags=re.IGNORECASE)
 
 LOG_MAX_QUERY_LENGTH = 80
+
+ASYNC_NO_DATA_MAX_RETRY = 24
+ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 
 
 def exit_handler(*_):  # pragma: no cover
@@ -159,6 +163,8 @@ class SnowflakeCursor(object):
         self._first_chunk_time = None
 
         self._log_max_query_length = connection.log_max_query_length
+        self._inner_cursor = None
+        self._prefetch_hook = None
 
         self.reset()
 
@@ -429,7 +435,7 @@ class SnowflakeCursor(object):
                 command: str,
                 params: Union[List, Tuple, None] = None,
                 timeout: Optional[int] = None,
-                exec_async: bool = False,
+                _exec_async: bool = False,
                 _do_reset: bool = True,
                 _put_callback: 'SnowflakeProgressPercentage' = None,
                 _put_azure_callback: 'SnowflakeProgressPercentage' = None,
@@ -451,7 +457,7 @@ class SnowflakeCursor(object):
             command: The SQL command to be executed.
             params: Parameters to be bound into the SQL statement.
             timeout: Number of seconds after which to abort the query.
-            exec_async: Whether to execute this query asynchronously.
+            _exec_async: Whether to execute this query asynchronously.
             _do_reset: Whether or not the result set needs to be reset before executing query.
             _put_callback: Function to which GET command should call back to.
             _put_azure_callback: Function to which an Azure GET command should call back to.
@@ -472,6 +478,8 @@ class SnowflakeCursor(object):
         Returns:
             A result class with the results in it. This can either be json, or an arrow result class.
         """
+        if _exec_async:
+            _no_results = True
         logger.debug('executing SQL/command')
         if self.is_closed():
             Error.errorhandler_wrapper(
@@ -579,6 +587,8 @@ class SnowflakeCursor(object):
                 value = m.group(2)
                 self._connection.converter.set_parameter(param, value)
 
+            if _exec_async:
+                self.connection._async_sfqids.add(self._sfqid)
             if _no_results:
                 self._total_rowcount = ret['data'][
                     'total'] if 'data' in ret and 'total' in ret[
@@ -603,6 +613,15 @@ class SnowflakeCursor(object):
                                        ProgrammingError,
                                        errvalue)
         return self
+
+    def execute_async(self, *args, **kwargs):
+        """Convenience function to execute a query without waiting for results (asynchronously).
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+        """
+        kwargs['_exec_async'] = True
+        return self.execute(*args, **kwargs)
 
     def _format_query_for_log(self, query):
         return self._connection._format_query_for_log(query)
@@ -816,6 +835,8 @@ class SnowflakeCursor(object):
 
     def fetchone(self):
         """Fetches one row."""
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         try:
             return next(self._result)
         except StopIteration:
@@ -882,6 +903,11 @@ class SnowflakeCursor(object):
         self._total_rowcount = -1  # reset the rowcount
         if self._result is not None:
             self._result._reset()
+        if self._inner_cursor is not None:
+            self._inner_cursor.reset()
+            self._result = None
+            self._inner_cursor = None
+        self._prefetch_hook = None
 
     def __iter__(self):
         """Iteration over the result set."""
@@ -916,6 +942,39 @@ class SnowflakeCursor(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager with commit or rollback."""
         self.close()
+
+    def get_results_from_sfqid(self, sfqid: str):
+        """Gets the results from previously ran query."""
+
+        def wait_until_ready():
+            """Makes sure query has finished executing and once it has retrieves results."""
+            no_data_counter = 0
+            retry_pattern_pos = 0
+            while True:
+                status = self.connection.get_query_status(sfqid)
+                if not self.connection.is_still_running(status):
+                    break
+                if status == QueryStatus.NO_DATA:
+                    no_data_counter += 1
+                    if no_data_counter > ASYNC_NO_DATA_MAX_RETRY:
+                        raise DatabaseError("Cannot retrieve data on the status of this query. No information returned "
+                                            "from server for query '{}'")
+                time.sleep(0.5 * ASYNC_RETRY_PATTERN[retry_pattern_pos])  # Same wait as JDBC
+                # If we can advance in ASYNC_RETRY_PATTERN then do so
+                if retry_pattern_pos < (len(ASYNC_RETRY_PATTERN) - 1):
+                    retry_pattern_pos += 1
+            if status != QueryStatus.SUCCESS:
+                raise DatabaseError("Status of query '{}' is {}, results are unavailable".format(sfqid, status.name))
+            self._inner_cursor.execute('select * from table(result_scan(\'{}\'))'.format(sfqid))
+            self._result = self._inner_cursor._result
+            # Unset this function, so that we don't block anymore
+            self._prefetch_hook = None
+
+        self.connection.get_query_status_throw_if_error(sfqid)  # Trigger an exception if query failed
+        klass = self.__class__
+        self._inner_cursor = klass(self.connection)
+        self._sfqid = sfqid
+        self._prefetch_hook = wait_until_ready
 
 
 class DictCursor(SnowflakeCursor):

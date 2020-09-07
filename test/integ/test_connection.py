@@ -29,7 +29,7 @@ from snowflake.connector.errors import Error, ForbiddenError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
-try:
+try:  # pragma: no cover
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}

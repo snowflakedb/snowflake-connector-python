@@ -9,10 +9,13 @@ from mock import patch
 
 import snowflake.connector
 
+try:  # pragma: no cover
+    from snowflake.connector.constants import QueryStatus
+except ImportError:
+    QueryStatus = None
 
-@patch(
-    'snowflake.connector.network.SnowflakeRestful._post_request'
-)
+
+@patch('snowflake.connector.network.SnowflakeRestful._post_request')
 def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
     def mock_post_request(url, headers, json_body, **kwargs):
         global mock_cnt
@@ -102,3 +105,25 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
     )
     # Test to see if closing connection works or raises an exception. If an exception is raised, test will fail.
     con.close()
+
+
+@pytest.mark.skipolddriver
+def test_is_still_running():
+    """Checks that is_still_running returns expected results."""
+    statuses = [
+        (QueryStatus.RUNNING, True),
+        (QueryStatus.ABORTING, False),
+        (QueryStatus.SUCCESS, False),
+        (QueryStatus.FAILED_WITH_ERROR, False),
+        (QueryStatus.ABORTED, False),
+        (QueryStatus.QUEUED, True),
+        (QueryStatus.FAILED_WITH_INCIDENT, False),
+        (QueryStatus.DISCONNECTED, False),
+        (QueryStatus.RESUMING_WAREHOUSE, True),
+        (QueryStatus.QUEUED_REPAIRING_WAREHOUSE, True),
+        (QueryStatus.RESTARTED, False),
+        (QueryStatus.BLOCKED, False),
+        (QueryStatus.NO_DATA, True),
+    ]
+    for status, expected_result in statuses:
+        assert snowflake.connector.SnowflakeConnection.is_still_running(status) == expected_result

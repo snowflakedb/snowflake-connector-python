@@ -5,7 +5,7 @@
 #
 
 from collections import defaultdict, namedtuple
-from enum import Enum
+from enum import Enum, unique
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -151,6 +151,7 @@ HTTP_HEADER_SERVICE_NAME = 'X-Snowflake-Service'
 HTTP_HEADER_VALUE_OCTET_STREAM = 'application/octet-stream'
 
 
+@unique
 class OCSPMode(Enum):
     """OCSP Mode enumerator for all the available modes.
 
@@ -165,3 +166,21 @@ class OCSPMode(Enum):
     FAIL_CLOSED = 'FAIL_CLOSED'
     FAIL_OPEN = 'FAIL_OPEN'
     INSECURE = 'INSECURE'
+
+
+@unique
+class QueryStatus(Enum):
+    RUNNING = 0
+    ABORTING = 1
+    SUCCESS = 2
+    FAILED_WITH_ERROR = 3
+    ABORTED = 4
+    QUEUED = 5
+    FAILED_WITH_INCIDENT = 6
+    DISCONNECTED = 7
+    RESUMING_WAREHOUSE = 8
+    # purposeful typo. Is present in QueryDTO.java
+    QUEUED_REPAIRING_WAREHOUSE = 9
+    RESTARTED = 10
+    BLOCKED = 11
+    NO_DATA = 12
