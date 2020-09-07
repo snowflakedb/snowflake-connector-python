@@ -69,7 +69,7 @@ CONNECTION_PARAMETERS = {
 
 @pytest.fixture(scope='session', autouse=True)
 def filter_log():
-    # A workround to use our custom Formatter in pytest.
+    # A workaround to use our custom Formatter in pytest.
     # Based on the discussion here 'https://github.com/pytest-dev/pytest/issues/2987'
     from snowflake.connector.secret_detector import SecretDetector
     import logging
@@ -234,12 +234,12 @@ def conn_testaccount(request):
 
 
 @pytest.fixture()
-def conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
+def conn_cnx() -> Callable[..., 'SnowflakeConnection']:
     return db
 
 
 @pytest.fixture()
-def negative_conn_cnx():
+def negative_conn_cnx() -> Callable[..., 'SnowflakeConnection']:
     """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
     return negative_db
 

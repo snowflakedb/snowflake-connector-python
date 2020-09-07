@@ -294,5 +294,5 @@ class OtherHTTPRetryableError(Error):
 class MissingDependencyError(Error):
     """Exception for missing extras dependencies."""
 
-    def __init__(self, dependency):
+    def __init__(self, dependency: str):
         super(MissingDependencyError, self).__init__(msg="Missing optional dependency: {}".format(dependency))

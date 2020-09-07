@@ -16,6 +16,7 @@ import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.connection import SnowflakeConnection
+from snowflake.connector.constants import QueryStatus
 from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errors import ForbiddenError
 from snowflake.connector.network import APPLICATION_SNOWSQL
@@ -784,3 +785,43 @@ def test_invalid_connection_parameters_only_warns(db_parameters):
             assert len(w) == 0
         finally:
             conn.close()
+
+
+@pytest.mark.parametrize('status,expected_result', (
+        (QueryStatus.RUNNING, True),
+        (QueryStatus.ABORTING, False),
+        (QueryStatus.SUCCESS, False),
+        (QueryStatus.FAILED_WITH_ERROR, False),
+        (QueryStatus.ABORTED, False),
+        (QueryStatus.QUEUED, True),
+        (QueryStatus.FAILED_WITH_INCIDENT, False),
+        (QueryStatus.DISCONNECTED, False),
+        (QueryStatus.RESUMING_WAREHOUSE, True),
+        (QueryStatus.QUEUED_REPAIRING_WAREHOUSE, True),
+        (QueryStatus.RESTARTED, False),
+        (QueryStatus.BLOCKED, False),
+        (QueryStatus.NO_DATA, True),
+))
+def test_is_still_running(status: QueryStatus, expected_result: bool):
+    """Checks that is_still_running returns expected results."""
+    assert SnowflakeConnection.is_still_running(status) == expected_result
+
+
+@pytest.mark.parametrize('status,expected_result', (
+        (QueryStatus.RUNNING, False),
+        (QueryStatus.ABORTING, True),
+        (QueryStatus.SUCCESS, False),
+        (QueryStatus.FAILED_WITH_ERROR, True),
+        (QueryStatus.ABORTED, True),
+        (QueryStatus.QUEUED, False),
+        (QueryStatus.FAILED_WITH_INCIDENT, True),
+        (QueryStatus.DISCONNECTED, True),
+        (QueryStatus.RESUMING_WAREHOUSE, False),
+        (QueryStatus.QUEUED_REPAIRING_WAREHOUSE, False),
+        (QueryStatus.RESTARTED, False),
+        (QueryStatus.BLOCKED, True),
+        (QueryStatus.NO_DATA, False),
+))
+def test_is_an_error(status: QueryStatus, expected_result: bool):
+    """Checks that is_still_running returns expected results."""
+    assert SnowflakeConnection.is_an_error(status) == expected_result

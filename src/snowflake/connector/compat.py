@@ -61,6 +61,7 @@ BadStatusLine = http.client.BadStatusLine
 
 urlencode = urllib.parse.urlencode
 unquote = urllib.parse.unquote
+quote = urllib.parse.quote
 unescape = html.unescape
 
 EmptyQueue = queue.Empty
