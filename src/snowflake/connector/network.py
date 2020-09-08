@@ -9,7 +9,6 @@ import gzip
 import itertools
 import json
 import logging
-import sys
 import time
 import traceback
 import uuid
