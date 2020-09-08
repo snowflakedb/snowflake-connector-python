@@ -6,9 +6,7 @@ channels:
 dependencies:
 - blas=*=mkl
 - bokeh
-- dask-ml
-- dask-saturn==0.0.4
-- dask-xgboost
+- dask-saturn
 - dask==2.20.0
 - distributed==2.20.0
 - graphviz
@@ -20,9 +18,5 @@ dependencies:
 - pip
 - pyarrow
 - python=3.7
-- s3fs
-- scikit-learn
-- scipy
 - snowflake-connector-python
 - snowflake-sqlalchemy
-- xgboost
