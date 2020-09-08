@@ -35,6 +35,7 @@ def test_mfa_cache(
                     'mfaToken': 'MFA_TOKEN',
                 }}
         elif mock_post_req_cnt == 1:
+            assert body['data']['SESSION_PARAMETERS'].get('CLIENT_REQUEST_MFA_TOKEN') is True
             assert body['data']['TOKEN'] == 'MFA_TOKEN'
             ret = {
                 'success': True,
@@ -42,27 +43,20 @@ def test_mfa_cache(
                 'data': {
                     'token': 'NEW_TOKEN',
                     'masterToken': 'NEW_MASTER_TOKEN',
+                    'mfaToken': 'NEW_MFA_TOKEN'
                 }}
         elif mock_post_req_cnt == 2:
-            # return from USE WAREHOUSE TESTWH_NEW
+            assert body['data']['SESSION_PARAMETERS'].get('CLIENT_REQUEST_MFA_TOKEN') is True
+            assert body['data']['TOKEN'] == 'NEW_MFA_TOKEN'
             ret = {
                 'success': True,
                 'message': None,
                 'data': {
-                    'finalDatabase': 'TESTDB',
-                    'finalWarehouse': 'TESTWH_NEW',
+                    'token': 'NEW_TOKEN',
+                    'masterToken': 'NEW_MASTER_TOKEN',
                 }}
         elif mock_post_req_cnt == 3:
             # return from USE DATABASE TESTDB_NEW
-            ret = {
-                'success': True,
-                'message': None,
-                'data': {
-                    'finalDatabase': 'TESTDB_NEW',
-                    'finalWarehouse': 'TESTWH_NEW',
-                }}
-        elif mock_post_req_cnt == 4:
-            # return from SELECT 1
             ret = {
                 'success': True,
                 'message': None,
@@ -108,7 +102,10 @@ def test_mfa_cache(
             warehouse='TESTWH',
             client_request_mfa_token=True,
         )
+        assert con._rest.token == 'TOKEN'
+        assert con._rest.master_token == 'MASTER_TOKEN'
         assert con._rest.mfa_token == 'MFA_TOKEN'
+        con.close()
 
         # second connection that uses the id token to get the session token
         con = snowflake.connector.connect(
@@ -121,14 +118,22 @@ def test_mfa_cache(
             warehouse='TESTWH_NEW',  # override the warehouse
             client_request_mfa_token=True,
         )
-
-        """
         assert con._rest.token == 'NEW_TOKEN'
         assert con._rest.master_token == 'NEW_MASTER_TOKEN'
-        assert con._rest.id_token is None
-        assert con.database == 'TESTDB_NEW'
-        assert con.warehouse == 'TESTWH_NEW'
-        """
+        assert con._rest.mfa_token == 'NEW_MFA_TOKEN'
+        con.close()
+
+        con = snowflake.connector.connect(
+            account=account,
+            user=user,
+            password=pwd,
+            host=host,
+            authenticator=authenticator,
+            database='TESTDB_NEW',  # override the database
+            warehouse='TESTWH_NEW',  # override the warehouse
+            client_request_mfa_token=True,
+        )
+        assert con._rest.mfa_token is None
 
     if IS_MACOS:
         with patch('keyring.delete_password', Mock(return_value=None)
