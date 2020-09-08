@@ -6,19 +6,13 @@
 
 import logging
 
-from .auth import read_temporary_credential_file, TEMPORARY_CREDENTIAL, KEYRING_DRIVER_NAME
 from .auth_by_plugin import AuthByPlugin
-from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS
 from .network import USR_PWD_MFA_AUTHENTICATOR
 
 logger = logging.getLogger(__name__)
 
-try:
-  import keyring
-except ImportError as ie:
-  keyring = None
-
 MFA_TOKEN = 'MFATOKEN'
+
 
 class AuthByUsrPwdMfa(AuthByPlugin):
     """Username & password & mfa authenticator."""
@@ -38,7 +32,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
 
     @mfa_token.setter
     def mfa_token(self, value):
-        self._mfa_token = value 
+        self._mfa_token = value
 
     def authenticate(
             self, authenticator, service_name, account, user, password):
@@ -46,7 +40,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
         pass
 
     def update_body(self, body):
-        ### TODO, set mfa token?
+        # TODO, set mfa token?
         """Sets the password and mfa_token if available."""
         body['data']['AUTHENTICATOR'] = USR_PWD_MFA_AUTHENTICATOR
         if self._password:

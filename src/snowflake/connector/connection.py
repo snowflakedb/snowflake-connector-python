@@ -24,8 +24,8 @@ from .auth_idtoken import AuthByIdToken
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
-from .auth_webbrowser import AuthByWebBrowser
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
+from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
 from .compat import IS_LINUX, IS_WINDOWS, PY_ISSUE_23517, urlencode
 from .constants import (
@@ -62,8 +62,8 @@ from .network import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
-    USR_PWD_MFA_AUTHENTICATOR,
     REQUEST_ID,
+    USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -619,7 +619,7 @@ class SnowflakeConnection(object):
                     self._client_request_mfa_token if IS_LINUX else True
 
         auth = Auth(self.rest)
-        auth.read_temporary_credentials(self.host, self.account, self.user, self._session_parameters)
+        auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
         self._authenticate(auth_instance)
 
         self._password = None  # ensure password won't persist

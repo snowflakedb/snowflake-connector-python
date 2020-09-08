@@ -356,8 +356,6 @@ class Auth(object):
                 self._rest._connection._role = session_info.get('roleName')
             self._rest._connection._set_parameters(ret, session_parameters)
 
-            auth_instance.post_auth(ret)
-
         return session_parameters
 
     # WUFAN TODO, to be deleted
@@ -388,13 +386,13 @@ class Auth(object):
             if not keyring:
                 return
             try:
-                cred = keyring.get_password(self.build_credential_name(host, user, cred_type), user.upper())
+                cred = keyring.get_password(build_credential_name(host, user, cred_type), user.upper())
             except keyring.errors.KeyringError as ke:
                 logger.debug("Could not retrieve {} from secure storage : {}".format(cred_type, str(ke)))
         elif IS_LINUX:
             read_temporary_credential_file()
             cred = TEMPORARY_CREDENTIAL.get(
-                    host.upper(), {}).get(self.build_credential_name(host, user, cred_type))
+                    host.upper(), {}).get(build_credential_name(host, user, cred_type))
         else:
             logger.debug("OS not support for Local Secure Storage")
         return cred
@@ -405,15 +403,6 @@ class Auth(object):
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
             self._rest.mfa_token = self._read_temporary_credential(host, user, MFA_TOKEN)
-    return
-
-
-    def build_credential_name(self, host, user, cred_type):
-        return "{host}:{user}:{driver}:{cred}".format(
-                host=host.upper(),
-                user=user.upper(),
-                driver=KEYRING_DRIVER_NAME,
-                cred=cred_type)
 
 
     def _write_temporary_credential(self, host, user, cred_type, cred):
@@ -428,14 +417,13 @@ class Auth(object):
                              "snowflake-connector-python[secure-local-storage]")
                 return
             try:
-                keyring.set_password(self.build_credential_name(host, user, cred_type), cred)
+                keyring.set_password(build_credential_name(host, user, cred_type), cred)
             except keyring.errors.KeyringError as ke:
                 logger.debug("Could not store id_token to keyring, %s", str(ke))
         elif IS_LINUX:
-            write_temporary_credential_file(host, self.build_credential_name(host, user, cred_type))
+            write_temporary_credential_file(host, build_credential_name(host, user, cred_type), cred)
         else:
             logger.debug("OS not support for Local Secure Storage")
-
 
     def write_temporary_credentials(self, host, user, session_parameters, response):
         if self._rest._connection.consent_cache_id_token and session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
@@ -466,7 +454,6 @@ class Auth(object):
 #        write_temporary_credential_file(host, account, user, id_token)
 #    else:
 #        logger.debug("connection parameter client_store_temporary_credential not set or OS not support")
-
 
 
 def write_temporary_credential_file(host, cred_name, cred):
@@ -566,6 +553,17 @@ def delete_temporary_credential(host, user, store_temporary_credential=False):
         delete_temporary_credential_file()
 
 
+def delete_temporary_mfa_token(host, user):
+    if (IS_MACOS or IS_WINDOWS) and keyring:
+        try:
+            keyring.delete_password(build_credential_name(host, user, MFA_TOKEN))
+        except Exception as ex:
+            logger.debug("Failed to delete credential in the keyring: err=[%s]",
+                         ex)
+    elif IS_LINUX:
+        delete_temporary_credential_file()
+
+
 def delete_temporary_credential_file():
     """Deletes temporary credential file and its lock file."""
     global TEMPORARY_CREDENTIAL_FILE
@@ -583,3 +581,11 @@ def delete_temporary_credential_file():
 def convert_target(host, user):
     return "{host}:{user}:{driver}".format(
             host=host.upper(), user=user.upper(), driver=KEYRING_DRIVER_NAME)
+
+
+def build_credential_name(host, user, cred_type):
+    return "{host}:{user}:{driver}:{cred}".format(
+            host=host.upper(),
+            user=user.upper(),
+            driver=KEYRING_DRIVER_NAME,
+            cred=cred_type)
