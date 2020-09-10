@@ -12,6 +12,7 @@ from logging import getLogger
 from threading import Lock, Timer
 from typing import Optional
 
+from .chunk_downloader import ArrowBinaryHandler
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
 from .errorcode import (
@@ -67,6 +68,56 @@ DESC_TABLE_RE = re.compile(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$',
                            flags=re.IGNORECASE)
 
 LOG_MAX_QUERY_LENGTH = 80
+
+try:
+    from dask import delayed
+    import dask.dataframe as dd
+    HAS_DASK = True
+    
+    @delayed
+    def _pandas_from_chunk(conn_kwargs, chunk_url, chunk_downloader_headers):
+        """
+        Given information about how to connect to Snowflake and some
+        details of a chunk from a query that has already been executed, read that
+        chunk and return a pandas dataframe.
+
+        The chunk_downloader generates S3 presigned URLs for chunks, and those
+        URLs are valid for 1 day.
+        
+        # TODO: use the actual module paths to describe these things
+        This function has to be serializable with ``pickle`` to be used on a distributed
+        Dask cluster, so it cannot use un-pickleable objects like a ``ChunkDownloader``,
+        ``Connection``, or ``Cursor``.
+
+        :param conn_kwargs: kwargs used to create a new connection
+        :param chunk_url: URL for one chunk, from `chunk_downloader.chunks[n].url`
+        :param chunk_downloader_headers: headers to use when fetching the chunks
+            using the snowflake REST API.
+        """
+        # recreate a connection and cursor
+        from snowflake.connector.connection import SnowflakeConnection
+        conn = SnowflakeConnection(**conn_kwargs)
+        cur = conn.cursor()
+        try:
+            result_handler = ArrowBinaryHandler(cur, conn)
+
+            # TODO: use all of the keyword arguments here
+            result = conn.rest.fetch(
+                'get',
+                chunk_url,
+                chunk_downloader_headers,
+                timeout=7,
+                is_raw_binary=True,
+                binary_data_handler=result_handler
+            )
+        finally:
+            conn.close()
+
+        result.init("table")
+        return result.__next__().to_pandas()
+
+except ImportError:
+    HAS_DASK = False
 
 
 def exit_handler(*_):
@@ -718,6 +769,33 @@ class SnowflakeCursor(object):
                                        ProgrammingError,
                                        errvalue)
         return self
+    
+    def fetch_dask_dataframe(self, conn_kwargs, **kwargs):
+        """
+        Given a query result, return a Dask data frame.
+        
+        :param connection_info: kwargs to pass to a connection
+        """
+        if not HAS_DASK:
+            raise NotImplementError("dask is not available")
+        self.check_can_use_pandas()
+        if self._query_result_format != 'arrow':
+            raise NotSupportedError("can only use fetch_dask_dataframe() with Arrow results")
+        cdl = self._result._get_chunk_downloader()
+        try:
+            ddf = dd.from_delayed(
+                [
+                    _pandas_from_chunk(
+                        conn_kwargs=conn_kwargs,
+                        chunk_url=chunk.url,
+                        chunk_downloader_headers=cdl._chunk_headers
+                    )
+                    for chunk in cdl._chunks.values()
+                ],
+            )
+        finally:
+            cdl.terminate()
+        return ddf
 
     def fetch_pandas_batches(self, **kwargs):
         """Fetches a single Arrow Table."""
