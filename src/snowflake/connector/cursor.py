@@ -889,8 +889,7 @@ class SnowflakeCursor(object):
             self._inner_cursor.reset()
             self._result = None
             self._inner_cursor = None
-        if self._prefetch_hook is not None:
-            self._prefetch_hook = None
+        self._prefetch_hook = None
 
     def __iter__(self):
         """Iteration over the result set."""
