@@ -774,7 +774,48 @@ class SnowflakeCursor(object):
         """
         Given a query result, return a Dask data frame.
         
-        :param connection_info: kwargs to pass to a connection
+        :param connection_info: kwargs to pass to a ``snowflake.connector.Connection`` object
+        
+        :Example:
+        
+        .. code-block:: python
+        
+            import os
+            import dask.dataframe as dd
+            import snowflake.connector
+
+            from dask.distributed import wait
+            
+            conn_info = {
+                "warehouse" : "COMPUTE_WH",
+                "database": "SNOWFLAKE_SAMPLE_DATA",
+                "schema": "TPCDS_SF100TCL",
+                "account": os.environ["SNOWFLAKE_ACCOUNT"],
+                "user": os.environ["SNOWFLAKE_USER"],
+                "password": os.environ["SNOWFLAKE_PASSWORD"]
+            }
+            conn = snowflake.connector.connect(**conn_info)
+            
+            query = \"\"\"
+                SELECT
+                    C_BIRTH_DAY
+                FROM
+                    customer
+                \"\"\"
+
+            cur = conn.cursor()
+            
+            # Create a Dask data frame from all chunks. This is lazy,
+            # and returns quickly
+            ddf = cur.execute(query).fetch_dask_dataframe(
+                conn_kwargs=conn_info
+            )
+            
+            # Persist the data frame on the cluster. This means workers will
+            # split up the task of fetching all the result chunks and converting
+            # them to pandas data frames
+            ddf = ddf.persist()
+            _ = wait(ddf)
         """
         if not HAS_DASK:
             raise NotImplementError("dask is not available")
