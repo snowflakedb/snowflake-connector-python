@@ -69,6 +69,9 @@ DESC_TABLE_RE = re.compile(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$',
 
 LOG_MAX_QUERY_LENGTH = 80
 
+ASYNC_NO_DATA_MAX_RETRY = 24
+ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
+
 
 def exit_handler(*_):
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
@@ -930,20 +933,23 @@ class SnowflakeCursor(object):
 
         def wait_until_ready():
             """Makes sure query has finished executing and once it has retrieves results."""
-            status = self.connection.get_query_status(sfqid)
             no_data_counter = 0
-            no_data_max_retry = 24
-            while self.connection.is_still_running(status):
+            retry_pattern_pos = 0
+            while True:
                 status = self.connection.get_query_status(sfqid)
-                if not self.connection.is_still_running(status) and status != QueryStatus.SUCCESS:
-                    raise DatabaseError(
-                        "Status of query '{}' is {}, results are unavailable".format(sfqid, status.name))
+                if not self.connection.is_still_running(status):
+                    break
                 if status == QueryStatus.NO_DATA:
                     no_data_counter += 1
-                    if no_data_counter > no_data_max_retry:
+                    if no_data_counter > ASYNC_NO_DATA_MAX_RETRY:
                         raise DatabaseError("Cannot retrieve data on the status of this query. No information returned "
                                             "from server for query '{}'")
-                time.sleep(5)  # Arbitrary number, doing what JDBC has done
+                time.sleep(0.5 * ASYNC_RETRY_PATTERN[retry_pattern_pos])  # Same wait as JDBC
+                # If we can advance in ASYNC_RETRY_PATTERN then do so
+                if retry_pattern_pos < (len(ASYNC_RETRY_PATTERN) - 1):
+                    retry_pattern_pos += 1
+            if status != QueryStatus.SUCCESS:
+                raise DatabaseError("Status of query '{}' is {}, results are unavailable".format(sfqid, status.name))
             self._inner_cursor.execute('select * from table(result_scan(\'{}\'))'.format(sfqid))
             self._result = self._inner_cursor._result
             # Unset this function, so that we don't block anymore

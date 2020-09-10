@@ -27,7 +27,6 @@ def test_async_exec(conn_cnx):
             cur.execute('select count(*) from table(generator(timeLimit => 5))', exec_async=True)
             q_id = cur.sfqid
             status = con.get_query_status(q_id)
-            assert status in (QueryStatus.RUNNING, QueryStatus.NO_DATA)
             assert con.is_still_running(status)
     time.sleep(10)
     with conn_cnx() as con:
