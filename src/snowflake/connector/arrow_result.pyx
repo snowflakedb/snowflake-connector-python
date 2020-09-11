@@ -177,6 +177,19 @@ cdef class ArrowResult:
         self._arrow_context = None
         self._iter_unit = EMPTY_UNIT
 
+    def _get_chunk_downloader(self):
+        """
+        Initialize and retrieve the chunk_downloader
+        """
+        if self._iter_unit == EMPTY_UNIT:
+            self._iter_unit = TABLE_UNIT
+        elif self._iter_unit == ROW_UNIT:
+            snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
+                              msg="The iterator has been built for fetching row")
+            raise RuntimeError
+        self._current_chunk_row.init(self._iter_unit)
+        return self._chunk_downloader
+
     def _fetch_arrow_batches(self):
         """Fetch Arrow Table in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the number of
         rows in table) may be different."""
