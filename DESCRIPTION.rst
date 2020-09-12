@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.3.2(September 14,2020)
+
+   - Fixed a bug where a file handler was not closed properly.
+   - Fixed various documentation typos.
+
 - v2.3.1(August 25,2020)
 
    - Fixed a bug where 2 constants were removed by mistake.
