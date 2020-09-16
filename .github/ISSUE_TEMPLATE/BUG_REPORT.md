@@ -1,3 +1,8 @@
+---
+name: Bug Report 🐞
+about: Something isn't working as expected? Here is the right place to report.
+---
+
 Please answer these questions before submitting your issue. Thanks!
 
 1. What version of Python are you using (`python --version`)?
