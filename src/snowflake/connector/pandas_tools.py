@@ -41,7 +41,7 @@ def write_pandas(conn: 'SnowflakeConnection',
                  compression: str = 'gzip',
                  on_error: str = 'abort_statement',
                  parallel: int = 4,
-                 quote_identifiers: bool = False
+                 quote_identifiers: bool = True
                  ) -> Tuple[bool, int, int,
                             Sequence[Tuple[str, str, int, int, int, int, Optional[str], Optional[int],
                                            Optional[int], Optional[str]]]]:
@@ -74,9 +74,9 @@ def write_pandas(conn: 'SnowflakeConnection',
             (Default value = 'abort_statement').
         parallel: Number of threads to be used when uploading chunks, default follows documentation at:
             https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters (Default value = 4).
-        quote_identifiers: By default, identifiers are passed on to Snowflake without quoting. I.e. identifiers
-            will be coerced to uppercase by Snowflake. If set to True, identifiers, specifically database, schema,
-            table and column names (from df.columns) will be quoted. (Default value = False)
+        quote_identifiers: By default, identifiers, specifically database, schema, table and column names
+            (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
+            I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
