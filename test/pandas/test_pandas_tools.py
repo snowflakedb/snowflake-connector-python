@@ -66,7 +66,7 @@ def test_write_pandas_quoted_identifiers(conn_cnx: Callable[..., Generator['Snow
 
 @pytest.mark.parametrize('chunk_size', [5, 4, 3, 2, 1])
 @pytest.mark.parametrize('compression', ['gzip', 'snappy'])
-# Note: since the file will to small to chunk, this is only testing the put command's syntax
+# Note: since the file will be too small to chunk, this is only testing the put command's syntax
 @pytest.mark.parametrize('parallel', [4, 99])
 def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', None, None]],
                       db_parameters: Dict[str, str],
