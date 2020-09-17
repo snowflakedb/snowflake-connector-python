@@ -1,3 +1,5 @@
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+
 # cython: profile=False
 # cython: language_level=3
 

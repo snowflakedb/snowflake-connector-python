@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+
 #
 # X.509 Internet Public Key Infrastructure Online Certificate Status
 # Protocol - OCSP
 #
 # ASN.1 source from
 # https://tools.ietf.org/html/rfc6960
+
 from pyasn1.type import namedtype, namedval, tag, univ, useful
 from pyasn1_modules import rfc2459
 

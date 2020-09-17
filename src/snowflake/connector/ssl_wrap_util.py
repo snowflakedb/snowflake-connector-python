@@ -1,3 +1,5 @@
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+
 """SSL wrap util for PyOpenSSL.
 
 Copied from: https://github.com/shazow/urllib3/tree/master/urllib3/util to support ssl_wrap_socket.

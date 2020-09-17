@@ -18,6 +18,20 @@ repos:
     -   id: check-ast
     -   id: flake8
         additional_dependencies: ["flake8-bugbear == 19.3.0", "flake8-docstrings"]
+-   repo: https://github.com/Lucas-C/pre-commit-hooks.git
+    rev: v1.1.9
+    hooks:
+    -   id: insert-license
+        name: insert-py-license
+        files: src/snowflake/connector/.*\.pyx?$
+        exclude: >
+            (?x)^(
+                src/snowflake/connector/version.py|
+                src/snowflake/connector/cpp|
+            )$
+        args:
+            - --license-filepath
+            - license_header.txt
 -   repo: https://github.com/asottile/pyupgrade
     rev: v1.19.0
     hooks:

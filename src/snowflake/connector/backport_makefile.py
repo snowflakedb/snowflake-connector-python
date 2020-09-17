@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+
 """Backports the Python 3 ``socket.makefile`` method for use with anything that wants to create a "fake" socket object.
 
 Copied from:
