@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+ */
+
 #ifndef PC_PYTHON_COMMON_HPP
 #define PC_PYTHON_COMMON_HPP
 

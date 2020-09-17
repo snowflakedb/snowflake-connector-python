@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+ */
+
 #ifndef PC_TIMESTAMPCONVERTER_HPP
 #define PC_TIMESTAMPCONVERTER_HPP
 

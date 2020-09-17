@@ -32,6 +32,15 @@ repos:
         args:
             - --license-filepath
             - license_header.txt
+    -   id: insert-license
+        name: insert-cpp-license
+        files: src/snowflake/connector/cpp/.*\.(cpp|hpp)$
+        exclude: version.py$
+        args:
+            - --comment-style
+            - '/*| *| */'
+            - --license-filepath
+            - license_header.txt
 -   repo: https://github.com/asottile/pyupgrade
     rev: v1.19.0
     hooks:
