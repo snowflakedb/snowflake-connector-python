@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
 #include <Python.h>
 #include "Helpers.hpp"
 #include "Common.hpp"

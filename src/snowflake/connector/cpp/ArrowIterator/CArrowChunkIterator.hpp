@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
 #ifndef PC_ARROWCHUNKITERATOR_HPP
 #define PC_ARROWCHUNKITERATOR_HPP
 

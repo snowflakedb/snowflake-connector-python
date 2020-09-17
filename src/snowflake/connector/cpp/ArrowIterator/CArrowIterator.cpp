@@ -1,7 +1,3 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
-
 #include "CArrowIterator.hpp"
 
 namespace sf

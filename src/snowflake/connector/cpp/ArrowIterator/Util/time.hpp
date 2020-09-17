@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
 #ifndef PC_UTIL_TIME_HPP
 #define PC_UTIL_TIME_HPP
 

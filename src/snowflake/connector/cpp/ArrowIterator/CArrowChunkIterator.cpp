@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
 #include "CArrowChunkIterator.hpp"
 #include "SnowflakeType.hpp"
 #include "IntConverter.hpp"

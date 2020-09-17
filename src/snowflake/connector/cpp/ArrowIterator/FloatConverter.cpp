@@ -1,6 +1,3 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
 #include "FloatConverter.hpp"
 
 namespace sf

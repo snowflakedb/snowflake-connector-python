@@ -1,7 +1,3 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
-
 #include "TimeStampConverter.hpp"
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
