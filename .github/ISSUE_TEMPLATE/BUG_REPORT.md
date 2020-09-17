@@ -9,7 +9,15 @@ Please answer these questions before submitting your issue. Thanks!
 
 2. What operating system and processor architecture are you using (`python -c 'import platform; print(platform.platform())'`)?
 
-3. What are the component versions in the environment (`pip list`)?
+3. What are the component versions in the environment (`pip freeze`)?
+
+   <details>
+   <summary>Click to expand</summary>
+
+   Insert pip freeze's output here.
+
+   </details>
+
 
 4. What did you do?
 If possible, provide a recipe for reproducing the error.
