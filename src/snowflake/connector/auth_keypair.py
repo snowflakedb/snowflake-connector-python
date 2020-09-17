@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-# Copyright (c) 2012-2017 Snowflake Computing Inc. All right reserved.
-#
-
 import base64
 import hashlib
 from datetime import datetime, timedelta

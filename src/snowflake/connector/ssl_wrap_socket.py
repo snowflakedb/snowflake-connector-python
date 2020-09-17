@@ -6,7 +6,6 @@
 # https://github.com/shazow/urllib3/blob/master/urllib3/contrib/pyopenssl.py
 #
 # and added OCSP validator on the top.
-#
 import logging
 import ssl
 import sys

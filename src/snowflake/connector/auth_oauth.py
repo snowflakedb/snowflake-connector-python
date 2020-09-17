@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
-#
-
 from .auth_by_plugin import AuthByPlugin
 from .network import OAUTH_AUTHENTICATOR
 

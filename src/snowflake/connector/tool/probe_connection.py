@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-#
-
 from socket import gaierror, gethostbyname_ex
 
 from asn1crypto import ocsp

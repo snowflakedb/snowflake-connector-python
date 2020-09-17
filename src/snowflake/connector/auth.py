@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
-#
-
 import codecs
 import copy
 import json

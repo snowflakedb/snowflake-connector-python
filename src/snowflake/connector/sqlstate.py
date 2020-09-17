@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
-#
 
 SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED = "08001"
 SQLSTATE_CONNECTION_ALREADY_EXISTS = "08002"
