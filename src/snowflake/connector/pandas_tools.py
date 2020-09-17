@@ -164,7 +164,8 @@ def write_pandas(conn: 'SnowflakeConnection',
 def pd_writer(table: pandas.io.sql.SQLTable,
               conn: Union['sqlalchemy.engine.Engine', 'sqlalchemy.engine.Connection'],
               keys: Iterable,
-              data_iter: Iterable) -> None:
+              data_iter: Iterable,
+              quote_identifiers: bool = True) -> None:
     """This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
 
         Example usage:
@@ -173,12 +174,19 @@ def pd_writer(table: pandas.io.sql.SQLTable,
 
             sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
             sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
+            
+            # to use quote_identifiers=False
+            from functools import partial
+            sf_connector_version_df.to_sql(
+                'driver_versions', engine, index=False, method=partial(pd_writer, quote_identifiers=False))
 
     Args:
         table: Pandas package's table object.
         conn: SQLAlchemy engine object to talk to Snowflake.
         keys: Column names that we are trying to insert.
         data_iter: Iterator over the rows.
+        quote_identifiers: if True (default), quote identifiers passed to Snowflake. If False, identifiers are not
+            quoted (and typically coerced to uppercase by Snowflake)
     """
     sf_connection = conn.connection.connection
     df = pandas.DataFrame(data_iter, columns=keys)
@@ -186,4 +194,5 @@ def pd_writer(table: pandas.io.sql.SQLTable,
                  df=df,
                  # Note: Our sqlalchemy connector creates tables case insensitively
                  table_name=table.name.upper(),
-                 schema=table.schema)
+                 schema=table.schema,
+                 quote_identifiers=quote_identifiers)
