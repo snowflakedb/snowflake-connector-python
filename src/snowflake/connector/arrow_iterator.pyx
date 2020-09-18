@@ -88,6 +88,13 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
     cdef cppclass CRecordBatchReader" arrow::RecordBatchReader":
         CStatus ReadNext(shared_ptr[CRecordBatch]* batch)
 
+    cdef cppclass CResult "arrow::Result"[T]:
+        CResult()
+        CResult(CStatus)
+        CResult(T)
+        c_bool ok()
+        CStatus status()
+        T operator*()
 
 cdef extern from "arrow/ipc/api.h" namespace "arrow::ipc" nogil:
     cdef cppclass CRecordBatchStreamReader \
@@ -133,6 +140,8 @@ cdef extern from "arrow/io/api.h" namespace "arrow::io" nogil:
 cdef extern from "arrow/python/api.h" namespace "arrow::py" nogil:
     cdef cppclass PyReadableFile(RandomAccessFile):
         PyReadableFile(object fo)
+
+    T GetResultValue[T](CResult[T]) except *
 
 
 cdef class EmptyPyArrowIterator:
