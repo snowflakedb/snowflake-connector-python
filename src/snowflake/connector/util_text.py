@@ -5,6 +5,7 @@
 #
 import logging
 import re
+from io import StringIO
 from typing import Optional
 
 COMMENT_PATTERN_RE = re.compile(r'^\s*\-\-')
@@ -27,7 +28,7 @@ class SQLDelimiter(object):
         self.sql_delimiter = sql_delimiter
 
 
-def split_statements(buf, remove_comments: bool = False, delimiter: Optional[SQLDelimiter] = None):
+def split_statements(buf: StringIO, remove_comments: bool = False, delimiter: Optional[SQLDelimiter] = None):
     """Splits a stream into SQL statements (ends with a semicolon) or commands (!...).
 
     Args:
