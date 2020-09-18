@@ -25,8 +25,6 @@ MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from snowflake.connector import SnowflakeConnection
 
-CLOUD_PROVIDERS = {'aws', 'azure', 'gcp'}
-PUBLIC_SKIP_TAGS = {'internal'}
 
 RUNNING_ON_GH = (os.getenv('GITHUB_ACTIONS') == 'true')
 
@@ -226,3 +224,31 @@ def conn_cnx() -> Callable[..., 'SnowflakeConnection']:
 def negative_conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
     """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
     return negative_db
+
+
+@pytest.fixture(scope='session', autouse=True)
+def filter_log() -> None:
+    """Sets up our SecretDetector as a logging formatter.
+
+    A workaround to use our custom Formatter in pytest based on the discussion at
+    https://github.com/pytest-dev/pytest/issues/2987
+    """
+    import logging
+    import pathlib
+    from snowflake.connector.secret_detector import SecretDetector
+
+    if not isinstance(SecretDetector, logging.Formatter):
+        # Override it if SecretDetector is not an instance of logging.Formatter
+        class SecretDetector(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                return super().format(record)
+
+    log_dir = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER', str(pathlib.Path(__file__).parent.parent.absolute()))
+
+    _logger = getLogger('snowflake.connector')
+    _logger.setLevel(logging.DEBUG)
+    sd = logging.FileHandler(os.path.join(log_dir, '', '..', 'snowflake_ssm_rt.log'))
+    sd.setLevel(logging.DEBUG)
+    sd.setFormatter(SecretDetector(
+        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
+    _logger.addHandler(sd)

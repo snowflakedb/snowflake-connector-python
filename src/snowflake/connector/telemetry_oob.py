@@ -136,7 +136,7 @@ class TelemetryService(object):
     __instance = None
 
     @staticmethod
-    def get_instance():
+    def get_instance() -> 'TelemetryService':
         """Static access method."""
         if TelemetryService.__instance is None:
             TelemetryService()

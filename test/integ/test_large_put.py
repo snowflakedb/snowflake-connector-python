@@ -12,7 +12,6 @@ from ..generate_test_files import generate_k_lines_of_n_files
 
 
 @pytest.mark.aws
-@pytest.mark.flaky(reruns=3)
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies into large files."""
     # generates N files

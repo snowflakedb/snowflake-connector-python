@@ -16,6 +16,49 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 SRC_DIR = os.path.join(THIS_DIR, 'src')
 CONNECTOR_SRC_DIR = os.path.join(SRC_DIR, 'snowflake', 'connector')
 
+# Requirements
+
+install_requirements = [
+    'azure-common<2.0.0',
+    'azure-storage-blob>=12.0.0,<13.0.0',
+    'boto3>=1.4.4,<1.17',
+    'requests<2.24.0',
+    'urllib3>=1.20,<1.26.0',
+    'certifi<2021.0.0',
+    'pytz<2021.0',
+    'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
+    'pyOpenSSL>=16.2.0,<21.0.0',
+    'cffi>=1.9,<1.15',
+    'cryptography>=2.5.0,<4.0.0',
+    'pyjwt<2.0.0',
+    'oscrypto<2.0.0',
+    'asn1crypto>0.24.0,<2.0.0',
+]
+
+sso_requirements = ['keyring<22.0.0,!=16.1.0']
+
+pandas_requirements = [
+    # Must be kept in sync with pyproject.toml
+    'pyarrow>=0.17.0,<0.18.0',
+    'pandas>=1.0.0,<1.2.0',
+]
+
+dev_requirements = [
+    'pytest<6.2.0',
+    'pytest-cov',
+    'pytest-rerunfailures',
+    'pytest-timeout',
+    'coverage',
+    'pexpect',
+    'mock',
+    'pytz',
+    'pytzdata',
+    'Cython',
+    'pendulum!=2.1.1',
+    'more-itertools',
+    'numpy',
+]
+
 VERSION = (1, 1, 1, None)  # Default
 try:
     with open(os.path.join(CONNECTOR_SRC_DIR, 'generated_version.py'), encoding='utf-8') as f:
@@ -38,12 +81,6 @@ for flag in options.keys():
 
 extensions = None
 cmd_class = {}
-
-pandas_requirements = [
-    # Must be kept in sync with pyproject.toml
-    'pyarrow>=0.17.0,<0.18.0',
-    'pandas>=1.0.0,<1.2.0',
-]
 
 try:
     from Cython.Distutils import build_ext
@@ -187,22 +224,7 @@ setup(
 
     python_requires='>=3.6',
 
-    install_requires=[
-        'azure-common<2.0.0',
-        'azure-storage-blob>=12.0.0,<13.0.0',
-        'boto3>=1.4.4,<1.17',
-        'requests<2.24.0',
-        'urllib3>=1.20,<1.26.0',
-        'certifi<2021.0.0',
-        'pytz<2021.0',
-        'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
-        'pyOpenSSL>=16.2.0,<21.0.0',
-        'cffi>=1.9,<1.15',
-        'cryptography>=2.5.0,<4.0.0',
-        'pyjwt<2.0.0',
-        'oscrypto<2.0.0',
-        'asn1crypto>0.24.0,<2.0.0',
-    ],
+    install_requires=install_requirements,
 
     namespace_packages=['snowflake'],
     packages=[
@@ -230,25 +252,9 @@ setup(
         ],
     },
     extras_require={
-        "secure-local-storage": [
-            'keyring<22.0.0,!=16.1.0',
-        ],
+        "secure-local-storage": sso_requirements,
         "pandas": pandas_requirements,
-        "development": [
-            'pytest<6.2.0',
-            'pytest-cov',
-            'pytest-rerunfailures',
-            'pytest-timeout',
-            'coverage',
-            'pexpect',
-            'mock',
-            'pytz',
-            'pytzdata',
-            'Cython',
-            'pendulum!=2.1.1',
-            'more-itertools',
-            'numpy',
-        ],
+        "development": dev_requirements,
     },
 
     classifiers=[
