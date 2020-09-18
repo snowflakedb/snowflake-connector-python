@@ -1,6 +1,6 @@
-/*
- * Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
- */
+//
+// Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+//
 
 #ifndef PC_TIMECONVERTER_HPP
 #define PC_TIMECONVERTER_HPP
