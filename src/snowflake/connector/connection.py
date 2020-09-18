@@ -14,7 +14,7 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
-from typing import Callable
+from typing import Callable, Generator, Iterable
 
 from . import errors, proxy
 from .auth import Auth
@@ -475,7 +475,7 @@ class SnowflakeConnection(object):
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(self, cursor_class=SnowflakeCursor):
+    def cursor(self, cursor_class: SnowflakeCursor = SnowflakeCursor):
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug('cursor')
         if not self.rest:
@@ -489,29 +489,31 @@ class SnowflakeConnection(object):
                 })
         return cursor_class(self)
 
-    def execute_string(self, sql_text,
+    def execute_string(self, sql_text: str,
                        remove_comments: bool = False,
                        return_cursors: bool = True,
-                       cursor_class=SnowflakeCursor,
-                       **kwargs):
+                       cursor_class: SnowflakeCursor = SnowflakeCursor,
+                       **kwargs) -> Iterable[SnowflakeCursor]:
         """Executes a SQL text including multiple statements. This is a non-standard convenience method."""
-        ret = []
         stream = StringIO(sql_text)
-        for sql, is_put_or_get in split_statements(
-                stream, remove_comments=remove_comments):
-            cur = self.cursor(cursor_class=cursor_class)
-            if return_cursors:
-                ret.append(cur)
-            cur.execute(sql, _is_put_get=is_put_or_get, **kwargs)
-        return ret
+        stream_generator = self.execute_stream(stream,
+                                               remove_comments=remove_comments,
+                                               cursor_class=cursor_class,
+                                               **kwargs)
+        ret = list(stream_generator)
+        return ret if return_cursors else list()
 
-    def execute_stream(self, stream,
-                       remove_comments: bool = False):
+    def execute_stream(self, stream: StringIO,
+                       remove_comments: bool = False,
+                       cursor_class: SnowflakeCursor = SnowflakeCursor,
+                       **kwargs) -> Generator['SnowflakeCursor', None, None]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
-        for sql, is_put_or_get in split_statements(
-                stream, remove_comments=remove_comments):
-            cur = self.cursor()
-            cur.execute(sql, _is_put_get=is_put_or_get)
+        split_statements_list = split_statements(stream, remove_comments=remove_comments)
+        # Note: split_statements_list is a list of tuples of sql statements and whether they are put/get
+        non_empty_statements = [e for e in split_statements_list if e[0]]
+        for sql, is_put_or_get in non_empty_statements:
+            cur = self.cursor(cursor_class=cursor_class)
+            cur.execute(sql, _is_put_get=is_put_or_get, **kwargs)
             yield cur
 
     def __set_error_attributes(self):
