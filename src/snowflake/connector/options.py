@@ -21,7 +21,7 @@ def warn_incompatible_dep(dep_name: str,
                           expected_ver: 'pkg_resources.Requirement') -> None:
     warnings.warn(
         "You have an incompatible version of '{}' installed, please install a version that "
-        "adheres to: '{}'".format(dep_name, _expected_pyarrow_version),
+        "adheres to: '{}'".format(dep_name, expected_ver),
         stacklevel=2)
 
 
