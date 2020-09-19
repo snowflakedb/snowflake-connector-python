@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
 # cython: profile=False

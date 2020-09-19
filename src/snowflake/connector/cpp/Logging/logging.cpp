@@ -1,3 +1,7 @@
+//
+// Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+//
+
 #include "logging.hpp"
 #include "Python/Helpers.hpp"
 #include <cstdio>
