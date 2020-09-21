@@ -67,7 +67,6 @@ def _import_or_missing_pandas_option() -> Tuple[ModuleLikeObject, ModuleLikeObje
         pandas = importlib.import_module('pandas')  # NOQA
         # since we enable relative imports without dots this import gives us an issues when ran from test directory
         from pandas import DataFrame  # NOQA
-        import pyarrow  # NOQA
         pyarrow = importlib.import_module('pyarrow')  # NOQA
         # Check whether we have the currently supported pyarrow installed
         installed_packages = pkg_resources.working_set.by_key
