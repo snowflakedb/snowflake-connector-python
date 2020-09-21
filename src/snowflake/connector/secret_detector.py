@@ -80,7 +80,7 @@ class SecretDetector(logging.Formatter):
             The masked string.
         """
         if text is None:
-            return None
+            return (True, None, None)
 
         masked = False
         err_str = None

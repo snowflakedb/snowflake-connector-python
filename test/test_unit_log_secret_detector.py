@@ -4,16 +4,39 @@
 # Copyright (c) 2020 Snowflake Computing Inc. All right reserved.
 #
 
+import mock
+
 from snowflake.connector.secret_detector import SecretDetector
 
 
-def test_no_masking():
-    test_str = "This string is innocuous"
+def basic_masking(test_str):
     masked, masked_str, err_str = SecretDetector. \
         mask_secrets(test_str)
     assert not masked
     assert err_str is None
     assert masked_str == test_str
+
+
+def test_none_string():
+    basic_masking(None)
+
+
+def test_empty_string():
+    basic_masking("")
+
+
+def test_no_masking():
+    basic_masking("This string is innocuous")
+
+
+@mock.patch.object(SecretDetector, 'mask_connection_token', mock.Mock(side_effect=Exception('test exception')))
+def test_exception_in_masking():
+    test_str = "This string will raise an exception"
+    masked, masked_str, err_str = SecretDetector. \
+        mask_secrets(test_str)
+    assert not masked
+    assert err_str == "Test exception"
+    assert masked_str == "Test exception"
 
 
 def test_mask_token():
