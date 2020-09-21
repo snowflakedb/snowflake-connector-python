@@ -71,7 +71,6 @@ def _import_or_missing_pandas_option() -> Tuple[ModuleLikeObject, ModuleLikeObje
         pyarrow = importlib.import_module('pyarrow')  # NOQA
         # Check whether we have the currently supported pyarrow installed
         installed_packages = pkg_resources.working_set.by_key
-        print(installed_packages)
         if all(k in installed_packages for k in ("snowflake-connector-python", "pyarrow")):
             _pandas_extras = installed_packages['snowflake-connector-python']._dep_map['pandas']  # NOQA
             _expected_pyarrow_version = [dep for dep in _pandas_extras if dep.name == 'pyarrow'][0]
