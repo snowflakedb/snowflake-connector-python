@@ -16,6 +16,15 @@ inputs:
   description:
     description: Issue description
     required: false
+  type:
+    description: Issue type
+    required: false
+  area:
+    description: Issue area
+    required: false
+  assignee:
+    description: Issue assignee
+    required: false
 outputs:
   issue:
     description: Key of the newly created issue
