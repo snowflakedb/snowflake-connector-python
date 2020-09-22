@@ -90,11 +90,9 @@ module.exports = class {
       fields: {},
     })
 
-    console.log(JSON.stringify(payload, null, 4))
-
     const issue = await this.Jira.createIssue(payload)
 
-    return { issue: issue.key }
+    return { issue: issue.key , body: payload}
   }
 
   preprocessArgs () {
