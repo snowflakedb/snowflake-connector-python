@@ -23,7 +23,7 @@ jobs:
           AREA: "Data Platform: Ecosystem"
           ASSIGNEE: triage-data_platform_drivers_cli-dl
           SUMMARY: "{{ event.issue.title }}"
-          DESCRIPTION: "{{ event.issue.body }}\n\n_Created from GitHub Action_"
+          DESCRIPTION: "{{ event.issue.body }}\n\n_Created from GitHub Action_ for {{ event.issue.html_url }}"
       - name: update issue
         uses: ./.github/actions/gajira-issue-update
         env:
