@@ -11,7 +11,6 @@ Release Notes
 
 - v2.3.2(September 14,2020)
 
-   - Fixed a bug where a file handler was not closed properly.
    - Fixed various documentation typos.
 
 - v2.3.1(August 25,2020)
@@ -20,7 +19,6 @@ Release Notes
 
 - v2.3.0(August 24,2020)
 
-   - When the log level is set to DEBUG, log the OOB telemetry entries that are sent to Snowflake.
    - Fixed a bug in the PUT command where long running PUTs would fail to re-authenticate to GCP for storage.
    - Updated the minimum build target MacOS version to 10.13.
 
