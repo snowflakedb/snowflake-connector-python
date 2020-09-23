@@ -61,7 +61,7 @@ module.exports = class {
       providedFields.push({
         key: 'assignee',
         value: {
-            name: argv.assignee
+            id: argv.assignee
             }
       })
     }
@@ -92,7 +92,7 @@ module.exports = class {
 
     const issue = await this.Jira.createIssue(payload)
 
-    return { issue: issue.key , body: payload}
+    return { issue: issue.key }
   }
 
   preprocessArgs () {
