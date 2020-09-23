@@ -35,8 +35,6 @@ async function exec () {
       // result.issue is the issue key
       console.log(`Created issue: ${result.issue}`)
 
-      console.log(`With body:`)
-      console.log(JSON.stringify(result.body, null, 4))
       // Expose created issue's key as an output
       core.setOutput("issue", result.issue)
 
