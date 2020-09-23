@@ -24,7 +24,7 @@ def test_async_exec(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute('select count(*) from table(generator(timeLimit => 5))', exec_async=True)
+            cur.execute_async('select count(*) from table(generator(timeLimit => 5))')
             q_id = cur.sfqid
             status = con.get_query_status(q_id)
             assert con.is_still_running(status)
@@ -45,7 +45,7 @@ def test_async_error(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute('select * from nonexistentTable', exec_async=True)
+            cur.execute_async('select * from nonexistentTable')
             q_id = cur.sfqid
             while con.is_still_running(con.get_query_status(q_id)):
                 time.sleep(1)
@@ -67,9 +67,9 @@ def test_mix_sync_async(conn_cnx):
                 for table in ['smallTable', 'uselessTable']:
                     cur.execute('create or replace table {} (colA string, colB int)'.format(table))
                     cur.execute('insert into {} values (\'row1\', 1), (\'row2\', 2), (\'row3\', 3)'.format(table))
-                cur.execute('select * from smallTable', exec_async=True)
+                cur.execute_async('select * from smallTable')
                 sf_qid1 = cur.sfqid
-                cur.execute('select * from uselessTable', exec_async=True)
+                cur.execute_async('select * from uselessTable')
                 sf_qid2 = cur.sfqid
                 # Wait until the 2 queries finish
                 while con.is_still_running(con.get_query_status(sf_qid1)):
@@ -98,7 +98,7 @@ def test_async_qmark(conn_cnx):
                 try:
                     cur.execute("create or replace table qmark_test (aa STRING, bb STRING)")
                     cur.execute("insert into qmark_test VALUES(?, ?)", ('test11', 'test12'))
-                    cur.execute("select * from qmark_test", exec_async=True)
+                    cur.execute_async("select * from qmark_test")
                     async_qid = cur.sfqid
                     with conn_cnx() as con2:
                         with con2.cursor() as cur2:
@@ -114,9 +114,9 @@ def test_done_caching(conn_cnx):
     """Tests whether get status caching is working as expected."""
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute('select count(*) from table(generator(timeLimit => 5))', exec_async=True)
+            cur.execute_async('select count(*) from table(generator(timeLimit => 5))')
             qid1 = cur.sfqid
-            cur.execute('select count(*) from table(generator(timeLimit => 10))', exec_async=True)
+            cur.execute_async('select count(*) from table(generator(timeLimit => 10))')
             qid2 = cur.sfqid
             assert len(con._async_sfqids) == 2
             time.sleep(5)
@@ -151,7 +151,7 @@ def test_not_fetching(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute('select 1', exec_async=True)
+            cur.execute_async('select 1')
             sf_qid = cur.sfqid
             cur.get_results_from_sfqid(sf_qid)
             cur.execute('select 2')

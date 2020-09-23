@@ -428,7 +428,7 @@ class SnowflakeCursor(object):
                 command,
                 params=None,
                 timeout: Optional[int] = None,
-                exec_async: bool = False,
+                _exec_async: bool = False,
                 _do_reset: bool = True,
                 _put_callback=None,
                 _put_azure_callback=None,
@@ -450,7 +450,7 @@ class SnowflakeCursor(object):
             command: The SQL command to be executed.
             params: Parameters to be bound into the SQL statement.
             timeout: Number of seconds after which to abort the query.
-            exec_async: Whether to execute this query asynchronously.
+            _exec_async: Whether to execute this query asynchronously.
             _do_reset: Whether or not the result set needs to be reset before executing query.
             _put_callback: Function to which GET command should call back to.
             _put_azure_callback: Function to which an Azure GET command should call back to.
@@ -471,7 +471,7 @@ class SnowflakeCursor(object):
         Returns:
             A result class with the results in it. This can either be json, or an arrow result class.
         """
-        if exec_async:
+        if _exec_async:
             _no_results = True
         logger.debug('executing SQL/command')
         if self.is_closed():
@@ -580,7 +580,7 @@ class SnowflakeCursor(object):
                 value = m.group(2)
                 self._connection.converter.set_parameter(param, value)
 
-            if exec_async:
+            if _exec_async:
                 self.connection._async_sfqids.add(self._sfqid)
             if _no_results:
                 self._total_rowcount = ret['data'][
@@ -606,6 +606,15 @@ class SnowflakeCursor(object):
                                        ProgrammingError,
                                        errvalue)
         return self
+
+    def execute_async(self, *args, **kwargs):
+        """Convenience function to execute a query without waiting for results (asynchronously).
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+        """
+        kwargs['_exec_async'] = True
+        return self.execute(*args, **kwargs)
 
     def _format_query_for_log(self, query):
         return self._connection._format_query_for_log(query)
