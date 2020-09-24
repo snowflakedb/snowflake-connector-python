@@ -40,7 +40,4 @@ def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
         }
         os.environ['HTTP_PROXY'] = proxies['http']
         os.environ['HTTPS_PROXY'] = proxies['https']
-    warn("Arguments `proxy_host`, `proxy_port`, `proxy_user`"
-        "and `proxy_password` are going to deprecated. Please start using"
-        "`proxies` instead.", DeprecationWarning)
     return proxies
