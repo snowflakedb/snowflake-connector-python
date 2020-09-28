@@ -5,7 +5,6 @@
 #
 
 import os
-from warnings import warn
 
 
 def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
