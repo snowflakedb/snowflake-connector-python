@@ -2,53 +2,101 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
+import importlib
 import warnings
+from logging import getLogger
+from types import ModuleType
+from typing import Tuple, Union
 
 import pkg_resources
 
 from .errors import MissingDependencyError
 
-# Flags to see whether optional dependencies were installed
-installed_pandas = False
-installed_keyring = False
+logger = getLogger(__name__)
+
+"""This module helps to manage optional dependencies.
+
+It implements MissingOptionalDependency as a base class. If a module is unavailable an instance of this will be
+returned. These derived classes can be seen in this file pre-defined. The point of these classes is that if someone
+tries to use pyarrow code then by importing pyarrow from this module if they did pyarrow.xxx then that would raise
+a MissingDependencyError.
+"""
+
+
+class MissingOptionalDependency(object):
+    """A class to replace missing dependencies.
+
+    The only thing this class is supposed to do is raise a MissingDependencyError when __getattr__ is called.
+    This will be triggered whenever module.member is going to be called.
+    """
+
+    _dep_name = "not set"
+
+    def __getattr__(self, item):
+        raise MissingDependencyError(self._dep_name)
+
+
+class MissingPandas(MissingOptionalDependency):
+    """The class is specifically for pandas optional dependency."""
+    _dep_name = "pandas"
+
+
+class MissingKeyring(MissingOptionalDependency):
+    """The class is specifically for sso optional dependency."""
+    _dep_name = "keyring"
+
+
+ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
 def warn_incompatible_dep(dep_name: str,
                           installed_ver: str,
                           expected_ver: 'pkg_resources.Requirement') -> None:
-    warnings.warn(
-        "You have an incompatible version of '{}' installed, please install a version that "
-        "adheres to: '{}'".format(dep_name,
-                                  _expected_version),
-        stacklevel=2)
+    warnings.warn("You have an incompatible version of '{}' installed ({}), please install a version that "
+                  "adheres to: '{}'".format(dep_name, installed_ver, expected_ver),
+                  stacklevel=2)
 
 
-class MissingPandas(object):
+def _import_or_missing_pandas_option() -> Tuple[ModuleLikeObject, ModuleLikeObject, bool]:
+    """This function tries importing the following packages: pandas, pyarrow.
 
-    def __getattr__(self, item):
-        raise MissingDependencyError('pandas')
+    If available it returns pandas and pyarrow packages with a flag of whether they were imported.
+    It also warns users if they have an unsupported pyarrow version installed if possible.
+    """
+    try:
+        pandas = importlib.import_module('pandas')  # NOQA
+        # since we enable relative imports without dots this import gives us an issues when ran from test directory
+        from pandas import DataFrame  # NOQA
+        pyarrow = importlib.import_module('pyarrow')  # NOQA
+        # Check whether we have the currently supported pyarrow installed
+        installed_packages = pkg_resources.working_set.by_key
+        if all(k in installed_packages for k in ("snowflake-connector-python", "pyarrow")):
+            _pandas_extras = installed_packages['snowflake-connector-python']._dep_map['pandas']  # NOQA
+            _expected_pyarrow_version = [dep for dep in _pandas_extras if dep.name == 'pyarrow'][0]
+            _installed_pyarrow_version = installed_packages['pyarrow']
+            if _installed_pyarrow_version and _installed_pyarrow_version.version not in _expected_pyarrow_version:
+                warn_incompatible_dep('pyarrow', _installed_pyarrow_version.version, _expected_pyarrow_version)
+
+        else:
+            logger.info("Cannot determine if compatible pyarrow is installed because of missing package(s) from "
+                        "{}".format(installed_packages.keys()))
+        return pandas, pyarrow, True
+    except ImportError:
+        return MissingPandas(), MissingPandas(), False
 
 
-try:
-    import pandas
-    # since we enable relative imports without dots this import gives us an issues when ran from test directory
-    from pandas import DataFrame  # NOQA
-    import pyarrow
+def _import_or_missing_keyring_option() -> Tuple[ModuleLikeObject, bool]:
+    """This function tries importing the following packages: keyring.
 
-    installed_pandas = True
-    # Make sure we have the right pyarrow installed
-    _pandas_extras = pkg_resources.working_set.by_key['snowflake-connector-python']._dep_map['pandas']
-    _expected_version = [dep for dep in _pandas_extras if dep.name == 'pyarrow'][0]
-    _installed_pyarrow = pkg_resources.working_set.by_key['pyarrow']
-    if _installed_pyarrow and _installed_pyarrow.version not in _expected_version:
-        warn_incompatible_dep('pyarrow', _installed_pyarrow.version, _expected_version)
-except ImportError:
-    pandas = MissingPandas()
-    pyarrow = MissingPandas()
+    If available it returns keyring package with a flag of whether it was imported.
+    """
+    try:
+        keyring = importlib.import_module('keyring')  # NOQA
+        return keyring, True
+    except ImportError:
+        return MissingKeyring(), False
 
-try:
-    import keyring
 
-    installed_keyring = True
-except ImportError:
-    keyring = None
+# Create actual constants to be imported from this file
+pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
+keyring, installed_keyring = _import_or_missing_keyring_option()
