@@ -60,7 +60,6 @@ class SnowflakeS3Util:
         logger = getLogger(__name__)
         stage_credentials = stage_info['creds']
         security_token = stage_credentials.get('AWS_TOKEN', None)
-        end_point = stage_info['endPoint']
         logger.debug("AWS_KEY_ID: %s", stage_credentials['AWS_KEY_ID'])
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
@@ -71,13 +70,16 @@ class SnowflakeS3Util:
             s3={
                 'use_accelerate_endpoint': use_accelerate_endpoint,
                 'addressing_style': ADDRESSING_STYLE
-            })
-        client = boto3.resource(
-            's3',
+            }
+        )
+        session = boto3.Session(
             region_name=stage_info['region'],
             aws_access_key_id=stage_credentials['AWS_KEY_ID'],
             aws_secret_access_key=stage_credentials['AWS_SECRET_KEY'],
             aws_session_token=security_token,
+        )
+        client = session.resource(
+            's3',
             endpoint_url=end_point,
             config=config,
         )
