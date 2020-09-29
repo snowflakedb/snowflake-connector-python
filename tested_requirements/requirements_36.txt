@@ -2,7 +2,7 @@
 # With snowflake-connector-python version: 2.3.0
 asn1crypto==1.4.0
 azure-common==1.1.25
-azure-core==1.8.0
+azure-core==1.8.1
 azure-storage-blob==12.4.0
 boto3==1.14.47
 botocore==1.17.47
