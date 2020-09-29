@@ -7,6 +7,7 @@
 import codecs
 import json
 import logging
+import os
 import tempfile
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -46,6 +47,14 @@ TARGET_HOSTS = [
 ]
 
 THIS_DIR = path.dirname(path.realpath(__file__))
+
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    # Reset OCSP cache location before each test
+    if 'SF_OCSP_RESPONSE_CACHE_DIR' in os.environ:
+        del os.environ['SF_OCSP_RESPONSE_CACHE_DIR']
+    OCSPCache.reset_cache_dir()
 
 
 def test_ocsp():
@@ -195,8 +204,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
     """Attempts to use bogus OCSP response data."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
-    ocsp = SFOCSP(
-        ocsp_response_cache_uri='file://' + cache_file_name)
+    ocsp = SFOCSP()
     OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
     cache_data = OCSPCache.CACHE
     assert cache_data, "more than one cache entries should be stored."
@@ -212,8 +220,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
 
     # forces to use the bogus cache file but it should raise errors
     SnowflakeOCSP.clear_cache()
-    ocsp = SFOCSP(
-        ocsp_response_cache_uri='file://' + cache_file_name)
+    ocsp = SFOCSP()
     for hostname in target_hosts:
         connection = _openssl_connect(hostname)
         assert ocsp.validate(hostname, connection), \
@@ -224,8 +231,7 @@ def test_ocsp_with_outdated_cache(tmpdir):
     """Attempts to use outdated OCSP response cache file."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
-    ocsp = SFOCSP(
-        ocsp_response_cache_uri='file://' + cache_file_name)
+    ocsp = SFOCSP()
 
     # reading cache file
     OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
@@ -243,18 +249,18 @@ def test_ocsp_with_outdated_cache(tmpdir):
 
     # forces to use the bogus cache file but it should raise errors
     SnowflakeOCSP.clear_cache()  # reset the memory cache
-    SFOCSP(
-        ocsp_response_cache_uri='file://' + cache_file_name)
+    SFOCSP()
     assert SnowflakeOCSP.cache_size() == 0, \
         'must be empty. outdated cache should not be loaded'
 
 
 def _store_cache_in_file(
-        tmpdir, target_hosts=None, filename=None):
+        tmpdir, target_hosts=None):
     if target_hosts is None:
         target_hosts = TARGET_HOSTS
-    if filename is None:
-        filename = path.join(str(tmpdir), 'cache_file.txt')
+    os.environ['SF_OCSP_RESPONSE_CACHE_DIR'] = str(tmpdir)
+    OCSPCache.reset_cache_dir()
+    filename = path.join(str(tmpdir), 'ocsp_response_cache.json')
 
     # cache OCSP response
     SnowflakeOCSP.clear_cache()
@@ -339,19 +345,18 @@ def test_ocsp_incomplete_chain():
 
 def test_ocsp_cache_merge(tmpdir):
     """Merges two OCSP response cache files."""
-    previous_cache_filename = path.join(str(tmpdir), 'cache_file1.txt')
-    _store_cache_in_file(
-        tmpdir,
-        target_hosts=TARGET_HOSTS[0:3],
-        filename=previous_cache_filename)
+    previous_folder = tmpdir.mkdir('previous')
+    previous_cache_filename, _ = _store_cache_in_file(
+        previous_folder,
+        target_hosts=TARGET_HOSTS[0:3])
 
-    current_cache_filename = path.join(str(tmpdir), 'cache_file2.txt')
-    _store_cache_in_file(
-        tmpdir,
-        target_hosts=TARGET_HOSTS[4:],
-        filename=current_cache_filename)
+    current_folder = tmpdir.mkdir('current')
+    current_cache_filename, _ = _store_cache_in_file(
+        current_folder,
+        target_hosts=TARGET_HOSTS[4:])
 
-    latest_cache_filename = path.join(str(tmpdir), 'cache_file.txt')
+    latest_folder = tmpdir.mkdir('latest')
+    latest_cache_filename = path.join(str(latest_folder), 'cache_file.txt')
 
     SnowflakeOCSP.clear_cache()  # reset the memory cache
     ocsp = SFOCSP()

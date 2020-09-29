@@ -376,6 +376,7 @@ class OCSPCache(object):
         """Deletes the OCSP response cache file if exists."""
         cache_file = path.join(OCSPCache.CACHE_DIR, OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME)
         if path.exists(cache_file):
+            logger.debug('deleting cache file {}'.format(cache_file))
             os.unlink(cache_file)
 
     @staticmethod
@@ -488,7 +489,7 @@ class OCSPCache(object):
     @staticmethod
     def write_ocsp_response_cache_file(ocsp, filename):
         """Writes OCSP Response Cache."""
-        logger.debug('writing OCSP response cache file')
+        logger.debug('writing OCSP response cache file to {}'.format(filename))
         file_cache_data = {}
         ocsp.encode_ocsp_response_cache(file_cache_data)
         with codecs.open(filename, 'w', encoding='utf-8', errors='ignore') as f:
@@ -685,6 +686,7 @@ class OCSPCache(object):
         fname = path.join(parsed_url.netloc, parsed_url.path)
         OCSPCache.lock_cache_file(fname)
         try:
+            logger.debug('deleting cache file, used by tests only {}'.format(fname))
             os.unlink(fname)
         finally:
             OCSPCache.unlock_cache_file(fname)
