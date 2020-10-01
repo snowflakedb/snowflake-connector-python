@@ -6,13 +6,7 @@
 
 
 import select
-import time
 from selectors import EVENT_READ, EVENT_WRITE, DefaultSelector
-
-try:
-    monotonic = time.monotonic
-except (AttributeError, ImportError):  # Python 3.3<
-    monotonic = time.time
 
 HAS_SELECT = True  # Variable that shows whether the platform has a selector.
 _SYSCALL_SENTINEL = object()  # Sentinel in case a system call returns None.
