@@ -26,7 +26,14 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
 
-from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE, ER_INVALID_OCSP_RESPONSE_CODE
+from snowflake.connector.errorcode import (
+    ER_INVALID_OCSP_RESPONSE,
+    ER_INVALID_OCSP_RESPONSE_CODE,
+    ER_INVALID_SIGNATURE,
+    ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
+    ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID,
+    ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL,
+)
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
 from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
@@ -269,7 +276,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                     ocsp_cert['tbs_certificate'])
             except RevocationCheckError as rce:
                 raise RevocationCheckError(msg=rce.msg,
-                                           errno='ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID')
+                                           errno=ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID)
             cert_valid, debug_msg = self.check_cert_time_validity(cur_time, ocsp_cert)
 
             if not cert_valid:
@@ -345,7 +352,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             if not signer.verify(digest, signature):
                 raise RevocationCheckError(
                     msg="Failed to verify the signature",
-                    errno=ER_)
+                    errno=ER_INVALID_SIGNATURE)
 
         else:
             backend = default_backend()
