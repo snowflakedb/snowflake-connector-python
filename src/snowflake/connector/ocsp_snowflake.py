@@ -32,6 +32,12 @@ from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE_CODE,
     ER_INVALID_SSD,
     ER_OCSP_FAILED_TO_CONNECT_HOST,
+    ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
+    ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID,
+    ER_OCSP_RESPONSE_EXPIRED,
+    ER_OCSP_RESPONSE_INVALID_EXPIRY_INFO_MISSING,
+    ER_OCSP_RESPONSE_INVALID_SIGNATURE,
+    ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL,
     ER_SERVER_CERTIFICATE_REVOKED,
     ER_SERVER_CERTIFICATE_UNKNOWN,
 )
@@ -52,6 +58,8 @@ logger = getLogger(__name__)
 class OCSPTelemetryData(object):
 
     def __init__(self):
+        self.event_sub_type = None
+        self.ocsp_connection_method = None
         self.cert_id = None
         self.sfc_peer_host = None
         self.ocsp_url = None
@@ -61,6 +69,12 @@ class OCSPTelemetryData(object):
         self.cache_hit = False
         self.fail_open = False
         self.insecure_mode = False
+
+    def set_even_sub_type(self, event_sub_type):
+        self.event_sub_type = event_sub_type
+
+    def set_ocsp_connection_method(self, ocsp_conn_method):
+        self.ocsp_connection_method = ocsp_conn_method
 
     def set_cert_id(self, cert_id):
         self.cert_id = cert_id
@@ -98,6 +112,7 @@ class OCSPTelemetryData(object):
         cls, exception, stack_trace = sys.exc_info()
         telemetry_data = {}
         telemetry_data.update({"eventType": event_type})
+        telemetry_data.update({"eventSubType": self.event_sub_type})
         telemetry_data.update({"sfcPeerHost": self.sfc_peer_host})
         telemetry_data.update({"certId": self.cert_id})
         telemetry_data.update({"ocspRequestBase64": self.ocsp_req})
@@ -945,6 +960,7 @@ class SnowflakeOCSP(object):
         try:
             cert_data = self.extract_certificate_chain(connection)
         except RevocationCheckError:
+            telemetry_data.set_even_sub_type("CertExtractionFailure")
             logger.debug(telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
             return None
 
@@ -1083,7 +1099,7 @@ class SnowflakeOCSP(object):
                 logger.debug("using OCSP response cache")
 
             if not ocsp_response:
-                logger.debug('No OCSP URL is found.')
+                telemetry_data.set_event_sub_type('OCSPResponseUnavailable')
                 raise RevocationCheckError(msg="Could not retrieve OCSP Response. Cannot perform Revocation Check",
                                            errno=ER_SERVER_CERTIFICATE_UNKNOWN)
             try:
@@ -1100,6 +1116,20 @@ class SnowflakeOCSP(object):
                         # TODO - Remove this potentially broken OCSP Response / SSD
                         raise op_er
                 else:
+                    if op_er.errno == ER_INVALID_OCSP_RESPONSE_CODE:
+                        telemetry_data.set_event_sub_type('OCSPResponseLoadFailure')
+                    elif op_er.errno == ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL:
+                        telemetry_data.set_event_sub_type("OCSPResponseStatusUnsuccessful")
+                    elif op_er.errno == ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID:
+                        telemetry_data.set_event_sub_type("OCSPResponseAttachedCertInvalid")
+                    elif op_er.errno == ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED:
+                        telemetry_data.set_event_sub_type("OCSPResponseAttachedCertExpired")
+                    elif op_er.errno == ER_OCSP_RESPONSE_INVALID_SIGNATURE:
+                        telemetry_data.set_event_sub_type("OCSPResponseSignatureInvalid")
+                    elif op_er.errno == ER_OCSP_RESPONSE_INVALID_EXPIRY_INFO_MISSING:
+                        telemetry_data.set_event_sub_type("OCSPResponseExpiryInfoMissing")
+                    elif op_er.errno == ER_OCSP_RESPONSE_EXPIRED:
+                        telemetry_data.set_event_sub_type("OCSPResponseExpired")
                     raise op_er
 
         except RevocationCheckError as rce:
@@ -1277,6 +1307,7 @@ class SnowflakeOCSP(object):
         cert_id_enc = self.encode_cert_id_base64(
             self.decode_cert_id_key(cert_id))
         if not ocsp_url:
+            telemetry_data.set_event_sub_type("OCSPURLMissing")
             raise RevocationCheckError(msg="No OCSP URL found in cert. Cannot perform Certificate Revocation check",
                                        errno=ER_SERVER_CERTIFICATE_UNKNOWN)
         headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
@@ -1308,6 +1339,7 @@ class SnowflakeOCSP(object):
                                   'ocsp_responder_url': ocsp_url})
             headers['Content-Type'] = 'application/json'
 
+        telemetry_data.set_ocsp_connection_method(actual_method)
         if self.test_mode is not None:
             logger.debug("WARNING - DRIVER IS CONFIGURED IN TESTMODE.")
             test_ocsp_url = os.getenv("SF_TEST_OCSP_URL", None)
@@ -1361,6 +1393,7 @@ class SnowflakeOCSP(object):
                                      "Retrying in %s(s)", sleep_time)
                         time.sleep(sleep_time)
                     else:
+                        telemetry_data.set_event_sub_type("OCSPResponseFetchException")
                         raise RevocationCheckError(
                             msg="Could not fetch OCSP Response from server. Consider"
                                 "checking your whitelists : Exception - {}".format(
@@ -1370,6 +1403,7 @@ class SnowflakeOCSP(object):
                 logger.error(
                     "Failed to get OCSP response after {} attempt. Consider checking "
                     "for OCSP URLs being blocked".format(max_retry))
+                telemetry_data.set_event_sub_type("OCSPResponseFetchFailure")
                 raise RevocationCheckError(
                     msg="Failed to get OCSP response after {} attempt.".format(
                         max_retry),
@@ -1388,7 +1422,7 @@ class SnowflakeOCSP(object):
                 msg="Either this update or next "
                     "update is None. this_update: {}, next_update: {}".format(
                     this_update_native, next_update_native),
-                errno=ER_INVALID_OCSP_RESPONSE)
+                errno=ER_INVALID_OCSP_RESPONSE_VALIDITY_INFO_MISSING)
 
         this_update = (this_update_native.replace(
             tzinfo=None) - SnowflakeOCSP.ZERO_EPOCH).total_seconds()
@@ -1399,7 +1433,7 @@ class SnowflakeOCSP(object):
             raise RevocationCheckError(
                 msg=SnowflakeOCSP._validity_error_message(
                     current_time, this_update, next_update),
-                errno=ER_INVALID_OCSP_RESPONSE)
+                errno=ER_OCSP_RESPONSE_EXPIRED)
 
     def _process_revoked_status(self, single_response, cert_id):
         """Processes REVOKED status."""

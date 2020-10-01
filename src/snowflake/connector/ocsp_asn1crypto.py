@@ -243,7 +243,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         if res['response_status'].native != 'successful':
             raise RevocationCheckError(
                 msg="Invalid Status: {}".format(res['response_status'].native),
-                errno=ER_INVALID_OCSP_RESPONSE)
+                errno=ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL)
 
         basic_ocsp_response = res.basic_ocsp_response
         if basic_ocsp_response['certs'].native:
@@ -257,22 +257,25 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
             cur_time = datetime.now(timezone.utc)
 
-            """
-            Signature verification should happen before any kind of
-            validation
-            """
-            self.verify_signature(
-                ocsp_cert.hash_algo,
-                ocsp_cert.signature,
-                issuer,
-                ocsp_cert['tbs_certificate'])
-
+            try:
+                """
+                Signature verification should happen before any kind of
+                validation
+                """
+                self.verify_signature(
+                    ocsp_cert.hash_algo,
+                    ocsp_cert.signature,
+                    issuer,
+                    ocsp_cert['tbs_certificate'])
+            except RevocationCheckError as rce:
+                raise RevocationCheckError(msg=rce.msg,
+                                           errno='ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID')
             cert_valid, debug_msg = self.check_cert_time_validity(cur_time, ocsp_cert)
 
             if not cert_valid:
                 raise RevocationCheckError(
                     msg=debug_msg,
-                    errno=ER_INVALID_OCSP_RESPONSE_CODE)
+                    errno=ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED)
 
         else:
             logger.debug("Certificate is NOT attached in Basic OCSP Response. "
@@ -282,11 +285,15 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         tbs_response_data = basic_ocsp_response['tbs_response_data']
 
         logger.debug("Verifying the OCSP response is signed by the issuer.")
-        self.verify_signature(
-            basic_ocsp_response['signature_algorithm'].hash_algo,
-            basic_ocsp_response['signature'].native,
-            ocsp_cert,
-            tbs_response_data)
+        try:
+            self.verify_signature(
+                basic_ocsp_response['signature_algorithm'].hash_algo,
+                basic_ocsp_response['signature'].native,
+                ocsp_cert,
+                tbs_response_data)
+        except RevocationCheckError as rce:
+            raise RevocationCheckError(msg=rce.msg,
+                                       errno='ER_OCSP_RESPONSE_SIGNATURE_INVALID')
 
         single_response = tbs_response_data['responses'][0]
         cert_status = single_response['cert_status'].name
@@ -338,7 +345,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             if not signer.verify(digest, signature):
                 raise RevocationCheckError(
                     msg="Failed to verify the signature",
-                    errno=ER_INVALID_OCSP_RESPONSE)
+                    errno=ER_)
 
         else:
             backend = default_backend()
