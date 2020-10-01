@@ -2,17 +2,7 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
-"""SSL wrap util for PyOpenSSL.
-
-Copied from: https://github.com/shazow/urllib3/tree/master/urllib3/util to support ssl_wrap_socket.
-
-Backport of selectors.py from Python 3.5+ to support Python < 3.4
-Also has the behavior specified in PEP 475 which is to retry syscalls
-in the case of an EINTR error. This module is required because selectors34
-does not follow this behavior and instead returns that no dile descriptor
-events have occurred rather than retry the syscall. The decision to drop
-support for select.devpoll is made to maintain 100% test coverage.
-"""
+"""SSL wrap util for PyOpenSSL."""
 
 
 import select
