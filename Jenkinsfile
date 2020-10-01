@@ -12,7 +12,6 @@ timestamps {
         usernamePassword(credentialsId: '063fc85b-62a6-4181-9d72-873b43488411', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY'),
         string(credentialsId: 'a791118f-a1ea-46cd-b876-56da1b9bc71c',variable: 'NEXUS_PASSWORD')
         ]) {
-        buildDescription('','${GIT_BRANCH},${GIT_COMMIT}')
         sh '''\
         |cd $WORKSPACE
         |export GIT_BRANCH=${GIT_BRANCH}
