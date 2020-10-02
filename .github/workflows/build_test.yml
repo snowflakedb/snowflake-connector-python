@@ -276,5 +276,6 @@ jobs:
       - name: Combine coverages
         run: python -m tox -e coverage
       - uses: codecov/codecov-action@v1
+        if: false
         with:
           file: .tox/coverage.xml
