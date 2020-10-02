@@ -280,5 +280,6 @@ jobs:
           name: overall_cov_html
           path: .tox/htmlcov
       - uses: codecov/codecov-action@v1
+        if: false
         with:
           file: .tox/coverage.xml
