@@ -15,7 +15,7 @@ docutils==0.15.2
 idna==2.9
 isodate==0.6.0
 jmespath==0.10.0
-msrest==0.6.18
+msrest==0.6.19
 oauthlib==3.1.0
 oscrypto==1.2.1
 pycparser==2.20
