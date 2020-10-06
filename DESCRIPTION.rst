@@ -11,8 +11,8 @@ Release Notes
 
 - v2.3.3(October 05,2020)
 
-   - Test setting changes to simplify config files.
-   - The following Connection functions now filter out empty lines from their inputs: execute_stream, execute_string.
+   - Simplified the configuration files by consolidating test settings.
+   - In the Connection object, the execute_stream and execute_string methods now filter out empty lines from their inputs.
 
 - v2.3.2(September 14,2020)
 
