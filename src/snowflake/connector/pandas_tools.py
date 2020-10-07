@@ -178,7 +178,7 @@ def pd_writer(table: pandas.io.sql.SQLTable,
 
             sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
             sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
-            
+
             # to use quote_identifiers=False
             from functools import partial
             sf_connector_version_df.to_sql(

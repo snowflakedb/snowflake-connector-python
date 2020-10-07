@@ -12,8 +12,8 @@ import mock
 import pandas
 import pytest
 
+from snowflake.connector import DictCursor
 from snowflake.connector.pandas_tools import write_pandas
-from snowflake.connector.pandas_tools import pd_writer
 
 MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
@@ -35,14 +35,12 @@ sf_connector_version_df = pandas.DataFrame(sf_connector_version_data, columns=['
 # Note: since the file will to small to chunk, this is only testing the put command's syntax
 @pytest.mark.parametrize('parallel', [4, 99])
 @pytest.mark.parametrize('quote_identifiers', [True, False])
-@pytest.mark.parametrize('create_default_columns', [True, False])
 def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', None, None]],
                       db_parameters: Dict[str, str],
                       compression: str,
                       parallel: int,
                       chunk_size: int,
-                      quote_identifiers: bool,
-                      create_default_columns: bool):
+                      quote_identifiers: bool):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
 
     with conn_cnx(user=db_parameters['user'],
@@ -51,27 +49,11 @@ def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', N
         table_name = 'driver_versions'
 
         if quote_identifiers:
-            if create_default_columns:
-                create_sql = """CREATE OR REPLACE TABLE "{}" 
-                             ("name" STRING, "newest_version" STRING,
-                             "id" varchar(36) default uuid_string(),
-                             "ts" timestamp_ltz default current_timestamp)""".format(table_name)
-                id_key = 'id'
-                ts_key = 'ts'
-            else:
-                create_sql = 'CREATE OR REPLACE TABLE "{}" ("name" STRING, "newest_version" STRING)'.format(table_name)
+            create_sql = 'CREATE OR REPLACE TABLE "{}" ("name" STRING, "newest_version" STRING)'.format(table_name)
             select_sql = 'SELECT * FROM "{}"'.format(table_name)
             drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
         else:
-            if create_default_columns:
-                create_sql = """CREATE OR REPLACE TABLE {} 
-                             (name STRING, newest_version STRING,
-                             id varchar(36) default uuid_string(),
-                             ts timestamp_ltz default current_timestamp)""".format(table_name)
-                id_key = 'ID'
-                ts_key = 'TS'
-            else:
-                create_sql = 'CREATE OR REPLACE TABLE {} (name STRING, newest_version STRING)'.format(table_name)
+            create_sql = 'CREATE OR REPLACE TABLE {} (name STRING, newest_version STRING)'.format(table_name)
             select_sql = 'SELECT * FROM {}'.format(table_name)
             drop_sql = 'DROP TABLE IF EXISTS {}'.format(table_name)
 
@@ -84,16 +66,8 @@ def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', N
                                                       parallel=parallel,
                                                       chunk_size=chunk_size,
                                                       quote_identifiers=quote_identifiers)
-            
-            if create_default_columns:
-                from snowflake.connector import DictCursor
-                result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
-                for row in result:
-                    assert row[id_key] is not None  # ID (UUID String)
-                    assert len(row[id_key]) == 36
-                    assert row[ts_key] is not None  # TS (Current Timestamp)
-                    assert isinstance(row[ts_key], datetime)
-            elif num_of_chunks == 1:
+
+            if num_of_chunks == 1:
                 # Note: since we used one chunk order is conserved
                 assert (cnx.cursor().execute(select_sql).fetchall() ==
                         sf_connector_version_data)
@@ -101,7 +75,7 @@ def test_write_pandas(conn_cnx: Callable[..., Generator['SnowflakeConnection', N
                 # Note: since we used one chunk order is NOT conserved
                 assert (set(cnx.cursor().execute(select_sql).fetchall()) ==
                         set(sf_connector_version_data))
-                
+
             # Make sure all files were loaded and no error occurred
             assert success
             # Make sure overall as many rows were ingested as we tried to insert
@@ -127,9 +101,10 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
+
         with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute', side_effect=mocked_execute) as m_execute:
             success, nchunks, nrows, _ = write_pandas(cnx, sf_connector_version_df, "table",
-                                                      database='database', schema='schema', 
+                                                      database='database', schema='schema',
                                                       quote_identifiers=quote_identifiers)
             assert m_execute.called and any(map(lambda e: 'COPY INTO' in str(e.args), m_execute.call_args_list))
 
@@ -149,6 +124,7 @@ def test_location_building_schema(conn_cnx, quote_identifiers: bool):
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
+
         with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute', side_effect=mocked_execute) as m_execute:
             success, nchunks, nrows, _ = write_pandas(cnx, sf_connector_version_df, "table",
                                                       schema='schema', quote_identifiers=quote_identifiers)
@@ -170,55 +146,93 @@ def test_location_building(conn_cnx, quote_identifiers: bool):
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
+
         with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute', side_effect=mocked_execute) as m_execute:
             success, nchunks, nrows, _ = write_pandas(cnx, sf_connector_version_df, "teble.table",
                                                       quote_identifiers=quote_identifiers)
             assert m_execute.called and any(map(lambda e: 'COPY INTO' in str(e.args), m_execute.call_args_list))
-            
+
+
 @pytest.mark.parametrize('quote_identifiers', [True, False])
-def test_pandas_to_sql(conn_cnx, db_parameters: Dict[str, str], quote_identifiers: bool):
-    try:
-        from sqlalchemy import create_engine
-        from snowflake.sqlalchemy import URL
-    except ImportError:
-        from warnings import warn
-        warn("Not testing pandas.dataframe.to_sql because snowflake-sqlalchemy is not installed", ImportWarning)
-        # User does not have snowflake-sqlalchemy installed
-        return
-    table_name = 'driver_versions'
-    select_sql = None  # forward declaration
-    drop_sql = None  # forward declaration
+def test_default_value_insertion(conn_cnx: Callable[..., Generator['SnowflakeConnection', None, None]],
+                                 quote_identifiers: bool):
+    """Tests whether default values can be successfully inserted with the pandas writeback."""
+    table_name = 'users'
+    df_data = [('Mark', 10), ('Luke', 20)]
 
-    engine = create_engine(URL(
-        account=db_parameters['account'],
-        user=db_parameters['user'],
-        password=db_parameters['password'],
-        database=db_parameters['database'],
-        schema=db_parameters['schema'],
-        warehouse=db_parameters['warehouse']
-    ))
+    # Create a DataFrame containing data about customers
+    df = pandas.DataFrame(df_data, columns=['name', 'balance'])
+    # Assume quote_identifiers is true in string and if not remove " from strings
+    create_sql = """CREATE OR REPLACE TABLE "{}"
+                 ("name" STRING, "balance" INT,
+                 "id" varchar(36) default uuid_string(),
+                 "ts" timestamp_ltz default current_timestamp)""".format(table_name)
+    select_sql = 'SELECT * FROM "{}"'.format(table_name)
+    drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
+    if not quote_identifiers:
+        create_sql = create_sql.replace('"', '')
+        select_sql = select_sql.replace('"', '')
+        drop_sql = drop_sql.replace('"', '')
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            success, nchunks, nrows, _ = write_pandas(cnx,
+                                                      df,
+                                                      table_name,
+                                                      quote_identifiers=quote_identifiers)
 
-    connection = engine.connect()
+            # Check write_pandas output
+            assert success
+            assert nrows == len(df_data)
+            assert nchunks == 1
+            # Check table's contents
+            result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
+            for row in result:
+                assert row['id' if quote_identifiers else 'ID'] is not None  # ID (UUID String)
+                assert len(row['id' if quote_identifiers else 'ID']) == 36
+                assert row['ts' if quote_identifiers else 'TS'] is not None  # TS (Current Timestamp)
+                assert isinstance(row['ts' if quote_identifiers else 'TS'], datetime)
+                assert (row['name' if quote_identifiers else 'NAME'],
+                        row['balance' if quote_identifiers else 'BALANCE']) in df_data
+        finally:
+            cnx.execute_string(drop_sql)
 
-    try:
-        if quote_identifiers:
-            select_sql = 'SELECT * FROM "{}"'.format(table_name.upper())
-            drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name.upper())
 
-            # SQL alchemy connector creates table names case insensitively, even though write_pandas,
-            # by default, quotes everything
-            sf_connector_version_df.to_sql(name=table_name.upper(), con=engine, if_exists='replace', index=False)
-            results = [tuple(r) for r in connection.execute(select_sql).fetchall()]
-            assert (set(results) == set(sf_connector_version_data))
-        else:
-            select_sql = 'SELECT * FROM {}'.format(table_name)
-            drop_sql = 'DROP TABLE IF EXISTS {}'.format(table_name)
+@pytest.mark.parametrize('quote_identifiers', [True, False])
+def test_autoincrement_insertion(conn_cnx: Callable[..., Generator['SnowflakeConnection', None, None]],
+                                 quote_identifiers: bool):
+    """Tests whether default values can be successfully inserted with the pandas writeback."""
+    table_name = 'users'
+    df_data = [('Mark', 10), ('Luke', 20)]
 
-            from functools import partial
-            sf_connector_version_df.to_sql(name=table_name, con=engine, if_exists='replace', index=False,
-                    method=partial(pd_writer, quote_identifiers=quote_identifiers))
-            results = [tuple(r) for r in connection.execute(select_sql).fetchall()]
-            assert (set(results) == set(sf_connector_version_data))
-    finally:
-        engine.execute(drop_sql)
-        engine.dispose()
+    # Create a DataFrame containing data about customers
+    df = pandas.DataFrame(df_data, columns=['name', 'balance'])
+    # Assume quote_identifiers is true in string and if not remove " from strings
+    create_sql = ('CREATE OR REPLACE TABLE "{}"'
+                  '("name" STRING, "balance" INT, "id" INT AUTOINCREMENT)').format(table_name)
+    select_sql = 'SELECT * FROM "{}"'.format(table_name)
+    drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
+    if not quote_identifiers:
+        create_sql = create_sql.replace('"', '')
+        select_sql = select_sql.replace('"', '')
+        drop_sql = drop_sql.replace('"', '')
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            success, nchunks, nrows, _ = write_pandas(cnx,
+                                                      df,
+                                                      table_name,
+                                                      quote_identifiers=quote_identifiers)
+
+            # Check write_pandas output
+            assert success
+            assert nrows == len(df_data)
+            assert nchunks == 1
+            # Check table's contents
+            result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
+            for row in result:
+                assert row['id' if quote_identifiers else 'ID'] in (1, 2)
+                assert (row['name' if quote_identifiers else 'NAME'],
+                        row['balance' if quote_identifiers else 'BALANCE']) in df_data
+        finally:
+            cnx.execute_string(drop_sql)
