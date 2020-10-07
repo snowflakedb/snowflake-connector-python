@@ -7,6 +7,7 @@ import pandas
 import pytest
 
 from snowflake.connector.pandas_tools import write_pandas
+from snowflake.connector.pandas_tools import pd_writer
 
 MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
@@ -167,3 +168,51 @@ def test_location_building(conn_cnx, quote_identifiers: bool):
             success, nchunks, nrows, _ = write_pandas(cnx, sf_connector_version_df, "teble.table",
                                                       quote_identifiers=quote_identifiers)
             assert m_execute.called and any(map(lambda e: 'COPY INTO' in str(e.args), m_execute.call_args_list))
+            
+@pytest.mark.parametrize('quote_identifiers', [True, False])
+def test_pandas_to_sql(conn_cnx, db_parameters: Dict[str, str], quote_identifiers: bool):
+    try:
+        from sqlalchemy import create_engine
+        from snowflake.sqlalchemy import URL
+    except ImportError:
+        from warnings import warn
+        warn("Not testing pandas.dataframe.to_sql because snowflake-sqlalchemy is not installed", ImportWarning)
+        # User does not have snowflake-sqlalchemy installed
+        return
+    table_name = 'driver_versions'
+    select_sql = None  # forward declaration
+    drop_sql = None  # forward declaration
+
+    engine = create_engine(URL(
+        account=db_parameters['account'],
+        user=db_parameters['user'],
+        password=db_parameters['password'],
+        database=db_parameters['database'],
+        schema=db_parameters['schema'],
+        warehouse=db_parameters['warehouse']
+    ))
+
+    connection = engine.connect()
+
+    try:
+        if quote_identifiers:
+            select_sql = 'SELECT * FROM "{}"'.format(table_name.upper())
+            drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name.upper())
+
+            # SQL alchemy connector creates table names case insensitively, even though write_pandas,
+            # by default, quotes everything
+            sf_connector_version_df.to_sql(name=table_name.upper(), con=engine, if_exists='replace', index=False)
+            results = [tuple(r) for r in connection.execute(select_sql).fetchall()]
+            assert (set(results) == set(sf_connector_version_data))
+        else:
+            select_sql = 'SELECT * FROM {}'.format(table_name)
+            drop_sql = 'DROP TABLE IF EXISTS {}'.format(table_name)
+
+            from functools import partial
+            sf_connector_version_df.to_sql(name=table_name, con=engine, if_exists='replace', index=False,
+                    method=partial(pd_writer, quote_identifiers=quote_identifiers))
+            results = [tuple(r) for r in connection.execute(select_sql).fetchall()]
+            assert (set(results) == set(sf_connector_version_data))
+    finally:
+        engine.execute(drop_sql)
+        engine.dispose()
