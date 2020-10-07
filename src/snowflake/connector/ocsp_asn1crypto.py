@@ -27,11 +27,11 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
 
 from snowflake.connector.errorcode import (
-    ER_INVALID_OCSP_RESPONSE,
-    ER_INVALID_OCSP_RESPONSE_CODE,
-    ER_INVALID_SIGNATURE,
     ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
     ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID,
+    ER_OCSP_RESPONSE_CERT_STATUS_INVALID,
+    ER_OCSP_RESPONSE_LOAD_FAILURE,
+    ER_OCSP_RESPONSE_SIGNATURE_INVALID,
     ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL,
 )
 from snowflake.connector.errors import RevocationCheckError
@@ -193,7 +193,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         if res['response_status'].native != 'successful':
             raise RevocationCheckError(
                 msg="Invalid Status: {}".format(res['response_status'].native),
-                errno=ER_INVALID_OCSP_RESPONSE)
+                errno=ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL)
 
         basic_ocsp_response = res.basic_ocsp_response
         if basic_ocsp_response['certs'].native:
@@ -240,11 +240,12 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             if self.test_mode is not None:
                 ocsp_load_failure = getenv("SF_TEST_OCSP_FORCE_BAD_OCSP_RESPONSE")
                 if ocsp_load_failure is not None:
-                    raise RevocationCheckError("Force fail")
+                    raise RevocationCheckError("Force fail",
+                                               errno=ER_OCSP_RESPONSE_LOAD_FAILURE)
         except Exception:
             raise RevocationCheckError(
                 msg='Invalid OCSP Response',
-                errno=ER_INVALID_OCSP_RESPONSE
+                errno=ER_OCSP_RESPONSE_LOAD_FAILURE
             )
 
         if res['response_status'].native != 'successful':
@@ -300,7 +301,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                 tbs_response_data)
         except RevocationCheckError as rce:
             raise RevocationCheckError(msg=rce.msg,
-                                       errno='ER_OCSP_RESPONSE_SIGNATURE_INVALID')
+                                       errno=ER_OCSP_RESPONSE_SIGNATURE_INVALID)
 
         single_response = tbs_response_data['responses'][0]
         cert_status = single_response['cert_status'].name
@@ -327,7 +328,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                     format(cert_status)
                 raise RevocationCheckError(
                     msg=debug_msg,
-                    errno=ER_INVALID_OCSP_RESPONSE_CODE
+                    errno=ER_OCSP_RESPONSE_CERT_STATUS_INVALID
                 )
         except RevocationCheckError as op_er:
             debug_msg = "{} Consider running curl -o ocsp.der {}".\
@@ -351,8 +352,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             digest.update(data.dump())
             if not signer.verify(digest, signature):
                 raise RevocationCheckError(
-                    msg="Failed to verify the signature",
-                    errno=ER_INVALID_SIGNATURE)
+                    msg="Failed to verify the signature")
 
         else:
             backend = default_backend()
@@ -376,8 +376,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                 )
             except InvalidSignature:
                 raise RevocationCheckError(
-                    msg="Failed to verify the signature",
-                    errno=ER_INVALID_OCSP_RESPONSE)
+                    msg="Failed to verify the signature")
 
     def extract_certificate_chain(self, connection):
         """Gets certificate chain and extract the key info from OpenSSL connection."""

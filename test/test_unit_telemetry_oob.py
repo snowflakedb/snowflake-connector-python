@@ -6,8 +6,10 @@
 
 import pytest
 
+import snowflake.connector.errorcode
 from snowflake.connector.errorcode import ER_FAILED_TO_REQUEST
 from snowflake.connector.errors import RevocationCheckError
+from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from snowflake.connector.telemetry_oob import TelemetryService
 
@@ -102,6 +104,15 @@ def test_telemetry_oob_http_log(telemetry_setup):
     assert telemetry.size() == 1
     telemetry.flush()
     assert telemetry.size() == 0
+
+
+def test_telemetry_oob_error_code_mapping():
+    """Tests that all OCSP error codes have a corresponding Telemetry sub event type."""
+    ec_dict = snowflake.connector.errorcode.__dict__
+    for ec in ec_dict:
+        if not ec.startswith('__'):
+            if 254000 <= ec_dict[ec] < 255000:
+                assert ec_dict in OCSPTelemetryData.ERROR_CODE_MAP
 
 
 @pytest.mark.flaky(reruns=3)
