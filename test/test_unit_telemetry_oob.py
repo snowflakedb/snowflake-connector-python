@@ -109,7 +109,7 @@ def test_telemetry_oob_http_log(telemetry_setup):
 def test_telemetry_oob_error_code_mapping():
     """Tests that all OCSP error codes have a corresponding Telemetry sub event type."""
     ec_dict = snowflake.connector.errorcode.__dict__
-    for ec, ec_val in ec_dict:
+    for ec, ec_val in ec_dict.items():
         if not ec.startswith('__'):
             if 254000 <= ec_val < 255000:
                 assert ec in OCSPTelemetryData.ERROR_CODE_MAP
