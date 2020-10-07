@@ -1022,7 +1022,7 @@ class SnowflakeOCSP(object):
         try:
             cert_data = self.extract_certificate_chain(connection)
         except RevocationCheckError:
-            telemetry_data.set_even_sub_type(OCSPTelemetryData.CERTIFICATE_EXTRACTION_FAILED)
+            telemetry_data.set_event_sub_type(OCSPTelemetryData.CERTIFICATE_EXTRACTION_FAILED)
             logger.debug(telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
             return None
 
@@ -1178,7 +1178,7 @@ class SnowflakeOCSP(object):
                         # TODO - Remove this potentially broken OCSP Response / SSD
                         raise op_er
                 else:
-                    telemetry_data.set_even_sub_type(OCSPTelemetryData.ERROR_CODE_MAP(op_er.errno))
+                    telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP(op_er.errno))
                     raise op_er
 
         except RevocationCheckError as rce:
@@ -1215,7 +1215,7 @@ class SnowflakeOCSP(object):
         try:
             self._check_ocsp_response_cache_server(cert_data)
         except RevocationCheckError as rce:
-            telemetry_data.set_even_sub_type(OCSPTelemetryData.ERROR_CODE_MAP(rce.errno))
+            telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP(rce.errno))
         except Exception as ex:
             logger.debug("Caught unknown exception - %s. Continue to validate by direct connection", str(ex))
 
