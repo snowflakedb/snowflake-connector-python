@@ -115,10 +115,16 @@ class OCSPTelemetryData(object):
         self.fail_open = False
         self.insecure_mode = False
 
-    def set_event_sub_type(self, event_sub_type):
-        # There can be multiple event_sub_types
-        # in the case where there was a problem
-        # with the cache.
+    def set_event_sub_type(self, event_sub_type: str) -> None:
+        """
+        Sets sub type for OCSP Telemetry Event.
+
+        There can be multiple event_sub_type that could have happened
+        during a single connection establishment. Ensure that all of them
+        are captured.
+        :param event_sub_type:
+        :return:
+        """
         if self.event_sub_type is not None:
             self.event_sub_type = "{}|{}".\
                 format(self.event_sub_type,
@@ -321,7 +327,7 @@ class OCSPServer(object):
                 logger.debug("OCSP Response cache download failed. The client"
                              "will reach out to the OCSP Responder directly for"
                              "any missing OCSP responses %s\n" % rce.msg)
-                raise rce
+                raise
 
     @staticmethod
     def _download_ocsp_response_cache(ocsp, url, do_retry=True):
