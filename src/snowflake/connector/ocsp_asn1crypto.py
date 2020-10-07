@@ -30,8 +30,8 @@ from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
     ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID,
     ER_OCSP_RESPONSE_CERT_STATUS_INVALID,
+    ER_OCSP_RESPONSE_INVALID_SIGNATURE,
     ER_OCSP_RESPONSE_LOAD_FAILURE,
-    ER_OCSP_RESPONSE_SIGNATURE_INVALID,
     ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL,
 )
 from snowflake.connector.errors import RevocationCheckError
@@ -301,7 +301,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                 tbs_response_data)
         except RevocationCheckError as rce:
             raise RevocationCheckError(msg=rce.msg,
-                                       errno=ER_OCSP_RESPONSE_SIGNATURE_INVALID)
+                                       errno=ER_OCSP_RESPONSE_INVALID_SIGNATURE)
 
         single_response = tbs_response_data['responses'][0]
         cert_status = single_response['cert_status'].name
