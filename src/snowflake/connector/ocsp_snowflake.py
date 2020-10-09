@@ -70,6 +70,7 @@ class OCSPTelemetryData(object):
     OCSP_RESPONSE_FETCH_EXCEPTION = "OCSPResponseFetchException"
     OCSP_RESPONSE_FAILED_TO_CONNECT_CACHE_SERVER = "OCSPResponseFailedToConnectCacheServer"
     OCSP_RESPONSE_CERT_STATUS_INVALID = "OCSPResponseCertStatusInvalid"
+    OCSP_RESPONSE_CERT_STATUS_REVOKED = "OCSPResponseCertStatusRevoked"
     OCSP_RESPONSE_CERT_STATUS_UNKNOWN = "OCSPResponseCertStatusUnknown"
     OCSP_RESPONSE_STATUS_UNSUCCESSFUL = "OCSPResponseStatusUnsuccessful"
     OCSP_RESPONSE_ATTACHED_CERT_INVALID = "OCSPResponseAttachedCertInvalid"
@@ -88,6 +89,7 @@ class OCSPTelemetryData(object):
         ER_OCSP_RESPONSE_FETCH_EXCEPTION: OCSP_RESPONSE_FETCH_EXCEPTION,
         ER_OCSP_FAILED_TO_CONNECT_CACHE_SERVER: OCSP_RESPONSE_FAILED_TO_CONNECT_CACHE_SERVER,
         ER_OCSP_RESPONSE_CERT_STATUS_INVALID: OCSP_RESPONSE_CERT_STATUS_INVALID,
+        ER_OCSP_RESPONSE_CERT_STATUS_REVOKED: OCSP_RESPONSE_CERT_STATUS_REVOKED,
         ER_OCSP_RESPONSE_CERT_STATUS_UNKNOWN: OCSP_RESPONSE_CERT_STATUS_UNKNOWN,
         ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL: OCSP_RESPONSE_STATUS_UNSUCCESSFUL,
         ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID: OCSP_RESPONSE_ATTACHED_CERT_INVALID,
@@ -1184,7 +1186,7 @@ class SnowflakeOCSP(object):
                         # TODO - Remove this potentially broken OCSP Response / SSD
                         raise op_er
                 else:
-                    telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP(op_er.errno))
+                    telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP[op_er.errno])
                     raise op_er
 
         except RevocationCheckError as rce:
@@ -1221,7 +1223,7 @@ class SnowflakeOCSP(object):
         try:
             self._check_ocsp_response_cache_server(cert_data)
         except RevocationCheckError as rce:
-            telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP(rce.errno))
+            telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP[rce.errno])
         except Exception as ex:
             logger.debug("Caught unknown exception - %s. Continue to validate by direct connection", str(ex))
 
