@@ -112,7 +112,7 @@ def test_telemetry_oob_error_code_mapping():
     for ec, ec_val in ec_dict.items():
         if not ec.startswith('__'):
             if 254000 <= ec_val < 255000:
-                assert ec_val in OCSPTelemetryData.ERROR_CODE_MAP
+                assert ec in OCSPTelemetryData.ERROR_CODE_MAP
 
 
 @pytest.mark.flaky(reruns=3)
