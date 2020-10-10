@@ -80,6 +80,7 @@ class OCSPTelemetryData(object):
     OCSP_RESPONSE_EXPIRED = "OCSPResponseExpired"
     OCSP_RESPONSE_FETCH_FAILURE = "OCSPResponseFetchFailure"
     OCSP_RESPONSE_CACHE_DOWNLOAD_FAILED = "OCSPResponseCacheDownloadFailed"
+    OCSP_RESPONSE_CACHE_DECODE_FAILED = "OCSPResponseCacheDecodeFailed"
     OCSP_RESPONSE_LOAD_FAILURE = "OCSPResponseLoadFailure"
     OCSP_RESPONSE_INVALID_SSD = "OCSPResponseInvalidSSD"
 
@@ -100,6 +101,7 @@ class OCSPTelemetryData(object):
         ER_OCSP_RESPONSE_FETCH_FAILURE: OCSP_RESPONSE_FETCH_FAILURE,
         ER_OCSP_RESPONSE_LOAD_FAILURE: OCSP_RESPONSE_LOAD_FAILURE,
         ER_OCSP_RESPONSE_CACHE_DOWNLOAD_FAILED: OCSP_RESPONSE_CACHE_DOWNLOAD_FAILED,
+        ER_OCSP_RESPONSE_CACHE_DECODE_FAILED: OCSP_RESPONSE_CACHE_DECODE_FAILED,
         ER_INVALID_OCSP_RESPONSE_SSD: OCSP_RESPONSE_INVALID_SSD,
         ER_INVALID_SSD: OCSP_RESPONSE_INVALID_SSD
     }
@@ -493,14 +495,12 @@ class OCSPCache(object):
                 raise Exception(
                     "Unsupported OCSP URI: %s",
                     OCSPCache.OCSP_RESPONSE_CACHE_URI)
-        except RevocationCheckError as rce:
-            raise Exception(rce.msg)
-        except Exception as e:
+        except (RevocationCheckError, Exception) as rce:
             logger.debug(
                 "Failed to read OCSP response cache file %s: %s, "
                 "No worry. It will validate with OCSP server. "
                 "Ignoring...",
-                OCSPCache.OCSP_RESPONSE_CACHE_URI, e, exc_info=True)
+                OCSPCache.OCSP_RESPONSE_CACHE_URI, rce, exc_info=True)
 
     @staticmethod
     def read_ocsp_response_cache_file(ocsp, filename):
