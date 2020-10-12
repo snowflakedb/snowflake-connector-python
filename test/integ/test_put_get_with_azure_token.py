@@ -16,6 +16,8 @@ import pytest
 from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage
 
+from ..generate_test_files import generate_k_lines_of_n_files
+
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:
@@ -90,12 +92,12 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
     """[azure] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -140,13 +142,13 @@ def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
+def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx,
                                          db_parameters):
     """[azure] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
     number_of_lines = 100
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -220,11 +222,11 @@ def test_put_copy_duplicated_files_azure(tmpdir, test_files, conn_cnx,
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_get_large_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
     """[azure] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')

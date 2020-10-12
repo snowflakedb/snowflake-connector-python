@@ -77,7 +77,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
             'locationType': 'S3',
         },
         'dst_file_name': 'data1.txt.gz',
-        'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
         'overwrite': True,
     }
     upload_meta['real_src_file_name'] = upload_meta['src_file_name']
@@ -137,7 +137,7 @@ def test_upload_one_file_to_s3_econnreset():
             },
             'client': client,
             'dst_file_name': 'data1.txt.gz',
-            'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+            'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
             'overwrite': True,
         }
         upload_meta['real_src_file_name'] = upload_meta['src_file_name']
@@ -201,7 +201,7 @@ def test_upload_file_with_s3_upload_failed_error():
         },
         'client': client,
         'dst_file_name': 'data1.txt.gz',
-        'src_file_name': path.join(THIS_DIR, 'data', 'put_get_1.txt'),
+        'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
         'overwrite': True,
     }
     upload_meta['real_src_file_name'] = upload_meta['src_file_name']

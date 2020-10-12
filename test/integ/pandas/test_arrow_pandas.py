@@ -11,10 +11,8 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from pandas import DataFrame
 
-from snowflake.connector.options import installed_pandas
-from snowflake.connector.options import pandas as pd
+from snowflake.connector.options import installed_pandas, pandas
 
 try:
     import pyarrow  # NOQA
@@ -489,7 +487,7 @@ def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='fl
                 for j in range(col_count):
                     c_new = df_new.iat[i, j]
                     if cases[i] == "NULL":
-                        assert c_new is None or pd.isnull(c_new), '{} row, {} column: original value is NULL, ' \
+                        assert c_new is None or pandas.isnull(c_new), '{} row, {} column: original value is NULL, ' \
                                                                   'new value is {}, values are not equal'.format(
                             i, j, c_new)
                     else:
@@ -511,12 +509,12 @@ def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='fl
                         elif data_type.startswith('timestamp'):
                             time_str_len = 19 if scale == 0 else 20 + scale
                             if timezone:
-                                c_case = pd.Timestamp(cases[i][:time_str_len], tz=timezone)
+                                c_case = pandas.Timestamp(cases[i][:time_str_len], tz=timezone)
                                 if data_type == 'timestamptz':
                                     c_case = c_case.tz_convert('UTC')
                                     c_case = c_case.tz_localize(None)
                             else:
-                                c_case = pd.Timestamp(cases[i][:time_str_len])
+                                c_case = pandas.Timestamp(cases[i][:time_str_len])
                             assert c_case == c_new, '{} row, {} column: original value is {}, new value is {}, ' \
                                                     'values are not equal'.format(i, j, cases[i], c_new)
                             break
@@ -593,12 +591,12 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method='one'):
             cursor_row.execute(sql)
 
             # build dataframe
-            # actually its exec time would be different from `pd.read_sql()` via sqlalchemy as most people use
+            # actually its exec time would be different from `pandas.read_sql()` via sqlalchemy as most people use
             # further perf test can be done separately
             start_time = time.time()
             rows = 0
             if method == 'one':
-                df_old = pd.DataFrame(cursor_row.fetchall(), columns=['c{}'.format(i) for i in range(col_count)])
+                df_old = pandas.DataFrame(cursor_row.fetchall(), columns=['c{}'.format(i) for i in range(col_count)])
             else:
                 print("use fetchmany")
                 while True:
@@ -606,7 +604,7 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method='one'):
                     if not dat:
                         break
                     else:
-                        df_old = pd.DataFrame(dat, columns=['c{}'.format(i) for i in range(col_count)])
+                        df_old = pandas.DataFrame(dat, columns=['c{}'.format(i) for i in range(col_count)])
                         rows += df_old.shape[0]
             end_time = time.time()
             print('The original way took {}s'.format(end_time - start_time))
@@ -706,8 +704,8 @@ def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
             else:
                 scanned_results = resultscan_cur.fetch_pandas_all()
             assert resultscan_cur._query_result_format.upper() == resultscan_format
-        if isinstance(results, DataFrame):
+        if isinstance(results, pandas.DataFrame):
             results = [tuple(e) for e in results.values.tolist()]
-        if isinstance(scanned_results, DataFrame):
+        if isinstance(scanned_results, pandas.DataFrame):
             scanned_results = [tuple(e) for e in scanned_results.values.tolist()]
         assert results == scanned_results

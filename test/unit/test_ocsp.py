@@ -19,7 +19,7 @@ from snowflake.connector import OperationalError
 from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED, ER_OCSP_RESPONSE_FETCH_FAILURE
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
-from snowflake.connector.ocsp_snowflake import OCSPCache, SnowflakeOCSP
+from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer, SnowflakeOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
@@ -320,7 +320,7 @@ def _validate_certs_using_ocsp(url, cache_file_name):
 def test_ocsp_revoked_certificate():
     """Tests revoked certificate."""
     revoked_cert = path.join(
-        THIS_DIR, 'data', 'cert_tests', 'revoked_certs.pem')
+        THIS_DIR, '../data', 'cert_tests', 'revoked_certs.pem')
 
     SnowflakeOCSP.clear_cache()  # reset the memory cache
     ocsp = SFOCSP()
@@ -333,7 +333,7 @@ def test_ocsp_revoked_certificate():
 def test_ocsp_incomplete_chain():
     """Tests incomplete chained certificate."""
     incomplete_chain_cert = path.join(
-        THIS_DIR, 'data', 'cert_tests', 'incomplete-chain.pem')
+        THIS_DIR, '../data', 'cert_tests', 'incomplete-chain.pem')
 
     SnowflakeOCSP.clear_cache()  # reset the memory cache
     ocsp = SFOCSP()
@@ -375,3 +375,105 @@ def test_ocsp_cache_merge(tmpdir):
 
     assert len(latest) > len(prev)
     assert len(latest) > len(curr)
+
+
+def test_building_retry_url():
+    # privatelink retry url
+    OCSP_SERVER = OCSPServer()
+    OCSPCache.ACTIVATE_SSD = False
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.us-east-1.snowflakecomputing.com/ocsp_response_cache.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL == \
+           'http://ocsp.us-east-1.snowflakecomputing.com/retry/{0}/{1}'
+
+    # privatelink retry url with port
+    OCSPCache.ACTIVATE_SSD = False
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.us-east-1.snowflakecomputing.com:80/ocsp_response_cache' \
+        '.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL == \
+           'http://ocsp.us-east-1.snowflakecomputing.com:80/retry/{0}/{1}'
+
+    # non-privatelink retry url
+    OCSPCache.ACTIVATE_SSD = False
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.snowflakecomputing.com/ocsp_response_cache.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL is None
+
+    # non-privatelink retry url with port
+    OCSPCache.ACTIVATE_SSD = False
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.snowflakecomputing.com:80/ocsp_response_cache.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL is None
+
+    # ssd enabled for privatelink retry url
+    OCSPCache.ACTIVATE_SSD = True
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.us-east-1.snowflakecomputing.com/ocsp_response_cache.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL == \
+           'http://ocsp.us-east-1.snowflakecomputing.com/retry'
+
+    # ssd enabled for privatelink retry url with port
+    OCSPCache.ACTIVATE_SSD = True
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.us-east-1.snowflakecomputing.com:80/ocsp_response_cache' \
+        '.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL == \
+           'http://ocsp.us-east-1.snowflakecomputing.com:80/retry'
+
+    # ssd enabled for non-privatelink
+    OCSPCache.ACTIVATE_SSD = True
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.snowflakecomputing.com/ocsp_response_cache.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL is None
+
+    # ssd enabled for non-privatelink with port
+    OCSPCache.ACTIVATE_SSD = True
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    OCSP_SERVER.CACHE_SERVER_URL = \
+        'http://ocsp.snowflakecomputing.com:80/ocsp_response_cache.json'
+    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
+    assert OCSP_SERVER.OCSP_RETRY_URL is None
+    # Once SSD is active we would use hostname specific OCSP Endpoints.
+
+
+def test_building_new_retry():
+    OCSP_SERVER = OCSPServer()
+    OCSPCache.ACTIVATE_SSD = False
+    OCSP_SERVER.OCSP_RETRY_URL = None
+    hname = \
+        "a1.us-east-1.snowflakecomputing.com"
+    os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "true"
+    OCSP_SERVER.reset_ocsp_endpoint(hname)
+    assert OCSP_SERVER.CACHE_SERVER_URL == \
+           "https://ocspssd.us-east-1.snowflakecomputing.com/ocsp/fetch"
+
+    assert OCSP_SERVER.OCSP_RETRY_URL == "https://ocspssd.us-east-1.snowflakecomputing.com/ocsp/retry"
+
+    hname = "a1-12345.global.snowflakecomputing.com"
+    OCSP_SERVER.reset_ocsp_endpoint(hname)
+    assert OCSP_SERVER.CACHE_SERVER_URL == "https://ocspssd-12345.global.snowflakecomputing.com/ocsp/fetch"
+
+    assert OCSP_SERVER.OCSP_RETRY_URL == "https://ocspssd-12345.global.snowflakecomputing.com/ocsp/retry"
+
+    hname = "snowflake.okta.com"
+    OCSP_SERVER.reset_ocsp_endpoint(hname)
+    assert OCSP_SERVER.CACHE_SERVER_URL == "https://ocspssd.snowflakecomputing.com/ocsp/fetch"
+
+    assert OCSP_SERVER.OCSP_RETRY_URL == "https://ocspssd.snowflakecomputing.com/ocsp/retry"
+
+    del os.environ['SF_OCSP_ACTIVATE_NEW_ENDPOINT']

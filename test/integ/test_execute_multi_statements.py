@@ -173,7 +173,7 @@ def test_execute_stream(conn_cnx):
     # file stream
     expected_results = [1, 2, 3]
     with codecs.open(os.path.join(
-            THIS_DIR, 'data', 'multiple_statements.sql'),
+            THIS_DIR, '../data', 'multiple_statements.sql'),
             encoding='utf-8') as f:
         with conn_cnx() as cnx:
             for idx, rec in enumerate(cnx.execute_stream(f)):
@@ -190,14 +190,14 @@ def test_execute_stream(conn_cnx):
 def test_execute_stream_with_error(conn_cnx):
     # file stream
     expected_results = [1, 2, 3]
-    with open(os.path.join(THIS_DIR, 'data', 'multiple_statements.sql')) as f:
+    with open(os.path.join(THIS_DIR, '../data', 'multiple_statements.sql')) as f:
         with conn_cnx() as cnx:
             for idx, rec in enumerate(cnx.execute_stream(f)):
                 assert rec.fetchall()[0][0] == expected_results[idx]
 
     # read a file including syntax error in the middle
     with codecs.open(os.path.join(
-            THIS_DIR, 'data',
+            THIS_DIR, '../data',
             'multiple_statements_negative.sql'), encoding='utf-8') as f:
         with conn_cnx() as cnx:
             gen = cnx.execute_stream(f)

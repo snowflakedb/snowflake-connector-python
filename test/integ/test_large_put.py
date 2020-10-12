@@ -8,15 +8,17 @@ import os
 
 import pytest
 
+from ..generate_test_files import generate_k_lines_of_n_files
+
 
 @pytest.mark.aws
 @pytest.mark.flaky(reruns=3)
-def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, test_files):
+def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies into large files."""
     # generates N files
     number_of_files = 2
     number_of_lines = 200000
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
     with conn_cnx(
