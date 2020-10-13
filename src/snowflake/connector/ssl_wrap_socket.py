@@ -421,7 +421,7 @@ def _openssl_connect(hostname, port=443, max_retry=20):
             client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
             client_ssl.do_handshake()
             return client_ssl
-        except (OpenSSL.SSL.SysCallError, ConnectionRefusedError, TimeoutError) as ex:
+        except (OpenSSL.SSL.SysCallError, ConnectionRefusedError, TimeoutError, OSError) as ex:
             err = ex
             sleeping_time *= 2
             if sleeping_time > 16:
