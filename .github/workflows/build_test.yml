@@ -224,7 +224,7 @@ jobs:
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
-        run: python -m pip install tox tox-external-wheels
+        run: python -m pip install tox tox-external-wheels virtualenv==20.0.33
       - name: Run tests
         run: python -m tox -e "py${PYTHON_VERSION/\./}{-extras,,-pandas,-sso}-ci"
         env:
