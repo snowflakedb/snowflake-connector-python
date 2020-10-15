@@ -9,9 +9,10 @@
 
 import pathlib
 import subprocess
+import sys
 
 for test_file in pathlib.Path(__file__).parent.glob('*.py'):
     if test_file.name != 'run.py':
         print("Running {}".format(test_file))
-        sub_process = subprocess.run(['python', str(test_file)])
+        sub_process = subprocess.run([sys.executable, str(test_file)])
         sub_process.check_returncode()
