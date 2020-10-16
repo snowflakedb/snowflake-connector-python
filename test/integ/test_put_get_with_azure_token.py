@@ -18,60 +18,39 @@ from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercen
 
 from ..generate_test_files import generate_k_lines_of_n_files
 
-try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
-except ImportError:
-    CONNECTION_PARAMETERS_ADMIN = {}
-
 logger = getLogger(__name__)
 
 # Mark every test in this module as an azure and a putget test
 pytestmark = pytest.mark.azure
 
 
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin account is not accessible."
-)
 def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     """[azure] Puts and Gets a small text using Azure."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_azure_token.txt.gz'))
+    original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, 'wb') as f:
-        original_contents = "123,test1\n456,test2\n"
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_azure_token'))
 
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password']) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             csr.execute("rm @~/snow32806")
-            csr.execute(
-                "create or replace table snow32806 (a int, b string)")
+            csr.execute("create or replace table snow32806 (a int, b string)")
             try:
-
-                csr.execute(
-                    "put file://{} @%snow32806 auto_compress=true parallel=30".format(
-                        fname),
-                    _put_azure_callback=SnowflakeAzureProgressPercentage,
-                    _get_azure_callback=SnowflakeAzureProgressPercentage)
+                csr.execute("put file://{} @%snow32806 auto_compress=true parallel=30".format(fname),
+                            _put_callback=SnowflakeAzureProgressPercentage,
+                            _get_callback=SnowflakeAzureProgressPercentage)
                 rec = csr.fetchone()
                 assert rec[6] == 'UPLOADED'
                 csr.execute("copy into snow32806")
-                csr.execute(
-                    "copy into @~/snow32806 from snow32806 "
-                    "file_format=( format_name='common.public.csv' "
-                    "compression='gzip')")
-                csr.execute(
-                    "get @~/snow32806 file://{} pattern='snow32806.*'".format(
-                        tmp_dir),
-                    _put_azure_callback=SnowflakeAzureProgressPercentage,
-                    _get_azure_callback=SnowflakeAzureProgressPercentage)
+                csr.execute("copy into @~/snow32806 from snow32806 "
+                            "file_format=(type=csv compression='gzip')")
+                csr.execute("get @~/snow32806 file://{} pattern='snow32806.*'".format(tmp_dir),
+                            _put_callback=SnowflakeAzureProgressPercentage,
+                            _get_callback=SnowflakeAzureProgressPercentage)
                 rec = csr.fetchone()
-                assert rec[0].startswith(
-                    'snow32806'), 'A file downloaded by GET'
+                assert rec[0].startswith('snow32806'), 'A file downloaded by GET'
                 assert rec[1] == 36, 'Return right file size'
                 assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
                 assert rec[3] == '', 'Return no error message'
@@ -82,17 +61,10 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     files = glob.glob(os.path.join(tmp_dir, 'snow32806*'))
     with gzip.open(files[0], 'rb') as fd:
         contents = fd.read().decode(UTF8)
-    assert original_contents == contents, (
-        'Output is different from the original file')
+    assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.aws
-@pytest.mark.azure
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin account is not accessible."
-)
-def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
+def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
     """[azure] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
@@ -107,10 +79,7 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
             name=db_parameters['name'])
         return csr.execute(sql).fetchall()
 
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password']) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -130,20 +99,12 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
 
                 rows = sum([rec[0] for rec in run(csr, "select count(*) from "
                                                        "{name}")])
-                assert rows == number_of_files * number_of_lines, \
-                    'Number of rows'
+                assert rows == number_of_files * number_of_lines, 'Number of rows'
             finally:
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.aws
-@pytest.mark.azure
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin account is not accessible."
-)
-def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx,
-                                         db_parameters):
+def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, db_parameters):
     """[azure] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
@@ -158,10 +119,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx,
             name=db_parameters['name'])
         return csr.execute(sql, _raise_put_get_error=False).fetchall()
 
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password']) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             run(csr, """
             create or replace table {name} (
@@ -218,10 +176,6 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx,
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin account is not accessible."
-)
 def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
     """[azure] Puts and Gets Large files."""
     number_of_files = 3
@@ -241,19 +195,15 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
 
     def run(cnx, sql):
         return cnx.cursor().execute(
-            sql.format(
-                files=files,
-                dir=db_parameters['name'],
-                output_dir=output_dir),
+            sql.format(files=files,
+                       dir=db_parameters['name'],
+                       output_dir=output_dir),
             _put_callback_output_stream=sys.stdout,
             _get_callback_output_stream=sys.stdout,
             _get_callback=cb,
             _put_callback=cb).fetchall()
 
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password']) as cnx:
+    with conn_cnx() as cnx:
         try:
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == 'UPLOADED' for rec in all_recs])
