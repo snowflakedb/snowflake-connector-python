@@ -377,10 +377,10 @@ def test_ocsp_cache_merge(tmpdir):
                 current_cache.update({certid: arr})
             counter += 1
 
-    with open(previous_cache_filename) as prev_cache_fp:
+    with open(previous_cache_filename, 'w') as prev_cache_fp:
         json.dump(prev_cache, prev_cache_fp)
 
-    with open(current_cache_filename) as curr_cache_fp:
+    with open(current_cache_filename, 'w') as curr_cache_fp:
         json.dump(current_cache, curr_cache_fp)
 
     latest_folder = tmpdir.mkdir('latest')
