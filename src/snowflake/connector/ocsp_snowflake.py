@@ -136,7 +136,7 @@ class OCSPTelemetryData(object):
         else:
             self.event_sub_type = event_sub_type
 
-    def set_ocsp_connection_method(self, ocsp_conn_method):
+    def set_ocsp_connection_method(self, ocsp_conn_method: str) -> None:
         self.ocsp_connection_method = ocsp_conn_method
 
     def set_cert_id(self, cert_id):
