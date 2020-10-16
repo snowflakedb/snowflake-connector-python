@@ -344,16 +344,44 @@ def test_ocsp_incomplete_chain():
 
 
 def test_ocsp_cache_merge(tmpdir):
-    """Merges two OCSP response cache files."""
+    """
+    Merges two OCSP response cache files.
+
+    First create the entire cache for all hosts.
+    Split the created cache into two caches
+    Merge the two caches.
+    This is to prevent us from doing multiple cache
+    creations as the results are not predictable
+    due to OCSP responder shenanigans
+    """
+    cache_folder = tmpdir.mkdir("caches")
+    cache_filename, _ = _store_cache_in_file(
+        cache_folder,
+        target_hosts=TARGET_HOSTS)
+
     previous_folder = tmpdir.mkdir('previous')
-    previous_cache_filename, _ = _store_cache_in_file(
-        previous_folder,
-        target_hosts=TARGET_HOSTS[0:3])
+    previous_cache_filename = path.join(str(previous_folder), 'ocsp_response_cache.json')
 
     current_folder = tmpdir.mkdir('current')
-    current_cache_filename, _ = _store_cache_in_file(
-        current_folder,
-        target_hosts=TARGET_HOSTS[4:])
+    current_cache_filename = path.join(str(current_folder), 'ocsp_response_cache.json')
+
+    prev_cache = {}
+    current_cache = {}
+    with codecs.open(cache_filename) as cf:
+        orig_cache = json.load(cf)
+        counter = 0
+        for certid, arr in orig_cache.items():
+            if counter < 1:
+                prev_cache.update({certid: arr})
+            else:
+                current_cache.update({certid: arr})
+            counter += 1
+
+    with open(previous_cache_filename) as prev_cache_fp:
+        json.dump(prev_cache, prev_cache_fp)
+
+    with open(current_cache_filename) as curr_cache_fp:
+        json.dump(current_cache, curr_cache_fp)
 
     latest_folder = tmpdir.mkdir('latest')
     latest_cache_filename = path.join(str(latest_folder), 'cache_file.txt')
