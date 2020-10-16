@@ -30,6 +30,25 @@ jobs:
       - name: Run fix_lint
         run: python -m tox -e fix_lint
 
+  rstcheck:
+    name: Check rst files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Display Python version
+        run: python -c "import sys; import os; print(\"\n\".join(os.environ[\"PATH\"].split(os.pathsep))); print(sys.version); print(sys.executable);"
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip
+      - name: Install rstcheck
+        run: python -m pip install rstcheck
+      - name: Run rstcheck
+        run: rstcheck *.rst
+
+
   build-sdist:
     needs: lint
     name: Build sdist
