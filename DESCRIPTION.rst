@@ -223,7 +223,7 @@ Release Notes
 
 - v1.8.0 (May 10, 2019)
 
-    - support numpy.bool_ in binding type
+    - support ``numpy.bool_`` in binding type
     - Add Option to Skip Request Pooling
     - Add OCSP_MODE metric
     - Fixed PUT URI issue for Windows path
