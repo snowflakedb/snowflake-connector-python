@@ -38,7 +38,8 @@ timestamps {
           'Test Python 35': { build job: 'RT-PyConnector35-PC',parameters: params},
           'Test Python 36': { build job: 'RT-PyConnector36-PC',parameters: params},
           'Test Python 37': { build job: 'RT-PyConnector37-PC',parameters: params},
-          'Test Python 38': { build job: 'RT-PyConnector38-PC',parameters: params}
+          'Test Python 38': { build job: 'RT-PyConnector38-PC',parameters: params},
+          'Test Python Lambda 37': { build job: 'RT-PyConnector37-PC-Lambda',parameters: params}
           )
         }
       }
