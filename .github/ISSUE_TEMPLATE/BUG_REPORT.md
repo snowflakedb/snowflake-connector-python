@@ -1,10 +1,19 @@
+---
+name: Bug Report 🐞
+about: Something isn't working as expected? Here is the right place to report.
+---
+
 Please answer these questions before submitting your issue. Thanks!
 
 1. What version of Python are you using (`python --version`)?
 
 2. What operating system and processor architecture are you using (`python -c 'import platform; print(platform.platform())'`)?
 
-3. What are the component versions in the environment (`pip list`)?
+3. What are the component versions in the environment (`pip freeze`)?
+
+```
+Insert pip freeze's output here.
+```
 
 4. What did you do?
 If possible, provide a recipe for reproducing the error.

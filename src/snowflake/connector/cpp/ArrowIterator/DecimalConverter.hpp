@@ -1,6 +1,7 @@
-/*
- * Copyright (c) 2013-2019 Snowflake Computing
- */
+//
+// Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+//
+
 #ifndef PC_DECIMALCONVERTER_HPP
 #define PC_DECIMALCONVERTER_HPP
 

@@ -61,7 +61,7 @@ module.exports = class {
       providedFields.push({
         key: 'assignee',
         value: {
-            name: argv.assignee
+            id: argv.assignee
             }
       })
     }

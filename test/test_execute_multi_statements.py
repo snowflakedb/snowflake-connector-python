@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
 import codecs
@@ -212,3 +212,11 @@ def test_execute_stream_with_error(conn_cnx):
             gen = cnx.execute_stream(
                 BytesIO(b"SELECT 3; SELECT 4; SELECT 5;\nSELECT 6;"))
             next(gen)
+
+
+def test_execute_string_empty_lines(conn_cnx, db_parameters):
+    """Tests whether execute_string can filter out empty lines."""
+    with conn_cnx() as cnx:
+        cursors = cnx.execute_string("select 1;\n\n")
+        assert len(cursors) == 1
+        assert [c.fetchall() for c in cursors] == [[(1,)]]
