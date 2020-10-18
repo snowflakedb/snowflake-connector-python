@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
+
 import decimal
 import json
 import os
@@ -801,8 +802,16 @@ def test_fetch_out_of_range_timestamp_value(conn):
         with conn() as cnx:
             cur = cnx.cursor()
             cur.execute("alter session set python_connector_query_result_format='{}'".format(result_format))
-            cur.execute("""
-    select '12345-01-02'::timestamp_ntz
-    """)
+            cur.execute("select '12345-01-02'::timestamp_ntz")
             with pytest.raises(errors.InterfaceError):
                 cur.fetchone()
+
+
+def test_empty_execution(conn):
+    """Checks whether executing an empty string behaves as expected."""
+    with conn() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute('')
+            assert cur._result is None
+            with pytest.raises(Exception):
+                cur.fetchall()

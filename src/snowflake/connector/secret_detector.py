@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
+
 """The secret detector detects sensitive information.
 
 It masks secrets that might be leaked from two potential avenues
@@ -12,6 +13,7 @@ It masks secrets that might be leaked from two potential avenues
 import logging
 import os
 import re
+from typing import Tuple
 
 MIN_TOKEN_LEN = os.getenv("MIN_TOKEN_LEN", 32)
 MIN_PWD_LEN = os.getenv("MIN_PWD_LEN", 8)
@@ -69,7 +71,7 @@ class SecretDetector(logging.Formatter):
         return SecretDetector.PRIVATE_KEY_DATA_PATTERN.sub('"privateKeyData": "XXXX"', text)
 
     @staticmethod
-    def mask_secrets(text: str) -> str:
+    def mask_secrets(text: str) -> Tuple[bool, str, str]:
         """Masks any secrets. This is the method that should be used by outside classes.
 
         Args:
@@ -79,7 +81,7 @@ class SecretDetector(logging.Formatter):
             The masked string.
         """
         if text is None:
-            return None
+            return (False, None, None)
 
         masked = False
         err_str = None
@@ -129,7 +131,7 @@ class SecretDetector(logging.Formatter):
             if masked and err_str is not None:
                 sanitized_log = "{} - {} {} - {} - {} - {}".format(
                     record.asctime, record.threadName,
-                    "sf_secret_detector.py", "sanitize_log_str",
+                    "secret_detector.py", "sanitize_log_str",
                     record.levelname, err_str)
         except Exception as ex:
             sanitized_log = "{} - {} {} - {} - {} - {}".format(

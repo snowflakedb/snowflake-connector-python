@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2018-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
+
 import logging
 from threading import Lock
 
@@ -87,7 +88,7 @@ class TelemetryClient(object):
             return
 
         body = {'logs': [x.to_dict() for x in to_send]}
-        logger.debug("Sending %d logs to telemetry. Data is %s.", len(body), SecretDetector.mask_secrets(str(body)))
+        logger.debug("Sending %d logs to telemetry. Data is %s.", len(body), SecretDetector.mask_secrets(str(body))[1])
         if ENABLE_TELEMETRY_LOG:
             # This logger guarantees the payload won't be masked. Testing purpose.
             rt_plain_logger.debug("Inband telemetry data being sent is {}".format(body))

@@ -9,6 +9,16 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.3.3(October 05,2020)
+
+   - Simplified the configuration files by consolidating test settings.
+   - In the Connection object, the execute_stream and execute_string methods now filter out empty lines from their inputs.
+
+- v2.3.2(September 14,2020)
+
+   - Fixed a bug where a file handler was not closed properly.
+   - Fixed various documentation typos.
+
 - v2.3.1(August 25,2020)
 
    - Fixed a bug where 2 constants were removed by mistake.
