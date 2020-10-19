@@ -242,6 +242,7 @@ jobs:
             .tox/coverage.xml
 
   combine-coverage:
+    if: ${{ success() || failure() }}
     name: Combine coverage
     needs: test
     runs-on: ubuntu-latest
