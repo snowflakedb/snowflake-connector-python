@@ -40,7 +40,8 @@ def write_pandas(conn: 'SnowflakeConnection',
                  chunk_size: Optional[int] = None,
                  compression: str = 'gzip',
                  on_error: str = 'abort_statement',
-                 parallel: int = 4
+                 parallel: int = 4,
+                 quote_identifiers: bool = True
                  ) -> Tuple[bool, int, int,
                             Sequence[Tuple[str, str, int, int, int, int, Optional[str], Optional[int],
                                            Optional[int], Optional[str]]]]:
@@ -73,6 +74,9 @@ def write_pandas(conn: 'SnowflakeConnection',
             (Default value = 'abort_statement').
         parallel: Number of threads to be used when uploading chunks, default follows documentation at:
             https://docs.snowflake.com/en/sql-reference/sql/put.html#optional-parameters (Default value = 4).
+        quote_identifiers: By default, identifiers, specifically database, schema, table and column names
+            (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
+            I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
@@ -91,9 +95,14 @@ def write_pandas(conn: 'SnowflakeConnection',
             compression,
             compression_map.keys()
         ))
-    location = ((('"' + database + '".') if database else '') +
-                (('"' + schema + '".') if schema else '') +
-                ('"' + table_name + '"'))
+    if quote_identifiers:
+        location = ((('"' + database + '".') if database else '') +
+                    (('"' + schema + '".') if schema else '') +
+                    ('"' + table_name + '"'))
+    else:
+        location = ((database + '.' if database else '') +
+                    (schema + '.' if schema else '') +
+                    (table_name))
     if chunk_size is None:
         chunk_size = len(df)
     cursor = conn.cursor()
@@ -127,10 +136,22 @@ def write_pandas(conn: 'SnowflakeConnection',
             cursor.execute(upload_sql, _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
+    if quote_identifiers:
+        columns = '"' + '","'.join(list(df.columns)) + '"'
+    else:
+        columns = ','.join(list(df.columns))
+
+    # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
+    # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
+    parquet_columns = '$1:' + ',$1:'.join(df.columns)
     copy_into_sql = ('COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ '
-                     'FROM @"{stage_name}" FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) '
-                     'MATCH_BY_COLUMN_NAME=CASE_SENSITIVE  PURGE=TRUE ON_ERROR={on_error}').format(
+                     '({columns}) '
+                     'FROM (SELECT {parquet_columns} FROM @"{stage_name}") '
+                     'FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) '
+                     'PURGE=TRUE ON_ERROR={on_error}').format(
         location=location,
+        columns=columns,
+        parquet_columns=parquet_columns,
         stage_name=stage_name,
         compression=compression_map[compression],
         on_error=on_error
@@ -147,7 +168,8 @@ def write_pandas(conn: 'SnowflakeConnection',
 def pd_writer(table: pandas.io.sql.SQLTable,
               conn: Union['sqlalchemy.engine.Engine', 'sqlalchemy.engine.Connection'],
               keys: Iterable,
-              data_iter: Iterable) -> None:
+              data_iter: Iterable,
+              quote_identifiers: bool = True) -> None:
     """This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
 
         Example usage:
@@ -157,11 +179,18 @@ def pd_writer(table: pandas.io.sql.SQLTable,
             sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
             sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
 
+            # to use quote_identifiers=False
+            from functools import partial
+            sf_connector_version_df.to_sql(
+                'driver_versions', engine, index=False, method=partial(pd_writer, quote_identifiers=False))
+
     Args:
         table: Pandas package's table object.
         conn: SQLAlchemy engine object to talk to Snowflake.
         keys: Column names that we are trying to insert.
         data_iter: Iterator over the rows.
+        quote_identifiers: if True (default), quote identifiers passed to Snowflake. If False, identifiers are not
+            quoted (and typically coerced to uppercase by Snowflake)
     """
     sf_connection = conn.connection.connection
     df = pandas.DataFrame(data_iter, columns=keys)
@@ -169,4 +198,5 @@ def pd_writer(table: pandas.io.sql.SQLTable,
                  df=df,
                  # Note: Our sqlalchemy connector creates tables case insensitively
                  table_name=table.name.upper(),
-                 schema=table.schema)
+                 schema=table.schema,
+                 quote_identifiers=quote_identifiers)
