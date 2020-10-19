@@ -12,6 +12,7 @@ import boto3
 import pytest
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
 from snowflake.connector.s3_util import SnowflakeS3Util
 
 # Mark every test in this module as an aws test
@@ -51,7 +52,9 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
                 password=db_parameters['password']) as cnx:
             cnx.cursor().execute(
                 "put file://{} @%snow9144 auto_compress=true parallel=30".format(
-                    fname))
+                    fname),
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage)
             cnx.cursor().execute("copy into snow9144")
             cnx.cursor().execute(
                 "copy into @~/snow9144 from snow9144 "
@@ -60,7 +63,9 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
             c = cnx.cursor()
             c.execute(
                 "get @~/snow9144 file://{} pattern='snow9144.*'".format(
-                    tmp_dir))
+                    tmp_dir),
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage)
             rec = c.fetchone()
             assert rec[0].startswith('snow9144'), 'A file downloaded by GET'
             assert rec[1] == 36, 'Return right file size'
