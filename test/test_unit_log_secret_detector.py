@@ -4,16 +4,70 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
+import logging
+
+import mock
+
 from snowflake.connector.secret_detector import SecretDetector
 
 
-def test_no_masking():
-    test_str = "This string is innocuous"
+def basic_masking(test_str):
     masked, masked_str, err_str = SecretDetector. \
         mask_secrets(test_str)
     assert not masked
     assert err_str is None
     assert masked_str == test_str
+
+
+def test_none_string():
+    basic_masking(None)
+
+
+def test_empty_string():
+    basic_masking("")
+
+
+def test_no_masking():
+    basic_masking("This string is innocuous")
+
+
+@mock.patch.object(SecretDetector, 'mask_connection_token', mock.Mock(side_effect=Exception('Test exception')))
+def test_exception_in_masking():
+    test_str = "This string will raise an exception"
+    masked, masked_str, err_str = SecretDetector. \
+        mask_secrets(test_str)
+    assert masked
+    assert err_str == "Test exception"
+    assert masked_str == "Test exception"
+
+
+def exception_in_log_masking():
+    test_str = "This string will raise an exception"
+    log_record = logging.LogRecord(
+        SecretDetector.__name__,
+        logging.DEBUG,
+        "test_unit_log_secret_detector.py",
+        45,
+        test_str,
+        list(),
+        None)
+    log_record.asctime = '2003-07-08 16:49:45,896'
+    secret_detector = SecretDetector()
+    sanitized_log = secret_detector.format(log_record)
+    assert "Test exception" in sanitized_log
+    assert "secret_detector.py" in sanitized_log
+    assert "sanitize_log_str" in sanitized_log
+    assert test_str not in sanitized_log
+
+
+@mock.patch.object(SecretDetector, 'mask_connection_token', mock.Mock(side_effect=Exception('Test exception')))
+def test_exception_in_secret_detector_while_log_masking():
+    exception_in_log_masking()
+
+
+@mock.patch.object(SecretDetector, 'mask_secrets', mock.Mock(side_effect=Exception('Test exception')))
+def test_exception_while_log_masking():
+    exception_in_log_masking()
 
 
 def test_mask_token():

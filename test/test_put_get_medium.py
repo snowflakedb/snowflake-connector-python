@@ -18,6 +18,7 @@ import pytz
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
+from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage, SnowflakeS3ProgressPercentage
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -37,14 +38,22 @@ def test_put_copy0(conn_cnx, db_parameters):
         sql = sql.format(
             file=data_file.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql).fetchall()
+        return cnx.cursor().execute(sql,
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage,
+                    _put_azure_callback=SnowflakeAzureProgressPercentage,
+                    _get_azure_callback=SnowflakeAzureProgressPercentage).fetchall()
 
     def run_with_cursor(cnx, sql):
         sql = sql.format(
             file=data_file.replace('\\', '\\\\'),
             name=db_parameters['name'])
         c = cnx.cursor(DictCursor)
-        return c, c.execute(sql).fetchall()
+        return c, c.execute(sql,
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage,
+                    _put_azure_callback=SnowflakeAzureProgressPercentage,
+                    _get_azure_callback=SnowflakeAzureProgressPercentage).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
