@@ -33,6 +33,8 @@ for logger_name in ['test', 'snowflake.connector', 'botocore']:
         '%(funcName)s() - %(levelname)s - %(message)s'))
     logger.addHandler(ch)
 
+pytestmark = [pytest.mark.timeout(120)]
+
 TARGET_HOSTS = [
     'ocspssd.us-east-1.snowflakecomputing.com',
     'sqs.us-west-2.amazonaws.com',
