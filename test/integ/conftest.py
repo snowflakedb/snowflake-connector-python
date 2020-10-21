@@ -67,25 +67,6 @@ CONNECTION_PARAMETERS = {
 """)
 
 
-@pytest.fixture(scope='session', autouse=True)
-def filter_log():
-    # A workround to use our custom Formatter in pytest.
-    # Based on the discussion here 'https://github.com/pytest-dev/pytest/issues/2987'
-    from snowflake.connector.secret_detector import SecretDetector
-    import logging
-    import pathlib
-    # the directory that is going to contain test logs, default is THIS_DIR
-    log_dir = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER', str(pathlib.Path(__file__).parent.absolute()))
-
-    _logger = getLogger('snowflake.connector')
-    _logger.setLevel(logging.DEBUG)
-    sd = logging.FileHandler(os.path.join(log_dir, '../snowflake_ssm_rt.log'))
-    sd.setLevel(logging.DEBUG)
-    sd.setFormatter(SecretDetector(
-        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
-    _logger.addHandler(sd)
-
-
 @pytest.fixture(scope='session')
 def is_public_test() -> bool:
     return is_public_testaccount()
@@ -155,7 +136,7 @@ def get_db_parameters() -> Dict[str, str]:
 
 
 @pytest.fixture(scope='session', autouse=True)
-def init_test_schema(request, db_parameters):
+def init_test_schema(request, db_parameters) -> None:
     """Initializes and Deinitializes the test schema. This is automatically called per test session."""
     ret = db_parameters
     with snowflake.connector.connect(
@@ -209,7 +190,7 @@ def db(**kwargs) -> Generator['SnowflakeConnection', None, None]:
 
 
 @contextmanager
-def negative_db(**kwargs):
+def negative_db(**kwargs) -> Generator['SnowflakeConnection', None, None]:
     if not kwargs.get('timezone'):
         kwargs['timezone'] = 'UTC'
     if not kwargs.get('converter_class'):
@@ -243,20 +224,3 @@ def conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
 def negative_conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
     """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
     return negative_db
-
-
-def pytest_runtest_setup(item) -> None:
-    """Ran before calling each test, used to decide whether a test should be skipped."""
-    test_tags = [mark.name for mark in item.iter_markers()]
-
-    # Get what cloud providers the test is marked for if any
-    test_supported_providers = CLOUD_PROVIDERS.intersection(test_tags)
-    # Default value means that we are probably running on a developer's machine, allow everything in this case
-    current_provider = os.getenv('cloud_provider', 'dev')
-    if test_supported_providers:
-        # If test is tagged for specific cloud providers add the default cloud_provider as supported too
-        test_supported_providers.add('dev')
-        if current_provider not in test_supported_providers:
-            pytest.skip("cannot run integration test against cloud provider {}".format(current_provider))
-    if PUBLIC_SKIP_TAGS.intersection(test_tags) and is_public_testaccount():
-        pytest.skip("cannot run integration test on public CI")

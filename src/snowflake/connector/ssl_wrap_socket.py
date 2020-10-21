@@ -423,9 +423,7 @@ def _openssl_connect(hostname, port=443, max_retry=20):
             return client_ssl
         except (OpenSSL.SSL.SysCallError, ConnectionRefusedError, TimeoutError, OSError) as ex:
             err = ex
-            sleeping_time *= 2
-            if sleeping_time > 16:
-                sleeping_time = 16
+            sleeping_time = min(sleeping_time * 2, 16)
             time.sleep(sleeping_time)
     if err:
         raise err

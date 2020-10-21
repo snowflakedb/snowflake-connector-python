@@ -12,10 +12,8 @@ import pytest
 
 from . import CLOUD_PROVIDERS, PUBLIC_SKIP_TAGS, running_on_public_ci
 
-logger = getLogger(__name__)
 
-
-def pytest_collection_modifyitems(items):
+def pytest_collection_modifyitems(items) -> None:
     """Applies tags to tests based on folders that they are in."""
     top_test_dir = Path(__file__).parent
     for item in items:
@@ -26,7 +24,7 @@ def pytest_collection_modifyitems(items):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def filter_log():
+def filter_log() -> None:
     """Sets up our SecretDetector as a logging formatter.
 
     A workaround to use our custom Formatter in pytest based on the discussion at
