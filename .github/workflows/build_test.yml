@@ -65,10 +65,10 @@ jobs:
       - uses: actions/checkout@v1
       - name: Updating path
         run: |
-          echo "::add-path::/opt/python/cp35-cp35m/bin/"
-          echo "::add-path::/opt/python/cp36-cp36m/bin/"
-          echo "::add-path::/opt/python/cp37-cp37m/bin/"
-          echo "::add-path::/opt/python/cp38-cp38/bin/"
+          echo "/opt/python/cp35-cp35m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp36-cp36m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp37-cp37m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp38-cp38/bin/" >> $GITHUB_PATH
       - name: Display Python version
         run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
