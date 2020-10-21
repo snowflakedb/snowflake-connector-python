@@ -65,10 +65,10 @@ jobs:
       - uses: actions/checkout@v1
       - name: Updating path
         run: |
-          echo "::add-path::/opt/python/cp35-cp35m/bin/"
-          echo "::add-path::/opt/python/cp36-cp36m/bin/"
-          echo "::add-path::/opt/python/cp37-cp37m/bin/"
-          echo "::add-path::/opt/python/cp38-cp38/bin/"
+          echo "/opt/python/cp35-cp35m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp36-cp36m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp37-cp37m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp38-cp38/bin/" >> $GITHUB_PATH
       - name: Display Python version
         run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
@@ -242,6 +242,7 @@ jobs:
             .tox/coverage.xml
 
   combine-coverage:
+    if: ${{ success() || failure() }}
     name: Combine coverage
     needs: test
     runs-on: ubuntu-latest
@@ -275,6 +276,11 @@ jobs:
               shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
         run: python -m tox -e coverage
+      - uses: actions/upload-artifact@v2
+        with:
+          name: overall_cov_html
+          path: .tox/htmlcov
       - uses: codecov/codecov-action@v1
+        if: false
         with:
           file: .tox/coverage.xml

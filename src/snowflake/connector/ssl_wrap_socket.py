@@ -30,7 +30,7 @@ from cryptography.hazmat.backends.openssl.x509 import _Certificate
 from urllib3.contrib.pyopenssl import PyOpenSSLContext
 
 from .constants import OCSPMode
-from .errorcode import ER_SERVER_CERTIFICATE_REVOKED
+from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .ssl_wrap_util import wait_for_read, wait_for_write
 
@@ -393,7 +393,7 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
                     'The certificate is revoked or '
                     'could not be validated: hostname={}'.format(
                         server_hostname)),
-                errno=ER_SERVER_CERTIFICATE_REVOKED)
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED)
     else:
         log.info('THIS CONNECTION IS IN INSECURE '
                  'MODE. IT MEANS THE CERTIFICATE WILL BE '
