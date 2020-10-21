@@ -16,7 +16,7 @@ from os import environ, path
 import pytest
 
 from snowflake.connector import OperationalError
-from snowflake.connector.errorcode import ER_INVALID_OCSP_RESPONSE_CODE, ER_SERVER_CERTIFICATE_REVOKED
+from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED, ER_OCSP_RESPONSE_FETCH_FAILURE
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ocsp_snowflake import OCSPCache, SnowflakeOCSP
@@ -138,7 +138,7 @@ def test_ocsp_fail_close_w_single_endpoint():
         ocsp.validate("snowflake.okta.com", connection)
 
     try:
-        assert ex.value.errno == ER_INVALID_OCSP_RESPONSE_CODE, "Connection should have failed"
+        assert ex.value.errno == ER_OCSP_RESPONSE_FETCH_FAILURE, "Connection should have failed"
     finally:
         del environ['SF_OCSP_TEST_MODE']
         del environ['SF_TEST_OCSP_URL']
@@ -327,7 +327,7 @@ def test_ocsp_revoked_certificate():
 
     with pytest.raises(OperationalError) as ex:
         ocsp.validate_certfile(revoked_cert)
-    assert ex.value.errno == ex.value.errno == ER_SERVER_CERTIFICATE_REVOKED
+    assert ex.value.errno == ex.value.errno == ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 
 
 def test_ocsp_incomplete_chain():
