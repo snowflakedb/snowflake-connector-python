@@ -14,6 +14,7 @@ from logging import getLogger
 import pytest
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -51,7 +52,9 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
 
                 csr.execute(
                     "put file://{} @%snow32806 auto_compress=true parallel=30".format(
-                        fname))
+                        fname),
+                    _put_azure_callback=SnowflakeAzureProgressPercentage,
+                    _get_azure_callback=SnowflakeAzureProgressPercentage)
                 rec = csr.fetchone()
                 assert rec[6] == 'UPLOADED'
                 csr.execute("copy into snow32806")
@@ -61,7 +64,9 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
                     "compression='gzip')")
                 csr.execute(
                     "get @~/snow32806 file://{} pattern='snow32806.*'".format(
-                        tmp_dir))
+                        tmp_dir),
+                    _put_azure_callback=SnowflakeAzureProgressPercentage,
+                    _get_azure_callback=SnowflakeAzureProgressPercentage)
                 rec = csr.fetchone()
                 assert rec[0].startswith(
                     'snow32806'), 'A file downloaded by GET'
