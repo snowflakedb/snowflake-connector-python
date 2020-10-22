@@ -4,9 +4,10 @@ THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 # In case this is not run locally and not on Jenkins
 
-if [ ! -d "$CONNECTOR_DIR/dist/repaired_wheels/" ] || [ $(ls "$CONNECTOR_DIR/dist/repaired_wheels/*36*" ) -eq 0 ]; then
+if [[ ! -d "$CONNECTOR_DIR/dist/" ]] || [[ $(ls $CONNECTOR_DIR/dist/*cp36*manylinux2010*.whl) == '' ]]; then
   echo "Missing wheel files, going to compile Python connector in Docker..."
   $THIS_DIR/build_docker.sh 3.6
+  cp $CONNECTOR_DIR/dist/repaired_wheels/*cp36*manylinux2010*.whl $CONNECTOR_DIR/dist/
 fi
 
 cd $THIS_DIR/docker/connector_test_fips
