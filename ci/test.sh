@@ -34,7 +34,7 @@ gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAME
 aws s3 cp --recursive --only-show-errors s3://sfc-jenkins/repository/python_connector/linux/${client_git_branch}/${client_git_commit}/ dist
 
 # Run one of the tests
-if [ "${py_test}" = "fips" ]; then
+if [ "${py_test_mode}" = "fips" ]; then
     echo "[Info] Going to run FIPS tests"
     ${THIS_DIR}/test_fips_docker.sh
 else
