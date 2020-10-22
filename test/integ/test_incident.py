@@ -18,6 +18,7 @@ from snowflake.connector.incident import Incident
 # NOTE the incident throttling feature is working and will stop returning new
 # incident ids, so do not assert them, or don't add many more incidents to be
 # reported
+from .conftest import RUNNING_AGAINST_LOCAL_SNOWFLAKE
 
 
 def test_incident_creation():
@@ -60,6 +61,7 @@ def test_default_values():
 
 
 @pytest.mark.internal
+@pytest.mark.skipif(not RUNNING_AGAINST_LOCAL_SNOWFLAKE, reason="local Snowflake is necessary")
 def test_create_incident_from_exception(negative_conn_cnx):
     with negative_conn_cnx() as con:
         try:
@@ -75,6 +77,7 @@ def test_create_incident_from_exception(negative_conn_cnx):
 
 
 @pytest.mark.internal
+@pytest.mark.skipif(not RUNNING_AGAINST_LOCAL_SNOWFLAKE, reason="local Snowflake is necessary")
 def test_report_automatic_incident(negative_conn_cnx):
     def helper(number):
         if number == 0:
@@ -94,6 +97,7 @@ def test_report_automatic_incident(negative_conn_cnx):
 
 @pytest.mark.internal
 @pytest.mark.parametrize('app_name', ['asd', 'mark'])
+@pytest.mark.skipif(not RUNNING_AGAINST_LOCAL_SNOWFLAKE, reason="local Snowflake is necessary")
 def test_reporting_values(app_name, db_parameters):
     import snowflake.connector
     original_paramstyle = snowflake.connector.paramstyle

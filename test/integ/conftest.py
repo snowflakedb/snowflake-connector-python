@@ -30,6 +30,8 @@ PUBLIC_SKIP_TAGS = {'internal'}
 
 RUNNING_ON_GH = (os.getenv('GITHUB_ACTIONS') == 'true')
 
+RUNNING_AGAINST_LOCAL_SNOWFLAKE = CONNECTION_PARAMETERS['host'].endswith('local')
+
 try:
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
