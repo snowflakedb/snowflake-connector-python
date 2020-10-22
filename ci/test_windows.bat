@@ -43,7 +43,7 @@ cd %CONNECTOR_DIR%
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
-tox -e py%pv%-ci,py%pv%-pandas-ci,py%pv%-sso-ci --external_wheels %connector_whl% -- --basetemp=%workspace%\pytest-tmp\
+tox -e py%pv%-{extras,unit,integ,pandas,sso}-ci --external_wheels %connector_whl% -- --basetemp=%workspace%\pytest-tmp\
 if %errorlevel% neq 0 goto :error
 
 call deactivate
