@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from logging import getLogger
 from os import environ, path
 from os.path import expanduser
-from threading import Lock
+from threading import Lock, RLock
 from time import gmtime, strftime
 
 import jwt
@@ -897,7 +897,7 @@ class SnowflakeOCSP(object):
     ROOT_CERTIFICATES_DICT = {}  # root certificates
 
     # root certificate cache lock
-    ROOT_CERTIFICATES_DICT_LOCK = Lock()
+    ROOT_CERTIFICATES_DICT_LOCK = RLock()
 
     # ssd cache object
     SSD = SFSsd()

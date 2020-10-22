@@ -25,7 +25,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     echo "[Info] Testing with ${PYTHON_VERSION}"
     SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
     CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
-    TEST_ENVLIST=py${SHORT_VERSION}{,-pandas,-sso}-ci
+    TEST_ENVLIST=py${SHORT_VERSION}-{extras,unit,integ,pandas,sso}-ci
     echo "[Info] Running tox for ${TEST_ENVLIST}"
 
     # https://github.com/tox-dev/tox/issues/1485

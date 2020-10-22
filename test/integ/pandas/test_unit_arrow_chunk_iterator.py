@@ -566,7 +566,6 @@ def get_timezone(timezone=None):
         tz = 'UTC' if not timezone else timezone
         return pytz.timezone(tz)
     except pytz.exceptions.UnknownTimeZoneError:
-        logger.warning('converting to tzinfo failed')
         if tzlocal is not None:
             return tzlocal.get_localzone()
         else:

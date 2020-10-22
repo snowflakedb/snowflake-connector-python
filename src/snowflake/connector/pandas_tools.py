@@ -165,7 +165,7 @@ def write_pandas(conn: 'SnowflakeConnection',
             copy_results)
 
 
-def pd_writer(table: pandas.io.sql.SQLTable,
+def pd_writer(table: 'pandas.io.sql.SQLTable',
               conn: Union['sqlalchemy.engine.Engine', 'sqlalchemy.engine.Connection'],
               keys: Iterable,
               data_iter: Iterable,

@@ -14,6 +14,8 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
+from ..generate_test_files import generate_k_lines_of_n_files
+
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 
@@ -50,7 +52,7 @@ def test_encrypt_decrypt_file():
             os.remove(decrypted_file)
 
 
-def test_encrypt_decrypt_large_file(tmpdir, test_files):
+def test_encrypt_decrypt_large_file(tmpdir):
     """Encrypts and Decrypts a large file."""
     encryption_material = SnowflakeFileEncryptionMaterial(
         query_stage_master_key='ztke8tIdVt1zmlQIZm0BMA==',
@@ -60,7 +62,7 @@ def test_encrypt_decrypt_large_file(tmpdir, test_files):
     # generates N files
     number_of_files = 1
     number_of_lines = 10000
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = glob.glob(os.path.join(tmp_dir, 'file*'))
     input_file = files[0]
