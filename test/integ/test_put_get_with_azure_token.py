@@ -64,7 +64,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_put_copy_many_files_azure(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
     """[azure] Puts and Copies many files."""
     # generates N files
     number_of_files = 10

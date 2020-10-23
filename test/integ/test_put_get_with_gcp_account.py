@@ -19,6 +19,8 @@ import requests
 from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
+from ..generate_test_files import generate_k_lines_of_n_files
+
 logger = getLogger(__name__)
 
 # Mark every test in this module as a gcp test
@@ -61,12 +63,12 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_put_copy_many_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
     """[gcp] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -98,12 +100,12 @@ def test_put_copy_many_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_copy_duplicated_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
     """[gcp] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
     number_of_lines = 100
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -165,11 +167,11 @@ def test_put_copy_duplicated_files_gcp(tmpdir, test_files, conn_cnx, db_paramete
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_get_large_files_gcp(tmpdir, test_files, conn_cnx, db_parameters):
+def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters):
     """[gcp] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
-    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
 
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')
