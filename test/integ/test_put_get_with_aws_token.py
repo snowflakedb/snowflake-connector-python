@@ -7,6 +7,8 @@
 import glob
 import gzip
 import os
+import random
+import string
 
 import boto3
 import pytest
@@ -27,41 +29,37 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
     with gzip.open(fname, 'wb') as f:
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_aws_token'))
+    table_name = 'snow9144_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
 
     with conn_cnx() as cnx:
-        cnx.cursor().execute("rm @~/snow9144")
-        cnx.cursor().execute("create or replace table snow9144 (a int, b string)")
-    try:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("put file://{} @%snow9144 auto_compress=true parallel=30".format(fname),
-                                 _put_callback=SnowflakeS3ProgressPercentage,
-                                 _get_callback=SnowflakeS3ProgressPercentage)
-            cnx.cursor().execute("copy into snow9144")
-            cnx.cursor().execute("copy into @~/snow9144 from snow9144 "
-                                 "file_format=(type=csv compression='gzip')")
-            with cnx.cursor() as c:
-                c.execute("get @~/snow9144 file://{} pattern='snow9144.*'".format(tmp_dir),
-                          _put_callback=SnowflakeS3ProgressPercentage,
-                          _get_callback=SnowflakeS3ProgressPercentage)
-                rec = c.fetchone()
-            assert rec[0].startswith('snow9144'), 'A file downloaded by GET'
-            assert rec[1] == 36, 'Return right file size'
-            assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
-            assert rec[3] == '', 'Return no error message'
-            cnx.cursor().execute("rm @%snow9144")
-            cnx.cursor().execute("rm @~/snow9144")
-    finally:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("drop table snow9144")
+        with cnx.cursor() as csr:
+            try:
+                csr.execute("create or replace table {} (a int, b string)".format(table_name))
+                csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name),
+                            _put_callback=SnowflakeS3ProgressPercentage,
+                            _get_callback=SnowflakeS3ProgressPercentage)
+                rec = csr.fetchone()
+                assert rec[6] == 'UPLOADED'
+                csr.execute("copy into {}".format(table_name))
+                csr.execute("rm @%{}".format(table_name))
+                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute("copy into @%{table_name} from {table_name} "
+                            "file_format=(type=csv compression='gzip')".format(table_name=table_name))
+                csr.execute("get @%{table_name} file://{}".format(tmp_dir, table_name=table_name),
+                            _put_callback=SnowflakeS3ProgressPercentage,
+                            _get_callback=SnowflakeS3ProgressPercentage)
+                rec = csr.fetchone()
+                assert rec[0].startswith('data_'), 'A file downloaded by GET'
+                assert rec[1] == 36, 'Return right file size'
+                assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
+                assert rec[3] == '', 'Return no error message'
+            finally:
+                csr.execute("drop table {}".format(table_name))
 
-    files = glob.glob(os.path.join(tmp_dir, 'snow9144*'))
-    contents = ''
-    fd = gzip.open(files[0], 'rb')
-    for line in fd:
-        contents += line.decode(UTF8)
-    fd.close()
-    assert original_contents == contents, (
-        'Output is different from the original file')
+    files = glob.glob(os.path.join(tmp_dir, 'data_*'))
+    with gzip.open(files[0], 'rb') as fd:
+        contents = fd.read().decode(UTF8)
+    assert original_contents == contents, 'Output is different from the original file'
 
 
 def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
