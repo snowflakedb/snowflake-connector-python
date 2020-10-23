@@ -68,42 +68,46 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt.gz'))
     with gzip.open(fname, 'wb') as f:
         f.write("123,test1\n456,test2".encode(UTF8))
+    table_name = 'snow6154_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
 
     with conn_cnx() as cnx:
-        cnx.cursor().execute("create or replace table snow6154 (a int, b string)")
-        ret = cnx.cursor()._execute_helper("put file://{} @%snow6154".format(fname))
-        stage_location = ret['data']['stageInfo']['location']
-        stage_credentials = ret['data']['stageInfo']['creds']
+        try:
+            cnx.cursor().execute("create or replace table {} (a int, b string)".format(table_name))
+            ret = cnx.cursor()._execute_helper("put file://{} @%{}".format(fname, table_name))
+            stage_location = ret['data']['stageInfo']['location']
+            stage_credentials = ret['data']['stageInfo']['creds']
 
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(stage_location)
+            s3location = SnowflakeS3Util.extract_bucket_name_and_path(stage_location)
 
-        s3path = s3location.s3path + os.path.basename(fname) + ".gz"
+            s3path = s3location.s3path + os.path.basename(fname) + ".gz"
 
-        # positive case
-        client = boto3.resource(
-            's3',
-            aws_access_key_id=stage_credentials['AWS_ID'],
-            aws_secret_access_key=stage_credentials['AWS_KEY'],
-            aws_session_token=stage_credentials['AWS_TOKEN'])
+            # positive case
+            client = boto3.resource(
+                's3',
+                aws_access_key_id=stage_credentials['AWS_ID'],
+                aws_secret_access_key=stage_credentials['AWS_KEY'],
+                aws_session_token=stage_credentials['AWS_TOKEN'])
 
-        client.meta.client.upload_file(
-            fname, s3location.bucket_name, s3path)
-
-        # negative: wrong location, attempting to put the file in the
-        # parent path
-        parent_s3path = os.path.dirname(os.path.dirname(s3path)) + '/'
-
-        with pytest.raises(Exception):
-            client.meta.client.upload_file(fname, s3location.bucket_name, parent_s3path)
-
-        # negative: missing AWS_TOKEN
-        client = boto3.resource(
-            's3',
-            aws_access_key_id=stage_credentials['AWS_ID'],
-            aws_secret_access_key=stage_credentials['AWS_KEY'])
-        with pytest.raises(Exception):
             client.meta.client.upload_file(
                 fname, s3location.bucket_name, s3path)
+
+            # negative: wrong location, attempting to put the file in the
+            # parent path
+            parent_s3path = os.path.dirname(os.path.dirname(s3path)) + '/'
+
+            with pytest.raises(Exception):
+                client.meta.client.upload_file(fname, s3location.bucket_name, parent_s3path)
+
+            # negative: missing AWS_TOKEN
+            client = boto3.resource(
+                's3',
+                aws_access_key_id=stage_credentials['AWS_ID'],
+                aws_secret_access_key=stage_credentials['AWS_KEY'])
+            with pytest.raises(Exception):
+                client.meta.client.upload_file(
+                    fname, s3location.bucket_name, s3path)
+        finally:
+            cnx.cursor().execute("drop table if exists {}".format(table_name))
 
 
 def _s3bucket_list(client, s3bucket):
@@ -118,10 +122,11 @@ def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt'))
     with gzip.open(fname, 'wb') as f:
         f.write("123,test1\n456,test2".encode(UTF8))
+    table_name = 'snow6154_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
 
     with conn_cnx() as cnx:
-        cnx.cursor().execute("create or replace table snow6154 (a int, b string)")
-        ret = cnx.cursor()._execute_helper("put file://{} @%snow6154".format(fname))
+        cnx.cursor().execute("create or replace table {} (a int, b string)".format(table_name))
+        ret = cnx.cursor()._execute_helper("put file://{} @%{}".format(fname, table_name))
         stage_location = ret['data']['stageInfo']['location']
         stage_credentials = ret['data']['stageInfo']['creds']
 

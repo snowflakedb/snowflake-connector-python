@@ -229,15 +229,15 @@ def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters):
 
 def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
+    original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, 'wb') as f:
-        original_contents = "123,test1\n456,test2\n"
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
+    table_name = 'snow32807_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute("rm @~/snow32807")
-            csr.execute("create or replace table snow32807 (a int, b string)")
+            csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
                 from requests import put, get
 
@@ -261,12 +261,14 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.put', side_effect=mocked_put):
-                        csr.execute("put file://{} @%snow32807 auto_compress=true parallel=30".format(fname))
+                        csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
                     assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
-                rec = csr.fetchone()
-                assert rec[6] == 'UPLOADED'
-                csr.execute("copy into snow32807")
-                csr.execute("copy into @~/snow32807 from snow32807 file_format=(type=csv compression='gzip')")
+                assert csr.fetchone()[6] == 'UPLOADED'
+                csr.execute("copy into {}".format(table_name))
+                csr.execute("rm @%{}".format(table_name))
+                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute("copy into @%{table_name} from {table_name} "
+                            "file_format=(type=csv compression='gzip')".format(table_name=table_name))
 
                 def mocked_get(*args, **kwargs):
                     if mocked_get.counter == 0:
@@ -288,19 +290,17 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.get', side_effect=mocked_get):
-                        csr.execute("get @~/snow32807 file://{} pattern='snow32807.*'".format(tmp_dir))
+                        csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
                     assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
                 rec = csr.fetchone()
-                assert rec[0].startswith(
-                    'snow32807'), 'A file downloaded by GET'
+                assert rec[0].startswith('data_'), 'A file downloaded by GET'
                 assert rec[1] == 36, 'Return right file size'
                 assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
                 assert rec[3] == '', 'Return no error message'
             finally:
-                csr.execute("drop table snow32807")
-                csr.execute("rm @~/snow32807")
+                csr.execute("drop table {}".format(table_name))
 
-    files = glob.glob(os.path.join(tmp_dir, 'snow32807*'))
+    files = glob.glob(os.path.join(tmp_dir, 'data_*'))
     with gzip.open(files[0], 'rb') as fd:
         contents = fd.read().decode(UTF8)
     assert original_contents == contents, 'Output is different from the original file'
@@ -309,13 +309,14 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
 def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data', 'example.json'))
+    stage_name = 'teststage_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
             try:
-                cursor.execute("create or replace stage teststage")
-                cursor.execute("put file://{} @teststage auto_compress=false".format(fname))
-                cursor.execute("get @teststage file://{}".format(str(tmpdir)))
+                cursor.execute("create or replace stage {}".format(stage_name))
+                cursor.execute("put file://{} @{} auto_compress=false".format(fname, stage_name))
+                cursor.execute("get @{} file://{}".format(stage_name, str(tmpdir)))
                 downloaded_file = os.path.join(str(tmpdir), 'example.json')
                 assert cmp(fname, downloaded_file)
             finally:
-                cursor.execute("drop stage teststage")
+                cursor.execute("drop stage {}".format(stage_name))
