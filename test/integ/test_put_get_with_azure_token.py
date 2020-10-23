@@ -72,13 +72,14 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
     number_of_files = 10
     number_of_lines = 1000
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    folder_name = 'test_put_copy_many_files_azure' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
 
     files = os.path.join(tmp_dir, 'file*')
 
     def run(csr, sql):
         sql = sql.format(
             files=files,
-            name=db_parameters['name'])
+            name=folder_name)
         return csr.execute(sql).fetchall()
 
     with conn_cnx() as cnx:
@@ -112,13 +113,13 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, db_parameters):
     number_of_files = 5
     number_of_lines = 100
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    table_name = ('test_put_copy_duplicated_files_azure' +
+                  ''.join([random.choice(string.ascii_lowercase) for _ in range(5)]))
 
     files = os.path.join(tmp_dir, 'file*')
 
     def run(csr, sql):
-        sql = sql.format(
-            files=files,
-            name=db_parameters['name'])
+        sql = sql.format(files=files, name=table_name)
         return csr.execute(sql, _raise_put_get_error=False).fetchall()
 
     with conn_cnx() as cnx:
@@ -187,6 +188,7 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')
     os.makedirs(output_dir)
+    folder_name = 'test_put_get_large_files_azure' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
 
     class cb(object):
         def __init__(self, filename, filesize, **_):
@@ -198,7 +200,7 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
     def run(cnx, sql):
         return cnx.cursor().execute(
             sql.format(files=files,
-                       dir=db_parameters['name'],
+                       dir=folder_name,
                        output_dir=output_dir),
             _put_callback_output_stream=sys.stdout,
             _get_callback_output_stream=sys.stdout,
