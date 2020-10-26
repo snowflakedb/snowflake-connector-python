@@ -11,12 +11,12 @@ Release Notes
 
 - v2.3.4(October 26,2020)
 
-   - The function write_pandas now has the option to not quote identifiers (non default option).
-   - The function write_pandas now honors default and auto-increment values.
-   - Update Python Connector OCSP error messages and accompanying telemetry Information.
-   - Run-time pyarrow version verification is now able to gracefully fail. Fixing a bug with AWS glue environment.
-   - Bumped boto3 from 1.14.47 to 1.15.9
-   - Bump idna from 2.9 to 2.10
+   - Added an optional parameter to the write_pandas function to specify that identifiers should not be quoted before being sent to the server.
+   - The write_pandas function now honors default and auto-increment values for columns when inserting new rows.
+   - Updated the Python Connector OCSP error messages and accompanying telemetry Information.
+   - Enabled the runtime pyarrow version verification to fail gracefully. Fixed a bug with AWS glue environment.
+   - Upgraded the version of boto3 from 1.14.47 to 1.15.9.
+   - Upgraded the version of idna from 2.9 to 2.10.
 
 - v2.3.3(October 05,2020)
 
