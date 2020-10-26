@@ -226,10 +226,11 @@ jobs:
       - name: Install tox
         run: python -m pip install tox tox-external-wheels
       - name: Run tests
-        run: python -m tox -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci"
+        run: python -m tox -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci" -p auto
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
+          TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - name: Combine coverages
         run: python -m tox -e coverage --skip-missing-interpreters false
