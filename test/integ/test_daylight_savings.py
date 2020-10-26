@@ -6,7 +6,10 @@
 
 from datetime import datetime
 
+import pytest
 import pytz
+
+pytestmark = pytest.mark.olddriver
 
 
 def _insert_timestamp(ctx, table, tz, dt):

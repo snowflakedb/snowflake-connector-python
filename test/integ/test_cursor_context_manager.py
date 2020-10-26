@@ -6,6 +6,10 @@
 
 from logging import getLogger
 
+import pytest
+
+pytestmark = pytest.mark.olddriver
+
 
 def test_context_manager(conn_testaccount, db_parameters):
     """Tests context Manager support in Cursor."""

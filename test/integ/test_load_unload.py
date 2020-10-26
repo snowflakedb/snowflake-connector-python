@@ -21,6 +21,8 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 
 logger = getLogger(__name__)
 
+pytestmark = pytest.mark.olddriver
+
 
 @pytest.fixture()
 def test_data(request, conn_cnx, db_parameters):

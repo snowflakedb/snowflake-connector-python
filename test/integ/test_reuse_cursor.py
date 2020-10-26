@@ -4,6 +4,10 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
+import pytest
+
+pytestmark = pytest.mark.olddriver
+
 
 def test_reuse_cursor(conn_cnx, db_parameters):
     """Ensures only the last executed command/query's result sets are returned."""

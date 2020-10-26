@@ -26,7 +26,7 @@ except ImportError:
 logger = getLogger(__name__)
 
 # Mark every test in this module as an azure and a putget test
-pytestmark = pytest.mark.azure
+pytestmark = [pytest.mark.azure, pytest.mark.olddriver]
 
 
 @pytest.mark.skipif(

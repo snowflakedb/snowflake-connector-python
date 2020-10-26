@@ -9,6 +9,8 @@ import pytest
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
+pytestmark = pytest.mark.olddriver
+
 
 @pytest.mark.skipif(
     IS_WINDOWS,

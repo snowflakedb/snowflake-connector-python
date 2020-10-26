@@ -4,8 +4,12 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
+import pytest
+
 import snowflake.connector
 from snowflake.connector import errors
+
+pytestmark = pytest.mark.olddriver
 
 
 def test_error_classes(conn_cnx):

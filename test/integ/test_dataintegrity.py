@@ -13,9 +13,12 @@ import random
 import time
 from math import fabs
 
+import pytest
 import pytz
 
 from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFromTicks
+
+pytestmark = pytest.mark.olddriver
 
 
 def table_exists(conn_cnx, name):

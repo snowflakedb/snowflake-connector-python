@@ -6,6 +6,9 @@ import datetime
 import time
 
 import numpy as np
+import pytest
+
+pytestmark = pytest.mark.olddriver
 
 
 def test_numpy_datatype_binding(conn_cnx, db_parameters):
