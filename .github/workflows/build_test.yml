@@ -269,14 +269,6 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
-      - name: Show wheels downloaded
-        run: ls -lh dist
-        shell: bash
-      - name: Remove manylinux1 wheel
-        run: |
-          rm dist/*manylinux1*.whl
-          ls -lh dist
-        if: matrix.os.download_name == 'linux'
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
