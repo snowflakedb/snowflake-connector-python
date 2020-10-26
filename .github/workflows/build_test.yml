@@ -276,7 +276,7 @@ jobs:
       - name: Install Old Python Connector
         run: python -m pip install snowflake-connector-python==${{ matrix.driver-version }}
       - name: Run tests
-        run: python -m tox -e "py${PYTHON_VERSION/\./}-olddriver-ci"
+        run: python -m tox -e "py${PYTHON_VERSION/\./}-olddriver-ci2"
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
