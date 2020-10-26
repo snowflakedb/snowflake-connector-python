@@ -7,8 +7,6 @@
 import glob
 import gzip
 import os
-import random
-import string
 import sys
 import time
 from logging import getLogger
@@ -19,6 +17,7 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
+from ..randomize import random_string
 
 logger = getLogger(__name__)
 
@@ -34,7 +33,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
     with gzip.open(fname, 'wb') as f:
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_azure_token'))
-    table_name = 'snow32806_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    table_name = random_string(5, 'snow32806_')
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
@@ -72,7 +71,7 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
     number_of_files = 10
     number_of_lines = 1000
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
-    folder_name = 'test_put_copy_many_files_azure' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    folder_name = random_string(5, 'test_put_copy_many_files_azure_')
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -100,8 +99,7 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
                 assert all([rec[6] == 'UPLOADED' for rec in all_recs])
                 run(csr, "copy into {name}")
 
-                rows = sum([rec[0] for rec in run(csr, "select count(*) from "
-                                                       "{name}")])
+                rows = sum([rec[0] for rec in run(csr, "select count(*) from {name}")])
                 assert rows == number_of_files * number_of_lines, 'Number of rows'
             finally:
                 run(csr, "drop table if exists {name}")
@@ -113,8 +111,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, db_parameters):
     number_of_files = 5
     number_of_lines = 100
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
-    table_name = ('test_put_copy_duplicated_files_azure' +
-                  ''.join([random.choice(string.ascii_lowercase) for _ in range(5)]))
+    table_name = random_string(5, 'test_put_copy_duplicated_files_azure_')
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -188,7 +185,7 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')
     os.makedirs(output_dir)
-    folder_name = 'test_put_get_large_files_azure' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    folder_name = random_string(5, 'test_put_get_large_files_azure_')
 
     class cb(object):
         def __init__(self, filename, filesize, **_):

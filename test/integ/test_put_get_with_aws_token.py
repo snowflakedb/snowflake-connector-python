@@ -7,8 +7,6 @@
 import glob
 import gzip
 import os
-import random
-import string
 
 import boto3
 import pytest
@@ -16,6 +14,8 @@ import pytest
 from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
 from snowflake.connector.s3_util import SnowflakeS3Util
+
+from ..randomize import random_string
 
 # Mark every test in this module as an aws test
 pytestmark = pytest.mark.aws
@@ -29,7 +29,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters):
     with gzip.open(fname, 'wb') as f:
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_aws_token'))
-    table_name = 'snow9144_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    table_name = random_string(5, 'snow9144_')
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
@@ -68,7 +68,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt.gz'))
     with gzip.open(fname, 'wb') as f:
         f.write("123,test1\n456,test2".encode(UTF8))
-    table_name = 'snow6154_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    table_name = random_string(5, 'snow6154_')
 
     with conn_cnx() as cnx:
         try:
@@ -122,7 +122,7 @@ def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt'))
     with gzip.open(fname, 'wb') as f:
         f.write("123,test1\n456,test2".encode(UTF8))
-    table_name = 'snow6154_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    table_name = random_string(5, 'snow6154_list_')
 
     with conn_cnx() as cnx:
         cnx.cursor().execute("create or replace table {} (a int, b string)".format(table_name))

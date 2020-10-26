@@ -7,8 +7,6 @@
 import glob
 import gzip
 import os
-import random
-import string
 import sys
 import time
 from filecmp import cmp
@@ -22,6 +20,7 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 from ..generate_test_files import generate_k_lines_of_n_files
+from ..randomize import random_string
 
 logger = getLogger(__name__)
 
@@ -37,7 +36,7 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
     with gzip.open(fname, 'wb') as f:
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
-    table_name = 'snow32806_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    table_name = random_string(5, 'snow32806_')
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
@@ -71,7 +70,7 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
     number_of_files = 10
     number_of_lines = 1000
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
-    table_name = 'test_put_copy_many_files_gcp' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    table_name = random_string(5, 'test_put_copy_many_files_gcp_')
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -109,8 +108,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
     number_of_files = 5
     number_of_lines = 100
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
-    table_name = ('test_put_copy_duplicated_files_gcp' +
-                  ''.join([random.choice(string.ascii_lowercase) for _ in range(5)]))
+    table_name = random_string(5, 'test_put_copy_duplicated_files_gcp_')
 
     files = os.path.join(tmp_dir, 'file*')
 
@@ -177,7 +175,7 @@ def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters):
     number_of_files = 3
     number_of_lines = 200000
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
-    folder_name = 'test_put_get_large_files_gcp' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    folder_name = random_string(5, 'test_put_get_large_files_gcp_')
 
     files = os.path.join(tmp_dir, 'file*')
     output_dir = os.path.join(tmp_dir, 'output_dir')
@@ -237,7 +235,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     with gzip.open(fname, 'wb') as f:
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
-    table_name = 'snow32807_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    table_name = random_string(5, 'snow32807_')
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
@@ -313,7 +311,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
 def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data', 'example.json'))
-    stage_name = 'teststage_' + ''.join([random.choice(string.ascii_lowercase) for _ in range(5)])
+    stage_name = random_string(5, 'teststage_')
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
             try:
