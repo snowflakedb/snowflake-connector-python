@@ -10,6 +10,9 @@ import pytest
 
 import snowflake.connector
 
+pytestmark = pytest.mark.olddriver
+
+
 try:
     from parameters import (CONNECTION_PARAMETERS)
 except ImportError:

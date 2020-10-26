@@ -21,6 +21,9 @@ import pytz
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ProgrammingError
 
+pytestmark = pytest.mark.olddriver
+
+
 tempfile.gettempdir()
 
 for logger_name in ['snowflake.connector', 'botocore']:

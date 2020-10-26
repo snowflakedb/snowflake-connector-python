@@ -20,6 +20,9 @@ from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errors import ForbiddenError
 from snowflake.connector.network import APPLICATION_SNOWSQL
 
+pytestmark = pytest.mark.olddriver
+
+
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:
