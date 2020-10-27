@@ -21,6 +21,8 @@ from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCS
 from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer, SnowflakeOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
+from ..randomize import random_string
+
 try:
     from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED, \
         ER_OCSP_RESPONSE_FETCH_FAILURE  # NOQA
@@ -56,10 +58,11 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 
 
 @pytest.fixture(autouse=True)
-def cleanup():
+def ocsp_reset(tmpdir):
     # Reset OCSP cache location before each test
     if 'SF_OCSP_RESPONSE_CACHE_DIR' in os.environ:
         del os.environ['SF_OCSP_RESPONSE_CACHE_DIR']
+    os.environ['SF_OCSP_RESPONSE_CACHE_DIR'] = str(tmpdir.join(random_string(5)))
     OCSPCache.reset_cache_dir()
 
 
