@@ -273,7 +273,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox
       - name: Run tests
-        run: python -m tox -e olddriver-ci
+        run: python -m tox -e olddriver
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
