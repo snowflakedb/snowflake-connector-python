@@ -12,9 +12,6 @@ import pytest
 import snowflake.connector
 from snowflake.connector.errors import ProgrammingError
 
-pytestmark = pytest.mark.olddriver
-
-
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except Exception:

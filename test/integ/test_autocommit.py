@@ -4,11 +4,7 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
-import pytest
-
 import snowflake.connector
-
-pytestmark = pytest.mark.olddriver
 
 
 def exe0(cnx, sql):
