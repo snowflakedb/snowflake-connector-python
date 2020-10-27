@@ -21,6 +21,9 @@ def pytest_collection_modifyitems(items) -> None:
         relative_path = item_path.relative_to(top_test_dir)
         for part in relative_path.parts:
             item.add_marker(part)
+            if part in ('unit', 'lambda'):
+                # no old driver test run for unit and lambda
+                item.add_marker('skipolddriver')
 
 
 @pytest.fixture(scope='session', autouse=True)
