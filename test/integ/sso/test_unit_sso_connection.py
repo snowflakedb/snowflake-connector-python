@@ -10,8 +10,11 @@ import pytest
 from mock import Mock, patch
 
 import snowflake.connector
-from snowflake.connector.compat import IS_MACOS
 
+try:
+    from snowflake.connector.compat import IS_MACOS  # NOQA
+except ImportError:
+    IS_MACOS = False
 try:
     from snowflake.connector.auth import delete_temporary_credential  # NOQA
 except ImportError:
