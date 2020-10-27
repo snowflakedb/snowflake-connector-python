@@ -21,10 +21,10 @@ def test_create_client(caplog):
     """Creates a GCSUtil with an access token."""
     client = SnowflakeGCSUtil.create_client({'creds': {'GCS_ACCESS_TOKEN': 'fake_token'}})
     assert client is None
-    assert caplog.record_tuples == [
+    assert all([log in caplog.record_tuples for log in [
         ('snowflake.connector.gcs_util', logging.DEBUG, "len(GCS_ACCESS_TOKEN): 10"),
         ('snowflake.connector.gcs_util', logging.DEBUG, "GCS operations with an access token are currently unsupported")
-    ]
+    ]])
 
 
 def test_native_download_access_token(caplog):
@@ -32,10 +32,8 @@ def test_native_download_access_token(caplog):
     meta = {}
     SnowflakeGCSUtil._native_download_file(meta, None, 99)
     assert meta['result_status'] == ResultStatus.ERROR
-    assert caplog.record_tuples == [
-        ('snowflake.connector.gcs_util', logging.ERROR, "GCS download operation with an access token is "
-                                                        "currently unsupported"),
-    ]
+    assert (('snowflake.connector.gcs_util', logging.ERROR, "GCS download operation with an access token is "
+                                                            "currently unsupported") in caplog.record_tuples)
 
 
 def test_native_upload_access_token(caplog):
@@ -43,10 +41,8 @@ def test_native_upload_access_token(caplog):
     meta = {}
     SnowflakeGCSUtil.upload_file(None, meta, None, 99)
     assert meta['result_status'] == ResultStatus.ERROR
-    assert caplog.record_tuples == [
-        ('snowflake.connector.gcs_util', logging.ERROR, "GCS upload operation with an access token is "
-                                                        "currently unsupported"),
-    ]
+    assert (('snowflake.connector.gcs_util', logging.ERROR, "GCS upload operation with an access token is "
+                                                            "currently unsupported") in caplog.record_tuples)
 
 
 @pytest.mark.parametrize('errno', [403, 408, 429, 500, 503])
@@ -87,9 +83,9 @@ def test_upload_put_timeout(tmpdir, caplog):
         SnowflakeGCSUtil.upload_file(f_name, meta, None, 99)
     assert isinstance(meta['last_error'], requests.exceptions.Timeout)
     assert meta['result_status'] == ResultStatus.NEED_RETRY
-    assert caplog.record_tuples == [
+    assert all([log in caplog.record_tuples for log in [
         ('snowflake.connector.gcs_util', logging.DEBUG, 'GCS file upload Timeout Error: ')
-    ]
+    ]])
 
 
 def test_upload_get_timeout(tmpdir, caplog):
@@ -100,9 +96,7 @@ def test_upload_get_timeout(tmpdir, caplog):
         SnowflakeGCSUtil._native_download_file(meta, str(tmpdir), 99)
     assert isinstance(meta['last_error'], requests.exceptions.Timeout)
     assert meta['result_status'] == ResultStatus.NEED_RETRY
-    assert caplog.record_tuples == [
-        ('snowflake.connector.gcs_util', logging.DEBUG, 'GCS file download Timeout Error: ')
-    ]
+    assert ('snowflake.connector.gcs_util', logging.DEBUG, 'GCS file download Timeout Error: ') in caplog.record_tuples
 
 
 def test_get_file_header_none():
