@@ -34,10 +34,10 @@ def filter_log() -> None:
     """
     import logging
     import pathlib
-    try:
-        from snowflake.connector.secret_detector import SecretDetector  # NOQA
-    except ImportError:
-        # No secret detector is available
+    from snowflake.connector.secret_detector import SecretDetector
+
+    if not isinstance(SecretDetector, logging.Formatter):
+        # Override it if SecretDetector is not an instance of logging.Formatter
         class SecretDetector(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
                 return super().format(record)
