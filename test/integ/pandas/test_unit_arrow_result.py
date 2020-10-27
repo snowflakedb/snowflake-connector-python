@@ -13,7 +13,11 @@ import pytest
 
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.cursor import SnowflakeCursor
-from snowflake.connector.options import installed_pandas
+
+try:
+    from snowflake.connector.options import installed_pandas  # NOQA
+except ImportError:
+    installed_pandas = False
 
 try:
     from pyarrow import RecordBatchStreamReader  # NOQA

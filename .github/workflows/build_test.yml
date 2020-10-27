@@ -276,7 +276,7 @@ jobs:
       - name: Install Old Python Connector
         run: python -m pip install snowflake-connector-python==${{ matrix.driver-version }}
       - name: Adjust the dependency
-        run: python -m pip install azure-storage-blob==2.1.0 pandas
+        run: python -m pip install azure-storage-blob==2.1.0 pandas pendulum
       - name: Install pytest
         run: python -m pip install pytest==6.0.2 pytest-cov pytest-rerunfailures pytest-timeout mock
       - name: Run tests

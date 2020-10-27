@@ -3,11 +3,6 @@
 #
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
-import pytest
-
-pytestmark = pytest.mark.olddriver
-
-
 def test_binding_fetching_boolean(conn_cnx, db_parameters):
     try:
         with conn_cnx() as cnx:

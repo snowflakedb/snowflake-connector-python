@@ -12,7 +12,12 @@ from decimal import Decimal
 
 import pytest
 
-from snowflake.connector.options import installed_pandas, pandas
+try:
+    from snowflake.connector.options import installed_pandas, pandas  # NOQA
+except ImportError:
+    installed_pandas = False
+    pandas = None
+
 
 try:
     import pyarrow  # NOQA
