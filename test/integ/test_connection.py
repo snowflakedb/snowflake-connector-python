@@ -613,6 +613,7 @@ def test_another_site(db_parameters):
     assert get('https://wikipedia.org') == 200
 
 
+@pytest.mark.skipolddriver
 def test_okta_url(db_parameters):
     orig_authenticator = 'https://someaccount.okta.com/snowflake/oO56fExYCGnfV83/2345'
 
@@ -636,6 +637,7 @@ def test_okta_url(db_parameters):
         assert cnx
 
 
+@pytest.mark.skipolddriver
 def test_use_openssl_only(db_parameters):
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -699,6 +701,7 @@ def test_dashed_url_account_name(db_parameters):
             assert any([c.args[1].startswith('https://test-account.snowflakecomputing.com:443') for c in mocked_fetch.call_args_list])
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize('name,value,exc_warn', [
     # Not existing parameter
     ('no_such_parameter', True, UserWarning("'no_such_parameter' is an unknown connection parameter")),
