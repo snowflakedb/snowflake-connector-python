@@ -32,9 +32,16 @@ def filter_log() -> None:
     A workaround to use our custom Formatter in pytest based on the discussion at
     https://github.com/pytest-dev/pytest/issues/2987
     """
-    from snowflake.connector.secret_detector import SecretDetector
     import logging
     import pathlib
+    try:
+        from snowflake.connector.secret_detector import SecretDetector  # NOQA
+    except ImportError:
+        # No secret detector is available
+        class SecretDetector(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                return super().format(record)
+
     log_dir = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER', str(pathlib.Path(__file__).parent.absolute()))
 
     _logger = getLogger('snowflake.connector')
