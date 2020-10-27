@@ -13,6 +13,8 @@ import pytest
 
 import snowflake.connector
 
+pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
+
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
     no_arrow_iterator_ext = False
