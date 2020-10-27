@@ -230,6 +230,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - name: Combine coverages
