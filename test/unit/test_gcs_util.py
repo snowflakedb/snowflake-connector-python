@@ -60,6 +60,19 @@ def test_upload_retry_errors(errno, tmpdir):
         assert meta['result_status'] == ResultStatus.NEED_RETRY
 
 
+def test_upload_uncaught_exception(tmpdir):
+    """Tests whether non-retryable errors are handled correctly when uploading."""
+    f_name = str(tmpdir.join('some_file.txt'))
+    resp = Response()
+    resp.status_code = 501
+    meta = {'presigned_url': ['some_url'], 'sha256_digest': 'asd'}
+    with open(f_name, 'w') as f:
+        f.write(random_string(15))
+    with mock.patch('requests.put', side_effect=requests.exceptions.HTTPError(response=resp)):
+        with pytest.raises(requests.exceptions.HTTPError):
+            SnowflakeGCSUtil.upload_file(f_name, meta, None, 99)
+
+
 @pytest.mark.parametrize('errno', [403, 408, 429, 500, 503])
 def test_download_retry_errors(errno, tmpdir):
     """Tests whether retryable errors are handled correctly when downloading."""
@@ -70,6 +83,16 @@ def test_download_retry_errors(errno, tmpdir):
         SnowflakeGCSUtil._native_download_file(meta, str(tmpdir), 99)
         assert isinstance(meta['last_error'], requests.exceptions.HTTPError)
         assert meta['result_status'] == ResultStatus.NEED_RETRY
+
+
+def test_download_uncaught_exception(tmpdir):
+    """Tests whether non-retryable errors are handled correctly when downloading."""
+    resp = Response()
+    resp.status_code = 501
+    meta = {'presigned_url': ['some_url'], 'sha256_digest': 'asd'}
+    with mock.patch('requests.get', side_effect=requests.exceptions.HTTPError(response=resp)):
+        with pytest.raises(requests.exceptions.HTTPError):
+            SnowflakeGCSUtil._native_download_file(meta, str(tmpdir), 99)
 
 
 def test_upload_put_timeout(tmpdir, caplog):
