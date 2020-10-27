@@ -9,8 +9,6 @@ from datetime import datetime
 import pytest
 import pytz
 
-pytestmark = pytest.mark.olddriver
-
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:

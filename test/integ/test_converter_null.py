@@ -7,15 +7,11 @@
 import re
 from datetime import datetime, timedelta
 
-import pytest
-
 import snowflake.connector
 from snowflake.connector.converter import ZERO_EPOCH
 from snowflake.connector.converter_null import SnowflakeNoConverterToPython
 
 NUMERIC_VALUES = re.compile(r'-?[\d.]*\d$')
-
-pytestmark = pytest.mark.olddriver
 
 
 def test_converter_no_converter_to_python(db_parameters):

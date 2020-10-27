@@ -6,14 +6,10 @@
 
 from logging import getLogger
 
-import pytest
-
 from snowflake.connector import errorcode, errors
 from snowflake.connector.network import SnowflakeRestful
 
 logger = getLogger(__name__)
-
-pytestmark = pytest.mark.olddriver
 
 
 def test_no_auth(db_parameters):

@@ -15,8 +15,6 @@ from snowflake.connector import DictCursor, ProgrammingError
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
-pytestmark = pytest.mark.olddriver
-
 
 def test_execute_string(conn_cnx, db_parameters):
     with conn_cnx() as cnx:

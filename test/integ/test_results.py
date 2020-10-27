@@ -8,8 +8,6 @@ import pytest
 
 from snowflake.connector import ProgrammingError
 
-pytestmark = pytest.mark.olddriver
-
 
 def test_results(conn_cnx):
     """Gets results for the given qid."""

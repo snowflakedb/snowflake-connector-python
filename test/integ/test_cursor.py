@@ -17,8 +17,6 @@ import snowflake.connector
 from snowflake.connector import constants, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
 
-pytestmark = pytest.mark.olddriver
-
 
 def _drop_warehouse(conn, db_parameters):
     conn.cursor().execute("drop warehouse if exists {}".format(

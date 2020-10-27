@@ -6,10 +6,6 @@
 
 import os
 
-import pytest
-
-pytestmark = pytest.mark.olddriver
-
 
 def test_abc(conn_cnx, tmpdir, db_parameters):
     """Tests PUTing a file on Windows using the URI and Windows path."""

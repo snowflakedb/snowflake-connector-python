@@ -16,7 +16,7 @@ from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentag
 from snowflake.connector.s3_util import SnowflakeS3Util
 
 # Mark every test in this module as an aws test
-pytestmark = [pytest.mark.aws, pytest.mark.olddriver]
+pytestmark = pytest.mark.aws
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)

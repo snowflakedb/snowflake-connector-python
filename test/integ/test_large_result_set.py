@@ -13,8 +13,6 @@ NUMBER_OF_ROWS = 50000
 
 PREFETCH_THREADS = [8, 3, 1]
 
-pytestmark = pytest.mark.olddriver
-
 
 @pytest.fixture()
 def ingest_data(request, conn_cnx, db_parameters):

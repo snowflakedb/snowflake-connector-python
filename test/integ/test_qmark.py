@@ -8,8 +8,6 @@ import pytest
 
 from snowflake.connector import errors
 
-pytestmark = pytest.mark.olddriver
-
 
 def test_qmark_paramstyle(conn_cnx, db_parameters):
     """Tests that binding question marks is not supported by default."""

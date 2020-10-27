@@ -8,8 +8,6 @@ import pytest
 
 from snowflake.connector.errors import ProgrammingError
 
-pytestmark = pytest.mark.olddriver
-
 
 def test_binding_security(conn_cnx, db_parameters):
     """SQL Injection Tests."""

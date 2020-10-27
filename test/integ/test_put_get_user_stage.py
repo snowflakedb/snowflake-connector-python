@@ -14,8 +14,6 @@ import pytest
 
 from ..generate_test_files import generate_k_lines_of_n_files
 
-pytestmark = pytest.mark.olddriver
-
 
 @pytest.mark.aws
 def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, db_parameters):

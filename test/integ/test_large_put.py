@@ -10,8 +10,6 @@ import pytest
 
 from ..generate_test_files import generate_k_lines_of_n_files
 
-pytestmark = pytest.mark.olddriver
-
 
 @pytest.mark.aws
 @pytest.mark.flaky(reruns=3)

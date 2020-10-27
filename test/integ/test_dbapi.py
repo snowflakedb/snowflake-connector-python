@@ -22,8 +22,6 @@ from snowflake.connector.compat import BASE_EXCEPTION_CLASS
 TABLE1 = 'dbapi_ddl1'
 TABLE2 = 'dbapi_ddl2'
 
-pytestmark = pytest.mark.olddriver
-
 
 def drop_dbapi_tables(conn_cnx):
     with conn_cnx() as cnx:

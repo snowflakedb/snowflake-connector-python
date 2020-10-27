@@ -6,10 +6,6 @@
 
 import os
 
-import pytest
-
-pytestmark = pytest.mark.olddriver
-
 
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus file and should fail."""
