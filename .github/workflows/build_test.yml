@@ -65,10 +65,10 @@ jobs:
       - uses: actions/checkout@v1
       - name: Updating path
         run: |
-          echo "::add-path::/opt/python/cp35-cp35m/bin/"
-          echo "::add-path::/opt/python/cp36-cp36m/bin/"
-          echo "::add-path::/opt/python/cp37-cp37m/bin/"
-          echo "::add-path::/opt/python/cp38-cp38/bin/"
+          echo "/opt/python/cp35-cp35m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp36-cp36m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp37-cp37m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp38-cp38/bin/" >> $GITHUB_PATH
       - name: Display Python version
         run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
@@ -226,10 +226,12 @@ jobs:
       - name: Install tox
         run: python -m pip install tox tox-external-wheels
       - name: Run tests
-        run: python -m tox -e "py${PYTHON_VERSION/\./}{-extras,,-pandas,-sso}-ci"
+        run: python -m tox -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci" -p auto
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes
+          TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - name: Combine coverages
         run: python -m tox -e coverage --skip-missing-interpreters false
@@ -241,7 +243,46 @@ jobs:
             .tox/.coverage
             .tox/coverage.xml
 
+  test-olddriver:
+    name: Old Driver Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: lint
+    runs-on: ${{ matrix.os.image_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+         - image_name: ubuntu-latest
+           download_name: linux
+        python-version: [3.7]
+        cloud-provider: [aws]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Upgrade setuptools, pip and wheel
+        run: python -m pip install -U setuptools pip wheel
+      - name: Install tox
+        run: python -m pip install tox
+      - name: Run tests
+        run: python -m tox -e olddriver
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+        shell: bash
+
   combine-coverage:
+    if: ${{ success() || failure() }}
     name: Combine coverage
     needs: test
     runs-on: ubuntu-latest
@@ -275,6 +316,11 @@ jobs:
               shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
         run: python -m tox -e coverage
+      - uses: actions/upload-artifact@v2
+        with:
+          name: overall_cov_html
+          path: .tox/htmlcov
       - uses: codecov/codecov-action@v1
+        if: false
         with:
           file: .tox/coverage.xml

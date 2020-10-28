@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
 import codecs
@@ -35,16 +35,11 @@ from .network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
+from .options import installed_keyring, keyring
 from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from .version import VERSION
 
 logger = logging.getLogger(__name__)
-
-try:
-    import keyring
-except ImportError as ie:
-    keyring = None
-    logger.debug('Failed to import keyring module. err=[%s]', ie)
 
 # Cache directory
 CACHE_ROOT_DIR = getenv('SF_TEMPORARY_CREDENTIAL_CACHE_DIR') or \
@@ -370,7 +365,7 @@ class Auth(object):
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
             id_token = None
             if IS_MACOS or IS_WINDOWS:
-                if not keyring:
+                if not installed_keyring:
                     # we will leave the exception for write_temporary_credential function to raise
                     return
                 new_target = convert_target(host, user)
@@ -393,7 +388,7 @@ def write_temporary_credential(host, account, user, id_token, store_temporary_cr
         logger.debug("no ID token is given when try to store temporary credential")
         return
     if IS_MACOS or IS_WINDOWS:
-        if not keyring:
+        if not installed_keyring:
             logger.debug("Dependency 'keyring' is not installed, cannot cache id token. You might experience "
                          "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
                          "this please install keyring module using the following command : pip install "
@@ -496,7 +491,7 @@ def unlock_temporary_credential_file():
 
 
 def delete_temporary_credential(host, user, store_temporary_credential=False):
-    if (IS_MACOS or IS_WINDOWS) and keyring:
+    if (IS_MACOS or IS_WINDOWS) and installed_keyring:
         new_target = convert_target(host, user)
         try:
             keyring.delete_password(new_target, user.upper())

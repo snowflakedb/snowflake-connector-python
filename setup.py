@@ -43,7 +43,7 @@ pandas_requirements = [
     # Must be kept in sync with pyproject.toml
     'pyarrow>=0.17.0,<0.18.0',
     'pandas==0.24.2;python_version=="3.5"',
-    'pandas>=1.0.0,<1.1.0;python_version>"3.5"',
+    'pandas>=1.0.0,<1.2.0;python_version>"3.5"',
 ]
 
 try:
@@ -192,7 +192,7 @@ setup(
         'azure-common<2.0.0',
         'azure-storage-blob<12.0.0;python_version<="3.5.1"',
         'azure-storage-blob>=12.0.0,<13.0.0;python_version>="3.5.2"',
-        'boto3>=1.4.4,<1.15',
+        'boto3>=1.4.4,<1.16',
         'requests<2.24.0',
         'urllib3>=1.20,<1.26.0',
         'certifi<2021.0.0',
@@ -200,9 +200,9 @@ setup(
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
         'pyOpenSSL>=16.2.0,<21.0.0',
         'cffi>=1.9,<1.15',
-        'cryptography>=2.5.0,<3.0.0',
+        'cryptography>=2.5.0,<4.0.0',
         'pyjwt<2.0.0',
-        'idna<2.10',
+        'idna<2.11',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
     ],
@@ -238,7 +238,7 @@ setup(
         ],
         "pandas": pandas_requirements,
         "development": [
-            'pytest',
+            'pytest<6.1.0',
             'pytest-cov',
             'pytest-rerunfailures',
             'pytest-timeout',

@@ -13,12 +13,44 @@ repos:
     hooks:
     -   id: trailing-whitespace
     -   id: end-of-file-fixer
+        exclude: license_header.txt
     -   id: check-yaml
     -   id: debug-statements
     -   id: check-ast
     -   id: flake8
         additional_dependencies: ["flake8-bugbear == 19.3.0", "flake8-docstrings"]
+-   repo: https://github.com/Lucas-C/pre-commit-hooks.git
+    rev: v1.1.9
+    hooks:
+    -   id: insert-license
+        name: insert-py-license
+        files: >
+            (?x)^(
+                src/snowflake/connector/.*\.pyx?|
+                test/.*\.py|
+            )$
+        exclude: >
+            (?x)^(
+                src/snowflake/connector/version.py|
+                src/snowflake/connector/cpp|
+            )$
+        args:
+            - --license-filepath
+            - license_header.txt
+    -   id: insert-license
+        name: insert-cpp-license
+        files: src/snowflake/connector/cpp/.*\.(cpp|hpp)$
+        exclude: version.py$
+        args:
+            - --comment-style
+            - //
+            - --license-filepath
+            - license_header.txt
 -   repo: https://github.com/asottile/pyupgrade
     rev: v1.19.0
     hooks:
     -   id: pyupgrade
+-   repo: https://github.com/myint/rstcheck
+    rev: 3f92957478422df87bd730abde66f089cc1ee19b
+    hooks:
+    -   id: rstcheck

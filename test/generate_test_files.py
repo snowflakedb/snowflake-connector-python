@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+#
+
 import argparse
 import os
 import platform
@@ -6,11 +10,12 @@ import random
 import subprocess
 import tempfile
 import time
+from typing import Optional
 
 IS_WINDOWS = platform.system() == 'Windows'
 
 
-def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir: bool = None):
+def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir: Optional[bool] = None) -> str:
     """Creates testing files.
 
     Notes:
@@ -47,11 +52,9 @@ def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir:
                 tsntz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
                 tm = time.gmtime(
                     int(random.random() * 30000.0) - 15000)
-                tstz = time.strftime('%Y-%m-%dT%H:%M:%S', tm) + \
-                       ('-' if random.random() < 0.5 else '+') + \
-                       "{:02d}:{:02d}".format(
-                           int(random.random() * 12.0),
-                           int(random.random() * 60.0))
+                tstz = (time.strftime('%Y-%m-%dT%H:%M:%S', tm) +
+                        ('-' if random.random() < 0.5 else '+') +
+                        "{:02d}:{:02d}".format(int(random.random() * 12.0), int(random.random() * 60.0)))
                 pct = random.random() * 1000.0
                 ratio = "{:5.2f}".format(random.random() * 1000.0)
                 rec = "{:d},{:s},{:s},{:s},{:s},{:s},{:f},{:s}".format(

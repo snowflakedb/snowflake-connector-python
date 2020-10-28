@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
 from __future__ import division
@@ -147,9 +147,8 @@ class SnowflakeRemoteStorageUtil(object):
             if last_err:
                 raise last_err
             else:
-                raise Exception(
-                    "Unknown Error in uploading a file: %s",
-                    data_file)
+                msg = "Unknown Error in uploading a file: {}".format(data_file)
+                raise Exception(msg)
 
     @staticmethod
     def download_one_file(meta):
@@ -245,9 +244,8 @@ class SnowflakeRemoteStorageUtil(object):
             if last_err:
                 raise last_err
             else:
-                raise Exception(
-                    "Unknown Error in downloading a file: %s",
-                    full_dst_file_name)
+                msg = "Unknown Error in downloading a file: {}".format(full_dst_file_name)
+                raise Exception(msg)
 
     @staticmethod
     def upload_one_file_with_retry(meta):

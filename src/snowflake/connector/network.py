@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
+
 import collections
 import contextlib
 import gzip
 import itertools
 import json
 import logging
-import sys
 import time
 import traceback
 import uuid
@@ -637,7 +637,6 @@ class SnowflakeRestful(object):
             return {}
         except RetryRequest as e:
             if retry_ctx.cnt == TelemetryService.get_instance().num_of_retry_to_trigger_telemetry:
-                _, _, stack_trace = sys.exc_info()
                 TelemetryService.get_instance().log_http_request_error(
                     "HttpRequestRetry%dTimes" % retry_ctx.cnt,
                     full_url,
@@ -656,7 +655,6 @@ class SnowflakeRestful(object):
                 retry_ctx.timeout -= int(time.time() - start_request_thread)
                 if retry_ctx.timeout <= 0:
                     logger.error(cause, exc_info=True)
-                    _, _, stack_trace = sys.exc_info()
                     TelemetryService.get_instance().log_http_request_error(
                         "HttpRequestRetryTimeout",
                         full_url,
@@ -871,7 +869,6 @@ class SnowflakeRestful(object):
                 exc_info=True)
             raise RetryRequest(err)
         except Exception as err:
-            _, _, stack_trace = sys.exc_info()
             TelemetryService.get_instance().log_http_request_error(
                 "HttpException%s" % str(err),
                 full_url,

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
+
 import binascii
 import glob
 import mimetypes
@@ -14,6 +15,7 @@ import threading
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 from time import sleep, time
+from typing import IO, Optional, Union
 
 import botocore.exceptions
 
@@ -65,8 +67,8 @@ logger = getLogger(__name__)
 
 
 def _update_progress(
-        file_name, start_time, total_size, progress,
-        output_stream=sys.stdout, show_progress_bar=True):
+        file_name: str, start_time: float, total_size: float, progress: Union[float, int],
+        output_stream: Optional[IO] = sys.stdout, show_progress_bar: Optional[bool] = True) -> float:
     barLength = 10  # Modify this to change the length of the progress bar
     total_size /= MB
     status = ""
@@ -109,9 +111,9 @@ class SnowflakeProgressPercentage(object):
     """Built-in Progress bar for PUT commands."""
 
     def __init__(
-            self, filename, filesize,
-            output_stream=sys.stdout,
-            show_progress_bar=True):
+            self, filename: str, filesize: Union[int, float],
+            output_stream: Optional[IO] = sys.stdout,
+            show_progress_bar: Optional[bool] = True):
         last_pound_char = filename.rfind('#')
         if last_pound_char < 0:
             last_pound_char = len(filename)
@@ -124,21 +126,21 @@ class SnowflakeProgressPercentage(object):
         self._start_time = time()
         self._lock = threading.Lock()
 
-    def __call__(self, bytes_amount):
+    def __call__(self, bytes_amount: int):
         raise NotImplementedError
 
 
 class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
     def __init__(
-            self, filename, filesize,
-            output_stream=sys.stdout,
-            show_progress_bar=True):
+            self, filename: str, filesize: Union[int, float],
+            output_stream: Optional[IO] = sys.stdout,
+            show_progress_bar: Optional[bool] = True):
         super(SnowflakeS3ProgressPercentage, self).__init__(
             filename, filesize,
             output_stream=output_stream,
             show_progress_bar=show_progress_bar)
 
-    def __call__(self, bytes_amount):
+    def __call__(self, bytes_amount: int):
         # logger.debug("Bytes returned from callback %s", bytes_amount)
         with self._lock:
             if self._output_stream:
@@ -153,15 +155,15 @@ class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
 
 
 class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
-    def __init__(self, filename, filesize,
-                 output_stream=sys.stdout,
-                 show_progress_bar=True):
+    def __init__(self, filename: str, filesize: Union[int, float],
+            output_stream: Optional[IO] = sys.stdout,
+            show_progress_bar: Optional[bool] = True):
         super(SnowflakeAzureProgressPercentage, self).__init__(
             filename, filesize,
             output_stream=output_stream,
             show_progress_bar=show_progress_bar)
 
-    def __call__(self, current):
+    def __call__(self, current: int):
         with self._lock:
             if self._output_stream:
                 self._seen_so_far = current

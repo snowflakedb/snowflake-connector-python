@@ -9,6 +9,25 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.3.4(October 26,2020)
+
+   - Added an optional parameter to the write_pandas function to specify that identifiers should not be quoted before being sent to the server.
+   - The write_pandas function now honors default and auto-increment values for columns when inserting new rows.
+   - Updated the Python Connector OCSP error messages and accompanying telemetry Information.
+   - Enabled the runtime pyarrow version verification to fail gracefully. Fixed a bug with AWS glue environment.
+   - Upgraded the version of boto3 from 1.14.47 to 1.15.9.
+   - Upgraded the version of idna from 2.9 to 2.10.
+
+- v2.3.3(October 05,2020)
+
+   - Simplified the configuration files by consolidating test settings.
+   - In the Connection object, the execute_stream and execute_string methods now filter out empty lines from their inputs.
+
+- v2.3.2(September 14,2020)
+
+   - Fixed a bug where a file handler was not closed properly.
+   - Fixed various documentation typos.
+
 - v2.3.1(August 25,2020)
 
    - Fixed a bug where 2 constants were removed by mistake.

@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 #
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+#
+
+#
 # SSL wrap socket for PyOpenSSL.
 # Mostly copied from
 #
 # https://github.com/shazow/urllib3/blob/master/urllib3/contrib/pyopenssl.py
 #
 # and added OCSP validator on the top.
-#
+
 import logging
 import ssl
 import sys
@@ -26,15 +30,9 @@ from cryptography.hazmat.backends.openssl.x509 import _Certificate
 from urllib3.contrib.pyopenssl import PyOpenSSLContext
 
 from .constants import OCSPMode
-from .errorcode import ER_SERVER_CERTIFICATE_REVOKED
+from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .ssl_wrap_util import wait_for_read, wait_for_write
-
-try:  # Platform-specific: Python 2
-    from socket import _fileobject
-except ImportError:  # Platform-specific: Python 3
-    _fileobject = None
-    from .backport_makefile import backport_makefile
 
 FEATURE_OCSP_MODE = OCSPMode.FAIL_OPEN
 
@@ -293,15 +291,6 @@ class WrappedSocket(object):
             self._makefile_refs -= 1
 
 
-if _fileobject:  # Platform-specific: Python 2
-    def makefile(self, mode, bufsize=-1):
-        self._makefile_refs += 1
-        return _fileobject(self, mode, bufsize, close=True)
-else:  # Platform-specific: Python 3
-    makefile = backport_makefile
-
-WrappedSocket.makefile = makefile
-
 DEFAULT_SSL_CIPHER_LIST = ssl_.DEFAULT_CIPHERS
 if isinstance(DEFAULT_SSL_CIPHER_LIST, str):
     DEFAULT_SSL_CIPHER_LIST = DEFAULT_SSL_CIPHER_LIST.encode('utf-8')
@@ -404,7 +393,7 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
                     'The certificate is revoked or '
                     'could not be validated: hostname={}'.format(
                         server_hostname)),
-                errno=ER_SERVER_CERTIFICATE_REVOKED)
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED)
     else:
         log.info('THIS CONNECTION IS IN INSECURE '
                  'MODE. IT MEANS THE CERTIFICATE WILL BE '
@@ -432,15 +421,9 @@ def _openssl_connect(hostname, port=443, max_retry=20):
             client_ssl.set_tlsext_host_name(hostname.encode('utf-8'))
             client_ssl.do_handshake()
             return client_ssl
-        except Exception as ex:
-            if isinstance(ex, OpenSSL.SSL.SysCallError) or \
-                    ex.__class__.__name__ == 'TimeoutError':
-                err = ex
-                sleeping_time *= 2
-                if sleeping_time > 16:
-                    sleeping_time = 16
-                time.sleep(sleeping_time)
-            else:
-                raise ex
+        except (OpenSSL.SSL.SysCallError, ConnectionRefusedError, TimeoutError, OSError) as ex:
+            err = ex
+            sleeping_time = min(sleeping_time * 2, 16)
+            time.sleep(sleeping_time)
     if err:
         raise err
