@@ -24,8 +24,7 @@ docker build -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLIN
 
 user_id=$(id -u ${USER})
 docker run --network=host \
-    -e LANG=en_US.UTF-8 \
-    -e TERM=xterm \
+    -e TERM=vt102 \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
     -e LOCAL_USER_ID=${user_id} \
     -e AWS_ACCESS_KEY_ID \
