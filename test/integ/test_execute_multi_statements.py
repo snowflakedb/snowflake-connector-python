@@ -70,6 +70,7 @@ SELECT * FROM {tbl2} ORDER BY 1 DESC;
                 tbl2=db_parameters['name'] + '2'), return_cursors=False)
 
 
+@pytest.mark.skipolddriver
 def test_execute_string_dict_cursor(conn_cnx, db_parameters):
     with conn_cnx() as cnx:
         cnx.execute_string("""
@@ -214,6 +215,7 @@ def test_execute_stream_with_error(conn_cnx):
             next(gen)
 
 
+@pytest.mark.skipolddriver
 def test_execute_string_empty_lines(conn_cnx, db_parameters):
     """Tests whether execute_string can filter out empty lines."""
     with conn_cnx() as cnx:
