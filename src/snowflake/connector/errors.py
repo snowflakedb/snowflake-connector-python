@@ -6,7 +6,7 @@
 
 import logging
 from logging import getLogger
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 
 from snowflake.connector.constants import UTF8
 
@@ -66,9 +66,15 @@ class Error(BASE_EXCEPTION_CLASS):
         return self.__unicode__().encode(UTF8)
 
     @staticmethod
+    def send_exception_telemetry(connection: 'SnowflakeConnection',
+                                 error_class: 'Exception',
+                                 error_value: Dict[str, str]):
+        pass
+
+    @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
                              cursor: 'SnowflakeCursor',
-                             error_class,
+                             error_class: 'Exception',
                              error_value: Dict[str, str]):
         """Default error handler that raises an error.
 
@@ -89,7 +95,10 @@ class Error(BASE_EXCEPTION_CLASS):
             done_format_msg=error_value.get('done_format_msg'))
 
     @staticmethod
-    def errorhandler_wrapper(connection, cursor, error_class, error_value=None):
+    def errorhandler_wrapper(connection: 'SnowflakeConnection',
+                             cursor: 'SnowflakeCursor',
+                             error_class: 'Exception',
+                             error_value: Optional[Dict[str, str]] = None):
         """Error handler wrapper that calls the errorhandler method.
 
         Args:
@@ -121,9 +130,11 @@ class Error(BASE_EXCEPTION_CLASS):
             connection.messages.append((error_class, error_value))
         if cursor is not None:
             cursor.messages.append((error_class, error_value))
+            Error.send_exception_telemetry(cursor.connection, error_class, error_value)
             cursor.errorhandler(connection, cursor, error_class, error_value)
             return
         elif connection is not None:
+            Error.send_exception_telemetry(connection, error_class, error_value)
             connection.errorhandler(connection, cursor, error_class, error_value)
             return
 

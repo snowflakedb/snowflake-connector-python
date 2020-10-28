@@ -19,6 +19,7 @@ class TelemetryField(object):
     TIME_CONSUME_LAST_RESULT = "client_time_consume_last_result"
     TIME_DOWNLOADING_CHUNKS = "client_time_downloading_chunks"
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
+    SQL_EXCEPTION = "client_sql_exception"
 
 
 class TelemetryData(object):
