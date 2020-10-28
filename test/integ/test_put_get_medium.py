@@ -509,6 +509,7 @@ ratio number(6,2))
             run(cnx, "drop table if exists {name}")
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
 def test_put_collision(tmpdir, conn_cnx, db_parameters):

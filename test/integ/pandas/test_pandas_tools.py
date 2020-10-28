@@ -12,10 +12,16 @@ import mock
 import pytest
 
 from snowflake.connector import DictCursor
-from snowflake.connector.options import pandas
-from snowflake.connector.pandas_tools import write_pandas
 
 from ...lazy_var import LazyVar
+
+try:
+    from snowflake.connector.options import pandas  # NOQA
+    from snowflake.connector.pandas_tools import write_pandas  # NOQA
+except ImportError:
+    pandas = None
+    write_pandas = None
+
 
 MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated

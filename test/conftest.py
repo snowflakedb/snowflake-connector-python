@@ -21,6 +21,8 @@ def pytest_collection_modifyitems(items) -> None:
         relative_path = item_path.relative_to(top_test_dir)
         for part in relative_path.parts:
             item.add_marker(part)
+            if part in ('unit', 'pandas'):
+                item.add_marker('skipolddriver')
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -30,9 +32,16 @@ def filter_log() -> None:
     A workaround to use our custom Formatter in pytest based on the discussion at
     https://github.com/pytest-dev/pytest/issues/2987
     """
-    from snowflake.connector.secret_detector import SecretDetector
     import logging
     import pathlib
+    from snowflake.connector.secret_detector import SecretDetector
+
+    if not isinstance(SecretDetector, logging.Formatter):
+        # Override it if SecretDetector is not an instance of logging.Formatter
+        class SecretDetector(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                return super().format(record)
+
     log_dir = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER', str(pathlib.Path(__file__).parent.absolute()))
 
     _logger = getLogger('snowflake.connector')

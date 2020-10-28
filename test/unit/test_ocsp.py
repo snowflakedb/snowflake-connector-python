@@ -16,11 +16,17 @@ from os import environ, path
 import pytest
 
 from snowflake.connector import OperationalError
-from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED, ER_OCSP_RESPONSE_FETCH_FAILURE
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer, SnowflakeOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
+
+try:
+    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED, \
+        ER_OCSP_RESPONSE_FETCH_FAILURE  # NOQA
+except ImportError:
+    ER_OCSP_RESPONSE_CERT_STATUS_REVOKED = None
+    ER_OCSP_RESPONSE_FETCH_FAILURE = None
 
 for logger_name in ['test', 'snowflake.connector', 'botocore']:
     logger = logging.getLogger(logger_name)
@@ -74,7 +80,7 @@ def test_ocsp_wo_cache_server():
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
-        assert ocsp.validate(url, connection),\
+        assert ocsp.validate(url, connection), \
             'Failed to validate: {}'.format(url)
 
 
@@ -122,6 +128,8 @@ def test_ocsp_fail_open_w_single_endpoint():
         del environ['SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT']
 
 
+@pytest.mark.skipif(ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is None,
+                    reason="No ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is available.")
 def test_ocsp_fail_close_w_single_endpoint():
     SnowflakeOCSP.clear_cache()
 
