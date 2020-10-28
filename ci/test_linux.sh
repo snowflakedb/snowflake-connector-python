@@ -40,6 +40,6 @@ if [[ -z "$is_old_driver" ]]; then
     done
 else
     # Old Driver Test
-    echo "[Info] Testing with ${PYTHON_VERSION}"
+    echo "[Info] Running old connector tests"
     python3 -m tox -e olddriver
 fi
