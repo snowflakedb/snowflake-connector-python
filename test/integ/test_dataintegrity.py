@@ -17,6 +17,8 @@ import pytz
 
 from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFromTicks
 
+from ..randomize import random_string
+
 
 def table_exists(conn_cnx, name):
     with conn_cnx() as cnx:
@@ -145,9 +147,7 @@ def test_DATE(conn_cnx):
 def test_STRING(conn_cnx):
     def generator(row, col):
         import string
-        rstr = ''.join(
-            [random.choice(string.ascii_letters + string.digits) for n in
-             range(1024)])
+        rstr = random_string(1024, choices=string.ascii_letters + string.digits)
         return rstr
 
     check_data_integrity(conn_cnx, ('col2 STRING',), 'STRING', generator)
@@ -164,9 +164,7 @@ def test_TEXT(conn_cnx):
 def test_VARCHAR(conn_cnx):
     def generator(row, col):
         import string
-        rstr = ''.join(
-            [random.choice(string.ascii_letters + string.digits) for n in
-             range(50)])
+        rstr = random_string(50, choices=string.ascii_letters + string.digits)
         return rstr
 
     check_data_integrity(conn_cnx, ('col2 VARCHAR',), 'VARCHAR', generator)
