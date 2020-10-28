@@ -16,6 +16,8 @@ from snowflake.connector.gcs_util import SnowflakeGCSUtil
 
 from ..randomize import random_string
 
+pytestmark = pytest.mark.gcp
+
 
 def test_create_client(caplog):
     """Creates a GCSUtil with an access token."""
