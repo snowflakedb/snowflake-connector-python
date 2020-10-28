@@ -12,11 +12,15 @@ import requests
 from requests import Response
 
 from snowflake.connector.constants import ResultStatus
-from snowflake.connector.gcs_util import SnowflakeGCSUtil
 
 from ..randomize import random_string
 
 pytestmark = pytest.mark.gcp
+
+try:
+    from snowflake.connector.gcs_util import SnowflakeGCSUtil  # NOQA
+except ImportError:
+    SnowflakeGCSUtil = None
 
 
 def test_create_client(caplog):
