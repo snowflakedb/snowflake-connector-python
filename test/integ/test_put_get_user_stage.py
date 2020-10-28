@@ -20,7 +20,7 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, db_
     """[s3] Puts and Gets Small Data via User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
-    _put_get_user_stage(tmpdir, generate_k_lines_of_n_files, conn_cnx, db_parameters,
+    _put_get_user_stage(tmpdir, conn_cnx, db_parameters,
                         number_of_files=5, number_of_lines=10)
 
 
@@ -30,7 +30,7 @@ def test_put_get_large_data_via_user_stage(
     """[s3] Puts and Gets Large Data via User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
-    _put_get_user_stage(tmpdir, generate_k_lines_of_n_files, conn_cnx, db_parameters,
+    _put_get_user_stage(tmpdir, conn_cnx, db_parameters,
                         number_of_files=2,
                         number_of_lines=200000)
 

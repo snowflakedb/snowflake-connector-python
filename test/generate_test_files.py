@@ -15,7 +15,7 @@ from typing import Optional
 IS_WINDOWS = platform.system() == 'Windows'
 
 
-def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir: Optional[bool] = None) -> str:
+def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir: Optional[str] = None) -> str:
     """Creates testing files.
 
     Notes:
