@@ -539,6 +539,7 @@ def test_put_overwrite(tmpdir, db_parameters):
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
+@pytest.mark.skipolddriver
 def test_utf8_filename(tmpdir, db_parameters, is_public_test):
     if is_public_test:
         pytest.skip('account missing on public CI')
