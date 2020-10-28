@@ -11,4 +11,4 @@ Use it like a regular requirements file, with:
 
     .. code-block:: bash
 
-        python3.6 -m pip install -r requirements_36.txt
+        python3.6 -m pip install -r requirements_36.reqs
