@@ -26,8 +26,8 @@ logger = getLogger(__name__)
 class Error(BASE_EXCEPTION_CLASS):
     """Base Snowflake exception class."""
 
-    def __init__(self, connection, cursor, msg=None, errno=None, sqlstate=None, sfqid=None,
-                 done_format_msg=False):
+    def __init__(self, msg=None, errno=None, sqlstate=None, sfqid=None,
+                 done_format_msg=False, connection=None, cursor=None):
         self.msg = msg
         self.raw_msg = msg
         self.errno = errno or -1
@@ -134,13 +134,13 @@ class Error(BASE_EXCEPTION_CLASS):
             A Snowflake error.
         """
         raise error_class(
-            connection,
-            cursor,
             msg=error_value.get('msg'),
             errno=error_value.get('errno'),
             sqlstate=error_value.get('sqlstate'),
             sfqid=error_value.get('sfqid'),
-            done_format_msg=error_value.get('done_format_msg'))
+            done_format_msg=error_value.get('done_format_msg'),
+            connection=connection,
+            cursor=cursor)
 
     @staticmethod
     def errorhandler_wrapper(connection: 'SnowflakeConnection',
