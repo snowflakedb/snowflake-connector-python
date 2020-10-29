@@ -281,10 +281,60 @@ jobs:
           cloud_provider: ${{ matrix.cloud-provider }}
         shell: bash
 
+  test-fips:
+    name: Test FIPS ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: build-manylinux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+            - image_name: ubuntu-latest
+              download_name: linux
+        python-version: [3.6]
+        cloud-provider: [aws]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Download wheel(s)
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
+          path: dist
+      - name: Show wheels downloaded
+        run: ls -lh dist
+        shell: bash
+      - name: Remove manylinux1 wheel
+        run: |
+          rm dist/*manylinux1*.whl
+          ls -lh dist
+      - name: Run tests
+        run: ./ci/test_fips_docker.sh
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      - uses: actions/upload-artifact@v2
+        with:
+          name: coverage_${{ matrix.os.download_name }}-fips-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .coverage
+            coverage.xml
+
   combine-coverage:
     if: ${{ success() || failure() }}
     name: Combine coverage
-    needs: test
+    needs: [test, test-fips]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
