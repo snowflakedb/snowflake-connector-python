@@ -21,6 +21,16 @@ class TelemetryField(object):
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
     SQL_EXCEPTION = "client_sql_exception"
 
+    KEY_TYPE = "type"
+    KEY_SFQID = "QueryID"
+    KEY_SQLSTATE = "SQLState"
+    KEY_DRIVER_TYPE = "DriverType"
+    KEY_REASON = "reason"
+    KEY_ERROR_NUMBER = "ErrorNumber"
+    KEY_ERROR_MESSAGE = "ErrorMessage"
+    KEY_STACKTRACE = "Stacktrace"
+    KEY_EXCEPTION = "Exception"
+
 
 class TelemetryData(object):
     """An instance of telemetry data which can be sent to the server."""

@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING, Dict, Optional
 from snowflake.connector.constants import UTF8
 
 from .compat import BASE_EXCEPTION_CLASS
+from .description import CLIENT_NAME
+from .telemetry import TelemetryData, TelemetryField
+from .telemetry_oob import TelemetryService
+from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -22,7 +26,7 @@ logger = getLogger(__name__)
 class Error(BASE_EXCEPTION_CLASS):
     """Base Snowflake exception class."""
 
-    def __init__(self, msg=None, errno=None, sqlstate=None, sfqid=None,
+    def __init__(self, connection, cursor, msg=None, errno=None, sqlstate=None, sfqid=None,
                  done_format_msg=False):
         self.msg = msg
         self.raw_msg = msg
@@ -56,6 +60,18 @@ class Error(BASE_EXCEPTION_CLASS):
                     self.msg = '{errno:06d}: {msg}'.format(errno=self.errno,
                                                             msg=self.msg)
 
+        try:
+            telemetry_data = self.generate_telemetry_exception_data(msg)
+            if cursor is not None:
+                self.send_exception_telemetry(cursor.connection, telemetry_data)
+            elif connection is not None:
+                self.send_exception_telemetry(connection, telemetry_data)
+            else:
+                self.send_exception_telemetry(None, telemetry_data)
+        except Exception:
+            # Do nothing if sending telemetry fails
+            pass
+
     def __repr__(self):
         return self.__str__()
 
@@ -65,11 +81,41 @@ class Error(BASE_EXCEPTION_CLASS):
     def __bytes__(self):
         return self.__unicode__().encode(UTF8)
 
-    @staticmethod
-    def send_exception_telemetry(connection: 'SnowflakeConnection',
-                                 error_class: 'Exception',
-                                 error_value: Dict[str, str]):
-        pass
+    def generate_telemetry_exception_data(self: 'Error', msg: Optional[str] = None) -> Dict:
+        telemetry_data = {TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME}
+        if self.sfqid:
+            telemetry_data[TelemetryField.KEY_SFQID] = self.sfqid
+        if self.sqlstate:
+            telemetry_data[TelemetryField.KEY_SQLSTATE] = self.sqlstate
+        if msg:
+            telemetry_data[TelemetryField.KEY_REASON] = msg
+        if self.errno:
+            telemetry_data[TelemetryField.KEY_ERROR_NUMBER] = str(self.errno)
+        if self.msg:
+            telemetry_data[TelemetryField.KEY_ERROR_MESSAGE] = self.msg
+
+        telemetry_data[TelemetryField.KEY_STACKTRACE] = self.__traceback__
+
+        return telemetry_data
+
+    def send_exception_telemetry(self: 'Error',
+                                 connection: Optional['SnowflakeConnection'],
+                                 telemetry_data: Dict[str, str]):
+        if connection is not None and connection.telemetry_enabled and not connection._telemetry.is_closed:
+            # Send with in-band telemetry
+            telemetry_data[TelemetryField.KEY_TYPE] = TelemetryField.SQL_EXCEPTION
+            telemetry_data[TelemetryField.KEY_EXCEPTION] = self.__class__.__name__
+            ts = get_time_millis()
+            try:
+                connection._log_telemetry(TelemetryData(telemetry_data, ts))
+            except AttributeError:
+                logger.warning(
+                    "Cursor failed to log to telemetry.",
+                    exc_info=True)
+        else:
+            # Send with out-of-band telemetry
+            telemetry_oob = TelemetryService.get_instance()
+            telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
 
     @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
@@ -88,6 +134,8 @@ class Error(BASE_EXCEPTION_CLASS):
             A Snowflake error.
         """
         raise error_class(
+            connection,
+            cursor,
             msg=error_value.get('msg'),
             errno=error_value.get('errno'),
             sqlstate=error_value.get('sqlstate'),

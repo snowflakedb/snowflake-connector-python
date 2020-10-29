@@ -382,6 +382,22 @@ class TelemetryService(object):
             # Do nothing on exception, just log
             logger.debug("Failed to log HTTP request error", exc_info=True)
 
+    def log_general_exception(self, event_name, telemetry_data, tags=None, urgent=False):
+        if tags is None:
+            tags = dict()
+        try:
+            if self.enabled:
+                log_event = TelemetryLogEvent(
+                    name=event_name,
+                    tags=tags,
+                    value=telemetry_data,
+                    urgent=urgent
+                )
+                self.add(log_event)
+        except Exception:
+            # Do nothing on exception, just log
+            logger.debug("Failed to log general exception", exc_info=True)
+
     def _upload_payload(self, payload):
         """Uploads the JSON-formatted string payload to the telemetry backend.
 
