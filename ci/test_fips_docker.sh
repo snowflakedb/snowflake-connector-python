@@ -24,6 +24,7 @@ docker run --network=host \
     -e SF_USE_OPENSSL_ONLY=True \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
     -e LOCAL_USER_ID=$user_id \
+    -e CRYPTOGRAPHY_ALLOW_OPENSSL_102=1 \
     -e AWS_ACCESS_KEY_ID \
     -e AWS_SECRET_ACCESS_KEY \
     -e SF_REGRESS_LOGS \
