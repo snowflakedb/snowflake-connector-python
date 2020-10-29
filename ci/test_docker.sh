@@ -33,6 +33,7 @@ docker run --network=host \
     -e SF_PROJECT_ROOT \
     -e cloud_provider \
     -e JENKINS_HOME \
+    -e is_old_driver \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
     /home/user/snowflake-connector-python/ci/test_linux.sh ${PYTHON_ENV}
