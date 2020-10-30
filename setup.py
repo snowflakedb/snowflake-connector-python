@@ -202,7 +202,6 @@ setup(
         'cffi>=1.9,<1.15',
         'cryptography>=2.5.0,<4.0.0',
         'pyjwt<2.0.0',
-        'idna<2.11',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
     ],
