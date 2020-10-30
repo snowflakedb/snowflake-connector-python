@@ -24,11 +24,13 @@ docker run --network=host \
     -e SF_USE_OPENSSL_ONLY=True \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
     -e LOCAL_USER_ID=$user_id \
+    -e CRYPTOGRAPHY_ALLOW_OPENSSL_102=1 \
     -e AWS_ACCESS_KEY_ID \
     -e AWS_SECRET_ACCESS_KEY \
     -e SF_REGRESS_LOGS \
     -e SF_PROJECT_ROOT \
     -e cloud_provider \
+    -e PYTEST_ADDOPTS \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
     /home/user/snowflake-connector-python/ci/test_fips.sh $1
