@@ -5,13 +5,17 @@
 #
 
 import errno
+import logging
 import os
 from collections import defaultdict
 from os import path
 
 import botocore
+import botocore.exceptions
+import mock
 import OpenSSL
-from boto3.exceptions import S3UploadFailedError
+import pytest
+from boto3.exceptions import RetriesExceededError, S3UploadFailedError
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
@@ -211,3 +215,167 @@ def test_upload_file_with_s3_upload_failed_error():
     akey = SnowflakeRemoteStorageUtil.upload_one_file(upload_meta)
     assert akey is None
     assert upload_meta['result_status'] == ResultStatus.RENEW_TOKEN
+
+
+def test_get_header_expiry_error(caplog):
+    """Tests whether token expiry error is handled as expected when getting header."""
+    meta = {}
+    mock_resource = MagicMock()
+    mock_resource.load.side_effect = botocore.exceptions.ClientError(
+        {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
+        SnowflakeS3Util.get_file_header(meta, 'file.txt')
+    assert ('snowflake.connector.s3_util', logging.DEBUG, 'AWS Token expired. Renew and retry') in caplog.record_tuples
+    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+
+
+def test_get_header_unexpected_error(caplog):
+    """Tests whether unexpected errors are handled as expected when getting header."""
+    meta = {}
+    mock_resource = MagicMock()
+    mock_resource.load.side_effect = botocore.exceptions.ClientError(
+        {'Error': {'Code': '???', 'Message': 'Just testing'}}, 'Testing')
+    mock_resource.bucket_name = "bucket"
+    mock_resource.key = "key"
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
+        assert SnowflakeS3Util.get_file_header(meta, 'file.txt') is None
+    assert ('snowflake.connector.s3_util',
+            logging.DEBUG,
+            'Failed to get metadata for bucket, key: An error occurred (???) when calling '
+            'the Testing operation: Just testing') in caplog.record_tuples
+    assert meta['result_status'] == ResultStatus.ERROR
+
+
+def test_upload_expiry_error(caplog):
+    """Tests whether token expiry error is handled as expected when uploading."""
+    mock_resource, mock_object = MagicMock(), MagicMock()
+    mock_resource.Object.return_value = mock_object
+    mock_object.upload_file.side_effect = botocore.exceptions.ClientError(
+        {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
+    meta = {'client': mock_resource,
+            'sha256_digest': 'asd',
+            'stage_info': {'location': 'loc'},
+            'dst_file_name': 'f',
+            'put_callback': None}
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util.extract_bucket_name_and_path'):
+        assert SnowflakeS3Util.upload_file('f', meta, {}, 4) is None
+    assert ('snowflake.connector.s3_util', logging.DEBUG, 'AWS Token expired. Renew and retry') in caplog.record_tuples
+    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+
+
+def test_upload_unknown_error(caplog):
+    """Tests whether unknown errors are handled as expected when uploading."""
+    mock_resource, mock_object = MagicMock(), MagicMock()
+    mock_resource.Object.return_value = mock_object
+    mock_object.bucket_name = 'bucket'
+    mock_object.key = 'key'
+    mock_object.upload_file.side_effect = botocore.exceptions.ClientError(
+        {'Error': {'Code': 'unknown', 'Message': 'Just testing'}}, 'Testing')
+    meta = {'client': mock_resource,
+            'sha256_digest': 'asd',
+            'stage_info': {'location': 'loc'},
+            'dst_file_name': 'f',
+            'put_callback': None}
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util.extract_bucket_name_and_path'):
+        with pytest.raises(botocore.exceptions.ClientError,
+                           match=r'An error occurred \(unknown\) when calling the Testing operation: Just testing'):
+            SnowflakeS3Util.upload_file('f', meta, {}, 4)
+
+
+def test_upload_failed_error(caplog):
+    """Tests whether token expiry error is handled as expected when uploading."""
+    mock_resource, mock_object = MagicMock(), MagicMock()
+    mock_resource.Object.return_value = mock_object
+    mock_object.upload_file.side_effect = S3UploadFailedError('ExpiredToken')
+    meta = {'client': mock_resource,
+            'sha256_digest': 'asd',
+            'stage_info': {'location': 'loc'},
+            'dst_file_name': 'f',
+            'put_callback': None}
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util.extract_bucket_name_and_path'):
+        assert SnowflakeS3Util.upload_file('f', meta, {}, 4) is None
+    assert ('snowflake.connector.s3_util',
+            logging.DEBUG,
+            'Failed to upload a file: f, err: ExpiredToken. Renewing AWS Token and Retrying') in caplog.record_tuples
+    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+
+
+def test_download_expiry_error(caplog):
+    """Tests whether token expiry error is handled as expected when downloading."""
+    mock_resource = MagicMock()
+    mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
+        {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
+    meta = {'client': mock_resource,
+            'sha256_digest': 'asd',
+            'stage_info': {'location': 'loc'},
+            'src_file_name': 'f',
+            'src_file_size': 99,
+            'get_callback_output_stream': None,
+            'show_progress_bar': False,
+            'get_callback': None}
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
+        SnowflakeS3Util._native_download_file(meta, 'f', 4)
+    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+
+
+def test_download_unknown_error(caplog):
+    """Tests whether an unknown error is handled as expected when downloading."""
+    mock_resource = MagicMock()
+    mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
+        {'Error': {'Code': 'unknown', 'Message': 'Just testing'}}, 'Testing')
+    meta = {'client': mock_resource,
+            'sha256_digest': 'asd',
+            'stage_info': {'location': 'loc'},
+            'src_file_name': 'f',
+            'src_file_size': 99,
+            'get_callback_output_stream': None,
+            'show_progress_bar': False,
+            'get_callback': None}
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
+        with pytest.raises(botocore.exceptions.ClientError,
+                           match=r'An error occurred \(unknown\) when calling the Testing operation: Just testing'):
+            SnowflakeS3Util._native_download_file(meta, 'f', 4)
+    assert ('snowflake.connector.s3_util',
+            logging.DEBUG,
+            'Failed to download a file: f, err: An error occurred (unknown) when '
+            'calling the Testing operation: Just testing') in caplog.record_tuples
+
+
+def test_download_retry_exceeded_error(caplog):
+    """Tests whether a retry exceeded error is handled as expected when downloading."""
+    mock_resource = MagicMock()
+    mock_resource.download_file.side_effect = RetriesExceededError(None)
+    meta = {'client': mock_resource,
+            'sha256_digest': 'asd',
+            'stage_info': {'location': 'loc'},
+            'src_file_name': 'f',
+            'src_file_size': 99,
+            'get_callback_output_stream': None,
+            'show_progress_bar': False,
+            'get_callback': None}
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
+        SnowflakeS3Util._native_download_file(meta, 'f', 4)
+    assert meta['last_error'] is mock_resource.download_file.side_effect
+    assert meta['result_status'] == ResultStatus.NEED_RETRY
+
+
+@pytest.mark.parametrize('error_no, result_status', [
+    (ERRORNO_WSAECONNABORTED, ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY),
+    (100, ResultStatus.NEED_RETRY),
+])
+def test_download_syscall_error(caplog, error_no, result_status):
+    """Tests whether a syscall error is handled as expected when downloading."""
+    mock_resource = MagicMock()
+    mock_resource.download_file.side_effect = OpenSSL.SSL.SysCallError(error_no)
+    meta = {'client': mock_resource,
+            'sha256_digest': 'asd',
+            'stage_info': {'location': 'loc'},
+            'src_file_name': 'f',
+            'src_file_size': 99,
+            'get_callback_output_stream': None,
+            'show_progress_bar': False,
+            'get_callback': None}
+    with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
+        SnowflakeS3Util._native_download_file(meta, 'f', 4)
+    assert meta['last_error'] is mock_resource.download_file.side_effect
+    assert meta['result_status'] == result_status
