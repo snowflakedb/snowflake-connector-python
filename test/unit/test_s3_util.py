@@ -15,7 +15,7 @@ import botocore.exceptions
 import mock
 import OpenSSL
 import pytest
-from boto3.exceptions import RetriesExceededError, S3UploadFailedError
+from boto3.exceptions import Boto3Error, RetriesExceededError, S3UploadFailedError
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
@@ -344,7 +344,7 @@ def test_download_unknown_error(caplog):
 def test_download_retry_exceeded_error(caplog):
     """Tests whether a retry exceeded error is handled as expected when downloading."""
     mock_resource = MagicMock()
-    mock_resource.download_file.side_effect = RetriesExceededError(None)
+    mock_resource.download_file.side_effect = RetriesExceededError(Boto3Error())
     meta = {'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
