@@ -243,7 +243,6 @@ setup(
             'pytest-timeout',
             'coverage',
             'pexpect',
-            'mock',
             'pytz',
             'pytzdata',
             'Cython',
