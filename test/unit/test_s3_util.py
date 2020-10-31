@@ -9,8 +9,8 @@ import logging
 import os
 from collections import defaultdict
 from os import path
-from unittest.mock import MagicMock, Mock, PropertyMock
 from unittest import mock
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 import botocore
 import botocore.exceptions
