@@ -6,10 +6,10 @@
 
 import warnings
 from traceback import format_exc
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from mock import patch
 from pytest import fail
 
 from snowflake.connector import ProgrammingError, converter

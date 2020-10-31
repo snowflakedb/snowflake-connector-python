@@ -7,9 +7,9 @@
 import codecs
 import os
 from io import BytesIO, StringIO
+from unittest.mock import patch
 
 import pytest
-from mock import patch
 
 from snowflake.connector import DictCursor, ProgrammingError
 

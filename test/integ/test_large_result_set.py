@@ -3,9 +3,9 @@
 #
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
+from unittest.mock import Mock
 
 import pytest
-from mock import Mock
 
 from snowflake.connector.telemetry import TelemetryField
 

@@ -5,9 +5,9 @@
 #
 
 from os import chmod, path
+from unittest.mock import MagicMock
 
 import pytest
-from mock import MagicMock
 
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.errors import Error

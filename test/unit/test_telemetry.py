@@ -4,7 +4,7 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
-from mock import Mock
+from unittest.mock import Mock
 
 import snowflake.connector.telemetry
 

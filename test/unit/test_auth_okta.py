@@ -4,7 +4,7 @@
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
 
-from mock import MagicMock, Mock, PropertyMock
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.constants import OCSPMode

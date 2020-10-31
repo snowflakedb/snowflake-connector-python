@@ -9,9 +9,9 @@ import pathlib
 from getpass import getuser
 from logging import getLogger
 from os import path
+from unittest.mock import patch
 
 import pytest
-from mock import patch
 
 import snowflake.connector
 

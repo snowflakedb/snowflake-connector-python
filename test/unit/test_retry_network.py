@@ -11,10 +11,10 @@ import tempfile
 import time
 from logging import getLogger
 from os import path
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 import OpenSSL.SSL
 import pytest
-from mock import MagicMock, Mock, PropertyMock
 from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
 from requests.packages.urllib3.exceptions import ProtocolError, ReadTimeoutError
 
