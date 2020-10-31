@@ -7,9 +7,9 @@
 import os
 import queue
 import threading
+from unittest import mock
 import warnings
 
-import mock
 import pytest
 
 import snowflake.connector

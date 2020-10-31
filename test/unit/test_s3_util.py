@@ -10,7 +10,7 @@ import os
 from collections import defaultdict
 from os import path
 from unittest.mock import MagicMock, Mock, PropertyMock
-import unittest.mock
+from unittest import mock
 
 import botocore
 import botocore.exceptions

@@ -3,8 +3,8 @@
 #
 
 from copy import deepcopy
+from unittest import mock
 
-import mock
 import pytest
 from pkg_resources import working_set
 

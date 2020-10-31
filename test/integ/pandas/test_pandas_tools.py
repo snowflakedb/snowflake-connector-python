@@ -7,8 +7,8 @@
 import math
 from datetime import datetime
 from typing import Callable, Dict, Generator
+from unittest import mock
 
-import mock
 import pytest
 
 from snowflake.connector import DictCursor

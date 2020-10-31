@@ -5,8 +5,7 @@
 #
 
 import logging
-
-import mock
+from unittest import mock
 
 from snowflake.connector.secret_detector import SecretDetector
 

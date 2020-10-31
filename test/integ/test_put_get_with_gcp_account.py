@@ -11,8 +11,8 @@ import sys
 import time
 from filecmp import cmp
 from logging import getLogger
+from unittest import mock
 
-import mock
 import pytest
 import requests
 
