@@ -9,14 +9,14 @@ import logging
 import os
 from collections import defaultdict
 from os import path
+from unittest.mock import MagicMock, Mock, PropertyMock
+import unittest.mock
 
 import botocore
 import botocore.exceptions
-import mock
 import OpenSSL
 import pytest
 from boto3.exceptions import Boto3Error, RetriesExceededError, S3UploadFailedError
-from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from snowflake.connector.remote_storage_util import DEFAULT_MAX_RETRY, SnowflakeRemoteStorageUtil
