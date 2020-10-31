@@ -33,7 +33,7 @@ from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
 
 MYPY = False
-if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
+if MYPY:  # pragma: no cover
     from .connection import SnowflakeConnection
 
 logger = getLogger(__name__)
@@ -47,7 +47,7 @@ except ImportError:
 try:
     from .arrow_result import ArrowResult
     CAN_USE_ARROW_RESULT = True
-except ImportError as e:
+except ImportError as e:  # pragma: no cover
     logger.debug("Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s", e)
     CAN_USE_ARROW_RESULT = False
 
@@ -70,7 +70,7 @@ DESC_TABLE_RE = re.compile(r'desc(?:ribe)?\s+([\w_]+)\s*;?\s*$',
 LOG_MAX_QUERY_LENGTH = 80
 
 
-def exit_handler(*_):
+def exit_handler(*_):  # pragma: no cover
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
     print("\nForce exit")
     logger.info("Force exit")
@@ -162,7 +162,7 @@ class SnowflakeCursor(object):
 
         self.reset()
 
-    def __del__(self):
+    def __del__(self):  # pragma: no cover
         try:
             self.close()
         except BASE_EXCEPTION_CLASS as e:
@@ -341,7 +341,7 @@ class SnowflakeCursor(object):
 
         original_sigint = signal.getsignal(signal.SIGINT)
 
-        def interrupt_handler(*_):
+        def interrupt_handler(*_):  # pragma: no cover
             try:
                 signal.signal(signal.SIGINT, exit_handler)
             except (ValueError, TypeError):

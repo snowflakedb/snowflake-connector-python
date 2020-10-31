@@ -14,8 +14,10 @@ import pytest
 import pytz
 
 import snowflake.connector
-from snowflake.connector import constants, errorcode, errors
+from snowflake.connector import ProgrammingError, constants, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
+
+from ..randomize import random_string
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -815,3 +817,49 @@ def test_empty_execution(conn):
             assert cur._result is None
             with pytest.raises(Exception):
                 cur.fetchall()
+
+
+def test_values_set(conn):
+    """Checks whether a bunch of properties start as Nones, but get set to something else when a query was executed."""
+    properties = [
+        'timestamp_output_format',
+        'timestamp_ltz_output_format',
+        'timestamp_tz_output_format',
+        'timestamp_ntz_output_format',
+        'date_output_format',
+        'timezone',
+        'time_output_format',
+        'binary_output_format',
+    ]
+    with conn() as cnx:
+        with cnx.cursor() as cur:
+            for property in properties:
+                assert getattr(cur, property) is None
+            assert cur.execute('select 1').fetchone() == (1,)
+            # The default values might change in future, so let's just check that they aren't None anymore
+            for property in properties:
+                assert getattr(cur, property) is not None
+
+
+def test_execute_helper_params_error(conn_testaccount):
+    """Tests whether calling _execute_helper with a non-dict statement params is handled correctly."""
+    with conn_testaccount.cursor() as cur:
+        with pytest.raises(ProgrammingError,
+                           match=r'The data type of statement params is invalid. It must be dict.$'):
+            cur._execute_helper('select %()s', statement_params='1')
+
+
+def test_desc_rewrite(conn, caplog):
+    """Tests whether describe queries are rewritten as expected and this action is logged."""
+    with conn() as cnx:
+        with cnx.cursor() as cur:
+            table_name = random_string(5, 'test_desc_rewrite_')
+            try:
+                cur.execute('create or replace table {} (a int)'.format(table_name))
+                cur.execute('desc {}'.format(table_name))
+                assert ('snowflake.connector.cursor', 20,
+                        'query was rewritten: org=desc {table_name}, new=describe table {table_name}'.format(
+                            table_name=table_name
+                        )) in caplog.record_tuples
+            finally:
+                cur.execute('drop table {}'.format(table_name))
