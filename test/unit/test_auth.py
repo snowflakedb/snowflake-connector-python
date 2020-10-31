@@ -6,7 +6,7 @@
 
 import time
 
-from mock import MagicMock, Mock, PropertyMock
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.auth_default import AuthByDefault
