@@ -819,6 +819,16 @@ def test_empty_execution(conn):
                 cur.fetchall()
 
 
+def test_rownumber(conn):
+    """Checks whether rownumber is returned as expected."""
+    with conn() as cnx:
+        with cnx.cursor() as cur:
+            assert cur.execute('select * from values (1), (2)').fetchone() == (1,)
+            assert cur.rownumber == 0
+            assert cur.fetchone() == (2,)
+            assert cur.rownumber == 1
+
+
 def test_values_set(conn):
     """Checks whether a bunch of properties start as Nones, but get set to something else when a query was executed."""
     properties = [
