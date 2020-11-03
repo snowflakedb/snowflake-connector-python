@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.3.5(November 03,2020)
+
+   - Updated the dependency on the cryptography package from version 2.9.2 to 3.2.1.
+
 - v2.3.4(October 26,2020)
 
    - Added an optional parameter to the write_pandas function to specify that identifiers should not be quoted before being sent to the server.
