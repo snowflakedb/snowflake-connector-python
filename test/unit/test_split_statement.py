@@ -8,9 +8,18 @@ from io import StringIO
 
 import pytest
 
-from snowflake.connector.util_text import SQLDelimiter, split_statements
+try:
+    from snowflake.connector.util_text import split_statements
+except ImportError:
+    split_statements = None
+
+try:
+    from snowflake.connector.util_text import SQLDelimiter
+except ImportError:
+    SQLDelimiter = None
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_simple_sql():
     with StringIO("show tables") as f:
         itr = split_statements(f)
@@ -64,6 +73,7 @@ def test_simple_sql():
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_multiple_line_sql():
     s = "select /* test */ 1; -- test comment\nselect 23;"
 
@@ -163,6 +173,7 @@ select 23; /* test comment 2
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_quotes():
     s = "select 'hello', 1; -- test comment\nselect 23,'hello"
 
@@ -234,6 +245,7 @@ select "23,'','hello" """
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_quotes_in_comments():
     s = "select 'hello'; -- test comment 'hello2' in comment\n/* comment 'quote'*/ select true\n"
     with StringIO(s) as f:
@@ -246,6 +258,7 @@ def test_quotes_in_comments():
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_backslash():
     """Tests backslash in a literal.
 
@@ -270,6 +283,7 @@ def test_backslash():
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_file_with_slash_star():
     s = "put file:///tmp/* @%tmp;\nls @%tmp;"
 
@@ -350,6 +364,7 @@ list @~;
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_sql_with_commands():
     with StringIO("""create or replace view aaa
     as select * from
@@ -373,6 +388,7 @@ show tables""") as f:
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_sql_example1():
     with StringIO("""
 create or replace table a(aa int, bb string);
@@ -412,6 +428,7 @@ GET @%bcd file:///tmp/aaa.txt;
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_empty_statement():
     with StringIO("""select 1;
 -- tail comment1
@@ -425,6 +442,7 @@ def test_empty_statement():
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_multiple_comments():
     s = """--- test comment 1
 select /*another test comments*/ 1; -- test comment 2
@@ -439,6 +457,7 @@ select 2;
         assert next(itr) == ("-- test comment 3\nselect 2;", False)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_comments_with_semicolon():
     s = """--test ;
 select 1;
@@ -453,6 +472,7 @@ select 1;
             next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_comment_in_values():
     """SNOW-51297: SnowSQL -o remove_comments=True breaks the query."""
     # no space before a comment
@@ -493,6 +513,7 @@ VALUES ( /*TIMEOUT*/ 10);"""
         )
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_multiline_double_dollar_experssion_with_removed_comments():
     s = """CREATE FUNCTION mean(a FLOAT, b FLOAT)
   RETURNS FLOAT LANGUAGE JAVASCRIPT AS $$
@@ -507,6 +528,7 @@ def test_multiline_double_dollar_experssion_with_removed_comments():
             "  var c = a + b;\n  return(c / 2);\n  $$;", False)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_backslash_quote_escape():
     s = """
 SELECT 1 'Snowflake\\'s 1';
@@ -518,6 +540,7 @@ SELECT 2 'Snowflake\\'s 2'
         assert next(itr) == ("SELECT 2 'Snowflake\\'s 2'", False)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_sql_delimiter():
     """Copy of test_sql_with_commands but with an unconventional sql_delimiter.
 
@@ -551,6 +574,7 @@ def test_sql_delimiter():
         next(itr)
 
 
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
 def test_sql_splitting_tokenization():
     """This tests that sql_delimiter is token sensitive."""
     raw_sql = "select 123 as asd"
@@ -562,6 +586,8 @@ def test_sql_splitting_tokenization():
             assert next(s)[0] == raw_sql
 
 
+@pytest.mark.skipif(split_statements is None or SQLDelimiter is None,
+                    reason="No split_statements or SQLDelimiter is available")
 @pytest.mark.parametrize('sql, delimiter, split_stmnts', [
     ("select 1 as a__b __ select 1", '__', ['select 1 as a__b ;', 'select 1']),
     ("select 1 as a__b/", '/', ['select 1 as a__b;']),

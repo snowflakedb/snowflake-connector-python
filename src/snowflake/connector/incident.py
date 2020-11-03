@@ -124,7 +124,7 @@ class IncidentAPI(object):
             Any error that comes from not being to reach back-end services to report incident to.
         """
         if incident is None:
-            cls, exc, trace = exc_info()
+            cls, exc, _ = exc_info()
             if cls in CLS_BLACKLIST:
                 logger.warning("Ignoring blacklisted exception type: {type}".format(type=cls))
                 return

@@ -24,7 +24,11 @@ import sys
 import pytest
 
 import snowflake.connector
-from snowflake.connector.auth import delete_temporary_credential
+
+try:
+    from snowflake.connector.auth import delete_temporary_credential
+except ImportError:
+    delete_temporary_credential = None
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -67,7 +71,7 @@ ALTER SYSTEM SET
 
 
 @pytest.mark.skipif(
-    not (CONNECTION_PARAMETERS_SSO and CONNECTION_PARAMETERS_ADMIN),
+    not (CONNECTION_PARAMETERS_SSO and CONNECTION_PARAMETERS_ADMIN and delete_temporary_credential),
     reason="SSO and ADMIN connection parameters must be provided."
 )
 def test_connect_externalbrowser(token_validity_test_values):

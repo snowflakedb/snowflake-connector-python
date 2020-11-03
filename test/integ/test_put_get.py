@@ -6,8 +6,6 @@
 
 import os
 import pathlib
-import random
-import string
 from getpass import getuser
 from logging import getLogger
 from os import path
@@ -16,6 +14,8 @@ import pytest
 from mock import patch
 
 import snowflake.connector
+
+from ..randomize import random_string
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -539,13 +539,14 @@ def test_put_overwrite(tmpdir, db_parameters):
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
+@pytest.mark.skipolddriver
 def test_utf8_filename(tmpdir, db_parameters, is_public_test):
     if is_public_test:
         pytest.skip('account missing on public CI')
     test_file = tmpdir.join("utf卡豆.csv")
     with open(str(test_file), 'w') as f:
         f.write("1,2,3\n")
-    stage_name = ''.join([random.choice(string.ascii_lowercase) for i in range(5)])
+    stage_name = random_string(5, 'test_utf8_filename_')
     with snowflake.connector.connect(
         user=db_parameters['user'],
         password=db_parameters['password'],

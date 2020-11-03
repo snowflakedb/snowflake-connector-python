@@ -5,11 +5,18 @@
 from copy import deepcopy
 
 import mock
+import pytest
 from pkg_resources import working_set
 
-from snowflake.connector.options import MissingPandas, _import_or_missing_pandas_option  # NOQA
+try:
+    from snowflake.connector.options import MissingPandas, _import_or_missing_pandas_option  # NOQA
+except ImportError:
+    MissingPandas = None
+    _import_or_missing_pandas_option = None
 
 
+@pytest.mark.skipif(MissingPandas is None or _import_or_missing_pandas_option is None,
+                    reason="No snowflake.connector.options is available. It can be the case if running old driver tests")
 def test_pandas_option_reporting(caplog):
     """Tests for the weird case where someone can import pyarrow, but setuptools doesn't know about it.
 

@@ -7,8 +7,6 @@
 import datetime
 import gzip
 import os
-import random
-import string
 import sys
 import time
 from logging import getLogger
@@ -21,6 +19,7 @@ from snowflake.connector.cursor import DictCursor
 from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage, SnowflakeS3ProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
+from ..randomize import random_string
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -509,6 +508,7 @@ ratio number(6,2))
             run(cnx, "drop table if exists {name}")
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
 def test_put_collision(tmpdir, conn_cnx, db_parameters):
@@ -585,10 +585,7 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     f = gzip.open(fname, 'wb')
     for i in range(n):
         logger.debug("adding a value in {}".format(i))
-        f.write('{{"k":"{}"}}'.format(
-            ''.join(
-                random.choice(string.ascii_uppercase + string.digits) for _ in
-                range(value_size))))
+        f.write('{{"k":"{}"}}'.format(random_string(value_size)))
     f.close()
     return fname
 

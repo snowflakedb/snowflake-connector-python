@@ -43,7 +43,7 @@ pandas_requirements = [
     # Must be kept in sync with pyproject.toml
     'pyarrow>=0.17.0,<0.18.0',
     'pandas==0.24.2;python_version=="3.5"',
-    'pandas>=1.0.0,<1.1.0;python_version>"3.5"',
+    'pandas>=1.0.0,<1.2.0;python_version>"3.5"',
 ]
 
 try:
@@ -202,7 +202,6 @@ setup(
         'cffi>=1.9,<1.15',
         'cryptography>=2.5.0,<4.0.0',
         'pyjwt<2.0.0',
-        'idna<2.11',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
     ],
@@ -238,7 +237,7 @@ setup(
         ],
         "pandas": pandas_requirements,
         "development": [
-            'pytest<6.1.0',
+            'pytest<6.2.0',
             'pytest-cov',
             'pytest-rerunfailures',
             'pytest-timeout',
