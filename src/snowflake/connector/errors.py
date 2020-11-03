@@ -178,11 +178,9 @@ class Error(BASE_EXCEPTION_CLASS):
             connection.messages.append((error_class, error_value))
         if cursor is not None:
             cursor.messages.append((error_class, error_value))
-            Error.send_exception_telemetry(cursor.connection, error_class, error_value)
             cursor.errorhandler(connection, cursor, error_class, error_value)
             return
         elif connection is not None:
-            Error.send_exception_telemetry(connection, error_class, error_value)
             connection.errorhandler(connection, cursor, error_class, error_value)
             return
 
