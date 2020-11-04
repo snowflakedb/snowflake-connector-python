@@ -60,17 +60,7 @@ class Error(BASE_EXCEPTION_CLASS):
                     self.msg = '{errno:06d}: {msg}'.format(errno=self.errno,
                                                             msg=self.msg)
 
-        try:
-            telemetry_data = self.generate_telemetry_exception_data(msg)
-            if cursor is not None:
-                self.send_exception_telemetry(cursor.connection, telemetry_data)
-            elif connection is not None:
-                self.send_exception_telemetry(connection, telemetry_data)
-            else:
-                self.send_exception_telemetry(None, telemetry_data)
-        except Exception:
-            # Do nothing if sending telemetry fails
-            pass
+        self.exception_telemetry(msg, cursor, connection)
 
     def __repr__(self):
         return self.__str__()
@@ -116,6 +106,19 @@ class Error(BASE_EXCEPTION_CLASS):
             # Send with out-of-band telemetry
             telemetry_oob = TelemetryService.get_instance()
             telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
+
+    def exception_telemetry(self, msg, cursor, connection):
+        try:
+            telemetry_data = self.generate_telemetry_exception_data(msg)
+            if cursor is not None:
+                self.send_exception_telemetry(cursor.connection, telemetry_data)
+            elif connection is not None:
+                self.send_exception_telemetry(connection, telemetry_data)
+            else:
+                self.send_exception_telemetry(None, telemetry_data)
+        except Exception:
+            # Do nothing if sending telemetry fails
+            pass
 
     @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
@@ -243,7 +246,10 @@ class NotSupportedError(DatabaseError):
 
 class RevocationCheckError(OperationalError):
     """Exception for errors during certificate revocation check."""
-    pass
+
+    # We already send OCSP exception events
+    def exception_telemetry(self, msg, cursor, connection):
+        pass
 
 
 # internal errors

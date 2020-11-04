@@ -154,7 +154,7 @@ class TelemetryService(object):
         self.num_of_retry_to_trigger_telemetry = DEFAULT_NUM_OF_RETRY_TO_TRIGGER_TELEMETRY
         self.context = dict()
         self.connection_params = dict()
-        self.deployment = None
+        self.deployment = TelemetryServerDeployments.PROD
 
     def __del__(self):
         """Tries to flush all events left in the queue. Ignores all exceptions."""
