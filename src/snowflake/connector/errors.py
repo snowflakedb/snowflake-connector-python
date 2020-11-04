@@ -105,7 +105,7 @@ class Error(BASE_EXCEPTION_CLASS):
             try:
                 connection._log_telemetry(TelemetryData(telemetry_data, ts))
             except AttributeError:
-                logger.warning(
+                logger.info(
                     "Cursor failed to log to telemetry.",
                     exc_info=True)
         else:
@@ -128,7 +128,7 @@ class Error(BASE_EXCEPTION_CLASS):
                 self.send_exception_telemetry(None, telemetry_data)
         except Exception:
             # Do nothing but log if sending telemetry fails
-            logger.warning("Sending exception telemetry failed")
+            logger.info("Sending exception telemetry failed")
 
     @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
