@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Dict, Optional
 from snowflake.connector.constants import UTF8
 
 from .compat import BASE_EXCEPTION_CLASS
-from .description import CLIENT_NAME
+from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
+from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
 from .time_util import get_time_millis
@@ -72,25 +73,30 @@ class Error(BASE_EXCEPTION_CLASS):
         return self.__unicode__().encode(UTF8)
 
     def generate_telemetry_exception_data(self: 'Error', msg: Optional[str] = None) -> Dict:
-        telemetry_data = {TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME}
+        """Generate the data to send through telemetry."""
+        telemetry_data = {
+            TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME,
+            TelemetryField.KEY_DRIVER_VERSION: SNOWFLAKE_CONNECTOR_VERSION
+        }
         if self.sfqid:
             telemetry_data[TelemetryField.KEY_SFQID] = self.sfqid
         if self.sqlstate:
             telemetry_data[TelemetryField.KEY_SQLSTATE] = self.sqlstate
         if msg:
-            telemetry_data[TelemetryField.KEY_REASON] = msg
+            telemetry_data[TelemetryField.KEY_REASON] = SecretDetector.mask_secrets(msg)
         if self.errno:
             telemetry_data[TelemetryField.KEY_ERROR_NUMBER] = str(self.errno)
         if self.msg:
-            telemetry_data[TelemetryField.KEY_ERROR_MESSAGE] = self.msg
+            telemetry_data[TelemetryField.KEY_ERROR_MESSAGE] = SecretDetector.mask_secrets(self.msg)
 
-        telemetry_data[TelemetryField.KEY_STACKTRACE] = self.__traceback__
+        telemetry_data[TelemetryField.KEY_STACKTRACE] = SecretDetector.mask_secrets(self.__traceback__)
 
         return telemetry_data
 
     def send_exception_telemetry(self: 'Error',
                                  connection: Optional['SnowflakeConnection'],
                                  telemetry_data: Dict[str, str]):
+        """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
         if connection is not None and connection.telemetry_enabled and not connection._telemetry.is_closed:
             # Send with in-band telemetry
             telemetry_data[TelemetryField.KEY_TYPE] = TelemetryField.SQL_EXCEPTION
@@ -107,7 +113,11 @@ class Error(BASE_EXCEPTION_CLASS):
             telemetry_oob = TelemetryService.get_instance()
             telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
 
-    def exception_telemetry(self, msg, cursor, connection):
+    def exception_telemetry(self: 'Error',
+                            msg: str,
+                            cursor: 'SnowflakeCursor',
+                            connection: 'SnowflakeConnection'):
+        """Main method to generate and send telemetry data for exceptions."""
         try:
             telemetry_data = self.generate_telemetry_exception_data(msg)
             if cursor is not None:
@@ -117,8 +127,8 @@ class Error(BASE_EXCEPTION_CLASS):
             else:
                 self.send_exception_telemetry(None, telemetry_data)
         except Exception:
-            # Do nothing if sending telemetry fails
-            pass
+            # Do nothing but log if sending telemetry fails
+            logger.warning("Sending exception telemetry failed")
 
     @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
