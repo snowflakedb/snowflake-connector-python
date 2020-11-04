@@ -11,12 +11,15 @@ import sys
 import time
 from logging import getLogger
 
+import botocore
+import mock
 import pytest
 import pytz
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
 from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage, SnowflakeS3ProgressPercentage
+from snowflake.connector.s3_util import EXPIRED_TOKEN, SnowflakeS3Util
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..randomize import random_string
@@ -687,6 +690,72 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
         try:
             run(cnx, "PUT 'file://{files}' @~/{dir}")
             # run(cnx, "PUT 'file://{files}' @~/{dir}")  # retry
+            all_recs = []
+            for _ in range(100):
+                all_recs = run(cnx, "LIST @~/{dir}")
+                if len(all_recs) == number_of_files:
+                    break
+                time.sleep(1)
+            else:
+                pytest.fail(
+                    'cannot list all files. Potentially '
+                    'PUT command missed uploading Files: {}'.format(all_recs))
+            all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
+            assert len(all_recs) == number_of_files
+            assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])
+        finally:
+            run(cnx, "RM @~/{dir}")
+
+
+@pytest.mark.aws
+@pytest.mark.flaky(reruns=3)
+def test_put_get_with_mock(tmpdir, test_files, conn_cnx, db_parameters):
+    """[s3] Puts and Gets Large files."""
+    number_of_files = 3
+    number_of_lines = 200000
+    tmp_dir = test_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+
+    files = os.path.join(tmp_dir, 'file*')
+    output_dir = os.path.join(tmp_dir, 'output_dir')
+    os.makedirs(output_dir)
+
+    class cb(object):
+        def __init__(self, filename, filesize, **_):
+            pass
+
+        def __call__(self, bytes_amount):
+            pass
+
+    def run(cnx, sql):
+        return cnx.cursor().execute(
+            sql.format(
+                files=files.replace('\\', '\\\\'),
+                dir=db_parameters['name'],
+                output_dir=output_dir.replace('\\', '\\\\')),
+            _put_callback_output_stream=sys.stdout,
+            _get_callback_output_stream=sys.stdout,
+            _get_callback=cb,
+            _put_callback=cb).fetchall()
+
+    def mocked_put_request(*args, **kwargs):
+        if mocked_put_request.counter == 0:
+            mocked_put_request.counter += 1
+            exc = botocore.exceptions.ClientError
+            exc.response['Error']['Code'] = EXPIRED_TOKEN
+            raise exc
+        else:
+            return SnowflakeS3Util._get_s3_object(*args, **kwargs)
+
+    mocked_put_request.counter = 0
+
+    with conn_cnx(
+            user=db_parameters['user'],
+            account=db_parameters['account'],
+            password=db_parameters['password']) as cnx:
+        try:
+            with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', side_effect=mocked_put_request):
+                run(cnx, "PUT 'file://{files}' @~/{dir}")
+                # run(cnx, "PUT 'file://{files}' @~/{dir}")  # retry
             all_recs = []
             for _ in range(100):
                 all_recs = run(cnx, "LIST @~/{dir}")
