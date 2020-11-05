@@ -383,7 +383,7 @@ class TelemetryService(object):
             # Do nothing on exception, just log
             logger.debug("Failed to log HTTP request error", exc_info=True)
 
-    def log_general_exception(self: 'TelemetryService',
+    def log_general_exception(self,
                               event_name: str,
                               telemetry_data: dict,
                               tags: Optional[dict] = None,

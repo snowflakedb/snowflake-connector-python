@@ -6,6 +6,7 @@
 
 import logging
 from logging import getLogger
+from traceback import format_tb
 from typing import TYPE_CHECKING, Dict, Optional
 
 from snowflake.connector.constants import UTF8
@@ -72,7 +73,7 @@ class Error(BASE_EXCEPTION_CLASS):
     def __bytes__(self):
         return self.__unicode__().encode(UTF8)
 
-    def generate_telemetry_exception_data(self: 'Error', msg: Optional[str] = None) -> Dict:
+    def generate_telemetry_exception_data(self, msg: Optional[str] = None) -> Dict[str, str]:
         """Generate the data to send through telemetry."""
         telemetry_data = {
             TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME,
@@ -89,11 +90,11 @@ class Error(BASE_EXCEPTION_CLASS):
         if self.msg:
             telemetry_data[TelemetryField.KEY_ERROR_MESSAGE] = SecretDetector.mask_secrets(self.msg)
 
-        telemetry_data[TelemetryField.KEY_STACKTRACE] = SecretDetector.mask_secrets(self.__traceback__)
+        telemetry_data[TelemetryField.KEY_STACKTRACE] = SecretDetector.mask_secrets(format_tb(self.__traceback__))
 
         return telemetry_data
 
-    def send_exception_telemetry(self: 'Error',
+    def send_exception_telemetry(self,
                                  connection: Optional['SnowflakeConnection'],
                                  telemetry_data: Dict[str, str]):
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
@@ -105,7 +106,7 @@ class Error(BASE_EXCEPTION_CLASS):
             try:
                 connection._log_telemetry(TelemetryData(telemetry_data, ts))
             except AttributeError:
-                logger.info(
+                logger.debug(
                     "Cursor failed to log to telemetry.",
                     exc_info=True)
         else:
@@ -113,10 +114,10 @@ class Error(BASE_EXCEPTION_CLASS):
             telemetry_oob = TelemetryService.get_instance()
             telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
 
-    def exception_telemetry(self: 'Error',
+    def exception_telemetry(self,
                             msg: str,
-                            cursor: 'SnowflakeCursor',
-                            connection: 'SnowflakeConnection'):
+                            cursor: Optional['SnowflakeCursor'],
+                            connection: Optional['SnowflakeConnection']):
         """Main method to generate and send telemetry data for exceptions."""
         try:
             telemetry_data = self.generate_telemetry_exception_data(msg)
@@ -128,12 +129,12 @@ class Error(BASE_EXCEPTION_CLASS):
                 self.send_exception_telemetry(None, telemetry_data)
         except Exception:
             # Do nothing but log if sending telemetry fails
-            logger.info("Sending exception telemetry failed")
+            logger.debug("Sending exception telemetry failed")
 
     @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
                              cursor: 'SnowflakeCursor',
-                             error_class: 'Exception',
+                             error_class: Exception,
                              error_value: Dict[str, str]):
         """Default error handler that raises an error.
 
@@ -158,7 +159,7 @@ class Error(BASE_EXCEPTION_CLASS):
     @staticmethod
     def errorhandler_wrapper(connection: 'SnowflakeConnection',
                              cursor: 'SnowflakeCursor',
-                             error_class: 'Exception',
+                             error_class: Exception,
                              error_value: Optional[Dict[str, str]] = None):
         """Error handler wrapper that calls the errorhandler method.
 
