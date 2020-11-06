@@ -925,6 +925,7 @@ def test_execute_helper_cannot_use_arrow_exception(conn_cnx, caplog):
                     })
 
 
+@pytest.mark.skipolddriver
 def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     """Tests check_can_use_arrow_resultset has no effect when we can use arrow."""
     with conn_cnx() as cnx:
