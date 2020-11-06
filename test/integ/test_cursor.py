@@ -6,16 +6,28 @@
 
 import decimal
 import json
+import logging
 import os
 import time
 from datetime import datetime
 
+import mock
 import pytest
 import pytz
 
 import snowflake.connector
-from snowflake.connector import ProgrammingError, constants, errorcode, errors
+from snowflake.connector import InterfaceError, NotSupportedError, ProgrammingError, constants, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
+from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
+from snowflake.connector.errorcode import (
+    ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
+    ER_INVALID_VALUE,
+    ER_NO_ARROW_RESULT,
+    ER_NO_PYARROW,
+    ER_NO_PYARROW_SNOWSQL,
+    ER_NOT_POSITIVE_SIZE,
+)
+from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
 from ..randomize import random_string
 
@@ -873,3 +885,174 @@ def test_desc_rewrite(conn, caplog):
                         )) in caplog.record_tuples
             finally:
                 cur.execute('drop table {}'.format(table_name))
+
+
+@pytest.mark.parametrize('result_format', [False, None, 'json'])
+def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
+    """Tests whether cannot use arrow is handled correctly inside of _execute_helper."""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            with mock.patch('snowflake.connector.cursor.CAN_USE_ARROW_RESULT', False):
+                if result_format is False:
+                    result_format = None
+                else:
+                    result_format = {
+                        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+                    }
+                cur.execute("select 1", _statement_params=result_format)
+                assert ('snowflake.connector.cursor',
+                        logging.DEBUG,
+                        "Cannot use arrow result format, fallback to json format") in caplog.record_tuples
+                assert cur.fetchone() == (1,)
+
+
+def test_execute_helper_cannot_use_arrow_exception(conn_cnx, caplog):
+    """Like test_execute_helper_cannot_use_arrow but when we are trying to force arrow an Exception should be raised."""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            with mock.patch('snowflake.connector.cursor.CAN_USE_ARROW_RESULT', False):
+                with pytest.raises(ProgrammingError,
+                                   match="The result set in Apache Arrow format is not supported for the platform."):
+                    cur.execute("select 1", _statement_params={
+                            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: 'arrow'
+                    })
+
+
+def test_check_can_use_arrow_resultset(conn_cnx, caplog):
+    """Tests check_can_use_arrow_resultset has no effect when we can use arrow."""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            with mock.patch('snowflake.connector.cursor.CAN_USE_ARROW_RESULT', True):
+                cur.check_can_use_arrow_resultset()
+    assert 'Arrow' not in caplog.text
+
+
+@pytest.mark.parametrize('snowsql', [True, False])
+def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
+    """Tests check_can_use_arrow_resultset expected outcomes."""
+    config = {}
+    if snowsql:
+        config['application'] = 'SnowSQL'
+    with conn_cnx(**config) as cnx:
+        with cnx.cursor() as cur:
+            with mock.patch('snowflake.connector.cursor.CAN_USE_ARROW_RESULT', False):
+                with pytest.raises(
+                        ProgrammingError,
+                        match="Currently SnowSQL doesn't support the result set in Apache Arrow format." if snowsql else
+                        "The result set in Apache Arrow format is not supported for the platform.") as pe:
+                    cur.check_can_use_arrow_resultset()
+                    assert pe.errno == (ER_NO_PYARROW_SNOWSQL if snowsql else ER_NO_ARROW_RESULT)
+
+
+def test_check_can_use_pandas(conn_cnx):
+    """Tests check_can_use_arrow_resultset has no effect when we can import pandas."""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            with mock.patch('snowflake.connector.cursor.pyarrow', 'Something other than None'):
+                cur.check_can_use_pandas()
+
+
+def test_check_cannot_use_pandas(conn_cnx):
+    """Tests check_can_use_arrow_resultset has expected outcomes."""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            with mock.patch('snowflake.connector.cursor.pyarrow', None):
+                with pytest.raises(ProgrammingError,
+                                   match=r"Optional dependency: 'pyarrow' is not installed, please see the "
+                                         "following link for install instructions: https:.*") as pe:
+                    cur.check_can_use_pandas()
+                    assert pe.errno == ER_NO_PYARROW
+
+
+def test_not_supported_pandas(conn_cnx):
+    """Check that fetch_pandas functions return expected error when arrow results are not available."""
+    result_format = {
+        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: 'json'
+    }
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select 1", _statement_params=result_format)
+            with mock.patch('snowflake.connector.cursor.pyarrow', 'Something other than None'):
+                with pytest.raises(NotSupportedError):
+                    cur.fetch_pandas_all()
+                with pytest.raises(NotSupportedError):
+                    list(cur.fetch_pandas_batches())
+
+
+@pytest.mark.timeout(30)
+def test_query_cancellation(conn_cnx):
+    """Tests whether query_cancellation works."""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute('select max(seq8()) from table(generator(timeLimit=>30));', _no_results=True)
+            sf_qid = cur.sfqid
+            cur.abort_query(sf_qid)
+
+
+def test_executemany_error(conn_cnx):
+    """Tests calling executemany without many things."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            with pytest.raises(InterfaceError,
+                               match="No parameters are specified for the command: select 1") as ie:
+                cur.executemany('select 1', [])
+                assert ie.errno == ER_INVALID_VALUE
+
+
+def test_executemany_insert_rewrite(conn_cnx):
+    """Tests calling executemany with a non rewritable pyformat insert query."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            with pytest.raises(InterfaceError,
+                               match="Failed to rewrite multi-row insert") as ie:
+                cur.executemany('insert into numbers (select 1)', [1, 2])
+                assert ie.errno == ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT
+
+
+def test_executemany_bulk_insert_size_mismatch(conn_cnx):
+    """Tests bulk insert error with variable length of arguments."""
+    with conn_cnx(paramstyle='qmark') as con:
+        with con.cursor() as cur:
+            with pytest.raises(InterfaceError,
+                               match="Bulk data size don't match. expected: 1, got: 2") as ie:
+                cur.executemany('insert into numbers values (?,?)', [[1], [1, 2]])
+                assert ie.errno == ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT
+
+
+def test_fetchmany_size_error(conn_cnx):
+    """Tests retrieving a negative number of results."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute('select 1')
+            with pytest.raises(ProgrammingError,
+                               match="The number of rows is not zero or positive number: -1") as ie:
+                cur.fetchmany(-1)
+                assert ie.errno == ER_NOT_POSITIVE_SIZE
+
+
+def test_nextset(conn_cnx, caplog):
+    """Tests no op function nextset."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            assert cur.nextset() is None
+    assert ('snowflake.connector.cursor', logging.DEBUG, 'nop') in caplog.record_tuples
+
+
+def test_scroll(conn_cnx):
+    """Tests if scroll returns a NotSupported exception."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            with pytest.raises(NotSupportedError, match='scroll is not supported.') as nse:
+                cur.scroll(2)
+                assert nse.errno == SQLSTATE_FEATURE_NOT_SUPPORTED
+
+
+def test__log_telemetry_job_data(conn_cnx, caplog):
+    """Tests whether we handle missing connection object correctly while logging a telemetry event."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            with mock.patch.object(cur, '_connection', None):
+                cur._log_telemetry_job_data('test', True)
+    assert ('snowflake.connector.cursor',
+            logging.WARNING,
+            "Cursor failed to log to telemetry. Connection object may be None.") in caplog.record_tuples
