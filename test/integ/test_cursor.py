@@ -18,22 +18,23 @@ import pytz
 import snowflake.connector
 from snowflake.connector import InterfaceError, NotSupportedError, ProgrammingError, constants, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
-from snowflake.connector.errorcode import (
-    ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
-    ER_INVALID_VALUE,
-    ER_NO_ARROW_RESULT,
-    ER_NO_PYARROW,
-    ER_NO_PYARROW_SNOWSQL,
-    ER_NOT_POSITIVE_SIZE,
-)
+from snowflake.connector.errorcode import ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT, ER_INVALID_VALUE, ER_NOT_POSITIVE_SIZE
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
 from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
+    from snowflake.connector.errorcode import (
+        ER_NO_ARROW_RESULT,
+        ER_NO_PYARROW,
+        ER_NO_PYARROW_SNOWSQL,
+    )
 except ImportError:
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
+    ER_NO_ARROW_RESULT = None
+    ER_NO_PYARROW = None
+    ER_NO_PYARROW_SNOWSQL = None
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -933,6 +934,7 @@ def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     assert 'Arrow' not in caplog.text
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize('snowsql', [True, False])
 def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
     """Tests check_can_use_arrow_resultset expected outcomes."""
@@ -950,6 +952,7 @@ def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
                     assert pe.errno == (ER_NO_PYARROW_SNOWSQL if snowsql else ER_NO_ARROW_RESULT)
 
 
+@pytest.mark.skipolddriver
 def test_check_can_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has no effect when we can import pandas."""
     with conn_cnx() as cnx:
@@ -958,6 +961,7 @@ def test_check_can_use_pandas(conn_cnx):
                 cur.check_can_use_pandas()
 
 
+@pytest.mark.skipolddriver
 def test_check_cannot_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has expected outcomes."""
     with conn_cnx() as cnx:
