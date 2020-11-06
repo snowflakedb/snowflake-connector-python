@@ -18,7 +18,6 @@ import pytz
 import snowflake.connector
 from snowflake.connector import InterfaceError, NotSupportedError, ProgrammingError, constants, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
-from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
@@ -30,6 +29,11 @@ from snowflake.connector.errorcode import (
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
 from ..randomize import random_string
+
+try:
+    from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
+except ImportError:
+    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -887,6 +891,7 @@ def test_desc_rewrite(conn, caplog):
                 cur.execute('drop table {}'.format(table_name))
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize('result_format', [False, None, 'json'])
 def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
     """Tests whether cannot use arrow is handled correctly inside of _execute_helper."""
@@ -906,6 +911,7 @@ def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
                 assert cur.fetchone() == (1,)
 
 
+@pytest.mark.skipolddriver
 def test_execute_helper_cannot_use_arrow_exception(conn_cnx, caplog):
     """Like test_execute_helper_cannot_use_arrow but when we are trying to force arrow an Exception should be raised."""
     with conn_cnx() as cnx:
@@ -964,6 +970,7 @@ def test_check_cannot_use_pandas(conn_cnx):
                     assert pe.errno == ER_NO_PYARROW
 
 
+@pytest.mark.skipolddriver
 def test_not_supported_pandas(conn_cnx):
     """Check that fetch_pandas functions return expected error when arrow results are not available."""
     result_format = {
