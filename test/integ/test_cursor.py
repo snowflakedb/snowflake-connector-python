@@ -991,7 +991,6 @@ def test_not_supported_pandas(conn_cnx):
                     list(cur.fetch_pandas_batches())
 
 
-@pytest.mark.timeout(30)
 def test_query_cancellation(conn_cnx):
     """Tests whether query_cancellation works."""
     with conn_cnx() as cnx:
