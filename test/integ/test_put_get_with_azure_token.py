@@ -14,7 +14,7 @@ from logging import getLogger
 import pytest
 
 from snowflake.connector.constants import UTF8
-from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage
+from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage, SnowflakeProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..randomize import random_string
@@ -187,7 +187,7 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
     os.makedirs(output_dir)
     folder_name = random_string(5, 'test_put_get_large_files_azure_')
 
-    class cb(object):
+    class cb(SnowflakeProgressPercentage):
         def __init__(self, filename, filesize, **_):
             pass
 

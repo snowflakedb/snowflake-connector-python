@@ -221,7 +221,7 @@ class SnowflakeConnection(object):
         self.telemetry_enabled = False
         self.incident = IncidentAPI(self._rest)
 
-    def __del__(self):
+    def __del__(self):  # pragma: no cover
         try:
             self.close(retry=False)
         except Exception:
@@ -466,8 +466,6 @@ class SnowflakeConnection(object):
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
                 logger.debug("Autocommit feature is not enabled for this "
                              "connection. Ignored")
-            else:
-                raise e
 
     def commit(self):
         """Commits the current transaction."""
@@ -667,7 +665,7 @@ class SnowflakeConnection(object):
         if self._numpy:
             try:
                 import numpy  # noqa: F401
-            except ModuleNotFoundError:
+            except ModuleNotFoundError:  # pragma: no cover
                 Error.errorhandler_wrapper(
                     self, None, ProgrammingError,
                     {
@@ -889,7 +887,6 @@ class SnowflakeConnection(object):
             Error.errorhandler_wrapper(self, cursor,
                                        ProgrammingError,
                                        errorvalue)
-            return None
         for idx, v in enumerate(params):
             if isinstance(v, tuple):
                 if len(v) != 2:
@@ -903,7 +900,6 @@ class SnowflakeConnection(object):
                             'errno': ER_FAILED_PROCESSING_PYFORMAT,
                         }
                     )
-                    return None
                 processed_params[str(idx + 1)] = {
                     'type': v[0],
                     'value': self.converter.to_snowflake_bindings(
@@ -924,7 +920,6 @@ class SnowflakeConnection(object):
                             'errno': ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
                         }
                     )
-                    return None
                 if isinstance(v, list):
                     vv = [
                         self.converter.to_snowflake_bindings(
@@ -942,7 +937,7 @@ class SnowflakeConnection(object):
 
     def _process_params(self,
                         params: Union[Dict, List, Tuple, None],
-                        cursor: 'SnowflakeCursor' = None) -> Tuple:
+                        cursor: 'SnowflakeCursor' = None) -> Union[Tuple, Dict]:
         if params is None:
             return {}
         if isinstance(params, dict):
@@ -987,7 +982,7 @@ class SnowflakeConnection(object):
             return res
         except Exception as e:
             errorvalue = {
-                'msg': "Failed processing pyformat-parameters; {}".format(
+                'msg': "Failed processing pyformat-parameters: {}".format(
                     e),
                 'errno': ER_FAILED_PROCESSING_PYFORMAT}
             Error.errorhandler_wrapper(
