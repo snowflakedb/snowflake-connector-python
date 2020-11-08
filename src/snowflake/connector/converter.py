@@ -606,7 +606,7 @@ class SnowflakeConverter(object):
         return res
 
     @staticmethod
-    def quote(value):
+    def quote(value) -> str:
         if isinstance(value, list):
             return ','.join(value)
         if value is None:

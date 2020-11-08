@@ -107,7 +107,7 @@ def _update_progress(
     return progress == 1.0
 
 
-class SnowflakeProgressPercentage(object):
+class SnowflakeProgressPercentage():
     """Built-in Progress bar for PUT commands."""
 
     def __init__(

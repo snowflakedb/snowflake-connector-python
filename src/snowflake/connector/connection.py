@@ -15,7 +15,7 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
-from typing import Callable, Generator, Iterable
+from typing import Callable, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
 from . import errors, proxy
 from .auth import Auth
@@ -769,10 +769,13 @@ class SnowflakeConnection(object):
             )
             self._use_openssl_only = (os.environ['SF_USE_OPENSSL_ONLY'] == 'True')
 
-    def cmd_query(self, sql, sequence_counter, request_id,
-                  binding_params=None,
+    def cmd_query(self,
+                  sql: str,
+                  sequence_counter: int,
+                  request_id: uuid.UUID,
+                  binding_params: Union[None, Tuple, Dict[str, Dict[str, str]]] = None,
                   is_file_transfer: bool = False,
-                  statement_params=None,
+                  statement_params: Optional[Dict[str, str]] = None,
                   is_internal: bool = False,
                   _no_results: bool = False,
                   _update_current_object: bool = True):
@@ -869,7 +872,9 @@ class SnowflakeConnection(object):
             session_parameters=self._session_parameters,
         )
 
-    def _process_params_qmarks(self, params, cursor=None):
+    def _process_params_qmarks(self,
+                               params: Union[List, Tuple, None],
+                               cursor: 'SnowflakeCursor' = None) -> Dict[str, Dict[str, str]]:
         if not params:
             return None
         processed_params = {}
@@ -934,7 +939,9 @@ class SnowflakeConnection(object):
                 logger.debug("idx: %s, type: %s", k, v.get('type'))
         return processed_params
 
-    def _process_params(self, params, cursor=None):
+    def _process_params(self,
+                        params: Union[Dict, List, Tuple, None],
+                        cursor: 'SnowflakeCursor' = None) -> Tuple:
         if params is None:
             return {}
         if isinstance(params, dict):
@@ -960,7 +967,10 @@ class SnowflakeConnection(object):
                                        ProgrammingError,
                                        errorvalue)
 
-    def __process_params_dict(self, params, cursor=None):
+    def __process_params_dict(self,
+                              params: Union[Dict, List, Tuple, None],
+                              cursor: 'SnowflakeCursor' = None) -> Dict:
+        # TODO this function could be reworked
         try:
             to_snowflake = self.converter.to_snowflake
             escape = self.converter.escape
