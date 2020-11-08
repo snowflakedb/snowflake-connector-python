@@ -260,6 +260,7 @@ class SnowflakeConnection(object):
 
     @property
     def region(self):
+        warnings.warn("Region has been deprecated and will be removed in the near future", PendingDeprecationWarning)
         return self._region
 
     @property
