@@ -799,6 +799,7 @@ def test_invalid_connection_parameters_only_warns(db_parameters):
             conn.close()
 
 
+@pytest.mark.skipolddriver
 def test_region_deprecation(conn_cnx):
     """Tests whether region raises a deprecation warning."""
     with conn_cnx() as conn:
@@ -882,6 +883,7 @@ def test_empty_response(conn_cnx, resp):
             assert conn.cmd_query('select 1', 0, uuid4()) == {'data': {}}
 
 
+@pytest.mark.skipolddriver
 def test_authenticate_error(conn_cnx, caplog):
     """Test Reauthenticate error handling while authenticating."""
     mock_auth = mock.MagicMock()
@@ -911,6 +913,7 @@ def test_process_qmark_params_error(conn_cnx):
         assert pe.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
 
 
+@pytest.mark.skipolddriver
 def test_process_param_dict_error(conn_cnx):
     """Tests whether exceptions in __process_params_dict are handled correctly."""
     with conn_cnx() as conn:
