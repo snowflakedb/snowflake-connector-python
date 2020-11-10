@@ -30,6 +30,7 @@ public:
 
 private:
   py::UniqueRef m_pyLogger;
+  const char *const m_name;
   static constexpr int CRITICAL = 50;
   static constexpr int FATAL = CRITICAL;
   static constexpr int ERROR = 40;
@@ -39,6 +40,8 @@ private:
   static constexpr int DEBUG = 10;
   static constexpr int NOTSET = 0;
   static constexpr int LINE_NUM = 0;
+
+  void setupPyLogger();
 };
 
 }  // namespace sf
