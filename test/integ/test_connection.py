@@ -3,11 +3,12 @@
 #
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
-
+import logging
 import os
 import queue
 import threading
 import warnings
+from uuid import uuid4
 
 import mock
 import pytest
@@ -17,8 +18,16 @@ from snowflake.connector import DatabaseError, OperationalError, ProgrammingErro
 from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.description import CLIENT_NAME
-from snowflake.connector.errors import ForbiddenError
-from snowflake.connector.network import APPLICATION_SNOWSQL
+from snowflake.connector.errorcode import (
+    ER_CONNECTION_IS_CLOSED,
+    ER_FAILED_PROCESSING_PYFORMAT,
+    ER_INVALID_VALUE,
+    ER_NO_ACCOUNT_NAME,
+    ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
+)
+from snowflake.connector.errors import Error, ForbiddenError
+from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
+from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
 try:
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -30,6 +39,7 @@ def test_basic(conn_testaccount):
     """Basic Connection test."""
     assert conn_testaccount, 'invalid cnx'
     # Test default values
+    assert conn_testaccount.session_id
 
 
 def test_connection_without_schema(db_parameters):
@@ -787,3 +797,128 @@ def test_invalid_connection_parameters_only_warns(db_parameters):
             assert len(w) == 0
         finally:
             conn.close()
+
+
+@pytest.mark.skipolddriver
+def test_region_deprecation(conn_cnx):
+    """Tests whether region raises a deprecation warning."""
+    with conn_cnx() as conn:
+        with warnings.catch_warnings(record=True) as w:
+            conn.region
+        assert len(w) == 1
+        assert issubclass(w[0].category, PendingDeprecationWarning)
+        assert "Region has been deprecated" in str(w[0].message)
+
+
+def test_invalid_errorhander_error(conn_cnx):
+    """Tests if no errorhandler cannot be set."""
+    with conn_cnx() as conn:
+        with pytest.raises(ProgrammingError, match="None errorhandler is specified"):
+            conn.errorhandler = None
+        original_handler = conn.errorhandler
+        conn.errorhandler = original_handler
+        assert conn.errorhandler is original_handler
+
+
+def test_disable_request_pooling_setter(conn_cnx):
+    """Tests whether request pooling can be set successfully."""
+    with conn_cnx() as conn:
+        original_value = conn.disable_request_pooling
+        conn.disable_request_pooling = not original_value
+        assert conn.disable_request_pooling == (not original_value)
+        conn.disable_request_pooling = original_value
+        assert conn.disable_request_pooling == original_value
+
+
+def test_autocommit_closed_already(conn_cnx):
+    """Test if setting autocommit on an already closed connection raised right error."""
+    with conn_cnx() as conn:
+        pass
+    with pytest.raises(DatabaseError, match=r"Connection is closed") as dbe:
+        conn.autocommit(True)
+        assert dbe.errno == ER_CONNECTION_IS_CLOSED
+
+
+def test_autocommit_invalid_type(conn_cnx):
+    """Tests if setting autocommit on an already closed connection raised right error."""
+    with conn_cnx() as conn:
+        with pytest.raises(ProgrammingError, match=r"Invalid parameter: True") as dbe:
+            conn.autocommit('True')
+            assert dbe.errno == ER_INVALID_VALUE
+
+
+def test_autocommit_unsupported(conn_cnx, caplog):
+    """Tests if server-side error is handled correctly when setting autocommit."""
+    with conn_cnx() as conn:
+        with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute',
+                        side_effect=Error("Test error", sqlstate=SQLSTATE_FEATURE_NOT_SUPPORTED)):
+            conn.autocommit(True)
+        assert ('snowflake.connector.connection',
+                logging.DEBUG,
+                "Autocommit feature is not enabled for this connection. Ignored") in caplog.record_tuples
+
+
+def test_sequence_counter(conn_cnx):
+    """Tests whether setting sequence counter and increasing it works as expected."""
+    with conn_cnx(sequence_counter=4) as conn:
+        assert conn.sequence_counter == 4
+        with conn.cursor() as cur:
+            assert cur.execute('select 1 ').fetchall() == [(1,)]
+        assert conn.sequence_counter == 5
+
+
+def test_missing_account(conn_cnx):
+    """Test whether missing account raises the right exception."""
+    with pytest.raises(ProgrammingError, match="Account must be specified") as pe:
+        with conn_cnx(account=''):
+            pass
+        assert pe.errno == ER_NO_ACCOUNT_NAME
+
+
+@pytest.mark.parametrize('resp', [None, {}])
+def test_empty_response(conn_cnx, resp):
+    """Tests that cmd_query returns an empty response when empty/no response is recevided from back-end."""
+    with conn_cnx() as conn:
+        with mock.patch('snowflake.connector.network.SnowflakeRestful.request', return_value=resp):
+            assert conn.cmd_query('select 1', 0, uuid4()) == {'data': {}}
+
+
+@pytest.mark.skipolddriver
+def test_authenticate_error(conn_cnx, caplog):
+    """Test Reauthenticate error handling while authenticating."""
+    mock_auth = mock.MagicMock()
+    mock_auth.authenticate.side_effect = ReauthenticationRequest(None)
+    with conn_cnx() as conn:
+        with pytest.raises(ReauthenticationRequest):
+            conn._authenticate(mock_auth)
+        assert ('snowflake.connector.connection',
+                logging.DEBUG,
+                'ID token expired. Reauthenticating...: None') in caplog.record_tuples
+
+
+def test_process_qmark_params_error(conn_cnx):
+    """Tests errors thrown in _process_params_qmarks."""
+    with conn_cnx() as conn:
+        with pytest.raises(ProgrammingError, match='Binding parameters must be a list: invalid input') as pe:
+            conn._process_params_qmarks('invalid input')
+            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
+        with pytest.raises(ProgrammingError,
+                           match="Binding parameters must be a list where one element is a single value or "
+                                 "a pair of Snowflake datatype and a value") as pe:
+            conn._process_params_qmarks(((1, 2, 3),))
+            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
+    with pytest.raises(ProgrammingError,
+                       match=r"Python data type \[magicmock\] cannot be automatically mapped to Snowflake") as pe:
+        conn._process_params_qmarks([mock.MagicMock()])
+        assert pe.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
+
+
+@pytest.mark.skipolddriver
+def test_process_param_dict_error(conn_cnx):
+    """Tests whether exceptions in __process_params_dict are handled correctly."""
+    with conn_cnx() as conn:
+        with pytest.raises(ProgrammingError, match="Failed processing pyformat-parameters: test") as pe:
+            with mock.patch('snowflake.connector.converter.SnowflakeConverter.to_snowflake',
+                            side_effect=Exception('test')):
+                conn._process_params({'asd': 'something'})
+            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT

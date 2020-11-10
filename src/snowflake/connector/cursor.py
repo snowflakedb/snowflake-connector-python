@@ -11,7 +11,7 @@ import sys
 import uuid
 from logging import getLogger
 from threading import Lock, Timer
-from typing import Optional
+from typing import IO, Dict, List, Optional, Tuple, Union
 
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
@@ -35,6 +35,7 @@ from .time_util import get_time_millis
 MYPY = False
 if MYPY:  # pragma: no cover
     from .connection import SnowflakeConnection
+    from .file_transfer_agent import SnowflakeProgressPercentage
 
 logger = getLogger(__name__)
 
@@ -265,8 +266,11 @@ class SnowflakeCursor(object):
                 'errno': ER_UNSUPPORTED_METHOD,
                 'sqlstate': SQLSTATE_FEATURE_NOT_SUPPORTED})
 
-    def close(self):
-        """Closes the cursor object."""
+    def close(self) -> Optional[bool]:
+        """Closes the cursor object.
+
+        Returns whether the cursor was closed during this call.
+        """
         try:
             if self.is_closed():
                 return False
@@ -282,10 +286,14 @@ class SnowflakeCursor(object):
     def is_closed(self):
         return self._connection is None or self._connection.is_closed()
 
-    def _execute_helper(
-            self, query, timeout=0, statement_params=None,
-            binding_params=None,
-            is_internal=False, _no_results=False, _is_put_get=None):
+    def _execute_helper(self,
+                        query: str,
+                        timeout: int = 0,
+                        statement_params: Optional[Dict[str, str]] = None,
+                        binding_params: Union[Tuple, Dict[str, Dict[str, str]]] = None,
+                        is_internal: bool = False,
+                        _no_results: bool = False,
+                        _is_put_get=None):
         del self.messages[:]
 
         if statement_params is not None and not isinstance(
@@ -294,8 +302,7 @@ class SnowflakeCursor(object):
                 self.connection, self,
                 ProgrammingError,
                 {
-                    'msg': "The data type of statement params is invalid. "
-                            "It must be dict.",
+                    'msg': "The data type of statement params is invalid. It must be dict.",
                     'errno': ER_INVALID_VALUE,
                 })
 
@@ -376,7 +383,7 @@ class SnowflakeCursor(object):
                 self._sequence_counter,
                 self._request_id,
                 binding_params=binding_params,
-                is_file_transfer=self._is_file_transfer,
+                is_file_transfer=bool(self._is_file_transfer),
                 statement_params=statement_params,
                 is_internal=is_internal,
                 _no_results=_no_results)
@@ -420,19 +427,19 @@ class SnowflakeCursor(object):
         return ret
 
     def execute(self,
-                command,
-                params=None,
+                command: str,
+                params: Union[List, Tuple, None] = None,
                 timeout: Optional[int] = None,
                 exec_async: bool = False,
                 _do_reset: bool = True,
-                _put_callback=None,
-                _put_azure_callback=None,
-                _put_callback_output_stream=sys.stdout,
-                _get_callback=None,
-                _get_azure_callback=None,
-                _get_callback_output_stream=sys.stdout,
+                _put_callback: 'SnowflakeProgressPercentage' = None,
+                _put_azure_callback: 'SnowflakeProgressPercentage' = None,
+                _put_callback_output_stream: IO[str] = sys.stdout,
+                _get_callback: 'SnowflakeProgressPercentage' = None,
+                _get_azure_callback: 'SnowflakeProgressPercentage' = None,
+                _get_callback_output_stream: IO[str] = sys.stdout,
                 _show_progress_bar: bool = True,
-                _statement_params=None,
+                _statement_params: Optional[Dict[str, str]] = None,
                 _is_internal: bool = False,
                 _no_results: bool = False,
                 _use_ijson: bool = False,
@@ -499,8 +506,8 @@ class SnowflakeCursor(object):
                 # qmark and numeric paramstyle
                 # server side binding
                 query = command
-                processed_params = self._connection._process_params_qmarks(
-                    params, self)
+                # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
+                processed_params = self._connection._process_params_qmarks(params, self)
         # Skip reporting Key, Value and Type errors
         except (KeyError, ValueError, TypeError):
             raise

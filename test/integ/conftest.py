@@ -218,7 +218,7 @@ def conn_testaccount(request) -> 'SnowflakeConnection':
 
 
 @pytest.fixture()
-def conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
+def conn_cnx() -> Callable[..., 'SnowflakeConnection']:
     return db
 
 
