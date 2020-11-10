@@ -5,8 +5,8 @@
 #
 
 import logging
+import traceback
 from logging import getLogger
-from traceback import format_tb
 from typing import TYPE_CHECKING, Dict, Optional
 
 from snowflake.connector.constants import UTF8
@@ -62,6 +62,8 @@ class Error(BASE_EXCEPTION_CLASS):
                     self.msg = '{errno:06d}: {msg}'.format(errno=self.errno,
                                                             msg=self.msg)
 
+        # We want to skip the last frame/line in the traceback since it is the current frame
+        self.telemetry_traceback = ''.join(traceback.format_stack()[:-1])
         self.exception_telemetry(msg, cursor, connection)
 
     def __repr__(self):
@@ -73,24 +75,31 @@ class Error(BASE_EXCEPTION_CLASS):
     def __bytes__(self):
         return self.__unicode__().encode(UTF8)
 
+    def telemetry_msg(self):
+        if self.sqlstate != "n/a":
+            return '{errno:06d} ({sqlstate})'.format(errno=self.errno, sqlstate=self.sqlstate)
+        elif self.errno != -1:
+            return '{errno:06d}'.format(errno=self.errno)
+        else:
+            return None
+
     def generate_telemetry_exception_data(self, msg: Optional[str] = None) -> Dict[str, str]:
         """Generate the data to send through telemetry."""
         telemetry_data = {
             TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME,
             TelemetryField.KEY_DRIVER_VERSION: SNOWFLAKE_CONNECTOR_VERSION
         }
+        telemetry_msg = self.telemetry_msg()
         if self.sfqid:
             telemetry_data[TelemetryField.KEY_SFQID] = self.sfqid
         if self.sqlstate:
             telemetry_data[TelemetryField.KEY_SQLSTATE] = self.sqlstate
-        if msg:
-            telemetry_data[TelemetryField.KEY_REASON] = SecretDetector.mask_secrets(msg)
+        if telemetry_msg:
+            telemetry_data[TelemetryField.KEY_REASON] = telemetry_msg
         if self.errno:
             telemetry_data[TelemetryField.KEY_ERROR_NUMBER] = str(self.errno)
-        if self.msg:
-            telemetry_data[TelemetryField.KEY_ERROR_MESSAGE] = SecretDetector.mask_secrets(self.msg)
 
-        telemetry_data[TelemetryField.KEY_STACKTRACE] = SecretDetector.mask_secrets(format_tb(self.__traceback__))
+        telemetry_data[TelemetryField.KEY_STACKTRACE] = SecretDetector.mask_secrets(self.telemetry_traceback)
 
         return telemetry_data
 
@@ -252,7 +261,10 @@ class DataError(DatabaseError):
 
 class NotSupportedError(DatabaseError):
     """Exception for errors when an unsupported database feature was used."""
-    pass
+
+    # Not supported errors do not have any PII in their
+    def telemetry_msg(self):
+        return self.msg
 
 
 class RevocationCheckError(OperationalError):
