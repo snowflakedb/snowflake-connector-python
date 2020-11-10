@@ -15,7 +15,7 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
-from typing import Callable, Generator, Iterable
+from typing import Callable, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
 from . import errors, proxy
 from .auth import Auth
@@ -221,7 +221,7 @@ class SnowflakeConnection(object):
         self.telemetry_enabled = False
         self.incident = IncidentAPI(self._rest)
 
-    def __del__(self):
+    def __del__(self):  # pragma: no cover
         try:
             self.close(retry=False)
         except Exception:
@@ -260,6 +260,7 @@ class SnowflakeConnection(object):
 
     @property
     def region(self):
+        warnings.warn("Region has been deprecated and will be removed in the near future", PendingDeprecationWarning)
         return self._region
 
     @property
@@ -465,8 +466,6 @@ class SnowflakeConnection(object):
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
                 logger.debug("Autocommit feature is not enabled for this "
                              "connection. Ignored")
-            else:
-                raise e
 
     def commit(self):
         """Commits the current transaction."""
@@ -666,7 +665,7 @@ class SnowflakeConnection(object):
         if self._numpy:
             try:
                 import numpy  # noqa: F401
-            except ModuleNotFoundError:
+            except ModuleNotFoundError:  # pragma: no cover
                 Error.errorhandler_wrapper(
                     self, None, ProgrammingError,
                     {
@@ -769,10 +768,13 @@ class SnowflakeConnection(object):
             )
             self._use_openssl_only = (os.environ['SF_USE_OPENSSL_ONLY'] == 'True')
 
-    def cmd_query(self, sql, sequence_counter, request_id,
-                  binding_params=None,
+    def cmd_query(self,
+                  sql: str,
+                  sequence_counter: int,
+                  request_id: uuid.UUID,
+                  binding_params: Union[None, Tuple, Dict[str, Dict[str, str]]] = None,
                   is_file_transfer: bool = False,
-                  statement_params=None,
+                  statement_params: Optional[Dict[str, str]] = None,
                   is_internal: bool = False,
                   _no_results: bool = False,
                   _update_current_object: bool = True):
@@ -869,7 +871,9 @@ class SnowflakeConnection(object):
             session_parameters=self._session_parameters,
         )
 
-    def _process_params_qmarks(self, params, cursor=None):
+    def _process_params_qmarks(self,
+                               params: Union[List, Tuple, None],
+                               cursor: 'SnowflakeCursor' = None) -> Dict[str, Dict[str, str]]:
         if not params:
             return None
         processed_params = {}
@@ -883,7 +887,6 @@ class SnowflakeConnection(object):
             Error.errorhandler_wrapper(self, cursor,
                                        ProgrammingError,
                                        errorvalue)
-            return None
         for idx, v in enumerate(params):
             if isinstance(v, tuple):
                 if len(v) != 2:
@@ -897,7 +900,6 @@ class SnowflakeConnection(object):
                             'errno': ER_FAILED_PROCESSING_PYFORMAT,
                         }
                     )
-                    return None
                 processed_params[str(idx + 1)] = {
                     'type': v[0],
                     'value': self.converter.to_snowflake_bindings(
@@ -918,7 +920,6 @@ class SnowflakeConnection(object):
                             'errno': ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
                         }
                     )
-                    return None
                 if isinstance(v, list):
                     vv = [
                         self.converter.to_snowflake_bindings(
@@ -934,7 +935,9 @@ class SnowflakeConnection(object):
                 logger.debug("idx: %s, type: %s", k, v.get('type'))
         return processed_params
 
-    def _process_params(self, params, cursor=None):
+    def _process_params(self,
+                        params: Union[Dict, List, Tuple, None],
+                        cursor: 'SnowflakeCursor' = None) -> Union[Tuple, Dict]:
         if params is None:
             return {}
         if isinstance(params, dict):
@@ -960,7 +963,10 @@ class SnowflakeConnection(object):
                                        ProgrammingError,
                                        errorvalue)
 
-    def __process_params_dict(self, params, cursor=None):
+    def __process_params_dict(self,
+                              params: Union[Dict, List, Tuple, None],
+                              cursor: 'SnowflakeCursor' = None) -> Dict:
+        # TODO this function could be reworked
         try:
             to_snowflake = self.converter.to_snowflake
             escape = self.converter.escape
@@ -976,7 +982,7 @@ class SnowflakeConnection(object):
             return res
         except Exception as e:
             errorvalue = {
-                'msg': "Failed processing pyformat-parameters; {}".format(
+                'msg': "Failed processing pyformat-parameters: {}".format(
                     e),
                 'errno': ER_FAILED_PROCESSING_PYFORMAT}
             Error.errorhandler_wrapper(

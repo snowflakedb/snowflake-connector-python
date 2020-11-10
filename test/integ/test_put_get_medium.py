@@ -16,7 +16,11 @@ import pytz
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
-from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage, SnowflakeS3ProgressPercentage
+from snowflake.connector.file_transfer_agent import (
+    SnowflakeAzureProgressPercentage,
+    SnowflakeProgressPercentage,
+    SnowflakeS3ProgressPercentage,
+)
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..randomize import random_string
@@ -662,7 +666,7 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
     output_dir = os.path.join(tmp_dir, 'output_dir')
     os.makedirs(output_dir)
 
-    class cb(object):
+    class cb(SnowflakeProgressPercentage):
         def __init__(self, filename, filesize, **_):
             pass
 
