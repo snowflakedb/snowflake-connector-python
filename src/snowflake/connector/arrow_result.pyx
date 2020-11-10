@@ -29,7 +29,7 @@ cdef class ArrowResult:
     cdef:
         object _cursor
         object _connection
-        int total_row_index;
+        readonly int total_row_index;
         int _chunk_index
         int _chunk_count
         int _current_chunk_row_count
