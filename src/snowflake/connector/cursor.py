@@ -365,7 +365,7 @@ class SnowflakeCursor(object):
         try:
             if not original_sigint == exit_handler:
                 signal.signal(signal.SIGINT, interrupt_handler)
-        except ValueError:
+        except ValueError:  # pragma: no cover
             logger.debug(
                 'Failed to set SIGINT handler. '
                 'Not in main thread. Ignored...')
@@ -384,7 +384,7 @@ class SnowflakeCursor(object):
             try:
                 if original_sigint:
                     signal.signal(signal.SIGINT, original_sigint)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError):  # pragma: no cover
                 logger.debug(
                     'Failed to reset SIGINT handler. Not in main '
                     'thread. Ignored...')
@@ -823,8 +823,7 @@ class SnowflakeCursor(object):
         if size < 0:
             errorvalue = {
                 'msg': ("The number of rows is not zero or "
-                         "positive number: {0}").format(
-                    size),
+                         "positive number: {}").format(size),
                 'errno': ER_NOT_POSITIVE_SIZE}
             Error.errorhandler_wrapper(
                 self.connection, self, ProgrammingError, errorvalue)
