@@ -60,7 +60,7 @@ jobs:
     container: quay.io/pypa/manylinux1_x86_64
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8]
     steps:
       - uses: actions/checkout@v1
       - name: Updating path
@@ -91,8 +91,6 @@ jobs:
     strategy:
       matrix:
         python:
-          - version: 3.5
-            link: https://www.python.org/ftp/python/3.5.0/python-3.5.0-macosx10.6.pkg
           - version: 3.6
             link: https://www.python.org/ftp/python/3.6.8/python-3.6.8-macosx10.9.pkg
           - version: 3.7
@@ -128,7 +126,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8]
     steps:
       - uses: actions/checkout@v2
       - name: Setup python
@@ -187,7 +185,7 @@ jobs:
            download_name: macos
          - image_name: windows-latest
            download_name: windows
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8]
         cloud-provider: [aws, azure, gcp]
     steps:
       - uses: actions/checkout@v2
