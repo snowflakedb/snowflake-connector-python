@@ -20,6 +20,8 @@ try:
 except ImportError:
     delete_temporary_credential = None
 
+ID_TOKEN = "ID_TOKEN"
+
 
 @pytest.mark.skipif(delete_temporary_credential is None,
                     reason="delete_temporary_credential is not available.")
@@ -109,7 +111,7 @@ def test_connect_externalbrowser(
         host = 'testaccount.snowflakecomputing.com'
 
         delete_temporary_credential(
-            host=host, user=user, store_temporary_credential=True)
+            host=host, user=user, cred_type=ID_TOKEN)
 
         # first connection
         con = snowflake.connector.connect(

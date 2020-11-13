@@ -9,8 +9,10 @@ from mock import Mock, patch
 
 import json
 import snowflake.connector
-from snowflake.connector.auth import delete_temporary_mfa_token
+from snowflake.connector.auth import delete_temporary_credential
 from snowflake.connector.compat import IS_MACOS
+
+MFA_TOKEN = "MFATOKEN"
 
 
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
@@ -19,6 +21,8 @@ def test_mfa_cache(
     """Connects with (username, pwd, mfa) mock."""
     os.environ['SF_TEMPORARY_CREDENTIAL_CACHE_DIR'] = os.getenv(
         "WORKSPACE", os.path.expanduser("~"))
+
+    LOCAL_CACHE = dict()
 
     def mock_post_request(url, headers, json_body, **kwargs):
         global mock_post_req_cnt
@@ -67,14 +71,14 @@ def test_mfa_cache(
         mock_post_req_cnt += 1
         return ret
 
-    def mock_get_password(service, user):
-        global mock_get_pwd_cnt
-        ret = None
-        if mock_get_pwd_cnt == 1:
-            # second connection
-            ret = 'MFA_TOKEN'
-        mock_get_pwd_cnt += 1
-        return ret
+    def mock_del_password(system, user):
+        LOCAL_CACHE.pop(system+user, None)
+
+    def mock_set_password(system, user, pwd):
+        LOCAL_CACHE[system+user] = pwd
+
+    def mock_get_password(system, user):
+        return LOCAL_CACHE.get(system+user, None)
 
     global mock_post_req_cnt, mock_get_pwd_cnt
     mock_post_req_cnt, mock_get_pwd_cnt = 0, 0
@@ -89,7 +93,7 @@ def test_mfa_cache(
         authenticator = 'username_password_mfa'
         host = 'testaccount.snowflakecomputing.com'
 
-        delete_temporary_mfa_token(host=host, user=user)
+        delete_temporary_credential(host=host, user=user, cred_type=MFA_TOKEN)
 
         # first connection
         con = snowflake.connector.connect(
@@ -136,8 +140,8 @@ def test_mfa_cache(
         assert con._rest.mfa_token is None
 
     if IS_MACOS:
-        with patch('keyring.delete_password', Mock(return_value=None)
-                   ), patch('keyring.set_password', Mock(return_value=None)
+        with patch('keyring.delete_password', Mock(side_effect=mock_del_password)
+                   ), patch('keyring.set_password', Mock(side_effect=mock_set_password)
                             ), patch('keyring.get_password', Mock(side_effect=mock_get_password)):
             test_body()
     else:

@@ -40,7 +40,6 @@ class AuthByUsrPwdMfa(AuthByPlugin):
         pass
 
     def update_body(self, body):
-        # TODO, set mfa token?
         """Sets the password and mfa_token if available."""
         body['data']['AUTHENTICATOR'] = USR_PWD_MFA_AUTHENTICATOR
         if self._password:
