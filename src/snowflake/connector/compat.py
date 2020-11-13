@@ -11,7 +11,6 @@ import http.client
 import os
 import platform
 import queue
-import sys
 import urllib.parse
 import urllib.request
 
@@ -84,13 +83,3 @@ def PRINT(msg):
 
 def INPUT(prompt):
     return input(prompt)
-
-
-"""
-Is Python 3.5.0
-This is to check if a workaround for http://bugs.python.org/issue23517
-is required or not. 3.6.0 already has the fix.
-No RC or dev version will be checked.
-"""
-PY_ISSUE_23517 = 0x03040300 <= sys.hexversion < 0x03040400 or \
-                 0x03050000 <= sys.hexversion < 0x03050100

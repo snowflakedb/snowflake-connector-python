@@ -26,7 +26,7 @@ from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
-from .compat import IS_LINUX, IS_WINDOWS, PY_ISSUE_23517, urlencode
+from .compat import IS_LINUX, IS_WINDOWS, urlencode
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -72,7 +72,7 @@ from .util_text import construct_hostname, parse_account, split_statements
 
 
 def DefaultConverterClass():
-    if PY_ISSUE_23517 or IS_WINDOWS:
+    if IS_WINDOWS:
         from .converter_issue23517 import SnowflakeConverterIssue23517
         return SnowflakeConverterIssue23517
     else:
