@@ -29,6 +29,7 @@ def test_mfa_cache(
         ret = None
         body = json.loads(json_body)
         if mock_post_req_cnt == 0:
+            # issue MFA token for a succeeded login
             assert body['data']['SESSION_PARAMETERS'].get('CLIENT_REQUEST_MFA_TOKEN') is True
             ret = {
                 'success': True,
@@ -39,6 +40,9 @@ def test_mfa_cache(
                     'mfaToken': 'MFA_TOKEN',
                 }}
         elif mock_post_req_cnt == 1:
+            # check associated mfa token and issue a new mfa token
+            # note: Normally, backend doesn't issue a new mfa token in this case, we do it here only to test
+            # whether the driver can replace the old token when server provides a new token
             assert body['data']['SESSION_PARAMETERS'].get('CLIENT_REQUEST_MFA_TOKEN') is True
             assert body['data']['TOKEN'] == 'MFA_TOKEN'
             ret = {
@@ -50,6 +54,7 @@ def test_mfa_cache(
                     'mfaToken': 'NEW_MFA_TOKEN'
                 }}
         elif mock_post_req_cnt == 2:
+            # check new mfa token
             assert body['data']['SESSION_PARAMETERS'].get('CLIENT_REQUEST_MFA_TOKEN') is True
             assert body['data']['TOKEN'] == 'NEW_MFA_TOKEN'
             ret = {
@@ -58,15 +63,6 @@ def test_mfa_cache(
                 'data': {
                     'token': 'NEW_TOKEN',
                     'masterToken': 'NEW_MASTER_TOKEN',
-                }}
-        elif mock_post_req_cnt == 3:
-            # return from USE DATABASE TESTDB_NEW
-            ret = {
-                'success': True,
-                'message': None,
-                'data': {
-                    'finalDatabase': 'TESTDB_NEW',
-                    'finalWarehouse': 'TESTWH_NEW',
                 }}
         mock_post_req_cnt += 1
         return ret
@@ -95,7 +91,7 @@ def test_mfa_cache(
 
         delete_temporary_credential(host=host, user=user, cred_type=MFA_TOKEN)
 
-        # first connection
+        # first connection, no mfa token cache
         con = snowflake.connector.connect(
             account=account,
             user=user,
@@ -111,7 +107,7 @@ def test_mfa_cache(
         assert con._rest.mfa_token == 'MFA_TOKEN'
         con.close()
 
-        # second connection that uses the id token to get the session token
+        # second connection that uses the mfa token issued for first connection to login
         con = snowflake.connector.connect(
             account=account,
             user=user,
@@ -127,6 +123,7 @@ def test_mfa_cache(
         assert con._rest.mfa_token == 'NEW_MFA_TOKEN'
         con.close()
 
+        # third connection which is expected to login with new mfa token
         con = snowflake.connector.connect(
             account=account,
             user=user,
