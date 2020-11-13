@@ -1121,7 +1121,14 @@ class SnowflakeConnection(object):
 
         Args:
             sf_qid: Snowflake query id of interest.
+
+        Raises:
+            ValueError: if sf_qid is not a valid UUID string.
         """
+        try:
+            uuid.UUID(sf_qid)
+        except ValueError:
+            raise ValueError("Invalid UUID: '{}'".format(sf_qid))
         logger.debug('get_query_status sf_qid=\'{}\''.format(sf_qid))
 
         status = 'NO_DATA'
@@ -1145,6 +1152,9 @@ class SnowflakeConnection(object):
 
         Args:
             sf_qid: Snowflake query id of interest.
+
+        Raises:
+            ValueError: if sf_qid is not a valid UUID string.
         """
         status, status_resp = self._get_query_status(sf_qid)
         return status
@@ -1156,6 +1166,9 @@ class SnowflakeConnection(object):
 
         Args:
             sf_qid: Snowflake query id of interest.
+
+        Raises:
+            ValueError: if sf_qid is not a valid UUID string.
         """
         status, status_resp = self._get_query_status(sf_qid)
         queries = status_resp['data']['queries']

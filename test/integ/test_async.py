@@ -8,7 +8,6 @@ import time
 import pytest
 
 from snowflake.connector import ProgrammingError
-from snowflake.connector.errors import InterfaceError
 
 # Mark all tests in this file to time out after 2 minutes to prevent hanging forever
 pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver]
@@ -138,13 +137,25 @@ def test_done_caching(conn_cnx):
             assert con.safe_to_close()
 
 
-def test_invalid_sfqid(conn_cnx):
-    """Tests the exception that is thrown when we attempt to get a status of a not existing query."""
+def test_invalid_uuid_get_status(conn_cnx):
+    """"""
     with conn_cnx() as con:
         with con.cursor() as cur:
-            with pytest.raises(InterfaceError) as thrown_ex:
+            with pytest.raises(ValueError, match=r"Invalid UUID: 'doesnt exist, dont even look'"):
                 cur.get_results_from_sfqid('doesnt exist, dont even look')
-            assert '404 Not Found:' in str(thrown_ex)
+
+
+def test_unknown_sfqid(conn_cnx):
+    """Tests the exception that there is no Exception thrown when we attempt to get a status of a not existing query."""
+    with conn_cnx() as con:
+        assert con.get_query_status('12345678-1234-4123-A123-123456789012') == QueryStatus.NO_DATA
+
+
+def test_unknown_sfqid_results(conn_cnx):
+    """Tests that there is no Exception thrown when we attempt to get a status of a not existing query."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.get_results_from_sfqid('12345678-1234-4123-A123-123456789012')
 
 
 def test_not_fetching(conn_cnx):
