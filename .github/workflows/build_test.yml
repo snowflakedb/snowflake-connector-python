@@ -69,7 +69,9 @@ jobs:
         run: python -m pip install -U setuptools pip wheel virtualenv
       - name: Build Python connector
         run: python -m pip wheel -v -w dist .
-      - name: Run Whitesource script
+      - name: Show wheels generated
+        run: ls -lh dist/
+      - name: Run WhiteSource script
         run: ./ci/wss.sh
         env:
           WHITESOURCE_API_KEY: ${{ secrets.WHITESOURCE_API_KEY }}
