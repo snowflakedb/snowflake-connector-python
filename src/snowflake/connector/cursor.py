@@ -11,7 +11,7 @@ import sys
 import uuid
 from logging import getLogger
 from threading import Lock, Timer
-from typing import IO, Dict, List, Optional, Tuple, Union
+from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
@@ -32,8 +32,7 @@ from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
 
-MYPY = False
-if MYPY:  # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
 

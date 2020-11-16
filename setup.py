@@ -42,8 +42,7 @@ cmd_class = {}
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
     'pyarrow>=0.17.0,<0.18.0',
-    'pandas==0.24.2;python_version=="3.5"',
-    'pandas>=1.0.0,<1.2.0;python_version>"3.5"',
+    'pandas>=1.0.0,<1.2.0',
 ]
 
 try:
@@ -186,12 +185,11 @@ setup(
     download_url='https://www.snowflake.com/',
     use_2to3=False,
 
-    python_requires='>=3.5',
+    python_requires='>=3.6',
 
     install_requires=[
         'azure-common<2.0.0',
-        'azure-storage-blob<12.0.0;python_version<="3.5.1"',
-        'azure-storage-blob>=12.0.0,<13.0.0;python_version>="3.5.2"',
+        'azure-storage-blob>=12.0.0,<13.0.0',
         'boto3>=1.4.4,<1.16',
         'requests<2.24.0',
         'urllib3>=1.20,<1.26.0',
@@ -269,9 +267,9 @@ setup(
         'Operating System :: OS Independent',
 
         'Programming Language :: SQL',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
 
         'Topic :: Database',
         'Topic :: Software Development',

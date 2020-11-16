@@ -7,13 +7,12 @@ import random
 import string
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import Iterable, Iterator, Optional, Sequence, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Sequence, Tuple, TypeVar, Union
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
 
-MYPY = False
-if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
+if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
 
     try:
