@@ -6,7 +6,7 @@
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 
-set python_versions= 3.5 3.6 3.7 3.8
+set python_versions= 3.6 3.7 3.8
 
 cd %CONNECTOR_DIR%
 

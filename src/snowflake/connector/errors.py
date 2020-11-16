@@ -6,14 +6,13 @@
 
 import logging
 from logging import getLogger
-from typing import Dict
+from typing import TYPE_CHECKING, Dict
 
 from snowflake.connector.constants import UTF8
 
 from .compat import BASE_EXCEPTION_CLASS
 
-MYPY = False
-if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
+if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .cursor import SnowflakeCursor
 
