@@ -9,6 +9,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.3.6(November 16,2020)
+
+   - Fixed a bug that was preventing the connector from working on Windows with Python 3.8.
+   - Improved the string formatting in exception messages.
+   - For dependency checking, increased the version condition for the cryptography package from <3.0.0 to <4.0.0.
+   - For dependency checking, increased the version condition for the pandas package from <1.1 to <1.2.
+
 - v2.3.5(November 03,2020)
 
    - Updated the dependency on the cryptography package from version 2.9.2 to 3.2.1.
