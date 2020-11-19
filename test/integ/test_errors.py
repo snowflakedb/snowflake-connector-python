@@ -5,6 +5,8 @@
 #
 import traceback
 
+import pytest
+
 import snowflake.connector
 from snowflake.connector import errors
 from snowflake.connector.telemetry import TelemetryField
@@ -31,6 +33,7 @@ def test_error_code(conn_cnx):
             assert e.errno == 1003, "Syntax error code"
 
 
+@pytest.mark.skipolddriver
 def test_error_telemetry(conn_cnx):
     with conn_cnx() as ctx:
         try:
