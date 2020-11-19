@@ -37,7 +37,7 @@ def test_error_telemetry(conn_cnx):
             ctx.cursor().execute("SELECT * FROOOM TEST")
             raise Exception('Failed to detect Syntax error')
         except errors.ProgrammingError as e:
-            telemetry_stacktrace = e.generate_telemetry_stacktrace()
+            telemetry_stacktrace = e.telemetry_traceback
             assert "SELECT * FROOOM TEST" not in telemetry_stacktrace
             for frame in traceback.extract_tb(e.__traceback__):
                 assert frame.line not in telemetry_stacktrace

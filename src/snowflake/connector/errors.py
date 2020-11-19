@@ -77,17 +77,24 @@ class Error(BASE_EXCEPTION_CLASS):
     def __bytes__(self):
         return self.__unicode__().encode(UTF8)
 
-    def generate_telemetry_stacktrace(self):
+    def generate_telemetry_stacktrace(self) -> str:
+        # Get the current stack minus this function and the Error init function
         stack_frames = traceback.extract_stack()[:-2]
         filtered_frames = list()
         for frame in stack_frames:
+            # Only add frames associated with the snowflake python connector to the telemetry stacktrace
             if connector_base_path in frame.filename:
+                # Get the index to truncate the file path to hide any user path
                 safe_path_index = frame.filename.find(connector_base_path)
-                filtered_frames.append(traceback.FrameSummary(frame.filename[safe_path_index:], frame.lineno, frame.name, line=''))
+                # Create a new frame with the truncated file name and without the line argument since that can
+                # output senitive data
+                filtered_frames.append(
+                    traceback.FrameSummary(frame.filename[safe_path_index:], frame.lineno, frame.name, line='')
+                )
 
         return ''.join(traceback.format_list(filtered_frames))
 
-    def telemetry_msg(self):
+    def telemetry_msg(self) -> Optional[str]:
         if self.sqlstate != "n/a":
             return '{errno:06d} ({sqlstate})'.format(errno=self.errno, sqlstate=self.sqlstate)
         elif self.errno != -1:
