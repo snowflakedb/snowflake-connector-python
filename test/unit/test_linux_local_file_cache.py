@@ -25,6 +25,7 @@ CRED_TYPE_1 = "MFA_TOKEN"
 def get_credential(sys, user):
     return auth.TEMPORARY_CREDENTIAL.get(sys.upper(), {}).get(user.upper())
 
+
 @pytest.mark.skipif(not IS_LINUX,
                     reason="The test is only for Linux platform")
 def test_basic_store():
