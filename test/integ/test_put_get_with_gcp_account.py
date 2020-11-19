@@ -96,6 +96,10 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_dow
             ratio number(6,2))
             """)
             try:
+                statement = "put file://{files} @%{name}"
+                if enable_gcs_downscoped:
+                    statement += " overwrite = true"
+
                 all_recs = run(csr, "put file://{files} @%{name}")
                 assert all([rec[6] == 'UPLOADED' for rec in all_recs])
                 run(csr, "copy into {name}")
@@ -139,7 +143,10 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_g
             try:
                 success_cnt = 0
                 skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
+                put_statement = "put file://{files} @%{name}"
+                if enable_gcs_downscoped:
+                    put_statement += " overwrite = true"
+                for rec in run(csr, put_statement):
                     logger.info('rec=%s', rec)
                     if rec[6] == 'UPLOADED':
                         success_cnt += 1
@@ -158,7 +165,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_g
 
                 success_cnt = 0
                 skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
+                for rec in run(csr, put_statement):
                     logger.info('rec=%s', rec)
                     if rec[6] == 'UPLOADED':
                         success_cnt += 1
@@ -330,8 +337,8 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downs
                 cursor.execute("drop stage {}".format(stage_name))
 
 
-@pytest.mark.parametrize('status_code, error_code', [(400, b'ExpiredToken'), (401, b'AuthenticationRequired')])
-def test_get_gcp_file_object_http_400_401_error_with_downscoped(tmpdir, conn_cnx, db_parameters, status_code, error_code):
+@pytest.mark.parametrize('error_code', [401, 403, 408, 429, 500, 503])
+def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpdir, conn_cnx, db_parameters, error_code):
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, 'wb') as f:
@@ -344,20 +351,29 @@ def test_get_gcp_file_object_http_400_401_error_with_downscoped(tmpdir, conn_cnx
             csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
-                from requests import put, get
+                from requests import put, get, head
 
                 def mocked_put(*args, **kwargs):
                     if mocked_put.counter == 0:
-                        mocked_put.counter += 1
                         exc = requests.exceptions.HTTPError(response=requests.Response())
-                        exc.response.status_code = status_code
-                        exc.response._content = b"<?xml version='1.0' encoding='UTF-8'?>" \
-                                                b"<Error><Code>" + error_code + b"</Code></Error>"
+                        exc.response.status_code = error_code
+                        mocked_put.counter += 1
                         raise exc
                     else:
                         return put(*args, **kwargs)
 
                 mocked_put.counter = 0
+
+                def mocked_head(*args, **kwargs):
+                    if mocked_head.counter == 0:
+                        mocked_head.counter += 1
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = error_code
+                        raise exc
+                    else:
+                        return head(*args, **kwargs)
+
+                mocked_head.counter = 0
 
                 def mocked_file_agent(*args, **kwargs):
                     agent = SnowflakeFileTransferAgent(*args, **kwargs)
@@ -370,8 +386,10 @@ def test_get_gcp_file_object_http_400_401_error_with_downscoped(tmpdir, conn_cnx
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.put', side_effect=mocked_put):
-                        csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
-                    assert mocked_file_agent.agent.renew_expired_client.call_count == 1
+                        with mock.patch('requests.head', side_effect=mocked_head):
+                            csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
+                    if error_code == 401:
+                        assert mocked_file_agent.agent.renew_expired_client.call_count == 2
                 assert csr.fetchone()[6] == 'UPLOADED'
                 csr.execute("copy into {}".format(table_name))
                 csr.execute("rm @%{}".format(table_name))
@@ -383,9 +401,7 @@ def test_get_gcp_file_object_http_400_401_error_with_downscoped(tmpdir, conn_cnx
                     if mocked_get.counter == 0:
                         mocked_get.counter += 1
                         exc = requests.exceptions.HTTPError(response=requests.Response())
-                        exc.response.status_code = status_code
-                        exc.response._content = b"<?xml version='1.0' encoding='UTF-8'?>" \
-                                                b"<Error><Code>" + error_code + b"</Code></Error>"
+                        exc.response.status_code = error_code
                         raise exc
                     else:
                         return get(*args, **kwargs)
@@ -396,7 +412,8 @@ def test_get_gcp_file_object_http_400_401_error_with_downscoped(tmpdir, conn_cnx
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.get', side_effect=mocked_get):
                         csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
-                    assert mocked_file_agent.agent.renew_expired_client.call_count == 1
+                    if error_code == 401:
+                        assert mocked_file_agent.agent.renew_expired_client.call_count == 1
                 rec = csr.fetchone()
                 assert rec[0].startswith('data_'), 'A file downloaded by GET'
                 assert rec[1] == 36, 'Return right file size'
@@ -409,3 +426,34 @@ def test_get_gcp_file_object_http_400_401_error_with_downscoped(tmpdir, conn_cnx
     with gzip.open(files[0], 'rb') as fd:
         contents = fd.read().decode(UTF8)
     assert original_contents == contents, 'Output is different from the original file'
+
+
+def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters):
+    """Tests whether _force_put_overwrite and overwrite=true works as intended."""
+    with conn_cnx() as cnx:
+
+        tmp_dir = str(tmpdir.mkdir('data'))
+        test_data = os.path.join(tmp_dir, 'data.txt')
+        with open(test_data, 'w') as f:
+            f.write("test1,test2")
+            f.write("test3,test4")
+
+        cnx.cursor().execute("RM @~/test_put_overwrite")
+        try:
+            with cnx.cursor() as cur:
+                cur.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = true')
+                with mock.patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                    cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                    assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
+                with mock.patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                    cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                    assert mock_result.call_args[0][0]['rowset'][0][-2] == 'SKIPPED'
+                with mock.patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
+                    cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                    assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
+
+            ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
+            assert "test_put_overwrite/data.txt" in ret[0]
+            assert "data.txt.gz" in ret[0]
+        finally:
+            cnx.cursor().execute("RM @~/test_put_overwrite")

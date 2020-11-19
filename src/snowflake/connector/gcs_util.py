@@ -6,7 +6,6 @@
 
 import json
 import os
-import xml.etree.ElementTree as ElementTree
 from collections import namedtuple
 from logging import getLogger
 from urllib.parse import quote
@@ -89,7 +88,7 @@ class SnowflakeGCSUtil:
 
         if not upload_url:
             upload_url = SnowflakeGCSUtil.generate_file_url(meta['stage_info']['location'],
-                                                            meta['src_file_name'].lstrip('/'))
+                                                            meta['dst_file_name'].lstrip('/'))
             access_token = meta['client']
 
         content_encoding = ""
@@ -319,13 +318,54 @@ class SnowflakeGCSUtil:
                     GCS_FILE_HEADER_ENCRYPTION_METADATA, None),
             )
         else:
-            meta['result_status'] = ResultStatus.NOT_FOUND_FILE
+            if meta.get('presigned_url', None):
+                meta['result_status'] = ResultStatus.NOT_FOUND_FILE
+            else:
+                url = SnowflakeGCSUtil.generate_file_url(meta['stage_info']['location'], filename.lstrip('/'))
+                access_token = meta['client']
+                gcs_headers = {'Authorization': f'Bearer {access_token}'}
+                try:
+                    response = requests.head(url, headers=gcs_headers)
+                    response.raise_for_status()
 
-        return FileHeader(
-            digest=None,
-            content_length=None,
-            encryption_metadata=None
-        )
+                    digest = response.headers.get(
+                        GCS_METADATA_SFC_DIGEST, None)
+                    content_length = response.headers.get(
+                        'content-length', None)
+                    if response.headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None):
+                        encryption_data = json.loads(
+                            response.headers[GCS_METADATA_ENCRYPTIONDATAPROP])
+
+                        if encryption_data:
+                            encryption_metadata = EncryptionMetadata(
+                                key=encryption_data['WrappedContentKey']['EncryptedKey'],
+                                iv=encryption_data['ContentEncryptionIV'],
+                                matdesc=response.headers[GCS_METADATA_MATDESC_KEY]
+                                if GCS_METADATA_MATDESC_KEY in response.headers
+                                else None,
+                            )
+                    meta['result_status'] = ResultStatus.UPLOADED
+                    return FileHeader(
+                        digest=digest,
+                        content_length=content_length,
+                        encryption_metadata=encryption_metadata
+                    )
+                except requests.exceptions.HTTPError as errh:
+                    if errh.response.status_code in [403, 408, 429, 500, 503]:
+                        meta['last_error'] = errh
+                        meta['result_status'] = ResultStatus.NEED_RETRY
+                        return
+                    if errh.response.status_code == 404:
+                        meta['result_status'] = ResultStatus.NOT_FOUND_FILE
+                    elif errh.response.status_code == 401:
+                        meta['last_error'] = errh
+                        meta['result_status'] = ResultStatus.RENEW_TOKEN
+                    else:
+                        meta['last_error'] = errh
+                        meta['result_status'] = ResultStatus.ERROR
+                        raise errh
+
+        return None
 
     @staticmethod
     def extract_bucket_name_and_path(stage_location):
@@ -352,17 +392,5 @@ class SnowflakeGCSUtil:
 
     @staticmethod
     def is_token_expired(response):
-        # https://cloud.google.com/storage/docs/xml-api/reference-status
-        if response.status_code == 400:
-            error_body = ElementTree.fromstring(response.content)
-            error_code = error_body.find('Code').text
-            return error_code == 'ExpiredToken'
-
-        # After testing with an expired Downscoped token, I find this error being returned instead of
-        # ExpiredToken.
-        elif response.status_code == 401:
-            error_body = ElementTree.fromstring(response.content)
-            error_code = error_body.find('Code').text
-            return error_code == 'AuthenticationRequired'
-
-        return False
+        # Looking further as java gcs client code, I find that token only need refresh if error is 401
+        return response.status_code == 401
