@@ -8,6 +8,7 @@ import json
 import os
 from collections import namedtuple
 from logging import getLogger
+from typing import Any, Dict
 from urllib.parse import quote
 
 import requests
@@ -38,7 +39,7 @@ class SnowflakeGCSUtil:
     """GCS Utility class."""
 
     @staticmethod
-    def create_client(stage_info,
+    def create_client(stage_info: Dict[str, Any],
                       use_accelerate_endpoint: bool = False):
         """Creates a client object with given stage credentials.
 
@@ -66,7 +67,7 @@ class SnowflakeGCSUtil:
         return client
 
     @staticmethod
-    def upload_file(data_file, meta, encryption_metadata, max_concurrency):
+    def upload_file(data_file: str, meta: Dict[str, Any], encryption_metadata: Any, max_concurrency: int):
         """Uploads the local file to remote storage.
 
         Args:
@@ -189,7 +190,7 @@ class SnowflakeGCSUtil:
             gcs_headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None)
 
     @staticmethod
-    def _native_download_file(meta, full_dst_file_name, max_concurrency):
+    def _native_download_file(meta: Dict[str, Any], full_dst_file_name: str, max_concurrency: int):
         """Downloads the remote object to local file.
 
         Args:
@@ -291,7 +292,7 @@ class SnowflakeGCSUtil:
         meta[GCS_FILE_HEADER_ENCRYPTION_METADATA] = encryption_metadata
 
     @staticmethod
-    def get_file_header(meta, filename):
+    def get_file_header(meta: Dict[str, Any], filename: str) -> FileHeader:
         """Gets the remote file's metadata.
 
         Args:
@@ -372,7 +373,7 @@ class SnowflakeGCSUtil:
         )
 
     @staticmethod
-    def extract_bucket_name_and_path(stage_location):
+    def extract_bucket_name_and_path(stage_location: str):
         stage_location = os.path.expanduser(stage_location)
         container_name = stage_location
         path = ''
@@ -389,12 +390,12 @@ class SnowflakeGCSUtil:
             path=path)
 
     @staticmethod
-    def generate_file_url(stage_location, filename):
+    def generate_file_url(stage_location: str, filename: str):
         gcs_location = SnowflakeGCSUtil.extract_bucket_name_and_path(stage_location)
         full_file_path = f'{gcs_location.path}{filename}'
         return f'https://storage.googleapis.com/{gcs_location.bucket_name}/{quote(full_file_path)}'
 
     @staticmethod
-    def is_token_expired(response):
+    def is_token_expired(response: Any):
         # Looking further as java gcs client code, I find that token only need refresh if error is 401
         return response.status_code == 401
