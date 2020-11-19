@@ -30,7 +30,7 @@ pytestmark = pytest.mark.gcp
 
 
 @pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
 def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp."""
     # create a data file
@@ -74,7 +74,7 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped
 
 
 @pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
 def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Copies many files."""
     # generates N files
@@ -124,7 +124,7 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_dow
 
 
 @pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
 def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Copies duplicated files."""
     # generates N files
@@ -203,7 +203,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_g
 
 
 @pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
 def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets Large files."""
     number_of_files = 3
@@ -344,7 +344,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
 
 
 @pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
 def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data', 'example.json'))
@@ -367,7 +367,7 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downs
                 cursor.execute("drop stage {}".format(stage_name))
 
 
-@pytest.mark.xfail(reason="Server need to update with merged change")
+@pytest.mark.xfail(reason="Server need to update with merged change. Expected release version: 4.41.0 ")
 @pytest.mark.parametrize('error_code', [401, 403, 408, 429, 500, 503])
 def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpdir, conn_cnx, db_parameters, error_code):
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
@@ -459,7 +459,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
     assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.xfail(reason="Server need to update with merged change")
+@pytest.mark.xfail(reason="Server need to update with merged change. Expected release version: 4.41.0 ")
 def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     with conn_cnx() as cnx:
