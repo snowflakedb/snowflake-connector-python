@@ -365,7 +365,11 @@ class SnowflakeGCSUtil:
                         meta['result_status'] = ResultStatus.ERROR
                         raise errh
 
-        return None
+        return FileHeader(
+            digest=None,
+            content_length=None,
+            encryption_metadata=None,
+        )
 
     @staticmethod
     def extract_bucket_name_and_path(stage_location):
