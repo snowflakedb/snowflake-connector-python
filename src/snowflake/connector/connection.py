@@ -633,7 +633,7 @@ class SnowflakeConnection(object):
                 return AuthByIdToken(self._rest.id_token)
         if type(auth_instance) is AuthByUsrPwdMfa:
             if self._rest.mfa_token is not None:
-                auth_instance.mfa_token = self._rest.mfa_token
+                auth_instance.set_mfa_token(self._rest.mfa_token)
         return auth_instance
 
     def __config(self, **kwargs):

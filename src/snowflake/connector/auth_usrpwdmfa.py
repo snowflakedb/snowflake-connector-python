@@ -23,18 +23,12 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     def __init__(self, password, mfa_token=None):
         """Initializes and instance with a password and a mfa token."""
         self._password = password
-        self.mfa_token = mfa_token
+        self._mfa_token = mfa_token
 
-    @property
-    def mfa_token(self):
-        return self._mfa_token
-
-    @mfa_token.setter
-    def mfa_token(self, value):
+    def set_mfa_token(self, value):
         self._mfa_token = value
 
-    def authenticate(
-            self, authenticator, service_name, account, user, password):
+    def authenticate(self, authenticator, service_name, account, user, password):
         """NOOP."""
         pass
 

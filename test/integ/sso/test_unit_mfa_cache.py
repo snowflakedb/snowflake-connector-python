@@ -28,8 +28,7 @@ MFA_TOKEN = "MFATOKEN"
 @pytest.mark.skipif(delete_temporary_credential is None or IS_MACOS is None,
                     reason="delete_temporary_credential or IS_MACOS is not available.")
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
-def test_mfa_cache(
-        mockSnowflakeRestfulPostRequest):
+def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     """Connects with (username, pwd, mfa) mock."""
     os.environ['SF_TEMPORARY_CREDENTIAL_CACHE_DIR'] = os.getenv(
         "WORKSPACE", os.path.expanduser("~"))

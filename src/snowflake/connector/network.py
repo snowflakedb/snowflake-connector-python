@@ -248,7 +248,7 @@ class SnowflakeRestful(object):
 
     @property
     def id_token(self):
-        return self._id_token if hasattr(self, '_id_token') else None
+        return getattr(self, '_id_token', None)
 
     @id_token.setter
     def id_token(self, value):
@@ -256,7 +256,7 @@ class SnowflakeRestful(object):
 
     @property
     def mfa_token(self):
-        return self._mfa_token if hasattr(self, '_mfa_token') else None
+        return getattr(self, '_mfa_token', None)
 
     @mfa_token.setter
     def mfa_token(self, value):

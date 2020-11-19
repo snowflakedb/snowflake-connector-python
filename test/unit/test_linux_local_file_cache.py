@@ -6,6 +6,8 @@
 
 import os
 
+import pytest
+
 import snowflake.connector.auth as auth
 from snowflake.connector.compat import IS_LINUX
 
@@ -23,11 +25,9 @@ CRED_TYPE_1 = "MFA_TOKEN"
 def get_credential(sys, user):
     return auth.TEMPORARY_CREDENTIAL.get(sys.upper(), {}).get(user.upper())
 
-
+@pytest.mark.skipif(not IS_LINUX,
+                    reason="The test is only for Linux platform")
 def test_basic_store():
-    if not IS_LINUX:
-        return
-
     os.environ['SF_TEMPORARY_CREDENTIAL_CACHE_DIR'] = os.getenv("WORKSPACE", os.path.expanduser("~"))
 
     auth.delete_temporary_credential_file()

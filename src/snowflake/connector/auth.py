@@ -375,7 +375,7 @@ class Auth(object):
             cred = TEMPORARY_CREDENTIAL.get(
                     host.upper(), {}).get(build_temporary_credential_name(host, user, cred_type))
         else:
-            logger.debug("OS not support for Local Secure Storage")
+            logger.debug("OS not supported for Local Secure Storage")
         return cred
 
     def read_temporary_credentials(self, host, user, session_parameters):
@@ -403,7 +403,7 @@ class Auth(object):
         elif IS_LINUX:
             write_temporary_credential_file(host, build_temporary_credential_name(host, user, cred_type), cred)
         else:
-            logger.debug("OS not support for Local Secure Storage")
+            logger.debug("OS not supported for Local Secure Storage")
 
     def write_temporary_credentials(self, host, user, session_parameters, response):
         if self._rest._connection.consent_cache_id_token and session_parameters.get(
@@ -424,12 +424,12 @@ def flush_temporary_credentials():
             break
         time.sleep(1)
     else:
-        logger.debug("The lock file still persists. Will ignore and "
-                     "write the temporary credential file: %s",
+        logger.debug("The lock file still persists after the maximum wait time."
+                     "Will ignore it and write temporary credential file: %s",
                      TEMPORARY_CREDENTIAL_FILE)
     try:
-        with codecs.open(TEMPORARY_CREDENTIAL_FILE, 'w',
-                         encoding='utf-8', errors='ignore') as f:
+        with open(TEMPORARY_CREDENTIAL_FILE, 'w',
+                  encoding='utf-8', errors='ignore') as f:
             json.dump(TEMPORARY_CREDENTIAL, f)
     except Exception as ex:
         logger.debug("Failed to write a credential file: "
