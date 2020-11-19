@@ -397,7 +397,7 @@ class Auth(object):
                              "snowflake-connector-python[secure-local-storage]")
                 return
             try:
-                keyring.set_password(build_temporary_credential_name(host, user, cred_type), cred)
+                keyring.set_password(build_temporary_credential_name(host, user, cred_type), user.upper(), cred)
             except keyring.errors.KeyringError as ke:
                 logger.debug("Could not store id_token to keyring, %s", str(ke))
         elif IS_LINUX:
