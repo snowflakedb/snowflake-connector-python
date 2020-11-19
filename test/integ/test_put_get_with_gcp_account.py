@@ -29,10 +29,11 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.gcp
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
-def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
     original_contents = "123,test1\n456,test2\n"
@@ -73,10 +74,11 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped
     assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
-def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Copies many files."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
@@ -123,10 +125,11 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_dow
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
-def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Copies duplicated files."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     # generates N files
     number_of_files = 5
     number_of_lines = 100
@@ -202,10 +205,11 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_g
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
-def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Gets Large files."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     number_of_files = 3
     number_of_lines = 200000
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
@@ -343,10 +347,11 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change. Expected release version: 4.41.0 "))])
-def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data', 'example.json'))
     stage_name = random_string(5, 'teststage_')
     with conn_cnx() as cnx:
@@ -367,9 +372,11 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downs
                 cursor.execute("drop stage {}".format(stage_name))
 
 
-@pytest.mark.xfail(reason="Server need to update with merged change. Expected release version: 4.41.0 ")
 @pytest.mark.parametrize('error_code', [401, 403, 408, 429, 500, 503])
-def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpdir, conn_cnx, db_parameters, error_code):
+def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpdir, conn_cnx, db_parameters,
+                                                                            error_code, is_public_test):
+    if is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, 'wb') as f:
@@ -459,9 +466,10 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
     assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.xfail(reason="Server need to update with merged change. Expected release version: 4.41.0 ")
-def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters):
+def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters, is_public_test):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
+    if is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     with conn_cnx() as cnx:
 
         tmp_dir = str(tmpdir.mkdir('data'))

@@ -69,6 +69,7 @@ class SnowflakeAzureUtil(object):
 
     @staticmethod
     def extract_container_name_and_path(stage_location):
+        stage_location = os.path.expanduser(stage_location)
         container_name = stage_location
         path = ''
 
