@@ -5,6 +5,7 @@
 #
 
 import logging
+import os
 import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Dict, Optional
@@ -23,6 +24,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
 
 logger = getLogger(__name__)
+connector_base_path = os.path.join("snowflake", "connector")
 
 
 class Error(BASE_EXCEPTION_CLASS):
@@ -63,7 +65,7 @@ class Error(BASE_EXCEPTION_CLASS):
                                                             msg=self.msg)
 
         # We want to skip the last frame/line in the traceback since it is the current frame
-        self.telemetry_traceback = ''.join(traceback.format_stack()[:-1])
+        self.telemetry_traceback = self.generate_telemetry_stacktrace()
         self.exception_telemetry(msg, cursor, connection)
 
     def __repr__(self):
@@ -75,6 +77,16 @@ class Error(BASE_EXCEPTION_CLASS):
     def __bytes__(self):
         return self.__unicode__().encode(UTF8)
 
+    def generate_telemetry_stacktrace(self):
+        stack_frames = traceback.extract_stack()[:-2]
+        filtered_frames = list()
+        for frame in stack_frames:
+            if connector_base_path in frame.filename:
+                safe_path_index = frame.filename.find(connector_base_path)
+                filtered_frames.append(traceback.FrameSummary(frame.filename[safe_path_index:], frame.lineno, frame.name, line=''))
+
+        return ''.join(traceback.format_list(filtered_frames))
+
     def telemetry_msg(self):
         if self.sqlstate != "n/a":
             return '{errno:06d} ({sqlstate})'.format(errno=self.errno, sqlstate=self.sqlstate)
@@ -83,7 +95,7 @@ class Error(BASE_EXCEPTION_CLASS):
         else:
             return None
 
-    def generate_telemetry_exception_data(self, msg: Optional[str] = None) -> Dict[str, str]:
+    def generate_telemetry_exception_data(self) -> Dict[str, str]:
         """Generate the data to send through telemetry."""
         telemetry_data = {
             TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME,
@@ -107,7 +119,7 @@ class Error(BASE_EXCEPTION_CLASS):
                                  connection: Optional['SnowflakeConnection'],
                                  telemetry_data: Dict[str, str]):
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
-        if connection is not None and connection.telemetry_enabled and not connection._telemetry.is_closed:
+        if connection is not None and connection.telemetry_enabled and not connection._telemetry.is_closed():
             # Send with in-band telemetry
             telemetry_data[TelemetryField.KEY_TYPE] = TelemetryField.SQL_EXCEPTION
             telemetry_data[TelemetryField.KEY_EXCEPTION] = self.__class__.__name__
@@ -129,7 +141,7 @@ class Error(BASE_EXCEPTION_CLASS):
                             connection: Optional['SnowflakeConnection']):
         """Main method to generate and send telemetry data for exceptions."""
         try:
-            telemetry_data = self.generate_telemetry_exception_data(msg)
+            telemetry_data = self.generate_telemetry_exception_data()
             if cursor is not None:
                 self.send_exception_telemetry(cursor.connection, telemetry_data)
             elif connection is not None:
