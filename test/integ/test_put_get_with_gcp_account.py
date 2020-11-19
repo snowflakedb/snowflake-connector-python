@@ -367,6 +367,7 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downs
                 cursor.execute("drop stage {}".format(stage_name))
 
 
+@pytest.mark.xfail(reason="Server need to update with merged change")
 @pytest.mark.parametrize('error_code', [401, 403, 408, 429, 500, 503])
 def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpdir, conn_cnx, db_parameters, error_code):
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
