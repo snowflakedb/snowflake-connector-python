@@ -7,7 +7,6 @@
 import logging
 
 from .auth_by_plugin import AuthByPlugin
-from .network import USR_PWD_MFA_AUTHENTICATOR
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
 
     def update_body(self, body):
         """Sets the password and mfa_token if available."""
-        body['data']['AUTHENTICATOR'] = USR_PWD_MFA_AUTHENTICATOR
+        # Don't set body['data']['AUTHENTICATOR'], since this is still snowflake default authenticator
         if self._password:
             body['data']['PASSWORD'] = self._password
         if self._mfa_token:

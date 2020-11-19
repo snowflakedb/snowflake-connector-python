@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
+
+import json
 import os
 
 from mock import Mock, patch
 
-import json
 import snowflake.connector
 from snowflake.connector.auth import delete_temporary_credential
 from snowflake.connector.compat import IS_MACOS
@@ -68,13 +69,13 @@ def test_mfa_cache(
         return ret
 
     def mock_del_password(system, user):
-        LOCAL_CACHE.pop(system+user, None)
+        LOCAL_CACHE.pop(system + user, None)
 
     def mock_set_password(system, user, pwd):
-        LOCAL_CACHE[system+user] = pwd
+        LOCAL_CACHE[system + user] = pwd
 
     def mock_get_password(system, user):
-        return LOCAL_CACHE.get(system+user, None)
+        return LOCAL_CACHE.get(system + user, None)
 
     global mock_post_req_cnt, mock_get_pwd_cnt
     mock_post_req_cnt, mock_get_pwd_cnt = 0, 0
