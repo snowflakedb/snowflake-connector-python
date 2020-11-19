@@ -32,7 +32,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def __init__(self, msg: Optional[str] = None, errno: Optional[int] = None, sqlstate: Optional[str] = None,
                  sfqid: Optional[str] = None, done_format_msg: Optional[bool] = None,
-                 connection: Optional[SnowflakeConnection] = None, cursor: Optional[SnowflakeCursor] = None):
+                 connection: Optional['SnowflakeConnection'] = None, cursor: Optional['SnowflakeCursor'] = None):
         self.msg = msg
         self.raw_msg = msg
         self.errno = errno or -1
@@ -164,7 +164,7 @@ class Error(BASE_EXCEPTION_CLASS):
     def default_errorhandler(connection: 'SnowflakeConnection',
                              cursor: 'SnowflakeCursor',
                              error_class: Exception,
-                             error_value: Dict[str, str]):
+                             error_value: Dict[str, str]) -> None:
         """Default error handler that raises an error.
 
         Args:
