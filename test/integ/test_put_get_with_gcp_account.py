@@ -17,6 +17,7 @@ import pytest
 import requests
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent, SnowflakeProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
@@ -28,8 +29,7 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.gcp
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
 def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp."""
     # create a data file
@@ -42,7 +42,12 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            try:
+                csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError:
+                # skip test if parameter is not available (server not updated)
+                if enable_gcs_downscoped:
+                    return
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
                 csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
@@ -67,8 +72,7 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped
     assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
 def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Copies many files."""
     # generates N files
@@ -85,7 +89,12 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_dow
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            try:
+                csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError:
+                # skip test if parameter is not available (server not updated)
+                if enable_gcs_downscoped:
+                    return
             run(csr, """
             create or replace table {name} (
             aa int,
@@ -112,8 +121,7 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_dow
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
 def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Copies duplicated files."""
     # generates N files
@@ -130,7 +138,12 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_g
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            try:
+                csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError:
+                # skip test if parameter is not available (server not updated)
+                if enable_gcs_downscoped:
+                    return
             run(csr, """
             create or replace table {name} (
             aa int,
@@ -186,8 +199,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_g
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
 def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets Large files."""
     number_of_files = 3
@@ -218,7 +230,12 @@ def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_dow
 
     with conn_cnx() as cnx:
         try:
-            run(cnx, f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            try:
+                run(cnx, f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError:
+                # skip test if parameter is not available (server not updated)
+                if enable_gcs_downscoped:
+                    return
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == 'UPLOADED' for rec in all_recs])
 
@@ -323,15 +340,19 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.parametrize('enable_gcs_downscoped', [False, pytest.param(True, marks=pytest.mark.xfail(
-    reason="Server need to update with merged change"))])
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
 def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data', 'example.json'))
     stage_name = random_string(5, 'teststage_')
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
-            cursor.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            try:
+                cursor.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError:
+                # skip test if parameter is not available (server not updated)
+                if enable_gcs_downscoped:
+                    return
             try:
                 cursor.execute("create or replace stage {}".format(stage_name))
                 cursor.execute("put file://{} @{} auto_compress=false".format(fname, stage_name))
@@ -342,7 +363,6 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downs
                 cursor.execute("drop stage {}".format(stage_name))
 
 
-@pytest.mark.xfail(reason="Server need to update with merged change")
 @pytest.mark.parametrize('error_code', [401, 403, 408, 429, 500, 503])
 def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpdir, conn_cnx, db_parameters, error_code):
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
@@ -354,7 +374,11 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
+            try:
+                csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
+            except ProgrammingError:
+                # skip test if parameter is not available (server not updated)
+                return
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
                 from requests import put, get, head
@@ -434,7 +458,6 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
     assert original_contents == contents, 'Output is different from the original file'
 
 
-@pytest.mark.xfail(reason="Server need to update with merged change")
 def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     with conn_cnx() as cnx:
@@ -448,7 +471,11 @@ def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters):
         cnx.cursor().execute("RM @~/test_put_overwrite")
         try:
             with cnx.cursor() as cur:
-                cur.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = true')
+                try:
+                    cur.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
+                except ProgrammingError:
+                    # skip test if parameter is not available (server not updated)
+                    return
                 with mock.patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
                     cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
                     assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
