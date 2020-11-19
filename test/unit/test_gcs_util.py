@@ -23,18 +23,14 @@ except ImportError:
     SnowflakeGCSUtil = None
 
 
-@pytest.mark.xfail(reason='Newer version support access token')
 def test_create_client(caplog):
     """Creates a GCSUtil with an access token."""
     client = SnowflakeGCSUtil.create_client({'creds': {'GCS_ACCESS_TOKEN': 'fake_token'}})
     assert client is not None
-    assert all([log in caplog.record_tuples for log in [
-        ('snowflake.connector.gcs_util', logging.DEBUG, "len(GCS_ACCESS_TOKEN): 10"),
-        ('snowflake.connector.gcs_util', logging.DEBUG, "GCS operations with an access token are currently unsupported")
-    ]])
+    assert client == 'fake_token'
 
 
-@pytest.mark.xfail(reason='Newer version support access token')
+@pytest.mark.xfail(reason='Newer version support access token. This test is obsoleted')
 def test_native_download_access_token(caplog):
     """Tests that GCS access token error is correctly logged when downloading."""
     meta = {}
@@ -44,7 +40,7 @@ def test_native_download_access_token(caplog):
                                                             "currently unsupported") in caplog.record_tuples)
 
 
-@pytest.mark.xfail(reason='Newer version support access token')
+@pytest.mark.xfail(reason='Newer version support access token. This test is obsoleted')
 def test_native_upload_access_token(caplog):
     """Tests that GCS access token error is correctly logged when uploading."""
     meta = {}
