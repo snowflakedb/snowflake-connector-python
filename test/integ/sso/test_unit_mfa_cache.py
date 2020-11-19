@@ -7,15 +7,26 @@
 import json
 import os
 
+import pytest
 from mock import Mock, patch
 
 import snowflake.connector
-from snowflake.connector.auth import delete_temporary_credential
-from snowflake.connector.compat import IS_MACOS
+
+try:
+    from snowflake.connector.compat import IS_MACOS  # NOQA
+except ImportError:
+    IS_MACOS = None
+try:
+    from snowflake.connector.auth import delete_temporary_credential  # NOQA
+except ImportError:
+    delete_temporary_credential = None
 
 MFA_TOKEN = "MFATOKEN"
 
 
+# Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed under ci environment
+@pytest.mark.skipif(delete_temporary_credential is None or IS_MACOS is None,
+                    reason="delete_temporary_credential or IS_MACOS is not available.")
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
 def test_mfa_cache(
         mockSnowflakeRestfulPostRequest):

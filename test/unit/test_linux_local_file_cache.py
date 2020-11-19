@@ -31,6 +31,7 @@ def test_basic_store():
     os.environ['SF_TEMPORARY_CREDENTIAL_CACHE_DIR'] = os.getenv("WORKSPACE", os.path.expanduser("~"))
 
     auth.delete_temporary_credential_file()
+    auth.TEMPORARY_CREDENTIAL.clear()
 
     auth.read_temporary_credential_file()
     assert not auth.TEMPORARY_CREDENTIAL
