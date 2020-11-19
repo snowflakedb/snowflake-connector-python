@@ -30,8 +30,9 @@ connector_base_path = os.path.join("snowflake", "connector")
 class Error(BASE_EXCEPTION_CLASS):
     """Base Snowflake exception class."""
 
-    def __init__(self, msg=None, errno=None, sqlstate=None, sfqid=None,
-                 done_format_msg=False, connection=None, cursor=None):
+    def __init__(self, msg: Optional[str] = None, errno: Optional[int] = None, sqlstate: Optional[str] = None,
+                 sfqid: Optional[str] = None, done_format_msg: Optional[bool] = None,
+                 connection: Optional[SnowflakeConnection] = None, cursor: Optional[SnowflakeCursor] = None):
         self.msg = msg
         self.raw_msg = msg
         self.errno = errno or -1
@@ -124,7 +125,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def send_exception_telemetry(self,
                                  connection: Optional['SnowflakeConnection'],
-                                 telemetry_data: Dict[str, str]):
+                                 telemetry_data: Dict[str, str]) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
         if connection is not None and connection.telemetry_enabled and not connection._telemetry.is_closed():
             # Send with in-band telemetry
@@ -145,7 +146,7 @@ class Error(BASE_EXCEPTION_CLASS):
     def exception_telemetry(self,
                             msg: str,
                             cursor: Optional['SnowflakeCursor'],
-                            connection: Optional['SnowflakeConnection']):
+                            connection: Optional['SnowflakeConnection']) -> None:
         """Main method to generate and send telemetry data for exceptions."""
         try:
             telemetry_data = self.generate_telemetry_exception_data()
