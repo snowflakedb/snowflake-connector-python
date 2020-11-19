@@ -293,14 +293,6 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
 
                 mocked_get.counter = 0
 
-                def mocked_file_agent(*args, **kwargs):
-                    agent = SnowflakeFileTransferAgent(*args, **kwargs)
-                    agent._update_file_metas_with_presigned_url = mock.MagicMock(
-                        wraps=agent._update_file_metas_with_presigned_url
-                    )
-                    mocked_file_agent.agent = agent
-                    return agent
-
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.get', side_effect=mocked_get):
@@ -336,3 +328,84 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downs
                 assert cmp(fname, downloaded_file)
             finally:
                 cursor.execute("drop stage {}".format(stage_name))
+
+
+@pytest.mark.parametrize('status_code, error_code', [(400, b'ExpiredToken'), (401, b'AuthenticationRequired')])
+def test_get_gcp_file_object_http_400_401_error_with_downscoped(tmpdir, conn_cnx, db_parameters, status_code, error_code):
+    fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
+    original_contents = "123,test1\n456,test2\n"
+    with gzip.open(fname, 'wb') as f:
+        f.write(original_contents.encode(UTF8))
+    tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
+    table_name = random_string(5, 'snow32807_')
+
+    with conn_cnx() as cnx:
+        with cnx.cursor() as csr:
+            csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
+            csr.execute("create or replace table {} (a int, b string)".format(table_name))
+            try:
+                from requests import put, get
+
+                def mocked_put(*args, **kwargs):
+                    if mocked_put.counter == 0:
+                        mocked_put.counter += 1
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = status_code
+                        exc.response._content = b"<?xml version='1.0' encoding='UTF-8'?>" \
+                                                b"<Error><Code>" + error_code + b"</Code></Error>"
+                        raise exc
+                    else:
+                        return put(*args, **kwargs)
+
+                mocked_put.counter = 0
+
+                def mocked_file_agent(*args, **kwargs):
+                    agent = SnowflakeFileTransferAgent(*args, **kwargs)
+                    agent.renew_expired_client = mock.MagicMock(
+                        wraps=agent.renew_expired_client
+                    )
+                    mocked_file_agent.agent = agent
+                    return agent
+
+                with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                                side_effect=mocked_file_agent):
+                    with mock.patch('requests.put', side_effect=mocked_put):
+                        csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
+                    assert mocked_file_agent.agent.renew_expired_client.call_count == 1
+                assert csr.fetchone()[6] == 'UPLOADED'
+                csr.execute("copy into {}".format(table_name))
+                csr.execute("rm @%{}".format(table_name))
+                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute("copy into @%{table_name} from {table_name} "
+                            "file_format=(type=csv compression='gzip')".format(table_name=table_name))
+
+                def mocked_get(*args, **kwargs):
+                    if mocked_get.counter == 0:
+                        mocked_get.counter += 1
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = status_code
+                        exc.response._content = b"<?xml version='1.0' encoding='UTF-8'?>" \
+                                                b"<Error><Code>" + error_code + b"</Code></Error>"
+                        raise exc
+                    else:
+                        return get(*args, **kwargs)
+
+                mocked_get.counter = 0
+
+                with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                                side_effect=mocked_file_agent):
+                    with mock.patch('requests.get', side_effect=mocked_get):
+                        csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
+                    assert mocked_file_agent.agent.renew_expired_client.call_count == 1
+                rec = csr.fetchone()
+                assert rec[0].startswith('data_'), 'A file downloaded by GET'
+                assert rec[1] == 36, 'Return right file size'
+                assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
+                assert rec[3] == '', 'Return no error message'
+            finally:
+                csr.execute("drop table {}".format(table_name))
+
+    files = glob.glob(os.path.join(tmp_dir, 'data_*'))
+    with gzip.open(files[0], 'rb') as fd:
+        contents = fd.read().decode(UTF8)
+    assert original_contents == contents, 'Output is different from the original file'
