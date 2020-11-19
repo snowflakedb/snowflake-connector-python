@@ -9,9 +9,10 @@ import os
 from collections import namedtuple
 from logging import getLogger
 from typing import Any, Dict
-from snowflake.connector.compat import quote
 
 import requests
+
+from snowflake.connector.compat import quote
 
 from .constants import HTTP_HEADER_CONTENT_ENCODING, SHA256_DIGEST, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
@@ -358,7 +359,7 @@ class SnowflakeGCSUtil:
                         return
                     if errh.response.status_code == 404:
                         meta['result_status'] = ResultStatus.NOT_FOUND_FILE
-                    elif SnowflakeGCSUtil.is_token_expired(errh.response)
+                    elif SnowflakeGCSUtil.is_token_expired(errh.response):
                         meta['last_error'] = errh
                         meta['result_status'] = ResultStatus.RENEW_TOKEN
                     else:
