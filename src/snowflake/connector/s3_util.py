@@ -85,7 +85,6 @@ class SnowflakeS3Util:
 
     @staticmethod
     def extract_bucket_name_and_path(stage_location):
-        stage_location = os.path.expanduser(stage_location)
         bucket_name = stage_location
         s3path = ''
 

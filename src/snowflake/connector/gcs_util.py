@@ -375,7 +375,6 @@ class SnowflakeGCSUtil:
 
     @staticmethod
     def extract_bucket_name_and_path(stage_location: str):
-        stage_location = os.path.expanduser(stage_location)
         container_name = stage_location
         path = ''
 
