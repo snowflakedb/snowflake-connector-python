@@ -28,7 +28,8 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.gcp
 
 
-def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', (True, False))
+def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
@@ -40,6 +41,7 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
                 csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
@@ -64,7 +66,8 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', (True, False))
+def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
@@ -80,6 +83,7 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
             run(csr, """
             create or replace table {name} (
             aa int,
@@ -102,7 +106,8 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', (True, False))
+def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
@@ -118,6 +123,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
             run(csr, """
             create or replace table {name} (
             aa int,
@@ -170,7 +176,8 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', (True, False))
+def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
@@ -200,6 +207,7 @@ def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         try:
+            run(cnx, f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == 'UPLOADED' for rec in all_recs])
 
@@ -251,6 +259,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                         raise exc
                     else:
                         return put(*args, **kwargs)
+
                 mocked_put.counter = 0
 
                 def mocked_file_agent(*args, **kwargs):
@@ -260,6 +269,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                     )
                     mocked_file_agent.agent = agent
                     return agent
+
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.put', side_effect=mocked_put):
@@ -280,6 +290,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                         raise exc
                     else:
                         return get(*args, **kwargs)
+
                 mocked_get.counter = 0
 
                 def mocked_file_agent(*args, **kwargs):
@@ -289,6 +300,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                     )
                     mocked_file_agent.agent = agent
                     return agent
+
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.get', side_effect=mocked_get):
@@ -308,12 +320,14 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', (True, False))
+def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data', 'example.json'))
     stage_name = random_string(5, 'teststage_')
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
+            cursor.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
             try:
                 cursor.execute("create or replace stage {}".format(stage_name))
                 cursor.execute("put file://{} @{} auto_compress=false".format(fname, stage_name))

@@ -194,7 +194,7 @@ class SnowflakeRemoteStorageUtil(object):
                     # preserve the idea of getting metadata in the first place.
                     # One example of this is the utils that use presigned url
                     # for upload/download and not the storage client library.
-                    if meta.get('presigned_url', None):
+                    if meta['stage_location_type'] == 'GCS':
                         file_header = util_class.get_file_header(meta, meta[
                             'src_file_name'])
 
