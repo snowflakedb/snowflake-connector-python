@@ -17,6 +17,7 @@ from os.path import expanduser
 from threading import Lock, Thread
 
 from .auth_keypair import AuthByKeyPair
+from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
 from .constants import (
     HTTP_HEADER_ACCEPT,
@@ -309,6 +310,8 @@ class Auth(object):
                     str(auth_instance._jwt_token_exp),
                     str(datetime.utcnow())
                 )
+            if type(auth_instance) is AuthByUsrPwdMfa:
+                delete_temporary_credential(self._rest._host, user, MFA_TOKEN)
             Error.errorhandler_wrapper(
                 self._rest._connection, None, DatabaseError,
                 {

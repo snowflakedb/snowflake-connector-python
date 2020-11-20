@@ -11,6 +11,7 @@ import pytest
 from mock import Mock, patch
 
 import snowflake.connector
+from snowflake.connector.errors import DatabaseError
 
 try:
     from snowflake.connector.compat import IS_MACOS  # NOQA
@@ -24,7 +25,7 @@ except ImportError:
 MFA_TOKEN = "MFATOKEN"
 
 
-# Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed under ci environment
+# Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed
 @pytest.mark.skipif(delete_temporary_credential is None or IS_MACOS is None,
                     reason="delete_temporary_credential or IS_MACOS is not available.")
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
@@ -50,7 +51,7 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
                     'masterToken': 'MASTER_TOKEN',
                     'mfaToken': 'MFA_TOKEN',
                 }}
-        elif mock_post_req_cnt == 1:
+        elif mock_post_req_cnt == 2:
             # check associated mfa token and issue a new mfa token
             # note: Normally, backend doesn't issue a new mfa token in this case, we do it here only to test
             # whether the driver can replace the old token when server provides a new token
@@ -64,7 +65,7 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
                     'masterToken': 'NEW_MASTER_TOKEN',
                     'mfaToken': 'NEW_MFA_TOKEN'
                 }}
-        elif mock_post_req_cnt == 2:
+        elif mock_post_req_cnt == 4:
             # check new mfa token
             assert body['data']['SESSION_PARAMETERS'].get('CLIENT_REQUEST_MFA_TOKEN') is True
             assert body['data']['TOKEN'] == 'NEW_MFA_TOKEN'
@@ -75,6 +76,26 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
                     'token': 'NEW_TOKEN',
                     'masterToken': 'NEW_MASTER_TOKEN',
                 }}
+        elif mock_post_req_cnt == 6:
+            # mock a failed log in
+            ret = {
+                'success': False,
+                'message': None,
+                'data': {}
+            }
+        elif mock_post_req_cnt == 7:
+            assert body['data']['SESSION_PARAMETERS'].get('CLIENT_REQUEST_MFA_TOKEN') is True
+            assert 'TOKEN' not in body['data']
+            ret = {
+                'success': True,
+                'data': {
+                    'token': 'TOKEN',
+                    'masterToken': 'MASTER_TOKEN'
+                }
+            }
+        elif mock_post_req_cnt in [1, 3, 5, 8]:
+            # connection.close()
+            ret = {'success': True}
         mock_post_req_cnt += 1
         return ret
 
@@ -109,8 +130,6 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
             password=pwd,
             host=host,
             authenticator=authenticator,
-            database='TESTDB',
-            warehouse='TESTWH',
             client_request_mfa_token=True,
         )
         assert con._rest.token == 'TOKEN'
@@ -125,8 +144,6 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
             password=pwd,
             host=host,
             authenticator=authenticator,
-            database='TESTDB_NEW',  # override the database
-            warehouse='TESTWH_NEW',  # override the warehouse
             client_request_mfa_token=True,
         )
         assert con._rest.token == 'NEW_TOKEN'
@@ -141,11 +158,35 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
             password=pwd,
             host=host,
             authenticator=authenticator,
-            database='TESTDB_NEW',  # override the database
-            warehouse='TESTWH_NEW',  # override the warehouse
             client_request_mfa_token=True,
         )
         assert con._rest.mfa_token is None
+        con.close()
+
+        try:
+            # a failed login will be forced by mocking for this connection
+            con = snowflake.connector.connect(
+                account=account,
+                user=user,
+                password=pwd,
+                host=host,
+                authenticator=authenticator,
+                client_request_mfa_token=True,
+            )
+        except DatabaseError:
+            # authentication failed exception, then mfa cache is cleaned up
+            pass
+
+        # no mfa cache token should be sent at this connection
+        con = snowflake.connector.connect(
+            account=account,
+            user=user,
+            password=pwd,
+            host=host,
+            authenticator=authenticator,
+            client_request_mfa_token=True,
+        )
+        con.close()
 
     if IS_MACOS:
         with patch('keyring.delete_password', Mock(side_effect=mock_del_password)
