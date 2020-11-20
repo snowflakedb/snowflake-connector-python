@@ -1,26 +1,43 @@
 #!/bin/bash -e
-#
-# Test Snowflake Connector
-# Note this is the script that test_docker.sh runs inside of the docker container
-#
+# Start Snowflake Python Connector tests
+# NOTES:
+#   - This script is used by Jenkins to start various tests
+#   - Assumes that py_test_mode And python_env (not required for FIPS tests as of now) were previously set
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-# shellcheck disable=SC1090
-source "${THIS_DIR}/py_exec.sh"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/docker/repaired_wheels/snowflake_connector_python*cp${PYTHON_ENV}*manylinux2010*.whl | sort -r | head -n 1)
-TEST_ENVLIST=fix_lint,py${PYTHON_ENV}-ci,py${PYTHON_ENV}-pandas-ci,py${PYTHON_ENV}-sso-ci,coverage
+PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/private"
 
-if [[ -n "$PIP_INDEX_URL" ]]; then
-  echo "PIP_INDEX_URL before now: ${PIP_INDEX_URL}"
-  unset PIP_INDEX_URL
+cd "${CONNECTOR_DIR}"
+
+# Check Requirements
+if [ -z "${PARAMETERS_SECRET}" ]; then
+    echo "Missing PARAMETERS_SECRET, failing..."
+    exit 1
 fi
 
-# setup venv with tox and run tests with tox
-${PYTHON_EXEC} -m venv tox_env
-source tox_env/bin/activate
-python -m pip install -U tox tox-external-wheels>=0.1.4
-cd $CONNECTOR_DIR
+# Decrypt parameters file
+PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
+[ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure.py.gpg"
+[ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
+gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
-tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
+# Decrypt jenkins version parameters file
+PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws_jenkins.py.gpg"
+[ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure_jenkins.py.gpg"
+[ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp_jenkins.py.gpg"
+gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters_jenkins.py
 
-deactivate
+# Decrypt to get new test password
+gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMETERS_DIR}/jenkins_test_parameters.py.gpg > ci/jenkins_test_parameters.py
+
+# Download artifacts made by build
+aws s3 cp --recursive --only-show-errors s3://sfc-jenkins/repository/python_connector/linux/${client_git_branch}/${client_git_commit}/ dist
+
+# Run one of the tests
+if [ "${py_test_mode}" = "fips" ]; then
+    echo "[Info] Going to run FIPS tests"
+    ${THIS_DIR}/test_fips_docker.sh
+else
+    echo "[Info] Going to run regular tests for Python ${python_env}"
+    ${THIS_DIR}/test_docker.sh ${python_env}
+fi

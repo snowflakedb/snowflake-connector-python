@@ -1,11 +1,8 @@
 Snowflake Connector for Python
 ********************************************************************************
 
-.. image:: https://travis-ci.org/snowflakedb/snowflake-connector-python.svg?branch=master
-    :target: https://travis-ci.org/snowflakedb/snowflake-connector-python
-
-.. image:: https://ci.appveyor.com/api/projects/status/xb70i4jt8mingig0/branch/master?svg=true
-    :target: https://ci.appveyor.com/project/smtakeda/snowflake-connector-python/branch/master
+.. image:: https://github.com/snowflakedb/snowflake-connector-python/workflows/Build%20and%20Test/badge.svg?branch=master
+    :target: https://github.com/snowflakedb/snowflake-connector-python/actions?query=workflow%3A%22Build+and+Test%22+branch%3Amaster
 
 .. image:: https://codecov.io/gh/snowflakedb/snowflake-connector-python/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/snowflakedb/snowflake-connector-python
@@ -26,10 +23,10 @@ using the Snowflake JDBC or ODBC drivers.
 
 The connector is a native, pure Python package that has no dependencies on JDBC or
 ODBC. It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
-(Python 3.8 is currently not supported on Windows) where Python 3.5.0 (or higher) is installed.
+where Python 3.6.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
-https://docs.snowflake.net/
+https://docs.snowflake.com/
 
 Feel free to file an issue or submit a PR here for general cases. For official support, contact Snowflake support at:
 https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge

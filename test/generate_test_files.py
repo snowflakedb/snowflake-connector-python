@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+#
+
 import argparse
 import os
 import platform
@@ -6,19 +10,26 @@ import random
 import subprocess
 import tempfile
 import time
+from typing import Optional
 
 IS_WINDOWS = platform.system() == 'Windows'
 
 
-def generate_k_lines_of_n_files(k, n, compress=False, tmp_dir=None):
-    """
-    Create testing files
-    BEWARE returned path has to be deleted by caller
-    :param k: number of lines per file to generate
-    :param n: number of files to generate
-    :param compress: whether to compress the files
-    :param tmp_dir: location where the files should be generated, if not supplied a temp directory will be created
-    :return: path to parent folder to newly generated files
+def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir: Optional[str] = None) -> str:
+    """Creates testing files.
+
+    Notes:
+        Returned path has to be deleted by caller.
+
+    Args:
+        k: Number of lines per file to generate.
+        n: Number of files to generate.
+        compress: Whether to compress the files (Default value = False).
+        tmp_dir: Location where the files should be generated, if not supplied a temp directory will be created
+        (Default value = None).
+
+    Returns:
+        Path to parent folder to newly generated files.
     """
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp(prefix='data')
@@ -41,14 +52,12 @@ def generate_k_lines_of_n_files(k, n, compress=False, tmp_dir=None):
                 tsntz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
                 tm = time.gmtime(
                     int(random.random() * 30000.0) - 15000)
-                tstz = time.strftime('%Y-%m-%dT%H:%M:%S', tm) + \
-                       ('-' if random.random() < 0.5 else '+') + \
-                       "{:02d}:{:02d}".format(
-                           int(random.random() * 12.0),
-                           int(random.random() * 60.0))
+                tstz = (time.strftime('%Y-%m-%dT%H:%M:%S', tm) +
+                        ('-' if random.random() < 0.5 else '+') +
+                        "{:02d}:{:02d}".format(int(random.random() * 12.0), int(random.random() * 60.0)))
                 pct = random.random() * 1000.0
-                ratio = u"{:5.2f}".format(random.random() * 1000.0)
-                rec = u"{:d},{:s},{:s},{:s},{:s},{:s},{:f},{:s}".format(
+                ratio = "{:5.2f}".format(random.random() * 1000.0)
+                rec = "{:d},{:s},{:s},{:s},{:s},{:s},{:f},{:s}".format(
                     num, dt, ts, tsltz, tsntz, tstz,
                     pct,
                     ratio)

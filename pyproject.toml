@@ -1,0 +1,10 @@
+[build-system]
+requires = [
+    # The minimum setuptools version is specific to the PEP 517 backend,
+    # and may be stricter than the version required in `setup.py`
+    "setuptools>=40.6.0",
+    "wheel",
+    "cython",
+    # Must be kept in sync with the `setup_requirements` in `setup.py`
+    'pyarrow>=0.17.0,<0.18.0',
+]

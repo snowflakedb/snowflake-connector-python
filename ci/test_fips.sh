@@ -6,7 +6,7 @@
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck disable=SC1090
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/docker/repaired_wheels/*cp36*manylinux2010*.whl | sort -r | head -n 1)"
+CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp36*manylinux2010*.whl | sort -r | head -n 1)"
 
 python3.6 -m venv fips_env
 source fips_env/bin/activate
