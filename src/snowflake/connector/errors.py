@@ -138,7 +138,7 @@ class Error(BASE_EXCEPTION_CLASS):
                 logger.debug(
                     "Cursor failed to log to telemetry.",
                     exc_info=True)
-        else:
+        elif connection is None:
             # Send with out-of-band telemetry
             telemetry_oob = TelemetryService.get_instance()
             telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
