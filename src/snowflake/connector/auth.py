@@ -372,7 +372,7 @@ class Auth(object):
             try:
                 cred = keyring.get_password(build_temporary_credential_name(host, user, cred_type), user.upper())
             except keyring.errors.KeyringError as ke:
-                logger.debug("Could not retrieve {} from secure storage : {}".format(cred_type, str(ke)))
+                logger.error("Could not retrieve {} from secure storage : {}".format(cred_type, str(ke)))
         elif IS_LINUX:
             read_temporary_credential_file()
             cred = TEMPORARY_CREDENTIAL.get(
@@ -402,7 +402,7 @@ class Auth(object):
             try:
                 keyring.set_password(build_temporary_credential_name(host, user, cred_type), user.upper(), cred)
             except keyring.errors.KeyringError as ke:
-                logger.debug("Could not store id_token to keyring, %s", str(ke))
+                logger.error("Could not store id_token to keyring, %s", str(ke))
         elif IS_LINUX:
             write_temporary_credential_file(host, build_temporary_credential_name(host, user, cred_type), cred)
         else:
@@ -514,7 +514,7 @@ def delete_temporary_credential(host, user, cred_type):
         try:
             keyring.delete_password(build_temporary_credential_name(host, user, cred_type))
         except Exception as ex:
-            logger.debug("Failed to delete credential in the keyring: err=[%s]", ex)
+            logger.error("Failed to delete credential in the keyring: err=[%s]", ex)
     elif IS_LINUX:
         temporary_credential_file_delete_password(host, user, cred_type)
 
