@@ -512,7 +512,7 @@ def unlock_temporary_credential_file():
 def delete_temporary_credential(host, user, cred_type):
     if (IS_MACOS or IS_WINDOWS) and installed_keyring:
         try:
-            keyring.delete_password(build_temporary_credential_name(host, user, cred_type))
+            keyring.delete_password(build_temporary_credential_name(host, user, cred_type), user.upper())
         except Exception as ex:
             logger.error("Failed to delete credential in the keyring: err=[%s]", ex)
     elif IS_LINUX:
