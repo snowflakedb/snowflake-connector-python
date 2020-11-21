@@ -144,7 +144,7 @@ class SnowflakeAzureUtil(object):
         azure_metadata = {
             'sfcdigest': meta[SHA256_DIGEST],
         }
-        if (encryption_metadata):
+        if encryption_metadata:
             azure_metadata.update({
                 'encryptiondata': json.dumps({
                     'EncryptionMode': 'FullBlob',

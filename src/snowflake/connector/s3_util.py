@@ -19,6 +19,8 @@ from botocore.client import Config
 from .constants import HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_VALUE_OCTET_STREAM, SHA256_DIGEST, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 
+logger = getLogger(__name__)
+
 SFC_DIGEST = 'sfc-digest'
 
 AMZ_MATDESC = "x-amz-matdesc"
@@ -57,11 +59,8 @@ class SnowflakeS3Util:
         Returns:
             The client to communicate with S3.
         """
-        logger = getLogger(__name__)
         stage_credentials = stage_info['creds']
         security_token = stage_credentials.get('AWS_TOKEN', None)
-        end_point = stage_info['endPoint']
-        logger.debug("AWS_KEY_ID: %s", stage_credentials['AWS_KEY_ID'])
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
         end_point = ('https://' + stage_info['endPoint']) if stage_info['endPoint'] else None
@@ -102,7 +101,6 @@ class SnowflakeS3Util:
 
     @staticmethod
     def _get_s3_object(meta, filename):
-        logger = getLogger(__name__)
         client = meta['client']
         s3location = SnowflakeS3Util.extract_bucket_name_and_path(
             meta['stage_info']['location'])
@@ -110,8 +108,9 @@ class SnowflakeS3Util:
 
         if logger.getEffectiveLevel() == logging.DEBUG:
             tmp_meta = {}
+            log_black_list = ('stage_credentials', 'creds')
             for k, v in meta.items():
-                if k != 'stage_credentials':
+                if k not in log_black_list:
                     tmp_meta[k] = v
             logger.debug(
                 "s3location.bucket_name: %s, "
@@ -135,7 +134,6 @@ class SnowflakeS3Util:
             The file header, with expected properties populated or None, based on how the request goes with the
             storage provider.
         """
-        logger = getLogger(__name__)
         akey = SnowflakeS3Util._get_s3_object(meta, filename)
         try:
             # HTTP HEAD request
@@ -182,7 +180,6 @@ class SnowflakeS3Util:
 
     @staticmethod
     def upload_file(data_file, meta, encryption_metadata, max_concurrency):
-        logger = getLogger(__name__)
         try:
             s3_metadata = {
                 HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM,
@@ -256,7 +253,6 @@ class SnowflakeS3Util:
 
     @staticmethod
     def _native_download_file(meta, full_dst_file_name, max_concurrency):
-        logger = getLogger(__name__)
         try:
             akey = SnowflakeS3Util._get_s3_object(meta, meta['src_file_name'])
             akey.download_file(
