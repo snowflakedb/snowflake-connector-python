@@ -5,6 +5,7 @@
 #
 
 import itertools
+import json
 import random
 from datetime import datetime
 
@@ -385,6 +386,49 @@ def test_select_with_empty_resultset(conn_cnx):
         cursor.execute("select seq4() from table(generator(rowcount=>100)) limit 0")
 
         assert cursor.fetchone() is None
+
+
+def test_dont_convert_variant_to_python_object(conn_cnx):
+    with conn_cnx() as cnx:
+        cursor = cnx.cursor()
+        cursor.execute("alter session set query_result_format='ARROW_FORCE'")
+        cursor.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
+
+        result = cursor.execute("select OBJECT_CONSTRUCT('key', 'value'):key as VARIANT").fetchone()
+        # We expect to get variant as a dumped json
+        assert result[0] == json.dumps('value')
+
+
+def test_convert_variant_to_python_object(conn_cnx):
+    with conn_cnx(convert_arrow_variant_to_object=True) as cnx:
+        cursor = cnx.cursor()
+        cursor.execute("alter session set query_result_format='ARROW_FORCE'")
+        cursor.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
+
+        result = cursor.execute("select OBJECT_CONSTRUCT('key', 'value'):key as VARIANT").fetchone()
+        assert result[0] == 'value'
+
+
+def test_convert_object_to_python_object(conn_cnx):
+    with conn_cnx(convert_arrow_variant_to_object=True) as cnx:
+        cursor = cnx.cursor()
+        cursor.execute("alter session set query_result_format='ARROW_FORCE'")
+        cursor.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
+
+        result = cursor.execute("select OBJECT_CONSTRUCT('key', 'value') as OBJECT").fetchone()
+        assert isinstance(result[0], dict)
+        assert result[0]['key'] == 'value'
+
+
+def test_convert_array_to_python_object(conn_cnx):
+    with conn_cnx(convert_arrow_variant_to_object=True) as cnx:
+        cursor = cnx.cursor()
+        cursor.execute("alter session set query_result_format='ARROW_FORCE'")
+        cursor.execute("alter session set python_connector_query_result_format='ARROW_FORCE'")
+
+        result = cursor.execute("select ARRAY_CONSTRUCT('value') as ARRAY").fetchone()
+        assert isinstance(result[0], list)
+        assert result[0][0] == 'value'
 
 
 def test_select_with_large_resultset(conn_cnx):
