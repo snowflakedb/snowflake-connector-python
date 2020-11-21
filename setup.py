@@ -111,6 +111,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                                 os.path.join(ARROW_ITERATOR_SRC_DIR, 'FloatConverter.cpp'),
                                 os.path.join(ARROW_ITERATOR_SRC_DIR, 'IntConverter.cpp'),
                                 os.path.join(ARROW_ITERATOR_SRC_DIR, 'StringConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'VariantConverter.cpp'),
                                 os.path.join(ARROW_ITERATOR_SRC_DIR, 'TimeConverter.cpp'),
                                 os.path.join(ARROW_ITERATOR_SRC_DIR, 'TimeStampConverter.cpp'),
                                 os.path.join(ARROW_ITERATOR_SRC_DIR, 'Python', 'Common.cpp'),

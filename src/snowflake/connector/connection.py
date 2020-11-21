@@ -130,6 +130,7 @@ DEFAULT_CONFIGURATION = {
     'numpy': (False, bool),  # snowflake
     'ocsp_response_cache_filename': (None, (type(None), str)),  # snowflake internal
     'converter_class': (DefaultConverterClass(), SnowflakeConverter),
+    'convert_arrow_variant_to_object': (False, bool),
     'chunk_downloader_class': (SnowflakeChunkDownloader, object),  # snowflake internal
     'validate_default_parameters': (False, bool),  # snowflake
     'probe_connection': (False, bool),  # snowflake
@@ -195,6 +196,7 @@ class SnowflakeConnection(object):
         is_pyformat: Whether the current argument binding is pyformat or format.
         consent_cache_id_token: Consented cache ID token.
         use_openssl_only: Use OpenSSL instead of pure Python libraries for signature verification and encryption.
+        convert_arrow_variant_to_object: Convert array, object and variant columns to python objects instead of to strings.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -363,6 +365,10 @@ class SnowflakeConnection(object):
     @property
     def converter_class(self):
         return self._converter_class
+
+    @property
+    def convert_arrow_variant_to_object(self):
+        return self._convert_arrow_variant_to_object
 
     @property
     def validate_default_parameters(self):

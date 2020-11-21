@@ -5,6 +5,7 @@
 #
 
 import decimal
+import json
 import time
 from datetime import datetime, timedelta
 from logging import getLogger
@@ -31,10 +32,11 @@ logger = getLogger(__name__)
 
 
 class ArrowConverterContext(object):
-    def __init__(self, session_parameters=None):
+    def __init__(self, session_parameters=None, convert_variant_to_object=False):
         if session_parameters is None:
             session_parameters = {}
         self._timezone = None if PARAMETER_TIMEZONE not in session_parameters else session_parameters[PARAMETER_TIMEZONE]
+        self._convert_variant_to_object = convert_variant_to_object
 
     @property
     def timezone(self):
@@ -116,3 +118,9 @@ class ArrowConverterContext(object):
     def TIMESTAMP_NTZ_TWO_FIELD_to_numpy_datetime64(self, epoch, fraction):
         nanoseconds = int(decimal.Decimal(epoch).scaleb(9) + decimal.Decimal(fraction))
         return numpy.datetime64(nanoseconds, 'ns')
+
+    def VARIANT_to_python(self, value):
+        if not self._convert_variant_to_object:
+            return value
+
+        return json.loads(value)

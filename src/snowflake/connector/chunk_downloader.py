@@ -303,7 +303,8 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
 
     def __init__(self, cursor, connection):
         self._cursor = cursor
-        self._arrow_context = ArrowConverterContext(connection._session_parameters)
+        self._arrow_context = ArrowConverterContext(connection._session_parameters,
+                                                    connection.convert_arrow_variant_to_object)
 
     """
     Handler to consume data as arrow stream
