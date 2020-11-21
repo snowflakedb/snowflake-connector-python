@@ -850,6 +850,7 @@ def test_autocommit_invalid_type(conn_cnx):
 def test_autocommit_unsupported(conn_cnx, caplog):
     """Tests if server-side error is handled correctly when setting autocommit."""
     with conn_cnx() as conn:
+        caplog.set_level(logging.DEBUG, 'snowflake.connector')
         with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute',
                         side_effect=Error("Test error", sqlstate=SQLSTATE_FEATURE_NOT_SUPPORTED)):
             conn.autocommit(True)
@@ -889,6 +890,7 @@ def test_authenticate_error(conn_cnx, caplog):
     mock_auth = mock.MagicMock()
     mock_auth.authenticate.side_effect = ReauthenticationRequest(None)
     with conn_cnx() as conn:
+        caplog.set_level(logging.DEBUG, 'snowflake.connector')
         with pytest.raises(ReauthenticationRequest):
             conn._authenticate(mock_auth)
         assert ('snowflake.connector.connection',

@@ -219,6 +219,7 @@ def test_upload_file_with_s3_upload_failed_error():
 
 def test_get_header_expiry_error(caplog):
     """Tests whether token expiry error is handled as expected when getting header."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     meta = {}
     mock_resource = MagicMock()
     mock_resource.load.side_effect = botocore.exceptions.ClientError(
@@ -231,6 +232,7 @@ def test_get_header_expiry_error(caplog):
 
 def test_get_header_unexpected_error(caplog):
     """Tests whether unexpected errors are handled as expected when getting header."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     meta = {}
     mock_resource = MagicMock()
     mock_resource.load.side_effect = botocore.exceptions.ClientError(
@@ -248,6 +250,7 @@ def test_get_header_unexpected_error(caplog):
 
 def test_upload_expiry_error(caplog):
     """Tests whether token expiry error is handled as expected when uploading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource, mock_object = MagicMock(), MagicMock()
     mock_resource.Object.return_value = mock_object
     mock_object.upload_file.side_effect = botocore.exceptions.ClientError(
@@ -265,6 +268,7 @@ def test_upload_expiry_error(caplog):
 
 def test_upload_unknown_error(caplog):
     """Tests whether unknown errors are handled as expected when uploading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource, mock_object = MagicMock(), MagicMock()
     mock_resource.Object.return_value = mock_object
     mock_object.bucket_name = 'bucket'
@@ -284,6 +288,7 @@ def test_upload_unknown_error(caplog):
 
 def test_upload_failed_error(caplog):
     """Tests whether token expiry error is handled as expected when uploading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource, mock_object = MagicMock(), MagicMock()
     mock_resource.Object.return_value = mock_object
     mock_object.upload_file.side_effect = S3UploadFailedError('ExpiredToken')
@@ -302,6 +307,7 @@ def test_upload_failed_error(caplog):
 
 def test_download_expiry_error(caplog):
     """Tests whether token expiry error is handled as expected when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
@@ -320,6 +326,7 @@ def test_download_expiry_error(caplog):
 
 def test_download_unknown_error(caplog):
     """Tests whether an unknown error is handled as expected when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'unknown', 'Message': 'Just testing'}}, 'Testing')
@@ -343,6 +350,7 @@ def test_download_unknown_error(caplog):
 
 def test_download_retry_exceeded_error(caplog):
     """Tests whether a retry exceeded error is handled as expected when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = RetriesExceededError(Boto3Error())
     meta = {'client': mock_resource,
@@ -365,6 +373,7 @@ def test_download_retry_exceeded_error(caplog):
 ])
 def test_download_syscall_error(caplog, error_no, result_status):
     """Tests whether a syscall error is handled as expected when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = OpenSSL.SSL.SysCallError(error_no)
     meta = {'client': mock_resource,

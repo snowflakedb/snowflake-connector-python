@@ -5,12 +5,8 @@
 #
 
 import errno
-import logging
 import os
-import tempfile
 import time
-from logging import getLogger
-from os import path
 
 import OpenSSL.SSL
 import pytest
@@ -34,19 +30,6 @@ from snowflake.connector.errors import DatabaseError, InterfaceError, OtherHTTPR
 from snowflake.connector.network import STATUS_TO_EXCEPTION, RetryRequest, SnowflakeRestful
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-
-
-for logger_name in ['test', 'snowflake.connector', 'botocore']:
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    ch = logging.FileHandler(
-        path.join(tempfile.gettempdir(), 'python_connector.log'))
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(logging.Formatter(
-        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
-    logger.addHandler(ch)
-
-logger = getLogger(__name__)
 
 
 def test_request_exec():
