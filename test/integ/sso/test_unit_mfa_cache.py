@@ -108,8 +108,8 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     def mock_get_password(system, user):
         return LOCAL_CACHE.get(system + user, None)
 
-    global mock_post_req_cnt, mock_get_pwd_cnt
-    mock_post_req_cnt, mock_get_pwd_cnt = 0, 0
+    global mock_post_req_cnt
+    mock_post_req_cnt = 0
 
     # POST requests mock
     mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
