@@ -99,7 +99,7 @@ def test_mfa_no_local_secure_storage(mockSnowflakeRestfulPostRequest):
         )
         assert con._rest.token == 'NEW_TOKEN'
         assert con._rest.master_token == 'NEW_MASTER_TOKEN'
-        assert con._rest.mfa_token == ''
+        assert not con._rest.mfa_token
         con.close()
 
     test_body()
