@@ -11,6 +11,7 @@ import pytest
 from mock import Mock, patch
 
 import snowflake.connector
+from snowflake.connector.compat import IS_LINUX
 from snowflake.connector.errors import DatabaseError
 
 try:
@@ -27,8 +28,8 @@ MFA_TOKEN = "MFATOKEN"
 
 
 # Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed
-@pytest.mark.skipif(delete_temporary_credential is None or not IS_MACOS,
-                    reason="delete_temporary_credential or IS_MACOS is not available.")
+@pytest.mark.skipif(delete_temporary_credential is None,
+                    reason="delete_temporary_credential is not available.")
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
 def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     """Connects with (username, pwd, mfa) mock."""
@@ -115,82 +116,51 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     # POST requests mock
     mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
 
-    def test_body():
-        account = 'testaccount'
-        user = 'testuser'
-        pwd = 'testpwd'
-        authenticator = 'username_password_mfa'
-        host = 'testaccount.snowflakecomputing.com'
-
-        delete_temporary_credential(host=host, user=user, cred_type=MFA_TOKEN)
+    def test_body(conn_cfg):
+        delete_temporary_credential(host=conn_cfg['host'], user=conn_cfg['user'], cred_type=MFA_TOKEN)
 
         # first connection, no mfa token cache
-        con = snowflake.connector.connect(
-            account=account,
-            user=user,
-            password=pwd,
-            host=host,
-            authenticator=authenticator,
-            client_request_mfa_token=True,
-        )
+        con = snowflake.connector.connect(**conn_cfg)
         assert con._rest.token == 'TOKEN'
         assert con._rest.master_token == 'MASTER_TOKEN'
         assert con._rest.mfa_token == 'MFA_TOKEN'
         con.close()
 
         # second connection that uses the mfa token issued for first connection to login
-        con = snowflake.connector.connect(
-            account=account,
-            user=user,
-            password=pwd,
-            host=host,
-            authenticator=authenticator,
-            client_request_mfa_token=True,
-        )
+        con = snowflake.connector.connect(**conn_cfg)
         assert con._rest.token == 'NEW_TOKEN'
         assert con._rest.master_token == 'NEW_MASTER_TOKEN'
         assert con._rest.mfa_token == 'NEW_MFA_TOKEN'
         con.close()
 
         # third connection which is expected to login with new mfa token
-        con = snowflake.connector.connect(
-            account=account,
-            user=user,
-            password=pwd,
-            host=host,
-            authenticator=authenticator,
-            client_request_mfa_token=True,
-        )
+        con = snowflake.connector.connect(**conn_cfg)
         assert con._rest.mfa_token is None
         con.close()
 
         with pytest.raises(DatabaseError):
             # A failed login will be forced by a mocked response for this connection
             # Under authentication failed exception, mfa cache is expected to be cleaned up
-            con = snowflake.connector.connect(
-                account=account,
-                user=user,
-                password=pwd,
-                host=host,
-                authenticator=authenticator,
-                client_request_mfa_token=True,
-            )
+            con = snowflake.connector.connect(**conn_cfg)
 
         # no mfa cache token should be sent at this connection
-        con = snowflake.connector.connect(
-            account=account,
-            user=user,
-            password=pwd,
-            host=host,
-            authenticator=authenticator,
-            client_request_mfa_token=True,
-        )
+        con = snowflake.connector.connect(**conn_cfg)
         con.close()
+
+    conn_cfg = {
+        'account': 'testaccount',
+        'user': 'testuser',
+        'password': 'testpwd',
+        'authenticator': 'username_password_mfa',
+        'host': 'testaccount.snowflakecomputing.com',
+    }
+    if IS_LINUX:
+        conn_cfg['client_request_mfa_token'] = True
 
     if IS_MACOS:
         with patch('keyring.delete_password', Mock(side_effect=mock_del_password)
                    ), patch('keyring.set_password', Mock(side_effect=mock_set_password)
                             ), patch('keyring.get_password', Mock(side_effect=mock_get_password)):
-            test_body()
+            test_body(conn_cfg)
     else:
-        test_body()
+        test_body(conn_cfg)
