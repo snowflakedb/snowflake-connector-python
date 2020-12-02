@@ -15,13 +15,14 @@ try:
     from snowflake.connector.compat import IS_LINUX  # NOQA
     from snowflake.connector.options import installed_keyring
 except ImportError:
-    IS_LINUX = True
-    installed_keyring = None
+	import platform
+    IS_LINUX = (platform.system() == 'Linux')
+    installed_keyring = False
 
 MFA_TOKEN = "MFATOKEN"
 
 
-@pytest.mark.skipif(IS_LINUX or installed_keyring is None,
+@pytest.mark.skipif(IS_LINUX or not installed_keyring,
                     reason="Skip linux platform or (IS_LINUX or installed_keyring) is not available.")
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
 def test_mfa_no_local_secure_storage(mockSnowflakeRestfulPostRequest):

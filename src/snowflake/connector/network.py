@@ -339,8 +339,7 @@ class SnowflakeRestful(object):
 
     def _token_request(self, request_type):
         logger.debug(
-            'updating session. master_token: %s',
-            '****' if self.master_token else None)
+            'updating session. master_token: {}'.format('****' if self.master_token else None))
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,

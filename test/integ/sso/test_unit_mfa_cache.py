@@ -16,7 +16,8 @@ from snowflake.connector.errors import DatabaseError
 try:
     from snowflake.connector.compat import IS_MACOS  # NOQA
 except ImportError:
-    IS_MACOS = None
+    import platform
+    IS_MACOS = (platform.system() == 'Darwin')
 try:
     from snowflake.connector.auth import delete_temporary_credential  # NOQA
 except ImportError:
@@ -26,7 +27,7 @@ MFA_TOKEN = "MFATOKEN"
 
 
 # Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed
-@pytest.mark.skipif(delete_temporary_credential is None or IS_MACOS is None,
+@pytest.mark.skipif(delete_temporary_credential is None or not IS_MACOS,
                     reason="delete_temporary_credential or IS_MACOS is not available.")
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
 def test_mfa_cache(mockSnowflakeRestfulPostRequest):
