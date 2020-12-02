@@ -28,8 +28,8 @@ def get_credential(sys, user):
 
 @pytest.mark.skipif(not IS_LINUX,
                     reason="The test is only for Linux platform")
-def test_basic_store():
-    os.environ['SF_TEMPORARY_CREDENTIAL_CACHE_DIR'] = os.getenv("WORKSPACE", os.path.expanduser("~"))
+def test_basic_store(tmpdir):
+    os.environ['SF_TEMPORARY_CREDENTIAL_CACHE_DIR'] = str(tmpdir)
 
     auth.delete_temporary_credential_file()
     auth.TEMPORARY_CREDENTIAL.clear()

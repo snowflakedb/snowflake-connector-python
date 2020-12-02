@@ -34,7 +34,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
 
     def update_body(self, body):
         """Sets the password and mfa_token if available.
-        
+
         Don't set body['data']['AUTHENTICATOR'], since this is still snowflake default authenticator.
         """
         if self._password:

@@ -164,8 +164,9 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
         assert con._rest.mfa_token is None
         con.close()
 
-        try:
-            # a failed login will be forced by mocking for this connection
+        with pytest.raises(DatabaseError):
+            # A failed login will be forced by a mocked response for this connection
+            # Under authentication failed exception, mfa cache is expected to be cleaned up
             con = snowflake.connector.connect(
                 account=account,
                 user=user,
@@ -174,9 +175,6 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
                 authenticator=authenticator,
                 client_request_mfa_token=True,
             )
-        except DatabaseError:
-            # authentication failed exception, then mfa cache is cleaned up
-            pass
 
         # no mfa cache token should be sent at this connection
         con = snowflake.connector.connect(

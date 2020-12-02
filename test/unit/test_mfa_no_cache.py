@@ -10,20 +10,19 @@ import pytest
 from mock import patch
 
 import snowflake.connector
+from snowflake.connector.compat import IS_LINUX  # NOQA
 
 try:
-    from snowflake.connector.compat import IS_LINUX  # NOQA
     from snowflake.connector.options import installed_keyring
 except ImportError:
-	import platform
-    IS_LINUX = (platform.system() == 'Linux')
-    installed_keyring = False
+    # if installed_keyring is unavailable, we set it as True to skip the test
+    installed_keyring = True
 
 MFA_TOKEN = "MFATOKEN"
 
 
-@pytest.mark.skipif(IS_LINUX or not installed_keyring,
-                    reason="Skip linux platform or (IS_LINUX or installed_keyring) is not available.")
+@pytest.mark.skipif(IS_LINUX or installed_keyring,
+                    reason="Required test env is Mac/Win with no pre-installed keyring package.")
 @patch('snowflake.connector.network.SnowflakeRestful._post_request')
 def test_mfa_no_local_secure_storage(mockSnowflakeRestfulPostRequest):
     """Test whether username_password_mfa authenticator can work when no local secure storage is available."""
@@ -68,39 +67,36 @@ def test_mfa_no_local_secure_storage(mockSnowflakeRestfulPostRequest):
     # POST requests mock
     mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
 
-    def test_body():
-        account = 'testaccount'
-        user = 'testuser'
-        pwd = 'testpwd'
-        authenticator = 'username_password_mfa'
-        host = 'testaccount.snowflakecomputing.com'
+    account = 'testaccount'
+    user = 'testuser'
+    pwd = 'testpwd'
+    authenticator = 'username_password_mfa'
+    host = 'testaccount.snowflakecomputing.com'
 
-        # first connection, no mfa token cache
-        con = snowflake.connector.connect(
-            account=account,
-            user=user,
-            password=pwd,
-            host=host,
-            authenticator=authenticator,
-            client_request_mfa_token=True,
-        )
-        assert con._rest.token == 'TOKEN'
-        assert con._rest.master_token == 'MASTER_TOKEN'
-        assert con._rest.mfa_token == 'MFA_TOKEN'
-        con.close()
+    # first connection, no mfa token cache
+    con = snowflake.connector.connect(
+        account=account,
+        user=user,
+        password=pwd,
+        host=host,
+        authenticator=authenticator,
+        client_request_mfa_token=True,
+    )
+    assert con._rest.token == 'TOKEN'
+    assert con._rest.master_token == 'MASTER_TOKEN'
+    assert con._rest.mfa_token == 'MFA_TOKEN'
+    con.close()
 
-        # second connection, no mfa token should be issued as well since no available local secure storage
-        con = snowflake.connector.connect(
-            account=account,
-            user=user,
-            password=pwd,
-            host=host,
-            authenticator=authenticator,
-            client_request_mfa_token=True,
-        )
-        assert con._rest.token == 'NEW_TOKEN'
-        assert con._rest.master_token == 'NEW_MASTER_TOKEN'
-        assert not con._rest.mfa_token
-        con.close()
-
-    test_body()
+    # second connection, no mfa token should be issued as well since no available local secure storage
+    con = snowflake.connector.connect(
+        account=account,
+        user=user,
+        password=pwd,
+        host=host,
+        authenticator=authenticator,
+        client_request_mfa_token=True,
+    )
+    assert con._rest.token == 'NEW_TOKEN'
+    assert con._rest.master_token == 'NEW_MASTER_TOKEN'
+    assert not con._rest.mfa_token
+    con.close()
