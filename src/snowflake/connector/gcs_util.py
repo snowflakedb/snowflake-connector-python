@@ -12,8 +12,7 @@ from typing import Any, Dict
 
 import requests
 
-from snowflake.connector.compat import quote
-
+from .compat import quote
 from .constants import HTTP_HEADER_CONTENT_ENCODING, SHA256_DIGEST, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 
