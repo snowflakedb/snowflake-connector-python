@@ -113,7 +113,7 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, enable_gcs_dow
                 if enable_gcs_downscoped:
                     statement += " overwrite = true"
 
-                all_recs = run(csr, "put file://{files} @%{name}")
+                all_recs = run(csr, statement)
                 assert all([rec[6] == 'UPLOADED' for rec in all_recs])
                 run(csr, "copy into {name}")
 

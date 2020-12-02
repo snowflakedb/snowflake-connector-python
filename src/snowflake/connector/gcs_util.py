@@ -9,7 +9,7 @@ import os
 from collections import namedtuple
 from logging import getLogger
 from typing import Any, Dict
-from urllib.parse import quote
+from snowflake.connector.compat import quote
 
 import requests
 
@@ -358,7 +358,7 @@ class SnowflakeGCSUtil:
                         return
                     if errh.response.status_code == 404:
                         meta['result_status'] = ResultStatus.NOT_FOUND_FILE
-                    elif errh.response.status_code == 401:
+                    elif SnowflakeGCSUtil.is_token_expired(errh.response)
                         meta['last_error'] = errh
                         meta['result_status'] = ResultStatus.RENEW_TOKEN
                     else:
@@ -385,9 +385,7 @@ class SnowflakeGCSUtil:
             if path and not path.endswith('/'):
                 path += '/'
 
-        return GcsLocation(
-            bucket_name=container_name,
-            path=path)
+        return GcsLocation(bucket_name=container_name, path=path)
 
     @staticmethod
     def generate_file_url(stage_location: str, filename: str):
