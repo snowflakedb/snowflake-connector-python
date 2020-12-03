@@ -7,6 +7,8 @@
 import logging
 
 from .auth_by_plugin import AuthByPlugin
+from .errorcode import ER_NO_PASSWORD
+from .errors import ProgrammingError
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,8 @@ class AuthByUsrPwdMfa(AuthByPlugin):
 
         Don't set body['data']['AUTHENTICATOR'], since this is still snowflake default authenticator.
         """
-        if self._password:
-            body['data']['PASSWORD'] = self._password
+        if not self._password:
+            raise ProgrammingError(msg="Password for username password authenticator is empty.", errno=ER_NO_PASSWORD)
+        body['data']['PASSWORD'] = self._password
         if self._mfa_token:
             body['data']['TOKEN'] = self._mfa_token
