@@ -17,6 +17,7 @@ import pytest
 import requests
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent, SnowflakeProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
@@ -28,8 +29,11 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.gcp
 
 
-def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
     original_contents = "123,test1\n456,test2\n"
@@ -40,6 +44,12 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            try:
+                csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError as e:
+                if enable_gcs_downscoped:
+                    # not raise error when the parameter is not available yet, using old behavior
+                    raise e
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
                 csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
@@ -64,8 +74,11 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Copies many files."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
@@ -80,6 +93,12 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            try:
+                csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError as e:
+                if enable_gcs_downscoped:
+                    # not raise error when the parameter is not available yet, using old behavior
+                    raise e
             run(csr, """
             create or replace table {name} (
             aa int,
@@ -92,7 +111,11 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
             ratio number(6,2))
             """)
             try:
-                all_recs = run(csr, "put file://{files} @%{name}")
+                statement = "put file://{files} @%{name}"
+                if enable_gcs_downscoped:
+                    statement += " overwrite = true"
+
+                all_recs = run(csr, statement)
                 assert all([rec[6] == 'UPLOADED' for rec in all_recs])
                 run(csr, "copy into {name}")
 
@@ -102,8 +125,11 @@ def test_put_copy_many_files_gcp(tmpdir, conn_cnx, db_parameters):
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Copies duplicated files."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     # generates N files
     number_of_files = 5
     number_of_lines = 100
@@ -118,6 +144,12 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            try:
+                csr.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError as e:
+                if enable_gcs_downscoped:
+                    # not raise error when the parameter is not available yet, using old behavior
+                    raise e
             run(csr, """
             create or replace table {name} (
             aa int,
@@ -133,7 +165,10 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
             try:
                 success_cnt = 0
                 skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
+                put_statement = "put file://{files} @%{name}"
+                if enable_gcs_downscoped:
+                    put_statement += " overwrite = true"
+                for rec in run(csr, put_statement):
                     logger.info('rec=%s', rec)
                     if rec[6] == 'UPLOADED':
                         success_cnt += 1
@@ -152,7 +187,7 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
 
                 success_cnt = 0
                 skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
+                for rec in run(csr, put_statement):
                     logger.info('rec=%s', rec)
                     if rec[6] == 'UPLOADED':
                         success_cnt += 1
@@ -170,8 +205,11 @@ def test_put_copy_duplicated_files_gcp(tmpdir, conn_cnx, db_parameters):
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Gets Large files."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     number_of_files = 3
     number_of_lines = 200000
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
@@ -200,6 +238,12 @@ def test_put_get_large_files_gcp(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         try:
+            try:
+                run(cnx, f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError as e:
+                if enable_gcs_downscoped:
+                    # not raise error when the parameter is not available yet, using old behavior
+                    raise e
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == 'UPLOADED' for rec in all_recs])
 
@@ -251,6 +295,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                         raise exc
                     else:
                         return put(*args, **kwargs)
+
                 mocked_put.counter = 0
 
                 def mocked_file_agent(*args, **kwargs):
@@ -260,14 +305,14 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                     )
                     mocked_file_agent.agent = agent
                     return agent
+
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.put', side_effect=mocked_put):
                         csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
                     assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
                 assert csr.fetchone()[6] == 'UPLOADED'
-                csr.execute("copy into {}".format(table_name))
-                csr.execute("rm @%{}".format(table_name))
+                csr.execute("copy into {} purge = true".format(table_name))
                 assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
                 csr.execute("copy into @%{table_name} from {table_name} "
                             "file_format=(type=csv compression='gzip')".format(table_name=table_name))
@@ -280,15 +325,9 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
                         raise exc
                     else:
                         return get(*args, **kwargs)
+
                 mocked_get.counter = 0
 
-                def mocked_file_agent(*args, **kwargs):
-                    agent = SnowflakeFileTransferAgent(*args, **kwargs)
-                    agent._update_file_metas_with_presigned_url = mock.MagicMock(
-                        wraps=agent._update_file_metas_with_presigned_url
-                    )
-                    mocked_file_agent.agent = agent
-                    return agent
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
                     with mock.patch('requests.get', side_effect=mocked_get):
@@ -308,12 +347,21 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
+def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
+    if enable_gcs_downscoped and is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
     fname = str(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data', 'example.json'))
     stage_name = random_string(5, 'teststage_')
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
+            try:
+                cursor.execute(f'ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = {enable_gcs_downscoped}')
+            except ProgrammingError as e:
+                if enable_gcs_downscoped:
+                    # not raise error when the parameter is not available yet, using old behavior
+                    raise e
             try:
                 cursor.execute("create or replace stage {}".format(stage_name))
                 cursor.execute("put file://{} @{} auto_compress=false".format(fname, stage_name))
@@ -322,3 +370,132 @@ def test_auto_compress_off_gcp(tmpdir, conn_cnx, db_parameters):
                 assert cmp(fname, downloaded_file)
             finally:
                 cursor.execute("drop stage {}".format(stage_name))
+
+
+@pytest.mark.parametrize('error_code', [401, 403, 408, 429, 500, 503])
+def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpdir, conn_cnx, db_parameters,
+                                                                            error_code, is_public_test):
+    if is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
+    fname = str(tmpdir.join('test_put_get_with_gcp_token.txt.gz'))
+    original_contents = "123,test1\n456,test2\n"
+    with gzip.open(fname, 'wb') as f:
+        f.write(original_contents.encode(UTF8))
+    tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
+    table_name = random_string(5, 'snow32807_')
+
+    with conn_cnx() as cnx:
+        with cnx.cursor() as csr:
+            csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
+            csr.execute("create or replace table {} (a int, b string)".format(table_name))
+            try:
+                from requests import put, get, head
+
+                def mocked_put(*args, **kwargs):
+                    if mocked_put.counter == 0:
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = error_code
+                        mocked_put.counter += 1
+                        raise exc
+                    else:
+                        return put(*args, **kwargs)
+
+                mocked_put.counter = 0
+
+                def mocked_head(*args, **kwargs):
+                    if mocked_head.counter == 0:
+                        mocked_head.counter += 1
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = error_code
+                        raise exc
+                    else:
+                        return head(*args, **kwargs)
+
+                mocked_head.counter = 0
+
+                def mocked_file_agent(*args, **kwargs):
+                    agent = SnowflakeFileTransferAgent(*args, **kwargs)
+                    agent.renew_expired_client = mock.MagicMock(
+                        wraps=agent.renew_expired_client
+                    )
+                    mocked_file_agent.agent = agent
+                    return agent
+
+                with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                                side_effect=mocked_file_agent):
+                    with mock.patch('requests.put', side_effect=mocked_put):
+                        with mock.patch('requests.head', side_effect=mocked_head):
+                            csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
+                    if error_code == 401:
+                        assert mocked_file_agent.agent.renew_expired_client.call_count == 2
+                assert csr.fetchone()[6] == 'UPLOADED'
+                csr.execute("copy into {}".format(table_name))
+                csr.execute("rm @%{}".format(table_name))
+                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute("copy into @%{table_name} from {table_name} "
+                            "file_format=(type=csv compression='gzip')".format(table_name=table_name))
+
+                def mocked_get(*args, **kwargs):
+                    if mocked_get.counter == 0:
+                        mocked_get.counter += 1
+                        exc = requests.exceptions.HTTPError(response=requests.Response())
+                        exc.response.status_code = error_code
+                        raise exc
+                    else:
+                        return get(*args, **kwargs)
+
+                mocked_get.counter = 0
+
+                with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                                side_effect=mocked_file_agent):
+                    with mock.patch('requests.get', side_effect=mocked_get):
+                        csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
+                    if error_code == 401:
+                        assert mocked_file_agent.agent.renew_expired_client.call_count == 1
+                rec = csr.fetchone()
+                assert rec[0].startswith('data_'), 'A file downloaded by GET'
+                assert rec[1] == 36, 'Return right file size'
+                assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
+                assert rec[3] == '', 'Return no error message'
+            finally:
+                csr.execute("drop table {}".format(table_name))
+
+    files = glob.glob(os.path.join(tmp_dir, 'data_*'))
+    with gzip.open(files[0], 'rb') as fd:
+        contents = fd.read().decode(UTF8)
+    assert original_contents == contents, 'Output is different from the original file'
+
+
+def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters, is_public_test):
+    """Tests whether _force_put_overwrite and overwrite=true works as intended."""
+    if is_public_test:
+        pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
+    with conn_cnx() as cnx:
+
+        tmp_dir = str(tmpdir.mkdir('data'))
+        test_data = os.path.join(tmp_dir, 'data.txt')
+        with open(test_data, 'w') as f:
+            f.write("test1,test2")
+            f.write("test3,test4")
+
+        cnx.cursor().execute("RM @~/test_put_overwrite")
+        try:
+            with cnx.cursor() as cur:
+                cur.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                data = cur.fetchall()
+                assert data[0][6] == 'UPLOADED'
+
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                data = cur.fetchall()
+                assert data[0][6] == 'SKIPPED'
+
+                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                data = cur.fetchall()
+                assert data[0][6] == 'UPLOADED'
+
+            ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
+            assert "test_put_overwrite/data.txt" in ret[0]
+            assert "data.txt.gz" in ret[0]
+        finally:
+            cnx.cursor().execute("RM @~/test_put_overwrite")

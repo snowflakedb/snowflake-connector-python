@@ -79,23 +79,6 @@ class SnowflakeRemoteStorageUtil(object):
 
         util_class = SnowflakeRemoteStorageUtil.getForStorageType(
             meta['stage_info']['locationType'])
-        if not meta.get('overwrite'):
-            file_header = util_class.get_file_header(
-                meta, meta['dst_file_name'])
-            if meta['result_status'] == ResultStatus.RENEW_TOKEN:
-                # need renew token
-                return
-            elif meta['result_status'] == ResultStatus.RENEW_PRESIGNED_URL:
-                return
-            elif file_header and \
-                    meta['result_status'] == ResultStatus.UPLOADED:
-                logger.debug(
-                    'file already exists location="%s", file_name="%s"',
-                    meta['stage_info']['location'],
-                    meta['dst_file_name'])
-                meta['dst_file_size'] = 0
-                meta['result_status'] = ResultStatus.SKIPPED
-                return
 
         logger.debug('putting a file: %s, %s',
                      meta['stage_info']['location'], meta['dst_file_name'])
@@ -104,12 +87,27 @@ class SnowflakeRemoteStorageUtil(object):
         last_err = None
         max_retry = DEFAULT_MAX_RETRY
         for retry in range(max_retry):
-            util_class.upload_file(
-                data_file,
-                meta,
-                encryption_metadata,
-                max_concurrency
-            )
+            if not meta.get('overwrite'):
+                file_header = util_class.get_file_header(
+                    meta, meta['dst_file_name'])
+
+                if file_header and \
+                        meta['result_status'] == ResultStatus.UPLOADED:
+                    logger.debug(
+                        'file already exists location="%s", file_name="%s"',
+                        meta['stage_info']['location'],
+                        meta['dst_file_name'])
+                    meta['dst_file_size'] = 0
+                    meta['result_status'] = ResultStatus.SKIPPED
+                    return
+
+            if meta.get('overwrite') or meta.get('result_status') == ResultStatus.NOT_FOUND_FILE:
+                util_class.upload_file(
+                    data_file,
+                    meta,
+                    encryption_metadata,
+                    max_concurrency
+                )
 
             if (meta['result_status'] == ResultStatus.UPLOADED):
                 return
