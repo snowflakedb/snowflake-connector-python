@@ -25,12 +25,14 @@ from .auth_idtoken import AuthByIdToken
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
+from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
+    PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
@@ -63,6 +65,7 @@ from .network import (
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     REQUEST_ID,
+    USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -142,6 +145,7 @@ DEFAULT_CONFIGURATION = {
     'disable_request_pooling': (False, bool),  # snowflake
     # enable temporary credential file for Linux, default false. Mac/Win will overlook this
     'client_store_temporary_credential': (False, bool),
+    'client_request_mfa_token': (False, bool),
     'use_openssl_only': (False, bool),  # only use openssl instead of python only crypto modules
 }
 
@@ -583,6 +587,8 @@ class SnowflakeConnection(object):
             auth_instance = AuthByKeyPair(self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
             auth_instance = AuthByOAuth(self._token)
+        elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+            auth_instance = AuthByUsrPwdMfa(self._password)
         else:
             # okta URL, e.g., https://<account>.okta.com/
             auth_instance = AuthByOkta(self.rest, self.application)
@@ -617,8 +623,13 @@ class SnowflakeConnection(object):
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
                     self._client_store_temporary_credential if IS_LINUX else True
 
+        if self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+            self._session_parameters[
+                PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = \
+                    self._client_request_mfa_token if IS_LINUX else True
+
         auth = Auth(self.rest)
-        auth.read_temporary_credential(self.host, self.account, self.user, self._session_parameters)
+        auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
         self._authenticate(auth_instance)
 
         self._password = None  # ensure password won't persist
@@ -630,6 +641,9 @@ class SnowflakeConnection(object):
         if type(auth_instance) is AuthByWebBrowser:
             if self._rest.id_token is not None:
                 return AuthByIdToken(self._rest.id_token)
+        if type(auth_instance) is AuthByUsrPwdMfa:
+            if self._rest.mfa_token is not None:
+                auth_instance.set_mfa_token(self._rest.mfa_token)
         return auth_instance
 
     def __config(self, **kwargs):
@@ -707,7 +721,8 @@ class SnowflakeConnection(object):
                 DEFAULT_AUTHENTICATOR,
                 EXTERNAL_BROWSER_AUTHENTICATOR,
                 KEY_PAIR_AUTHENTICATOR,
-                OAUTH_AUTHENTICATOR
+                OAUTH_AUTHENTICATOR,
+                USR_PWD_MFA_AUTHENTICATOR,
             ]:
                 self._authenticator = auth_tmp
 
