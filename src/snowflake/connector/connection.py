@@ -1206,7 +1206,7 @@ class SnowflakeConnection(object):
                                         'errno': int(code),
                                         'sqlstate': sql_state,
                                         'sfqid': sf_qid})
-            return status
+        return status
 
     @staticmethod
     def is_still_running(status: QueryStatus) -> bool:
