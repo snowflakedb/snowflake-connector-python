@@ -64,7 +64,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             Extension(name='snowflake.connector.arrow_result',
                       sources=[os.path.join(CONNECTOR_SRC_DIR, 'arrow_result.pyx')])
         ],
-        build_dir=os.path.join('build', 'cython'))
+    )
 
     class MyBuildExt(build_ext):
 

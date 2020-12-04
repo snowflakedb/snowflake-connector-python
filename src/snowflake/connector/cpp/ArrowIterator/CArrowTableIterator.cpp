@@ -823,10 +823,11 @@ bool CArrowTableIterator::convertRecordBatchesToTable()
   if (!m_cTable && !m_cRecordBatches->empty())
   {
     reconstructRecordBatches();
-    arrow::Status ret = arrow::Table::FromRecordBatches(*m_cRecordBatches, &m_cTable);
+    arrow::Result<std::shared_ptr<arrow::Table>> ret = arrow::Table::FromRecordBatches(*m_cRecordBatches);
     SF_CHECK_ARROW_RC_AND_RETURN(ret, false,
       "[Snowflake Exception] arrow failed to build table from batches, errorInfo: %s",
-      ret.message().c_str());
+      ret.status().message().c_str());
+    m_cTable = ret.ValueOrDie();
 
     return true;
   }

@@ -69,6 +69,16 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
         c_bool IsIndexError()
         c_bool IsSerializationError()
 
+    cdef cppclass CResult "arrow::Result"[T]:
+        CResult()
+        CResult(CStatus status)
+
+        c_string ToString()
+        c_string message()
+
+        c_bool ok()
+        const CStatus& status()
+        T& ValueOrDie()
 
     cdef cppclass CBuffer" arrow::Buffer":
         CBuffer(const uint8_t* data, int64_t size)
@@ -83,8 +93,7 @@ cdef extern from "arrow/ipc/api.h" namespace "arrow::ipc" nogil:
     cdef cppclass CRecordBatchStreamReader \
             " arrow::ipc::RecordBatchStreamReader"(CRecordBatchReader):
         @staticmethod
-        CStatus Open(const InputStream* stream,
-                     shared_ptr[CRecordBatchReader]* out)
+        CResult[shared_ptr[CRecordBatchReader]] Open(const InputStream* stream)
 
 
 cdef extern from "arrow/io/api.h" namespace "arrow::io" nogil:
@@ -154,19 +163,22 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     def __cinit__(self, object cursor, object py_inputstream, object arrow_context, object use_dict_result,
                   object numpy):
         cdef shared_ptr[InputStream] input_stream
-        cdef shared_ptr[CRecordBatchReader] reader
         cdef shared_ptr[CRecordBatch] record_batch
+        cdef CStatus ret
         input_stream.reset(new PyReadableFile(py_inputstream))
-        cdef CStatus ret = CRecordBatchStreamReader.Open(input_stream.get(), &reader)
-        if not ret.ok():
+        cdef CResult[shared_ptr[CRecordBatchReader]] readerRet = CRecordBatchStreamReader.Open(input_stream.get())
+        #cdef  ret = CRecordBatchStreamReader.Open(input_stream.get(), &reader)
+        if not readerRet.ok():
             Error.errorhandler_wrapper(
                 cursor.connection,
                 cursor,
                 OperationalError,
                 {
-                    'msg': 'Failed to open arrow stream: ' + str(ret.message()),
+                    'msg': 'Failed to open arrow stream: ' + str(readerRet.status().message()),
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
+
+        cdef shared_ptr[CRecordBatchReader] reader = readerRet.ValueOrDie()
 
         while True:
             ret = reader.get().ReadNext(&record_batch)
