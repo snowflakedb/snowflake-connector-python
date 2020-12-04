@@ -33,6 +33,11 @@ void CArrowTableIterator::reconstructRecordBatches()
   {
     std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
     std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
+    // These copies will be used if rebuilding the RecordBatch if necessary
+    bool needsRebuild = false;
+    std::vector<std::shared_ptr<arrow::Field>> futureFields;
+    std::vector<std::shared_ptr<arrow::Array>> futureColumns;
+
     for (int colIdx = 0; colIdx < currentBatch->num_columns(); colIdx++)
     {
       std::shared_ptr<arrow::Array> columnArray = currentBatch->column(colIdx);
@@ -54,7 +59,7 @@ void CArrowTableIterator::reconstructRecordBatches()
           {
             logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
                          scale, dt->id());
-            convertScaledFixedNumberColumnToDoubleColumn(batchIdx, colIdx, field, columnArray, scale);
+            convertScaledFixedNumberColumnToDoubleColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild);
           }
           break;
         }
@@ -80,7 +85,7 @@ void CArrowTableIterator::reconstructRecordBatches()
                           ? std::stoi(metaData->value(metaData->FindKey("scale")))
                           : 9;
 
-          convertTimeColumn(batchIdx, colIdx, field, columnArray, scale);
+          convertTimeColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild);
           break;
         }
 
@@ -90,7 +95,7 @@ void CArrowTableIterator::reconstructRecordBatches()
                           ? std::stoi(metaData->value(metaData->FindKey("scale")))
                           : 9;
 
-          convertTimestampColumn(batchIdx, colIdx, field, columnArray, scale);
+          convertTimestampColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild);
           break;
         }
 
@@ -100,7 +105,7 @@ void CArrowTableIterator::reconstructRecordBatches()
                           ? std::stoi(metaData->value(metaData->FindKey("scale")))
                           : 9;
 
-          convertTimestampColumn(batchIdx, colIdx, field, columnArray, scale, m_timezone);
+          convertTimestampColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild, m_timezone);
           break;
         }
 
@@ -114,7 +119,7 @@ void CArrowTableIterator::reconstructRecordBatches()
                 ? std::stoi(metaData->value(metaData->FindKey("byteLength")))
                 : 16;
 
-          convertTimestampTZColumn(batchIdx, colIdx, field, columnArray, scale, byteLength);
+          convertTimestampTZColumn(batchIdx, colIdx, field, columnArray, scale, byteLength, futureFields, futureColumns, needsRebuild);
           break;
         }
 
@@ -128,6 +133,12 @@ void CArrowTableIterator::reconstructRecordBatches()
           return;
         }
       }
+    }
+
+    if (needsRebuild)
+    {
+     std::shared_ptr<arrow::Schema> newSchema = arrow::schema(futureFields, schema->metadata());
+     (*m_cRecordBatches)[batchIdx] = arrow::RecordBatch::Make(schema, currentBatch->num_rows(), currentBatch->columns());
     }
   }
 }
@@ -154,26 +165,26 @@ std::shared_ptr<ReturnVal> CArrowTableIterator::next()
   }
 }
 
-arrow::Status CArrowTableIterator::replaceColumn(
+void CArrowTableIterator::replaceColumn(
     const unsigned int batchIdx,
     const int colIdx,
     const std::shared_ptr<arrow::Field>& newField,
-    const std::shared_ptr<arrow::Array>& newColumn)
+    const std::shared_ptr<arrow::Array>& newColumn,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild)
 {
   // replace the targeted column
-  std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
-  arrow::Status ret = currentBatch->AddColumn(colIdx+1, newField, newColumn, &currentBatch);
-  if(!ret.ok())
+  if (needsRebuild == false)
   {
-    return ret;
+    // First time of modifying batches, we have to make a deep copy of fields and columns
+    std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
+    futureFields = currentBatch->schema()->fields();
+    futureColumns = currentBatch->columns();
+    needsRebuild = true;
   }
-  ret = currentBatch->RemoveColumn(colIdx, &currentBatch);
-  if(!ret.ok())
-  {
-    return ret;
-  }
-  (*m_cRecordBatches)[batchIdx] = currentBatch;
-  return ret;
+  futureFields[colIdx] = newField;
+  futureColumns[colIdx] = newColumn;
 }
 
 template <typename T>
@@ -210,7 +221,10 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
   const int colIdx,
   const std::shared_ptr<arrow::Field> field,
   const std::shared_ptr<arrow::Array> columnArray,
-  const unsigned int scale
+  const unsigned int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
 )
 {
   // Convert to arrow double/float64 column
@@ -276,11 +290,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
     ret.message().c_str());
 
   // replace the targeted column
-  ret = replaceColumn(batchIdx, colIdx, doubleField, doubleArray);
-  SF_CHECK_ARROW_RC(ret,
-    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-    ", errorInfo: %s",
-    dt->id(), ret.message().c_str());
+  replaceColumn(batchIdx, colIdx, doubleField, doubleArray, futureFields, futureColumns, needsRebuild);
 }
 
 void CArrowTableIterator::convertTimeColumn(
@@ -288,7 +298,10 @@ void CArrowTableIterator::convertTimeColumn(
   const int colIdx,
   const std::shared_ptr<arrow::Field> field,
   const std::shared_ptr<arrow::Array> columnArray,
-  const int scale
+  const int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
 )
 {
   std::shared_ptr<arrow::Field> tsField;
@@ -457,11 +470,7 @@ void CArrowTableIterator::convertTimeColumn(
   }
 
   // replace the targeted column
-  ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  SF_CHECK_ARROW_RC(ret,
-    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-    ", errorInfo: %s",
-    dt->id(), ret.message().c_str());
+  replaceColumn(batchIdx, colIdx, tsField, tsArray, futureFields, futureColumns, needsRebuild);
 }
 
 void CArrowTableIterator::convertTimestampColumn(
@@ -470,6 +479,9 @@ void CArrowTableIterator::convertTimestampColumn(
   const std::shared_ptr<arrow::Field> field,
   const std::shared_ptr<arrow::Array> columnArray,
   const int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild,
   const std::string timezone
 )
 {
@@ -670,11 +682,7 @@ void CArrowTableIterator::convertTimestampColumn(
   }
 
   // replace the targeted column
-  ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  SF_CHECK_ARROW_RC(ret,
-    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-    ", errorInfo: %s",
-    dt->id(), ret.message().c_str());
+  replaceColumn(batchIdx, colIdx, tsField, tsArray, futureFields, futureColumns, needsRebuild);
 }
 
 void CArrowTableIterator::convertTimestampTZColumn(
@@ -683,7 +691,11 @@ void CArrowTableIterator::convertTimestampTZColumn(
   const std::shared_ptr<arrow::Field> field,
   const std::shared_ptr<arrow::Array> columnArray,
   const int scale,
-  const int byteLength)
+  const int byteLength,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
+)
 {
   std::shared_ptr<arrow::Field> tsField;
   std::shared_ptr<arrow::Array> tsArray;
@@ -802,11 +814,7 @@ void CArrowTableIterator::convertTimestampTZColumn(
     ret.message().c_str());
 
   // replace the targeted column
-  ret = replaceColumn(batchIdx, colIdx, tsField, tsArray);
-  SF_CHECK_ARROW_RC(ret,
-    "[Snowflake Exception] arrow failed to replace column: internal data type(%d)"
-    ", errorInfo: %s",
-    dt->id(), ret.message().c_str());
+  replaceColumn(batchIdx, colIdx, tsField, tsArray, futureFields, futureColumns, needsRebuild);
 }
 
 bool CArrowTableIterator::convertRecordBatchesToTable()
