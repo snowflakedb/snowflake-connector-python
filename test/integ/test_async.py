@@ -134,7 +134,7 @@ def test_done_caching(conn_cnx):
             assert con.get_query_status(qid2) == QueryStatus.SUCCESS
             assert len(con._async_sfqids) == 0
             assert len(con._done_async_sfqids) == 2
-            assert con.safe_to_close()
+            assert con._all_aync_queries_finished()
 
 
 def test_invalid_uuid_get_status(conn_cnx):

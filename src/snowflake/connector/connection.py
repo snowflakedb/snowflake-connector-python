@@ -437,7 +437,7 @@ class SnowflakeConnection(object):
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
             self._telemetry.close(send_on_close=retry)
-            if self.safe_to_close():
+            if self._all_aync_queries_finished():
                 logger.info('No async queries seem to be running, deleting session')
                 self.rest.delete_session(retry=retry)
             else:
@@ -1231,11 +1231,8 @@ class SnowflakeConnection(object):
             QueryStatus.BLOCKED,
         )
 
-    def safe_to_close(self) -> bool:
-        """Checks whether this connection is safe to close.
-
-        A connection is safe to close if all of its async queries are not running anymore.
-        """
+    def _all_aync_queries_finished(self) -> bool:
+        """Checks whether all async queries started by this Connection have finished executing."""
         queries = copy.copy(self._async_sfqids)  # get_query_status might update _async_sfqids, let's copy the list
         finished_async_queries = (not self.is_still_running(self.get_query_status(q)) for q in queries)
         return all(finished_async_queries)
