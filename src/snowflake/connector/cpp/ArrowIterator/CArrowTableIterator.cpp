@@ -137,8 +137,8 @@ void CArrowTableIterator::reconstructRecordBatches()
 
     if (needsRebuild)
     {
-     std::shared_ptr<arrow::Schema> newSchema = arrow::schema(futureFields, schema->metadata());
-     (*m_cRecordBatches)[batchIdx] = arrow::RecordBatch::Make(schema, currentBatch->num_rows(), currentBatch->columns());
+      std::shared_ptr<arrow::Schema> futureSchema = arrow::schema(futureFields, schema->metadata());
+      (*m_cRecordBatches)[batchIdx] = arrow::RecordBatch::Make(futureSchema, currentBatch->num_rows(), futureColumns);
     }
   }
 }
