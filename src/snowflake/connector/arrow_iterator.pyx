@@ -167,7 +167,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         cdef CStatus ret
         input_stream.reset(new PyReadableFile(py_inputstream))
         cdef CResult[shared_ptr[CRecordBatchReader]] readerRet = CRecordBatchStreamReader.Open(input_stream.get())
-        #cdef  ret = CRecordBatchStreamReader.Open(input_stream.get(), &reader)
         if not readerRet.ok():
             Error.errorhandler_wrapper(
                 cursor.connection,
