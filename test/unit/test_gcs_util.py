@@ -25,6 +25,7 @@ except ImportError:
 
 def test_create_client(caplog):
     """Creates a GCSUtil with an access token."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     client = SnowflakeGCSUtil.create_client({'creds': {'GCS_ACCESS_TOKEN': 'fake_token'}})
     assert client is not None
     assert client == 'fake_token'
@@ -33,6 +34,7 @@ def test_create_client(caplog):
 @pytest.mark.xfail(reason='Newer version support access token. This test is obsoleted')
 def test_native_download_access_token(caplog):
     """Tests that GCS access token error is correctly logged when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     meta = {}
     SnowflakeGCSUtil._native_download_file(meta, None, 99)
     assert meta['result_status'] == ResultStatus.ERROR
@@ -43,6 +45,7 @@ def test_native_download_access_token(caplog):
 @pytest.mark.xfail(reason='Newer version support access token. This test is obsoleted')
 def test_native_upload_access_token(caplog):
     """Tests that GCS access token error is correctly logged when uploading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     meta = {}
     SnowflakeGCSUtil.upload_file(None, meta, None, 99)
     assert meta['result_status'] == ResultStatus.ERROR
@@ -102,6 +105,7 @@ def test_download_uncaught_exception(tmpdir):
 
 def test_upload_put_timeout(tmpdir, caplog):
     """Tests whether timeout error is handled correctly when uploading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     f_name = str(tmpdir.join('some_file.txt'))
     resp = Response()
     meta = {'presigned_url': ['some_url'], 'sha256_digest': 'asd'}
@@ -118,6 +122,7 @@ def test_upload_put_timeout(tmpdir, caplog):
 
 def test_upload_get_timeout(tmpdir, caplog):
     """Tests whether timeout error is handled correctly when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     resp = Response()
     meta = {'presigned_url': ['some_url'], 'sha256_digest': 'asd'}
     with mock.patch('requests.get', side_effect=requests.exceptions.Timeout(response=resp)):

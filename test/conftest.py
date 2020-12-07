@@ -45,6 +45,10 @@ def filter_log() -> None:
     log_dir = os.getenv('CLIENT_LOG_DIR_PATH_DOCKER', str(pathlib.Path(__file__).parent.absolute()))
 
     _logger = getLogger('snowflake.connector')
+    original_log_level = _logger.getEffectiveLevel()
+    # Make sure that the old handlers are unaffected by the DEBUG level set for the new handler
+    for handler in _logger.handlers:
+        handler.setLevel(original_log_level)
     _logger.setLevel(logging.DEBUG)
     sd = logging.FileHandler(os.path.join(log_dir, '', '..', 'snowflake_ssm_rt.log'))
     sd.setLevel(logging.DEBUG)
