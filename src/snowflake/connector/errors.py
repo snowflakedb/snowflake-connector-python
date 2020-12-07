@@ -5,25 +5,34 @@
 #
 
 import logging
+import os
+import traceback
 from logging import getLogger
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 
 from snowflake.connector.constants import UTF8
 
 from .compat import BASE_EXCEPTION_CLASS
+from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
+from .secret_detector import SecretDetector
+from .telemetry import TelemetryData, TelemetryField
+from .telemetry_oob import TelemetryService
+from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .cursor import SnowflakeCursor
 
 logger = getLogger(__name__)
+connector_base_path = os.path.join("snowflake", "connector")
 
 
 class Error(BASE_EXCEPTION_CLASS):
     """Base Snowflake exception class."""
 
-    def __init__(self, msg=None, errno=None, sqlstate=None, sfqid=None,
-                 done_format_msg=False):
+    def __init__(self, msg: Optional[str] = None, errno: Optional[int] = None, sqlstate: Optional[str] = None,
+                 sfqid: Optional[str] = None, done_format_msg: Optional[bool] = None,
+                 connection: Optional['SnowflakeConnection'] = None, cursor: Optional['SnowflakeCursor'] = None):
         self.msg = msg
         self.raw_msg = msg
         self.errno = errno or -1
@@ -56,6 +65,10 @@ class Error(BASE_EXCEPTION_CLASS):
                     self.msg = '{errno:06d}: {msg}'.format(errno=self.errno,
                                                             msg=self.msg)
 
+        # We want to skip the last frame/line in the traceback since it is the current frame
+        self.telemetry_traceback = self.generate_telemetry_stacktrace()
+        self.exception_telemetry(msg, cursor, connection)
+
     def __repr__(self):
         return self.__str__()
 
@@ -65,11 +78,93 @@ class Error(BASE_EXCEPTION_CLASS):
     def __bytes__(self):
         return self.__unicode__().encode(UTF8)
 
+    def generate_telemetry_stacktrace(self) -> str:
+        # Get the current stack minus this function and the Error init function
+        stack_frames = traceback.extract_stack()[:-2]
+        filtered_frames = list()
+        for frame in stack_frames:
+            # Only add frames associated with the snowflake python connector to the telemetry stacktrace
+            if connector_base_path in frame.filename:
+                # Get the index to truncate the file path to hide any user path
+                safe_path_index = frame.filename.find(connector_base_path)
+                # Create a new frame with the truncated file name and without the line argument since that can
+                # output senitive data
+                filtered_frames.append(
+                    traceback.FrameSummary(frame.filename[safe_path_index:], frame.lineno, frame.name, line='')
+                )
+
+        return ''.join(traceback.format_list(filtered_frames))
+
+    def telemetry_msg(self) -> Optional[str]:
+        if self.sqlstate != "n/a":
+            return '{errno:06d} ({sqlstate})'.format(errno=self.errno, sqlstate=self.sqlstate)
+        elif self.errno != -1:
+            return '{errno:06d}'.format(errno=self.errno)
+        else:
+            return None
+
+    def generate_telemetry_exception_data(self) -> Dict[str, str]:
+        """Generate the data to send through telemetry."""
+        telemetry_data = {
+            TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME,
+            TelemetryField.KEY_DRIVER_VERSION: SNOWFLAKE_CONNECTOR_VERSION
+        }
+        telemetry_msg = self.telemetry_msg()
+        if self.sfqid:
+            telemetry_data[TelemetryField.KEY_SFQID] = self.sfqid
+        if self.sqlstate:
+            telemetry_data[TelemetryField.KEY_SQLSTATE] = self.sqlstate
+        if telemetry_msg:
+            telemetry_data[TelemetryField.KEY_REASON] = telemetry_msg
+        if self.errno:
+            telemetry_data[TelemetryField.KEY_ERROR_NUMBER] = str(self.errno)
+
+        telemetry_data[TelemetryField.KEY_STACKTRACE] = SecretDetector.mask_secrets(self.telemetry_traceback)
+
+        return telemetry_data
+
+    def send_exception_telemetry(self,
+                                 connection: Optional['SnowflakeConnection'],
+                                 telemetry_data: Dict[str, str]) -> None:
+        """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
+        if connection is not None and connection.telemetry_enabled and not connection._telemetry.is_closed():
+            # Send with in-band telemetry
+            telemetry_data[TelemetryField.KEY_TYPE] = TelemetryField.SQL_EXCEPTION
+            telemetry_data[TelemetryField.KEY_EXCEPTION] = self.__class__.__name__
+            ts = get_time_millis()
+            try:
+                connection._log_telemetry(TelemetryData(telemetry_data, ts))
+            except AttributeError:
+                logger.debug(
+                    "Cursor failed to log to telemetry.",
+                    exc_info=True)
+        elif connection is None:
+            # Send with out-of-band telemetry
+            telemetry_oob = TelemetryService.get_instance()
+            telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
+
+    def exception_telemetry(self,
+                            msg: str,
+                            cursor: Optional['SnowflakeCursor'],
+                            connection: Optional['SnowflakeConnection']) -> None:
+        """Main method to generate and send telemetry data for exceptions."""
+        try:
+            telemetry_data = self.generate_telemetry_exception_data()
+            if cursor is not None:
+                self.send_exception_telemetry(cursor.connection, telemetry_data)
+            elif connection is not None:
+                self.send_exception_telemetry(connection, telemetry_data)
+            else:
+                self.send_exception_telemetry(None, telemetry_data)
+        except Exception:
+            # Do nothing but log if sending telemetry fails
+            logger.debug("Sending exception telemetry failed")
+
     @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
                              cursor: 'SnowflakeCursor',
-                             error_class,
-                             error_value: Dict[str, str]):
+                             error_class: Exception,
+                             error_value: Dict[str, str]) -> None:
         """Default error handler that raises an error.
 
         Args:
@@ -86,10 +181,15 @@ class Error(BASE_EXCEPTION_CLASS):
             errno=error_value.get('errno'),
             sqlstate=error_value.get('sqlstate'),
             sfqid=error_value.get('sfqid'),
-            done_format_msg=error_value.get('done_format_msg'))
+            done_format_msg=error_value.get('done_format_msg'),
+            connection=connection,
+            cursor=cursor)
 
     @staticmethod
-    def errorhandler_wrapper(connection, cursor, error_class, error_value=None):
+    def errorhandler_wrapper(connection: 'SnowflakeConnection',
+                             cursor: 'SnowflakeCursor',
+                             error_class: Exception,
+                             error_value: Optional[Dict[str, str]] = None):
         """Error handler wrapper that calls the errorhandler method.
 
         Args:
@@ -181,12 +281,18 @@ class DataError(DatabaseError):
 
 class NotSupportedError(DatabaseError):
     """Exception for errors when an unsupported database feature was used."""
-    pass
+
+    # Not supported errors do not have any PII in their
+    def telemetry_msg(self):
+        return self.msg
 
 
 class RevocationCheckError(OperationalError):
     """Exception for errors during certificate revocation check."""
-    pass
+
+    # We already send OCSP exception events
+    def exception_telemetry(self, msg, cursor, connection):
+        pass
 
 
 # internal errors
