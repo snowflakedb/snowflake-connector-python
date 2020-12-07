@@ -211,6 +211,7 @@ class SnowflakeConnection(object):
         self.messages = []
         self._async_sfqids = set()
         self._done_async_sfqids = set()
+        self.telemetry_enabled = False
         logger.info(
             "Snowflake Connector for Python Version: %s, "
             "Python Version: %s, Platform: %s",
@@ -226,7 +227,6 @@ class SnowflakeConnection(object):
         self.converter = None
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
-        self.telemetry_enabled = False
         self.incident = IncidentAPI(self._rest)
 
     def __del__(self):  # pragma: no cover
