@@ -36,6 +36,8 @@ def test_async_exec(conn_cnx):
         with con.cursor() as cur:
             status = con.get_query_status(q_id)
             assert status == QueryStatus.SUCCESS
+            status = con.get_query_status_throw_if_error(q_id)
+            assert status == QueryStatus.SUCCESS
             cur.get_results_from_sfqid(q_id)
             assert len(cur.fetchall()) == 1
 
