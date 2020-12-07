@@ -883,6 +883,7 @@ def test_desc_rewrite(conn, caplog):
             table_name = random_string(5, 'test_desc_rewrite_')
             try:
                 cur.execute('create or replace table {} (a int)'.format(table_name))
+                caplog.set_level(logging.DEBUG, 'snowflake.connector')
                 cur.execute('desc {}'.format(table_name))
                 assert ('snowflake.connector.cursor', 20,
                         'query was rewritten: org=desc {table_name}, new=describe table {table_name}'.format(
@@ -905,6 +906,7 @@ def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
                     result_format = {
                         PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
                     }
+                caplog.set_level(logging.DEBUG, 'snowflake.connector')
                 cur.execute("select 1", _statement_params=result_format)
                 assert ('snowflake.connector.cursor',
                         logging.DEBUG,
@@ -913,7 +915,7 @@ def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
 
 
 @pytest.mark.skipolddriver
-def test_execute_helper_cannot_use_arrow_exception(conn_cnx, caplog):
+def test_execute_helper_cannot_use_arrow_exception(conn_cnx):
     """Like test_execute_helper_cannot_use_arrow but when we are trying to force arrow an Exception should be raised."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
@@ -931,6 +933,7 @@ def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             with mock.patch('snowflake.connector.cursor.CAN_USE_ARROW_RESULT', True):
+                caplog.set_level(logging.DEBUG, 'snowflake.connector')
                 cur.check_can_use_arrow_resultset()
     assert 'Arrow' not in caplog.text
 
@@ -1043,8 +1046,10 @@ def test_fetchmany_size_error(conn_cnx):
 
 def test_nextset(conn_cnx, caplog):
     """Tests no op function nextset."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     with conn_cnx() as con:
         with con.cursor() as cur:
+            caplog.set_level(logging.DEBUG, 'snowflake.connector')
             assert cur.nextset() is None
     assert ('snowflake.connector.cursor', logging.DEBUG, 'nop') in caplog.record_tuples
 
@@ -1063,6 +1068,7 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
     with conn_cnx() as con:
         with con.cursor() as cur:
             with mock.patch.object(cur, '_connection', None):
+                caplog.set_level(logging.DEBUG, 'snowflake.connector')
                 cur._log_telemetry_job_data('test', True)
     assert ('snowflake.connector.cursor',
             logging.WARNING,

@@ -8,7 +8,6 @@ import codecs
 import json
 import logging
 import os
-import tempfile
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from os import environ, path
@@ -29,17 +28,6 @@ try:
 except ImportError:
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED = None
     ER_OCSP_RESPONSE_FETCH_FAILURE = None
-
-for logger_name in ['test', 'snowflake.connector', 'botocore']:
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    ch = logging.FileHandler(
-        path.join(tempfile.gettempdir(), 'python_connector.log'))
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(logging.Formatter(
-        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - '
-        '%(funcName)s() - %(levelname)s - %(message)s'))
-    logger.addHandler(ch)
 
 TARGET_HOSTS = [
     'ocspssd.us-east-1.snowflakecomputing.com',

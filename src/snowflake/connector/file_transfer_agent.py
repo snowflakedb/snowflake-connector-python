@@ -795,7 +795,6 @@ class SnowflakeFileTransferAgent(object):
                 self._ret['data']['encryptionMaterial'] is not None:
             root_node = self._ret['data']['encryptionMaterial']
             logger.debug(self._command_type)
-            logger.debug('root_node=%s', root_node)
 
             if self._command_type == CMD_TYPE_UPLOAD:
                 self._encryption_material.append(
@@ -847,7 +846,6 @@ class SnowflakeFileTransferAgent(object):
                     self._encryption_material):
                 for idx, src_file in enumerate(self._src_files):
                     logger.debug(src_file)
-                    logger.debug(self._encryption_material[idx])
                     self._src_file_to_encryption_material[src_file] = \
                         self._encryption_material[idx]
             elif len(self._encryption_material) != 0:

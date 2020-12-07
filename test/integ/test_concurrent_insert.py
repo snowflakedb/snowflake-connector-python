@@ -32,7 +32,6 @@ def _concurrent_insert(meta):
         schema=meta['schema'],
         timezone='UTC',
         protocol='http'
-        # tracing = logging.DEBUG,
     )
     try:
         cnx.cursor().execute("use warehouse {}".format(meta['warehouse']))
