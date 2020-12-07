@@ -108,7 +108,7 @@ class SnowflakeS3Util:
 
         if logger.getEffectiveLevel() == logging.DEBUG:
             tmp_meta = {}
-            log_black_list = ('stage_credentials', 'creds')
+            log_black_list = ('stage_credentials', 'creds', 'encryption_material')
             for k, v in meta.items():
                 if k not in log_black_list:
                     tmp_meta[k] = v
