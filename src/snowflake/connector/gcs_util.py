@@ -83,7 +83,6 @@ class SnowflakeGCSUtil:
         Returns:
             None, if uploading was successful.
         """
-
         upload_url = meta.get('presigned_url', None)
         access_token = None
 
