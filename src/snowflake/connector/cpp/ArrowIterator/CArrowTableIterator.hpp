@@ -67,11 +67,14 @@ private:
   /**
    * replace column with the new column in place
    */
-  arrow::Status replaceColumn(
+  void replaceColumn(
     const unsigned int batchIdx,
     const int colIdx,
     const std::shared_ptr<arrow::Field>& newField,
-    const std::shared_ptr<arrow::Array>& newColumn);
+    const std::shared_ptr<arrow::Array>& newColumn,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild);
 
   /**
    * convert scaled fixed number column to double column
@@ -81,7 +84,10 @@ private:
     const int colIdx,
     const std::shared_ptr<arrow::Field> field,
     const std::shared_ptr<arrow::Array> columnArray,
-    const unsigned int scale);
+    const unsigned int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild);
 
   /**
    * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
@@ -92,7 +98,10 @@ private:
     const int colIdx,
     const std::shared_ptr<arrow::Field> field,
     const std::shared_ptr<arrow::Array> columnArray,
-    const int scale);
+    const int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild);
 
   /**
    * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp column
@@ -103,6 +112,9 @@ private:
     const std::shared_ptr<arrow::Field> field,
     const std::shared_ptr<arrow::Array> columnArray,
     const int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild,
     const std::string timezone="");
 
   /**
@@ -116,7 +128,10 @@ private:
     const std::shared_ptr<arrow::Field> field,
     const std::shared_ptr<arrow::Array> columnArray,
     const int scale,
-    const int byteLength);
+    const int byteLength,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild);
 
   /**
    * convert scaled fixed number to double
