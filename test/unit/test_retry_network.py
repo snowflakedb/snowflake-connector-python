@@ -11,8 +11,6 @@ import time
 import OpenSSL.SSL
 import pytest
 from mock import MagicMock, Mock, PropertyMock
-from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout
-from requests.packages.urllib3.exceptions import ProtocolError, ReadTimeoutError
 
 from snowflake.connector.compat import (
     BAD_GATEWAY,
@@ -28,6 +26,13 @@ from snowflake.connector.compat import (
 )
 from snowflake.connector.errors import DatabaseError, InterfaceError, OtherHTTPRetryableError
 from snowflake.connector.network import STATUS_TO_EXCEPTION, RetryRequest, SnowflakeRestful
+
+try:
+    from snowflake.connector.vendored import requests  # NOQA
+    from snowflake.connector.vendored import urllib3  # NOQA
+except ImportError:  # pragma: no cover
+    import requests
+    import urllib3
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -102,11 +107,11 @@ def test_request_exec():
 
     # handle retryable exception
     for exc in [
-        ConnectTimeout,
-        ReadTimeout,
+        requests.exceptions.ConnectTimeout,
+        requests.exceptions.ReadTimeout,
         IncompleteReadMock,
-        ProtocolError,
-        ConnectionError,
+        urllib3.exceptions.ProtocolError,
+        requests.exceptions.ConnectionError,
         AttributeError,
     ]:
         session = MagicMock()
@@ -126,7 +131,7 @@ def test_request_exec():
         OpenSSL.SSL.SysCallError(errno.ETIMEDOUT),
         OpenSSL.SSL.SysCallError(errno.EPIPE),
         OpenSSL.SSL.SysCallError(-1),  # unknown
-        ReadTimeoutError(None, None, None),
+        urllib3.exceptions.ReadTimeoutError(None, None, None),
         BadStatusLine('fake')
     ]:
         session = MagicMock()

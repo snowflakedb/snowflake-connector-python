@@ -14,7 +14,6 @@ from logging import getLogger
 
 import mock
 import pytest
-import requests
 
 from snowflake.connector.constants import UTF8
 from snowflake.connector.errors import ProgrammingError
@@ -22,6 +21,13 @@ from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent, 
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..randomize import random_string
+
+try:
+    from snowflake.connector.vendored import requests  # NOQA
+    vendored_request = True
+except ImportError:  # pragma: no cover
+    import requests
+    vendored_request = False
 
 logger = getLogger(__name__)
 
@@ -285,7 +291,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
         with cnx.cursor() as csr:
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
-                from requests import put, get
+                from snowflake.connector.vendored.requests import put, get
 
                 def mocked_put(*args, **kwargs):
                     if mocked_put.counter == 0:
@@ -308,7 +314,8 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
 
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
-                    with mock.patch('requests.put', side_effect=mocked_put):
+                    with mock.patch('snowflake.connector.vendored.requests.put' if vendored_request else 'request.put',
+                                    side_effect=mocked_put):
                         csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
                     assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
                 assert csr.fetchone()[6] == 'UPLOADED'
@@ -330,7 +337,8 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
 
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
-                    with mock.patch('requests.get', side_effect=mocked_get):
+                    with mock.patch('snowflake.connector.vendored.requests.get' if vendored_request else 'request.get',
+                                    side_effect=mocked_get):
                         csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
                     assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
                 rec = csr.fetchone()
@@ -389,7 +397,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
             csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
-                from requests import put, get, head
+                from snowflake.connector.vendored.requests import put, get, head
 
                 def mocked_put(*args, **kwargs):
                     if mocked_put.counter == 0:
@@ -423,8 +431,11 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
 
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
-                    with mock.patch('requests.put', side_effect=mocked_put):
-                        with mock.patch('requests.head', side_effect=mocked_head):
+                    with mock.patch('snowflake.connector.vendored.requests.put' if vendored_request else 'requests.put',
+                                    side_effect=mocked_put):
+                        with mock.patch('snowflake.connector.vendored.requests.head' if vendored_request
+                                        else 'requests.head',
+                                        side_effect=mocked_head):
                             csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
                     if error_code == 401:
                         assert mocked_file_agent.agent.renew_expired_client.call_count == 2
@@ -448,7 +459,8 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
 
                 with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
                                 side_effect=mocked_file_agent):
-                    with mock.patch('requests.get', side_effect=mocked_get):
+                    with mock.patch('snowflake.connector.vendored.requests.get' if vendored_request else 'requests.get',
+                                    ide_effect=mocked_get):
                         csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
                     if error_code == 401:
                         assert mocked_file_agent.agent.renew_expired_client.call_count == 1
