@@ -15,8 +15,8 @@ Release Notes
    - Added support for MFA token caching.
    - Added support for upcoming downscoped GCS credentials.
    - Tightened the pyOpenSSL dependency pin.
-   - Relaxed the boto3 dependency pin to include the next major release.
-   - Relaxed the cffi dependency pin to incllude the next major release.
+   - Relaxed the boto3 dependency pin up to the next major release.
+   - Relaxed the cffi dependency pin up to the next major release.
    - Added support for executing asynchronous queries.
    - Dropped support for Python 3.5.
 
