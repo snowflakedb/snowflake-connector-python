@@ -11,7 +11,7 @@ CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp36*manylinux2010*.whl | sort -r | hea
 python3.6 -m venv fips_env
 source fips_env/bin/activate
 pip install -U setuptools pip
-pip install cryptography --no-binary cryptography
+pip install "cryptography<3.3.0" --no-binary cryptography
 pip install "${CONNECTOR_WHL}[pandas,secure-local-storage,development]"
 
 echo "!!! Environment description !!!"
