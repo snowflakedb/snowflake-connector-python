@@ -36,6 +36,8 @@ def test_async_exec(conn_cnx):
         with con.cursor() as cur:
             status = con.get_query_status(q_id)
             assert status == QueryStatus.SUCCESS
+            status = con.get_query_status_throw_if_error(q_id)
+            assert status == QueryStatus.SUCCESS
             cur.get_results_from_sfqid(q_id)
             assert len(cur.fetchall()) == 1
 
@@ -134,7 +136,7 @@ def test_done_caching(conn_cnx):
             assert con.get_query_status(qid2) == QueryStatus.SUCCESS
             assert len(con._async_sfqids) == 0
             assert len(con._done_async_sfqids) == 2
-            assert con.safe_to_close()
+            assert con._all_async_queries_finished()
 
 
 def test_invalid_uuid_get_status(conn_cnx):

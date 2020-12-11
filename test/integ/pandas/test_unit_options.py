@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
 #
-
+import logging
 from copy import deepcopy
 
 import mock
@@ -26,6 +26,7 @@ def test_pandas_option_reporting(caplog):
     modified_by_key.pop('snowflake-connector-python')
     modified_by_key.pop('pyarrow')
     with mock.patch.object(working_set, 'by_key', modified_by_key):
+        caplog.set_level(logging.DEBUG, 'snowflake.connector')
         pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
         assert installed_pandas
         assert not isinstance(pandas, MissingPandas)

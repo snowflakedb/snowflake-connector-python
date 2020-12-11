@@ -158,7 +158,8 @@ EXTERNAL_BROWSER_AUTHENTICATOR = 'EXTERNALBROWSER'
 KEY_PAIR_AUTHENTICATOR = 'SNOWFLAKE_JWT'
 OAUTH_AUTHENTICATOR = 'OAUTH'
 ID_TOKEN_AUTHENTICATOR = 'ID_TOKEN'
-CUSTOM_AUTHENTICATOR = u'CUSTOM_AUTHENTICATOR'
+USR_PWD_MFA_AUTHENTICATOR = 'USERNAME_PASSWORD_MFA'
+CUSTOM_AUTHENTICATOR = 'CUSTOM_AUTHENTICATOR'
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -249,11 +250,19 @@ class SnowflakeRestful(object):
 
     @property
     def id_token(self):
-        return self._id_token if hasattr(self, '_id_token') else None
+        return getattr(self, '_id_token', None)
 
     @id_token.setter
     def id_token(self, value):
         self._id_token = value
+
+    @property
+    def mfa_token(self):
+        return getattr(self, '_mfa_token', None)
+
+    @mfa_token.setter
+    def mfa_token(self, value):
+        self._mfa_token = value
 
     def close(self):
         if hasattr(self, '_token'):
@@ -262,6 +271,8 @@ class SnowflakeRestful(object):
             del self._master_token
         if hasattr(self, '_id_token'):
             del self._id_token
+        if hasattr(self, '_mfa_token'):
+            del self._mfa_token
         sessions = list(self._active_sessions)
         if sessions:
             logger.debug("Closing %s active sessions", len(sessions))
@@ -314,12 +325,14 @@ class SnowflakeRestful(object):
 
     def update_tokens(self, session_token, master_token,
                       master_validity_in_seconds=None,
-                      id_token=None):
+                      id_token=None,
+                      mfa_token=None):
         """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
             self._token = session_token
             self._master_token = master_token
             self._id_token = id_token
+            self._mfa_token = mfa_token
             self._master_validity_in_seconds = master_validity_in_seconds
 
     def _renew_session(self):
@@ -328,9 +341,7 @@ class SnowflakeRestful(object):
 
     def _token_request(self, request_type):
         logger.debug(
-            'updating session. master_token: %s, id_token: %s',
-            '****' if self.master_token else None,
-            '****' if self.id_token else None)
+            'updating session. master_token: {}'.format('****' if self.master_token else None))
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -360,8 +371,7 @@ class SnowflakeRestful(object):
                 ret['data']['sessionToken'],
                 ret['data'].get('masterToken'),
                 master_validity_in_seconds=ret['data'].get(
-                    'masterValidityInSeconds'),
-                id_token=self.id_token)
+                    'masterValidityInSeconds'))
             logger.debug('updating session completed')
             return ret
         else:

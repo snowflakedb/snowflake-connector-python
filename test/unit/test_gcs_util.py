@@ -25,16 +25,16 @@ except ImportError:
 
 def test_create_client(caplog):
     """Creates a GCSUtil with an access token."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     client = SnowflakeGCSUtil.create_client({'creds': {'GCS_ACCESS_TOKEN': 'fake_token'}})
-    assert client is None
-    assert all([log in caplog.record_tuples for log in [
-        ('snowflake.connector.gcs_util', logging.DEBUG, "len(GCS_ACCESS_TOKEN): 10"),
-        ('snowflake.connector.gcs_util', logging.DEBUG, "GCS operations with an access token are currently unsupported")
-    ]])
+    assert client is not None
+    assert client == 'fake_token'
 
 
+@pytest.mark.xfail(reason='Newer version support access token. This test is obsoleted')
 def test_native_download_access_token(caplog):
     """Tests that GCS access token error is correctly logged when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     meta = {}
     SnowflakeGCSUtil._native_download_file(meta, None, 99)
     assert meta['result_status'] == ResultStatus.ERROR
@@ -42,8 +42,10 @@ def test_native_download_access_token(caplog):
                                                             "currently unsupported") in caplog.record_tuples)
 
 
+@pytest.mark.xfail(reason='Newer version support access token. This test is obsoleted')
 def test_native_upload_access_token(caplog):
     """Tests that GCS access token error is correctly logged when uploading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     meta = {}
     SnowflakeGCSUtil.upload_file(None, meta, None, 99)
     assert meta['result_status'] == ResultStatus.ERROR
@@ -103,6 +105,7 @@ def test_download_uncaught_exception(tmpdir):
 
 def test_upload_put_timeout(tmpdir, caplog):
     """Tests whether timeout error is handled correctly when uploading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     f_name = str(tmpdir.join('some_file.txt'))
     resp = Response()
     meta = {'presigned_url': ['some_url'], 'sha256_digest': 'asd'}
@@ -119,6 +122,7 @@ def test_upload_put_timeout(tmpdir, caplog):
 
 def test_upload_get_timeout(tmpdir, caplog):
     """Tests whether timeout error is handled correctly when downloading."""
+    caplog.set_level(logging.DEBUG, 'snowflake.connector')
     resp = Response()
     meta = {'presigned_url': ['some_url'], 'sha256_digest': 'asd'}
     with mock.patch('requests.get', side_effect=requests.exceptions.Timeout(response=resp)):
@@ -128,9 +132,9 @@ def test_upload_get_timeout(tmpdir, caplog):
     assert ('snowflake.connector.gcs_util', logging.DEBUG, 'GCS file download Timeout Error: ') in caplog.record_tuples
 
 
-def test_get_file_header_none():
+def test_get_file_header_none_with_presigned_url():
     """Tests whether default file handle created by get_file_header is as expected."""
-    file_header = SnowflakeGCSUtil.get_file_header({}, 'file')
+    file_header = SnowflakeGCSUtil.get_file_header({"presigned_url": "www.example.com"}, 'file')
     assert file_header.digest is None
     assert file_header.content_length is None
     assert file_header.encryption_metadata is None

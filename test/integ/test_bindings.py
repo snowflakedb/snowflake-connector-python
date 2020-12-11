@@ -5,14 +5,12 @@
 #
 
 import calendar
-import logging
 import tempfile
 import time
 from datetime import date, datetime
 from datetime import time as datetime_time
 from datetime import timedelta
 from decimal import Decimal
-from os import path
 
 import pendulum
 import pytest
@@ -22,17 +20,6 @@ from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ProgrammingError
 
 tempfile.gettempdir()
-
-for logger_name in ['snowflake.connector', 'botocore']:
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    ch = logging.FileHandler(
-        path.join(tempfile.gettempdir(), 'python_connector.log'))
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(logging.Formatter(
-        '%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
-    logger.addHandler(ch)
-
 
 PST_TZ = "America/Los_Angeles"
 JST_TZ = "Asia/Tokyo"

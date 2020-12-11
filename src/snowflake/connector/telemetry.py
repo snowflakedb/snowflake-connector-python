@@ -19,6 +19,19 @@ class TelemetryField(object):
     TIME_CONSUME_LAST_RESULT = "client_time_consume_last_result"
     TIME_DOWNLOADING_CHUNKS = "client_time_downloading_chunks"
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
+    SQL_EXCEPTION = "client_sql_exception"
+
+    # Keys for telemetry data sent through either in-band or out-of-band telemetry
+    KEY_TYPE = "type"
+    KEY_SFQID = "QueryID"
+    KEY_SQLSTATE = "SQLState"
+    KEY_DRIVER_TYPE = "DriverType"
+    KEY_DRIVER_VERSION = "DriverVersion"
+    KEY_REASON = "reason"
+    KEY_ERROR_NUMBER = "ErrorNumber"
+    KEY_ERROR_MESSAGE = "ErrorMessage"
+    KEY_STACKTRACE = "Stacktrace"
+    KEY_EXCEPTION = "Exception"
 
 
 class TelemetryData(object):

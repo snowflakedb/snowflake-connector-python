@@ -10,6 +10,7 @@ import logging
 import uuid
 from collections import namedtuple
 from queue import Queue
+from typing import Optional
 
 import requests
 
@@ -154,7 +155,7 @@ class TelemetryService(object):
         self.num_of_retry_to_trigger_telemetry = DEFAULT_NUM_OF_RETRY_TO_TRIGGER_TELEMETRY
         self.context = dict()
         self.connection_params = dict()
-        self.deployment = None
+        self.deployment = TelemetryServerDeployments.PROD
 
     def __del__(self):
         """Tries to flush all events left in the queue. Ignores all exceptions."""
@@ -381,6 +382,27 @@ class TelemetryService(object):
         except Exception:
             # Do nothing on exception, just log
             logger.debug("Failed to log HTTP request error", exc_info=True)
+
+    def log_general_exception(self,
+                              event_name: str,
+                              telemetry_data: dict,
+                              tags: Optional[dict] = None,
+                              urgent: Optional[bool] = False):
+        """Sends any type of exception through OOB telemetry."""
+        if tags is None:
+            tags = dict()
+        try:
+            if self.enabled:
+                log_event = TelemetryLogEvent(
+                    name=event_name,
+                    tags=tags,
+                    value=telemetry_data,
+                    urgent=urgent
+                )
+                self.add(log_event)
+        except Exception:
+            # Do nothing on exception, just log
+            logger.debug("Failed to log general exception", exc_info=True)
 
     def _upload_payload(self, payload):
         """Uploads the JSON-formatted string payload to the telemetry backend.

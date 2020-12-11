@@ -506,7 +506,7 @@ def validate_pandas(conn_cnx, sql, cases, col_count, method='one', data_type='fl
                             time_str_len = 8 if scale == 0 else 9 + scale
                             c_case = cases[i].strip()[:time_str_len]
                             c_new = str(c_new).strip()[:time_str_len]
-                            assert c_case == c_new, '{} row, {} column: original value is {}, ' \
+                            assert c_new == c_case, '{} row, {} column: original value is {}, ' \
                                                     'new value is {}, ' \
                                                     'values are not equal'.format(i, j, cases[i],
                                                                                   c_new)

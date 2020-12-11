@@ -25,12 +25,14 @@ from .auth_idtoken import AuthByIdToken
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
+from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
+    PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
@@ -64,6 +66,7 @@ from .network import (
     OAUTH_AUTHENTICATOR,
     CUSTOM_AUTHENTICATOR,
     REQUEST_ID,
+    USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -143,6 +146,7 @@ DEFAULT_CONFIGURATION = {
     'disable_request_pooling': (False, bool),  # snowflake
     # enable temporary credential file for Linux, default false. Mac/Win will overlook this
     'client_store_temporary_credential': (False, bool),
+    'client_request_mfa_token': (False, bool),
     'use_openssl_only': (False, bool),  # only use openssl instead of python only crypto modules
 }
 
@@ -208,6 +212,7 @@ class SnowflakeConnection(object):
         self.messages = []
         self._async_sfqids = set()
         self._done_async_sfqids = set()
+        self.telemetry_enabled = False
         logger.info(
             "Snowflake Connector for Python Version: %s, "
             "Python Version: %s, Platform: %s",
@@ -223,7 +228,6 @@ class SnowflakeConnection(object):
         self.converter = None
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
-        self.telemetry_enabled = False
         self.incident = IncidentAPI(self._rest)
 
     def __del__(self):  # pragma: no cover
@@ -434,7 +438,7 @@ class SnowflakeConnection(object):
             # close telemetry first, since it needs rest to send remaining data
             logger.info('closed')
             self._telemetry.close(send_on_close=retry)
-            if self.safe_to_close():
+            if self._all_async_queries_finished():
                 logger.info('No async queries seem to be running, deleting session')
                 self.rest.delete_session(retry=retry)
             else:
@@ -587,6 +591,8 @@ class SnowflakeConnection(object):
             auth_instance = AuthByKeyPair(self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
             auth_instance = AuthByOAuth(self._token)
+        elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+            auth_instance = AuthByUsrPwdMfa(self._password)
         elif self._authenticator == CUSTOM_AUTHENTICATOR:
             auth_instance = self.get_custom_authenticator()
         else:
@@ -623,8 +629,13 @@ class SnowflakeConnection(object):
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
                     self._client_store_temporary_credential if IS_LINUX else True
 
+        if self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+            self._session_parameters[
+                PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = \
+                    self._client_request_mfa_token if IS_LINUX else True
+
         auth = Auth(self.rest)
-        auth.read_temporary_credential(self.host, self.account, self.user, self._session_parameters)
+        auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
         self._authenticate(auth_instance)
 
         self._password = None  # ensure password won't persist
@@ -649,6 +660,9 @@ class SnowflakeConnection(object):
         if type(auth_instance) is AuthByWebBrowser:
             if self._rest.id_token is not None:
                 return AuthByIdToken(self._rest.id_token)
+        if type(auth_instance) is AuthByUsrPwdMfa:
+            if self._rest.mfa_token is not None:
+                auth_instance.set_mfa_token(self._rest.mfa_token)
         return auth_instance
 
     def __config(self, **kwargs):
@@ -727,6 +741,7 @@ class SnowflakeConnection(object):
                 EXTERNAL_BROWSER_AUTHENTICATOR,
                 KEY_PAIR_AUTHENTICATOR,
                 OAUTH_AUTHENTICATOR,
+                USR_PWD_MFA_AUTHENTICATOR,
                 CUSTOM_AUTHENTICATOR
             ]:
                 self._authenticator = auth_tmp
@@ -1207,7 +1222,7 @@ class SnowflakeConnection(object):
                                         'errno': int(code),
                                         'sqlstate': sql_state,
                                         'sfqid': sf_qid})
-            return status
+        return status
 
     @staticmethod
     def is_still_running(status: QueryStatus) -> bool:
@@ -1232,11 +1247,8 @@ class SnowflakeConnection(object):
             QueryStatus.BLOCKED,
         )
 
-    def safe_to_close(self) -> bool:
-        """Checks whether this connection is safe to close.
-
-        A connection is safe to close if all of its async queries are not running anymore.
-        """
+    def _all_async_queries_finished(self) -> bool:
+        """Checks whether all async queries started by this Connection have finished executing."""
         queries = copy.copy(self._async_sfqids)  # get_query_status might update _async_sfqids, let's copy the list
         finished_async_queries = (not self.is_still_running(self.get_query_status(q)) for q in queries)
         return all(finished_async_queries)

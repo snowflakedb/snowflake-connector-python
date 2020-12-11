@@ -64,7 +64,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             Extension(name='snowflake.connector.arrow_result',
                       sources=[os.path.join(CONNECTOR_SRC_DIR, 'arrow_result.pyx')])
         ],
-        build_dir=os.path.join('build', 'cython'))
+    )
 
     class MyBuildExt(build_ext):
 
@@ -200,12 +200,16 @@ setup(
         'certifi<2021.0.0',
         'pytz<2021.0',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
-        'pyOpenSSL>=16.2.0,<21.0.0',
+        'pyOpenSSL>=16.2.0,<20.0.0',
         'cffi>=1.9,<2.0.0',
         'cryptography>=2.5.0,<4.0.0',
         'pyjwt<2.0.0',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
+        # A functioning pkg_resources.working_set.by_key and pkg_resources.Requirement is
+        # required. Python 3.6 was released at the end of 2016. setuptools 34.0.0 was released
+        # in early 2017, so we pick this version as a reasonably modern base.
+        'setuptools>34.0.0',
     ],
 
     namespace_packages=['snowflake'],

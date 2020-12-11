@@ -42,6 +42,8 @@ try:
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
+ID_TOKEN = "ID_TOKEN"
+
 
 @pytest.fixture
 def token_validity_test_values(request):
@@ -83,7 +85,7 @@ def test_connect_externalbrowser(token_validity_test_values):
     delete_temporary_credential(
             host=CONNECTION_PARAMETERS_SSO['host'],
             user=CONNECTION_PARAMETERS_SSO['user'],
-            store_temporary_credential=True)    # delete existing temporary credential
+            cred_type=ID_TOKEN)    # delete existing temporary credential
     CONNECTION_PARAMETERS_SSO['client_store_temporary_credential'] = True
 
     # change database and schema to non-default one
