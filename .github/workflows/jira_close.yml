@@ -5,7 +5,7 @@ on:
     types: [closed, deleted]
 
 jobs:
-  comment-issue:
+  close-issue:
     runs-on: ubuntu-latest
     steps:
       - name: Jira login
@@ -26,4 +26,4 @@ jobs:
         if: startsWith(steps.extract.outputs.jira, 'SNOW-')
         with:
           issue: "${{ steps.extract.outputs.jira }}"
-          transition: "Done"
+          transitionId: 71
