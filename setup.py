@@ -243,7 +243,7 @@ setup(
         ],
         "pandas": pandas_requirements,
         "development": [
-            'pytest<6.2.0',
+            'pytest<6.3.0',
             'pytest-cov',
             'pytest-rerunfailures',
             'pytest-timeout',
