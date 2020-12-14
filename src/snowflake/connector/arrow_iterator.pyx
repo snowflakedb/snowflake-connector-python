@@ -72,6 +72,7 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
     cdef cppclass CResult "arrow::Result"[T]:
         CResult()
         CResult(CStatus status)
+        CResult(T)
 
         c_string ToString()
         c_string message()
@@ -79,6 +80,7 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
         c_bool ok()
         const CStatus& status()
         T& ValueOrDie()
+        T operator*()
 
     cdef cppclass CBuffer" arrow::Buffer":
         CBuffer(const uint8_t* data, int64_t size)
@@ -88,13 +90,6 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
     cdef cppclass CRecordBatchReader" arrow::RecordBatchReader":
         CStatus ReadNext(shared_ptr[CRecordBatch]* batch)
 
-    cdef cppclass CResult "arrow::Result"[T]:
-        CResult()
-        CResult(CStatus)
-        CResult(T)
-        c_bool ok()
-        CStatus status()
-        T operator*()
 
 cdef extern from "arrow/ipc/api.h" namespace "arrow::ipc" nogil:
     cdef cppclass CRecordBatchStreamReader \
