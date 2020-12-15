@@ -12,12 +12,12 @@ Release Notes
 
 - v2.3.7(December 10,2020)
 
-   - Added support for MFA Cache.
+   - Added support for MFA token caching.
    - Added support for upcoming downscoped GCS credentials.
-   - Tightened pyOpenSSL dependency pin.
-   - Relaxed boto3 dependency pin up to next major release.
-   - Relaxed cffi dependency pin up to next major release.
-   - Async query execution.
+   - Tightened the pyOpenSSL dependency pin.
+   - Relaxed the boto3 dependency pin up to the next major release.
+   - Relaxed the cffi dependency pin up to the next major release.
+   - Added support for executing asynchronous queries.
    - Dropped support for Python 3.5.
 
 - v2.3.6(November 16,2020)
