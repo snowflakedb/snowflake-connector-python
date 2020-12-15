@@ -10,6 +10,14 @@ on:
         branches:
             - master
             - prep-**
+    workflow_dispatch:
+        inputs:
+          logLevel:
+            default: warning
+            description: "Log level"
+            required: true
+          tags:
+            description: "Test scenario tags"
 
 jobs:
   lint:
