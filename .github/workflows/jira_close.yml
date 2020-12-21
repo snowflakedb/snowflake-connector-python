@@ -8,6 +8,8 @@ jobs:
   close-issue:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Jira login
         uses: atlassian/gajira-login@master
         env:
