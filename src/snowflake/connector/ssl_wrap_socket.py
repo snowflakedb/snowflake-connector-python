@@ -36,6 +36,8 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
 
 log = logging.getLogger(__name__)
 
+first = True
+
 
 def inject_into_urllib3():
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
@@ -78,17 +80,20 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
               FEATURE_OCSP_MODE.name,
               FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME)
     if FEATURE_OCSP_MODE != OCSPMode.INSECURE:
-        v = SFOCSP(
-            ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
-            use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN
-        ).validate(server_hostname, ret.connection)
-        if not v:
-            raise OperationalError(
-                msg=(
-                    'The certificate is revoked or '
-                    'could not be validated: hostname={}'.format(
-                        server_hostname)),
-                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED)
+        global first
+        if first:
+            first = False
+            v = SFOCSP(
+                ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+                use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN
+            ).validate(server_hostname, ret.connection)
+            if not v:
+                raise OperationalError(
+                    msg=(
+                        'The certificate is revoked or '
+                        'could not be validated: hostname={}'.format(
+                            server_hostname)),
+                    errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED)
     else:
         log.info('THIS CONNECTION IS IN INSECURE '
                  'MODE. IT MEANS THE CERTIFICATE WILL BE '
