@@ -7,6 +7,7 @@
 import codecs
 import json
 import os
+import pathlib
 import platform
 import re
 import sys
@@ -14,6 +15,7 @@ import tempfile
 import time
 import traceback
 from base64 import b64decode, b64encode
+from concurrent.futures.thread import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta
 from logging import getLogger
@@ -21,13 +23,18 @@ from os import environ, path
 from os.path import expanduser
 from threading import Lock, RLock
 from time import gmtime, strftime
+from typing import Dict, List, Optional, Tuple, Union
 
 import jwt
 import requests as generic_requests
+from asn1crypto.ocsp import CertId
+from asn1crypto.x509 import Certificate
+from OpenSSL.SSL import Connection
 
-from snowflake.connector.compat import OK, urlsplit
-from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
-from snowflake.connector.errorcode import (
+from .compat import OK, urlsplit
+from .constants import HTTP_HEADER_USER_AGENT
+from .dict_cache import SFGenericDictionaryCache
+from .errorcode import (
     ER_INVALID_OCSP_RESPONSE_SSD,
     ER_INVALID_SSD,
     ER_OCSP_FAILED_TO_CONNECT_CACHE_SERVER,
@@ -48,18 +55,20 @@ from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_UNAVAILABLE,
     ER_OCSP_URL_INFO_MISSING,
 )
-from snowflake.connector.errors import RevocationCheckError
-from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
-from snowflake.connector.ssd_internal_keys import (
+from .errors import RevocationCheckError
+from .network import PYTHON_CONNECTOR_USER_AGENT
+from .ssd_internal_keys import (
     ocsp_internal_dep1_key_ver,
     ocsp_internal_dep2_key_ver,
     ocsp_internal_ssd_pub_dep1,
     ocsp_internal_ssd_pub_dep2,
 )
-from snowflake.connector.telemetry_oob import TelemetryService
-from snowflake.connector.time_util import DecorrelateJitterBackoff
+from .telemetry_oob import TelemetryService
+from .time_util import DecorrelateJitterBackoff
 
 logger = getLogger(__name__)
+
+CFA_URL = os.getenv('SF_CFA_URL')
 
 
 class OCSPTelemetryData(object):
@@ -788,6 +797,20 @@ class OCSPCache(object):
             return len(OCSPCache.CACHE)
 
 
+class NewOCSPCache(SFGenericDictionaryCache[str, str]):
+    """TODO."""
+    _CACHE_NAME = 'OCSPCache'
+    _DEFAULT_CACHE_FILE_NAME = 'ocsp_response_cache'
+
+    def _generate_default_location(self) -> pathlib.Path:
+        if platform.system() == 'Windows':
+            return pathlib.Path.home() / 'AppData' / 'Local' / 'Snowflake' / 'Caches' / self._DEFAULT_CACHE_FILE_NAME
+        elif platform.system() == 'Darwin':
+            return pathlib.Path.home() / 'Library' / 'Caches' / 'Snowflake' / self._DEFAULT_CACHE_FILE_NAME
+        # On anything else
+        return pathlib.Path.home() / '.cache' / 'snowflake' / self._DEFAULT_CACHE_FILE_NAME
+
+
 # Reset OCSP cache directory
 OCSPCache.reset_cache_dir()
 
@@ -954,7 +977,7 @@ class SnowflakeOCSP(object):
             use_ocsp_cache_server=None,
             use_post_method=True,
             use_fail_open=True):
-
+        self.cache = NewOCSPCache()
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
 
         if self.test_mode == 'true':
@@ -1006,9 +1029,21 @@ class SnowflakeOCSP(object):
         return self._validate(
             None, cert_data, telemetry_data, do_retry=False, no_exception=no_exception)
 
-    def validate(self, hostname, connection, no_exception=False):
+    def validate(
+            self,
+            hostname: Optional[str],
+            connection: Connection,
+            no_exception: bool = False,
+    ) -> List[Tuple[
+        Optional[Exception],
+        Certificate,
+        Certificate,
+        CertId,
+        Union[str, bytes]
+    ]]:
         """Validates the certificate is not revoked using OCSP."""
         logger.debug('validating certificate: %s', hostname)
+        use_cfa = CFA_URL is not None
 
         do_retry = SnowflakeOCSP.get_ocsp_retry_choice()
 
@@ -1033,10 +1068,77 @@ class SnowflakeOCSP(object):
             logger.debug(telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
             return None
 
-        return self._validate(hostname, cert_data, telemetry_data, do_retry, no_exception)
+        return (self._validate_cfa(hostname, cert_data, telemetry_data, do_retry, no_exception) if use_cfa
+                else self._validate(hostname, cert_data, telemetry_data, do_retry, no_exception))
+
+    def _validate_cfa(
+            self,
+            hostname: Optional[str],
+            cert_data: List[Tuple[Certificate, Certificate]],
+            telemetry_data: 'OCSPTelemetryData',
+            do_retry: bool = True,
+            no_exception: bool = False
+    ) -> List[Tuple[
+        Optional[Exception],
+        Certificate,
+        Certificate,
+        CertId,
+        str
+    ]]:
+        # Validate certs sequentially if OCSP response cache server is used
+        results = self._validate_certificates_parallel_cfa(
+            cert_data, telemetry_data, hostname, do_retry=do_retry)
+
+        any_err = False
+        for err, _issuer, _subject, _cert_id, _ocsp_response_status in results:
+            if isinstance(err, RevocationCheckError):
+                err.msg += ' for {}'.format(hostname)
+            elif _ocsp_response_status != 'Good':
+                if _ocsp_response_status == 'Revoked':
+                    msg = 'Certificate is revoked for {}'. \
+                        format(hostname)
+                    raise RevocationCheckError(msg=msg,
+                                               errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED)
+                else:
+                    if self.is_enabled_fail_open():
+                        logger.debug("Fail Open Warning Triggered:"
+                                     "OCSP Response - {}"
+                                     "for hostname {}".format(_ocsp_response_status,
+                                                              hostname))
+                    else:
+                        if _ocsp_response_status == 'Unavailable':
+                            errmsg = "OCSP Response unavailable for" \
+                                     "hostname {}".format(hostname)
+                            raise RevocationCheckError(msg=errmsg,
+                                                       errno=ER_OCSP_RESPONSE_CERT_STATUS_UNKNOWN)
+                        elif _ocsp_response_status == 'Bad':
+                            errmsg = "OCSP Response is invalid for hostname {}". \
+                                format(hostname)
+
+                            raise RevocationCheckError(msg=errmsg,
+                                                       errno=ER_OCSP_RESPONSE_CERT_STATUS_INVALID)
+            if not no_exception and err is not None:
+                raise err
+            elif err is not None:
+                any_err = True
+
+        logger.debug('ok' if not any_err else 'failed')
+        return results
 
     def _validate(
-            self, hostname, cert_data, telemetry_data, do_retry=True, no_exception=False):
+            self,
+            hostname: Optional[str],
+            cert_data: List[Tuple[Certificate, Certificate]],
+            telemetry_data: 'OCSPTelemetryData',
+            do_retry: bool = True,
+            no_exception: bool = False
+    ) -> List[Tuple[
+        Optional[Exception],
+        Certificate,
+        Certificate,
+        CertId,
+        bytes
+    ]]:
         # Validate certs sequentially if OCSP response cache server is used
         results = self._validate_certificates_sequential(
             cert_data, telemetry_data, hostname, do_retry=do_retry)
@@ -1101,7 +1203,20 @@ class SnowflakeOCSP(object):
         ocsp_warning = "{} \n {}".format(static_warning, ocsp_log)
         logger.error(ocsp_warning)
 
-    def validate_by_direct_connection(self, issuer, subject, telemetry_data, hostname=None, do_retry=True):
+    def validate_by_direct_connection(
+            self,
+            issuer: Certificate,
+            subject: Certificate,
+            telemetry_data: 'OCSPTelemetryData',
+            hostname: str = None,
+            do_retry: bool = True,
+    ) -> Tuple[
+        Optional[Exception],
+        Certificate,
+        Certificate,
+        CertId,
+        bytes
+    ]:
         ssd_cache_status = False
         cache_status = False
         ocsp_response = None
@@ -1216,9 +1331,76 @@ class SnowflakeOCSP(object):
                     telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
                 return None
 
-    def _validate_certificates_sequential(self, cert_data, telemetry_data,
-                                          hostname=None, do_retry=True):
-        results = []
+    def _validate_certificates_parallel_cfa(
+            self,
+            cert_data: List[Tuple[Certificate, Certificate]],
+            telemetry_data: 'OCSPTelemetryData',
+            hostname: Optional[str] = None,
+            do_retry: bool = True
+    ) -> List[Tuple[
+        Optional[Exception],
+        Certificate,
+        Certificate,
+        CertId,
+        str
+    ]]:
+        """Validate certificates sequentially using the newer cache for all service."""
+        headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
+
+        def get_resp(data: Dict[str, str]) -> str:
+            """Simply send a get request with retry."""
+            max_retry = 2
+            sleep_time = 1
+            backoff = DecorrelateJitterBackoff(sleep_time, 16)
+            for _ in range(max_retry):
+                resp = requests.get(url=CFA_URL, headers=headers, params=data)
+                if resp.status_code == OK:
+                    logger.debug("OCSP response was successfully returned from OCSP server.")
+                    ocsp_resp_status = resp.json()['ocsp_response_status']
+                    if ocsp_resp_status == 'Good':
+                        break
+                    # TODO add more statuses
+                elif max_retry > 1:
+                    sleep_time = backoff.next_sleep(1, sleep_time)
+                    logger.debug(f"OCSP server returned {resp.status_code}. Retrying in {sleep_time}(s)")
+                    logger.debug(f'sleeping for {sleep_time}')
+                    time.sleep(sleep_time)
+            else:
+                # No breaks were done
+                # TODO
+                return "Unavailable"
+
+            return ocsp_resp_status
+
+        datas = [
+            {
+                'cert_id': self.encode_cert_id_base64(
+                    self.decode_cert_id_key(self.create_ocsp_request(issuer, subject)[0])
+                ),
+                'ocsp_url': self.extract_ocsp_url(subject),
+                'issuer': b64encode(issuer.dump()),
+            } for issuer, subject in cert_data]
+        to_get = [e for e in datas if str(e) not in self.cache]
+
+        insert_into_cache = dict(zip([str(e) for e in to_get], ThreadPoolExecutor().map(get_resp, to_get)))
+        if insert_into_cache:
+            self.cache.update(insert_into_cache)
+
+        return [(None, c[0], c[1], self.create_ocsp_request(*c)[0], self.cache[str(d)]) for c, d in zip(cert_data, datas)]
+
+    def _validate_certificates_sequential(
+            self,
+            cert_data: List[Tuple[Certificate, Certificate]],
+            telemetry_data: 'OCSPTelemetryData',
+            hostname: Optional[str] = None,
+            do_retry: bool = True
+    ) -> List[Tuple[
+        Optional[Exception],
+        Certificate,
+        Certificate,
+        CertId,
+        bytes
+    ]]:
         try:
             self._check_ocsp_response_cache_server(cert_data)
         except RevocationCheckError as rce:
@@ -1226,11 +1408,8 @@ class SnowflakeOCSP(object):
         except Exception as ex:
             logger.debug("Caught unknown exception - %s. Continue to validate by direct connection", str(ex))
 
-        for issuer, subject in cert_data:
-            r = self.validate_by_direct_connection(
-                issuer, subject, telemetry_data, hostname, do_retry=do_retry)
-            results.append(r)
-        return results
+        return [self.validate_by_direct_connection(issuer, subject, telemetry_data, hostname, do_retry=do_retry)
+                for issuer, subject in cert_data]
 
     def _check_ocsp_response_cache_server(self, cert_data):
         """Checks if OCSP response is in cache, and if not it downloads the OCSP response cache from the server.
