@@ -213,6 +213,7 @@ def test_bogus(db_parameters):
             host=db_parameters['host'],
             port=db_parameters['port'],
             account=db_parameters['account'],
+            login_timeout=5,
         )
 
     with pytest.raises(DatabaseError):
