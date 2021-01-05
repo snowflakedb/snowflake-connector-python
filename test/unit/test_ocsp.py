@@ -60,7 +60,7 @@ def test_ocsp():
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     for url in TARGET_HOSTS:
-        connection = _openssl_connect(url)
+        connection = _openssl_connect(url, timeout=5)
         assert ocsp.validate(url, connection), \
             'Failed to validate: {}'.format(url)
 

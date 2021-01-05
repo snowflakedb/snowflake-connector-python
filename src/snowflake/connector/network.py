@@ -17,13 +17,6 @@ from io import BytesIO
 from threading import Lock
 
 import OpenSSL.SSL
-import requests
-from requests.adapters import HTTPAdapter
-from requests.auth import AuthBase
-from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout, SSLError
-from requests.packages.urllib3.exceptions import ProtocolError, ReadTimeoutError
-
-from snowflake.connector.time_util import get_time_millis
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -81,8 +74,13 @@ from .sqlstate import (
     SQLSTATE_IO_ERROR,
 )
 from .telemetry_oob import TelemetryService
-from .time_util import DEFAULT_MASTER_VALIDITY_IN_SECONDS, DecorrelateJitterBackoff
+from .time_util import DEFAULT_MASTER_VALIDITY_IN_SECONDS, DecorrelateJitterBackoff, get_time_millis
 from .tool.probe_connection import probe_connection
+from .vendored import requests
+from .vendored.requests.adapters import HTTPAdapter
+from .vendored.requests.auth import AuthBase
+from .vendored.requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout, SSLError
+from .vendored.urllib3.exceptions import ProtocolError, ReadTimeoutError
 
 logger = logging.getLogger(__name__)
 
