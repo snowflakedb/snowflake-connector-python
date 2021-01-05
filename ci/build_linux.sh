@@ -36,8 +36,8 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"
     # Clean up possible build artifacts
     rm -rf build generated_version.py
-    # Update PEP-517 dependencies and flake8
-    ${PYTHON} -m pip install -U pip setuptools
+    # Update PEP-517 dependencies
+    ${PYTHON} -m pip install -U pip setuptools wheel
     # Use new PEP-517 build
     ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
     # On Linux we should repair wheel(s) generated
