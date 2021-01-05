@@ -12,7 +12,6 @@ Release Notes
 
 - v2.3.7(December 10,2020)
 
-   - Added support for MFA token caching.
    - Added support for upcoming downscoped GCS credentials.
    - Tightened the pyOpenSSL dependency pin.
    - Relaxed the boto3 dependency pin up to the next major release.
