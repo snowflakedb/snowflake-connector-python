@@ -27,6 +27,7 @@ from snowflake.connector.compat import (
 from snowflake.connector.errors import DatabaseError, InterfaceError, OtherHTTPRetryableError
 from snowflake.connector.network import STATUS_TO_EXCEPTION, RetryRequest, SnowflakeRestful
 
+# We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
     from snowflake.connector.vendored import requests  # NOQA
     from snowflake.connector.vendored import urllib3  # NOQA

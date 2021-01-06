@@ -28,6 +28,7 @@ from snowflake.connector.errorcode import (
 from snowflake.connector.errors import Error, ForbiddenError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
+from snowflake.connector.vendored import urllib3
 
 try:  # pragma: no cover
     from parameters import (CONNECTION_PARAMETERS_ADMIN)
@@ -614,7 +615,6 @@ class ExecPrivatelinkThread(threading.Thread):
 
 
 def test_another_site(db_parameters):
-    import urllib3
 
     def get(url):
         pool_manager = urllib3.PoolManager()
