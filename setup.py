@@ -195,8 +195,8 @@ setup(
         'azure-common<2.0.0',
         'azure-storage-blob>=12.0.0,<13.0.0',
         'boto3>=1.4.4,<2.0.0',
+        # While requests is vendored, we use regular requests to perform OCSP checks
         'requests<3.0.0',
-        'urllib3<2.0.0',
         'certifi<2021.0.0',
         'pytz<2021.0',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',

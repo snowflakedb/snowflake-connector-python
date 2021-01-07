@@ -23,6 +23,9 @@ from threading import Lock, RLock
 from time import gmtime, strftime
 
 import jwt
+# We use regular requests and urlib3 when we reach out to do OCSP checks, basically in this very narrow
+# part of the code where we want to call out to check for revoked certificates,
+# we don't want to use our hardened version of requests.
 import requests as generic_requests
 
 from snowflake.connector.compat import OK, urlsplit
@@ -1265,6 +1268,8 @@ class SnowflakeOCSP(object):
                     self.read_cert_bundle(ca_bundle)
                 else:
                     import sys
+                    # This import that depends on these libraries is to import certificates from them,
+                    # we would like to have these as up to date as possible.
                     from requests import certs
                     if hasattr(certs, '__file__') and \
                             path.exists(certs.__file__) and \

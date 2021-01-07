@@ -22,6 +22,7 @@ from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent, 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..randomize import random_string
 
+# We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
     from snowflake.connector.vendored import requests  # NOQA
     vendored_request = True
