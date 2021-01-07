@@ -45,7 +45,7 @@ from ctypes import (
     c_bool,
 )
 from ctypes import CDLL, POINTER, CFUNCTYPE
-from urllib3.packages.six import raise_from
+from snowflake.connector.vendored.urllib3.packages.six import raise_from
 
 
 if platform.system() != "Darwin":
