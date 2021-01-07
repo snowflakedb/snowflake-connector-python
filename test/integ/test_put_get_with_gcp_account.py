@@ -24,6 +24,7 @@ from ..randomize import random_string
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
+    from snowflake.connector.vendored import requests  # NOQA
     vendored_request = True
 except ImportError:  # pragma: no cover
     import requests
