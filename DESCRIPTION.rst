@@ -10,6 +10,14 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.3.8(January 14,2021)
+
+   - Arrow result conversion speed up.
+   - Send all Python Connector exceptions to in-band or out-of-band telemetry.
+   - Vendoring requests and urllib3 to contain OCSP monkey patching to our library only.
+   - Declare dependency on setuptools.
+
+
 - v2.3.7(December 10,2020)
 
    - Added support for upcoming downscoped GCS credentials.
