@@ -20,8 +20,10 @@ import OpenSSL.SSL
 import requests
 from requests.adapters import HTTPAdapter
 from requests.auth import AuthBase
-from requests.exceptions import ConnectionError, ConnectTimeout, ReadTimeout, SSLError
+from requests.exceptions import ConnectionError, ConnectTimeout, InvalidProxyURL, ReadTimeout, SSLError
 from requests.packages.urllib3.exceptions import ProtocolError, ReadTimeoutError
+from requests.utils import prepend_scheme_if_needed, select_proxy
+from urllib3.util.url import parse_url
 
 from snowflake.connector.time_util import get_time_millis
 
@@ -168,6 +170,32 @@ def is_retryable_http_code(code: int) -> bool:
         METHOD_NOT_ALLOWED,  # 405
         REQUEST_TIMEOUT,  # 408
     )
+
+
+class ProxySupportAdapter(HTTPAdapter):
+    """This Adapter creates proper headers for Proxy CONNECT messages."""
+
+    def get_connection(self, url, proxies=None):
+        proxy = select_proxy(url, proxies)
+
+        if proxy:
+            proxy = prepend_scheme_if_needed(proxy, 'http')
+            proxy_url = parse_url(proxy)
+            if not proxy_url.host:
+                raise InvalidProxyURL("Please check proxy URL. It is malformed"
+                                      " and could be missing the host.")
+            proxy_manager = self.proxy_manager_for(proxy)
+            parsed_url = urlparse(url)
+            # Add Host to proxy header SNOW-232777
+            proxy_manager.proxy_headers['Host'] = parsed_url.hostname
+            conn = proxy_manager.connection_from_url(url)
+        else:
+            # Only scheme should be lower case
+            parsed = urlparse(url)
+            url = parsed.geturl()
+            conn = self.poolmanager.connection_from_url(url)
+
+        return conn
 
 
 class RetryRequest(Exception):
@@ -892,8 +920,8 @@ class SnowflakeRestful(object):
 
     def make_requests_session(self):
         s = requests.Session()
-        s.mount('http://', HTTPAdapter(max_retries=REQUESTS_RETRY))
-        s.mount('https://', HTTPAdapter(max_retries=REQUESTS_RETRY))
+        s.mount('http://', ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        s.mount('https://', ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         s._reuse_count = itertools.count()
         return s
 
