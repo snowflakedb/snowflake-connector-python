@@ -127,7 +127,7 @@ DEFAULT_CONFIGURATION = {
     'inject_client_pause': (0, int),  # snowflake internal
     'session_parameters': (None, (type(None), dict)),  # snowflake session parameters
     'autocommit': (None, (type(None), bool)),  # snowflake
-    'client_session_keep_alive': (False, bool),  # snowflake
+    'client_session_keep_alive': (None, bool),  # snowflake
     'client_session_keep_alive_heartbeat_frequency': (None, (type(None), int)),  # snowflake
     'client_prefetch_threads': (4, int),  # snowflake
     'numpy': (False, bool),  # snowflake
@@ -323,7 +323,12 @@ class SnowflakeConnection(object):
 
     @client_session_keep_alive.setter
     def client_session_keep_alive(self, value):
-        self._client_session_keep_alive = True if value else False
+        if value is None:
+            self._client_session_keep_alive = None
+        elif value.tolower == 'true':
+            self._client_session_keep_alive = True
+        else:
+            self._client_session_keep_alive = False
 
     @property
     def client_session_keep_alive_heartbeat_frequency(self):
@@ -605,8 +610,8 @@ class SnowflakeConnection(object):
             # Snowflake will validate the requested database, schema, and warehouse
             self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = True
 
-        if self.client_session_keep_alive:
-            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = True
+        if self.client_session_keep_alive is not None:
+            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = self._client_session_keep_alive
 
         if self.client_session_keep_alive_heartbeat_frequency:
             self._session_parameters[
@@ -1088,6 +1093,7 @@ class SnowflakeConnection(object):
         """Sets session parameters."""
         if 'parameters' not in ret['data']:
             return
+        client_session_keep_alive_set = False
         parameters = ret['data']['parameters']
         with self._lock_converter:
             self.converter.set_parameters(parameters)
@@ -1103,9 +1109,16 @@ class SnowflakeConnection(object):
                 else:
                     TelemetryService.get_instance().disable()
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
-                self.client_session_keep_alive = value
+                # Only set if the local config is None.
+                # Always give preference to user config.
+                if self.client_session_keep_alive is None:
+                    self.client_session_keep_alive = value
+                else:
+                    client_session_keep_alive_set = True
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == \
-                    name:
+                    name and self.client_session_keep_alive is True\
+                    and client_session_keep_alive_set is False:
+                # Any local configs should not be overwritten.
                 self.client_session_keep_alive_heartbeat_frequency = value
             elif PARAMETER_SERVICE_NAME == name:
                 self.service_name = value
