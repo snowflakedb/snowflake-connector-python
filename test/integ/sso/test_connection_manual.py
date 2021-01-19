@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-#
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 # This test requires the SSO and Snowflake admin connection parameters.
 #
 # CONNECTION_PARAMETERS_SSO = {

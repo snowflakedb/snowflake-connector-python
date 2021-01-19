@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-#
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 # This script run every Python file in this directory other than this one in a subprocess
 # and checks their exit codes
 
