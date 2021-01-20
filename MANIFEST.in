@@ -1,5 +1,6 @@
 include *.rst
 recursive-include src/snowflake/connector *.py *.pyx
 include LICENSE.txt
+include NOTICE
 recursive-include src/snowflake/connector/cpp *.cpp *.hpp
 prune test

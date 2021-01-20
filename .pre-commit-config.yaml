@@ -1,4 +1,4 @@
-exclude: '^(.*egg.info.*|.*/parameters.py).*$'
+exclude: '^(.*egg.info.*|.*/parameters.py|src/snowflake/connector/vendored/.*/).*$'
 repos:
 -   repo: https://github.com/asottile/seed-isort-config
     rev: v1.9.1

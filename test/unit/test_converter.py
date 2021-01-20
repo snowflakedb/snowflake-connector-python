@@ -6,7 +6,11 @@
 
 from logging import getLogger
 
+import pytest
+
+from snowflake.connector import ProgrammingError
 from snowflake.connector.connection import DefaultConverterClass
+from snowflake.connector.converter import SnowflakeConverter
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
 logger = getLogger(__name__)
@@ -66,3 +70,15 @@ def test_more_timestamps():
     assert m('-2208943503.8765432') == '1900-01-01 12:34:56.123456800'
     assert m('-2208943503.0000000') == '1900-01-01 12:34:57.000000000'
     assert m('-2208943503.0120000') == '1900-01-01 12:34:56.988000000'
+
+
+def test_converter_to_snowflake_error():
+    converter = SnowflakeConverter()
+    with pytest.raises(ProgrammingError, match=r'Binding data in type \(bogus\) is not supported'):
+        converter._bogus_to_snowflake('Bogus')
+
+
+def test_converter_to_snowflake_bindings_error():
+    converter = SnowflakeConverter()
+    with pytest.raises(ProgrammingError, match=r'Binding data in type \(somethingsomething\) is not supported'):
+        converter._somethingsomething_to_snowflake_bindings('Bogus')

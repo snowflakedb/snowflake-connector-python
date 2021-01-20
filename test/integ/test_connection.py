@@ -213,6 +213,7 @@ def test_bogus(db_parameters):
             host=db_parameters['host'],
             port=db_parameters['port'],
             account=db_parameters['account'],
+            login_timeout=5,
         )
 
     with pytest.raises(DatabaseError):
@@ -612,17 +613,6 @@ class ExecPrivatelinkThread(threading.Thread):
             self.bucket.put("Success")
 
 
-def test_another_site(db_parameters):
-    import urllib3
-
-    def get(url):
-        pool_manager = urllib3.PoolManager()
-        res = pool_manager.request('GET', url)
-        return res.status
-
-    assert get('https://wikipedia.org') == 200
-
-
 @pytest.mark.skipolddriver
 def test_okta_url(db_parameters):
     orig_authenticator = 'https://someaccount.okta.com/snowflake/oO56fExYCGnfV83/2345'
@@ -923,4 +913,15 @@ def test_process_param_dict_error(conn_cnx):
             with mock.patch('snowflake.connector.converter.SnowflakeConverter.to_snowflake',
                             side_effect=Exception('test')):
                 conn._process_params({'asd': 'something'})
+            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
+
+
+@pytest.mark.skipolddriver
+def test_process_param_error(conn_cnx):
+    """Tests whether exceptions in __process_params_dict are handled correctly."""
+    with conn_cnx() as conn:
+        with pytest.raises(ProgrammingError, match="Failed processing pyformat-parameters; test") as pe:
+            with mock.patch('snowflake.connector.converter.SnowflakeConverter.to_snowflake',
+                            side_effect=Exception('test')):
+                conn._process_params(mock.Mock())
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT

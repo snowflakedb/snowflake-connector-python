@@ -195,8 +195,8 @@ setup(
         'azure-common<2.0.0',
         'azure-storage-blob>=12.0.0,<13.0.0',
         'boto3>=1.4.4,<2.0.0',
-        'requests<2.24.0',
-        'urllib3>=1.20,<1.26.0',
+        # While requests is vendored, we use regular requests to perform OCSP checks
+        'requests<3.0.0',
         'certifi<2021.0.0',
         'pytz<2021.0',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
@@ -210,16 +210,29 @@ setup(
         # required. Python 3.6 was released at the end of 2016. setuptools 34.0.0 was released
         # in early 2017, so we pick this version as a reasonably modern base.
         'setuptools>34.0.0',
+        # requests requirements
+        'chardet>=3.0.2,<4',
+        'idna>=2.5,<3',
+        'certifi>=2017.4.17',
     ],
 
     namespace_packages=['snowflake'],
     packages=[
         'snowflake.connector',
         'snowflake.connector.tool',
+
+        'snowflake.connector.vendored',
+        'snowflake.connector.vendored.requests',
+        'snowflake.connector.vendored.urllib3',
+        'snowflake.connector.vendored.urllib3.packages',
+        'snowflake.connector.vendored.urllib3.packages.ssl_match_hostname',
+        'snowflake.connector.vendored.urllib3.packages.backports',
+        'snowflake.connector.vendored.urllib3.contrib',
+        'snowflake.connector.vendored.urllib3.contrib._securetransport',
+        'snowflake.connector.vendored.urllib3.util',
     ],
     package_dir={
-        'snowflake.connector': os.path.join('src', 'snowflake', 'connector'),
-        'snowflake.connector.tool': os.path.join('src', 'snowflake', 'connector', 'tool'),
+        '': 'src',
     },
     package_data={
         'snowflake.connector': ['*.pem', '*.json', '*.rst', 'LICENSE.txt'],
