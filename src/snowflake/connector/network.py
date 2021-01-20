@@ -175,6 +175,7 @@ class ProxySupportAdapter(HTTPAdapter):
 
     def get_connection(self, url, proxies=None):
         proxy = select_proxy(url, proxies)
+        parsed_url = urlparse(url)
 
         if proxy:
             proxy = prepend_scheme_if_needed(proxy, 'http')
@@ -183,14 +184,13 @@ class ProxySupportAdapter(HTTPAdapter):
                 raise InvalidProxyURL("Please check proxy URL. It is malformed"
                                       " and could be missing the host.")
             proxy_manager = self.proxy_manager_for(proxy)
-            parsed_url = urlparse(url)
+
             # Add Host to proxy header SNOW-232777
             proxy_manager.proxy_headers['Host'] = parsed_url.hostname
             conn = proxy_manager.connection_from_url(url)
         else:
             # Only scheme should be lower case
-            parsed = urlparse(url)
-            url = parsed.geturl()
+            url = parsed_url.geturl()
             conn = self.poolmanager.connection_from_url(url)
 
         return conn
