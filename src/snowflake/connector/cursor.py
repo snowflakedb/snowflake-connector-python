@@ -383,6 +383,7 @@ class SnowflakeCursor(object):
                 'Failed to set SIGINT handler. '
                 'Not in main thread. Ignored...')
         ret = {'data': {}}
+        logger.debug('request_id: %s', str(self._request_id))
         try:
             ret = self._connection.cmd_query(
                 query,
