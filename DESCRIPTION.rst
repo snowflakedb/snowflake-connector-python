@@ -2,12 +2,70 @@ This package includes the Snowflake Connector for Python, which conforms to the 
 https://www.python.org/dev/peps/pep-0249/
 
 Snowflake Documentation is available at:
-https://docs.snowflake.net/
+https://docs.snowflake.com/
 
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 Release Notes
 -------------------------------------------------------------------------------
+
+
+- v2.3.8(January 14,2021)
+
+   - Arrow result conversion speed up.
+   - Send all Python Connector exceptions to in-band or out-of-band telemetry.
+   - Vendoring requests and urllib3 to contain OCSP monkey patching to our library only.
+   - Declare dependency on setuptools.
+
+
+- v2.3.7(December 10,2020)
+
+   - Added support for upcoming downscoped GCS credentials.
+   - Tightened the pyOpenSSL dependency pin.
+   - Relaxed the boto3 dependency pin up to the next major release.
+   - Relaxed the cffi dependency pin up to the next major release.
+   - Added support for executing asynchronous queries.
+   - Dropped support for Python 3.5.
+
+- v2.3.6(November 16,2020)
+
+   - Fixed a bug that was preventing the connector from working on Windows with Python 3.8.
+   - Improved the string formatting in exception messages.
+   - For dependency checking, increased the version condition for the cryptography package from <3.0.0 to <4.0.0.
+   - For dependency checking, increased the version condition for the pandas package from <1.1 to <1.2.
+
+- v2.3.5(November 03,2020)
+
+   - Updated the dependency on the cryptography package from version 2.9.2 to 3.2.1.
+
+- v2.3.4(October 26,2020)
+
+   - Added an optional parameter to the write_pandas function to specify that identifiers should not be quoted before being sent to the server.
+   - The write_pandas function now honors default and auto-increment values for columns when inserting new rows.
+   - Updated the Python Connector OCSP error messages and accompanying telemetry Information.
+   - Enabled the runtime pyarrow version verification to fail gracefully. Fixed a bug with AWS glue environment.
+   - Upgraded the version of boto3 from 1.14.47 to 1.15.9.
+   - Upgraded the version of idna from 2.9 to 2.10.
+
+- v2.3.3(October 05,2020)
+
+   - Simplified the configuration files by consolidating test settings.
+   - In the Connection object, the execute_stream and execute_string methods now filter out empty lines from their inputs.
+
+- v2.3.2(September 14,2020)
+
+   - Fixed a bug where a file handler was not closed properly.
+   - Fixed various documentation typos.
+
+- v2.3.1(August 25,2020)
+
+   - Fixed a bug where 2 constants were removed by mistake.
+
+- v2.3.0(August 24,2020)
+
+   - When the log level is set to DEBUG, log the OOB telemetry entries that are sent to Snowflake.
+   - Fixed a bug in the PUT command where long running PUTs would fail to re-authenticate to GCP for storage.
+   - Updated the minimum build target MacOS version to 10.13.
 
 - v2.2.10(August 03,2020)
 

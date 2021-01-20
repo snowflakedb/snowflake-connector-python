@@ -7,7 +7,7 @@
 set -o pipefail
 
 U_WIDTH=16
-PYTHON_VERSIONS="${1:-3.5 3.6 3.7 3.8}"
+PYTHON_VERSIONS="${1:-3.6 3.7 3.8}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 DIST_DIR="${CONNECTOR_DIR}/dist"
@@ -36,8 +36,8 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"
     # Clean up possible build artifacts
     rm -rf build generated_version.py
-    # Update PEP-517 dependencies and flake8
-    ${PYTHON} -m pip install -U pip setuptools
+    # Update PEP-517 dependencies
+    ${PYTHON} -m pip install -U pip setuptools wheel
     # Use new PEP-517 build
     ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
     # On Linux we should repair wheel(s) generated

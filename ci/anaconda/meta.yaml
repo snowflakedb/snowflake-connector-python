@@ -23,7 +23,7 @@ requirements:
         - cffi ==1.6.0
 
 about:
-    home: https://www.snowflake.net/
+    home: https://www.snowflake.com/
     license: Apache 2.0
     license_file: /tmp/anaconda_workspace/src/LICENSE.txt
     summary: Snowflake Connector for Python

@@ -7,24 +7,25 @@ import os
 import sys
 import warnings
 from codecs import open
-from os import path
 from shutil import copy
 from sys import platform
 
 from setuptools import Extension, setup
 
-THIS_DIR = path.dirname(path.realpath(__file__))
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+SRC_DIR = os.path.join(THIS_DIR, 'src')
+CONNECTOR_SRC_DIR = os.path.join(SRC_DIR, 'snowflake', 'connector')
 
 VERSION = (1, 1, 1, None)  # Default
 try:
-    with open(path.join(THIS_DIR, 'generated_version.py'), encoding='utf-8') as f:
+    with open(os.path.join(CONNECTOR_SRC_DIR, 'generated_version.py'), encoding='utf-8') as f:
         exec(f.read())
 except Exception:
-    with open(path.join(THIS_DIR, 'version.py'), encoding='utf-8') as f:
+    with open(os.path.join(CONNECTOR_SRC_DIR, 'version.py'), encoding='utf-8') as f:
         exec(f.read())
 version = '.'.join([str(v) for v in VERSION if v is not None])
 
-with open(path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
+with open(os.path.join(THIS_DIR, 'DESCRIPTION.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 
@@ -41,8 +42,7 @@ cmd_class = {}
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
     'pyarrow>=0.17.0,<0.18.0',
-    'pandas==0.24.2;python_version=="3.5"',
-    'pandas>=1.0.0,<1.1.0;python_version>"3.5"',
+    'pandas>=1.0.0,<1.2.0',
 ]
 
 try:
@@ -59,10 +59,12 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
     extensions = cythonize(
         [
-            Extension(name='snowflake.connector.arrow_iterator', sources=['arrow_iterator.pyx']),
-            Extension(name='snowflake.connector.arrow_result', sources=['arrow_result.pyx'])
+            Extension(name='snowflake.connector.arrow_iterator',
+                      sources=[os.path.join(CONNECTOR_SRC_DIR, 'arrow_iterator.pyx')]),
+            Extension(name='snowflake.connector.arrow_result',
+                      sources=[os.path.join(CONNECTOR_SRC_DIR, 'arrow_result.pyx')])
         ],
-        build_dir=os.path.join('build', 'cython'))
+    )
 
     class MyBuildExt(build_ext):
 
@@ -94,26 +96,29 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             if ext.name == 'snowflake.connector.arrow_iterator':
                 self._copy_arrow_lib()
+                CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, 'cpp')
+                ARROW_ITERATOR_SRC_DIR = os.path.join(CPP_SRC_DIR, 'ArrowIterator')
+                LOGGING_SRC_DIR = os.path.join(CPP_SRC_DIR, 'Logging')
 
-                ext.sources += ['cpp/ArrowIterator/CArrowIterator.cpp',
-                                'cpp/ArrowIterator/CArrowChunkIterator.cpp',
-                                'cpp/ArrowIterator/CArrowTableIterator.cpp',
-                                'cpp/ArrowIterator/SnowflakeType.cpp',
-                                'cpp/ArrowIterator/BinaryConverter.cpp',
-                                'cpp/ArrowIterator/BooleanConverter.cpp',
-                                'cpp/ArrowIterator/DecimalConverter.cpp',
-                                'cpp/ArrowIterator/DateConverter.cpp',
-                                'cpp/ArrowIterator/FloatConverter.cpp',
-                                'cpp/ArrowIterator/IntConverter.cpp',
-                                'cpp/ArrowIterator/StringConverter.cpp',
-                                'cpp/ArrowIterator/TimeConverter.cpp',
-                                'cpp/ArrowIterator/TimeStampConverter.cpp',
-                                'cpp/ArrowIterator/Python/Common.cpp',
-                                'cpp/ArrowIterator/Python/Helpers.cpp',
-                                'cpp/ArrowIterator/Util/time.cpp',
-                                'cpp/Logging/logging.cpp']
-                ext.include_dirs.append('cpp/ArrowIterator/')
-                ext.include_dirs.append('cpp/Logging')
+                ext.sources += [os.path.join(ARROW_ITERATOR_SRC_DIR, 'CArrowIterator.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'CArrowChunkIterator.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'CArrowTableIterator.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'SnowflakeType.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'BinaryConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'BooleanConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'DecimalConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'DateConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'FloatConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'IntConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'StringConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'TimeConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'TimeStampConverter.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'Python', 'Common.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'Python', 'Helpers.cpp'),
+                                os.path.join(ARROW_ITERATOR_SRC_DIR, 'Util', 'time.cpp'),
+                                LOGGING_SRC_DIR + '/logging.cpp']
+                ext.include_dirs.append(ARROW_ITERATOR_SRC_DIR)
+                ext.include_dirs.append(LOGGING_SRC_DIR)
 
                 if platform == 'win32':
                     ext.include_dirs.append(pyarrow.get_include())
@@ -147,7 +152,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             for lib in libs_to_bundle:
                 source = '{}/{}'.format(self._get_arrow_lib_dir(), lib)
-                build_dir = path.join(self.build_lib, 'snowflake', 'connector')
+                build_dir = os.path.join(self.build_lib, 'snowflake', 'connector')
                 copy(source, build_dir)
 
         def _get_arrow_lib_as_linker_input(self):
@@ -156,7 +161,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             for lib in link_lib:
                 source = '{}/{}'.format(self._get_arrow_lib_dir(), lib)
-                assert path.exists(source)
+                assert os.path.exists(source)
                 ret.append(source)
 
             return ret
@@ -177,38 +182,57 @@ setup(
     license='Apache License, Version 2.0',
     keywords="Snowflake db database cloud analytics warehouse",
     url='https://www.snowflake.com/',
-    download_url='https://www.snowflake.com/',
     use_2to3=False,
+    project_urls={
+        "Documentation": "https://docs.snowflake.com/",
+        "Code": "https://github.com/snowflakedb/snowflake-connector-python",
+        "Issue tracker": "https://github.com/snowflakedb/snowflake-connector-python/issues",
+    },
 
-    python_requires='>=3.5',
+    python_requires='>=3.6',
 
     install_requires=[
         'azure-common<2.0.0',
-        'azure-storage-blob<12.0.0;python_version<="3.5.1"',
-        'azure-storage-blob>=12.0.0,<13.0.0;python_version>="3.5.2"',
-        'boto3>=1.4.4,<1.15',
-        'requests<2.24.0',
-        'urllib3>=1.20,<1.26.0',
+        'azure-storage-blob>=12.0.0,<13.0.0',
+        'boto3>=1.4.4,<2.0.0',
+        # While requests is vendored, we use regular requests to perform OCSP checks
+        'requests<3.0.0',
         'certifi<2021.0.0',
         'pytz<2021.0',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
-        'pyOpenSSL>=16.2.0,<21.0.0',
-        'cffi>=1.9,<1.15',
-        'cryptography>=2.5.0,<3.0.0',
+        'pyOpenSSL>=16.2.0,<20.0.0',
+        'cffi>=1.9,<2.0.0',
+        'cryptography>=2.5.0,<4.0.0',
         'pyjwt<2.0.0',
-        'idna<2.10',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
+        # A functioning pkg_resources.working_set.by_key and pkg_resources.Requirement is
+        # required. Python 3.6 was released at the end of 2016. setuptools 34.0.0 was released
+        # in early 2017, so we pick this version as a reasonably modern base.
+        'setuptools>34.0.0',
+        # requests requirements
+        'chardet>=3.0.2,<4',
+        'idna>=2.5,<3',
+        'certifi>=2017.4.17',
     ],
 
     namespace_packages=['snowflake'],
     packages=[
         'snowflake.connector',
         'snowflake.connector.tool',
+
+        'snowflake.connector.vendored',
+        'snowflake.connector.vendored.requests',
+        'snowflake.connector.vendored.urllib3',
+        'snowflake.connector.vendored.urllib3.packages',
+        'snowflake.connector.vendored.urllib3.packages.ssl_match_hostname',
+        'snowflake.connector.vendored.urllib3.packages.backports',
+        'snowflake.connector.vendored.urllib3.contrib',
+        'snowflake.connector.vendored.urllib3.contrib._securetransport',
+        'snowflake.connector.vendored.urllib3.util',
     ],
     package_dir={
-        'snowflake.connector': '.',
-        'snowflake.connector.tool': 'tool',
+        '': 'src',
     },
     package_data={
         'snowflake.connector': ['*.pem', '*.json', '*.rst', 'LICENSE.txt'],
@@ -232,7 +256,7 @@ setup(
         ],
         "pandas": pandas_requirements,
         "development": [
-            'pytest',
+            'pytest<6.2.0',
             'pytest-cov',
             'pytest-rerunfailures',
             'pytest-timeout',
@@ -264,9 +288,9 @@ setup(
         'Operating System :: OS Independent',
 
         'Programming Language :: SQL',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
 
         'Topic :: Database',
         'Topic :: Software Development',

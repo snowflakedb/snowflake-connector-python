@@ -10,6 +10,14 @@ on:
         branches:
             - master
             - prep-**
+    workflow_dispatch:
+        inputs:
+          logLevel:
+            default: warning
+            description: "Log level"
+            required: true
+          tags:
+            description: "Test scenario tags"
 
 jobs:
   lint:
@@ -23,12 +31,58 @@ jobs:
           python-version: '3.x'
       - name: Display Python version
         run: python -c "import sys; import os; print(\"\n\".join(os.environ[\"PATH\"].split(os.pathsep))); print(sys.version); print(sys.executable);"
-      - name: Upgrade setuptools, pip and wheel
-        run: python -m pip install -U setuptools pip wheel
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip
       - name: Install tox
         run: python -m pip install tox
       - name: Run fix_lint
-        run: tox -e fix_lint
+        run: python -m tox -e fix_lint
+
+  build-sdist:
+    needs: lint
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.6'
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip
+      - name: Creating source distribution
+        run: python setup.py sdist
+      - name: Show sdist generated
+        run: ls -lh dist
+      - uses: actions/upload-artifact@v2
+        with:
+          name: sdist
+          path: dist/
+
+  whitesource:
+    name: Whitesource linux-3.6
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.6
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools, pip, wheel and virtualenv
+        run: python -m pip install -U setuptools pip wheel virtualenv
+      - name: Build Python connector
+        run: python -m pip wheel -v -w dist .
+      - name: Show wheels generated
+        run: ls -lh dist/
+      - name: Run WhiteSource script
+        run: ./ci/wss.sh
+        env:
+          WHITESOURCE_API_KEY: ${{ secrets.WHITESOURCE_API_KEY }}
 
   build-manylinux:
     needs: lint
@@ -37,15 +91,15 @@ jobs:
     container: quay.io/pypa/manylinux1_x86_64
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8]
     steps:
       - uses: actions/checkout@v1
       - name: Updating path
         run: |
-          echo "::add-path::/opt/python/cp35-cp35m/bin/"
-          echo "::add-path::/opt/python/cp36-cp36m/bin/"
-          echo "::add-path::/opt/python/cp37-cp37m/bin/"
-          echo "::add-path::/opt/python/cp38-cp38/bin/"
+          echo "/opt/python/cp35-cp35m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp36-cp36m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp37-cp37m/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp38-cp38/bin/" >> $GITHUB_PATH
       - name: Display Python version
         run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
@@ -68,8 +122,6 @@ jobs:
     strategy:
       matrix:
         python:
-          - version: 3.5
-            link: https://www.python.org/ftp/python/3.5.0/python-3.5.0-macosx10.6.pkg
           - version: 3.6
             link: https://www.python.org/ftp/python/3.6.8/python-3.6.8-macosx10.9.pkg
           - version: 3.7
@@ -91,7 +143,7 @@ jobs:
       - name: Generate wheel
         run: python3 -m pip wheel -v -w dist --no-deps .
         env:
-          MACOSX_DEPLOYMENT_TARGET: 10.12  # Should be kept in sync with ci/build_darwin.sh
+          MACOSX_DEPLOYMENT_TARGET: 10.13  # Should be kept in sync with ci/build_darwin.sh
       - name: Show wheels generated
         run: ls -lh dist/
       - uses: actions/upload-artifact@v2
@@ -105,7 +157,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7]
+        python-version: [3.6, 3.7, 3.8]
     steps:
       - uses: actions/checkout@v2
       - name: Setup python
@@ -126,6 +178,30 @@ jobs:
           name: windows_py${{ matrix.python-version }}
           path: dist/
 
+  test-sdist:
+    needs: build-sdist
+    name: Test sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Download sdist
+        uses: actions/download-artifact@v2
+        with:
+          name: sdist
+          path: dist
+      - name: Show sdist downloaded
+        run: ls -lh dist
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.6'
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip
+      - name: Install sdist
+        run: pip install dist/*
+
   test:
     name: Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
     needs: [build-manylinux, build-macos, build-windows]
@@ -140,12 +216,8 @@ jobs:
            download_name: macos
          - image_name: windows-latest
            download_name: windows
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8]
         cloud-provider: [aws, azure, gcp]
-        exclude:
-          - python-version: 3.8
-            os:
-              download_name: windows
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -179,8 +251,151 @@ jobs:
       - name: Install tox
         run: python -m pip install tox tox-external-wheels
       - name: Run tests
-        run: tox -e "py${PYTHON_VERSION/\./}{,-pandas,-sso}-ci"
+        run: python -m tox -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci"
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes
+          TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
+      - name: Combine coverages
+        run: python -m tox -e coverage --skip-missing-interpreters false
+        shell: bash
+      - uses: actions/upload-artifact@v2
+        with:
+          name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .tox/.coverage
+            .tox/coverage.xml
+
+  test-olddriver:
+    name: Old Driver Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: lint
+    runs-on: ${{ matrix.os.image_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+         - image_name: ubuntu-latest
+           download_name: linux
+        python-version: [3.7]
+        cloud-provider: [aws]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Upgrade setuptools, pip and wheel
+        run: python -m pip install -U setuptools pip wheel
+      - name: Install tox
+        run: python -m pip install tox
+      - name: Run tests
+        run: python -m tox -e olddriver
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes
+        shell: bash
+
+  test-fips:
+    name: Test FIPS linux-3.6-${{ matrix.cloud-provider }}
+    needs: build-manylinux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud-provider: [aws]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Download wheel(s)
+        uses: actions/download-artifact@v2
+        with:
+          name: linux_py3.6
+          path: dist
+      - name: Show wheels downloaded
+        run: ls -lh dist
+        shell: bash
+      - name: Remove manylinux1 wheel
+        run: |
+          rm dist/*manylinux1*.whl
+          ls -lh dist
+      - name: Run tests
+        run: ./ci/test_fips_docker.sh
+        env:
+          PYTHON_VERSION: 3.6
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      - uses: actions/upload-artifact@v2
+        with:
+          name: coverage_linux-fips-3.6-${{ matrix.cloud-provider }}
+          path: |
+            .coverage
+            coverage.xml
+
+  combine-coverage:
+    if: ${{ success() || failure() }}
+    name: Combine coverage
+    needs: [test, test-fips]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/download-artifact@v2
+        with:
+          path: artifacts
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.6'
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip
+      - name: Install tox
+        run: python -m pip install tox
+      - name: Collect all coverages to one dir
+        run: |
+          python -c '
+          from pathlib import Path
+          import shutil
+
+          src_dir = Path("artifacts")
+          dst_dir = Path(".") / ".tox"
+          dst_dir.mkdir()
+          for src_file in src_dir.glob("*/.coverage"):
+              dst_file = dst_dir / ".coverage.{}".format(src_file.parent.name[9:])
+              print("{} copy to {}".format(src_file, dst_file))
+              shutil.copy(str(src_file), str(dst_file))'
+      - name: Combine coverages
+        run: python -m tox -e coverage
+      - name: Publish html coverage
+        uses: actions/upload-artifact@v2
+        with:
+          name: overall_cov_html
+          path: .tox/htmlcov
+      - name: Publish xml coverage
+        uses: actions/upload-artifact@v2
+        with:
+          name: overall_cov_xml
+          path: .tox/coverage.xml
+      - uses: codecov/codecov-action@v1
+        with:
+          file: .tox/coverage.xml

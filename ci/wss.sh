@@ -5,55 +5,28 @@ set -e
 set -o pipefail
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
+SCAN_DIRECTORIES="${CONNECTOR_DIR}"
 
-[[ -z "$WHITESOURCE_API_KEY" ]] && echo "[WARNING] No WHITESOURCE_API_KEY is set. No WhiteSource scan will occur." && exit 0
-
-if [[ -z "$VIRTUAL_ENV" ]]; then
-    PY=
-    TMP_VENV=$(mktemp -d)
-    if which python3 >& /dev/null; then
-        PY=python3
-    elif which python3.7 >& /dev/null; then
-        PY=python3.7
-    elif which python3.6 >& /dev/null; then
-        PY=python3.6
-    elif which python3.5 >& /dev/null; then
-        PY=python3.5
-    elif which python >& /dev/null; then
-        if [[ "$(python -c 'import sys; print(sys.version_info.major)')" == "3" ]]; then
-            PY=python
-        fi
-    fi
-    [[ -z "$PY" ]] && echo "[ERROR] Failed to find Python3" && exit 1
-
-    echo "[INFO] Installing Python Virtualenv"
-    $PY -m venv $TMP_VENV >& /dev/null
-    source $TMP_VENV/bin/activate
-    IS_IN_CUSTOM_VENV=true
-else
-    echo "[INFO] Using Python Virtualenv $VIRTUAL_ENV"
-fi
-pip install -U pip virtualenv >& /dev/null
+[[ -z "$WHITESOURCE_API_KEY" ]] && echo "[WARNING] No WHITESOURCE_API_KEY is set. No WhiteSource scan will occur." && exit 1
 
 export PRODUCT_NAME=snowflake-connector-python
-
 export PROD_BRANCH=master
-export PROJECT_VERSION=$TRAVIS_COMMIT
+export PROJECT_VERSION="${GITHUB_SHA}"
 
-env | grep TRAVIS | sort
+BRANCH_OR_PR_NUMBER="$(echo "${GITHUB_REF}" | awk 'BEGIN { FS = "/" } ; { print $3 }')"
 
-if [[ "$TRAVIS_PULL_REQUEST" != "false" ]]; then
+# GITHUB_EVENT_NAME should either be 'push', or 'pull_request'
+if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
     echo "[INFO] Pull Request"
-    export PROJECT_NAME=PR-$TRAVIS_PULL_REQUEST
-elif [[ "$TRAVIS_BRANCH" == "$PROD_BRANCH" ]]; then
+    export PROJECT_NAME="PR-${BRANCH_OR_PR_NUMBER}"
+elif [[ "${BRANCH_OR_PR_NUMBER}" == "$PROD_BRANCH" ]]; then
     echo "[INFO] Production branch"
-    export PROJECT_NAME=$PROD_BRANCH
+    export PROJECT_NAME="$PROD_BRANCH"
 else
     echo "[INFO] Non Production branch. Skipping wss..."
-    export PROJECT_NAME=
+    export PROJECT_NAME=""
 fi
-
-SCAN_DIRECTORIES=$(cd $THIS_DIR/.. && pwd)
 
 if [[ -n "$PROJECT_NAME" ]]; then
     rm -f wss-unified-agent.jar
@@ -162,7 +135,7 @@ if [[ "$PROJECT_NAME" == "$PROD_BRANCH" ]]; then
         -offline true
     ERR=$?
     if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
-        echo "failed to run wss for $PRODUCT_VERSION_${PROJECT_VERSION} in ${PROJECT_VERSION}..."
+        echo "failed to run wss for PROJECT_VERSION=${PROJECT_VERSION} in ${PROJECT_VERSION}..."
         exit 1
     fi
 
@@ -174,7 +147,7 @@ if [[ "$PROJECT_NAME" == "$PROD_BRANCH" ]]; then
        -requestFiles whitesource/update-request.txt
     ERR=$?
     if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
-        echo "failed to run wss for $PRODUCT_VERSION_${PROJECT_VERSION} in baseline"
+        echo "failed to run wss for PROJECT_VERSION=${PROJECT_VERSION} in baseline"
         exit 1
     fi
     java -jar wss-unified-agent.jar -apiKey ${WHITESOURCE_API_KEY} \
@@ -185,7 +158,7 @@ if [[ "$PROJECT_NAME" == "$PROD_BRANCH" ]]; then
         -requestFiles whitesource/update-request.txt
     ERR=$?
     if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
-        echo "failed to run wss for $PRODUCT_VERSION_${PROJECT_VERSION} in ${PROJECT_VERSION}"
+        echo "failed to run wss for PROJECT_VERSION=${PROJECT_VERSION} in ${PROJECT_VERSION}"
         exit 1
     fi
 elif [[ -n "$PROJECT_NAME" ]]; then
@@ -198,10 +171,8 @@ elif [[ -n "$PROJECT_NAME" ]]; then
         -projectVersion ${PROJECT_VERSION}
     ERR=$?
     if [[ "$ERR" != "254" && "$ERR" != "0" ]]; then
-        echo "failed to run wss for $PRODUCT_VERSION_${PROJECT_VERSION} in ${PROJECT_VERSION}..."
+        echo "failed to run wss for PROJECT_VERSION=${PROJECT_VERSION} in ${PROJECT_VERSION}..."
         exit 1
     fi
 fi
 set -e
-
-[[ -n "$IS_IN_CUSTOM_VENV" ]] && deactivate || true
