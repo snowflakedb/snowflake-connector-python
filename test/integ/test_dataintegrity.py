@@ -1,6 +1,6 @@
 #!/usr/bin/env python -O
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 """Script to test database capabilities and the DB-API interface.
