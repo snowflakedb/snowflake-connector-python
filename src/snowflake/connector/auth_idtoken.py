@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+#
 
 from .auth_by_plugin import AuthByPlugin
 from .network import ID_TOKEN_AUTHENTICATOR

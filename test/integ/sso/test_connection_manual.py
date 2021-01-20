@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+#
 
 # This test requires the SSO and Snowflake admin connection parameters.
 #

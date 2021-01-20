@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
-
 #
 
 SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED = "08001"

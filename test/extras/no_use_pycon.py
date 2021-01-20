@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
-
 #
+
 # This test tests for SNOW-186747
 import requests
 

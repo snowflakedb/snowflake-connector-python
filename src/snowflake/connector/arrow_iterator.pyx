@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+#
 
 # distutils: language = c++
 # cython: language_level=3
