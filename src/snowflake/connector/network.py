@@ -536,7 +536,7 @@ class SnowflakeRestful(object):
         if ret.get('code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
             return ret
 
-        if 'data' in ret and 'queryId' in ret['data']:
+        if 'data' in ret and ret['data'] is not None and 'queryId' in ret['data']:
             logger.debug('sfqid: %s', ret['data']['queryId'])
 
         while ret.get('code') in \
