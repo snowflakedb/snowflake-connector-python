@@ -325,10 +325,8 @@ class SnowflakeConnection(object):
     def client_session_keep_alive(self, value):
         if value is None:
             self._client_session_keep_alive = None
-        elif value.tolower == 'true':
-            self._client_session_keep_alive = True
         else:
-            self._client_session_keep_alive = False
+            self._client_session_keep_alive = value
 
     @property
     def client_session_keep_alive_heartbeat_frequency(self):
