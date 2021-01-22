@@ -60,11 +60,11 @@ from .errorcode import (
 from .errors import DatabaseError, Error, ProgrammingError
 from .incident import IncidentAPI
 from .network import (
+    CUSTOM_AUTHENTICATOR,
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
-    CUSTOM_AUTHENTICATOR,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
