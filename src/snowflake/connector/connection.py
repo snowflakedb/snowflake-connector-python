@@ -830,7 +830,7 @@ class SnowflakeConnection(object):
             )
 
         ret = self.rest.request(
-            '/queries/v1/query-request?',
+            '/queries/v1/query-request',
             data, client=client, _no_results=_no_results,
             _include_retry_params=True, request_id=request_id)
 
