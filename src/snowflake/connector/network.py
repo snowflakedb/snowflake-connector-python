@@ -282,7 +282,7 @@ class SnowflakeRestful(object):
                 logger.info("Session cleanup failed: %s", e)
 
     def request(self, url, body=None, method='post', client='sfsql',
-                _no_results=False, timeout=None, _include_retry_params=False):
+                _no_results=False, timeout=None, _include_retry_params=False, request_id=None):
         if body is None:
             body = {}
         if self.master_token is None and self.token is None:
@@ -313,11 +313,11 @@ class SnowflakeRestful(object):
             return self._post_request(
                 url, headers, json.dumps(body),
                 token=self.token, _no_results=_no_results,
-                timeout=timeout, _include_retry_params=_include_retry_params)
+                timeout=timeout, _include_retry_params=_include_retry_params, request_id=request_id)
         else:
             return self._get_request(
                 url, headers, token=self.token,
-                timeout=timeout)
+                timeout=timeout, request_id=request_id)
 
     def update_tokens(self, session_token, master_token,
                       master_validity_in_seconds=None,
@@ -465,7 +465,7 @@ class SnowflakeRestful(object):
 
     def _get_request(self, url, headers, token=None,
                      timeout=None,
-                     socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT):
+                     socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT, request_id=None):
         if 'Content-Encoding' in headers:
             del headers['Content-Encoding']
         if 'Content-Length' in headers:
@@ -478,7 +478,7 @@ class SnowflakeRestful(object):
             url=url,
         )
         ret = self.fetch('get', full_url, headers, timeout=timeout,
-                         token=token, socket_timeout=socket_timeout)
+                         token=token, socket_timeout=socket_timeout, request_id=request_id)
         if ret.get('code') == SESSION_EXPIRED_GS_CODE:
             try:
                 ret = self._renew_session()
@@ -498,7 +498,7 @@ class SnowflakeRestful(object):
     def _post_request(self, url, headers, body, token=None,
                       timeout=None, _no_results=False, no_retry=False,
                       socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
-                      _include_retry_params=False):
+                      _include_retry_params=False, request_id=None):
         full_url = '{protocol}://{host}:{port}{url}'.format(
             protocol=self._protocol,
             host=self._host,
@@ -513,7 +513,7 @@ class SnowflakeRestful(object):
         ret = self.fetch('post', full_url, headers, data=body,
                          timeout=timeout, token=token,
                          no_retry=no_retry, socket_timeout=socket_timeout,
-                         _include_retry_params=_include_retry_params)
+                         _include_retry_params=_include_retry_params, request_id=request_id)
         logger.debug(
             'ret[code] = {code}, after post request'.format(
                 code=(ret.get('code', 'N/A'))))
@@ -533,11 +533,11 @@ class SnowflakeRestful(object):
                 return self._post_request(
                     url, headers, body, token=self.token, timeout=timeout)
 
+        if ret.get('data') and ret['data'].get('queryId'):
+            logger.debug('Query id: {}'.format(ret['data']['queryId']))
+
         if ret.get('code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
             return ret
-
-        if 'data' in ret and ret['data'] is not None and 'queryId' in ret['data']:
-            logger.debug('sfqid: %s', ret['data']['queryId'])
 
         while ret.get('code') in \
                 (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
@@ -555,7 +555,7 @@ class SnowflakeRestful(object):
 
         return ret
 
-    def fetch(self, method, full_url, headers, data=None, timeout=None,
+    def fetch(self, method, full_url, headers, data=None, timeout=None, request_id=None,
               **kwargs):
         """Carry out API request with session management."""
 
@@ -592,22 +592,24 @@ class SnowflakeRestful(object):
             retry_ctx = RetryCtx(timeout, include_retry_params)
             while True:
                 ret = self._request_exec_wrapper(
-                    session, method, full_url, headers, data, retry_ctx,
+                    session, method, full_url, headers, data, retry_ctx, request_id=request_id,
                     **kwargs)
                 if ret is not None:
                     return ret
 
     @staticmethod
-    def add_request_guid(full_url):
+    def add_request_id_and_guid(full_url, request_id):
         """Adds request_guid parameter for HTTP request tracing."""
         parsed_url = urlparse(full_url)
         if not parsed_url.hostname.endswith(SNOWFLAKE_HOST_SUFFIX):
             return full_url
-        request_guid = str(uuid.uuid4())
+        request_guid = uuid.uuid4()
         suffix = urlencode({
+            REQUEST_ID: request_id,
             REQUEST_GUID: request_guid
         })
-        logger.debug('request_guid: %s', request_guid)
+        if request_id:
+            logger.debug(f'request_id: {str(request_id)}, request_guid: {str(request_guid)}')
         sep = '&' if parsed_url.query else '?'
         # url has query string already, just add fields
         return full_url + sep + suffix
@@ -615,7 +617,7 @@ class SnowflakeRestful(object):
     def _request_exec_wrapper(
             self,
             session, method, full_url, headers, data, retry_ctx,
-            no_retry=False, token=NO_TOKEN,
+            no_retry=False, token=NO_TOKEN, request_id=None,
             **kwargs):
 
         conn = self._connection
@@ -624,7 +626,7 @@ class SnowflakeRestful(object):
 
         start_request_thread = time.time()
         full_url = retry_ctx.add_retry_params(full_url)
-        full_url = SnowflakeRestful.add_request_guid(full_url)
+        full_url = SnowflakeRestful.add_request_id_and_guid(full_url, request_id)
         try:
             return_object = self._request_exec(
                 session=session,
