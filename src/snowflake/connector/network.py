@@ -17,7 +17,6 @@ from io import BytesIO
 from threading import Lock
 
 import OpenSSL.SSL
-from urllib3.util.url import parse_url
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -83,6 +82,7 @@ from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import ConnectionError, ConnectTimeout, InvalidProxyURL, ReadTimeout, SSLError
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError, ReadTimeoutError
+from .vendored.urllib3.util.url import parse_url
 
 logger = logging.getLogger(__name__)
 
