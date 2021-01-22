@@ -186,7 +186,7 @@ class ProxySupportAdapter(HTTPAdapter):
             proxy_manager = self.proxy_manager_for(proxy)
 
             # Add Host to proxy header SNOW-232777
-            proxy_manager.proxy_headers['Host'] = parsed_url.hostname
+            proxy_manager.proxy_headers['Host'] = "{}:{}".format(parsed_url.hostname, parsed_url.port)
             conn = proxy_manager.connection_from_url(url)
         else:
             # Only scheme should be lower case
