@@ -4,7 +4,6 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-
 def test_connection(conn_cnx):
     """Test basic connection."""
     with conn_cnx() as cnx:
