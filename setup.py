@@ -203,7 +203,7 @@ setup(
         'pyOpenSSL>=16.2.0,<20.0.0',
         'cffi>=1.9,<2.0.0',
         'cryptography>=2.5.0,<4.0.0',
-        'pyjwt',
+        'pyjwt<3.0.0',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
         # A functioning pkg_resources.working_set.by_key and pkg_resources.Requirement is
