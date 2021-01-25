@@ -74,8 +74,18 @@ class AuthByKeyPair(AuthByPlugin):
             self.EXPIRE_TIME: self._jwt_token_exp
         }
 
-        self._jwt_token = jwt.encode(payload, private_key,
-                                     algorithm=self.ALGORITHM).decode('utf-8')
+        _jwt_token = jwt.encode(
+            payload,
+            private_key,
+            algorithm=self.ALGORITHM
+        )
+
+        # jwt.encode() returns bytes in pyjwt 1.x and a string
+        # in pyjwt 2.x
+        if isinstance(_jwt_token, bytes):
+            self._jwt_token = _jwt_token.decode('utf-8')
+        else:
+            self._jwt_token = _jwt_token
 
         return self._jwt_token
 
