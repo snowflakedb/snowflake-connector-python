@@ -10,6 +10,11 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.3.9(January 29,2021)
+
+   - The fix to add proper proxy CONNECT headers for connections made over proxies.
+
+
 - v2.3.8(January 14,2021)
 
    - Arrow result conversion speed up.
