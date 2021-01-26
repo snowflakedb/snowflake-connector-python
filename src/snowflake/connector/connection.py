@@ -829,12 +829,10 @@ class SnowflakeConnection(object):
                 is_file_transfer
             )
 
-        url_parameters = {REQUEST_ID: request_id}
-
         ret = self.rest.request(
-            '/queries/v1/query-request?' + urlencode(url_parameters),
+            '/queries/v1/query-request',
             data, client=client, _no_results=_no_results,
-            _include_retry_params=True)
+            _include_retry_params=True, request_id=request_id)
 
         if ret is None:
             ret = {'data': {}}
