@@ -41,7 +41,7 @@ cmd_class = {}
 
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
-    'pyarrow>=0.17.0,<0.18.0',
+    'pyarrow>=3.0.0,<3.1.0',
     'pandas>=1.0.0,<1.2.0',
 ]
 
@@ -72,21 +72,21 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            'linux': ['libarrow.so.17',
-                      'libarrow_python.so.17',
-                      'libarrow_flight.so.17'],
-            'darwin': ['libarrow.17.dylib',
-                       'libarrow_python.17.dylib'],
+            'linux': ['libarrow.so.300',
+                      'libarrow_python.so.300',
+                      'libarrow_flight.so.300'],
+            'darwin': ['libarrow.300.dylib',
+                       'libarrow_python.300.dylib'],
             'win32': ['arrow.dll',
                       'arrow_python.dll',
                       'zlib.dll']
         }
 
         arrow_libs_to_link = {
-            'linux': ['libarrow.so.17',
-                      'libarrow_python.so.17'],
-            'darwin': ['libarrow.17.dylib',
-                       'libarrow_python.17.dylib'],
+            'linux': ['libarrow.so.300',
+                      'libarrow_python.so.300'],
+            'darwin': ['libarrow.300.dylib',
+                       'libarrow_python.300.dylib'],
             'win32': ['arrow.lib',
                       'arrow_python.lib']
         }
