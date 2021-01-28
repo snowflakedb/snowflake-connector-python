@@ -44,7 +44,6 @@ from .constants import (
     OCSPMode,
     QueryStatus,
 )
-from .converter import SnowflakeConverter
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
 from .description import CLIENT_NAME, CLIENT_VERSION, PLATFORM, PYTHON_VERSION, SNOWFLAKE_CONNECTOR_VERSION
 from .errorcode import (
@@ -132,7 +131,7 @@ DEFAULT_CONFIGURATION = {
     'client_prefetch_threads': (4, int),  # snowflake
     'numpy': (False, bool),  # snowflake
     'ocsp_response_cache_filename': (None, (type(None), str)),  # snowflake internal
-    'converter_class': (DefaultConverterClass(), SnowflakeConverter),
+    'converter_class': (DefaultConverterClass(), object),
     'chunk_downloader_class': (SnowflakeChunkDownloader, object),  # snowflake internal
     'validate_default_parameters': (False, bool),  # snowflake
     'probe_connection': (False, bool),  # snowflake
