@@ -328,6 +328,8 @@ class SnowflakeCursor(object):
         self._sequence_counter = self._connection._next_sequence_counter()
         self._request_id = uuid.uuid4()
 
+        logger.debug(f'Request id: {self._request_id}')
+
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
                 'running query [%s]', self._format_query_for_log(query))

@@ -561,6 +561,9 @@ class SnowflakeRestful(object):
                 return self._post_request(
                     url, headers, body, token=self.token, timeout=timeout)
 
+        if ret.get('data') and ret['data'].get('queryId'):
+            logger.debug('Query id: {}'.format(ret['data']['queryId']))
+
         if ret.get('code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
             return ret
 
@@ -628,9 +631,11 @@ class SnowflakeRestful(object):
         parsed_url = urlparse(full_url)
         if not parsed_url.hostname.endswith(SNOWFLAKE_HOST_SUFFIX):
             return full_url
+        request_guid = str(uuid.uuid4())
         suffix = urlencode({
-            REQUEST_GUID: str(uuid.uuid4())
+            REQUEST_GUID: request_guid
         })
+        logger.debug(f'Request guid: {request_guid}')
         sep = '&' if parsed_url.query else '?'
         # url has query string already, just add fields
         return full_url + sep + suffix
