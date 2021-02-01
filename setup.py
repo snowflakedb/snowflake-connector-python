@@ -268,7 +268,7 @@ setup(
             'Cython',
             'pendulum!=2.1.1',
             'more-itertools',
-            'numpy',
+            'numpy<1.20.0',
         ],
     },
 
