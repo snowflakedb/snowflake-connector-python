@@ -88,7 +88,7 @@ jobs:
     needs: lint
     name: Build linux-py${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux1_x86_64
+    container: quay.io/pypa/manylinux2010_x86_64
     strategy:
       matrix:
         python-version: [3.6, 3.7, 3.8, 3.9]
@@ -108,7 +108,7 @@ jobs:
       - name: Generate wheel
         run: python${{ matrix.python-version }} -m pip wheel -v -w dist_tmp --no-deps .
       - name: Run auditwheel
-        run: auditwheel repair --plat manylinux2010_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
+        run: auditwheel repair --plat manylinux2014_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
       - name: Show wheels generated
         run: ls -lh dist
       - uses: actions/upload-artifact@v1
@@ -244,9 +244,9 @@ jobs:
       - name: Show wheels downloaded
         run: ls -lh dist
         shell: bash
-      - name: Remove manylinux1 wheel
+      - name: Remove manylinux2010 wheel
         run: |
-          rm dist/*manylinux1*.whl
+          rm dist/*manylinux2010*.whl
           ls -lh dist
         if: matrix.os.download_name == 'linux'
       - name: Upgrade setuptools, pip and wheel
@@ -335,9 +335,9 @@ jobs:
       - name: Show wheels downloaded
         run: ls -lh dist
         shell: bash
-      - name: Remove manylinux1 wheel
+      - name: Remove manylinux2010 wheel
         run: |
-          rm dist/*manylinux1*.whl
+          rm dist/*manylinux2010*.whl
           ls -lh dist
       - name: Run tests
         run: ./ci/test_fips_docker.sh
