@@ -73,13 +73,11 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         # upgraded
         arrow_libs_to_copy = {
             'linux': ['libarrow.so.300',
-                      'libarrow_python.so.300',
-                      'libarrow_flight.so.300'],
+                      'libarrow_python.so.300'],
             'darwin': ['libarrow.300.dylib',
                        'libarrow_python.300.dylib'],
             'win32': ['arrow.dll',
-                      'arrow_python.dll',
-                      'zlib.dll']
+                      'arrow_python.dll']
         }
 
         arrow_libs_to_link = {
