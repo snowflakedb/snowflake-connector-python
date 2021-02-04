@@ -8,6 +8,7 @@ import json
 import os
 from collections import namedtuple
 from logging import getLogger
+from typing import Any, Dict
 
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from azure.storage.blob import BlobServiceClient, ContentSettings, ExponentialRetry
@@ -30,9 +31,6 @@ AzureLocation = namedtuple(
 
 class SnowflakeAzureUtil(object):
     """Azure Utility class."""
-
-    # max_connections works over this size
-    DATA_SIZE_THRESHOLD = 67108864
 
     @staticmethod
     def create_client(stage_info, use_accelerate_endpoint: bool = False):
@@ -140,7 +138,28 @@ class SnowflakeAzureUtil(object):
                "Server failed to authenticate the request." in errstr
 
     @staticmethod
-    def upload_file(data_file, meta, encryption_metadata, max_concurrency):
+    def upload_file(data_file: str,
+                    meta: Dict[str, Any],
+                    encryption_metadata: 'EncryptionMetadata',
+                    max_concurrency: int,
+                    multipart_threshold: int,
+                    ):
+        """Uploads the local file to Azure's Blob Storage.
+
+        Args:
+            data_file: File path on local system.
+            meta: The File meta object (contains credentials and remote location).
+            encryption_metadata: Encryption metadata to be set on object.
+            max_concurrency: Not applicable to Azure.
+            multipart_threshold: The number of bytes after which size a file should be uploaded concurrently in chunks.
+                Not applicable to Azure.
+
+        Raises:
+            HTTPError if some http errors occurred.
+
+        Returns:
+            None.
+        """
         azure_metadata = {
             'sfcdigest': meta[SHA256_DIGEST],
         }

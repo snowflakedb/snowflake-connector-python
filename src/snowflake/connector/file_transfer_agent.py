@@ -19,7 +19,6 @@ from typing import IO, Optional, Union
 
 import botocore.exceptions
 
-from .azure_util import SnowflakeAzureUtil
 from .compat import GET_CWD, IS_WINDOWS
 from .constants import SHA256_DIGEST, ResultStatus
 from .converter_snowsql import SnowflakeConverterSnowSQL
@@ -40,6 +39,9 @@ from .gcs_util import SnowflakeGCSUtil
 from .local_util import SnowflakeLocalUtil
 from .remote_storage_util import SnowflakeFileEncryptionMaterial, SnowflakeRemoteStorageUtil
 from .s3_util import SnowflakeS3Util
+
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector.cursor import SnowflakeCursor
 
 S3_FS = 'S3'
 AZURE_FS = 'AZURE'
@@ -177,19 +179,24 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
 
 
 class SnowflakeFileTransferAgent(object):
-    """Snowflake File Transfer Agent."""
+    """Snowflake File Transfer Agent provides cloud provider independent implementation for putting/getting files."""
 
-    def __init__(self, cursor, command, ret,
-                 put_callback=None,
-                 put_azure_callback=None,
-                 put_callback_output_stream=sys.stdout,
-                 get_callback=None,
-                 get_azure_callback=None,
-                 get_callback_output_stream=sys.stdout,
-                 show_progress_bar=True,
-                 raise_put_get_error=True,
-                 force_put_overwrite=True,
-                 source_from_stream: Optional[IO[bytes]] = None):
+    def __init__(self,
+                 cursor: 'SnowflakeCursor',
+                 command: str,
+                 ret: Dict[str, Any],
+                 put_callback: Optional['SnowflakeProgressPercentage'] = None,
+                 put_azure_callback: Optional['SnowflakeProgressPercentage'] = None,
+                 put_callback_output_stream: IO[str] = sys.stdout,
+                 get_callback: Optional['SnowflakeProgressPercentage'] = None,
+                 get_azure_callback: Optional['SnowflakeProgressPercentage'] = None,
+                 get_callback_output_stream: IO[str] = sys.stdout,
+                 show_progress_bar: bool = True,
+                 raise_put_get_error: bool = True,
+                 force_put_overwrite: bool = True,
+                 multipart_threshold: Optional[int] = None,
+                 source_from_stream: Optional[IO[bytes]] = None
+                 ):
         self._cursor = cursor
         self._command = command
         self._ret = ret
@@ -206,6 +213,11 @@ class SnowflakeFileTransferAgent(object):
         self._show_progress_bar = show_progress_bar
         self._force_put_overwrite = force_put_overwrite
         self._source_from_stream = source_from_stream
+        if multipart_threshold is not None:
+            self._multipart_threshold = multipart_threshold
+        else:
+            # Historical value
+            self._multipart_threshold = 67108864
 
     def execute(self):
         self._parse_command()
@@ -244,10 +256,8 @@ class SnowflakeFileTransferAgent(object):
                 meta['show_progress_bar'] = self._show_progress_bar
 
                 # multichunk uploader threshold
-                if self._stage_location_type == S3_FS:
-                    size_threshold = SnowflakeS3Util.DATA_SIZE_THRESHOLD
-                else:
-                    size_threshold = SnowflakeAzureUtil.DATA_SIZE_THRESHOLD
+                size_threshold = self._multipart_threshold
+                meta['multipart_threshold'] = size_threshold
                 if meta.get('src_file_size', 1) > size_threshold:
                     meta['parallel'] = self._parallel
                     large_file_metas.append(meta)

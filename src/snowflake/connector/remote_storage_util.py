@@ -124,7 +124,8 @@ class SnowflakeRemoteStorageUtil(object):
                     data_file,
                     meta,
                     encryption_metadata,
-                    max_concurrency
+                    max_concurrency,
+                    multipart_threshold=meta['multipart_threshold']
                 )
 
             if (meta['result_status'] == ResultStatus.UPLOADED):

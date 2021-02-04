@@ -8,6 +8,7 @@ import logging
 import os
 from collections import namedtuple
 from logging import getLogger
+from typing import Any, Dict
 
 import boto3
 import botocore.exceptions
@@ -44,9 +45,6 @@ S3Location = namedtuple(
 
 class SnowflakeS3Util:
     """S3 Utility class."""
-
-    # magic number, given from  error message.
-    DATA_SIZE_THRESHOLD = 67108864
 
     @staticmethod
     def create_client(stage_info, use_accelerate_endpoint=False):
@@ -179,7 +177,28 @@ class SnowflakeS3Util:
         )
 
     @staticmethod
-    def upload_file(data_file, meta, encryption_metadata, max_concurrency):
+    def upload_file(data_file: str,
+                    # TODO replace with a custom dataclass instead of a dictionary that holds arbitrary data
+                    meta: Dict[str, Any],
+                    encryption_metadata: 'EncryptionMetadata',
+                    max_concurrency: int,
+                    multipart_threshold: int,
+                    ):
+        """Uploads the local file to S3.
+
+        Args:
+            data_file: File path on local system.
+            meta: The File meta object (contains credentials and remote location).
+            encryption_metadata: Encryption metadata to be set on object.
+            max_concurrency: The maximum number of threads to used to upload.
+            multipart_threshold: The number of bytes after which size a file should be uploaded concurrently in chunks.
+
+        Raises:
+            HTTPError if some http errors occurred.
+
+        Returns:
+            None.
+        """
         try:
             s3_metadata = {
                 HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM,
@@ -198,7 +217,7 @@ class SnowflakeS3Util:
             akey = meta['client'].Object(s3location.bucket_name, s3path)
             extra_args = {'Metadata': s3_metadata}
             config = TransferConfig(
-                multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
+                multipart_threshold=multipart_threshold,
                 max_concurrency=max_concurrency,
                 num_download_attempts=10,
             )

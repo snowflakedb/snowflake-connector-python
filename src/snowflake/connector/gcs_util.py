@@ -67,20 +67,27 @@ class SnowflakeGCSUtil:
         return client
 
     @staticmethod
-    def upload_file(data_file: str, meta: Dict[str, Any], encryption_metadata: Any, max_concurrency: int):
-        """Uploads the local file to remote storage.
+    def upload_file(data_file: str,
+                    meta: Dict[str, Any],
+                    encryption_metadata: Any,
+                    max_concurrency: int,
+                    multipart_threshold: int,
+                    ):
+        """Uploads the local file to GCS's blob storage.
 
         Args:
             data_file: File path on local system.
             meta: The File meta object (contains credentials and remote location).
             encryption_metadata: Encryption metadata to be set on object.
-            max_concurrency: Not applicable to GCS.
+            max_concurrency: The maximum number of threads to used to upload. Not applicable to GCS.
+            multipart_threshold: The number of bytes after which size a file should be uploaded concurrently in chunks.
+                Not applicable to GCS.
 
         Raises:
             HTTPError if some http errors occurred.
 
         Returns:
-            None, if uploading was successful.
+            None.
         """
         upload_url = meta.get('presigned_url', None)
         access_token = None
