@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 import io
@@ -11,7 +11,7 @@ from logging import getLogger
 from typing import IO
 
 CHUNK_SIZE = 16384
-MAGIC_NUMBER = 16  # magic number from requests/packages/urllib3/response.py
+MAGIC_NUMBER = 16  # magic number from .vendored.requests/packages/urllib3/response.py
 
 logger = getLogger(__name__)
 

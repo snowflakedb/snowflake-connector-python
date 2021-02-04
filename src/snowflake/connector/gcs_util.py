@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 import json
@@ -10,11 +10,10 @@ from collections import namedtuple
 from logging import getLogger
 from typing import Any, Dict
 
-import requests
-
 from .compat import quote
 from .constants import HTTP_HEADER_CONTENT_ENCODING, SHA256_DIGEST, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
+from .vendored import requests
 
 logger = getLogger(__name__)
 

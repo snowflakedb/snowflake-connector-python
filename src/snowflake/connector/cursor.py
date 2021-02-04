@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 import logging
@@ -72,6 +72,7 @@ LOG_MAX_QUERY_LENGTH = 80
 
 ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
+INCIDENT_BLACKLIST = (KeyError, ValueError, TypeError)
 
 
 def exit_handler(*_):  # pragma: no cover
@@ -327,6 +328,8 @@ class SnowflakeCursor(object):
         self._sequence_counter = self._connection._next_sequence_counter()
         self._request_id = uuid.uuid4()
 
+        logger.debug(f'Request id: {self._request_id}')
+
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
                 'running query [%s]', self._format_query_for_log(query))
@@ -516,10 +519,9 @@ class SnowflakeCursor(object):
                 # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
                 processed_params = self._connection._process_params_qmarks(params, self)
         # Skip reporting Key, Value and Type errors
-        except (KeyError, ValueError, TypeError):
-            raise
-        except Exception:
-            self.connection.incident.report_incident()
+        except Exception as exc:  # pragma: no cover
+            if not isinstance(exc, INCIDENT_BLACKLIST):
+                self.connection.incident.report_incident()
             raise
 
         m = DESC_TABLE_RE.match(query)
@@ -954,7 +956,7 @@ class SnowflakeCursor(object):
                 status = self.connection.get_query_status(sfqid)
                 if not self.connection.is_still_running(status):
                     break
-                if status == QueryStatus.NO_DATA:
+                if status == QueryStatus.NO_DATA:  # pragma: no cover
                     no_data_counter += 1
                     if no_data_counter > ASYNC_NO_DATA_MAX_RETRY:
                         raise DatabaseError("Cannot retrieve data on the status of this query. No information returned "

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 import codecs
@@ -60,7 +60,7 @@ def test_ocsp():
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     for url in TARGET_HOSTS:
-        connection = _openssl_connect(url)
+        connection = _openssl_connect(url, timeout=5)
         assert ocsp.validate(url, connection), \
             'Failed to validate: {}'.format(url)
 

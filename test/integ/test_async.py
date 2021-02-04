@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
+
 import time
 
 import pytest
@@ -16,6 +17,18 @@ try:  # pragma: no cover
     from snowflake.connector.constants import QueryStatus
 except ImportError:
     QueryStatus = None
+
+
+def test_simple_async(conn_cnx):
+    """Simple test to that shows the most simple usage of fire and forget.
+
+    This test also makes sure that wait_until_ready function's sleeping is tested.
+    """
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute_async('select count(*) from table(generator(timeLimit => 5))')
+            cur.get_results_from_sfqid(cur.sfqid)
+            assert len(cur.fetchall()) == 1
 
 
 def test_async_exec(conn_cnx):
