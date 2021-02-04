@@ -198,7 +198,7 @@ setup(
         # While requests is vendored, we use regular requests to perform OCSP checks
         'requests<3.0.0',
         'certifi<2021.0.0',
-        'pytz<2021.0',
+        'pytz',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
         'pyOpenSSL>=16.2.0,<20.0.0',
         'cffi>=1.9,<2.0.0',
