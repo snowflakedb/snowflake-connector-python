@@ -170,10 +170,21 @@ class SnowflakeAzureUtil(object):
 
         client = meta['client']
         callback = None
+        upload_src = None
+        upload_size = None
+
+        if 'src_stream' not in meta:
+            upload_size = os.path.getsize(data_file)
+            upload_src = open(data_file, 'rb')
+        else:
+            upload_src = meta.get('real_src_stream', meta['src_stream'])
+            upload_size = upload_src.seek(0, os.SEEK_END)
+            upload_src.seek(0)
+
         if meta['put_azure_callback']:
             callback = meta['put_azure_callback'](
                 data_file,
-                os.path.getsize(data_file),
+                upload_size,
                 output_stream=meta['put_callback_output_stream'],
                 show_progress_bar=meta['show_progress_bar'])
 
@@ -191,18 +202,17 @@ class SnowflakeAzureUtil(object):
                 azure_location.container_name,
                 path
             )
-            with open(data_file, 'rb') as upload_f:
-                blob.upload_blob(
-                    upload_f,
-                    metadata=azure_metadata,
-                    overwrite=True,
-                    max_concurrency=max_concurrency,
-                    raw_response_hook=azure_callback if meta['put_azure_callback'] else None,
-                    content_settings=ContentSettings(
-                        content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
-                        content_encoding='utf-8',
-                    )
+            blob.upload_blob(
+                upload_src,
+                metadata=azure_metadata,
+                overwrite=True,
+                max_concurrency=max_concurrency,
+                raw_response_hook=azure_callback if meta['put_azure_callback'] else None,
+                content_settings=ContentSettings(
+                    content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
+                    content_encoding='utf-8',
                 )
+            )
         except HttpResponseError as err:
             logger.debug("Caught exception's status code: {status_code} and message: {ex_representation}".format(
                 status_code=err.status_code,
@@ -215,6 +225,9 @@ class SnowflakeAzureUtil(object):
                 meta['last_error'] = err
                 meta['result_status'] = ResultStatus.NEED_RETRY
             return
+        finally:
+            if 'src_stream' not in meta:
+                upload_src.close()
 
         logger.debug('DONE putting a file')
         meta['dst_file_size'] = meta['upload_size']
@@ -245,6 +258,7 @@ class SnowflakeAzureUtil(object):
                 logger.debug("data transfer progress from sdk callback. "
                              "current: %s, total: %s",
                              current, total)
+
         try:
             blob = client.get_blob_client(
                 azure_location.container_name,

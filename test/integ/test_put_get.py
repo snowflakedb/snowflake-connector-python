@@ -464,7 +464,8 @@ union
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_with_auto_compress_false(tmpdir, db_parameters):
+@pytest.mark.parametrize('from_stream', [False, True])
+def test_put_with_auto_compress_false(tmpdir, db_parameters, from_stream):
     """Tests PUT command with auto_compress=False."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -502,7 +503,8 @@ LS @~/test_put_uncompress_file
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_overwrite(tmpdir, db_parameters):
+@pytest.mark.parametrize("from_stream", [False, True])
+def test_put_overwrite(tmpdir, db_parameters, from_stream):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -520,22 +522,26 @@ def test_put_overwrite(tmpdir, db_parameters):
         f.write("test3,test4")
 
     cnx.cursor().execute("RM @~/test_put_overwrite")
+    file_stream = None if not from_stream else open(test_data, 'rb')
+    file_name = test_data if not from_stream else "non_existent.txt"
     try:
         with cnx.cursor() as cur:
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(file_name), file_stream=file_stream)
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                cur.execute("PUT file://{} @~/test_put_overwrite".format(file_name), file_stream=file_stream)
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'SKIPPED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(file_name), file_stream=file_stream)
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
 
         ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
-        assert "test_put_overwrite/data.txt" in ret[0]
-        assert "data.txt.gz" in ret[0]
+        assert "test_put_overwrite/" + os.path.basename(file_name) in ret[0]
+        assert os.path.basename(file_name) + ".gz" in ret[0]
     finally:
+        if from_stream:
+            file_stream.close()
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 

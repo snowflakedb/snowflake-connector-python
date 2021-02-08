@@ -451,7 +451,8 @@ class SnowflakeCursor(object):
                 _use_ijson: bool = False,
                 _is_put_get: Optional[bool] = None,
                 _raise_put_get_error: bool = True,
-                _force_put_overwrite: bool = False):
+                _force_put_overwrite: bool = False,
+                file_stream: IO[bytes] = None):
         """Executes a command/query.
 
         Args:
@@ -475,6 +476,7 @@ class SnowflakeCursor(object):
             _raise_put_get_error: Whether to raise PUT and GET errors.
             _force_put_overwrite: If the SQL query is a PUT, then this flag can force overwriting of an already
                 existing file on stage.
+            file_stream: File-like object to be uploaded with PUT
 
         Returns:
             A result class with the results in it. This can either be json, or an arrow result class.
@@ -575,7 +577,8 @@ class SnowflakeCursor(object):
                     get_callback_output_stream=_get_callback_output_stream,
                     show_progress_bar=_show_progress_bar,
                     raise_put_get_error=_raise_put_get_error,
-                    force_put_overwrite=_force_put_overwrite or data.get('overwrite', False))
+                    force_put_overwrite=_force_put_overwrite or data.get('overwrite', False),
+                    source_from_stream=file_stream)
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data['rowset']) if \

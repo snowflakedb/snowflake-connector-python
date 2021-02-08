@@ -65,14 +65,25 @@ class SnowflakeRemoteStorageUtil(object):
         encryption_metadata = None
 
         if 'encryption_material' in meta:
-            (encryption_metadata,
-             data_file) = SnowflakeEncryptionUtil.encrypt_file(
-                meta['encryption_material'],
-                meta['real_src_file_name'], tmp_dir=meta['tmp_dir'])
-
-            logger.debug(
-                'encrypted data file=%s, size=%s', data_file,
-                os.path.getsize(data_file))
+            if 'src_stream' not in meta:
+                (encryption_metadata,
+                 data_file) = SnowflakeEncryptionUtil.encrypt_file(
+                    meta['encryption_material'],
+                    meta['real_src_file_name'], tmp_dir=meta['tmp_dir'])
+                logger.debug(
+                    'encrypted data file=%s, size=%s', data_file,
+                    os.path.getsize(data_file))
+            else:
+                (encryption_metadata, encrypted_stream) = SnowflakeEncryptionUtil.encrypt_stream(
+                    meta['encryption_material'],
+                    meta.get('real_src_stream', meta['src_stream'])
+                )
+                logger.debug(
+                    'encrypted data stream size=%s', len(encrypted_stream.getvalue()))
+                if 'real_src_stream' in meta:
+                    meta['real_src_stream'].close()
+                meta['real_src_stream'] = encrypted_stream
+                data_file = meta['real_src_file_name']
         else:
             logger.debug('not encrypted data file')
             data_file = meta['real_src_file_name']
