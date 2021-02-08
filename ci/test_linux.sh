@@ -28,18 +28,18 @@ mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.
 
 # Run tests
 cd $CONNECTOR_DIR
-if [[ -z "$is_old_driver" ]]; then
+if [[ "$is_old_driver" == "true" ]]; then
+    # Old Driver Test
+    echo "[Info] Running old connector tests"
+    python3 -m tox -e olddriver
+else
     for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
         echo "[Info] Testing with ${PYTHON_VERSION}"
         SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux2010*.whl | sort -r | head -n 1)
-        TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{extras,unit,integ,pandas,sso}-ci,coverage
+        TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{extras,unit,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 
         python3 -m tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
     done
-else
-    # Old Driver Test
-    echo "[Info] Running old connector tests"
-    python3 -m tox -e olddriver
 fi

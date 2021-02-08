@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 import logging
@@ -327,6 +327,8 @@ class SnowflakeCursor(object):
 
         self._sequence_counter = self._connection._next_sequence_counter()
         self._request_id = uuid.uuid4()
+
+        logger.debug(f'Request id: {self._request_id}')
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(

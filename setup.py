@@ -198,12 +198,12 @@ setup(
         # While requests is vendored, we use regular requests to perform OCSP checks
         'requests<3.0.0',
         'certifi<2021.0.0',
-        'pytz<2021.0',
+        'pytz',
         'pycryptodomex>=3.2,!=3.5.0,<4.0.0',
         'pyOpenSSL>=16.2.0,<20.0.0',
         'cffi>=1.9,<2.0.0',
         'cryptography>=2.5.0,<4.0.0',
-        'pyjwt<2.0.0',
+        'pyjwt<3.0.0',
         'oscrypto<2.0.0',
         'asn1crypto>0.24.0,<2.0.0',
         # A functioning pkg_resources.working_set.by_key and pkg_resources.Requirement is
@@ -268,7 +268,7 @@ setup(
             'Cython',
             'pendulum!=2.1.1',
             'more-itertools',
-            'numpy',
+            'numpy<1.20.0',
         ],
     },
 
