@@ -10,6 +10,12 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.3.10(February 01,2021)
+
+   - Improved query ID logging and added request GUID logging.
+   - For dependency checking, increased the version condition for the pyjwt package from <2.0.0 to <3.0.0.
+
+
 - v2.3.9(January 27,2021)
 
    - The fix to add proper proxy CONNECT headers for connections made over proxies.
