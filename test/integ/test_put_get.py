@@ -524,16 +524,21 @@ def test_put_overwrite(tmpdir, db_parameters, from_stream):
     cnx.cursor().execute("RM @~/test_put_overwrite")
     file_stream = None if not from_stream else open(test_data, 'rb')
     file_name = test_data if not from_stream else "non_existent.txt"
+
+    def run(csr, sql, **kwargs):
+        if not from_stream:
+            kwargs.pop('file_stream', None)
+        csr.execute(sql, **kwargs)
     try:
         with cnx.cursor() as cur:
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(file_name), file_stream=file_stream)
+                run(cur, "PUT file://{} @~/test_put_overwrite".format(file_name))
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(file_name), file_stream=file_stream)
+                run(cur, "PUT file://{} @~/test_put_overwrite".format(file_name))
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'SKIPPED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(file_name), file_stream=file_stream)
+                run(cur, "PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(file_name))
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
 
         ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()

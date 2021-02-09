@@ -16,7 +16,7 @@ from ..generate_test_files import generate_k_lines_of_n_files
 
 
 @pytest.mark.aws
-@pytest.mark.parametrize("from_stream", [False, True])
+@pytest.mark.parametrize('from_stream', [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
 def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, db_parameters, from_stream):
     """[s3] Puts and Gets Small Data via User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
@@ -30,7 +30,7 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, db_
 
 
 @pytest.mark.aws
-@pytest.mark.parametrize("from_stream", [False, True])
+@pytest.mark.parametrize('from_stream', [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
 def test_put_get_large_data_via_user_stage(
         is_public_test, tmpdir, conn_cnx, db_parameters, from_stream):
     """[s3] Puts and Gets Large Data via User Stage."""
@@ -103,10 +103,16 @@ credentials=(
                 "alter session set disable_put_and_get_on_external_stage = false")
             cnx.cursor().execute(
                 "rm @{stage_name}".format(stage_name=stage_name))
-            cnx.cursor().execute(
-                "put file://{file} @{stage_name}".format(
-                    file=files,
-                    stage_name=stage_name), file_stream=file_stream)
+            if from_stream:
+                cnx.cursor().execute(
+                    "put file://{file} @{stage_name}".format(
+                        file=files,
+                        stage_name=stage_name), file_stream=file_stream)
+            else:
+                cnx.cursor().execute(
+                    "put file://{file} @{stage_name}".format(
+                        file=files,
+                        stage_name=stage_name))
             cnx.cursor().execute(
                 "copy into {name} from @{stage_name}".format(
                     name=db_parameters['name'], stage_name=stage_name))

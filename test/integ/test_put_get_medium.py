@@ -37,44 +37,40 @@ logger = getLogger(__name__)
 
 @pytest.fixture()
 def file_src(request) -> Tuple[str, int, IO[bytes]]:
-    from_stream, file_name = request.param
+    file_name = request.param
     data_file = os.path.join(THIS_DIR, "../data", file_name)
     file_size = os.stat(data_file).st_size
-    if from_stream:
-        stream = open(data_file, 'rb')
-        yield "fake" + data_file, file_size, stream
-        stream.close()
-    else:
-        data_file = os.path.join(THIS_DIR, "../data", file_name)
-        yield data_file, file_size, None
+    stream = open(data_file, 'rb')
+    yield data_file, file_size, stream
+    stream.close()
 
 
-@pytest.mark.parametrize("file_src", [[False, "put_get_1.txt"], [True, "put_get_1.txt"]], indirect=['file_src'])
-def test_put_copy0(conn_cnx, db_parameters, file_src):
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['put_get_1.txt'], indirect=['file_src'])
+def test_put_copy0(conn_cnx, db_parameters, from_stream, file_src):
     """Puts and Copies a file."""
     file_path, _, file_stream = file_src
+    kwargs = {'_put_callback': SnowflakeS3ProgressPercentage,
+              '_get_callback': SnowflakeS3ProgressPercentage,
+              '_put_azure_callback': SnowflakeAzureProgressPercentage,
+              '_get_azure_callback': SnowflakeAzureProgressPercentage,
+              'file_stream': file_stream}
 
     def run(cnx, sql):
         sql = sql.format(
             file=file_path.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql,
-                                    _put_callback=SnowflakeS3ProgressPercentage,
-                                    _get_callback=SnowflakeS3ProgressPercentage,
-                                    _put_azure_callback=SnowflakeAzureProgressPercentage,
-                                    _get_azure_callback=SnowflakeAzureProgressPercentage).fetchall()
+        return cnx.cursor().execute(sql, **kwargs).fetchall()
 
     def run_with_cursor(cnx, sql):
         sql = sql.format(
             file=file_path.replace('\\', '\\\\'),
             name=db_parameters['name'])
         c = cnx.cursor(DictCursor)
-        return c, c.execute(sql,
-                            _put_callback=SnowflakeS3ProgressPercentage,
-                            _get_callback=SnowflakeS3ProgressPercentage,
-                            _put_azure_callback=SnowflakeAzureProgressPercentage,
-                            _get_azure_callback=SnowflakeAzureProgressPercentage,
-                            file_stream=file_stream).fetchall()
+
+        if not from_stream:
+            kwargs.pop('file_stream', None)
+        return c, c.execute(sql, **kwargs).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -107,9 +103,9 @@ ratio number(5,2))
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.parametrize("file_src", [[False, "gzip_sample.txt.gz"], [True, "gzip_sample.txt.gz"]],
-                         indirect=['file_src'])
-def test_put_copy_compressed(conn_cnx, db_parameters, file_src):
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['gzip_sample.txt.gz'], indirect=['file_src'])
+def test_put_copy_compressed(conn_cnx, db_parameters, from_stream, file_src):
     """Puts and Copies compressed files."""
     file_name, file_size, file_stream = file_src
 
@@ -117,7 +113,10 @@ def test_put_copy_compressed(conn_cnx, db_parameters, file_src):
         sql = sql.format(
             file=file_name.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor(DictCursor).execute(sql, file_stream=file_stream).fetchall()
+        if from_stream:
+            return cnx.cursor(DictCursor).execute(sql, file_stream=file_stream).fetchall()
+        else:
+            return cnx.cursor(DictCursor).execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -135,12 +134,12 @@ def test_put_copy_compressed(conn_cnx, db_parameters, file_src):
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.parametrize("file_src", [[False, "bzip2_sample.txt.bz2"], [True, "bzip2_sample.txt.bz2"]],
-                         indirect=['file_src'])
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['bzip2_sample.txt.bz2'], indirect=['file_src'])
 @pytest.mark.skip(
     reason="BZ2 is not detected in this test case. Need investigation"
 )
-def test_put_copy_bz2_compressed(conn_cnx, db_parameters, file_src):
+def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_stream, file_src):
     """Put and Copy bz2 compressed files."""
     file_name, _, file_stream = file_src
 
@@ -148,7 +147,10 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, file_src):
         sql = sql.format(
             file=file_name.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        if from_stream:
+            return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        else:
+            return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -165,9 +167,9 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, file_src):
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.parametrize("file_src", [[False, "brotli_sample.txt.br"], [True, "brotli_sample.txt.br"]],
-                         indirect=['file_src'])
-def test_put_copy_brotli_compressed(conn_cnx, db_parameters, file_src):
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['brotli_sample.txt.br'], indirect=['file_src'])
+def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_stream, file_src):
     """Puts and Copies brotli compressed files."""
     file_name, _, file_stream = file_src
 
@@ -175,7 +177,10 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters, file_src):
         sql = sql.format(
             file=file_name.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        if from_stream:
+            return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        else:
+            return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -194,9 +199,9 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters, file_src):
         run(cnx, 'drop table if exists {name}')
 
 
-@pytest.mark.parametrize("file_src", [[False, "zstd_sample.txt.zst"], [True, "zstd_sample.txt.zst"]],
-                         indirect=['file_src'])
-def test_put_copy_zstd_compressed(conn_cnx, db_parameters, file_src):
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['zstd_sample.txt.zst'], indirect=['file_src'])
+def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_stream, file_src):
     """Puts and Copies zstd compressed files."""
     file_name, _, file_stream = file_src
 
@@ -204,7 +209,10 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters, file_src):
         sql = sql.format(
             file=file_name.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        if from_stream:
+            return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        else:
+            return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -225,9 +233,9 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters, file_src):
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-@pytest.mark.parametrize("file_src", [[False, "nation.impala.parquet"], [True, "nation.impala.parquet"]],
-                         indirect=['file_src'])
-def test_put_copy_parquet_compressed(conn_cnx, db_parameters, file_src):
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['nation.impala.parquet'], indirect=['file_src'])
+def test_put_copy_parquet_compressed(conn_cnx, db_parameters, from_stream, file_src):
     """Puts and Copies parquet compressed files."""
     file_name, _, file_stream = file_src
 
@@ -235,7 +243,10 @@ def test_put_copy_parquet_compressed(conn_cnx, db_parameters, file_src):
         sql = sql.format(
             file=file_name.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        if from_stream:
+            return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        else:
+            return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -260,9 +271,9 @@ stage_file_format=(type='parquet')
         run(cnx, "alter session unset enable_parquet_filetype")
 
 
-@pytest.mark.parametrize("file_src", [[False, "TestOrcFile.test1.orc"], [True, "TestOrcFile.test1.orc"]],
-                         indirect=['file_src'])
-def test_put_copy_orc_compressed(conn_cnx, db_parameters, file_src):
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['TestOrcFile.test1.orc'], indirect=['file_src'])
+def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_stream, file_src):
     """Puts and Copies ORC compressed files."""
     file_name, _, file_stream = file_src
 
@@ -270,7 +281,10 @@ def test_put_copy_orc_compressed(conn_cnx, db_parameters, file_src):
         sql = sql.format(
             file=file_name.replace('\\', '\\\\'),
             name=db_parameters['name'])
-        return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        if from_stream:
+            return cnx.cursor().execute(sql, file_stream=file_stream).fetchall()
+        else:
+            return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -743,18 +757,22 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
 
 @pytest.mark.aws
 @pytest.mark.azure
-@pytest.mark.parametrize("file_src", [[False, "put_get_1.txt"], [True, "put_get_1.txt"]], indirect=['file_src'])
-def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, file_src):
+@pytest.mark.parametrize("from_stream", [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['put_get_1.txt'], indirect=['file_src'])
+def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_stream, file_src):
     """SNOW-15153: PUTs and GETs with hint."""
     tmp_dir = str(tmpdir.mkdir('put_get_with_hint'))
     file_name, file_size, file_stream = file_src
 
     def run(cnx, sql, _is_put_get=None):
-        return cnx.cursor().execute(
-            sql.format(
-                local_dir=tmp_dir.replace('\\', '\\\\'),
-                file=file_name.replace('\\', '\\\\'),
-                name=db_parameters['name']), _is_put_get=_is_put_get, file_stream=file_stream).fetchone()
+        sql = sql.format(
+            local_dir=tmp_dir.replace('\\', '\\\\'),
+            file=file_name.replace('\\', '\\\\'),
+            name=db_parameters['name'])
+        if from_stream:
+            return cnx.cursor().execute(sql, _is_put_get=_is_put_get, file_stream=file_stream).fetchone()
+        else:
+            return cnx.cursor().execute(sql, _is_put_get=_is_put_get).fetchone()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],

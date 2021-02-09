@@ -21,7 +21,7 @@ from ..randomize import random_string
 pytestmark = pytest.mark.aws
 
 
-@pytest.mark.parametrize("from_stream", [False, True])
+@pytest.mark.parametrize('from_stream', [False, pytest.param(True, marks=pytest.mark.skipolddriver)])
 def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_stream):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
@@ -37,10 +37,15 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_stream):
             try:
                 csr.execute("create or replace table {} (a int, b string)".format(table_name))
                 file_stream = None if not from_stream else open(fname, 'rb')
-                csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name),
-                            _put_callback=SnowflakeS3ProgressPercentage,
-                            _get_callback=SnowflakeS3ProgressPercentage,
-                            file_stream=file_stream)
+                if from_stream:
+                    csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name),
+                                _put_callback=SnowflakeS3ProgressPercentage,
+                                _get_callback=SnowflakeS3ProgressPercentage,
+                                file_stream=file_stream)
+                else:
+                    csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name),
+                                _put_callback=SnowflakeS3ProgressPercentage,
+                                _get_callback=SnowflakeS3ProgressPercentage)
                 rec = csr.fetchone()
                 assert rec[6] == 'UPLOADED'
                 csr.execute("copy into {}".format(table_name))
