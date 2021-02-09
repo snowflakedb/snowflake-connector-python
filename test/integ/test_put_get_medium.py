@@ -56,6 +56,9 @@ def test_put_copy0(conn_cnx, db_parameters, from_stream, file_src):
               '_get_azure_callback': SnowflakeAzureProgressPercentage,
               'file_stream': file_stream}
 
+    if not from_stream:
+        kwargs.pop('file_stream', None)
+
     def run(cnx, sql):
         sql = sql.format(
             file=file_path.replace('\\', '\\\\'),
@@ -67,9 +70,6 @@ def test_put_copy0(conn_cnx, db_parameters, from_stream, file_src):
             file=file_path.replace('\\', '\\\\'),
             name=db_parameters['name'])
         c = cnx.cursor(DictCursor)
-
-        if not from_stream:
-            kwargs.pop('file_stream', None)
         return c, c.execute(sql, **kwargs).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
