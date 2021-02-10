@@ -55,6 +55,7 @@ def test_extract_bucket_name_and_path():
     assert s3_loc.s3path == '//'
 
 
+# FIXME
 def test_upload_one_file_to_s3_wsaeconnaborted():
     """Tests Upload one file to S3 with retry on ERRORNO_WSAECONNABORTED.
 

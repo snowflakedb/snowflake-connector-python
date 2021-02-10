@@ -708,7 +708,7 @@ class SnowflakeRestful(object):
                         stack_trace=traceback.format_exc()
                     )
                     if isinstance(cause, Error):
-                        Error.errorhandler_wrapper(conn, None, cause)
+                        Error.errorhandler_wrapper_from_cause(conn, None, cause)
                     else:
                         self.handle_invalid_certificate_error(
                             conn, full_url, cause)

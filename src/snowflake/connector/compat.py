@@ -84,3 +84,15 @@ def PRINT(msg):
 
 def INPUT(prompt):
     return input(prompt)
+
+
+try:
+    # builtin dataclass
+    from dataclass import dataclass  # NOQA
+    from dataclass import field  # NOQA
+    from dataclass import asdict  # NOQA
+except ImportError:
+    # backported dataclass for Python 3.6
+    from dataclasses import dataclass  # NOQA
+    from dataclasses import field  # NOQA
+    from dataclasses import asdict  # NOQA
