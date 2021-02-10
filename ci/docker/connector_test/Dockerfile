@@ -12,6 +12,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /home/user
 RUN chmod 777 /home/user
-ENV PATH="${PATH}:/opt/python/cp35-cp35m/bin:/opt/python/cp36-cp36m/bin:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin/"
+ENV PATH="${PATH}:/opt/python/cp36-cp36m/bin:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin/:/opt/python/cp39-cp39/bin/"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
