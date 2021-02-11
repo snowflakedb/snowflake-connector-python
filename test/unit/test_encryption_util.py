@@ -35,8 +35,8 @@ def test_encrypt_decrypt_file():
 
         (metadata, encrypted_file) = SnowflakeEncryptionUtil.encrypt_file(
             encryption_material, input_file)
-        # decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
-        #     metadata, encryption_material, encrypted_file)
+        decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
+            metadata, encryption_material, encrypted_file)
         #
         # contents = ''
         # with codecs.open(decrypted_file, 'r', encoding=UTF8) as fd:
