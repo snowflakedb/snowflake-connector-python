@@ -41,7 +41,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Use new PEP-517 build
     ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
     # On Linux we should repair wheel(s) generated
-    auditwheel repair --plat manylinux2010_x86_64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+    auditwheel repair --plat manylinux2014_x86_64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 
     # Generate reqs files
     WHL_FILE="$(ls ${BUILD_DIR})"
