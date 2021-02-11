@@ -42,7 +42,7 @@ def test_encrypt_decrypt_file():
         with codecs.open(decrypted_file, 'r', encoding=UTF8) as fd:
             for line in fd:
                 contents += line
-        # assert data == contents, "encrypted and decrypted contents"
+        assert data == contents, "encrypted and decrypted contents"
     finally:
         os.close(input_fd)
         os.remove(input_file)
