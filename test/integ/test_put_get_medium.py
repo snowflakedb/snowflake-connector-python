@@ -53,11 +53,10 @@ def test_put_copy0(conn_cnx, db_parameters, from_stream, file_src):
     kwargs = {'_put_callback': SnowflakeS3ProgressPercentage,
               '_get_callback': SnowflakeS3ProgressPercentage,
               '_put_azure_callback': SnowflakeAzureProgressPercentage,
-              '_get_azure_callback': SnowflakeAzureProgressPercentage,
-              'file_stream': file_stream}
+              '_get_azure_callback': SnowflakeAzureProgressPercentage}
 
-    if not from_stream:
-        kwargs.pop('file_stream', None)
+    if from_stream:
+        kwargs['file_stream'] = file_src
 
     def run(cnx, sql):
         sql = sql.format(

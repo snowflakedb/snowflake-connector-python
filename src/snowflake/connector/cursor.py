@@ -454,7 +454,7 @@ class SnowflakeCursor(object):
                 _is_put_get: Optional[bool] = None,
                 _raise_put_get_error: bool = True,
                 _force_put_overwrite: bool = False,
-                file_stream: IO[bytes] = None):
+                file_stream: Optional[IO[bytes]] = None):
         """Executes a command/query.
 
         Args:

@@ -189,7 +189,7 @@ class SnowflakeFileTransferAgent(object):
                  show_progress_bar=True,
                  raise_put_get_error=True,
                  force_put_overwrite=True,
-                 source_from_stream=None):
+                 source_from_stream: Optional[IO[bytes] = None):
         self._cursor = cursor
         self._command = command
         self._ret = ret
