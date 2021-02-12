@@ -69,6 +69,8 @@ class SnowflakeEncryptionUtil(object):
     def encrypt_content(encryption_material: 'SnowflakeFileEncryptionMaterial', src: IO[bytes], out: IO[bytes],
                         chunk_size: int) -> 'EncryptionMetadata':
         """Reads content from src and write the encrypted content into out.
+        
+        This function is sensitive to current position of src and out streams.
 
         Args:
             encryption_material: The encryption material for file.
