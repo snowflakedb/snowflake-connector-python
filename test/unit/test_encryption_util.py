@@ -7,10 +7,7 @@
 import codecs
 import glob
 import os
-import tempfile
 from os import path
-
-import pytest
 
 from snowflake.connector.constants import UTF8
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
@@ -21,19 +18,18 @@ from ..generate_test_files import generate_k_lines_of_n_files
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 
-@pytest.mark.skip
-def test_encrypt_decrypt_file():
+def test_encrypt_decrypt_file(tmp_path):
     """Encrypts and Decrypts a file."""
     encryption_material = SnowflakeFileEncryptionMaterial(
         query_stage_master_key='ztke8tIdVt1zmlQIZm0BMA==',
         query_id='123873c7-3a66-40c4-ab89-e3722fbccce1',
         smk_id=3112)
     data = 'test data'
-    input_fd, input_file = tempfile.mkstemp()
+    input_file = tmp_path / 'test_encrypt_decrypt_file'
     encrypted_file = None
     decrypted_file = None
     try:
-        with codecs.open(input_file, 'w', encoding=UTF8) as fd:
+        with input_file.open('w', encoding=UTF8) as fd:
             fd.write(data)
 
         (metadata, encrypted_file) = SnowflakeEncryptionUtil.encrypt_file(
@@ -47,8 +43,7 @@ def test_encrypt_decrypt_file():
                 contents += line
         assert data == contents, "encrypted and decrypted contents"
     finally:
-        os.close(input_fd)
-        os.remove(input_file)
+        input_file.unlink()
         if encrypted_file:
             os.remove(encrypted_file)
         if decrypted_file:
