@@ -10,6 +10,8 @@ import os
 import tempfile
 from os import path
 
+import pytest
+
 from snowflake.connector.constants import UTF8
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
@@ -19,6 +21,7 @@ from ..generate_test_files import generate_k_lines_of_n_files
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 
+@pytest.mark.skip
 def test_encrypt_decrypt_file():
     """Encrypts and Decrypts a file."""
     encryption_material = SnowflakeFileEncryptionMaterial(
