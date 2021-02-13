@@ -9,7 +9,6 @@
 Adapted from a script by M-A Lemburg and taken from the MySQL python driver.
 """
 
-import sys
 import time
 
 import pytest
@@ -102,12 +101,12 @@ def test_paramstyle():
 
 def test_exceptions():
     # required exceptions should be defined in a hierarchy
-    if sys.version_info[0] > 2:
+    try:
+        assert issubclass(errors._Warning, Exception)
+    except AttributeError:
+        # Compatibility for olddriver tests
         assert issubclass(errors.Warning, Exception)
-        assert issubclass(errors.Error, Exception)
-    else:
-        assert issubclass(errors.Warning, StandardError)
-        assert issubclass(errors.Error, StandardError)
+    assert issubclass(errors.Error, Exception)
     assert issubclass(errors.InterfaceError, errors.Error)
     assert issubclass(errors.DatabaseError, errors.Error)
     assert issubclass(errors.OperationalError, errors.Error)
@@ -117,9 +116,14 @@ def test_exceptions():
     assert issubclass(errors.NotSupportedError, errors.Error)
 
 
-def test_ExceptionsAsConnectionAttributes(conn_cnx):
+def test_exceptions_as_connection_attributes(conn_cnx):
     with conn_cnx() as con:
-        assert con.Warning == errors.Warning
+        try:
+            assert con.Warning == errors._Warning
+        except AttributeError:
+            # Compatibility for olddriver tests
+            assert con.Warning == errors.Warning
+        assert con.Warning == errors._Warning
         assert con.Error == errors.Error
         assert con.InterfaceError == errors.InterfaceError
         assert con.DatabaseError == errors.DatabaseError

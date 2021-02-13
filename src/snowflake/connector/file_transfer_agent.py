@@ -100,7 +100,7 @@ class SnowflakeFileMeta:
     get_azure_callback: Optional[Type['SnowflakeProgressPercentage']] = None
     get_callback_output_stream: Optional[IO[str]] = None
     show_progress_bar: bool = False
-    multipart_threshold: int = -1
+    multipart_threshold: int = 67108864  # Historical value
     parallel: int = 1
     presigned_url: Optional[str] = None
     overwrite: bool = False

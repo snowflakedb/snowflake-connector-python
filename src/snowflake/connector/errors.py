@@ -253,9 +253,6 @@ class Error(BASE_EXCEPTION_CLASS):
             raise error_class(error_value)
 
 
-Error.__str__ = lambda self: self.__unicode__()
-
-
 class _Warning(BASE_EXCEPTION_CLASS):
     """Exception for important warnings."""
     pass
