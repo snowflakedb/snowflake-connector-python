@@ -107,6 +107,11 @@ def _update_progress(
     return progress == 1.0
 
 
+def percent(seen_so_far: int, size: int) -> float:
+    return 1.0 if seen_so_far >= size or size <= 0\
+                else float(seen_so_far / size)
+
+
 class SnowflakeProgressPercentage():
     """Built-in Progress bar for PUT commands."""
 
@@ -145,7 +150,7 @@ class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
         with self._lock:
             if self._output_stream:
                 self._seen_so_far += bytes_amount
-                percentage = float(self._seen_so_far / self._size)
+                percentage = percent(self._seen_so_far, self._size)
                 if not self._done:
                     self._done = _update_progress(
                         self._filename, self._start_time,
@@ -167,7 +172,7 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
         with self._lock:
             if self._output_stream:
                 self._seen_so_far = current
-                percentage = float(self._seen_so_far / self._size)
+                percentage = percent(self._seen_so_far, self._size)
                 if not self._done:
                     self._done = _update_progress(
                         self._filename, self._start_time,
