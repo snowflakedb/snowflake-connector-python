@@ -59,12 +59,12 @@ def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
 
     def run(cnx, sql):
         sql = sql.format(name=db_parameters['name'])
-        return cnx.cursor().execute(sql, **kwargs).fetchall()
+        return cnx.cursor().execute(sql).fetchall()
 
     def run_with_cursor(cnx, sql):
         sql = sql.format(name=db_parameters['name'])
         c = cnx.cursor(DictCursor)
-        return c, c.execute(sql, **kwargs).fetchall()
+        return c, c.execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
