@@ -196,6 +196,12 @@ class SnowflakeS3Util:
             s3path = s3location.s3path + meta['dst_file_name'].lstrip('/')
 
             akey = meta['client'].Object(s3location.bucket_name, s3path)
+            extra_args = {'Metadata': s3_metadata}
+            config = TransferConfig(
+                multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
+                max_concurrency=max_concurrency,
+                num_download_attempts=10,
+            )
 
             if 'src_stream' not in meta:
                 akey.upload_file(
@@ -204,16 +210,9 @@ class SnowflakeS3Util:
                         data_file,
                         os.path.getsize(data_file),
                         output_stream=meta['put_callback_output_stream'],
-                        show_progress_bar=meta['show_progress_bar']) if
-                    meta['put_callback'] else None,
-                    ExtraArgs={
-                        'Metadata': s3_metadata,
-                    },
-                    Config=TransferConfig(
-                        multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
-                        max_concurrency=max_concurrency,
-                        num_download_attempts=10,
-                    )
+                        show_progress_bar=meta['show_progress_bar']) if meta['put_callback'] else None,
+                    ExtraArgs=extra_args,
+                    Config=config
                 )
             else:
                 upload_stream = meta.get('real_src_stream', meta['src_stream'])
@@ -226,16 +225,9 @@ class SnowflakeS3Util:
                         data_file,
                         upload_size,
                         output_stream=meta['put_callback_output_stream'],
-                        show_progress_bar=meta['show_progress_bar']) if
-                    meta['put_callback'] else None,
-                    ExtraArgs={
-                        'Metadata': s3_metadata,
-                    },
-                    Config=TransferConfig(
-                        multipart_threshold=SnowflakeS3Util.DATA_SIZE_THRESHOLD,
-                        max_concurrency=max_concurrency,
-                        num_download_attempts=10,
-                    )
+                        show_progress_bar=meta['show_progress_bar']) if meta['put_callback'] else None,
+                    ExtraArgs=extra_args,
+                    Config=config,
                 )
 
             logger.debug('DONE putting a file')

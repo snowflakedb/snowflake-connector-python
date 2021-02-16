@@ -19,6 +19,8 @@ from cryptography.hazmat.primitives import hashes
 
 from .constants import UTF8
 
+logger = getLogger(__name__)
+
 
 class SnowflakeFileUtil(object):
 
@@ -83,7 +85,6 @@ class SnowflakeFileUtil(object):
         Returns:
             A tuple of gzip file name and size.
         """
-        logger = getLogger(__name__)
         base_name = os.path.basename(file_name)
         gzip_file_name = os.path.join(tmp_dir, base_name + '_c.gz')
         logger.debug('gzip file: %s, original file: %s', gzip_file_name,
@@ -143,7 +144,6 @@ class SnowflakeFileUtil(object):
             Tuple of src_stream's digest and src_stream's size in bytes.
         """
         digest, size = SnowflakeFileUtil.get_digest_and_size(src_stream)
-        logger = getLogger(__name__)
         logger.debug('getting digest and size for stream: %s, %s', digest,
                      size)
         return digest, size
@@ -161,7 +161,6 @@ class SnowflakeFileUtil(object):
         digest, size = None, None
         with open(file_name, 'rb') as src:
             digest, size = SnowflakeFileUtil.get_digest_and_size(src)
-        logger = getLogger(__name__)
         logger.debug('getting digest and size: %s, %s, file=%s', digest,
                      size, file_name)
         return digest, size
