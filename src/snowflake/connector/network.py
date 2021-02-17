@@ -561,7 +561,7 @@ class SnowflakeRestful(object):
                 return self._post_request(
                     url, headers, body, token=self.token, timeout=timeout)
 
-        if isinstance(ret.get('data', None), dict) and ret['data'].get('queryId'):
+        if isinstance(ret.get('data'), dict) and ret['data'].get('queryId'):
             logger.debug('Query id: {}'.format(ret['data']['queryId']))
 
         if ret.get('code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
