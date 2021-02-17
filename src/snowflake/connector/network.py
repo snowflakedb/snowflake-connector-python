@@ -561,7 +561,7 @@ class SnowflakeRestful(object):
                 return self._post_request(
                     url, headers, body, token=self.token, timeout=timeout)
 
-        if ret.get('data') and ret['data'].get('queryId'):
+        if isinstance(ret.get('data'), dict) and ret['data'].get('queryId'):
             logger.debug('Query id: {}'.format(ret['data']['queryId']))
 
         if ret.get('code') == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
@@ -770,7 +770,7 @@ class SnowflakeRestful(object):
             conn, None, OperationalError,
             {
                 'msg': 'Failed to get the response. Hanging? '
-                        'method: {method}, url: {url}'.format(
+                       'method: {method}, url: {url}'.format(
                     method=method,
                     url=full_url,
                 ),
@@ -846,7 +846,7 @@ class SnowflakeRestful(object):
                         self._connection, None, DatabaseError,
                         {
                             'msg': ('Failed to get authentication by OKTA: '
-                                     '{status}: {reason}').format(
+                                    '{status}: {reason}').format(
                                 status=raw_ret.status_code,
                                 reason=raw_ret.reason),
                             'errno': ER_FAILED_TO_CONNECT_TO_DB,
@@ -867,7 +867,7 @@ class SnowflakeRestful(object):
                         self._connection, None, InterfaceError,
                         {
                             'msg': ("{status} {reason}: "
-                                     "{method} {url}").format(
+                                    "{method} {url}").format(
                                 status=raw_ret.status_code,
                                 reason=raw_ret.reason,
                                 method=method,
