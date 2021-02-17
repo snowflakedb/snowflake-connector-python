@@ -93,7 +93,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             current_dir = os.getcwd()
 
             if ext.name == 'snowflake.connector.arrow_iterator':
-                self._copy_arrow_lib()
+                if not os.environ.get("SF_NO_COPY_ARROW_LIB", False):
+                    self._copy_arrow_lib()
                 CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, 'cpp')
                 ARROW_ITERATOR_SRC_DIR = os.path.join(CPP_SRC_DIR, 'ArrowIterator')
                 LOGGING_SRC_DIR = os.path.join(CPP_SRC_DIR, 'Logging')
@@ -124,8 +125,9 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 elif platform == 'linux' or platform == 'darwin':
                     ext.extra_compile_args.append('-isystem' + pyarrow.get_include())
                     ext.extra_compile_args.append('-isystem' + numpy.get_include())
-                    ext.extra_compile_args.append('-std=c++11')
-                    ext.extra_compile_args.append('-D_GLIBCXX_USE_CXX11_ABI=0')
+                    if "std=" not in os.environ.get("CXXFLAGS", ""):
+                        ext.extra_compile_args.append('-std=c++11')
+                        ext.extra_compile_args.append('-D_GLIBCXX_USE_CXX11_ABI=0')
 
                 ext.library_dirs.append(os.path.join(current_dir, self.build_lib, 'snowflake', 'connector'))
                 ext.extra_link_args += self._get_arrow_lib_as_linker_input()
@@ -143,6 +145,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             build_ext.build_extension(self, ext)
 
         def _get_arrow_lib_dir(self):
+            if "SF_ARROW_LIBDIR" in os.environ:
+                return os.environ["SF_ARROW_LIBDIR"]
             return pyarrow.get_library_dirs()[0]
 
         def _copy_arrow_lib(self):

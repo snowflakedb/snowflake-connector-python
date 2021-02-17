@@ -72,6 +72,7 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
     cdef cppclass CResult "arrow::Result"[T]:
         CResult()
         CResult(CStatus status)
+        CResult(T)
 
         c_string ToString()
         c_string message()
@@ -79,6 +80,7 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
         c_bool ok()
         const CStatus& status()
         T& ValueOrDie()
+        T operator*()
 
     cdef cppclass CBuffer" arrow::Buffer":
         CBuffer(const uint8_t* data, int64_t size)
@@ -133,6 +135,8 @@ cdef extern from "arrow/io/api.h" namespace "arrow::io" nogil:
 cdef extern from "arrow/python/api.h" namespace "arrow::py" nogil:
     cdef cppclass PyReadableFile(RandomAccessFile):
         PyReadableFile(object fo)
+
+    T GetResultValue[T](CResult[T]) except *
 
 
 cdef class EmptyPyArrowIterator:
