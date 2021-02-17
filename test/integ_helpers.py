@@ -4,9 +4,27 @@
 #
 
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector.cursor import SnowflakeCursor
 
 
-def put(csr, file_path, stage_path, from_path, sql_options="", **kwargs):
+def put(csr: 'SnowflakeCursor', file_path: str, stage_path: str, from_path: bool, sql_options: str = "",
+        **kwargs) -> 'SnowflakeCursor':
+    """Execute PUT <file> <stage> <options> query with given cursor.
+
+    Args:
+        csr: Snowflake cursor object.
+        file_path: Path to the target file in local system; Or <filename>.<extension> when from_path is False.
+        stage_path: Destination path of file on the stage.
+        from_path: Whether the target file is fetched with given path, specify file_stream=<IO> if False.
+        sql_options: Optional arguments to the PUT command.
+        **kwargs: Optional arguments passed to SnowflakeCursor.execute()
+
+    Returns:
+        A result class with the results in it. This can either be json, or an arrow result class.
+    """
     sql = "put 'file://{file}' @{stage} {sql_options}"
     if from_path:
         kwargs.pop('file_stream', None)
