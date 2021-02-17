@@ -10,9 +10,14 @@ import mock
 import pytest
 
 from snowflake.connector.constants import ResultStatus
-from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
 
 from ..randomize import random_string
+
+try:
+    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
+except ImportError:  # NOQA
+    # Compatibility for olddriver tests
+    SnowflakeFileMeta = dict
 
 pytestmark = pytest.mark.gcp
 

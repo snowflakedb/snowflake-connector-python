@@ -19,9 +19,14 @@ from boto3.exceptions import Boto3Error, RetriesExceededError, S3UploadFailedErr
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
-from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
 from snowflake.connector.remote_storage_util import DEFAULT_MAX_RETRY, SnowflakeRemoteStorageUtil
 from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED, SnowflakeS3Util
+
+try:
+    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
+except ImportError:  # NOQA
+    # Compatibility for olddriver tests
+    SnowflakeFileMeta = dict
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 MINIMAL_METADATA = SnowflakeFileMeta(

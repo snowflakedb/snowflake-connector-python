@@ -123,7 +123,6 @@ def test_exceptions_as_connection_attributes(conn_cnx):
         except AttributeError:
             # Compatibility for olddriver tests
             assert con.Warning == errors.Warning
-        assert con.Warning == errors._Warning
         assert con.Error == errors.Error
         assert con.InterfaceError == errors.InterfaceError
         assert con.DatabaseError == errors.DatabaseError

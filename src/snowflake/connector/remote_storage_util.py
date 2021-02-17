@@ -106,7 +106,7 @@ class SnowflakeRemoteStorageUtil(object):
         last_err = None
         max_retry = DEFAULT_MAX_RETRY
         for retry in range(max_retry):
-            if meta.overwrite is None:
+            if not meta.overwrite:
                 file_header = util_class.get_file_header(
                     meta, meta.dst_file_name)
 
@@ -118,7 +118,7 @@ class SnowflakeRemoteStorageUtil(object):
                     meta.result_status = ResultStatus.SKIPPED
                     return
 
-            if meta.overwrite is not None or meta.result_status == ResultStatus.NOT_FOUND_FILE:
+            if meta.overwrite or meta.result_status == ResultStatus.NOT_FOUND_FILE:
                 util_class.upload_file(
                     data_file,
                     meta,

@@ -10,8 +10,6 @@ import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Dict, Optional, Type, Union
 
-from snowflake.connector.constants import UTF8
-
 from .compat import BASE_EXCEPTION_CLASS
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
@@ -67,11 +65,8 @@ class Error(BASE_EXCEPTION_CLASS):
     def __repr__(self):
         return self.__str__()
 
-    def __unicode__(self):
+    def __str__(self):
         return self.msg
-
-    def __bytes__(self):
-        return self.__unicode__().encode(UTF8)
 
     @staticmethod
     def generate_telemetry_stacktrace() -> str:

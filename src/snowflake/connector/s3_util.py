@@ -18,7 +18,6 @@ from boto3.s3.transfer import TransferConfig
 from boto3.session import Session
 from botocore.client import Config
 
-from .compat import asdict
 from .constants import HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_VALUE_OCTET_STREAM, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 
@@ -111,7 +110,7 @@ class SnowflakeS3Util:
         if logger.getEffectiveLevel() == logging.DEBUG:
             tmp_meta = {}
             log_black_list = ('stage_credentials', 'creds', 'encryption_material')
-            for k, v in asdict(meta).items():
+            for k, v in meta.__dict__.items():
                 if k not in log_black_list:
                     tmp_meta[k] = v
             logger.debug(
