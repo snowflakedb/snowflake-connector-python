@@ -509,11 +509,8 @@ class SnowflakeConverter(object):
                 second=value.second
             )
 
-    def date_to_snowflake(self, value):
-        """Converts Date object to Snowflake object."""
-        return self._date_to_snowflake(value)
-
     def _date_to_snowflake(self, value):
+        """Converts Date object to Snowflake object."""
         return '{year:d}-{month:02d}-{day:02d}'.format(
             year=value.year, month=value.month, day=value.day)
 

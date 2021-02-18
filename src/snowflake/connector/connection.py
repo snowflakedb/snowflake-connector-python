@@ -623,12 +623,12 @@ class SnowflakeConnection(object):
             # enable storing temporary credential in a file
             self._session_parameters[
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
-                    self._client_store_temporary_credential if IS_LINUX else True
+                self._client_store_temporary_credential if IS_LINUX else True
 
         if self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[
                 PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = \
-                    self._client_request_mfa_token if IS_LINUX else True
+                self._client_request_mfa_token if IS_LINUX else True
 
         auth = Auth(self.rest)
         auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
@@ -800,6 +800,7 @@ class SnowflakeConnection(object):
                   sequence_counter: int,
                   request_id: uuid.UUID,
                   binding_params: Union[None, Tuple, Dict[str, Dict[str, str]]] = None,
+                  binding_stage: str = None,
                   is_file_transfer: bool = False,
                   statement_params: Optional[Dict[str, str]] = None,
                   is_internal: bool = False,
@@ -817,6 +818,9 @@ class SnowflakeConnection(object):
             data['parameters'] = statement_params
         if is_internal:
             data['isInternal'] = is_internal
+        if binding_stage is not None:
+            # binding stage for bulk array binding
+            data['bindStage'] = binding_stage
         if binding_params is not None:
             # binding parameters. This is for qmarks paramstyle.
             data['bindings'] = binding_params
@@ -898,6 +902,28 @@ class SnowflakeConnection(object):
             session_parameters=self._session_parameters,
         )
 
+    def _write_params_to_byte_rows(self, params: List[Tuple[Union[Any, Tuple]]],
+                                   cursor: 'SnowflakeCursor' = None) -> List[bytes]:
+        """Write csv-format rows of binding values as list of binary string.
+
+        Args:
+            params: Binding parameters to bulk array insertion query with qmark/numeric format.
+            cursor: SnowflakeCursor.
+
+        Returns:
+            List of binary string corresponding to rows
+
+        """
+        res = []
+        for row in params:
+            temp = map(lambda x: x if not (isinstance(x, tuple) and len(x) == 2) else x[1], row)
+            temp = map(self.converter.to_snowflake, res)
+            temp = map(self.converter.escape, res)
+            temp = map(self.converter.quote, res)
+            res.append((",".join(temp) + "\n").encode('utf-8'))
+        return res
+
+    # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(self,
                                params: Union[List, Tuple, None],
                                cursor: 'SnowflakeCursor' = None) -> Dict[str, Dict[str, str]]:
@@ -914,6 +940,7 @@ class SnowflakeConnection(object):
             Error.errorhandler_wrapper(self, cursor,
                                        ProgrammingError,
                                        errorvalue)
+
         for idx, v in enumerate(params):
             if isinstance(v, tuple):
                 if len(v) != 2:
@@ -922,8 +949,8 @@ class SnowflakeConnection(object):
                         ProgrammingError,
                         {
                             'msg': "Binding parameters must be a list "
-                                    "where one element is a single value or "
-                                    "a pair of Snowflake datatype and a value",
+                                   "where one element is a single value or "
+                                   "a pair of Snowflake datatype and a value",
                             'errno': ER_FAILED_PROCESSING_PYFORMAT,
                         }
                     )
@@ -940,9 +967,9 @@ class SnowflakeConnection(object):
                         ProgrammingError,
                         {
                             'msg': "Python data type [{}] cannot be "
-                                    "automatically mapped to Snowflake data "
-                                    "type. Specify the snowflake data type "
-                                    "explicitly.".format(
+                                   "automatically mapped to Snowflake data "
+                                   "type. Specify the snowflake data type "
+                                   "explicitly.".format(
                                 v.__class__.__name__.lower()),
                             'errno': ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
                         }
@@ -1214,11 +1241,11 @@ class SnowflakeConnection(object):
     def is_still_running(status: QueryStatus) -> bool:
         """Checks whether given status is currently running."""
         return status in (
-                QueryStatus.RUNNING,
-                QueryStatus.RESUMING_WAREHOUSE,
-                QueryStatus.QUEUED,
-                QueryStatus.QUEUED_REPAIRING_WAREHOUSE,
-                QueryStatus.NO_DATA,
+            QueryStatus.RUNNING,
+            QueryStatus.RESUMING_WAREHOUSE,
+            QueryStatus.QUEUED,
+            QueryStatus.QUEUED_REPAIRING_WAREHOUSE,
+            QueryStatus.NO_DATA,
         )
 
     @staticmethod
