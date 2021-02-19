@@ -10,6 +10,7 @@ import os
 import shutil
 import time
 from collections import namedtuple
+from io import BytesIO
 from logging import getLogger
 
 from .azure_util import SnowflakeAzureUtil
@@ -74,12 +75,18 @@ class SnowflakeRemoteStorageUtil(object):
                     'encrypted data file=%s, size=%s', data_file,
                     os.path.getsize(data_file))
             else:
-                (encryption_metadata, encrypted_stream) = SnowflakeEncryptionUtil.encrypt_stream(
+                encrypted_stream = BytesIO()
+                src_stream = meta.get('real_src_stream', meta['src_stream'])
+                src_stream.seek(0)
+                encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
                     meta['encryption_material'],
-                    meta.get('real_src_stream', meta['src_stream'])
+                    src_stream,
+                    encrypted_stream
                 )
+                src_stream.seek(0)
                 logger.debug(
-                    'encrypted data stream size=%s', len(encrypted_stream.getvalue()))
+                    'encrypted data stream size=%s', encrypted_stream.seek(0, os.SEEK_END))
+                encrypted_stream.seek(0)
                 if 'real_src_stream' in meta:
                     meta['real_src_stream'].close()
                 meta['real_src_stream'] = encrypted_stream

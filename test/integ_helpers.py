@@ -4,13 +4,13 @@
 #
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.cursor import SnowflakeCursor
 
 
-def put(csr: 'SnowflakeCursor', file_path: str, stage_path: str, from_path: bool, sql_options: str = "",
+def put(csr: 'SnowflakeCursor', file_path: str, stage_path: str, from_path: bool, sql_options: Optional[str] = "",
         **kwargs) -> 'SnowflakeCursor':
     """Execute PUT <file> <stage> <options> query with given cursor.
 

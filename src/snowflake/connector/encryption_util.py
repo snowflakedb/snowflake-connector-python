@@ -9,7 +9,6 @@ import json
 import os
 import tempfile
 from collections import namedtuple
-from io import BytesIO
 from logging import getLogger
 from typing import IO, TYPE_CHECKING, Tuple
 
@@ -66,11 +65,12 @@ class SnowflakeEncryptionUtil(object):
         return os.urandom(byte_length)
 
     @staticmethod
-    def encrypt_content(encryption_material: 'SnowflakeFileEncryptionMaterial', src: IO[bytes], out: IO[bytes],
-                        chunk_size: int) -> 'EncryptionMetadata':
+    def encrypt_stream(encryption_material: 'SnowflakeFileEncryptionMaterial', src: IO[bytes], out: IO[bytes],
+                       chunk_size: int = block_size * 4 * 1024) -> 'EncryptionMetadata':
         """Reads content from src and write the encrypted content into out.
-        
-        This function is sensitive to current position of src and out streams.
+
+        This function is sensitive to current position of src and out.
+        It does not seek to position 0 in neither stream objects before or after the encryption.
 
         Args:
             encryption_material: The encryption material for file.
@@ -163,19 +163,8 @@ class SnowflakeEncryptionUtil(object):
         metadata = None
         with open(in_filename, 'rb') as infile:
             with os.fdopen(temp_output_fd, 'wb') as outfile:
-                metadata = SnowflakeEncryptionUtil.encrypt_content(encryption_material, infile, outfile, chunk_size)
+                metadata = SnowflakeEncryptionUtil.encrypt_stream(encryption_material, infile, outfile, chunk_size)
         return metadata, temp_output_file
-
-    @staticmethod
-    def encrypt_stream(encryption_material: 'SnowflakeFileEncryptionMaterial', src_stream: IO[bytes],
-                       chunk_size: int = block_size * 4 * 1024) -> Tuple['EncryptionMetadata', IO[bytes]]:
-
-        output_stream = BytesIO()
-        src_stream.seek(0)
-        metadata = SnowflakeEncryptionUtil.encrypt_content(encryption_material, src_stream, output_stream, chunk_size)
-        src_stream.seek(0)
-        output_stream.seek(0)
-        return metadata, output_stream
 
     @staticmethod
     def decrypt_file(metadata, encryption_material, in_filename,
