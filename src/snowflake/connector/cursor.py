@@ -833,8 +833,7 @@ class SnowflakeCursor(object):
                 if bind_size > self.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD']:
                     # bind stage optimization
                     try:
-                        # TODO make sure type conversion is correct
-                        rows = self.connection._write_params_to_byte_rows(seqparams, cursor=self)
+                        rows = self.connection._write_params_to_byte_rows(seqparams)
                         bind_uploader = BindUploadAgent(self, rows)
                         bind_uploader.upload()
                         self._bind_stage = bind_uploader.stage_path

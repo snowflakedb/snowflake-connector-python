@@ -11,6 +11,7 @@ from datetime import date, datetime
 from datetime import time as dt_t
 from datetime import timedelta
 from logging import getLogger
+from typing import Any, Tuple, Union
 
 import pytz
 
@@ -198,6 +199,7 @@ class SnowflakeConverter(object):
 
     def _DATE_to_python(self, _):
         """Converts DATE to date."""
+
         def conv(value: str) -> date:
             try:
                 return datetime.utcfromtimestamp(int(value) * 86400).date()
@@ -297,6 +299,7 @@ class SnowflakeConverter(object):
 
     def _TIMESTAMP_NTZ_numpy_to_python(self, ctx):
         """TIMESTAMP NTZ to datetime64 with no timezone info is attached."""
+
         def conv(value: str) -> 'numpy.datetime64':
             nanoseconds = int(decimal.Decimal(value).scaleb(9))
             return numpy.datetime64(nanoseconds, 'ns')
@@ -589,6 +592,21 @@ class SnowflakeConverter(object):
             )
         raise AttributeError('No method is available: {}'.format(item))
 
+    def to_csv_bindings(self, value: Union[Tuple[str, Any], Any]) -> Union[str, None]:
+        """Convert value to a string representation in CSV-escaped format to INSERT INTO."""
+        if isinstance(value, tuple) and len(value) == 2:
+            if value[0] in ['TIMESTAMP_TZ', 'TIME']:
+                val = self.to_snowflake(value[1])
+            else:
+                val = self._datetime_to_snowflake_bindings(value[0], value[1])
+        else:
+            if isinstance(value, (time, timedelta)):
+                val = self.to_snowflake(value)
+            else:
+                snowflake_type = self.snowflake_type(value)
+                val = self.to_snowflake_bindings(snowflake_type, value)
+        return self.escape_for_csv(val)
+
     @staticmethod
     def escape(value):
         if isinstance(value, list):
@@ -617,3 +635,19 @@ class SnowflakeConverter(object):
             return "X'{}'".format(value.decode('ascii'))
 
         return "'{}'".format(value)
+
+    @staticmethod
+    def escape_for_csv(value: str) -> str:
+        if value is None:  # NULL
+            return ""
+        elif not value:  # Empty string
+            return "\"\""
+        if value.find('"') >= 0 \
+                or value.find('\n') >= 0 \
+                or value.find(',') >= 0 \
+                or value.find('\\') >= 0:
+            # replace single quote with double quotes
+            value = value.replace("\"", "\"\"")
+            return f'"{value}"'
+        else:
+            return value

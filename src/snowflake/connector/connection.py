@@ -27,6 +27,7 @@ from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
+from .bind_uploader import BindException
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
@@ -50,6 +51,7 @@ from .description import CLIENT_NAME, CLIENT_VERSION, PLATFORM, PYTHON_VERSION, 
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
+    ER_FAILED_PROCESSING_QMARK,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
@@ -902,25 +904,24 @@ class SnowflakeConnection(object):
             session_parameters=self._session_parameters,
         )
 
-    def _write_params_to_byte_rows(self, params: List[Tuple[Union[Any, Tuple]]],
-                                   cursor: 'SnowflakeCursor' = None) -> List[bytes]:
-        """Write csv-format rows of binding values as list of binary string.
+    def _write_params_to_byte_rows(self, params: List[Tuple[Union[Any, Tuple]]]) -> List[bytes]:
+        """Write csv-format rows of binding values as list of bytes string.
 
         Args:
             params: Binding parameters to bulk array insertion query with qmark/numeric format.
             cursor: SnowflakeCursor.
 
         Returns:
-            List of binary string corresponding to rows
+            List of bytes string corresponding to rows
 
         """
         res = []
-        for row in params:
-            temp = map(lambda x: x if not (isinstance(x, tuple) and len(x) == 2) else x[1], row)
-            temp = map(self.converter.to_snowflake, res)
-            temp = map(self.converter.escape, res)
-            temp = map(self.converter.quote, res)
-            res.append((",".join(temp) + "\n").encode('utf-8'))
+        try:
+            for row in params:
+                temp = map(self.converter.to_csv_bindings, row)
+                res.append((",".join(temp) + "\n").encode('utf-8'))
+        except (ProgrammingError, AttributeError) as exc:
+            raise BindException from exc
         return res
 
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
@@ -951,7 +952,7 @@ class SnowflakeConnection(object):
                             'msg': "Binding parameters must be a list "
                                    "where one element is a single value or "
                                    "a pair of Snowflake datatype and a value",
-                            'errno': ER_FAILED_PROCESSING_PYFORMAT,
+                            'errno': ER_FAILED_PROCESSING_QMARK,
                         }
                     )
                 processed_params[str(idx + 1)] = {

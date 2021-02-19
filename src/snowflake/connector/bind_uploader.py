@@ -30,7 +30,7 @@ class BindUploadAgent:
         try:
             self.cursor.execute(CREATE_STAGE_STMT)
         except Exception as exc:
-            # TBD: find out specific exception for permission denied
+            # TODO find out specific exception for permission denied
             self.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] = float('inf')
             raise BindException from exc
 
