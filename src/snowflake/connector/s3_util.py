@@ -216,7 +216,7 @@ class SnowflakeS3Util:
                 num_download_attempts=10,
             )
 
-            if 'src_stream' not in meta:
+            if meta.src_stream is None:
                 akey.upload_file(
                     data_file,
                     Callback=meta.put_callback(

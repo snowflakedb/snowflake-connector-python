@@ -185,7 +185,7 @@ class SnowflakeGCSUtil:
             meta.result_status = ResultStatus.NEED_RETRY
             return
         finally:
-            if meta.src_stream is not None:
+            if meta.src_stream is None:
                 upload_src.close()
 
         if meta.put_callback is not None:

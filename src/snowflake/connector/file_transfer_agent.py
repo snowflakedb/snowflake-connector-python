@@ -125,6 +125,8 @@ class SnowflakeFileMeta:
     require_compress: bool = False
     dst_file_name: Optional[str] = None
     dst_file_size: int = -1
+    src_stream: Optional[IO[bytes]] = None
+    real_src_stream: Optional[IO[bytes]] = None
     # Specific to Downloads only
     local_location: Optional[str] = None
 
@@ -501,7 +503,7 @@ class SnowflakeFileTransferAgent(object):
                             meta.src_stream)
 
             logger.debug(f'getting digest file={meta.real_src_file_name}')
-            if 'src_stream' not in meta:
+            if meta.src_stream is None:
                 meta.sha256_digest, meta.upload_size = \
                     SnowflakeFileUtil.get_digest_and_size_for_file(meta.real_src_file_name)
             else:
@@ -523,9 +525,9 @@ class SnowflakeFileTransferAgent(object):
         finally:
             logger.debug(f'cleaning up tmp dir: {tmp_dir}')
             shutil.rmtree(tmp_dir)
-            if 'src_stream' in meta:
+            if meta.src_stream is not None:
                 meta.src_stream.seek(0)
-            if 'real_src_stream' in meta:
+            if meta.real_src_stream is not None:
                 meta.real_src_stream.close()
         return meta
 

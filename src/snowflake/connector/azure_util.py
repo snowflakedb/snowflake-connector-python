@@ -188,7 +188,7 @@ class SnowflakeAzureUtil(object):
         upload_src = None
         upload_size = None
 
-        if 'src_stream' not in meta:
+        if meta.src_stream is None:
             upload_size = os.path.getsize(data_file)
             upload_src = open(data_file, 'rb')
         else:
@@ -237,7 +237,7 @@ class SnowflakeAzureUtil(object):
                 meta.result_status = ResultStatus.NEED_RETRY
             return
         finally:
-            if 'src_stream' not in meta:
+            if meta.src_stream is None:
                 upload_src.close()
 
         logger.debug('DONE putting a file')
