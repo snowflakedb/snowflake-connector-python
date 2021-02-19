@@ -30,11 +30,15 @@ class SnowflakeLocalUtil(object):
             meta['stage_info'],
             meta['dst_file_name']
         )
-        with open(meta['real_src_file_name'], 'rb') as frd:
-            with open(os.path.join(
-                    os.path.expanduser(meta['stage_info']['location']),
-                    meta['dst_file_name']), 'wb') as output:
-                output.writelines(frd)
+        frd = None
+        if 'src_stream' not in meta:
+            frd = open(meta['real_src_file_name'], 'rb')
+        else:
+            frd = meta.get('real_src_stream', meta['src_stream'])
+        with open(os.path.join(
+                os.path.expanduser(meta['stage_info']['location']),
+                meta['dst_file_name']), 'wb') as output:
+            output.writelines(frd)
 
         meta['dst_file_size'] = meta['upload_size']
         meta['result_status'] = ResultStatus.UPLOADED

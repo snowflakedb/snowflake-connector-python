@@ -15,6 +15,7 @@ from mock import patch
 
 import snowflake.connector
 
+from ..integ_helpers import put
 from ..randomize import random_string
 
 try:
@@ -464,7 +465,8 @@ union
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_with_auto_compress_false(tmpdir, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_with_auto_compress_false(tmpdir, db_parameters, from_path):
     """Tests PUT command with auto_compress=False."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -483,11 +485,10 @@ def test_put_with_auto_compress_false(tmpdir, db_parameters):
 
     cnx.cursor().execute("RM @~/test_put_uncompress_file")
     try:
+        file_stream = None if from_path else open(test_data, 'rb')
         with cnx.cursor() as cur:
-            for rec in cur.execute("""
-PUT file://{} @~/test_put_uncompress_file auto_compress=FALSE
-""".format(test_data)):
-                print(rec)
+            put(cur, test_data, "~/test_put_uncompress_file",
+                                from_path, sql_options="auto_compress=FALSE", file_stream=file_stream)
 
         ret = cnx.cursor().execute("""
 LS @~/test_put_uncompress_file
@@ -496,13 +497,16 @@ LS @~/test_put_uncompress_file
         assert "data.txt.gz" not in ret[0]
     finally:
         cnx.cursor().execute("RM @~/test_put_uncompress_file")
+        if file_stream:
+            file_stream.close()
 
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_overwrite(tmpdir, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_overwrite(tmpdir, db_parameters, from_path):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -521,21 +525,25 @@ def test_put_overwrite(tmpdir, db_parameters):
 
     cnx.cursor().execute("RM @~/test_put_overwrite")
     try:
+        file_stream = None if from_path else open(test_data, 'rb')
         with cnx.cursor() as cur:
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite", from_path, file_stream=file_stream)
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite", from_path, file_stream=file_stream)
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'SKIPPED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite",
+                                    from_path, file_stream=file_stream, sql_options="OVERWRITE = TRUE")
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
 
         ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
-        assert "test_put_overwrite/data.txt" in ret[0]
-        assert "data.txt.gz" in ret[0]
+        assert "test_put_overwrite/" + os.path.basename(test_data) in ret[0]
+        assert os.path.basename(test_data) + ".gz" in ret[0]
     finally:
+        if file_stream:
+            file_stream.close()
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 

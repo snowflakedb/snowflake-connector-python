@@ -132,43 +132,52 @@ class SnowflakeGCSUtil:
                 GCS_METADATA_MATDESC_KEY: encryption_metadata.matdesc
             })
 
-        with open(data_file, 'rb') as fd:
-            try:
-                response = requests.put(
-                    url=upload_url,
-                    data=fd,
-                    headers=gcs_headers)
-                response.raise_for_status()
-            except requests.exceptions.HTTPError as errh:
-                logger.debug("GCS file upload Http Error: %s", errh)
-                # Presigned urls can be generated for any xml-api operation
-                # offered by GCS. Hence the error codes expected are similar
-                # to xml api.
-                # https://cloud.google.com/storage/docs/xml-api/reference-status
+        try:
+            upload_src = None
+            if 'src_stream' not in meta:
+                upload_src = open(data_file, 'rb')
+            else:
+                upload_src = meta.get('real_src_stream', meta['src_stream'])
 
-                # According to the above resource, GCS recommends retrying
-                # for the following error codes.
-                if errh.response.status_code in [403, 408, 429, 500, 503]:
-                    meta['last_error'] = errh
-                    meta['result_status'] = ResultStatus.NEED_RETRY
-                    return
-                elif ((not access_token) and errh.response.status_code == 400 and
-                      ('last_error' not in meta or meta['last_error'].response.status_code != 400)):
-                    # Only attempt to renew urls if this isn't the second time this happens
-                    meta['last_error'] = errh
-                    meta['result_status'] = ResultStatus.RENEW_PRESIGNED_URL
-                    return
-                elif access_token and SnowflakeGCSUtil.is_token_expired(errh.response):
-                    meta['last_error'] = errh
-                    meta['result_status'] = ResultStatus.RENEW_TOKEN
-                    return
-                # raise anything else
-                raise errh
-            except requests.exceptions.Timeout as errt:
-                logger.debug("GCS file upload Timeout Error: %s", errt)
-                meta['last_error'] = errt
+            response = requests.put(
+                url=upload_url,
+                data=upload_src,
+                headers=gcs_headers)
+            response.raise_for_status()
+
+        except requests.exceptions.HTTPError as errh:
+            logger.debug("GCS file upload Http Error: %s", errh)
+            # Presigned urls can be generated for any xml-api operation
+            # offered by GCS. Hence the error codes expected are similar
+            # to xml api.
+            # https://cloud.google.com/storage/docs/xml-api/reference-status
+
+            # According to the above resource, GCS recommends retrying
+            # for the following error codes.
+            if errh.response.status_code in [403, 408, 429, 500, 503]:
+                meta['last_error'] = errh
                 meta['result_status'] = ResultStatus.NEED_RETRY
                 return
+            elif ((not access_token) and errh.response.status_code == 400 and
+                  ('last_error' not in meta or meta['last_error'].response.status_code != 400)):
+                # Only attempt to renew urls if this isn't the second time this happens
+                meta['last_error'] = errh
+                meta['result_status'] = ResultStatus.RENEW_PRESIGNED_URL
+                return
+            elif access_token and SnowflakeGCSUtil.is_token_expired(errh.response):
+                meta['last_error'] = errh
+                meta['result_status'] = ResultStatus.RENEW_TOKEN
+                return
+            # raise anything else
+            raise errh
+        except requests.exceptions.Timeout as errt:
+            logger.debug("GCS file upload Timeout Error: %s", errt)
+            meta['last_error'] = errt
+            meta['result_status'] = ResultStatus.NEED_RETRY
+            return
+        finally:
+            if 'src_stream' not in meta:
+                upload_src.close()
 
         if meta['put_callback']:
             meta['put_callback'](

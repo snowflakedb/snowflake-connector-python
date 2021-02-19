@@ -10,6 +10,7 @@ import os
 import shutil
 import time
 from collections import namedtuple
+from io import BytesIO
 from logging import getLogger
 
 from .azure_util import SnowflakeAzureUtil
@@ -65,14 +66,31 @@ class SnowflakeRemoteStorageUtil(object):
         encryption_metadata = None
 
         if 'encryption_material' in meta:
-            (encryption_metadata,
-             data_file) = SnowflakeEncryptionUtil.encrypt_file(
-                meta['encryption_material'],
-                meta['real_src_file_name'], tmp_dir=meta['tmp_dir'])
-
-            logger.debug(
-                'encrypted data file=%s, size=%s', data_file,
-                os.path.getsize(data_file))
+            if 'src_stream' not in meta:
+                (encryption_metadata,
+                 data_file) = SnowflakeEncryptionUtil.encrypt_file(
+                    meta['encryption_material'],
+                    meta['real_src_file_name'], tmp_dir=meta['tmp_dir'])
+                logger.debug(
+                    'encrypted data file=%s, size=%s', data_file,
+                    os.path.getsize(data_file))
+            else:
+                encrypted_stream = BytesIO()
+                src_stream = meta.get('real_src_stream', meta['src_stream'])
+                src_stream.seek(0)
+                encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
+                    meta['encryption_material'],
+                    src_stream,
+                    encrypted_stream
+                )
+                src_stream.seek(0)
+                logger.debug(
+                    'encrypted data stream size=%s', encrypted_stream.seek(0, os.SEEK_END))
+                encrypted_stream.seek(0)
+                if 'real_src_stream' in meta:
+                    meta['real_src_stream'].close()
+                meta['real_src_stream'] = encrypted_stream
+                data_file = meta['real_src_file_name']
         else:
             logger.debug('not encrypted data file')
             data_file = meta['real_src_file_name']
