@@ -43,7 +43,7 @@ class BindUploadAgent:
                 size += len(self.rows[row_idx])
                 row_idx += 1
             try:
-                self.cursor.execute(f"PUT file://{row_idx}.csv {self.stage_path}")
+                self.cursor.execute(f"PUT file://{row_idx}.csv {self.stage_path}", file_stream=f)
             except Exception as exc:
                 raise BindException from exc
             if not f.closed:
