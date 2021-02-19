@@ -17,6 +17,7 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage, SnowflakeProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
+from ..integ_helpers import put
 from ..randomize import random_string
 
 logger = getLogger(__name__)
@@ -25,7 +26,8 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.azure
 
 
-def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters, from_path):
     """[azure] Puts and Gets a small text using Azure."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_azure_token.txt.gz'))
@@ -39,9 +41,12 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
         with cnx.cursor() as csr:
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
-                csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name),
-                            _put_callback=SnowflakeAzureProgressPercentage,
-                            _get_callback=SnowflakeAzureProgressPercentage)
+                file_stream = None if from_path else open(fname, 'rb')
+                put(csr, fname, f"%{table_name}", from_path,
+                    sql_options=" auto_compress=true parallel=30",
+                    _put_callback=SnowflakeAzureProgressPercentage,
+                    _get_callback=SnowflakeAzureProgressPercentage,
+                    file_stream=file_stream)
                 assert csr.fetchone()[6] == 'UPLOADED'
                 csr.execute("copy into {}".format(table_name))
                 csr.execute("rm @%{}".format(table_name))
@@ -57,6 +62,8 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters):
                 assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
                 assert rec[3] == '', 'Return no error message'
             finally:
+                if file_stream:
+                    file_stream.close()
                 csr.execute("drop table {}".format(table_name))
 
     files = glob.glob(os.path.join(tmp_dir, 'data_*'))

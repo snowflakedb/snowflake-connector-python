@@ -188,7 +188,8 @@ class SnowflakeFileTransferAgent(object):
                  get_callback_output_stream=sys.stdout,
                  show_progress_bar=True,
                  raise_put_get_error=True,
-                 force_put_overwrite=True):
+                 force_put_overwrite=True,
+                 source_from_stream: Optional[IO[bytes]] = None):
         self._cursor = cursor
         self._command = command
         self._ret = ret
@@ -204,6 +205,7 @@ class SnowflakeFileTransferAgent(object):
         self._raise_put_get_error = raise_put_get_error
         self._show_progress_bar = show_progress_bar
         self._force_put_overwrite = force_put_overwrite
+        self._source_from_stream = source_from_stream
 
     def execute(self):
         self._parse_command()
@@ -421,16 +423,23 @@ class SnowflakeFileTransferAgent(object):
         try:
             if meta['require_compress']:
                 logger.debug('compressing file=%s', meta['src_file_name'])
-                meta['real_src_file_name'], upload_size = \
-                    SnowflakeFileUtil.compress_file_with_gzip(
-                        meta['src_file_name'], tmp_dir)
+                if 'src_stream' not in meta:
+                    meta['real_src_file_name'], upload_size = \
+                        SnowflakeFileUtil.compress_file_with_gzip(
+                            meta['src_file_name'], tmp_dir)
+                else:
+                    meta['real_src_stream'], upload_size = \
+                        SnowflakeFileUtil.compress_with_gzip_from_stream(
+                            meta['src_stream'])
+
             logger.debug(
                 'getting digest file=%s', meta['real_src_file_name'])
-            sha256_digest, upload_size = \
-                SnowflakeFileUtil.get_digest_and_size_for_file(
-                    meta['real_src_file_name'])
-            meta[SHA256_DIGEST] = sha256_digest
-            meta['upload_size'] = upload_size
+            if 'src_stream' not in meta:
+                meta[SHA256_DIGEST], meta['upload_size'] = \
+                    SnowflakeFileUtil.get_digest_and_size_for_file(meta['real_src_file_name'])
+            else:
+                meta[SHA256_DIGEST], meta['upload_size'] = \
+                    SnowflakeFileUtil.get_digest_and_size_for_stream(meta.get('real_src_stream', meta['src_stream']))
             logger.debug('really uploading data')
             storage_client = SnowflakeFileTransferAgent.get_storage_client(
                 meta['stage_location_type'])
@@ -455,6 +464,10 @@ class SnowflakeFileTransferAgent(object):
         finally:
             logger.debug('cleaning up tmp dir: %s', tmp_dir)
             shutil.rmtree(tmp_dir)
+            if 'src_stream' in meta:
+                meta['src_stream'].seek(0)
+            if 'real_src_stream' in meta:
+                meta['real_src_stream'].close()
         return meta
 
     def download(self, large_file_metas, small_file_metas):
@@ -835,7 +848,10 @@ class SnowflakeFileTransferAgent(object):
             )
 
         if self._command_type == CMD_TYPE_UPLOAD:
-            self._src_files = list(self._expand_filenames(self._src_locations))
+            if self._source_from_stream:
+                self._src_files = self._src_locations
+            else:
+                self._src_files = list(self._expand_filenames(self._src_locations))
             self._auto_compress = 'autoCompress' not in self._ret['data'] or self._ret['data']['autoCompress']
             self._source_compression = self._ret['data']['sourceCompression'].lower() if 'sourceCompression' in \
                                                                                          self._ret['data'] else ''
@@ -919,34 +935,46 @@ class SnowflakeFileTransferAgent(object):
                             file=file_name),
                         'errno': ER_FILE_NOT_EXISTS
                     })
-            for file_name in self._src_files:
-                if not os.path.exists(file_name):
-                    Error.errorhandler_wrapper(
-                        self._cursor.connection, self._cursor,
-                        ProgrammingError,
-                        {
-                            'msg': "File doesn't exist: {file}".format(
-                                file=file_name),
-                            'errno': ER_FILE_NOT_EXISTS
-                        })
-                elif os.path.isdir(file_name):
-                    Error.errorhandler_wrapper(
-                        self._cursor.connection, self._cursor,
-                        ProgrammingError,
-                        {
-                            'msg': ("Not a file but "
-                                     "a directory: {file}").format(
-                                file=file_name),
-                            'errno': ER_FILE_NOT_EXISTS
-                        })
-                statinfo = os.stat(file_name)
+            if not self._source_from_stream:
+                for file_name in self._src_files:
+                    if not os.path.exists(file_name):
+                        Error.errorhandler_wrapper(
+                            self._cursor.connection, self._cursor,
+                            ProgrammingError,
+                            {
+                                'msg': "File doesn't exist: {file}".format(
+                                    file=file_name),
+                                'errno': ER_FILE_NOT_EXISTS
+                            })
+                    elif os.path.isdir(file_name):
+                        Error.errorhandler_wrapper(
+                            self._cursor.connection, self._cursor,
+                            ProgrammingError,
+                            {
+                                'msg': ("Not a file but "
+                                         "a directory: {file}").format(
+                                    file=file_name),
+                                'errno': ER_FILE_NOT_EXISTS
+                            })
+                    statinfo = os.stat(file_name)
+                    self._file_metadata += [{
+                        'name': os.path.basename(file_name),
+                        'src_file_name': file_name,
+                        'src_file_size': statinfo.st_size,
+                        'stage_location_type': self._stage_location_type,
+                        'stage_info': self._stage_info,
+                    }]
+            else:
+                file_name = self._src_files[0]
                 self._file_metadata += [{
                     'name': os.path.basename(file_name),
                     'src_file_name': file_name,
-                    'src_file_size': statinfo.st_size,
+                    'src_stream': self._source_from_stream,
+                    'src_file_size': self._source_from_stream.seek(0, os.SEEK_END),
                     'stage_location_type': self._stage_location_type,
                     'stage_info': self._stage_info,
                 }]
+                self._source_from_stream.seek(0)
             if len(self._encryption_material) > 0:
                 for meta in self._file_metadata:
                     meta['encryption_material'] = self._encryption_material[0]
@@ -1005,8 +1033,13 @@ class SnowflakeFileTransferAgent(object):
                 _, encoding = mimetypes.guess_type(file_name)
 
                 if encoding is None:
-                    with open(file_name, 'rb') as f:
-                        test = f.read(4)
+                    test = None
+                    if not self._source_from_stream:
+                        with open(file_name, 'rb') as f:
+                            test = f.read(4)
+                    else:
+                        test = self._source_from_stream.read(4)
+                        self._source_from_stream.seek(0)
                     if file_name.endswith('.br'):
                         encoding = 'br'
                     elif test and test[:3] == b'ORC':

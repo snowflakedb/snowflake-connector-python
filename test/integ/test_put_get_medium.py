@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from logging import getLogger
+from typing import IO, Tuple
 
 import pytest
 import pytz
@@ -23,6 +24,7 @@ from snowflake.connector.file_transfer_agent import (
 )
 
 from ..generate_test_files import generate_k_lines_of_n_files
+from ..integ_helpers import put
 from ..randomize import random_string
 
 try:
@@ -30,35 +32,39 @@ try:
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
-
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
 
 
-def test_put_copy0(conn_cnx, db_parameters):
+@pytest.fixture()
+def file_src(request) -> Tuple[str, int, IO[bytes]]:
+    file_name = request.param
+    data_file = os.path.join(THIS_DIR, "../data", file_name)
+    file_size = os.stat(data_file).st_size
+    stream = open(data_file, 'rb')
+    yield data_file, file_size, stream
+    stream.close()
+
+
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['put_get_1.txt'], indirect=['file_src'])
+def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies a file."""
-    data_file = os.path.join(THIS_DIR, "../data", "put_get_1.txt")
+    file_path, _, file_stream = file_src
+    kwargs = {'_put_callback': SnowflakeS3ProgressPercentage,
+              '_get_callback': SnowflakeS3ProgressPercentage,
+              '_put_azure_callback': SnowflakeAzureProgressPercentage,
+              '_get_azure_callback': SnowflakeAzureProgressPercentage,
+              'file_stream': file_stream}
 
     def run(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
-        return cnx.cursor().execute(sql,
-                    _put_callback=SnowflakeS3ProgressPercentage,
-                    _get_callback=SnowflakeS3ProgressPercentage,
-                    _put_azure_callback=SnowflakeAzureProgressPercentage,
-                    _get_azure_callback=SnowflakeAzureProgressPercentage).fetchall()
+        sql = sql.format(name=db_parameters['name'])
+        return cnx.cursor().execute(sql).fetchall()
 
     def run_with_cursor(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
+        sql = sql.format(name=db_parameters['name'])
         c = cnx.cursor(DictCursor)
-        return c, c.execute(sql,
-                    _put_callback=SnowflakeS3ProgressPercentage,
-                    _get_callback=SnowflakeS3ProgressPercentage,
-                    _put_azure_callback=SnowflakeAzureProgressPercentage,
-                    _get_azure_callback=SnowflakeAzureProgressPercentage).fetchall()
+        return c, c.execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
@@ -74,10 +80,13 @@ tstz timestamp_tz,
 pct float,
 ratio number(5,2))
 """)
-        c, ret = run_with_cursor(cnx, "put 'file://{file}' @%{name}")
-        assert c.is_file_transfer, "PUT"
-        assert len(ret) == 1 and ret[0]['source'] == os.path.basename(
-            data_file), "File name"
+
+        with cnx.cursor(DictCursor) as csr:
+            ret = put(csr, file_path, f"%{db_parameters['name']}", from_path, **kwargs).fetchall()
+            assert csr.is_file_transfer, "PUT"
+            assert len(ret) == 1, "Upload one file"
+            assert ret[0]['source'] == os.path.basename(
+                file_path), "File name"
 
         c, ret = run_with_cursor(cnx, "copy into {name}")
         assert not c.is_file_transfer, "COPY"
@@ -89,26 +98,26 @@ ratio number(5,2))
         run(cnx, 'drop table if exists {name}')
 
 
-def test_put_copy_compressed(conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['gzip_sample.txt.gz'], indirect=['file_src'])
+def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies compressed files."""
-    data_file = os.path.join(THIS_DIR, "../data", "gzip_sample.txt.gz")
+    file_name, file_size, file_stream = file_src
 
     def run(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
+        sql = sql.format(name=db_parameters['name'])
         return cnx.cursor(DictCursor).execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
-                        account=db_parameters['account'],
-                        password=db_parameters['password']) as cnx:
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
-        file_size = os.stat(data_file).st_size
-        ret = run(cnx, "put 'file://{file}' @%{name}")
-        assert ret[0]['source'] == os.path.basename(data_file), "File name"
-        assert ret[0]['source_size'] == file_size, "File size"
-        assert ret[0]['status'] == 'UPLOADED'
-
+        with cnx.cursor(DictCursor) as csr:
+            ret = put(csr, file_name, f"%{db_parameters['name']}",
+                                      from_path, file_stream=file_stream).fetchall()
+            assert ret[0]['source'] == os.path.basename(file_name), "File name"
+            assert ret[0]['source_size'] == file_size, "File size"
+            assert ret[0]['status'] == 'UPLOADED'
         ret = run(cnx, "copy into {name}")
         assert len(ret) == 1 and ret[0]['status'] == "LOADED", \
             "Failed to load data"
@@ -117,26 +126,28 @@ def test_put_copy_compressed(conn_cnx, db_parameters):
         run(cnx, 'drop table if exists {name}')
 
 
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['bzip2_sample.txt.bz2'], indirect=['file_src'])
 @pytest.mark.skip(
     reason="BZ2 is not detected in this test case. Need investigation"
 )
-def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
+def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Put and Copy bz2 compressed files."""
-    data_file = os.path.join(THIS_DIR, "../data", "bzip2_sample.txt.bz2")
+    file_name, _, file_stream = file_src
 
     def run(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
+        sql = sql.format(name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
                   password=db_parameters['password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
-        for rec in run(cnx, "put 'file://{file}' @%{name}"):
+        for rec in put(cnx.cursor(), file_name, f"%{db_parameters['name']}",
+                                       from_path, file_stream=file_stream).fetchall():
             print(rec)
             assert rec[-2] == 'UPLOADED'
+
         for rec in run(cnx, "copy into {name}"):
             print(rec)
             assert rec[1] == 'LOADED'
@@ -144,23 +155,26 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters):
         run(cnx, 'drop table if exists {name}')
 
 
-def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['brotli_sample.txt.br'], indirect=['file_src'])
+def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies brotli compressed files."""
-    data_file = os.path.join(THIS_DIR, "../data", "brotli_sample.txt.br")
+    file_name, _, file_stream = file_src
 
     def run(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
+        sql = sql.format(name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
                   password=db_parameters['password']) as cnx:
+
         run(cnx, "create or replace table {name} (value string)")
-        for rec in run(cnx, "put 'file://{file}' @%{name}"):
+        for rec in put(cnx.cursor(), file_name, f"%{db_parameters['name']}",
+                                       from_path, file_stream=file_stream).fetchall():
             print(rec)
             assert rec[-2] == 'UPLOADED'
+
         for rec in run(
                 cnx, "copy into {name} file_format=(compression='BROTLI')"):
             print(rec)
@@ -169,21 +183,22 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters):
         run(cnx, 'drop table if exists {name}')
 
 
-def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['zstd_sample.txt.zst'], indirect=['file_src'])
+def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies zstd compressed files."""
-    data_file = os.path.join(THIS_DIR, "../data", "zstd_sample.txt.zst")
+    file_name, _, file_stream = file_src
 
     def run(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
+        sql = sql.format(name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
                   account=db_parameters['account'],
                   password=db_parameters['password']) as cnx:
         run(cnx, "create or replace table {name} (value string)")
-        for rec in run(cnx, "put 'file://{file}' @%{name}"):
+        for rec in put(cnx.cursor(), file_name, f"%{db_parameters['name']}",
+                                       from_path, file_stream=file_stream).fetchall():
             print(rec)
             assert rec[-2] == 'UPLOADED'
         for rec in run(
@@ -198,15 +213,14 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters):
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_copy_parquet_compressed(conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['nation.impala.parquet'], indirect=['file_src'])
+def test_put_copy_parquet_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies parquet compressed files."""
-    data_file = os.path.join(
-        THIS_DIR, "../data", "nation.impala.parquet")
+    file_name, _, file_stream = file_src
 
     def run(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
+        sql = sql.format(name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
@@ -218,11 +232,13 @@ create or replace table {name}
 (value variant)
 stage_file_format=(type='parquet')
 """)
-        for rec in run(cnx, "put 'file://{file}' @%{name}"):
+        for rec in put(cnx.cursor(), file_name, f"%{db_parameters['name']}",
+                                       from_path, file_stream=file_stream).fetchall():
             print(rec)
             assert rec[-2] == 'UPLOADED'
             assert rec[4] == 'PARQUET'
             assert rec[5] == 'PARQUET'
+
         for rec in run(cnx, "copy into {name}"):
             print(rec)
             assert rec[1] == 'LOADED'
@@ -231,14 +247,14 @@ stage_file_format=(type='parquet')
         run(cnx, "alter session unset enable_parquet_filetype")
 
 
-def test_put_copy_orc_compressed(conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['TestOrcFile.test1.orc'], indirect=['file_src'])
+def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies ORC compressed files."""
-    data_file = os.path.join(THIS_DIR, "../data", "TestOrcFile.test1.orc")
+    file_name, _, file_stream = file_src
 
     def run(cnx, sql):
-        sql = sql.format(
-            file=data_file.replace('\\', '\\\\'),
-            name=db_parameters['name'])
+        sql = sql.format(name=db_parameters['name'])
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx(user=db_parameters['user'],
@@ -247,7 +263,8 @@ def test_put_copy_orc_compressed(conn_cnx, db_parameters):
         run(cnx, """
 create or replace table {name} (value variant) stage_file_format=(type='orc')
 """)
-        for rec in run(cnx, "put 'file://{file}' @%{name}"):
+        for rec in put(cnx.cursor(), file_name, f"%{db_parameters['name']}",
+                                       from_path, file_stream=file_stream).fetchall():
             print(rec)
             assert rec[-2] == 'UPLOADED'
             assert rec[4] == 'ORC'
@@ -520,11 +537,13 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters):
     number_of_files = 5
     number_of_lines = 10
     # data set 1
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, compress=True, tmp_dir=str(tmpdir.mkdir('data1')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, compress=True,
+                                          tmp_dir=str(tmpdir.mkdir('data1')))
     files1 = os.path.join(tmp_dir, 'file*')
 
     # data set 2
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, compress=True, tmp_dir=str(tmpdir.mkdir('data2')))
+    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, compress=True,
+                                          tmp_dir=str(tmpdir.mkdir('data2')))
     files2 = os.path.join(tmp_dir, 'file*')
 
     stage_name = "test_put_collision/{}".format(db_parameters['name'])
@@ -538,8 +557,8 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters):
             success_cnt = 0
             skipped_cnt = 0
             for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name}".format(
-                        file=files1.replace('\\', '\\\\'),
-                        stage_name=stage_name)):
+                    file=files1.replace('\\', '\\\\'),
+                    stage_name=stage_name)):
                 logger.info('rec=%s', rec)
                 if rec[6] == 'UPLOADED':
                     success_cnt += 1
@@ -552,8 +571,8 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters):
             success_cnt = 0
             skipped_cnt = 0
             for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name}".format(
-                        file=files2.replace('\\', '\\\\'),
-                        stage_name=stage_name)):
+                    file=files2.replace('\\', '\\\\'),
+                    stage_name=stage_name)):
                 logger.info('rec=%s', rec)
                 if rec[6] == 'UPLOADED':
                     success_cnt += 1
@@ -566,8 +585,8 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters):
             success_cnt = 0
             skipped_cnt = 0
             for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name} OVERWRITE=true".format(
-                        file=files2.replace('\\', '\\\\'),
-                        stage_name=stage_name)):
+                    file=files2.replace('\\', '\\\\'),
+                    stage_name=stage_name)):
                 logger.info('rec=%s', rec)
                 if rec[6] == 'UPLOADED':
                     success_cnt += 1
@@ -710,49 +729,49 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
 
 @pytest.mark.aws
 @pytest.mark.azure
-def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+@pytest.mark.parametrize("file_src", ['put_get_1.txt'], indirect=['file_src'])
+def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src):
     """SNOW-15153: PUTs and GETs with hint."""
     tmp_dir = str(tmpdir.mkdir('put_get_with_hint'))
-    data_file = os.path.join(THIS_DIR, "../data", "put_get_1.txt")
+    file_name, file_size, file_stream = file_src
 
     def run(cnx, sql, _is_put_get=None):
-        return cnx.cursor().execute(
-            sql.format(
-                local_dir=tmp_dir.replace('\\', '\\\\'),
-                file=data_file.replace('\\', '\\\\'),
-                name=db_parameters['name']), _is_put_get=_is_put_get).fetchone()
+        sql = sql.format(
+            local_dir=tmp_dir.replace('\\', '\\\\'),
+            name=db_parameters['name'])
+        return cnx.cursor().execute(sql, _is_put_get=_is_put_get).fetchone()
 
     with conn_cnx(user=db_parameters['user'],
-                        account=db_parameters['account'],
-                        password=db_parameters['password']) as cnx:
+                  account=db_parameters['account'],
+                  password=db_parameters['password']) as cnx:
         # regular PUT case
-        ret = run(cnx, "PUT 'file://{file}' @~/{name}")
-        assert ret[0] == 'put_get_1.txt', 'PUT filename'
-
+        ret = put(cnx.cursor(), file_name, f"~/{db_parameters['name']}", from_path,
+                                  file_stream=file_stream).fetchone()
+        assert ret[0] == os.path.basename(file_name), 'PUT filename'
         # clean up a file
         ret = run(cnx, "RM @~/{name}")
-        assert ret[0].endswith('put_get_1.txt.gz'), 'RM filename'
+        assert ret[0].endswith(os.path.basename(file_name) + '.gz'), 'RM filename'
 
         # PUT detection failure
         with pytest.raises(ProgrammingError):
-            run(cnx, """
--- test comments
-PUT 'file://{file}' @~/{name}""")
+            put(cnx.cursor(), file_name, f"~/{db_parameters['name']}", from_path,
+                                commented=True,
+                                file_stream=file_stream)
 
         # PUT with hint
-        ret = run(cnx, """
---- test comments
-PUT 'file://{file}' @~/{name}""", _is_put_get=True)
-        assert ret[0] == 'put_get_1.txt', 'PUT filename'
+        ret = put(cnx.cursor(), file_name, f"~/{db_parameters['name']}", from_path,
+                                  file_stream=file_stream, _is_put_get=True).fetchone()
+        assert ret[0] == os.path.basename(file_name), 'PUT filename'
 
         # GET detection failure
-        with pytest.raises(ProgrammingError):
-            run(cnx, """
+        commented_get_sql = """
 --- test comments
-GET @~/{name} file://{local_dir}""")
+GET @~/{name} file://{local_dir}"""
+
+        with pytest.raises(ProgrammingError):
+            run(cnx, commented_get_sql)
 
         # GET with hint
-        ret = run(cnx, """
---- test comments
-GET @~/{name} 'file://{local_dir}'""", _is_put_get=True)
-        assert ret[0] == 'put_get_1.txt.gz', "GET filename"
+        ret = run(cnx, commented_get_sql, _is_put_get=True)
+        assert ret[0] == os.path.basename(file_name) + '.gz', "GET filename"
