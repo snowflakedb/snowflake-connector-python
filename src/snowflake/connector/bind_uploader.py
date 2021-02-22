@@ -12,7 +12,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
 
 stream_buffer_size = 1024 * 1024 * 10  # 10 MB default
-STAGE_NAME = "SYSTEM$BIND"
+STAGE_NAME = "SYSTEMBIND"
 CREATE_STAGE_STMT = f"create temporary stage {STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
 
 
@@ -24,13 +24,12 @@ class BindUploadAgent:
     def __init__(self, cursor: 'SnowflakeCursor', rows: List[bytes]):
         self.cursor = cursor
         self.rows = rows
-        self.stage_path = f"@{STAGE_NAME}/{uuid.uuid4()}"
+        self.stage_path = f"@{STAGE_NAME}/{uuid.uuid4().hex}"
 
     def upload(self):
         try:
             self.cursor.execute(CREATE_STAGE_STMT)
         except Exception as exc:
-            # TODO find out specific exception for permission denied
             self.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] = float('inf')
             raise BindException from exc
 
