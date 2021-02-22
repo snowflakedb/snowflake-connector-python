@@ -95,9 +95,9 @@ class SnowflakeGCSUtil:
         access_token: Optional[str] = None
 
         if not upload_url:
-            upload_url = SnowflakeGCSUtil.generate_file_url(meta.stage_info['location'],
+            upload_url = SnowflakeGCSUtil.generate_file_url(meta.client_meta.stage_info['location'],
                                                             meta.dst_file_name.lstrip('/'))
-            access_token = meta.client
+            access_token = meta.client_meta.cloud_client
 
         content_encoding = ""
         if meta.dst_compression_type is not None:
@@ -224,9 +224,9 @@ class SnowflakeGCSUtil:
         access_token: Optional[str] = None
 
         if not download_url:
-            download_url = SnowflakeGCSUtil.generate_file_url(meta.stage_info['location'],
+            download_url = SnowflakeGCSUtil.generate_file_url(meta.client_meta.stage_info['location'],
                                                               meta.src_file_name.lstrip('/'))
-            access_token = meta.client
+            access_token = meta.client_meta.cloud_client
             gcs_headers = {'Authorization': f'Bearer {access_token}'}
 
         try:
@@ -330,8 +330,8 @@ class SnowflakeGCSUtil:
             if meta.presigned_url:
                 meta.result_status = ResultStatus.NOT_FOUND_FILE
             else:
-                url = SnowflakeGCSUtil.generate_file_url(meta.stage_info['location'], filename.lstrip('/'))
-                access_token: str = meta.client
+                url = SnowflakeGCSUtil.generate_file_url(meta.client_meta.stage_info['location'], filename.lstrip('/'))
+                access_token: str = meta.client_meta.cloud_client
                 gcs_headers = {'Authorization': f'Bearer {access_token}'}
                 try:
                     response = requests.head(url, headers=gcs_headers)

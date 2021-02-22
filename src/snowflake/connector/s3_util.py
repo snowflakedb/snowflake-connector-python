@@ -8,7 +8,7 @@ import logging
 import os
 from collections import namedtuple
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
 import boto3
 import botocore.exceptions
@@ -73,12 +73,14 @@ class SnowflakeS3Util:
                 'use_accelerate_endpoint': use_accelerate_endpoint,
                 'addressing_style': ADDRESSING_STYLE
             })
-        client = boto3.resource(
-            's3',
+        session = boto3.Session(
             region_name=stage_info['region'],
             aws_access_key_id=stage_credentials['AWS_KEY_ID'],
             aws_secret_access_key=stage_credentials['AWS_SECRET_KEY'],
             aws_session_token=security_token,
+        )
+        client = session.resource(
+            's3',
             endpoint_url=end_point,
             config=config,
         )
@@ -103,8 +105,8 @@ class SnowflakeS3Util:
 
     @staticmethod
     def _get_s3_object(meta: 'SnowflakeFileMeta', filename):
-        client = meta.client
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(meta.stage_info['location'])
+        client = meta.client_meta.cloud_client
+        s3location = SnowflakeS3Util.extract_bucket_name_and_path(meta.client_meta.stage_info['location'])
         s3path = s3location.s3path + filename.lstrip('/')
 
         if logger.getEffectiveLevel() == logging.DEBUG:
@@ -205,10 +207,10 @@ class SnowflakeS3Util:
                     AMZ_MATDESC: encryption_metadata.matdesc,
                 })
             s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-                meta.stage_info['location'])
+                meta.client_meta.stage_info['location'])
             s3path = s3location.s3path + meta.dst_file_name.lstrip('/')
 
-            akey = meta.client.Object(s3location.bucket_name, s3path)
+            akey = meta.client_meta.cloud_client.Object(s3location.bucket_name, s3path)
             extra_args = {'Metadata': s3_metadata}
             config = TransferConfig(
                 multipart_threshold=multipart_threshold,
@@ -312,3 +314,27 @@ class SnowflakeS3Util:
                 meta.result_status = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
             else:
                 meta.result_status = ResultStatus.NEED_RETRY
+
+    @staticmethod
+    def transfer_accelerate_config(
+            client: 'Session.resource',
+            stage_info: Dict[str, Any]) -> bool:
+
+        s3location = SnowflakeS3Util.extract_bucket_name_and_path(
+            stage_info['location']
+        )
+        try:
+            ret = client.meta.client.get_bucket_accelerate_configuration(
+                Bucket=s3location.bucket_name)
+            use_accelerate_endpoint = ret and 'Status' in ret and \
+                ret['Status'] == 'Enabled'
+            logger.debug(f'use_accelerate_endpoint: {use_accelerate_endpoint}')
+            return use_accelerate_endpoint
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error'].get('Code', 'Unknown') == \
+                    'AccessDenied':
+                logger.debug(e)
+            else:
+                # unknown error
+                logger.debug(e, exc_info=True)
+        return False
