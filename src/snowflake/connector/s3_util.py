@@ -71,12 +71,14 @@ class SnowflakeS3Util:
                 'use_accelerate_endpoint': use_accelerate_endpoint,
                 'addressing_style': ADDRESSING_STYLE
             })
-        client = boto3.resource(
-            's3',
+        session = boto3.Session(
             region_name=stage_info['region'],
             aws_access_key_id=stage_credentials['AWS_KEY_ID'],
             aws_secret_access_key=stage_credentials['AWS_SECRET_KEY'],
             aws_session_token=security_token,
+        )
+        client = session.resource(
+            's3',
             endpoint_url=end_point,
             config=config,
         )
