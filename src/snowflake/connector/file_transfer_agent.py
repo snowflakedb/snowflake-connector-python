@@ -14,10 +14,10 @@ import tempfile
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
+from queue import Queue
 from time import sleep, time
 from typing import IO, TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
-import botocore.exceptions
 from boto3.session import Session
 
 from .compat import GET_CWD, IS_WINDOWS, dataclass, field
@@ -84,6 +84,14 @@ def result_fixed_column_desc(name):
 
 
 @dataclass
+class SFResourceMeta:
+    storage_util: Optional[Type[Union['SnowflakeRemoteStorageUtil', 'SnowflakeLocalUtil']]] = None
+    stage_info: Optional[Dict[str, Any]] = field(default_factory=dict)  # TODO could be strongly defined if need be
+    use_accelerate_endpoint: bool = False
+    cloud_client: Union['Session.resource', 'BlobServiceClient', str, None] = None
+
+
+@dataclass
 class SnowflakeFileMeta:
     """Class to keep track of information necessary for file operations."""
     name: str
@@ -91,7 +99,8 @@ class SnowflakeFileMeta:
     stage_location_type: str
     result_status: Optional['ResultStatus'] = None
 
-    client: Optional[Union['Session.resource', 'BlobServiceClient', Optional[str]]] = None
+    # client_meta holds cloud client object and the metadata needed to create such client
+    client_meta: 'SFResourceMeta' = SFResourceMeta(cloud_client=None)
     self: Optional['SnowflakeFileTransferAgent'] = None
     put_callback: Optional[Type['SnowflakeProgressPercentage']] = None
     put_azure_callback: Optional[Type['SnowflakeProgressPercentage']] = None
@@ -116,7 +125,6 @@ class SnowflakeFileMeta:
     gcs_file_header_content_length: Optional[int] = None
     gcs_file_header_encryption_metadata: Optional[Dict[str, Any]] = None
 
-    stage_info: Dict[str, Any] = field(default_factory=dict)  # TODO could be strongly defined if need be
     encryption_material: Optional['SnowflakeFileEncryptionMaterial'] = None
     # Specific to Uploads only
     src_file_size: int = 0
@@ -345,17 +353,15 @@ class SnowflakeFileTransferAgent(object):
         for result in self._results:
             result.result_status = result.result_status.value
 
-    def upload(self, large_file_metas: List['SnowflakeFileMeta'], small_file_metas: List[SnowflakeFileMeta]):
-        storage_client = SnowflakeFileTransferAgent.get_storage_client(
+    def upload(self, large_file_metas: List['SnowflakeFileMeta'], small_file_metas: List['SnowflakeFileMeta']):
+        storage_util = SnowflakeFileTransferAgent.get_storage_client(
             self._stage_location_type)
-        client = storage_client.create_client(
-            self._stage_info,
-            use_accelerate_endpoint=self._use_accelerate_endpoint
-        )
+        client_meta = SFResourceMeta(storage_util, self._stage_info, self._use_accelerate_endpoint)
+
         for meta in small_file_metas:
-            meta.client = client
+            meta.client_meta = client_meta
         for meta in large_file_metas:
-            meta.client = client
+            meta.client_meta = client_meta
 
         if len(small_file_metas) > 0:
             self._upload_files_in_parallel(small_file_metas)
@@ -367,26 +373,9 @@ class SnowflakeFileTransferAgent(object):
             client = SnowflakeRemoteStorageUtil.create_client(
                 self._stage_info,
                 use_accelerate_endpoint=False)
-            s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-                self._stage_info['location']
-            )
-            try:
-                ret = client.meta.client.get_bucket_accelerate_configuration(
-                    Bucket=s3location.bucket_name)
-                self._use_accelerate_endpoint = \
-                    ret and 'Status' in ret and \
-                    ret['Status'] == 'Enabled'
-            except botocore.exceptions.ClientError as e:
-                if e.response['Error'].get('Code', 'Unknown') == \
-                        'AccessDenied':
-                    logger.debug(e)
-                else:
-                    # unknown error
-                    logger.debug(e, exc_info=True)
-
-            logger.debug(
-                'use_accelerate_endpoint: %s',
-                self._use_accelerate_endpoint)
+            self._use_accelerate_endpoint = SnowflakeS3Util.transfer_accelerate_config(
+                client,
+                self._stage_info)
 
     def _upload_files_in_parallel(self, file_metas: List['SnowflakeFileMeta']) -> None:
         """Uploads files in parallel.
@@ -394,53 +383,69 @@ class SnowflakeFileTransferAgent(object):
         Args:
             file_metas: List of metadata for files to be uploaded.
         """
-        idx = 0
-        len_file_metas = len(file_metas)
-        while idx < len_file_metas:
-            end_of_idx = idx + self._parallel if \
-                idx + self._parallel <= len_file_metas else \
-                len_file_metas
+        qtask = Queue()
+        for meta in file_metas:
+            qtask.put(meta)
+        retry_round = 0
+        presigned_url_handled = False
+        while not qtask.empty():
+            len_file_metas = qtask.qsize()
+            thread_number = min(len_file_metas, self._parallel)
+            logger.debug(f'start {retry_round} round for {qtask.qsize()} items with {thread_number} threads')
+            pool = ThreadPoolExecutor(thread_number)
+            triggers = Queue()
+            for _ in range(thread_number):
+                pool.submit(SnowflakeFileTransferAgent._upload_files_in_queue_thread, qtask, self._results, triggers)
+            pool.shutdown()
 
-            logger.debug(f'uploading files idx: {idx + 1}/{end_of_idx}')
-
-            target_meta = file_metas[idx:end_of_idx]
-            while True:
-                pool = ThreadPoolExecutor(len(target_meta))
-                results: List['SnowflakeFileMeta'] = list(pool.map(
-                    SnowflakeFileTransferAgent.upload_one_file,
-                    target_meta))
-                pool.shutdown()
-
-                # need renew AWS token?
-                retry_meta: List['SnowflakeFileMeta'] = []
-                for result_meta in results:
-                    if result_meta.result_status in [
-                        ResultStatus.RENEW_TOKEN,
-                        ResultStatus.RENEW_PRESIGNED_URL
-                    ]:
-                        retry_meta.append(result_meta)
-                    else:
-                        self._results.append(result_meta)
-
-                if len(retry_meta) == 0:
-                    # no new AWS token is required
-                    break
-                if any([result_meta.result_status == ResultStatus.RENEW_TOKEN
-                        for result_meta in results]):
-                    client = self.renew_expired_client()
-                    for result_meta in retry_meta:
-                        result_meta.client = client
-                    if end_of_idx < len_file_metas:
-                        for idx0 in range(idx + self._parallel, len_file_metas):
-                            file_metas[idx0].client = client
-                if any([result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL
-                        for result_meta in results]):
+            # update presigned url before starting next round
+            while not triggers.empty():
+                result_meta = triggers.get()
+                if not presigned_url_handled and result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL:
                     self._update_file_metas_with_presigned_url()
-                target_meta = retry_meta
+                    presigned_url_handled = True
 
-            if end_of_idx == len_file_metas:
+            retry_round += 1
+
+    @staticmethod
+    def _upload_files_in_queue_thread(qtask: "Queue[SnowflakeFileMeta]",
+                                      results: "List[SnowflakeFileMeta]",
+                                      triggers: "Queue[SnowflakeFileMeta]"):
+        """Worker function for a single thread to do parallel uploading.
+
+        qtask: the queue contains tasks to be processed.
+        qnext: the queue for tasks to retry in next round.
+        results: the results of finished tasks.
+        triggers: when there is results trigger extra actions after this round of threads are done,
+             e.g. RENEW_PRESIGNED_URL,
+        """
+        logger.debug(f'Enter upload worker thread. tid={threading.current_thread().ident}')
+        thread_client = None
+        while not qtask.empty():
+            # triggers is not empty means a result trigger all threads to quit
+            if not triggers.empty():
                 break
-            idx += self._parallel
+
+            meta = qtask.get()
+            # initialize resource if it is not initialized yet
+            cln_meta = meta.client_meta
+            if thread_client is None:
+                thread_client = cln_meta.storage_util.create_client(cln_meta.stage_info,
+                                                                    cln_meta.use_accelerate_endpoint)
+            cln_meta.cloud_client = thread_client
+            result_meta = SnowflakeFileTransferAgent.upload_one_file(meta)
+            if result_meta.result_status == ResultStatus.RENEW_TOKEN:
+                # need to retry this upload. the meta will be added back once renew is done
+                thread_client = cln_meta.storage_client.create_client(
+                    cln_meta.stage_info,
+                    use_accelerate_endpoint=cln_meta.use_accelerate_endpoint)
+                qtask.put(meta)
+            elif result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL:
+                # now stop this round - by adding one item to triggers
+                triggers.put(result_meta)
+                qtask.put(meta)
+            else:
+                results.append(result_meta)
 
     def _upload_files_in_sequential(self, file_metas: List['SnowflakeFileMeta']):
         """Uploads files in sequential. Retry if the access token expires.
@@ -456,7 +461,7 @@ class SnowflakeFileTransferAgent(object):
             if result.result_status == ResultStatus.RENEW_TOKEN:
                 client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
-                    file_metas[idx0].client = client
+                    file_metas[idx0].client_meta.cloud_client = client
                 continue
             elif result.result_status == ResultStatus.RENEW_PRESIGNED_URL:
                 self._update_file_metas_with_presigned_url()
@@ -539,9 +544,9 @@ class SnowflakeFileTransferAgent(object):
             use_accelerate_endpoint=self._use_accelerate_endpoint
         )
         for meta in small_file_metas:
-            meta.client = client
+            meta.client_meta.cloud_client = client
         for meta in large_file_metas:
-            meta.client = client
+            meta.client_meta.cloud_client = client
 
         if len(small_file_metas) > 0:
             self._download_files_in_parallel(small_file_metas)
@@ -588,13 +593,13 @@ class SnowflakeFileTransferAgent(object):
                         for result_meta in results]):
                     client = self.renew_expired_client()
                     for result_meta in retry_meta:
-                        result_meta.client = client
+                        result_meta.client_meta.cloud_client = client
                 if any([result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL
                         for result_meta in results]):
                     self._update_file_metas_with_presigned_url()
                 if end_of_idx < len_file_metas:
                     for idx0 in range(idx + self._parallel, len_file_metas):
-                        file_metas[idx0].client = client
+                        file_metas[idx0].client_meta.cloud_client = client
                 target_meta = retry_meta
 
             if end_of_idx == len_file_metas:
@@ -615,7 +620,7 @@ class SnowflakeFileTransferAgent(object):
             if result['result_status'] == ResultStatus.RENEW_TOKEN:
                 client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
-                    file_metas[idx0].client = client
+                    file_metas[idx0].client_meta.cloud_client = client
                 continue
             elif result.result_status == ResultStatus.RENEW_PRESIGNED_URL:
                 self._update_file_metas_with_presigned_url()
@@ -627,7 +632,7 @@ class SnowflakeFileTransferAgent(object):
                 sleep(INJECT_WAIT_IN_PUT)
 
     @staticmethod
-    def download_one_file(meta: 'SnowflakeFileMeta'):
+    def download_one_file(meta: 'SnowflakeFileMeta') -> 'SnowflakeFileMeta':
         """Download a one file.
 
         Args:
@@ -991,7 +996,7 @@ class SnowflakeFileTransferAgent(object):
                             src_file_name=file_name,
                             src_file_size=statinfo.st_size,
                             stage_location_type=self._stage_location_type,
-                            stage_info=self._stage_info,
+                            client_meta=SFResourceMeta(stage_info=self._stage_info),
                             encryption_material=self._encryption_material[0] if len(self._encryption_material) > 0 else None
                         )
                     )
@@ -1004,7 +1009,7 @@ class SnowflakeFileTransferAgent(object):
                         src_stream=self._source_from_stream,
                         src_file_size=self._source_from_stream.seek(0, os.SEEK_END),
                         stage_location_type=self._stage_location_type,
-                        stage_info=self._stage_info,
+                        client_meta=SFResourceMeta(stage_info=self._stage_info),
                         encryption_material=self._encryption_material[0] if len(self._encryption_material) > 0 else None
                     )
                 )
@@ -1022,7 +1027,7 @@ class SnowflakeFileTransferAgent(object):
                             src_file_name=file_name,
                             dst_file_name=dst_file_name,
                             stage_location_type=self._stage_location_type,
-                            stage_info=self._stage_info,
+                            client_meta=SFResourceMeta(stage_info=self._stage_info),
                             local_location=self._local_location,
                             encryption_material=self._src_file_to_encryption_material[file_name]
                             if file_name in self._src_file_to_encryption_material else None,

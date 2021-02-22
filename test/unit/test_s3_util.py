@@ -23,7 +23,7 @@ from snowflake.connector.remote_storage_util import DEFAULT_MAX_RETRY, Snowflake
 from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED, SnowflakeS3Util
 
 try:
-    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
+    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta, SFResourceMeta
 except ImportError:  # NOQA
     # Compatibility for olddriver tests
     SnowflakeFileMeta = dict
@@ -79,6 +79,14 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     client = Mock()
     client.Object.return_value = s3object
     initial_parallel = 100
+    client_meta_dict = {
+        'stage_info': {
+            'location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
+            'locationType': 'S3',
+        },
+        'cloud_client': client,
+    }
+    client_meta = SFResourceMeta(**client_meta_dict)
     upload_meta = {
         'name': 'data1.txt.gz',
         'stage_location_type': 'S3',
@@ -86,12 +94,8 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
         'parallel': initial_parallel,
         'put_callback': None,
         'put_callback_output_stream': None,
-        'client': client,
+        'client_meta': client_meta,
         SHA256_DIGEST: '123456789abcdef',
-        'stage_info': {
-            'location': 'sfc-customer-stage/rwyi-testacco/users/9220/',
-            'locationType': 'S3',
-        },
         'dst_file_name': 'data1.txt.gz',
         'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
         'overwrite': True,
@@ -133,6 +137,13 @@ def test_upload_one_file_to_s3_econnreset():
         client = Mock()
         client.Object.return_value = s3object
         initial_parallel = 100
+        client_meta = {
+            'stage_info': {
+                'location': 'sfc-teststage/rwyitestacco/users/1234/',
+                'locationType': 'S3',
+            },
+            'cloud_client': client,
+        }
         upload_meta = {
             'name': 'data1.txt.gz',
             'stage_location_type': 'S3',
@@ -141,11 +152,7 @@ def test_upload_one_file_to_s3_econnreset():
             'put_callback': None,
             'put_callback_output_stream': None,
             SHA256_DIGEST: '123456789abcdef',
-            'stage_info': {
-                'location': 'sfc-teststage/rwyitestacco/users/1234/',
-                'locationType': 'S3',
-            },
-            'client': client,
+            'client_meta': SFResourceMeta(**client_meta),
             'dst_file_name': 'data1.txt.gz',
             'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
             'overwrite': True,
@@ -173,15 +180,18 @@ def test_get_s3_file_object_http_400_error():
     client.Object.return_value = s3object
     client.load.return_value = None
     type(client).s3path = PropertyMock(return_value='s3://testbucket/')
-    meta = {
-        'name': 'data1.txt.gz',
-        'stage_location_type': 'S3',
-        'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
-        'client': client,
+    client_meta = {
+        'cloud_client': client,
         'stage_info': {
             'location': 'sfc-teststage/rwyitestacco/users/1234/',
             'locationType': 'S3',
         }
+    }
+    meta = {
+        'name': 'data1.txt.gz',
+        'stage_location_type': 'S3',
+        'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
+        'client_meta': SFResourceMeta(**client_meta),
     }
     meta = SnowflakeFileMeta(**meta)
     filename = "/path1/file2.txt"
@@ -200,6 +210,13 @@ def test_upload_file_with_s3_upload_failed_error():
     client.Object.return_value = MagicMock(
         metadata=defaultdict(str), upload_file=upload_file)
     initial_parallel = 100
+    client_meta = {
+        'stage_info': {
+            'location': 'sfc-teststage/rwyitestacco/users/1234/',
+            'locationType': 'S3',
+        },
+        'cloud_client': client,
+    }
     upload_meta = {
         'name': 'data1.txt.gz',
         'stage_location_type': 'S3',
@@ -208,11 +225,7 @@ def test_upload_file_with_s3_upload_failed_error():
         'put_callback': None,
         'put_callback_output_stream': None,
         SHA256_DIGEST: '123456789abcdef',
-        'stage_info': {
-            'location': 'sfc-teststage/rwyitestacco/users/1234/',
-            'locationType': 'S3',
-        },
-        'client': client,
+        'client_meta': SFResourceMeta(**client_meta),
         'dst_file_name': 'data1.txt.gz',
         'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
         'overwrite': True,
@@ -264,12 +277,15 @@ def test_upload_expiry_error(caplog):
     mock_resource.Object.return_value = mock_object
     mock_object.upload_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
+    client_meta = {
+        'cloud_client': mock_resource,
+        'stage_info': {'location': 'loc'},
+    }
     meta = {'name': 'f',
             'src_file_name': 'f',
             'stage_location_type': 'S3',
-            'client': mock_resource,
+            'client_meta': SFResourceMeta(**client_meta),
             'sha256_digest': 'asd',
-            'stage_info': {'location': 'loc'},
             'dst_file_name': 'f',
             'put_callback': None}
     meta = SnowflakeFileMeta(**meta)
@@ -288,12 +304,15 @@ def test_upload_unknown_error(caplog):
     mock_object.key = 'key'
     mock_object.upload_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'unknown', 'Message': 'Just testing'}}, 'Testing')
+    client_meta = {
+        'cloud_client': mock_resource,
+        'stage_info': {'location': 'loc'},
+    }
     meta = {'name': 'f',
             'src_file_name': 'f',
             'stage_location_type': 'S3',
-            'client': mock_resource,
+            'client_meta': SFResourceMeta(**client_meta),
             'sha256_digest': 'asd',
-            'stage_info': {'location': 'loc'},
             'dst_file_name': 'f',
             'put_callback': None}
     meta = SnowflakeFileMeta(**meta)
@@ -309,12 +328,15 @@ def test_upload_failed_error(caplog):
     mock_resource, mock_object = MagicMock(), MagicMock()
     mock_resource.Object.return_value = mock_object
     mock_object.upload_file.side_effect = S3UploadFailedError('ExpiredToken')
+    client_meta = {
+        'cloud_client': mock_resource,
+        'stage_info': {'location': 'loc'},
+    }
     meta = {'name': 'f',
             'src_file_name': 'f',
             'stage_location_type': 'S3',
-            'client': mock_resource,
+            'client_meta': SFResourceMeta(**client_meta),
             'sha256_digest': 'asd',
-            'stage_info': {'location': 'loc'},
             'dst_file_name': 'f',
             'put_callback': None}
     meta = SnowflakeFileMeta(**meta)
@@ -332,18 +354,20 @@ def test_download_expiry_error(caplog):
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
-    meta = {'name': 'f',
-            'src_file_name': 'f',
-            'stage_location_type': 'S3',
-            'client': mock_resource,
-            'sha256_digest': 'asd',
-            'stage_info': {'location': 'loc'},
-            'src_file_name': 'f',
-            'src_file_size': 99,
-            'get_callback_output_stream': None,
-            'show_progress_bar': False,
-            'get_callback': None}
-    meta = SnowflakeFileMeta(**meta)
+    client_meta = {
+        'cloud_client': mock_resource,
+        'stage_info': {'location': 'loc'},
+    }
+    meta_dict = {'name': 'f',
+                 'src_file_name': 'f',
+                 'stage_location_type': 'S3',
+                 'sha256_digest': 'asd',
+                 'client_meta': SFResourceMeta(**client_meta),
+                 'src_file_size': 99,
+                 'get_callback_output_stream': None,
+                 'show_progress_bar': False,
+                 'get_callback': None}
+    meta = SnowflakeFileMeta(**meta_dict)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
         SnowflakeS3Util._native_download_file(meta, 'f', 4)
     assert meta.result_status == ResultStatus.RENEW_TOKEN
@@ -355,13 +379,15 @@ def test_download_unknown_error(caplog):
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'unknown', 'Message': 'Just testing'}}, 'Testing')
+    client_meta = {
+        'cloud_client': mock_resource,
+        'stage_info': {'location': 'loc'},
+    }
     meta = {'name': 'f',
             'src_file_name': 'f',
             'stage_location_type': 'S3',
-            'client': mock_resource,
+            'client_meta': SFResourceMeta(**client_meta),
             'sha256_digest': 'asd',
-            'stage_info': {'location': 'loc'},
-            'src_file_name': 'f',
             'src_file_size': 99,
             'get_callback_output_stream': None,
             'show_progress_bar': False,
@@ -382,13 +408,15 @@ def test_download_retry_exceeded_error(caplog):
     caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = RetriesExceededError(Boto3Error())
+    client_meta = {
+        'cloud_client': mock_resource,
+        'stage_info': {'location': 'loc'},
+    }
     meta = {'name': 'f',
             'src_file_name': 'f',
             'stage_location_type': 'S3',
-            'client': mock_resource,
+            'client_meta': SFResourceMeta(**client_meta),
             'sha256_digest': 'asd',
-            'stage_info': {'location': 'loc'},
-            'src_file_name': 'f',
             'src_file_size': 99,
             'get_callback_output_stream': None,
             'show_progress_bar': False,
@@ -409,11 +437,14 @@ def test_download_syscall_error(caplog, error_no, result_status):
     caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = OpenSSL.SSL.SysCallError(error_no)
+    client_meta = {
+        'cloud_client': mock_resource,
+        'stage_info': {'location': 'loc'},
+    }
     meta = {'name': 'f',
             'stage_location_type': 'S3',
-            'client': mock_resource,
+            'client_meta': SFResourceMeta(**client_meta),
             'sha256_digest': 'asd',
-            'stage_info': {'location': 'loc'},
             'src_file_name': 'f',
             'src_file_size': 99,
             'get_callback_output_stream': None,
