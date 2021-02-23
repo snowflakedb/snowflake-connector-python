@@ -8,9 +8,7 @@ import logging
 import os
 import traceback
 from logging import getLogger
-from typing import TYPE_CHECKING, Dict, Optional
-
-from snowflake.connector.constants import UTF8
+from typing import TYPE_CHECKING, Dict, Optional, Type, Union
 
 from .compat import BASE_EXCEPTION_CLASS
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
@@ -30,9 +28,14 @@ connector_base_path = os.path.join("snowflake", "connector")
 class Error(BASE_EXCEPTION_CLASS):
     """Base Snowflake exception class."""
 
-    def __init__(self, msg: Optional[str] = None, errno: Optional[int] = None, sqlstate: Optional[str] = None,
-                 sfqid: Optional[str] = None, done_format_msg: Optional[bool] = None,
-                 connection: Optional['SnowflakeConnection'] = None, cursor: Optional['SnowflakeCursor'] = None):
+    def __init__(self,
+                 msg: Optional[str] = None,
+                 errno: Optional[int] = None,
+                 sqlstate: Optional[str] = None,
+                 sfqid: Optional[str] = None,
+                 done_format_msg: Optional[bool] = None,
+                 connection: Optional['SnowflakeConnection'] = None,
+                 cursor: Optional['SnowflakeCursor'] = None):
         self.msg = msg
         self.raw_msg = msg
         self.errno = errno or -1
@@ -44,26 +47,16 @@ class Error(BASE_EXCEPTION_CLASS):
 
         if self.errno != -1 and not done_format_msg:
             if self.sqlstate != "n/a":
-                if logger.getEffectiveLevel() in (logging.INFO,
-                                                  logging.DEBUG):
-                    self.msg = '{errno:06d} ({sqlstate}): {sfqid}: {msg}'.format(
-                        errno=self.errno, msg=self.msg,
-                        sqlstate=self.sqlstate,
-                        sfqid=self.sfqid)
+                if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
+                    self.msg = f'{self.errno:06d} ({self.sqlstate}): {self.sfqid}: {self.msg}'
                 else:
-                    self.msg = '{errno:06d} ({sqlstate}): {msg}'.format(
-                        errno=self.errno,
-                        sqlstate=self.sqlstate,
-                        msg=self.msg)
+                    self.msg = f'{self.errno:06d} ({self.sqlstate}): {self.msg}'
             else:
                 if logger.getEffectiveLevel() in (logging.INFO,
                                                   logging.DEBUG):
-                    self.msg = '{errno:06d}: {sfqid}: {msg}'.format(
-                        errno=self.errno, msg=self.msg,
-                        sfqid=self.sfqid)
+                    self.msg = f'{self.errno:06d}: {self.errno}: {self.msg}'
                 else:
-                    self.msg = '{errno:06d}: {msg}'.format(errno=self.errno,
-                                                            msg=self.msg)
+                    self.msg = f'{self.errno:06d}: {self.msg}'
 
         # We want to skip the last frame/line in the traceback since it is the current frame
         self.telemetry_traceback = self.generate_telemetry_stacktrace()
@@ -72,13 +65,11 @@ class Error(BASE_EXCEPTION_CLASS):
     def __repr__(self):
         return self.__str__()
 
-    def __unicode__(self):
+    def __str__(self):
         return self.msg
 
-    def __bytes__(self):
-        return self.__unicode__().encode(UTF8)
-
-    def generate_telemetry_stacktrace(self) -> str:
+    @staticmethod
+    def generate_telemetry_stacktrace() -> str:
         # Get the current stack minus this function and the Error init function
         stack_frames = traceback.extract_stack()[:-2]
         filtered_frames = list()
@@ -88,7 +79,7 @@ class Error(BASE_EXCEPTION_CLASS):
                 # Get the index to truncate the file path to hide any user path
                 safe_path_index = frame.filename.find(connector_base_path)
                 # Create a new frame with the truncated file name and without the line argument since that can
-                # output senitive data
+                # output sensitive data
                 filtered_frames.append(
                     traceback.FrameSummary(frame.filename[safe_path_index:], frame.lineno, frame.name, line='')
                 )
@@ -97,9 +88,9 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def telemetry_msg(self) -> Optional[str]:
         if self.sqlstate != "n/a":
-            return '{errno:06d} ({sqlstate})'.format(errno=self.errno, sqlstate=self.sqlstate)
+            return f'{self.errno:06d} ({self.sqlstate})'
         elif self.errno != -1:
-            return '{errno:06d}'.format(errno=self.errno)
+            return f'{self.errno:06d}'
         else:
             return None
 
@@ -135,9 +126,8 @@ class Error(BASE_EXCEPTION_CLASS):
             try:
                 connection._log_telemetry(TelemetryData(telemetry_data, ts))
             except AttributeError:
-                logger.debug(
-                    "Cursor failed to log to telemetry.",
-                    exc_info=True)
+                logger.debug("Cursor failed to log to telemetry.",
+                             exc_info=True)
         elif connection is None:
             # Send with out-of-band telemetry
             telemetry_oob = TelemetryService.get_instance()
@@ -156,14 +146,14 @@ class Error(BASE_EXCEPTION_CLASS):
                 self.send_exception_telemetry(connection, telemetry_data)
             else:
                 self.send_exception_telemetry(None, telemetry_data)
-        except Exception:
+        except Exception:  # NOQA
             # Do nothing but log if sending telemetry fails
             logger.debug("Sending exception telemetry failed")
 
     @staticmethod
     def default_errorhandler(connection: 'SnowflakeConnection',
                              cursor: 'SnowflakeCursor',
-                             error_class: Exception,
+                             error_class: Type['Error'],
                              error_value: Dict[str, str]) -> None:
         """Default error handler that raises an error.
 
@@ -183,13 +173,46 @@ class Error(BASE_EXCEPTION_CLASS):
             sfqid=error_value.get('sfqid'),
             done_format_msg=error_value.get('done_format_msg'),
             connection=connection,
-            cursor=cursor)
+            cursor=cursor
+        )
+
+    @staticmethod
+    def errorhandler_wrapper_from_cause(connection: 'SnowflakeConnection',
+                                        cursor: Optional['SnowflakeCursor'],
+                                        cause: Union['Error', Exception]) -> None:
+        """Wrapper for errorhandler_wrapper, it is called with a cause instead of a dictionary.
+
+        The dictionary is first extracted form the cause and then it's given to errorhandler_wrapper
+
+        Args:
+            connection: Connections in which the error happened.
+            cursor: Cursor in which the error happened.
+            cause: Error instance that we want to handle.
+
+        Returns:
+            None if no exceptions are raised by the connection's and cursor's error handlers.
+
+        Raises:
+            A Snowflake error if connection and cursor are None.
+        """
+        return Error.errorhandler_wrapper(
+            connection,
+            cursor,
+            type(cause),
+            {
+                'msg': cause.msg,
+                'errno': cause.errno,
+                'sqlstate': cause.sqlstate,
+                'done_format_msg': True
+            }
+
+        )
 
     @staticmethod
     def errorhandler_wrapper(connection: 'SnowflakeConnection',
-                             cursor: 'SnowflakeCursor',
-                             error_class: Exception,
-                             error_value: Optional[Dict[str, str]] = None):
+                             cursor: Optional['SnowflakeCursor'],
+                             error_class: Union[Type['Error'], Type[Exception]],
+                             error_value: Dict[str, Union[str, bool]]) -> None:
         """Error handler wrapper that calls the errorhandler method.
 
         Args:
@@ -204,18 +227,7 @@ class Error(BASE_EXCEPTION_CLASS):
         Raises:
             A Snowflake error if connection and cursor are None.
         """
-        if error_value is None:
-            # no value indicates errorclass is error_object
-            error_object = error_class
-            error_class = type(error_object)
-            error_value = {
-                'msg': error_object.msg,
-                'errno': error_object.errno,
-                'sqlstate': error_object.sqlstate,
-                'done_format_msg': True
-            }
-        else:
-            error_value['done_format_msg'] = False
+        error_value.setdefault('done_format_msg', False)
 
         if connection is not None:
             connection.messages.append((error_class, error_value))
@@ -236,10 +248,7 @@ class Error(BASE_EXCEPTION_CLASS):
             raise error_class(error_value)
 
 
-Error.__str__ = lambda self: self.__unicode__()
-
-
-class Warning(BASE_EXCEPTION_CLASS):
+class _Warning(BASE_EXCEPTION_CLASS):
     """Exception for important warnings."""
     pass
 
@@ -345,44 +354,44 @@ class RequestTimeoutError(Error):
     """Exception for 408 HTTP error for retry."""
 
     def __init__(self, **kwargs):
-        Error.__init__(
-            self, msg=kwargs.get('msg') or 'HTTP 408: Request Timeout',
-            errno=kwargs.get('errno'),
-            sqlstate=kwargs.get('sqlstate'),
-            sfqid=kwargs.get('sfqid'))
+        Error.__init__(self,
+                       msg=kwargs.get('msg') or 'HTTP 408: Request Timeout',
+                       errno=kwargs.get('errno'),
+                       sqlstate=kwargs.get('sqlstate'),
+                       sfqid=kwargs.get('sfqid'))
 
 
 class BadRequest(Error):
     """Exception for 400 HTTP error for retry."""
 
     def __init__(self, **kwargs):
-        Error.__init__(
-            self, msg=kwargs.get('msg') or 'HTTP 400: Bad Request',
-            errno=kwargs.get('errno'),
-            sqlstate=kwargs.get('sqlstate'),
-            sfqid=kwargs.get('sfqid'))
+        Error.__init__(self,
+                       msg=kwargs.get('msg') or 'HTTP 400: Bad Request',
+                       errno=kwargs.get('errno'),
+                       sqlstate=kwargs.get('sqlstate'),
+                       sfqid=kwargs.get('sfqid'))
 
 
 class BadGatewayError(Error):
     """Exception for 502 HTTP error for retry."""
 
     def __init__(self, **kwargs):
-        Error.__init__(
-            self, msg=kwargs.get('msg') or 'HTTP 502: Bad Gateway',
-            errno=kwargs.get('errno'),
-            sqlstate=kwargs.get('sqlstate'),
-            sfqid=kwargs.get('sfqid'))
+        Error.__init__(self,
+                       msg=kwargs.get('msg') or 'HTTP 502: Bad Gateway',
+                       errno=kwargs.get('errno'),
+                       sqlstate=kwargs.get('sqlstate'),
+                       sfqid=kwargs.get('sfqid'))
 
 
 class MethodNotAllowed(Error):
     """Exception for 405 HTTP error for retry."""
 
     def __init__(self, **kwargs):
-        Error.__init__(
-            self, msg=kwargs.get('msg') or 'HTTP 405: Method not allowed',
-            errno=kwargs.get('errno'),
-            sqlstate=kwargs.get('sqlstate'),
-            sfqid=kwargs.get('sfqid'))
+        Error.__init__(self,
+                       msg=kwargs.get('msg') or 'HTTP 405: Method not allowed',
+                       errno=kwargs.get('errno'),
+                       sqlstate=kwargs.get('sqlstate'),
+                       sfqid=kwargs.get('sfqid'))
 
 
 class OtherHTTPRetryableError(Error):
@@ -390,15 +399,15 @@ class OtherHTTPRetryableError(Error):
 
     def __init__(self, **kwargs):
         code = kwargs.get('code', 'n/a')
-        Error.__init__(
-            self, msg=kwargs.get('msg') or 'HTTP {}'.format(code),
-            errno=kwargs.get('errno'),
-            sqlstate=kwargs.get('sqlstate'),
-            sfqid=kwargs.get('sfqid'))
+        Error.__init__(self,
+                       msg=kwargs.get('msg') or f'HTTP {code}',
+                       errno=kwargs.get('errno'),
+                       sqlstate=kwargs.get('sqlstate'),
+                       sfqid=kwargs.get('sfqid'))
 
 
 class MissingDependencyError(Error):
     """Exception for missing extras dependencies."""
 
     def __init__(self, dependency: str):
-        super(MissingDependencyError, self).__init__(msg="Missing optional dependency: {}".format(dependency))
+        super(MissingDependencyError, self).__init__(msg=f"Missing optional dependency: {dependency}")

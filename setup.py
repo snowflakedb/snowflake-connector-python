@@ -216,6 +216,7 @@ setup(
         'chardet>=3.0.2,<4',
         'idna>=2.5,<3',
         'certifi>=2017.4.17',
+        'dataclasses<1.0;python_version=="3.6"',
     ],
 
     namespace_packages=['snowflake'],
