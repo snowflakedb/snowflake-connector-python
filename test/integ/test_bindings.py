@@ -15,6 +15,7 @@ from decimal import Decimal
 import pendulum
 import pytest
 import pytz
+from mock import patch
 
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ProgrammingError
@@ -23,6 +24,7 @@ tempfile.gettempdir()
 
 PST_TZ = "America/Los_Angeles"
 JST_TZ = "Asia/Tokyo"
+CLIENT_STAGE_ARRAY_BINDING_THRESHOLD = 'CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'
 
 
 def test_invalid_binding_option(conn_cnx):
@@ -121,7 +123,7 @@ insert into {name} values(
         with conn_cnx(paramstyle='qmark', timezone=PST_TZ) as cnx:
             csr = cnx.cursor()
             if bulk_array_optimization:
-                cnx._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] = 1
+                cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
                 csr.executemany(INSERT.format(name=db_parameters['name']), [data])
                 assert csr._bind_stage is not None
             else:
@@ -314,13 +316,33 @@ create or replace table {name} (
                 (idx, 'test{}'.format(idx)) for idx in range(num_rows)
             ])
             assert c.rowcount == num_rows
-            if num_rows * 2 > cnx._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD']:
+            if num_rows * 2 > cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD]:
                 assert c._bind_stage is not None
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""
 drop table if exists {name}
 """.format(name=db_parameters['name']))
+
+
+def test_binding_bulk_insert_with_failed_stage_operation(conn_cnx, db_parameters):
+    with conn_cnx(paramstyle='qmark') as cnx, cnx.cursor() as csr:
+        csr.execute("""
+        create or replace table {name} (
+            c1 integer,
+            c2 string
+        )
+        """.format(name=db_parameters['name']))
+        query = 'insert into {name}(c1,c2) values(?,?)'.format(
+            name=db_parameters['name'])
+        cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
+        with patch('snowflake.connector.cursor.BindUploadAgent._create_stage') as mock_stage_creation:
+            mock_stage_creation.side_effect = Exception()
+            csr.executemany(query, [
+                (idx, 'test{}'.format(idx)) for idx in range(4)
+            ])
+        assert csr.rowcount == 4, 'Incorrect insertion result'
+        assert csr._bind_stage is None, 'Stage operation expected to fail'
 
 
 def test_binding_bulk_update(conn_cnx, db_parameters):
