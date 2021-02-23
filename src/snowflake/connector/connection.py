@@ -225,6 +225,7 @@ class SnowflakeConnection(object):
         self.heartbeat_thread = None
 
         self.converter = None
+        self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
         self.incident = IncidentAPI(self._rest)
@@ -419,7 +420,6 @@ class SnowflakeConnection(object):
             self.__config(**kwargs)
             TelemetryService.get_instance().update_context(kwargs)
 
-        self.__set_error_attributes()
         self.__open_connection()
 
     def close(self, retry=True):
@@ -533,7 +533,9 @@ class SnowflakeConnection(object):
     def __set_error_attributes(self):
         for m in [method for method in dir(errors) if
                   callable(getattr(errors, method))]:
-            setattr(self, m, getattr(errors, m))
+            # If name starts with _ then ignore that
+            name = m if not m.startswith('_') else m[1:]
+            setattr(self, name, getattr(errors, m))
 
     @staticmethod
     def setup_ocsp_privatelink(app, hostname):

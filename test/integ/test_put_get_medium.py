@@ -546,11 +546,8 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters):
                                           tmp_dir=str(tmpdir.mkdir('data2')))
     files2 = os.path.join(tmp_dir, 'file*')
 
-    stage_name = "test_put_collision/{}".format(db_parameters['name'])
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password']) as cnx:
+    stage_name = random_string(5, "test_put_collision_")
+    with conn_cnx() as cnx:
         cnx.cursor().execute("RM @~/{}".format(stage_name))
         try:
             # upload all files
