@@ -16,13 +16,10 @@ logger = getLogger(__name__)
 
 
 class JsonResult:
-    def __init__(self, raw_response, cursor):
+    def __init__(self, data, cursor):
         self._reset()
         self._cursor = cursor
         self._connection = cursor.connection
-        self._init_from_meta(raw_response)
-
-    def _init_from_meta(self, data):
         self._total_row_index = -1  # last fetched number of rows
         self._chunk_index = 0
         self._chunk_count = 0

@@ -48,15 +48,15 @@ logger = getLogger(__name__)
 class SnowflakeChunkDownloader(object):
     """Large Result set chunk downloader class."""
 
-    def _pre_init(
-        self,
-        chunks,
-        connection,
-        cursor,
-        qrmk,
-        chunk_headers,
-        query_result_format="JSON",
-        prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
+    def __init__(
+            self,
+            chunks,
+            connection,
+            cursor,
+            qrmk,
+            chunk_headers,
+            query_result_format: str = "JSON",
+            prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
     ):
         self._query_result_format = query_result_format
 
@@ -74,7 +74,6 @@ class SnowflakeChunkDownloader(object):
         self._effective_threads = min(prefetch_threads, self._chunk_size)
         if self._effective_threads < 1:
             self._effective_threads = 1
-
         for idx, chunk in enumerate(chunks):
             logger.debug("queued chunk %d: rowCount=%s", idx, chunk["rowCount"])
             self._chunks[idx] = SnowflakeChunk(
@@ -98,27 +97,6 @@ class SnowflakeChunkDownloader(object):
         self._total_millis_parsing_chunks = 0
 
         self._next_chunk_to_consume = 0
-
-    def __init__(
-        self,
-        chunks,
-        connection,
-        cursor,
-        qrmk,
-        chunk_headers,
-        query_result_format="JSON",
-        prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
-    ):
-        self._pre_init(
-            chunks,
-            connection,
-            cursor,
-            qrmk,
-            chunk_headers,
-            query_result_format=query_result_format,
-            prefetch_threads=prefetch_threads,
-        )
-        logger.debug("Chunk Downloader in memory")
         for idx in range(self._effective_threads):
             self._pool.submit(self._download_chunk, idx)
         self._next_chunk_to_download = self._effective_threads
