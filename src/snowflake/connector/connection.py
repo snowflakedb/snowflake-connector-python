@@ -27,7 +27,7 @@ from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
-from .bind_uploader import BindException
+from .bind_upload_agent import BindException
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (

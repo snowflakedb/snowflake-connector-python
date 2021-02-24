@@ -11,11 +11,11 @@ from datetime import date, datetime
 from datetime import time as datetime_time
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import pendulum
 import pytest
 import pytz
-from mock import patch
 
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ProgrammingError
@@ -125,11 +125,8 @@ insert into {name} values(
             if bulk_array_optimization:
                 cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
                 csr.executemany(INSERT.format(name=db_parameters['name']), [data])
-                assert csr._bind_stage is not None
             else:
                 csr.execute(INSERT.format(name=db_parameters['name']), data)
-                # use getattr to avoid old driver tests error
-                assert getattr(csr, '_bind_stage', None) is None
 
             ret = cnx.cursor().execute("""
 select * from {name} where c1=? and c2=?
@@ -316,8 +313,6 @@ create or replace table {name} (
                 (idx, 'test{}'.format(idx)) for idx in range(num_rows)
             ])
             assert c.rowcount == num_rows
-            if num_rows * 2 > cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD]:
-                assert c._bind_stage is not None
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""
@@ -325,24 +320,24 @@ drop table if exists {name}
 """.format(name=db_parameters['name']))
 
 
-def test_binding_bulk_insert_with_failed_stage_operation(conn_cnx, db_parameters):
+@pytest.mark.skipolddriver
+def test_bulk_insert_binding_fallback(conn_cnx, db_parameters):
+    """When stage creation fails, bulk inserts falls back to server side binding and disables stage optimization."""
     with conn_cnx(paramstyle='qmark') as cnx, cnx.cursor() as csr:
-        csr.execute("""
-        create or replace table {name} (
-            c1 integer,
-            c2 string
-        )
-        """.format(name=db_parameters['name']))
         query = 'insert into {name}(c1,c2) values(?,?)'.format(
             name=db_parameters['name'])
         cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
-        with patch('snowflake.connector.cursor.BindUploadAgent._create_stage') as mock_stage_creation:
-            mock_stage_creation.side_effect = Exception()
+        with patch.object(csr, '_execute_helper') as mocked_execute_helper, \
+                patch('snowflake.connector.cursor.BindUploadAgent._create_stage') as mocked_stage_creation:
+            mocked_stage_creation.side_effect = Exception()
             csr.executemany(query, [
                 (idx, 'test{}'.format(idx)) for idx in range(4)
             ])
-        assert csr.rowcount == 4, 'Incorrect insertion result'
-        assert csr._bind_stage is None, 'Stage operation expected to fail'
+        mocked_stage_creation.assert_called_once()
+        mocked_execute_helper.assert_called_once()
+        assert 'binding_stage' not in mocked_execute_helper.call_args[1], 'Stage binding should fail'
+        assert 'binding_params' in mocked_execute_helper.call_args[1], 'Should fall back to server side binding'
+        assert cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] == 0
 
 
 def test_binding_bulk_update(conn_cnx, db_parameters):

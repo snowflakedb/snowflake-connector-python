@@ -12,10 +12,9 @@ from typing import TYPE_CHECKING, List
 if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
 
-stream_buffer_size = 1024 * 1024 * 10  # 10 MB default
-STAGE_NAME = "SYSTEMBIND"
-CREATE_STAGE_STMT = f"create temporary stage {STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
 logger = getLogger(__name__)
+_STAGE_NAME = "SYSTEMBIND"
+_CREATE_STAGE_STMT = f"create temporary stage {_STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
 
 
 class BindException(Exception):
@@ -23,27 +22,36 @@ class BindException(Exception):
 
 
 class BindUploadAgent:
-    def __init__(self, cursor: 'SnowflakeCursor', rows: List[bytes]):
+
+    def __init__(self, cursor: 'SnowflakeCursor', rows: List[bytes], stream_buffer_size: int = 1024 * 1024 * 10):
+        """Construct an agent that uploads binding parameters as CSV files to a temporary stage.
+
+        Args:
+            cursor: The cursor object.
+            rows: Rows of binding parameters in CSV format.
+            stream_buffer_size: Size of each file, default to 10MB.
+        """
         self.cursor = cursor
         self.rows = rows
-        self.stage_path = f"@{STAGE_NAME}/{uuid.uuid4().hex}"
+        self._stream_buffer_size = stream_buffer_size
+        self.stage_path = f"@{_STAGE_NAME}/{uuid.uuid4().hex}"
 
     def _create_stage(self):
-        self.cursor.execute(CREATE_STAGE_STMT)
+        self.cursor.execute(_CREATE_STAGE_STMT)
 
     def upload(self):
         try:
             self._create_stage()
         except Exception as exc:
-            self.cursor.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] = float('inf')
-            logger.debug("Failed to create stage for binding, disabled client stage array binding.")
-            raise BindException from exc
+            logger.debug("Failed to create stage for binding.")
+            self.cursor.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] = 0
+            raise BindException() from exc
 
         row_idx = 0
         while row_idx < len(self.rows):
             f = BytesIO()
             size = 0
-            while row_idx < len(self.rows) and size + len(self.rows[row_idx]) <= stream_buffer_size:
+            while row_idx < len(self.rows) and size + len(self.rows[row_idx]) <= self._stream_buffer_size:
                 f.write(self.rows[row_idx])
                 size += len(self.rows[row_idx])
                 row_idx += 1
