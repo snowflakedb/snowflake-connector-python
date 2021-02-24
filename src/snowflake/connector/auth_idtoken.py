@@ -28,5 +28,5 @@ class AuthByIdToken(AuthByPlugin):
 
     def update_body(self, body):
         """Idtoken needs the authenticator and token attributes set."""
-        body[u'data'][u'AUTHENTICATOR'] = ID_TOKEN_AUTHENTICATOR
-        body[u'data'][u'TOKEN'] = self._id_token
+        body[u"data"][u"AUTHENTICATOR"] = ID_TOKEN_AUTHENTICATOR
+        body[u"data"][u"TOKEN"] = self._id_token

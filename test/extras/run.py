@@ -11,10 +11,12 @@ import pathlib
 import subprocess
 import sys
 
-file_ignore_list = ['run.py', '__init__.py']
+file_ignore_list = ["run.py", "__init__.py"]
 
-for test_file in pathlib.Path(__file__).parent.glob('*.py'):
+for test_file in pathlib.Path(__file__).parent.glob("*.py"):
     if test_file.name not in file_ignore_list:
         print("Running {}".format(test_file))
-        sub_process = subprocess.run([sys.executable if sys.executable else 'python', str(test_file)])
+        sub_process = subprocess.run(
+            [sys.executable if sys.executable else "python", str(test_file)]
+        )
         sub_process.check_returncode()

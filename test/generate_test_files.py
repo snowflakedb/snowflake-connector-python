@@ -12,10 +12,12 @@ import tempfile
 import time
 from typing import Optional
 
-IS_WINDOWS = platform.system() == 'Windows'
+IS_WINDOWS = platform.system() == "Windows"
 
 
-def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir: Optional[str] = None) -> str:
+def generate_k_lines_of_n_files(
+    k: int, n: int, compress: bool = False, tmp_dir: Optional[str] = None
+) -> str:
     """Creates testing files.
 
     Notes:
@@ -32,60 +34,66 @@ def generate_k_lines_of_n_files(k: int, n: int, compress: bool = False, tmp_dir:
         Path to parent folder to newly generated files.
     """
     if tmp_dir is None:
-        tmp_dir = tempfile.mkdtemp(prefix='data')
+        tmp_dir = tempfile.mkdtemp(prefix="data")
     for i in range(n):
-        with open(os.path.join(tmp_dir, 'file{}'.format(i)), 'w',
-                  encoding='utf-8') as f:
+        with open(
+            os.path.join(tmp_dir, "file{}".format(i)), "w", encoding="utf-8"
+        ) as f:
             for _ in range(k):
                 num = int(random.random() * 10000.0)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                dt = time.strftime('%Y-%m-%d', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                ts = time.strftime('%Y-%m-%d %H:%M:%S', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                tsltz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                tsntz = time.strftime('%Y-%m-%d %H:%M:%S', tm)
-                tm = time.gmtime(
-                    int(random.random() * 30000.0) - 15000)
-                tstz = (time.strftime('%Y-%m-%dT%H:%M:%S', tm) +
-                        ('-' if random.random() < 0.5 else '+') +
-                        "{:02d}:{:02d}".format(int(random.random() * 12.0), int(random.random() * 60.0)))
+                tm = time.gmtime(int(random.random() * 30000.0) - 15000)
+                dt = time.strftime("%Y-%m-%d", tm)
+                tm = time.gmtime(int(random.random() * 30000.0) - 15000)
+                ts = time.strftime("%Y-%m-%d %H:%M:%S", tm)
+                tm = time.gmtime(int(random.random() * 30000.0) - 15000)
+                tsltz = time.strftime("%Y-%m-%d %H:%M:%S", tm)
+                tm = time.gmtime(int(random.random() * 30000.0) - 15000)
+                tsntz = time.strftime("%Y-%m-%d %H:%M:%S", tm)
+                tm = time.gmtime(int(random.random() * 30000.0) - 15000)
+                tstz = (
+                    time.strftime("%Y-%m-%dT%H:%M:%S", tm)
+                    + ("-" if random.random() < 0.5 else "+")
+                    + "{:02d}:{:02d}".format(
+                        int(random.random() * 12.0), int(random.random() * 60.0)
+                    )
+                )
                 pct = random.random() * 1000.0
                 ratio = "{:5.2f}".format(random.random() * 1000.0)
                 rec = "{:d},{:s},{:s},{:s},{:s},{:s},{:f},{:s}".format(
-                    num, dt, ts, tsltz, tsntz, tstz,
-                    pct,
-                    ratio)
+                    num, dt, ts, tsltz, tsntz, tstz, pct, ratio
+                )
                 f.write(rec + "\n")
         if compress:
             if not IS_WINDOWS:
                 subprocess.Popen(
-                    ['gzip', os.path.join(tmp_dir, 'file{}'.format(i))],
+                    ["gzip", os.path.join(tmp_dir, "file{}".format(i))],
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE).communicate()
+                    stderr=subprocess.PIPE,
+                ).communicate()
             else:
                 import gzip
                 import shutil
-                fname = os.path.join(tmp_dir, 'file{}'.format(i))
-                with open(fname, 'rb') as f_in, \
-                        gzip.open(fname + '.gz', 'wb') as f_out:
+
+                fname = os.path.join(tmp_dir, "file{}".format(i))
+                with open(fname, "rb") as f_in, gzip.open(fname + ".gz", "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
                 os.unlink(fname)
     return tmp_dir
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Generate random testing files for Snowflake')
-    parser.add_argument('k', metavar='K', type=int,
-                        help='number of lines to generate in each files')
-    parser.add_argument('n', metavar='N', type=int,
-                        help='number of files to generate')
-    parser.add_argument('--dir', action='store', default=None,
-                        help='the directory in which to generate files')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Generate random testing files for Snowflake"
+    )
+    parser.add_argument(
+        "k", metavar="K", type=int, help="number of lines to generate in each files"
+    )
+    parser.add_argument("n", metavar="N", type=int, help="number of files to generate")
+    parser.add_argument(
+        "--dir",
+        action="store",
+        default=None,
+        help="the directory in which to generate files",
+    )
     args = vars(parser.parse_args())
-    print(generate_k_lines_of_n_files(k=args['k'], n=args['n'], tmp_dir=args['dir']))
+    print(generate_k_lines_of_n_files(k=args["k"], n=args["n"], tmp_dir=args["dir"]))

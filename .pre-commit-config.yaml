@@ -1,9 +1,13 @@
-exclude: ^src/snowflake/connector/vendored/
+exclude: '^(.*egg.info.*|.*/parameters.py|src/snowflake/connector/vendored/.*/).*$'
 repos:
--   repo: https://github.com/pre-commit/mirrors-isort
-    rev: v5.7.0
+-   repo: https://github.com/asottile/pyupgrade
+    rev: v2.10.0
     hooks:
-    -   id: isort
+        -   id: pyupgrade
+-   repo: https://github.com/PyCQA/isort
+    rev: 5.7.0
+    hooks:
+      - id: isort
 -   repo: https://github.com/psf/black
     rev: 20.8b1
     hooks:
@@ -20,11 +24,6 @@ repos:
     -   id: check-yaml
     -   id: debug-statements
     -   id: check-ast
--   repo: https://gitlab.com/pycqa/flake8
-    rev: 3.8.4
-    hooks:
-    -   id: flake8
-        additional_dependencies: ["flake8-bugbear == 19.3.0", "flake8-docstrings"]
 -   repo: https://github.com/Lucas-C/pre-commit-hooks.git
     rev: v1.1.9
     hooks:
@@ -52,11 +51,13 @@ repos:
             - //
             - --license-filepath
             - license_header.txt
--   repo: https://github.com/asottile/pyupgrade
-    rev: v2.10.0
-    hooks:
-    -   id: pyupgrade
 -   repo: https://github.com/myint/rstcheck
     rev: 3f92957478422df87bd730abde66f089cc1ee19b
     hooks:
     -   id: rstcheck
+-   repo: https://gitlab.com/pycqa/flake8
+    rev: 3.8.4
+    hooks:
+      - id: flake8
+        additional_dependencies:
+          - flake8-bugbear == 20.11.1

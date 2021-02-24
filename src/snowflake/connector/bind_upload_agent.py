@@ -18,10 +18,14 @@ logger = getLogger(__name__)
 
 class BindUploadAgent:
     _STAGE_NAME = "SYSTEMBIND"
-    _CREATE_STAGE_STMT = \
-        f"create temporary stage {_STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
+    _CREATE_STAGE_STMT = f"create temporary stage {_STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
 
-    def __init__(self, cursor: 'SnowflakeCursor', rows: List[bytes], stream_buffer_size: int = 1024 * 1024 * 10):
+    def __init__(
+        self,
+        cursor: "SnowflakeCursor",
+        rows: List[bytes],
+        stream_buffer_size: int = 1024 * 1024 * 10,
+    ):
         """Construct an agent that uploads binding parameters as CSV files to a temporary stage.
 
         Args:
@@ -41,7 +45,9 @@ class BindUploadAgent:
         try:
             self._create_stage()
         except Error as err:
-            self.cursor.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] = 0
+            self.cursor.connection._session_parameters[
+                "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
+            ] = 0
             logger.debug("Failed to create stage for binding.")
             raise BindUploadError from err
 
@@ -56,7 +62,9 @@ class BindUploadAgent:
                 if row_idx >= len(self.rows) or size >= self._stream_buffer_size:
                     break
             try:
-                self.cursor.execute(f"PUT file://{row_idx}.csv {self.stage_path}", file_stream=f)
+                self.cursor.execute(
+                    f"PUT file://{row_idx}.csv {self.stage_path}", file_stream=f
+                )
             except Error as err:
                 logger.debug("Failed to upload the bindings file to stage.")
                 raise BindUploadError from err

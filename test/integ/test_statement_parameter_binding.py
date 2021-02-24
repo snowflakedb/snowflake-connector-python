@@ -16,8 +16,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin account is not accessible."
+    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
 def test_binding_security(conn_cnx):
     """Tests binding statement parameters."""
@@ -26,8 +25,7 @@ def test_binding_security(conn_cnx):
     with conn_cnx() as cnx:
         cnx.cursor().execute("alter session set timezone='UTC'")
         with cnx.cursor() as cur:
-            cur.execute(
-                "show databases like 'TESTDB'")
+            cur.execute("show databases like 'TESTDB'")
             rec = cur.fetchone()
             assert rec[0] != expected_qa_mode_datetime
 
@@ -35,13 +33,13 @@ def test_binding_security(conn_cnx):
             cur.execute(
                 "show databases like 'TESTDB'",
                 _statement_params={
-                    'QA_MODE': True,
-                })
+                    "QA_MODE": True,
+                },
+            )
             rec = cur.fetchone()
             assert rec[0] == expected_qa_mode_datetime
 
         with cnx.cursor() as cur:
-            cur.execute(
-                "show databases like 'TESTDB'")
+            cur.execute("show databases like 'TESTDB'")
             rec = cur.fetchone()
             assert rec[0] != expected_qa_mode_datetime
