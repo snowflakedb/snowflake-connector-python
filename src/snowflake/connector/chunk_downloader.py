@@ -11,6 +11,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from gzip import GzipFile
 from logging import getLogger
 from threading import Condition, Lock
+from typing import List
 
 from snowflake.connector.gzip_decoder import decompress_raw_data
 
@@ -49,14 +50,14 @@ class SnowflakeChunkDownloader(object):
     """Large Result set chunk downloader class."""
 
     def __init__(
-            self,
-            chunks,
-            connection,
-            cursor,
-            qrmk,
-            chunk_headers,
-            query_result_format: str = "JSON",
-            prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
+        self,
+        chunks,
+        connection,
+        cursor,
+        qrmk,
+        chunk_headers,
+        query_result_format: str = "JSON",
+        prefetch_threads=DEFAULT_CLIENT_PREFETCH_THREADS,
     ):
         self._query_result_format = query_result_format
 
@@ -68,14 +69,14 @@ class SnowflakeChunkDownloader(object):
         self._chunk_headers = chunk_headers
 
         self._chunk_size = len(chunks)
-        self._chunks = {}
+        self._chunks: List["SnowflakeChunk"] = list()
         self._chunk_cond = Condition()
 
         self._effective_threads = min(prefetch_threads, self._chunk_size)
         if self._effective_threads < 1:
             self._effective_threads = 1
         for idx, chunk in enumerate(chunks):
-            logger.debug("queued chunk %d: rowCount=%s", idx, chunk["rowCount"])
+            logger.debug(f"queued chunk {idx}: rowCount={chunk['rowCount']}")
             self._chunks[idx] = SnowflakeChunk(
                 url=chunk["url"],
                 result_data=None,
@@ -84,10 +85,8 @@ class SnowflakeChunkDownloader(object):
             )
 
         logger.debug(
-            "prefetch threads: %s, " "number of chunks: %s, " "effective threads: %s",
-            prefetch_threads,
-            self._chunk_size,
-            self._effective_threads,
+            f"prefetch threads: {prefetch_threads}, number of chunks: {self._chunk_size}, "
+            f"effective threads: {self._effective_threads}"
         )
 
         self._pool = ThreadPoolExecutor(self._effective_threads)
@@ -103,7 +102,7 @@ class SnowflakeChunkDownloader(object):
 
     def _download_chunk(self, idx):
         """Downloads a chunk asynchronously."""
-        logger.debug("downloading chunk %s/%s", idx + 1, self._chunk_size)
+        logger.debug(f"downloading chunk {idx+1}/{self._chunk_size}")
         headers = {}
         if self._chunk_headers is not None:
             headers = self._chunk_headers
@@ -118,15 +117,11 @@ class SnowflakeChunkDownloader(object):
         for retry in range(10):
             try:
                 logger.debug(
-                    "started getting the result set %s: %s",
-                    idx + 1,
-                    self._chunks[idx].url,
+                    f"started getting the result set {idx+1}: {self._chunks[idx].url}"
                 )
                 result_data = self._fetch_chunk(self._chunks[idx].url, headers)
                 logger.debug(
-                    "finished getting the result set %s: %s",
-                    idx + 1,
-                    self._chunks[idx].url,
+                    f"finished getting the result set {idx+1}: {self._chunks[idx].url}"
                 )
 
                 if isinstance(result_data, ResultIterWithTimings):
@@ -145,18 +140,15 @@ class SnowflakeChunkDownloader(object):
                     )
                     self._chunk_cond.notify_all()
                     logger.debug(
-                        "added chunk %s/%s to a chunk list.", idx + 1, self._chunk_size
+                        f"added chunk {idx+1}/{self._chunk_size} to a chunk list."
                     )
                 break
             except Exception as e:
                 last_error = e
                 sleep_timer = backoff.next_sleep(1, sleep_timer)
                 logger.exception(
-                    "Failed to fetch the large result set chunk %s/%s for the %s th time, backing off for %s s",
-                    idx + 1,
-                    self._chunk_size,
-                    retry + 1,
-                    sleep_timer,
+                    f"Failed to fetch the large result set chunk {idx+1}/{self._chunk_size} "
+                    f"for the {retry+1} th time, backing off for {sleep_timer} s"
                 )
                 time.sleep(sleep_timer)
         else:
@@ -165,13 +157,9 @@ class SnowflakeChunkDownloader(object):
     def next_chunk(self):
         """Gets the next chunk if ready."""
         logger.debug(
-            "next_chunk_to_consume={next_chunk_to_consume}, "
-            "next_chunk_to_download={next_chunk_to_download}, "
-            "total_chunks={total_chunks}".format(
-                next_chunk_to_consume=self._next_chunk_to_consume + 1,
-                next_chunk_to_download=self._next_chunk_to_download + 1,
-                total_chunks=self._chunk_size,
-            )
+            f"next_chunk_to_consume={self._next_chunk_to_consume+1}, "
+            f"next_chunk_to_download={self._next_chunk_to_download+1}, "
+            f"total_chunks={self._chunk_size}"
         )
         if self._next_chunk_to_consume > 0:
             # clean up the previously fetched data
@@ -187,11 +175,8 @@ class SnowflakeChunkDownloader(object):
 
         for attempt in range(MAX_RETRY_DOWNLOAD):
             logger.debug(
-                "waiting for chunk %s/%s" " in %s/%s download attempt",
-                self._next_chunk_to_consume + 1,
-                self._chunk_size,
-                attempt + 1,
-                MAX_RETRY_DOWNLOAD,
+                f"waiting for chunk {self._next_chunk_to_consume+1}/{self._chunk_size} "
+                f"in {attempt+1}/{MAX_RETRY_DOWNLOAD} download attempt"
             )
             done = False
             for wait_counter in range(MAX_WAIT):
@@ -202,19 +187,14 @@ class SnowflakeChunkDownloader(object):
                         done = True
                         break
                     logger.debug(
-                        "chunk %s/%s is NOT ready to consume" " in %s/%s(s)",
-                        self._next_chunk_to_consume + 1,
-                        self._chunk_size,
-                        (wait_counter + 1) * WAIT_TIME_IN_SECONDS,
-                        MAX_WAIT * WAIT_TIME_IN_SECONDS,
+                        f"chunk {self._next_chunk_to_consume+1}/{self._chunk_size} is NOT ready to consume "
+                        f"in {(wait_counter + 1) * WAIT_TIME_IN_SECONDS}/{MAX_WAIT * WAIT_TIME_IN_SECONDS}(s)"
                     )
                     self._chunk_cond.wait(WAIT_TIME_IN_SECONDS)
             else:
                 logger.debug(
-                    "chunk %s/%s is still NOT ready. Restarting chunk "
-                    "downloader threads",
-                    self._next_chunk_to_consume + 1,
-                    self._chunk_size,
+                    f"chunk {self._next_chunk_to_consume+1}/{self._chunk_size} is still NOT ready. Restarting chunk "
+                    "downloader threads"
                 )
                 self._pool.shutdown(wait=False)  # terminate the thread pool
                 self._pool = ThreadPoolExecutor(self._effective_threads)
@@ -235,9 +215,7 @@ class SnowflakeChunkDownloader(object):
                 },
             )
         logger.debug(
-            "chunk %s/%s is ready to consume",
-            self._next_chunk_to_consume + 1,
-            self._chunk_size,
+            f"chunk {self._next_chunk_to_consume+1}/{self._chunk_size} is ready to consume"
         )
 
         ret = self._chunks[self._next_chunk_to_consume]
@@ -246,7 +224,7 @@ class SnowflakeChunkDownloader(object):
 
     def terminate(self):
         """Terminates downloading the chunks."""
-        if hasattr(self, u"_pool") and self._pool is not None:
+        if hasattr(self, "_pool") and self._pool is not None:
             self._pool.shutdown()
             self._pool = None
 
