@@ -15,14 +15,18 @@ from decimal import Decimal
 import pendulum
 import pytest
 import pytz
+from mock import patch
 
 from snowflake.connector.converter import convert_datetime_to_epoch
-from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.errors import ForbiddenError, ProgrammingError
+
+from ..randomize import random_string
 
 tempfile.gettempdir()
 
 PST_TZ = "America/Los_Angeles"
 JST_TZ = "Asia/Tokyo"
+CLIENT_STAGE_ARRAY_BINDING_THRESHOLD = 'CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'
 
 
 def test_invalid_binding_option(conn_cnx):
@@ -37,37 +41,44 @@ def test_invalid_binding_option(conn_cnx):
             pass
 
 
-def test_binding(conn_cnx, db_parameters):
-    """Paramstyle qmark basic tests."""
+@pytest.mark.parametrize("bulk_array_optimization", [pytest.param(True, marks=pytest.mark.skipolddriver), False])
+def test_binding(conn_cnx, db_parameters, bulk_array_optimization):
+    """Paramstyle qmark binding tests to cover basic data types."""
+    CREATE_TABLE = '''create or replace table {name} (
+        c1 BOOLEAN,
+        c2 INTEGER,
+        c3 NUMBER(38,2),
+        c4 VARCHAR(1234),
+        c5 FLOAT,
+        c6 BINARY,
+        c7 BINARY,
+        c8 TIMESTAMP_NTZ,
+        c9 TIMESTAMP_NTZ,
+        c10 TIMESTAMP_NTZ,
+        c11 TIMESTAMP_NTZ,
+        c12 TIMESTAMP_LTZ,
+        c13 TIMESTAMP_LTZ,
+        c14 TIMESTAMP_LTZ,
+        c15 TIMESTAMP_LTZ,
+        c16 TIMESTAMP_TZ,
+        c17 TIMESTAMP_TZ,
+        c18 TIMESTAMP_TZ,
+        c19 TIMESTAMP_TZ,
+        c20 DATE,
+        c21 TIME,
+        c22 TIMESTAMP_NTZ,
+        c23 TIME,
+        c24 STRING,
+        c25 STRING,
+        c26 STRING
+        )
+    '''
+    INSERT = """
+insert into {name} values(
+?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?,?,?)
+"""
     with conn_cnx(paramstyle='qmark') as cnx:
-        cnx.cursor().execute("""
-create or replace table {name} (
-    c1 BOOLEAN,
-    c2 INTEGER,
-    c3 NUMBER(38,2),
-    c4 VARCHAR(1234),
-    c5 FLOAT,
-    c6 BINARY,
-    c7 BINARY,
-    c8 TIMESTAMP_NTZ,
-    c9 TIMESTAMP_NTZ,
-    c10 TIMESTAMP_NTZ,
-    c11 TIMESTAMP_NTZ,
-    c12 TIMESTAMP_LTZ,
-    c13 TIMESTAMP_LTZ,
-    c14 TIMESTAMP_LTZ,
-    c15 TIMESTAMP_LTZ,
-    c16 TIMESTAMP_TZ,
-    c17 TIMESTAMP_TZ,
-    c18 TIMESTAMP_TZ,
-    c19 TIMESTAMP_TZ,
-    c20 DATE,
-    c21 TIME,
-    c22 TIMESTAMP_NTZ,
-    c23 TIME,
-    c24 STRING
-    )
-""".format(name=db_parameters['name']))
+        cnx.cursor().execute(CREATE_TABLE.format(name=db_parameters['name']))
     current_utctime = datetime.utcnow()
     current_localtime = pytz.utc.localize(
         current_utctime,
@@ -81,44 +92,51 @@ create or replace table {name} (
     struct_time_v = time.strptime("30 Sep 01 11:20:30", "%d %b %y %H:%M:%S")
     tdelta = timedelta(seconds=tm.hour * 3600 + tm.minute * 60 + tm.second,
                        microseconds=tm.microsecond)
+    data = (
+        True,
+        1,
+        Decimal("1.2"),
+        'str1',
+        1.2,
+        # Py2 has bytes in str type, so Python Connector
+        bytes(b'abc'),
+        bytearray(b'def'),
+        current_utctime,
+        current_localtime,
+        current_localtime_without_tz,
+        current_localtime_with_other_tz,
+        ("TIMESTAMP_LTZ", current_utctime),
+        ("TIMESTAMP_LTZ", current_localtime),
+        ("TIMESTAMP_LTZ", current_localtime_without_tz),
+        ("TIMESTAMP_LTZ", current_localtime_with_other_tz),
+        ("TIMESTAMP_TZ", current_utctime),
+        ("TIMESTAMP_TZ", current_localtime),
+        ("TIMESTAMP_TZ", current_localtime_without_tz),
+        ("TIMESTAMP_TZ", current_localtime_with_other_tz),
+        dt,
+        tm,
+        ("TIMESTAMP_NTZ", struct_time_v),
+        ("TIME", tdelta),
+        ("TEXT", None),
+        "",
+        ",an\\\\escaped\"line\n"
+    )
     try:
         with conn_cnx(paramstyle='qmark', timezone=PST_TZ) as cnx:
-            cnx.cursor().execute("""
-insert into {name} values(
-?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?)
-""".format(name=db_parameters['name']), (
-                True,
-                1,
-                Decimal("1.2"),
-                'str1',
-                1.2,
-                # Py2 has bytes in str type, so Python Connector
-                bytes(b'abc'),
-                bytearray(b'def'),
-                current_utctime,
-                current_localtime,
-                current_localtime_without_tz,
-                current_localtime_with_other_tz,
-                ("TIMESTAMP_LTZ", current_utctime),
-                ("TIMESTAMP_LTZ", current_localtime),
-                ("TIMESTAMP_LTZ", current_localtime_without_tz),
-                ("TIMESTAMP_LTZ", current_localtime_with_other_tz),
-                ("TIMESTAMP_TZ", current_utctime),
-                ("TIMESTAMP_TZ", current_localtime),
-                ("TIMESTAMP_TZ", current_localtime_without_tz),
-                ("TIMESTAMP_TZ", current_localtime_with_other_tz),
-                dt,
-                tm,
-                ("TIMESTAMP_NTZ", struct_time_v),
-                ("TIME", tdelta),
-                ("TEXT", None)
-            ))
+            csr = cnx.cursor()
+            if bulk_array_optimization:
+                cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
+                csr.executemany(INSERT.format(name=db_parameters['name']), [data])
+            else:
+                csr.execute(INSERT.format(name=db_parameters['name']), data)
+
             ret = cnx.cursor().execute("""
 select * from {name} where c1=? and c2=?
 """.format(name=db_parameters['name']), (
                 True,
                 1
             )).fetchone()
+            assert len(ret) == 26
             assert ret[0], "BOOLEAN"
             assert ret[2] == Decimal("1.2"), "NUMBER"
             assert ret[4] == 1.2, "FLOAT"
@@ -161,6 +179,8 @@ select * from {name} where c1=? and c2=?
                                      ret[22].second,
                              microseconds=ret[22].microsecond) == tdelta
             assert ret[23] is None
+            assert ret[24] == ""
+            assert ret[25] == ",an\\\\escaped\"line\n"
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""
@@ -276,7 +296,8 @@ drop table if exists {name}
 """.format(name=db_parameters['name']))
 
 
-def test_binding_bulk_insert(conn_cnx, db_parameters):
+@pytest.mark.parametrize("num_rows", [pytest.param(100000, marks=pytest.mark.skipolddriver), 4])
+def test_binding_bulk_insert(conn_cnx, db_parameters, num_rows):
     """Bulk insert test."""
     with conn_cnx() as cnx:
         cnx.cursor().execute("""
@@ -287,31 +308,37 @@ create or replace table {name} (
 """.format(name=db_parameters['name']))
     try:
         with conn_cnx(paramstyle='qmark') as cnx:
-            # short list
             c = cnx.cursor()
             fmt = 'insert into {name}(c1,c2) values(?,?)'.format(
                 name=db_parameters['name'])
             c.executemany(fmt, [
-                (1, 'test1'),
-                (2, 'test2'),
-                (3, 'test3'),
-                (4, 'test4'),
-            ])
-            assert c.rowcount == 4
-
-            # large list
-            num_rows = 100000
-            c = cnx.cursor()
-            c.executemany(fmt, [
                 (idx, 'test{}'.format(idx)) for idx in range(num_rows)
             ])
             assert c.rowcount == num_rows
-
     finally:
         with conn_cnx() as cnx:
             cnx.cursor().execute("""
 drop table if exists {name}
 """.format(name=db_parameters['name']))
+
+
+@pytest.mark.skipolddriver
+def test_bulk_insert_binding_fallback(conn_cnx):
+    """When stage creation fails, bulk inserts falls back to server side binding and disables stage optimization."""
+    with conn_cnx(paramstyle='qmark') as cnx, cnx.cursor() as csr:
+        query = f"insert into {random_string(5)}(c1,c2) values(?,?)"
+        cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
+        with patch.object(csr, '_execute_helper') as mocked_execute_helper, \
+                patch('snowflake.connector.cursor.BindUploadAgent._create_stage') as mocked_stage_creation:
+            mocked_stage_creation.side_effect = ForbiddenError
+            csr.executemany(query, [
+                (idx, 'test{}'.format(idx)) for idx in range(4)
+            ])
+        mocked_stage_creation.assert_called_once()
+        mocked_execute_helper.assert_called_once()
+        assert 'binding_stage' not in mocked_execute_helper.call_args[1], 'Stage binding should fail'
+        assert 'binding_params' in mocked_execute_helper.call_args[1], 'Should fall back to server side binding'
+        assert cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] == 0
 
 
 def test_binding_bulk_update(conn_cnx, db_parameters):

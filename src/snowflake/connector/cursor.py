@@ -14,6 +14,7 @@ from logging import getLogger
 from threading import Lock, Timer
 from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
+from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT, QueryStatus
 from .errorcode import (
@@ -47,6 +48,7 @@ except ImportError:
 
 try:
     from .arrow_result import ArrowResult
+
     CAN_USE_ARROW_RESULT = True
 except ImportError as e:  # pragma: no cover
     logger.debug("Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s", e)
@@ -297,6 +299,7 @@ class SnowflakeCursor(object):
                         timeout: int = 0,
                         statement_params: Optional[Dict[str, str]] = None,
                         binding_params: Union[Tuple, Dict[str, Dict[str, str]]] = None,
+                        binding_stage: Optional[str] = None,
                         is_internal: bool = False,
                         _no_results: bool = False,
                         _is_put_get=None):
@@ -391,6 +394,7 @@ class SnowflakeCursor(object):
                 self._sequence_counter,
                 self._request_id,
                 binding_params=binding_params,
+                binding_stage=binding_stage,
                 is_file_transfer=bool(self._is_file_transfer),
                 statement_params=statement_params,
                 is_internal=is_internal,
@@ -436,7 +440,8 @@ class SnowflakeCursor(object):
 
     def execute(self,
                 command: str,
-                params: Union[List, Tuple, None] = None,
+                params: Optional[Union[List, Tuple]] = None,
+                _bind_stage: Optional[str] = None,
                 timeout: Optional[int] = None,
                 _exec_async: bool = False,
                 _do_reset: bool = True,
@@ -460,6 +465,7 @@ class SnowflakeCursor(object):
         Args:
             command: The SQL command to be executed.
             params: Parameters to be bound into the SQL statement.
+            _bind_stage: Path in temporary stage where binding parameters are uploaded as CSV files.
             timeout: Number of seconds after which to abort the query.
             _exec_async: Whether to execute this query asynchronously.
             _do_reset: Whether or not the result set needs to be reset before executing query.
@@ -500,6 +506,13 @@ class SnowflakeCursor(object):
             logger.warning('execute: no query is given to execute')
             return
 
+        kwargs = {'timeout': timeout,
+                  'statement_params': _statement_params,
+                  'is_internal': _is_internal,
+                  '_no_results': _no_results,
+                  '_is_put_get': _is_put_get,
+                  }
+
         try:
             if self._connection.is_pyformat:
                 # pyformat/format paramstyle
@@ -513,13 +526,13 @@ class SnowflakeCursor(object):
                     query = command % processed_params
                 else:
                     query = command
-                processed_params = None  # reset to None
             else:
                 # qmark and numeric paramstyle
-                # server side binding
                 query = command
-                # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
-                processed_params = self._connection._process_params_qmarks(params, self)
+                if _bind_stage:
+                    kwargs['binding_stage'] = _bind_stage
+                else:
+                    kwargs['binding_params'] = self._connection._process_params_qmarks(params, self)
         # Skip reporting Key, Value and Type errors
         except Exception as exc:  # pragma: no cover
             if not isinstance(exc, INCIDENT_BLACKLIST):
@@ -540,14 +553,7 @@ class SnowflakeCursor(object):
         if logger.getEffectiveLevel() <= logging.INFO:
             logger.info(
                 'query: [%s]', self._format_query_for_log(query))
-        ret = self._execute_helper(
-            query,
-            timeout=timeout,
-            binding_params=processed_params,
-            statement_params=_statement_params,
-            is_internal=_is_internal,
-            _no_results=_no_results,
-            _is_put_get=_is_put_get)
+        ret = self._execute_helper(query, **kwargs)
         self._sfqid = ret['data']['queryId'] if 'data' in ret and 'queryId' in ret['data'] else None
         self._sqlstate = ret['data']['sqlState'] if 'data' in ret and 'sqlState' in ret['data'] else None
         self._first_chunk_time = get_time_millis()
@@ -778,8 +784,7 @@ class SnowflakeCursor(object):
 
         if len(seqparams) == 0:
             errorvalue = {
-                'msg': "No parameters are specified for the command: "
-                        "{}".format(command),
+                'msg': f"No parameters are specified for the command: {command}",
                 'errno': ER_INVALID_VALUE,
             }
             Error.errorhandler_wrapper(
@@ -812,26 +817,37 @@ class SnowflakeCursor(object):
                 return self
             else:
                 logger.debug('bulk insert')
-                num_params = len(seqparams[0])
-                pivot_param = []
-                for _ in range(num_params):
-                    pivot_param.append([])
+                # sanity check
+                row_size = len(seqparams[0])
                 for row in seqparams:
-                    if len(row) != num_params:
+                    if len(row) != row_size:
                         errorvalue = {
                             'msg':
-                                "Bulk data size don't match. expected: {}, "
-                                "got: {}, command: {}".format(
-                                    num_params, len(row), command),
+                                f"Bulk data size don't match. expected: {row_size}, "
+                                f"got: {len(row)}, command: {command}",
                             'errno': ER_INVALID_VALUE,
                         }
                         Error.errorhandler_wrapper(
                             self.connection, self, InterfaceError, errorvalue
                         )
                         return self
-                    for idx, value in enumerate(row):
-                        pivot_param[idx].append(value)
-                self.execute(command, params=pivot_param)
+                bind_size = len(seqparams) * row_size
+                bind_stage = None
+                if bind_size > self.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] > 0:
+                    # bind stage optimization
+                    try:
+                        rows = self.connection._write_params_to_byte_rows(seqparams)
+                        bind_uploader = BindUploadAgent(self, rows)
+                        bind_uploader.upload()
+                        bind_stage = bind_uploader.stage_path
+                    except BindUploadError:
+                        logger.debug("Failed to upload binds to stage, sending binds to Snowflake instead.")
+                    except Exception as exc:
+                        if not isinstance(exc, INCIDENT_BLACKLIST):
+                            self.connection.incident.report_incident()
+                        raise
+                binding_param = None if bind_stage else list(map(list, zip(*seqparams)))  # transpose
+                self.execute(command, params=binding_param, _bind_stage=bind_stage)
                 return self
 
         self.reset()
@@ -856,7 +872,7 @@ class SnowflakeCursor(object):
         if size < 0:
             errorvalue = {
                 'msg': ("The number of rows is not zero or "
-                         "positive number: {}").format(size),
+                        "positive number: {}").format(size),
                 'errno': ER_NOT_POSITIVE_SIZE}
             Error.errorhandler_wrapper(
                 self.connection, self, ProgrammingError, errorvalue)

@@ -178,11 +178,11 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_wrapper_from_cause(connection: 'SnowflakeConnection',
-                                        cursor: Optional['SnowflakeCursor'],
-                                        cause: Union['Error', Exception]) -> None:
+                                        cause: Union['Error', Exception],
+                                        cursor: Optional['SnowflakeCursor'] = None) -> None:
         """Wrapper for errorhandler_wrapper, it is called with a cause instead of a dictionary.
 
-        The dictionary is first extracted form the cause and then it's given to errorhandler_wrapper
+        The dictionary is first extracted from the cause and then it's given to errorhandler_wrapper
 
         Args:
             connection: Connections in which the error happened.
@@ -411,3 +411,8 @@ class MissingDependencyError(Error):
 
     def __init__(self, dependency: str):
         super(MissingDependencyError, self).__init__(msg=f"Missing optional dependency: {dependency}")
+
+
+class BindUploadError(Error):
+    """Exception for bulk array binding stage optimization fails."""
+    pass
