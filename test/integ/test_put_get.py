@@ -3,7 +3,6 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
 import os
 import pathlib
 from getpass import getuser
@@ -569,3 +568,21 @@ def test_utf8_filename(tmpdir, db_parameters, is_public_test):
             cur.execute("PUT 'file://{}' @{}".format(str(test_file).replace('\\', '/'), stage_name)).fetchall()
             cur.execute("select $1, $2, $3 from  @{}".format(stage_name))
             assert cur.fetchone() == ('1', '2', '3')
+
+
+def test_put_threshold(tmp_path, conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(reason="This feature hasn't been rolled out for public Snowflake deployments yet.")
+    file_name = 'test_put_get_with_aws_token.txt.gz'
+    stage_name = random_string(5, 'test_put_get_threshold_')
+    file = tmp_path / file_name
+    file.touch()
+    with conn_cnx() as cnx, cnx.cursor() as cur:
+        cur.execute(f"create temporary stage {stage_name}")
+        from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+        with patch(
+                'snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                autospec=SnowflakeFileTransferAgent
+        ) as mock_agent:
+            cur.execute(f"put file://{file} @{stage_name} threshold=156")
+        assert mock_agent.call_args.kwargs.get('multipart_threshold', -1) == 156
