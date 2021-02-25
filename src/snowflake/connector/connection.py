@@ -802,7 +802,7 @@ class SnowflakeConnection(object):
                   sequence_counter: int,
                   request_id: uuid.UUID,
                   binding_params: Union[None, Tuple, Dict[str, Dict[str, str]]] = None,
-                  binding_stage: str = None,
+                  binding_stage: Optional[str] = None,
                   is_file_transfer: bool = False,
                   statement_params: Optional[Dict[str, str]] = None,
                   is_internal: bool = False,

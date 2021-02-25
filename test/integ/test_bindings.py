@@ -11,7 +11,7 @@ from datetime import date, datetime
 from datetime import time as datetime_time
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from mock import patch
 
 import pendulum
 import pytest

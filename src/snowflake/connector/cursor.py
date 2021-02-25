@@ -299,7 +299,7 @@ class SnowflakeCursor(object):
                         timeout: int = 0,
                         statement_params: Optional[Dict[str, str]] = None,
                         binding_params: Union[Tuple, Dict[str, Dict[str, str]]] = None,
-                        binding_stage: str = None,
+                        binding_stage: Optional[str] = None,
                         is_internal: bool = False,
                         _no_results: bool = False,
                         _is_put_get=None):
@@ -509,7 +509,7 @@ class SnowflakeCursor(object):
                   'statement_params': _statement_params,
                   'is_internal': _is_internal,
                   '_no_results': _no_results,
-                  '_is_put_get': _is_put_get
+                  '_is_put_get': _is_put_get,
                   }
 
         try:
@@ -843,7 +843,7 @@ class SnowflakeCursor(object):
                         bind_uploader.upload()
                         bind_stage = bind_uploader.stage_path
                     except BindException as exc:
-                        logger.debug("Failed to upload binds to stage, sending binds to GS instead.", exc_info=exc)
+                        logger.debug("Failed to upload binds to stage, sending binds to Snowflake instead.", exc_info=exc)
                     except Exception as exc:
                         if not isinstance(exc, INCIDENT_BLACKLIST):
                             self.connection.incident.report_incident()
