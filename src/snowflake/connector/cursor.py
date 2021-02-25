@@ -14,7 +14,7 @@ from logging import getLogger
 from threading import Lock, Timer
 from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
-from .bind_upload_agent import BindException, BindUploadAgent
+from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import FIELD_NAME_TO_ID, PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT, QueryStatus
 from .errorcode import (
@@ -440,7 +440,8 @@ class SnowflakeCursor(object):
 
     def execute(self,
                 command: str,
-                params: Union[List, Tuple, None, str] = None,
+                params: Optional[Union[List, Tuple]] = None,
+                _bind_stage: Optional[str] = None,
                 timeout: Optional[int] = None,
                 _exec_async: bool = False,
                 _do_reset: bool = True,
@@ -463,8 +464,8 @@ class SnowflakeCursor(object):
 
         Args:
             command: The SQL command to be executed.
-            params: Parameters to be bound into the SQL statement or path in temporary stage where binding parameters
-                are uploaded as CSV files.
+            params: Parameters to be bound into the SQL statement.
+            _bind_stage: Path in temporary stage where binding parameters are uploaded as CSV files.
             timeout: Number of seconds after which to abort the query.
             _exec_async: Whether to execute this query asynchronously.
             _do_reset: Whether or not the result set needs to be reset before executing query.
@@ -525,12 +526,11 @@ class SnowflakeCursor(object):
                     query = command % processed_params
                 else:
                     query = command
-                processed_params = None  # reset to None
             else:
                 # qmark and numeric paramstyle
                 query = command
-                if isinstance(params, str):
-                    kwargs['binding_stage'] = params
+                if _bind_stage:
+                    kwargs['binding_stage'] = _bind_stage
                 else:
                     kwargs['binding_params'] = self._connection._process_params_qmarks(params, self)
         # Skip reporting Key, Value and Type errors
@@ -553,8 +553,7 @@ class SnowflakeCursor(object):
         if logger.getEffectiveLevel() <= logging.INFO:
             logger.info(
                 'query: [%s]', self._format_query_for_log(query))
-        ret = self._execute_helper(
-            query, **kwargs)
+        ret = self._execute_helper(query, **kwargs)
         self._sfqid = ret['data']['queryId'] if 'data' in ret and 'queryId' in ret['data'] else None
         self._sqlstate = ret['data']['sqlState'] if 'data' in ret and 'sqlState' in ret['data'] else None
         self._first_chunk_time = get_time_millis()
@@ -785,8 +784,7 @@ class SnowflakeCursor(object):
 
         if len(seqparams) == 0:
             errorvalue = {
-                'msg': "No parameters are specified for the command: "
-                       "{}".format(command),
+                'msg': f"No parameters are specified for the command: {command}",
                 'errno': ER_INVALID_VALUE,
             }
             Error.errorhandler_wrapper(
@@ -842,14 +840,14 @@ class SnowflakeCursor(object):
                         bind_uploader = BindUploadAgent(self, rows)
                         bind_uploader.upload()
                         bind_stage = bind_uploader.stage_path
-                    except BindException as exc:
-                        logger.debug("Failed to upload binds to stage, sending binds to Snowflake instead.", exc_info=exc)
+                    except BindUploadError:
+                        logger.debug("Failed to upload binds to stage, sending binds to Snowflake instead.")
                     except Exception as exc:
                         if not isinstance(exc, INCIDENT_BLACKLIST):
                             self.connection.incident.report_incident()
                         raise
-                binding_param = bind_stage or list(map(list, zip(*seqparams)))  # transpose
-                self.execute(command, params=binding_param)
+                binding_param = None if bind_stage else list(map(list, zip(*seqparams)))  # transpose
+                self.execute(command, params=binding_param, _bind_stage=bind_stage)
                 return self
 
         self.reset()

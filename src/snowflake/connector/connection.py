@@ -27,7 +27,7 @@ from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
-from .bind_upload_agent import BindException
+from .bind_upload_agent import BindUploadError
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
@@ -195,7 +195,7 @@ class SnowflakeConnection(object):
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
-        errorhandler: Handler used with errors. By default, an exception will raised on error.
+        errorhandler: Handler used with errors. By default, an exception will be raised on error.
         converter_class: Handler used to convert data to Python native objects.
         validate_default_parameters: Validate database, schema, role and warehouse used on Snowflake.
         is_pyformat: Whether the current argument binding is pyformat or format.
@@ -921,13 +921,13 @@ class SnowflakeConnection(object):
                 temp = map(self.converter.to_csv_bindings, row)
                 res.append((",".join(temp) + "\n").encode('utf-8'))
         except (ProgrammingError, AttributeError) as exc:
-            raise BindException from exc
+            raise BindUploadError from exc
         return res
 
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(self,
                                params: Union[List, Tuple, None],
-                               cursor: 'SnowflakeCursor' = None) -> Dict[str, Dict[str, str]]:
+                               cursor: Optional['SnowflakeCursor'] = None) -> Dict[str, Dict[str, str]]:
         if not params:
             return None
         processed_params = {}

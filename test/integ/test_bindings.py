@@ -11,14 +11,16 @@ from datetime import date, datetime
 from datetime import time as datetime_time
 from datetime import timedelta
 from decimal import Decimal
-from mock import patch
 
 import pendulum
 import pytest
 import pytz
+from mock import patch
 
 from snowflake.connector.converter import convert_datetime_to_epoch
-from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.errors import ForbiddenError, ProgrammingError
+
+from ..randomize import random_string
 
 tempfile.gettempdir()
 
@@ -321,15 +323,14 @@ drop table if exists {name}
 
 
 @pytest.mark.skipolddriver
-def test_bulk_insert_binding_fallback(conn_cnx, db_parameters):
+def test_bulk_insert_binding_fallback(conn_cnx):
     """When stage creation fails, bulk inserts falls back to server side binding and disables stage optimization."""
     with conn_cnx(paramstyle='qmark') as cnx, cnx.cursor() as csr:
-        query = 'insert into {name}(c1,c2) values(?,?)'.format(
-            name=db_parameters['name'])
+        query = f"insert into {random_string(5)}(c1,c2) values(?,?)"
         cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
         with patch.object(csr, '_execute_helper') as mocked_execute_helper, \
                 patch('snowflake.connector.cursor.BindUploadAgent._create_stage') as mocked_stage_creation:
-            mocked_stage_creation.side_effect = Exception()
+            mocked_stage_creation.side_effect = ForbiddenError
             csr.executemany(query, [
                 (idx, 'test{}'.format(idx)) for idx in range(4)
             ])

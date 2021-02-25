@@ -595,20 +595,21 @@ class SnowflakeConverter(object):
     def to_csv_bindings(self, value: Union[Tuple[str, Any], Any]) -> Union[str, None]:
         """Convert value to a string representation in CSV-escaped format to INSERT INTO."""
         if isinstance(value, tuple) and len(value) == 2:
-            if value[0] in ['TIMESTAMP_TZ', 'TIME']:
+            _type, val = value
+            if _type in ['TIMESTAMP_TZ', 'TIME']:
                 # unspecified timezone is considered utc
-                if getattr(value[1], 'tzinfo', 1) is None:
-                    val = self.to_snowflake(pytz.utc.localize(value[1]))
+                if getattr(val, 'tzinfo', 1) is None:
+                    val = self.to_snowflake(pytz.utc.localize(val))
                 else:
-                    val = self.to_snowflake(value[1])
+                    val = self.to_snowflake(val)
             else:
-                val = self.to_snowflake_bindings(value[0], value[1])
+                val = self.to_snowflake_bindings(_type, val)
         else:
             if isinstance(value, (dt_t, timedelta)):
                 val = self.to_snowflake(value)
             else:
-                snowflake_type = self.snowflake_type(value)
-                val = self.to_snowflake_bindings(snowflake_type, value)
+                _type = self.snowflake_type(value)
+                val = self.to_snowflake_bindings(_type, value)
         return self.escape_for_csv(val)
 
     @staticmethod

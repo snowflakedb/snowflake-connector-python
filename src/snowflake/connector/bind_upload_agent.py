@@ -8,19 +8,18 @@ from io import BytesIO
 from logging import getLogger
 from typing import TYPE_CHECKING, List
 
+from .errors import BindUploadError, Error
+
 if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
 
 logger = getLogger(__name__)
-_STAGE_NAME = "SYSTEMBIND"
-_CREATE_STAGE_STMT = f"create temporary stage {_STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
-
-
-class BindException(Exception):
-    pass
 
 
 class BindUploadAgent:
+    _STAGE_NAME = "SYSTEMBIND"
+    _CREATE_STAGE_STMT = \
+        f"create temporary stage {_STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
 
     def __init__(self, cursor: 'SnowflakeCursor', rows: List[bytes], stream_buffer_size: int = 1024 * 1024 * 10):
         """Construct an agent that uploads binding parameters as CSV files to a temporary stage.
@@ -33,31 +32,32 @@ class BindUploadAgent:
         self.cursor = cursor
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
-        self.stage_path = f"@{_STAGE_NAME}/{uuid.uuid4().hex}"
+        self.stage_path = f"@{self._STAGE_NAME}/{uuid.uuid4().hex}"
 
     def _create_stage(self):
-        self.cursor.execute(_CREATE_STAGE_STMT)
+        self.cursor.execute(self._CREATE_STAGE_STMT)
 
     def upload(self):
         try:
             self._create_stage()
-        except Exception as exc:
-            logger.debug("Failed to create stage for binding.")
+        except Error as err:
             self.cursor.connection._session_parameters['CLIENT_STAGE_ARRAY_BINDING_THRESHOLD'] = 0
-            raise BindException() from exc
+            logger.debug("Failed to create stage for binding.")
+            raise BindUploadError from err
 
         row_idx = 0
         while row_idx < len(self.rows):
             f = BytesIO()
             size = 0
-            while row_idx < len(self.rows) and size + len(self.rows[row_idx]) <= self._stream_buffer_size:
+            while True:
                 f.write(self.rows[row_idx])
                 size += len(self.rows[row_idx])
                 row_idx += 1
+                if row_idx >= len(self.rows) or size >= self._stream_buffer_size:
+                    break
             try:
                 self.cursor.execute(f"PUT file://{row_idx}.csv {self.stage_path}", file_stream=f)
-            except Exception as exc:
+            except Error as err:
                 logger.debug("Failed to upload the bindings file to stage.")
-                raise BindException from exc
-            if not f.closed:
-                f.close()
+                raise BindUploadError from err
+            f.close()
