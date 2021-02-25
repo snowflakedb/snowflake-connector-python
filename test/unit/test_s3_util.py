@@ -22,7 +22,18 @@ from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from snowflake.connector.remote_storage_util import DEFAULT_MAX_RETRY, SnowflakeRemoteStorageUtil
 from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED, SnowflakeS3Util
 
+try:
+    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
+except ImportError:  # NOQA
+    # Compatibility for olddriver tests
+    SnowflakeFileMeta = dict
+
 THIS_DIR = path.dirname(path.realpath(__file__))
+MINIMAL_METADATA = SnowflakeFileMeta(
+    name='file.txt',
+    stage_location_type='S3',
+    src_file_name='file.txt',
+)
 
 
 def test_extract_bucket_name_and_path():
@@ -69,11 +80,12 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     client.Object.return_value = s3object
     initial_parallel = 100
     upload_meta = {
+        'name': 'data1.txt.gz',
+        'stage_location_type': 'S3',
         'no_sleeping_time': True,
         'parallel': initial_parallel,
         'put_callback': None,
         'put_callback_output_stream': None,
-        'existing_files': [],
         'client': client,
         SHA256_DIGEST: '123456789abcdef',
         'stage_info': {
@@ -86,29 +98,22 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     }
     upload_meta['real_src_file_name'] = upload_meta['src_file_name']
     upload_meta['upload_size'] = os.stat(upload_meta['src_file_name']).st_size
-    tmp_upload_meta = upload_meta.copy()
-    try:
-        SnowflakeRemoteStorageUtil.upload_one_file(tmp_upload_meta)
-        raise Exception("Should fail with OpenSSL.SSL.SysCallError")
-    except OpenSSL.SSL.SysCallError:
-        assert upload_file.call_count == DEFAULT_MAX_RETRY
-        assert 'last_max_concurrency' in tmp_upload_meta
-        assert tmp_upload_meta[
-                   'last_max_concurrency'
-               ] == initial_parallel / DEFAULT_MAX_RETRY
+    meta = SnowflakeFileMeta(**upload_meta)
+    with pytest.raises(OpenSSL.SSL.SysCallError):
+        SnowflakeRemoteStorageUtil.upload_one_file(meta)
+    assert upload_file.call_count == DEFAULT_MAX_RETRY
+    assert meta.last_max_concurrency is not None
+    assert meta.last_max_concurrency == initial_parallel / DEFAULT_MAX_RETRY
 
     # min parallel == 1
     upload_file.reset_mock()
     initial_parallel = 4
-    upload_meta['parallel'] = initial_parallel
-    tmp_upload_meta = upload_meta.copy()
-    try:
-        SnowflakeRemoteStorageUtil.upload_one_file(tmp_upload_meta)
-        raise Exception("Should fail with OpenSSL.SSL.SysCallError")
-    except OpenSSL.SSL.SysCallError:
-        assert upload_file.call_count == DEFAULT_MAX_RETRY
-        assert 'last_max_concurrency' in tmp_upload_meta
-        assert tmp_upload_meta['last_max_concurrency'] == 1
+    meta.parallel = initial_parallel
+    with pytest.raises(OpenSSL.SSL.SysCallError):
+        SnowflakeRemoteStorageUtil.upload_one_file(meta)
+    assert upload_file.call_count == DEFAULT_MAX_RETRY
+    assert meta.last_max_concurrency is not None
+    assert meta.last_max_concurrency == 1
 
 
 def test_upload_one_file_to_s3_econnreset():
@@ -129,11 +134,12 @@ def test_upload_one_file_to_s3_econnreset():
         client.Object.return_value = s3object
         initial_parallel = 100
         upload_meta = {
+            'name': 'data1.txt.gz',
+            'stage_location_type': 'S3',
             'no_sleeping_time': True,
             'parallel': initial_parallel,
             'put_callback': None,
             'put_callback_output_stream': None,
-            'existing_files': [],
             SHA256_DIGEST: '123456789abcdef',
             'stage_info': {
                 'location': 'sfc-teststage/rwyitestacco/users/1234/',
@@ -145,14 +151,12 @@ def test_upload_one_file_to_s3_econnreset():
             'overwrite': True,
         }
         upload_meta['real_src_file_name'] = upload_meta['src_file_name']
-        upload_meta[
-            'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
-        try:
-            SnowflakeRemoteStorageUtil.upload_one_file(upload_meta)
-            raise Exception("Should fail with OpenSSL.SSL.SysCallError")
-        except OpenSSL.SSL.SysCallError:
-            assert upload_file.call_count == DEFAULT_MAX_RETRY
-            assert 'last_max_concurrency' not in upload_meta
+        upload_meta['upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+        meta = SnowflakeFileMeta(**upload_meta)
+        with pytest.raises(OpenSSL.SSL.SysCallError):
+            SnowflakeRemoteStorageUtil.upload_one_file(meta)
+        assert upload_file.call_count == DEFAULT_MAX_RETRY
+        assert 'last_max_concurrency' not in upload_meta
 
 
 def test_get_s3_file_object_http_400_error():
@@ -170,16 +174,20 @@ def test_get_s3_file_object_http_400_error():
     client.load.return_value = None
     type(client).s3path = PropertyMock(return_value='s3://testbucket/')
     meta = {
+        'name': 'data1.txt.gz',
+        'stage_location_type': 'S3',
+        'src_file_name': path.join(THIS_DIR, '../data', 'put_get_1.txt'),
         'client': client,
         'stage_info': {
             'location': 'sfc-teststage/rwyitestacco/users/1234/',
             'locationType': 'S3',
         }
     }
+    meta = SnowflakeFileMeta(**meta)
     filename = "/path1/file2.txt"
     akey = SnowflakeS3Util.get_file_header(meta, filename)
     assert akey is None
-    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+    assert meta.result_status == ResultStatus.RENEW_TOKEN
 
 
 def test_upload_file_with_s3_upload_failed_error():
@@ -193,11 +201,12 @@ def test_upload_file_with_s3_upload_failed_error():
         metadata=defaultdict(str), upload_file=upload_file)
     initial_parallel = 100
     upload_meta = {
+        'name': 'data1.txt.gz',
+        'stage_location_type': 'S3',
         'no_sleeping_time': True,
         'parallel': initial_parallel,
         'put_callback': None,
         'put_callback_output_stream': None,
-        'existing_files': [],
         SHA256_DIGEST: '123456789abcdef',
         'stage_info': {
             'location': 'sfc-teststage/rwyitestacco/users/1234/',
@@ -209,31 +218,31 @@ def test_upload_file_with_s3_upload_failed_error():
         'overwrite': True,
     }
     upload_meta['real_src_file_name'] = upload_meta['src_file_name']
-    upload_meta[
-        'upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+    upload_meta['upload_size'] = os.stat(upload_meta['src_file_name']).st_size
+    meta = SnowflakeFileMeta(**upload_meta)
 
-    akey = SnowflakeRemoteStorageUtil.upload_one_file(upload_meta)
+    akey = SnowflakeRemoteStorageUtil.upload_one_file(meta)
     assert akey is None
-    assert upload_meta['result_status'] == ResultStatus.RENEW_TOKEN
+    assert meta.result_status == ResultStatus.RENEW_TOKEN
 
 
 def test_get_header_expiry_error(caplog):
     """Tests whether token expiry error is handled as expected when getting header."""
     caplog.set_level(logging.DEBUG, 'snowflake.connector')
-    meta = {}
+    meta = MINIMAL_METADATA
     mock_resource = MagicMock()
     mock_resource.load.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
         SnowflakeS3Util.get_file_header(meta, 'file.txt')
     assert ('snowflake.connector.s3_util', logging.DEBUG, 'AWS Token expired. Renew and retry') in caplog.record_tuples
-    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+    assert meta.result_status == ResultStatus.RENEW_TOKEN
 
 
 def test_get_header_unexpected_error(caplog):
     """Tests whether unexpected errors are handled as expected when getting header."""
     caplog.set_level(logging.DEBUG, 'snowflake.connector')
-    meta = {}
+    meta = MINIMAL_METADATA
     mock_resource = MagicMock()
     mock_resource.load.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': '???', 'Message': 'Just testing'}}, 'Testing')
@@ -245,7 +254,7 @@ def test_get_header_unexpected_error(caplog):
             logging.DEBUG,
             'Failed to get metadata for bucket, key: An error occurred (???) when calling '
             'the Testing operation: Just testing') in caplog.record_tuples
-    assert meta['result_status'] == ResultStatus.ERROR
+    assert meta.result_status == ResultStatus.ERROR
 
 
 def test_upload_expiry_error(caplog):
@@ -255,15 +264,19 @@ def test_upload_expiry_error(caplog):
     mock_resource.Object.return_value = mock_object
     mock_object.upload_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
-    meta = {'client': mock_resource,
+    meta = {'name': 'f',
+            'src_file_name': 'f',
+            'stage_location_type': 'S3',
+            'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
             'dst_file_name': 'f',
             'put_callback': None}
+    meta = SnowflakeFileMeta(**meta)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util.extract_bucket_name_and_path'):
-        assert SnowflakeS3Util.upload_file('f', meta, {}, 4) is None
+        assert SnowflakeS3Util.upload_file('f', meta, None, 4, 67108864) is None
     assert ('snowflake.connector.s3_util', logging.DEBUG, 'AWS Token expired. Renew and retry') in caplog.record_tuples
-    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+    assert meta.result_status == ResultStatus.RENEW_TOKEN
 
 
 def test_upload_unknown_error(caplog):
@@ -275,15 +288,19 @@ def test_upload_unknown_error(caplog):
     mock_object.key = 'key'
     mock_object.upload_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'unknown', 'Message': 'Just testing'}}, 'Testing')
-    meta = {'client': mock_resource,
+    meta = {'name': 'f',
+            'src_file_name': 'f',
+            'stage_location_type': 'S3',
+            'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
             'dst_file_name': 'f',
             'put_callback': None}
+    meta = SnowflakeFileMeta(**meta)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util.extract_bucket_name_and_path'):
         with pytest.raises(botocore.exceptions.ClientError,
                            match=r'An error occurred \(unknown\) when calling the Testing operation: Just testing'):
-            SnowflakeS3Util.upload_file('f', meta, {}, 4)
+            SnowflakeS3Util.upload_file('f', meta, {}, 4, 67108864)
 
 
 def test_upload_failed_error(caplog):
@@ -292,17 +309,21 @@ def test_upload_failed_error(caplog):
     mock_resource, mock_object = MagicMock(), MagicMock()
     mock_resource.Object.return_value = mock_object
     mock_object.upload_file.side_effect = S3UploadFailedError('ExpiredToken')
-    meta = {'client': mock_resource,
+    meta = {'name': 'f',
+            'src_file_name': 'f',
+            'stage_location_type': 'S3',
+            'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
             'dst_file_name': 'f',
             'put_callback': None}
+    meta = SnowflakeFileMeta(**meta)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util.extract_bucket_name_and_path'):
-        assert SnowflakeS3Util.upload_file('f', meta, {}, 4) is None
+        assert SnowflakeS3Util.upload_file('f', meta, {}, 4, 67108864) is None
     assert ('snowflake.connector.s3_util',
             logging.DEBUG,
             'Failed to upload a file: f, err: ExpiredToken. Renewing AWS Token and Retrying') in caplog.record_tuples
-    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+    assert meta.result_status == ResultStatus.RENEW_TOKEN
 
 
 def test_download_expiry_error(caplog):
@@ -311,7 +332,10 @@ def test_download_expiry_error(caplog):
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'ExpiredToken', 'Message': 'Just testing'}}, 'Testing')
-    meta = {'client': mock_resource,
+    meta = {'name': 'f',
+            'src_file_name': 'f',
+            'stage_location_type': 'S3',
+            'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
             'src_file_name': 'f',
@@ -319,9 +343,10 @@ def test_download_expiry_error(caplog):
             'get_callback_output_stream': None,
             'show_progress_bar': False,
             'get_callback': None}
+    meta = SnowflakeFileMeta(**meta)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
         SnowflakeS3Util._native_download_file(meta, 'f', 4)
-    assert meta['result_status'] == ResultStatus.RENEW_TOKEN
+    assert meta.result_status == ResultStatus.RENEW_TOKEN
 
 
 def test_download_unknown_error(caplog):
@@ -330,7 +355,10 @@ def test_download_unknown_error(caplog):
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
         {'Error': {'Code': 'unknown', 'Message': 'Just testing'}}, 'Testing')
-    meta = {'client': mock_resource,
+    meta = {'name': 'f',
+            'src_file_name': 'f',
+            'stage_location_type': 'S3',
+            'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
             'src_file_name': 'f',
@@ -338,6 +366,7 @@ def test_download_unknown_error(caplog):
             'get_callback_output_stream': None,
             'show_progress_bar': False,
             'get_callback': None}
+    meta = SnowflakeFileMeta(**meta)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
         with pytest.raises(botocore.exceptions.ClientError,
                            match=r'An error occurred \(unknown\) when calling the Testing operation: Just testing'):
@@ -353,7 +382,10 @@ def test_download_retry_exceeded_error(caplog):
     caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = RetriesExceededError(Boto3Error())
-    meta = {'client': mock_resource,
+    meta = {'name': 'f',
+            'src_file_name': 'f',
+            'stage_location_type': 'S3',
+            'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
             'src_file_name': 'f',
@@ -361,10 +393,11 @@ def test_download_retry_exceeded_error(caplog):
             'get_callback_output_stream': None,
             'show_progress_bar': False,
             'get_callback': None}
+    meta = SnowflakeFileMeta(**meta)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
         SnowflakeS3Util._native_download_file(meta, 'f', 4)
-    assert meta['last_error'] is mock_resource.download_file.side_effect
-    assert meta['result_status'] == ResultStatus.NEED_RETRY
+    assert meta.last_error is mock_resource.download_file.side_effect
+    assert meta.result_status == ResultStatus.NEED_RETRY
 
 
 @pytest.mark.parametrize('error_no, result_status', [
@@ -376,7 +409,9 @@ def test_download_syscall_error(caplog, error_no, result_status):
     caplog.set_level(logging.DEBUG, 'snowflake.connector')
     mock_resource = MagicMock()
     mock_resource.download_file.side_effect = OpenSSL.SSL.SysCallError(error_no)
-    meta = {'client': mock_resource,
+    meta = {'name': 'f',
+            'stage_location_type': 'S3',
+            'client': mock_resource,
             'sha256_digest': 'asd',
             'stage_info': {'location': 'loc'},
             'src_file_name': 'f',
@@ -384,7 +419,8 @@ def test_download_syscall_error(caplog, error_no, result_status):
             'get_callback_output_stream': None,
             'show_progress_bar': False,
             'get_callback': None}
+    meta = SnowflakeFileMeta(**meta)
     with mock.patch('snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object', return_value=mock_resource):
         SnowflakeS3Util._native_download_file(meta, 'f', 4)
-    assert meta['last_error'] is mock_resource.download_file.side_effect
-    assert meta['result_status'] == result_status
+    assert meta.last_error is mock_resource.download_file.side_effect
+    assert meta.result_status == result_status

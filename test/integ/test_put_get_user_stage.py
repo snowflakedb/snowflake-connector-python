@@ -13,39 +13,52 @@ from logging import getLogger
 import pytest
 
 from ..generate_test_files import generate_k_lines_of_n_files
+from ..integ_helpers import put
 
 
 @pytest.mark.aws
-def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, db_parameters, from_path):
     """[s3] Puts and Gets Small Data via User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
+    number_of_files = 5 if from_path else 1
+    number_of_lines = 1
     _put_get_user_stage(tmpdir, conn_cnx, db_parameters,
-                        number_of_files=5, number_of_lines=10)
+                        number_of_files=number_of_files,
+                        number_of_lines=number_of_lines,
+                        from_path=from_path)
 
 
 @pytest.mark.aws
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
 def test_put_get_large_data_via_user_stage(
-        is_public_test, tmpdir, conn_cnx, db_parameters):
+        is_public_test, tmpdir, conn_cnx, db_parameters, from_path):
     """[s3] Puts and Gets Large Data via User Stage."""
     if is_public_test or 'AWS_ACCESS_KEY_ID' not in os.environ:
         pytest.skip('This test requires to change the internal parameter')
+    number_of_files = 2 if from_path else 1
+    number_of_lines = 200000
     _put_get_user_stage(tmpdir, conn_cnx, db_parameters,
-                        number_of_files=2,
-                        number_of_lines=200000)
+                        number_of_files=number_of_files,
+                        number_of_lines=number_of_lines,
+                        from_path=from_path)
 
 
 def _put_get_user_stage(tmpdir, conn_cnx, db_parameters,
                         number_of_files=1,
-                        number_of_lines=1):
+                        number_of_lines=1,
+                        from_path=True):
     # sanity check
     assert 'AWS_ACCESS_KEY_ID' in os.environ, 'AWS_ACCESS_KEY_ID is missing'
     assert 'AWS_SECRET_ACCESS_KEY' in os.environ, \
         'AWS_SECRET_ACCESS_KEY is missing'
+    if not from_path:
+        assert number_of_files == 1
 
     tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
-
-    files = os.path.join(tmp_dir, 'file*')
+    files = os.path.join(tmp_dir, 'file*' if from_path else os.listdir(tmp_dir)[0])
+    file_stream = None if from_path else open(files, 'rb')
 
     stage_name = db_parameters['name'] + '_stage_{}_{}'.format(
         number_of_files,
@@ -89,10 +102,8 @@ credentials=(
                 "alter session set disable_put_and_get_on_external_stage = false")
             cnx.cursor().execute(
                 "rm @{stage_name}".format(stage_name=stage_name))
-            cnx.cursor().execute(
-                "put file://{file} @{stage_name}".format(
-                    file=files,
-                    stage_name=stage_name))
+
+            put(cnx.cursor(), files, stage_name, from_path, file_stream=file_stream)
             cnx.cursor().execute(
                 "copy into {name} from @{stage_name}".format(
                     name=db_parameters['name'], stage_name=stage_name))
@@ -124,6 +135,8 @@ credentials=(
                     _, encoding = mimetypes.guess_type(file)
                     assert encoding == 'gzip', "exported file type"
     finally:
+        if file_stream:
+            file_stream.close()
         with conn_cnx(
                 user=db_parameters['user'],
                 account=db_parameters['account'],
