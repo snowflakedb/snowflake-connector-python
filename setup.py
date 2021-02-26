@@ -263,6 +263,7 @@ setup(
             'pytest-cov',
             'pytest-rerunfailures',
             'pytest-timeout',
+            'pytest-xdist',
             'coverage',
             'pexpect',
             'mock',
