@@ -11,7 +11,12 @@ from mock import MagicMock
 
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.errors import Error
-from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+from snowflake.connector.file_transfer_agent import (
+    SnowflakeAzureProgressPercentage,
+    SnowflakeFileTransferAgent,
+    SnowflakeS3ProgressPercentage,
+    percent,
+)
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason='permission model is different')
@@ -74,3 +79,18 @@ def test_put_error(tmpdir):
         sf_file_transfer_agent.result()
 
     chmod(file1, 0o700)
+
+
+def test_percentage(tmp_path):
+    """Tests for ProgressPercentage classes."""
+    assert 1.0 == percent(0, 0)
+    assert 1.0 == percent(20, 0)
+    assert 1.0 == percent(40, 20)
+    assert 0.5 == percent(14, 28)
+
+    file_path = tmp_path / 'zero_file1'
+    file_path.touch()
+    func_callback = SnowflakeS3ProgressPercentage(str(file_path), 0)
+    func_callback(1)
+    func_callback = SnowflakeAzureProgressPercentage(str(file_path), 0)
+    func_callback(1)
