@@ -127,7 +127,7 @@ DEFAULT_CONFIGURATION = {
     'inject_client_pause': (0, int),  # snowflake internal
     'session_parameters': (None, (type(None), dict)),  # snowflake session parameters
     'autocommit': (None, (type(None), bool)),  # snowflake
-    'client_session_keep_alive': (None, bool),  # snowflake
+    'client_session_keep_alive': (None, (type(None), bool)),  # snowflake
     'client_session_keep_alive_heartbeat_frequency': (None, (type(None), int)),  # snowflake
     'client_prefetch_threads': (4, int),  # snowflake
     'numpy': (False, bool),  # snowflake
@@ -323,10 +323,7 @@ class SnowflakeConnection(object):
 
     @client_session_keep_alive.setter
     def client_session_keep_alive(self, value):
-        if value is None:
-            self._client_session_keep_alive = None
-        else:
-            self._client_session_keep_alive = value
+        self._client_session_keep_alive = value
 
     @property
     def client_session_keep_alive_heartbeat_frequency(self):
