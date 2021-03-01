@@ -15,7 +15,6 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeAzureProgressPercentage,
     SnowflakeFileTransferAgent,
     SnowflakeS3ProgressPercentage,
-    percent,
 )
 
 
@@ -81,8 +80,10 @@ def test_put_error(tmpdir):
     chmod(file1, 0o700)
 
 
+@pytest.mark.skipolddriver
 def test_percentage(tmp_path):
     """Tests for ProgressPercentage classes."""
+    from snowflake.connector.file_transfer_agent import percent
     assert 1.0 == percent(0, 0)
     assert 1.0 == percent(20, 0)
     assert 1.0 == percent(40, 20)
