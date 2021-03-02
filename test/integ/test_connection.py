@@ -928,7 +928,7 @@ def test_process_param_error(conn_cnx):
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 
-@pytest.mark.parametrize('auto_commit', [True, False])
+@pytest.mark.parametrize('auto_commit', [pytest.param(True, marks=pytest.mark.skipolddriver), False])
 def test_autocommit(conn_cnx, db_parameters, auto_commit):
     conn = snowflake.connector.connect(**db_parameters)
     with mock.patch.object(conn, 'commit') as mocked_commit:
