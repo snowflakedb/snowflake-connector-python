@@ -214,6 +214,7 @@ class SnowflakeConnection(object):
         self._async_sfqids = set()
         self._done_async_sfqids = set()
         self.telemetry_enabled = False
+        self._session_parameters: Dict[str, Union[str, int, bool]] = {}
         logger.info(
             "Snowflake Connector for Python Version: %s, "
             "Python Version: %s, Platform: %s",
@@ -889,7 +890,7 @@ class SnowflakeConnection(object):
             auth_instance, 'consent_cache_id_token', True)
 
         auth = Auth(self.rest)
-        self._session_parameters = auth.authenticate(
+        auth.authenticate(
             auth_instance=auth_instance,
             account=self.account,
             user=self.user,
@@ -1114,17 +1115,15 @@ class SnowflakeConnection(object):
             self.client_prefetch_threads)
         return self.client_prefetch_threads
 
-    def _set_parameters(self, ret, session_parameters):
-        """Sets session parameters."""
-        if 'parameters' not in ret['data']:
-            return
-        parameters = ret['data']['parameters']
+    def _update_parameters(
+            self,
+            parameters: Dict[str, Union[str, int, bool]],
+    ) -> None:
+        """Update session parameters."""
         with self._lock_converter:
             self.converter.set_parameters(parameters)
-        for kv in parameters:
-            name = kv['name']
-            value = kv['value']
-            session_parameters[name] = value
+        for name, value in parameters.items():
+            self._session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
                 self.telemetry_enabled = value
             elif PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED == name:
@@ -1153,10 +1152,12 @@ class SnowflakeConnection(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager with commit or rollback teardown."""
-        if exc_tb is None:
-            self.commit()
-        else:
-            self.rollback()
+        if not self._session_parameters.get('AUTOCOMMIT', False):
+            # Either AUTOCOMMIT is turned off, or is not set so we default to old behavior
+            if exc_tb is None:
+                self.commit()
+            else:
+                self.rollback()
         self.close()
 
     def _get_query_status(self, sf_qid: str) -> Tuple[QueryStatus, Dict[str, Any]]:

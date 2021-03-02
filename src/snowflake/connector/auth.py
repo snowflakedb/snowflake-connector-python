@@ -15,6 +15,7 @@ from datetime import datetime
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
+from typing import Dict, Union
 
 from .auth_keypair import AuthByKeyPair
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
@@ -124,7 +125,7 @@ class Auth(object):
                      warehouse=None, role=None, passcode=None,
                      passcode_in_password=False,
                      mfa_callback=None, password_callback=None,
-                     session_parameters=None, timeout=120):
+                     session_parameters=None, timeout=120) -> Dict[str, Union[str, int, bool]]:
         logger.debug('authenticate')
 
         if session_parameters is None:
@@ -356,9 +357,10 @@ class Auth(object):
                 self._rest._connection._schema = session_info.get('schemaName')
                 self._rest._connection._warehouse = session_info.get('warehouseName')
                 self._rest._connection._role = session_info.get('roleName')
-            self._rest._connection._set_parameters(ret, session_parameters)
-
-        return session_parameters
+            if 'parameters' in ret['data']:
+                session_parameters.update({p['name']: p['value'] for p in ret['data']['parameters']})
+            self._rest._connection._update_parameters(session_parameters)
+            return session_parameters
 
     def _read_temporary_credential(self, host, user, cred_type):
         cred = None
