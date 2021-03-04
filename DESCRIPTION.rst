@@ -10,7 +10,7 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
-- v2.4.1(March 07,2021)
+- v2.4.1(March 04,2021)
 
    - Make connection object exit() aware of status of parameter `autocommit`
 
