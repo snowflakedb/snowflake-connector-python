@@ -11,7 +11,7 @@ from datetime import date, datetime
 from datetime import time as dt_t
 from datetime import timedelta
 from logging import getLogger
-from typing import Any, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import pytz
 
@@ -129,24 +129,22 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> pytz._FixedOffset:
 
 class SnowflakeConverter(object):
     def __init__(self, **kwargs):
-        self._parameters = {}
+        self._parameters: Dict[str, Union[str, int, bool]] = {}
         self._use_numpy = kwargs.get('use_numpy', False) and numpy is not None
 
         logger.debug('use_numpy: %s', self._use_numpy)
 
-    def set_parameters(self, parameters):
-        self._parameters = {}
-        for kv in parameters:
-            self._parameters[kv['name']] = kv['value']
+    def set_parameters(self, new_parameters: Dict) -> None:
+        self._parameters = new_parameters
 
-    def set_parameter(self, param, value):
+    def set_parameter(self, param: Any, value: Any) -> None:
         self._parameters[param] = value
 
-    def get_parameters(self):
+    def get_parameters(self) -> Dict[str, Union[str, int, bool]]:
         return self._parameters
 
-    def get_parameter(self, param):
-        return self._parameters[param] if param in self._parameters else None
+    def get_parameter(self, param: str) -> Optional[Union[str, int, bool]]:
+        return self._parameters.get(param)
 
     #
     # FROM Snowflake to Python Objects
