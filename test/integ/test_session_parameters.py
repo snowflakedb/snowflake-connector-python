@@ -4,7 +4,14 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
+import pytest
+
 import snowflake.connector
+
+try:  # pragma: no cover
+    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+except ImportError:
+    CONNECTION_PARAMETERS_ADMIN = {}
 
 
 def test_session_parameters(db_parameters):
@@ -27,6 +34,10 @@ def test_session_parameters(db_parameters):
     assert ret[1] == 'UTC'
 
 
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="This test needs to alter account level parameters"
+)
 def test_client_session_keep_alive(db_parameters):
     """Tests client_session_keep_alive setting.
 
