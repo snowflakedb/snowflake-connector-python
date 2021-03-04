@@ -10,6 +10,11 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.4.1(March 07,2021)
+
+   - Make connection object exit() aware of status of parameter `autocommit`
+
+
 - v2.4.0(March 04,2021)
 
    - Added support for Python 3.9 and PyArrow 3.0.x.
