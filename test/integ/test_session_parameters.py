@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-import pytest
-
 import snowflake.connector
 
 try:  # pragma: no cover
@@ -34,11 +32,7 @@ def test_session_parameters(db_parameters):
     assert ret[1] == 'UTC'
 
 
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="This test needs to alter account level parameters"
-)
-def test_client_session_keep_alive(db_parameters):
+def test_client_session_keep_alive(db_parameters, conn_cnx):
     """Tests client_session_keep_alive setting.
 
     Ensures that client's explicit config for client_session_keep_alive
@@ -56,29 +50,27 @@ def test_client_session_keep_alive(db_parameters):
 
     # Ensure backend parameter is set to False
     set_backend_client_session_keep_alive(db_parameters, admin_cnxn, False)
-    connection = create_client_connection(db_parameters, True)
+    with conn_cnx(client_session_keep_alive=True) as connection:
+        connection = create_client_connection(db_parameters, True)
 
-    ret = connection.cursor().execute(
-        "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
-    assert ret[1] == 'true'
-    connection.close()
+        ret = connection.cursor().execute(
+            "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
+        assert ret[1] == 'true'
 
     # Set backend parameter to True
     set_backend_client_session_keep_alive(db_parameters, admin_cnxn, True)
 
     # Set session parameter to False
-    connection = create_client_connection(db_parameters, False)
-    ret = connection.cursor().execute(
-        "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
-    assert ret[1] == 'false'
-    connection.close()
+    with conn_cnx(client_session_keep_alive=False) as connection:
+        ret = connection.cursor().execute(
+            "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
+        assert ret[1] == 'false'
 
     # Set session parameter to None backend parameter continues to be True
-    connection = create_client_connection(db_parameters, None)
-    ret = connection.cursor().execute(
-        "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
-    assert ret[1] == 'true'
-    connection.close()
+    with conn_cnx(client_session_keep_alive=None) as connection:
+        ret = connection.cursor().execute(
+            "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
+        assert ret[1] == 'true'
 
 
 def create_client_connection(db_parameters: object, val: bool) -> object:
