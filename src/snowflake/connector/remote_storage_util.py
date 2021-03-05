@@ -98,9 +98,9 @@ class SnowflakeRemoteStorageUtil(object):
             data_file = meta.real_src_file_name
 
         util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(
-            meta.stage_info['locationType'])
+            meta.client_meta.stage_info['locationType'])
 
-        logger.debug(f"putting a file: {meta.stage_info['location']}, {meta.dst_file_name}")
+        logger.debug(f"putting a file: {meta.client_meta.stage_info['location']}, {meta.dst_file_name}")
 
         max_concurrency = meta.parallel
         last_err = None
@@ -112,7 +112,7 @@ class SnowflakeRemoteStorageUtil(object):
 
                 if file_header and \
                         meta.result_status == ResultStatus.UPLOADED:
-                    logger.debug(f'file already exists location="{meta.stage_info["location"]}", '
+                    logger.debug(f'file already exists location="{meta.client_meta.stage_info["location"]}", '
                                  f'file_name="{meta.dst_file_name}"')
                     meta.dst_file_size = 0
                     meta.result_status = ResultStatus.SKIPPED
@@ -172,7 +172,7 @@ class SnowflakeRemoteStorageUtil(object):
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
 
-        util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(meta.stage_info['locationType'])
+        util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(meta.client_meta.stage_info['locationType'])
         file_header = util_class.get_file_header(meta, meta.src_file_name)
 
         if file_header:
@@ -248,7 +248,7 @@ class SnowflakeRemoteStorageUtil(object):
     @staticmethod
     def upload_one_file_with_retry(meta: 'SnowflakeFileMeta') -> None:
         """Uploads one file with retry."""
-        util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(meta.stage_info['locationType'])
+        util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(meta.client_meta.stage_info['locationType'])
         for _ in range(10):
             # retry
             SnowflakeRemoteStorageUtil.upload_one_file(meta)

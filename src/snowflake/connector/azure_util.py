@@ -86,8 +86,8 @@ class SnowflakeAzureUtil(object):
     @staticmethod
     def get_file_header(meta: 'SnowflakeFileMeta', filename):
         """Gets Azure file properties."""
-        client: BlobServiceClient = meta.client
-        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(meta.stage_info['location'])
+        client: BlobServiceClient = meta.client_meta.cloud_client
+        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(meta.client_meta.stage_info['location'])
         try:
             # HTTP HEAD request
             blob = client.get_blob_client(azure_location.container_name,
@@ -180,10 +180,10 @@ class SnowflakeAzureUtil(object):
                 'matdesc': encryption_metadata.matdesc
             })
         azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
-            meta.stage_info['location'])
+            meta.client_meta.stage_info['location'])
         path = azure_location.path + meta.dst_file_name.lstrip('/')
 
-        client: BlobServiceClient = meta.client
+        client: BlobServiceClient = meta.client_meta.cloud_client
         callback = None
         upload_src = None
         upload_size = None
@@ -248,9 +248,9 @@ class SnowflakeAzureUtil(object):
 
     @staticmethod
     def _native_download_file(meta: 'SnowflakeFileMeta', full_dst_file_name, max_concurrency):
-        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(meta.stage_info['location'])
+        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(meta.client_meta.stage_info['location'])
         path = azure_location.path + meta.src_file_name.lstrip('/')
-        client: BlobServiceClient = meta.client
+        client: BlobServiceClient = meta.client_meta.cloud_client
 
         callback = None
         if meta.get_azure_callback:
