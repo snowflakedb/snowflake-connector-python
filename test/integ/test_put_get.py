@@ -18,7 +18,7 @@ from ..integ_helpers import put
 from ..randomize import random_string
 
 try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
@@ -63,7 +63,7 @@ def create_test_data(request, db_parameters, connection):
 
     class TestData(object):
         def __init__(self):
-            self.test_data_dir = (pathlib.Path(__file__).parent / 'data').absolute()
+            self.test_data_dir = (pathlib.Path(__file__).parent.parent / 'data').absolute()
             self.AWS_ACCESS_KEY_ID = "'{}'".format(
                 os.environ['AWS_ACCESS_KEY_ID'])
             self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
