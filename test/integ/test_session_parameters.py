@@ -57,8 +57,6 @@ def test_client_session_keep_alive(db_parameters, conn_cnx):
     # Ensure backend parameter is set to False
     set_backend_client_session_keep_alive(db_parameters, admin_cnxn, False)
     with conn_cnx(client_session_keep_alive=True) as connection:
-        connection = create_client_connection(db_parameters, True)
-
         ret = connection.cursor().execute(
             "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
         assert ret[1] == 'true'
@@ -77,6 +75,8 @@ def test_client_session_keep_alive(db_parameters, conn_cnx):
         ret = connection.cursor().execute(
             "show parameters like 'CLIENT_SESSION_KEEP_ALIVE'").fetchone()
         assert ret[1] == 'true'
+
+    admin_cnxn.close()
 
 
 def create_client_connection(db_parameters: object, val: bool) -> object:
