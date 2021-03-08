@@ -88,10 +88,10 @@ jobs:
     needs: lint
     name: Build linux-py${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux1_x86_64
+    container: quay.io/pypa/manylinux2010_x86_64
     strategy:
       matrix:
-        python-version: [3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8, 3.9]
     steps:
       - uses: actions/checkout@v1
       - name: Updating path
@@ -100,6 +100,7 @@ jobs:
           echo "/opt/python/cp36-cp36m/bin/" >> $GITHUB_PATH
           echo "/opt/python/cp37-cp37m/bin/" >> $GITHUB_PATH
           echo "/opt/python/cp38-cp38/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp39-cp39/bin/" >> $GITHUB_PATH
       - name: Display Python version
         run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
@@ -107,7 +108,7 @@ jobs:
       - name: Generate wheel
         run: python${{ matrix.python-version }} -m pip wheel -v -w dist_tmp --no-deps .
       - name: Run auditwheel
-        run: auditwheel repair --plat manylinux2010_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
+        run: auditwheel repair --plat manylinux2014_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
       - name: Show wheels generated
         run: ls -lh dist
       - uses: actions/upload-artifact@v1
@@ -128,6 +129,8 @@ jobs:
             link: https://www.python.org/ftp/python/3.7.0/python-3.7.0-macosx10.9.pkg
           - version: 3.8
             link: https://www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg
+          - version: 3.9
+            link: https://www.python.org/ftp/python/3.9.0/python-3.9.0-macosx10.9.pkg
     steps:
       - uses: actions/checkout@v2
       - name: Setup Python
@@ -157,7 +160,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: [3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8, 3.9]
     steps:
       - uses: actions/checkout@v2
       - name: Setup python
@@ -216,7 +219,7 @@ jobs:
            download_name: macos
          - image_name: windows-latest
            download_name: windows
-        python-version: [3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8, 3.9]
         cloud-provider: [aws, azure, gcp]
     steps:
       - uses: actions/checkout@v2
@@ -241,9 +244,9 @@ jobs:
       - name: Show wheels downloaded
         run: ls -lh dist
         shell: bash
-      - name: Remove manylinux1 wheel
+      - name: Remove manylinux2010 wheel
         run: |
-          rm dist/*manylinux1*.whl
+          rm dist/*manylinux2010*.whl
           ls -lh dist
         if: matrix.os.download_name == 'linux'
       - name: Upgrade setuptools, pip and wheel
@@ -332,9 +335,9 @@ jobs:
       - name: Show wheels downloaded
         run: ls -lh dist
         shell: bash
-      - name: Remove manylinux1 wheel
+      - name: Remove manylinux2010 wheel
         run: |
-          rm dist/*manylinux1*.whl
+          rm dist/*manylinux2010*.whl
           ls -lh dist
       - name: Run tests
         run: ./ci/test_fips_docker.sh

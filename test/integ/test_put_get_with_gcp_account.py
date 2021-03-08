@@ -20,14 +20,17 @@ from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent, SnowflakeProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
+from ..integ_helpers import put
 from ..randomize import random_string
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
     from snowflake.connector.vendored import requests  # NOQA
+
     vendored_request = True
 except ImportError:  # pragma: no cover
     import requests
+
     vendored_request = False
 
 logger = getLogger(__name__)
@@ -37,7 +40,8 @@ pytestmark = pytest.mark.gcp
 
 
 @pytest.mark.parametrize('enable_gcs_downscoped', [True, False])
-def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped, from_path):
     """[gcp] Puts and Gets a small text using gcp."""
     if enable_gcs_downscoped and is_public_test:
         pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
@@ -59,7 +63,10 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enabl
                     raise e
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
-                csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
+                file_stream = None if from_path else open(fname, 'rb')
+                put(csr, fname, f"%{table_name}", from_path,
+                                    sql_options=" auto_compress=true parallel=30",
+                                    file_stream=file_stream)
                 assert csr.fetchone()[6] == 'UPLOADED'
                 csr.execute("copy into {}".format(table_name))
                 csr.execute("rm @%{}".format(table_name))
@@ -73,6 +80,8 @@ def test_put_get_with_gcp(tmpdir, conn_cnx, db_parameters, is_public_test, enabl
                 assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
                 assert rec[3] == '', 'Return no error message'
             finally:
+                if file_stream:
+                    file_stream.close()
                 csr.execute("drop table {}".format(table_name))
 
     files = glob.glob(os.path.join(tmp_dir, 'data_*'))
@@ -479,10 +488,12 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters, is_public_test):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters, is_public_test, from_path):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     if is_public_test:
         pytest.xfail("Server need to update with merged change. Expected release version: 4.41.0")
+
     with conn_cnx() as cnx:
 
         tmp_dir = str(tmpdir.mkdir('data'))
@@ -493,17 +504,20 @@ def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters, is_public
 
         cnx.cursor().execute("RM @~/test_put_overwrite")
         try:
+            file_stream = None if from_path else open(test_data, 'rb')
             with cnx.cursor() as cur:
                 cur.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite", from_path, file_stream=file_stream)
                 data = cur.fetchall()
                 assert data[0][6] == 'UPLOADED'
 
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite", from_path, file_stream=file_stream)
                 data = cur.fetchall()
                 assert data[0][6] == 'SKIPPED'
 
-                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite", from_path,
+                                    sql_options="OVERWRITE = TRUE",
+                                    file_stream=file_stream)
                 data = cur.fetchall()
                 assert data[0][6] == 'UPLOADED'
 
@@ -511,4 +525,6 @@ def test_put_overwrite_with_downscope(tmpdir, conn_cnx, db_parameters, is_public
             assert "test_put_overwrite/data.txt" in ret[0]
             assert "data.txt.gz" in ret[0]
         finally:
+            if file_stream:
+                file_stream.close()
             cnx.cursor().execute("RM @~/test_put_overwrite")

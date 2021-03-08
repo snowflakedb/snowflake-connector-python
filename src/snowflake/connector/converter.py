@@ -11,6 +11,7 @@ from datetime import date, datetime
 from datetime import time as dt_t
 from datetime import timedelta
 from logging import getLogger
+from typing import Any, Dict, Optional, Tuple, Union
 
 import pytz
 
@@ -128,24 +129,22 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> pytz._FixedOffset:
 
 class SnowflakeConverter(object):
     def __init__(self, **kwargs):
-        self._parameters = {}
+        self._parameters: Dict[str, Union[str, int, bool]] = {}
         self._use_numpy = kwargs.get('use_numpy', False) and numpy is not None
 
         logger.debug('use_numpy: %s', self._use_numpy)
 
-    def set_parameters(self, parameters):
-        self._parameters = {}
-        for kv in parameters:
-            self._parameters[kv['name']] = kv['value']
+    def set_parameters(self, new_parameters: Dict) -> None:
+        self._parameters = new_parameters
 
-    def set_parameter(self, param, value):
+    def set_parameter(self, param: Any, value: Any) -> None:
         self._parameters[param] = value
 
-    def get_parameters(self):
+    def get_parameters(self) -> Dict[str, Union[str, int, bool]]:
         return self._parameters
 
-    def get_parameter(self, param):
-        return self._parameters[param] if param in self._parameters else None
+    def get_parameter(self, param: str) -> Optional[Union[str, int, bool]]:
+        return self._parameters.get(param)
 
     #
     # FROM Snowflake to Python Objects
@@ -198,6 +197,7 @@ class SnowflakeConverter(object):
 
     def _DATE_to_python(self, _):
         """Converts DATE to date."""
+
         def conv(value: str) -> date:
             try:
                 return datetime.utcfromtimestamp(int(value) * 86400).date()
@@ -297,6 +297,7 @@ class SnowflakeConverter(object):
 
     def _TIMESTAMP_NTZ_numpy_to_python(self, ctx):
         """TIMESTAMP NTZ to datetime64 with no timezone info is attached."""
+
         def conv(value: str) -> 'numpy.datetime64':
             nanoseconds = int(decimal.Decimal(value).scaleb(9))
             return numpy.datetime64(nanoseconds, 'ns')
@@ -509,11 +510,8 @@ class SnowflakeConverter(object):
                 second=value.second
             )
 
-    def date_to_snowflake(self, value):
-        """Converts Date object to Snowflake object."""
-        return self._date_to_snowflake(value)
-
     def _date_to_snowflake(self, value):
+        """Converts Date object to Snowflake object."""
         return '{year:d}-{month:02d}-{day:02d}'.format(
             year=value.year, month=value.month, day=value.day)
 
@@ -592,6 +590,26 @@ class SnowflakeConverter(object):
             )
         raise AttributeError('No method is available: {}'.format(item))
 
+    def to_csv_bindings(self, value: Union[Tuple[str, Any], Any]) -> Union[str, None]:
+        """Convert value to a string representation in CSV-escaped format to INSERT INTO."""
+        if isinstance(value, tuple) and len(value) == 2:
+            _type, val = value
+            if _type in ['TIMESTAMP_TZ', 'TIME']:
+                # unspecified timezone is considered utc
+                if getattr(val, 'tzinfo', 1) is None:
+                    val = self.to_snowflake(pytz.utc.localize(val))
+                else:
+                    val = self.to_snowflake(val)
+            else:
+                val = self.to_snowflake_bindings(_type, val)
+        else:
+            if isinstance(value, (dt_t, timedelta)):
+                val = self.to_snowflake(value)
+            else:
+                _type = self.snowflake_type(value)
+                val = self.to_snowflake_bindings(_type, value)
+        return self.escape_for_csv(val)
+
     @staticmethod
     def escape(value):
         if isinstance(value, list):
@@ -620,3 +638,19 @@ class SnowflakeConverter(object):
             return "X'{}'".format(value.decode('ascii'))
 
         return "'{}'".format(value)
+
+    @staticmethod
+    def escape_for_csv(value: str) -> str:
+        if value is None:  # NULL
+            return ""
+        elif not value:  # Empty string
+            return "\"\""
+        if value.find('"') >= 0 \
+                or value.find('\n') >= 0 \
+                or value.find(',') >= 0 \
+                or value.find('\\') >= 0:
+            # replace single quote with double quotes
+            value = value.replace("\"", "\"\"")
+            return f'"{value}"'
+        else:
+            return value

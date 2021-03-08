@@ -27,6 +27,7 @@ from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
+from .bind_upload_agent import BindUploadError
 from .chunk_downloader import DEFAULT_CLIENT_PREFETCH_THREADS, MAX_CLIENT_PREFETCH_THREADS, SnowflakeChunkDownloader
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
@@ -50,6 +51,7 @@ from .description import CLIENT_NAME, CLIENT_VERSION, PLATFORM, PYTHON_VERSION, 
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
+    ER_FAILED_PROCESSING_QMARK,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
@@ -193,7 +195,7 @@ class SnowflakeConnection(object):
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
-        errorhandler: Handler used with errors. By default, an exception will raised on error.
+        errorhandler: Handler used with errors. By default, an exception will be raised on error.
         converter_class: Handler used to convert data to Python native objects.
         validate_default_parameters: Validate database, schema, role and warehouse used on Snowflake.
         is_pyformat: Whether the current argument binding is pyformat or format.
@@ -212,6 +214,7 @@ class SnowflakeConnection(object):
         self._async_sfqids = set()
         self._done_async_sfqids = set()
         self.telemetry_enabled = False
+        self._session_parameters: Dict[str, Union[str, int, bool]] = {}
         logger.info(
             "Snowflake Connector for Python Version: %s, "
             "Python Version: %s, Platform: %s",
@@ -225,6 +228,7 @@ class SnowflakeConnection(object):
         self.heartbeat_thread = None
 
         self.converter = None
+        self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
         self.incident = IncidentAPI(self._rest)
@@ -417,7 +421,6 @@ class SnowflakeConnection(object):
             self.__config(**kwargs)
             TelemetryService.get_instance().update_context(kwargs)
 
-        self.__set_error_attributes()
         self.__open_connection()
 
     def close(self, retry=True):
@@ -531,7 +534,9 @@ class SnowflakeConnection(object):
     def __set_error_attributes(self):
         for m in [method for method in dir(errors) if
                   callable(getattr(errors, method))]:
-            setattr(self, m, getattr(errors, m))
+            # If name starts with _ then ignore that
+            name = m if not m.startswith('_') else m[1:]
+            setattr(self, name, getattr(errors, m))
 
     @staticmethod
     def setup_ocsp_privatelink(app, hostname):
@@ -619,12 +624,12 @@ class SnowflakeConnection(object):
             # enable storing temporary credential in a file
             self._session_parameters[
                 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = \
-                    self._client_store_temporary_credential if IS_LINUX else True
+                self._client_store_temporary_credential if IS_LINUX else True
 
         if self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[
                 PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = \
-                    self._client_request_mfa_token if IS_LINUX else True
+                self._client_request_mfa_token if IS_LINUX else True
 
         auth = Auth(self.rest)
         auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
@@ -799,6 +804,7 @@ class SnowflakeConnection(object):
                   sequence_counter: int,
                   request_id: uuid.UUID,
                   binding_params: Union[None, Tuple, Dict[str, Dict[str, str]]] = None,
+                  binding_stage: Optional[str] = None,
                   is_file_transfer: bool = False,
                   statement_params: Optional[Dict[str, str]] = None,
                   is_internal: bool = False,
@@ -816,6 +822,9 @@ class SnowflakeConnection(object):
             data['parameters'] = statement_params
         if is_internal:
             data['isInternal'] = is_internal
+        if binding_stage is not None:
+            # binding stage for bulk array binding
+            data['bindStage'] = binding_stage
         if binding_params is not None:
             # binding parameters. This is for qmarks paramstyle.
             data['bindings'] = binding_params
@@ -882,7 +891,7 @@ class SnowflakeConnection(object):
             auth_instance, 'consent_cache_id_token', True)
 
         auth = Auth(self.rest)
-        self._session_parameters = auth.authenticate(
+        auth.authenticate(
             auth_instance=auth_instance,
             account=self.account,
             user=self.user,
@@ -897,9 +906,30 @@ class SnowflakeConnection(object):
             session_parameters=self._session_parameters,
         )
 
+    def _write_params_to_byte_rows(self, params: List[Tuple[Union[Any, Tuple]]]) -> List[bytes]:
+        """Write csv-format rows of binding values as list of bytes string.
+
+        Args:
+            params: Binding parameters to bulk array insertion query with qmark/numeric format.
+            cursor: SnowflakeCursor.
+
+        Returns:
+            List of bytes string corresponding to rows
+
+        """
+        res = []
+        try:
+            for row in params:
+                temp = map(self.converter.to_csv_bindings, row)
+                res.append((",".join(temp) + "\n").encode('utf-8'))
+        except (ProgrammingError, AttributeError) as exc:
+            raise BindUploadError from exc
+        return res
+
+    # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(self,
                                params: Union[List, Tuple, None],
-                               cursor: 'SnowflakeCursor' = None) -> Dict[str, Dict[str, str]]:
+                               cursor: Optional['SnowflakeCursor'] = None) -> Dict[str, Dict[str, str]]:
         if not params:
             return None
         processed_params = {}
@@ -913,6 +943,7 @@ class SnowflakeConnection(object):
             Error.errorhandler_wrapper(self, cursor,
                                        ProgrammingError,
                                        errorvalue)
+
         for idx, v in enumerate(params):
             if isinstance(v, tuple):
                 if len(v) != 2:
@@ -921,9 +952,9 @@ class SnowflakeConnection(object):
                         ProgrammingError,
                         {
                             'msg': "Binding parameters must be a list "
-                                    "where one element is a single value or "
-                                    "a pair of Snowflake datatype and a value",
-                            'errno': ER_FAILED_PROCESSING_PYFORMAT,
+                                   "where one element is a single value or "
+                                   "a pair of Snowflake datatype and a value",
+                            'errno': ER_FAILED_PROCESSING_QMARK,
                         }
                     )
                 processed_params[str(idx + 1)] = {
@@ -939,9 +970,9 @@ class SnowflakeConnection(object):
                         ProgrammingError,
                         {
                             'msg': "Python data type [{}] cannot be "
-                                    "automatically mapped to Snowflake data "
-                                    "type. Specify the snowflake data type "
-                                    "explicitly.".format(
+                                   "automatically mapped to Snowflake data "
+                                   "type. Specify the snowflake data type "
+                                   "explicitly.".format(
                                 v.__class__.__name__.lower()),
                             'errno': ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
                         }
@@ -1088,17 +1119,15 @@ class SnowflakeConnection(object):
             self.client_prefetch_threads)
         return self.client_prefetch_threads
 
-    def _set_parameters(self, ret, session_parameters):
-        """Sets session parameters."""
-        if 'parameters' not in ret['data']:
-            return
-        parameters = ret['data']['parameters']
+    def _update_parameters(
+            self,
+            parameters: Dict[str, Union[str, int, bool]],
+    ) -> None:
+        """Update session parameters."""
         with self._lock_converter:
             self.converter.set_parameters(parameters)
-        for kv in parameters:
-            name = kv['name']
-            value = kv['value']
-            session_parameters[name] = value
+        for name, value in parameters.items():
+            self._session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
                 self.telemetry_enabled = value
             elif PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED == name:
@@ -1131,10 +1160,12 @@ class SnowflakeConnection(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager with commit or rollback teardown."""
-        if exc_tb is None:
-            self.commit()
-        else:
-            self.rollback()
+        if not self._session_parameters.get('AUTOCOMMIT', False):
+            # Either AUTOCOMMIT is turned off, or is not set so we default to old behavior
+            if exc_tb is None:
+                self.commit()
+            else:
+                self.rollback()
         self.close()
 
     def _get_query_status(self, sf_qid: str) -> Tuple[QueryStatus, Dict[str, Any]]:
@@ -1220,11 +1251,11 @@ class SnowflakeConnection(object):
     def is_still_running(status: QueryStatus) -> bool:
         """Checks whether given status is currently running."""
         return status in (
-                QueryStatus.RUNNING,
-                QueryStatus.RESUMING_WAREHOUSE,
-                QueryStatus.QUEUED,
-                QueryStatus.QUEUED_REPAIRING_WAREHOUSE,
-                QueryStatus.NO_DATA,
+            QueryStatus.RUNNING,
+            QueryStatus.RESUMING_WAREHOUSE,
+            QueryStatus.QUEUED,
+            QueryStatus.QUEUED_REPAIRING_WAREHOUSE,
+            QueryStatus.NO_DATA,
         )
 
     @staticmethod

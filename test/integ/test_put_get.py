@@ -3,7 +3,6 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
 import os
 import pathlib
 from getpass import getuser
@@ -15,10 +14,11 @@ from mock import patch
 
 import snowflake.connector
 
+from ..integ_helpers import put
 from ..randomize import random_string
 
 try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
@@ -63,7 +63,7 @@ def create_test_data(request, db_parameters, connection):
 
     class TestData(object):
         def __init__(self):
-            self.test_data_dir = (pathlib.Path(__file__).parent / 'data').absolute()
+            self.test_data_dir = (pathlib.Path(__file__).parent.parent / 'data').absolute()
             self.AWS_ACCESS_KEY_ID = "'{}'".format(
                 os.environ['AWS_ACCESS_KEY_ID'])
             self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
@@ -464,7 +464,8 @@ union
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_with_auto_compress_false(tmpdir, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_with_auto_compress_false(tmpdir, db_parameters, from_path):
     """Tests PUT command with auto_compress=False."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -483,11 +484,10 @@ def test_put_with_auto_compress_false(tmpdir, db_parameters):
 
     cnx.cursor().execute("RM @~/test_put_uncompress_file")
     try:
+        file_stream = None if from_path else open(test_data, 'rb')
         with cnx.cursor() as cur:
-            for rec in cur.execute("""
-PUT file://{} @~/test_put_uncompress_file auto_compress=FALSE
-""".format(test_data)):
-                print(rec)
+            put(cur, test_data, "~/test_put_uncompress_file",
+                                from_path, sql_options="auto_compress=FALSE", file_stream=file_stream)
 
         ret = cnx.cursor().execute("""
 LS @~/test_put_uncompress_file
@@ -496,13 +496,16 @@ LS @~/test_put_uncompress_file
         assert "data.txt.gz" not in ret[0]
     finally:
         cnx.cursor().execute("RM @~/test_put_uncompress_file")
+        if file_stream:
+            file_stream.close()
 
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
-def test_put_overwrite(tmpdir, db_parameters):
+@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
+def test_put_overwrite(tmpdir, db_parameters, from_path):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     cnx = snowflake.connector.connect(
         user=db_parameters['user'],
@@ -521,21 +524,25 @@ def test_put_overwrite(tmpdir, db_parameters):
 
     cnx.cursor().execute("RM @~/test_put_overwrite")
     try:
+        file_stream = None if from_path else open(test_data, 'rb')
         with cnx.cursor() as cur:
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite", from_path, file_stream=file_stream)
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite", from_path, file_stream=file_stream)
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'SKIPPED'
             with patch.object(cur, '_init_result_and_meta', wraps=cur._init_result_and_meta) as mock_result:
-                cur.execute("PUT file://{} @~/test_put_overwrite OVERWRITE = TRUE".format(test_data))
+                put(cur, test_data, "~/test_put_overwrite",
+                                    from_path, file_stream=file_stream, sql_options="OVERWRITE = TRUE")
                 assert mock_result.call_args[0][0]['rowset'][0][-2] == 'UPLOADED'
 
         ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
-        assert "test_put_overwrite/data.txt" in ret[0]
-        assert "data.txt.gz" in ret[0]
+        assert "test_put_overwrite/" + os.path.basename(test_data) in ret[0]
+        assert os.path.basename(test_data) + ".gz" in ret[0]
     finally:
+        if file_stream:
+            file_stream.close()
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
@@ -561,3 +568,21 @@ def test_utf8_filename(tmpdir, db_parameters, is_public_test):
             cur.execute("PUT 'file://{}' @{}".format(str(test_file).replace('\\', '/'), stage_name)).fetchall()
             cur.execute("select $1, $2, $3 from  @{}".format(stage_name))
             assert cur.fetchone() == ('1', '2', '3')
+
+
+def test_put_threshold(tmp_path, conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(reason="This feature hasn't been rolled out for public Snowflake deployments yet.")
+    file_name = 'test_put_get_with_aws_token.txt.gz'
+    stage_name = random_string(5, 'test_put_get_threshold_')
+    file = tmp_path / file_name
+    file.touch()
+    with conn_cnx() as cnx, cnx.cursor() as cur:
+        cur.execute(f"create temporary stage {stage_name}")
+        from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+        with patch(
+                'snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                autospec=SnowflakeFileTransferAgent
+        ) as mock_agent:
+            cur.execute(f"put file://{file} @{stage_name} threshold=156")
+        assert mock_agent.call_args.kwargs.get('multipart_threshold', -1) == 156

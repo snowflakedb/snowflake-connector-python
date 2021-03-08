@@ -39,7 +39,7 @@ from .errors import (
     NotSupportedError,
     OperationalError,
     ProgrammingError,
-    Warning,
+    _Warning,
 )
 from .version import VERSION
 
@@ -57,7 +57,7 @@ __version__ = SNOWFLAKE_CONNECTOR_VERSION
 
 __all__ = [
     # Error handling
-    'Error', 'Warning',
+    'Error', '_Warning',
     'InterfaceError', 'DatabaseError',
     'NotSupportedError', 'DataError', 'IntegrityError', 'ProgrammingError',
     'OperationalError', 'InternalError',
