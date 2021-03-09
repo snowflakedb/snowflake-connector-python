@@ -6,6 +6,7 @@
 #include "SnowflakeType.hpp"
 #include "IntConverter.hpp"
 #include "StringConverter.hpp"
+#include "VariantConverter.hpp"
 #include "FloatConverter.hpp"
 #include "DecimalConverter.hpp"
 #include "BinaryConverter.hpp"
@@ -191,13 +192,19 @@ void CArrowChunkIterator::initColumnConverters()
 
       case SnowflakeType::Type::ANY:
       case SnowflakeType::Type::CHAR:
-      case SnowflakeType::Type::OBJECT:
-      case SnowflakeType::Type::VARIANT:
       case SnowflakeType::Type::TEXT:
-      case SnowflakeType::Type::ARRAY:
       {
         m_currentBatchConverters.push_back(
             std::make_shared<sf::StringConverter>(columnArray));
+        break;
+      }
+
+      case SnowflakeType::Type::OBJECT:
+      case SnowflakeType::Type::VARIANT:
+      case SnowflakeType::Type::ARRAY:
+      {
+        m_currentBatchConverters.push_back(
+            std::make_shared<sf::VariantConverter>(columnArray, m_context));
         break;
       }
 
