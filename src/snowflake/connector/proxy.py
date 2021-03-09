@@ -4,10 +4,8 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-import os
 
-
-def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
+def format_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
     """Sets proxy dict for requests."""
     PREFIX_HTTP = 'http://'
     PREFIX_HTTPS = 'https://'
@@ -37,6 +35,4 @@ def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
                 proxy_auth=proxy_auth,
             ),
         }
-        os.environ['HTTP_PROXY'] = proxies['http']
-        os.environ['HTTPS_PROXY'] = proxies['https']
     return proxies

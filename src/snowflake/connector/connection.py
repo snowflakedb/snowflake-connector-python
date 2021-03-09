@@ -555,7 +555,7 @@ class SnowflakeConnection(object):
             use_numpy=self._numpy,
             support_negative_year=self._support_negative_year)
 
-        proxy.set_proxies(
+        proxies = proxy.format_proxies(
             self.proxy_host, self.proxy_port, self.proxy_user,
             self.proxy_password)
 
@@ -564,7 +564,9 @@ class SnowflakeConnection(object):
             port=self.port,
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
-            connection=self)
+            connection=self,
+            proxies=proxies
+        )
         logger.debug('REST API object was created: %s:%s',
                      self.host,
                      self.port)
