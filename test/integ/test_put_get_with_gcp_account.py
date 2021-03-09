@@ -301,7 +301,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
         with cnx.cursor() as csr:
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
-                from snowflake.connector.vendored.requests import put, get
+                from snowflake.connector.vendored.requests import get, put
 
                 def mocked_put(*args, **kwargs):
                     if mocked_put.counter == 0:
@@ -407,7 +407,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
             csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
             csr.execute("create or replace table {} (a int, b string)".format(table_name))
             try:
-                from snowflake.connector.vendored.requests import put, get, head
+                from snowflake.connector.vendored.requests import get, head, put
 
                 def mocked_put(*args, **kwargs):
                     if mocked_put.counter == 0:
