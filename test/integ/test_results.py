@@ -8,6 +8,8 @@ import pytest
 
 from snowflake.connector import ProgrammingError
 
+pytestmark = pytest.mark.parallel
+
 
 def test_results(conn_cnx):
     """Gets results for the given qid."""
@@ -23,16 +25,13 @@ def test_results(conn_cnx):
 
 def test_results_with_error(conn_cnx):
     """Gets results with error."""
-    with conn_cnx() as cnx:
-        cur = cnx.cursor()
-        sfqid = None
+    with conn_cnx() as cnx, cnx.cursor() as cur:
         try:
             cur.execute("select blah")
             pytest.fail("Should fail here!")
         except ProgrammingError as e:
             sfqid = e.sfqid
 
-        got_sfqid = None
         try:
             cur.query_result(sfqid)
             pytest.fail("Should fail here again!")

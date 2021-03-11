@@ -6,8 +6,14 @@
 
 import os
 
+import pytest
 
-def test_abc(conn_cnx, tmpdir, db_parameters):
+from ..randomize import random_string
+
+pytestmark = pytest.mark.parallel
+
+
+def test_abc(conn_cnx, tmpdir):
     """Tests PUTing a file on Windows using the URI and Windows path."""
     import pathlib
     tmp_dir = str(tmpdir.mkdir('data'))
@@ -16,18 +22,14 @@ def test_abc(conn_cnx, tmpdir, db_parameters):
         f.write("test1,test2")
         f.write("test3,test4")
 
-    fileURI = pathlib.Path(test_data).as_uri()
+    file_uri = pathlib.Path(test_data).as_uri()
+    subdir = random_string(4, prefix="test_abc")
 
-    subdir = db_parameters['name']
-    with conn_cnx(user=db_parameters['user'],
-                        account=db_parameters['account'],
-                        password=db_parameters['password']) as con:
-        rec = con.cursor().execute("put {} @~/{}0/".format(
-            fileURI, subdir)).fetchall()
+    with conn_cnx() as con:
+        rec = con.cursor().execute(f"put {file_uri} @~/{subdir}0/").fetchall()
         assert rec[0][6] == 'UPLOADED'
 
-        rec = con.cursor().execute("put file://{} @~/{}1/".format(
-            test_data, subdir)).fetchall()
+        rec = con.cursor().execute(f"put file://{test_data} @~/{subdir}1/").fetchall()
         assert rec[0][6] == 'UPLOADED'
 
         con.cursor().execute("rm @~/{}0".format(subdir))

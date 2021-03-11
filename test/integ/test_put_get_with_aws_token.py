@@ -17,15 +17,15 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
 from snowflake.connector.s3_util import SnowflakeS3Util
 
-from ..integ_helpers import put
+from ..integ_helpers import drop_table, put
 from ..randomize import random_string
 
 # Mark every test in this module as an aws test
-pytestmark = pytest.mark.aws
+pytestmark = [pytest.mark.aws, pytest.mark.parallel]
 
 
 @pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
+def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt.gz'))
@@ -33,7 +33,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
     with gzip.open(fname, 'wb') as f:
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_aws_token'))
-    table_name = random_string(5, 'snow9144_')
+    table_name = random_string(7, 'snow9144_')
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
@@ -72,7 +72,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
 
 
 @pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, from_path):
+def test_put_with_invalid_token(tmpdir, conn_cnx, from_path):
     """[s3] SNOW-6154: Uses invalid combination of AWS credential."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt.gz'))
@@ -82,7 +82,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, from_path):
 
     with conn_cnx() as cnx:
         try:
-            cnx.cursor().execute("create or replace table {} (a int, b string)".format(table_name))
+            cnx.cursor().execute("create table {} (a int, b string)".format(table_name))
             ret = cnx.cursor()._execute_helper("put file://{} @%{}".format(fname, table_name))
             stage_location = ret['data']['stageInfo']['location']
             stage_credentials = ret['data']['stageInfo']['creds']
@@ -148,7 +148,7 @@ def _s3bucket_list(client, s3bucket):
     return list(s3bucket.objects.iterator())  # list cast is to trigger lazy evaluation
 
 
-def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
+def test_pretend_to_put_but_list(tmpdir, conn_cnx, request):
     """[s3] SNOW-6154: Pretends to PUT but LIST."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_aws_token.txt'))
@@ -157,7 +157,8 @@ def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
     table_name = random_string(5, 'snow6154_list_')
 
     with conn_cnx() as cnx:
-        cnx.cursor().execute("create or replace table {} (a int, b string)".format(table_name))
+        cnx.cursor().execute("create table {} (a int, b string)".format(table_name))
+        request.addfinalizer(drop_table(conn_cnx, table_name))
         ret = cnx.cursor()._execute_helper("put file://{} @%{}".format(fname, table_name))
         stage_location = ret['data']['stageInfo']['location']
         stage_credentials = ret['data']['stageInfo']['creds']

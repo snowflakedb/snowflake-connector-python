@@ -6,8 +6,12 @@
 
 from logging import getLogger
 
+import pytest
+
 from snowflake.connector import errorcode, errors
 from snowflake.connector.network import SnowflakeRestful
+
+pytestmark = pytest.mark.parallel
 
 logger = getLogger(__name__)
 
@@ -31,7 +35,7 @@ def test_no_auth(db_parameters):
             },
             method='post',
             client='rest')
-        raise Exception("Must fail with auth error")
+        pytest.fail("Must fail with auth error")
     except errors.Error as e:
         assert e.errno == errorcode.ER_CONNECTION_IS_CLOSED
     finally:

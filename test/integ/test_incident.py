@@ -20,6 +20,8 @@ from snowflake.connector.incident import Incident
 # reported
 from .conftest import RUNNING_AGAINST_LOCAL_SNOWFLAKE
 
+pytestmark = pytest.mark.parallel
+
 
 def test_incident_creation():
     error_message = "This is an exception"

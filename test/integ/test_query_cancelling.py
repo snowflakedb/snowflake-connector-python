@@ -17,34 +17,38 @@ logger = getLogger(__name__)
 logging.basicConfig(level=logging.CRITICAL)
 
 try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from ..parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
+pytestmark = pytest.mark.parallel
+
+
 @pytest.fixture()
 def conn_cnx(request, conn_cnx):
+    """Overrides the fixture definition in conftest to add extra users."""
     def fin():
         with conn_cnx() as cnx:
             cnx.cursor().execute("use role accountadmin")
-            cnx.cursor().execute("drop user magicuser1")
-            cnx.cursor().execute("drop user magicuser2")
+            cnx.cursor().execute("drop user if exists magicuser1")
+            cnx.cursor().execute("drop user if exists magicuser2")
 
     request.addfinalizer(fin)
 
     with conn_cnx() as cnx:
         cnx.cursor().execute('use role securityadmin')
         cnx.cursor().execute(
-            "create or replace user magicuser1 password='xxx' "
+            "create user if not exists magicuser1 password='xxx' "
             "default_role='PUBLIC'")
         cnx.cursor().execute(
-            "create or replace user magicuser2 password='xxx' "
+            "create user if not exists magicuser2 password='xxx' "
             "default_role='PUBLIC'")
 
     return conn_cnx
 
 
-def _query_run(conn, shared, expectedCanceled=True):
+def _query_run(conn, shared, expected_canceled=True):
     """Runs a query, and wait for possible cancellation."""
     with conn(user='magicuser1', password='xxx') as cnx:
         cnx.cursor().execute('use warehouse regress')
@@ -77,10 +81,10 @@ select count(*) from table(generator(timeLimit => 10))""")
         else:
             logger.info("Query finished successfully")
 
-        assert canceled == expectedCanceled
+        assert canceled == expected_canceled
 
 
-def _query_cancel(conn, shared, user, password, expectedCanceled):
+def _query_cancel(conn, shared, user, password, expected_canceled):
     """Tests cancelling the query running in another thread."""
     with conn(user=user, password=password) as cnx:
         cnx.cursor().execute('use warehouse regress')
@@ -104,22 +108,20 @@ def _query_cancel(conn, shared, user, password, expectedCanceled):
                 shared.session_id)
             logger.info("Query: %s", query)
             cnx.cursor().execute(query)
-            assert expectedCanceled, ("You should NOT be able to "
-                                      "cancel the query [{}]".format(
-                shared.session_id))
+            assert expected_canceled, ("You should NOT be able to "
+                                      f"cancel the query [{shared.session_id}]")
         except errors.ProgrammingError as e:
             logger.info("FAILED TO CANCEL THE QUERY: %s", e)
-            assert not expectedCanceled, (
+            assert not expected_canceled, (
                 "You should be able to "
-                "cancel the query [{}]".format(
-                    shared.session_id))
+                f"cancel the query [{shared.session_id}]")
 
 
-def _test_helper(conn, expectedCanceled, cancelUser, cancelPass):
+def _test_helper(conn, expected_canceled, cancel_user, cancel_pass):
     """Helper function for the actual tests.
 
-    queryRun is always run with magicuser1/xxx.
-    queryCancel is run with cancelUser/cancelPass
+    query_run is always run with magicuser1/xxx.
+    query_cancel is run with cancel_user/cancel_pass
     """
 
     class Shared(object):
@@ -128,15 +130,15 @@ def _test_helper(conn, expectedCanceled, cancelUser, cancelPass):
             self.session_id = None
 
     shared = Shared()
-    queryRun = Thread(target=_query_run, args=(
-        conn, shared, expectedCanceled))
-    queryRun.start()
-    queryCancel = Thread(target=_query_cancel,
-                         args=(conn, shared, cancelUser, cancelPass,
-                               expectedCanceled))
-    queryCancel.start()
-    queryCancel.join(5)
-    queryRun.join(20)
+    query_run = Thread(target=_query_run, args=(
+        conn, shared, expected_canceled))
+    query_run.start()
+    query_cancel = Thread(target=_query_cancel,
+                         args=(conn, shared, cancel_user, cancel_pass,
+                               expected_canceled))
+    query_cancel.start()
+    query_cancel.join(5)
+    query_run.join(20)
 
 
 @pytest.mark.skipif(

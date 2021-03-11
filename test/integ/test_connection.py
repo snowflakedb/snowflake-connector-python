@@ -6,8 +6,6 @@
 
 import logging
 import os
-import queue
-import threading
 import warnings
 from uuid import uuid4
 
@@ -17,8 +15,6 @@ import pytest
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.auth_okta import AuthByOkta
-from snowflake.connector.connection import SnowflakeConnection
-from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -27,20 +23,24 @@ from snowflake.connector.errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from snowflake.connector.errors import Error, ForbiddenError
-from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
+from snowflake.connector.network import ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
+pytestmark = pytest.mark.parallel
+
+
 try:  # pragma: no cover
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from ..parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
-def test_basic(conn_testaccount):
+def test_basic(conn_cnx):
     """Basic Connection test."""
-    assert conn_testaccount, 'invalid cnx'
-    # Test default values
-    assert conn_testaccount.session_id
+    with conn_cnx() as cnx:
+        assert cnx
+        # Test default values
+        assert cnx.session_id
 
 
 def test_connection_without_schema(db_parameters):
@@ -358,40 +358,29 @@ def test_invalid_default_parameters(db_parameters):
 )
 def test_drop_create_user(conn_cnx, db_parameters):
     """Drops and creates user."""
-    with conn_cnx() as cnx:
-        def exe(sql):
-            return cnx.cursor().execute(sql)
+    with conn_cnx() as cnx, cnx.cursor() as csr:
+        csr.execute('use role accountadmin')
+        csr.execute('drop user if exists snowdog')
+        csr.execute("create user if not exists snowdog identified by 'testdoc'")
+        csr.execute(f"use {db_parameters['database']}")
+        csr.execute("create or replace role snowdog_role")
+        csr.execute("grant role snowdog_role to user snowdog")
+        csr.execute(f"grant all on database {db_parameters['database']} to role snowdog_role")
+        csr.execute(f"grant all on schema {db_parameters['schema']} to role snowdog_role")
 
-        exe('use role accountadmin')
-        exe('drop user if exists snowdog')
-        exe("create user if not exists snowdog identified by 'testdoc'")
-        exe("use {}".format(db_parameters['database']))
-        exe("create or replace role snowdog_role")
-        exe("grant role snowdog_role to user snowdog")
-        exe("grant all on database {} to role snowdog_role".format(
-            db_parameters['database']))
-        exe("grant all on schema {} to role snowdog_role".format(
-            db_parameters['schema']))
+    with conn_cnx(user='snowdog', password='testdoc') as cnx2, cnx2.cursor() as csr:
+        csr.execute('use role snowdog_role')
+        csr.execute(f"use {db_parameters['database']}")
+        csr.execute(f"use schema {db_parameters['schema']}")
+        csr.execute('create or replace table friends(name varchar(100))')
+        csr.execute('drop table friends')
 
-    with conn_cnx(user='snowdog', password='testdoc') as cnx2:
-        def exe(sql):
-            return cnx2.cursor().execute(sql)
-
-        exe('use role snowdog_role')
-        exe("use {}".format(db_parameters['database']))
-        exe("use schema {}".format(db_parameters['schema']))
-        exe('create or replace table friends(name varchar(100))')
-        exe('drop table friends')
-    with conn_cnx() as cnx:
-        def exe(sql):
-            return cnx.cursor().execute(sql)
-
-        exe('use role accountadmin')
-        exe(
-            'revoke all on database {} from role snowdog_role'.format(
-                db_parameters['database']))
-        exe('drop role snowdog_role')
-        exe('drop user if exists snowdog')
+    with conn_cnx() as cnx, cnx.cursor() as csr:
+        csr.execute('use role accountadmin')
+        csr.execute(
+            f"revoke all on database {db_parameters['database']} from role snowdog_role")
+        csr.execute('drop role snowdog_role')
+        csr.execute('drop user if exists snowdog')
 
 
 @pytest.mark.timeout(15)
@@ -472,18 +461,16 @@ def test_us_west_connection(tmpdir):
 @pytest.mark.timeout(60)
 def test_privatelink(db_parameters):
     """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""
-    try:
-        os.environ['SF_OCSP_FAIL_OPEN'] = 'false'
-        os.environ['SF_OCSP_DO_RETRY'] = 'false'
-        snowflake.connector.connect(
-            account='testaccount',
-            user='testuser',
-            password='testpassword',
-            region='eu-central-1.privatelink',
-            login_timeout=5,
-        )
-        pytest.fail("should not make connection")
-    except OperationalError:
+    with mock.patch.dict('os.environ', {'SF_OCSP_FAIL_OPEN': 'false',
+                                        'SF_OCSP_DO_RETRY': 'false'}):
+        with pytest.raises(OperationalError):
+            snowflake.connector.connect(
+                account='testaccount',
+                user='testuser',
+                password='testpassword',
+                region='eu-central-1.privatelink',
+                login_timeout=5,
+            )
         ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
         assert ocsp_url is not None, "OCSP URL should not be None"
         assert ocsp_url == "http://ocsp.testaccount.eu-central-1." \
@@ -504,114 +491,12 @@ def test_privatelink(db_parameters):
 
     ocsp_url = os.getenv('SF_OCSP_RESPONSE_CACHE_SERVER_URL')
     assert ocsp_url is None, "OCSP URL should be None: {}".format(ocsp_url)
-    del os.environ['SF_OCSP_DO_RETRY']
-    del os.environ['SF_OCSP_FAIL_OPEN']
 
 
-def test_disable_request_pooling(db_parameters):
-    """Creates a connection with client_session_keep_alive parameter."""
-    config = {
-        'user': db_parameters['user'],
-        'password': db_parameters['password'],
-        'host': db_parameters['host'],
-        'port': db_parameters['port'],
-        'account': db_parameters['account'],
-        'schema': db_parameters['schema'],
-        'database': db_parameters['database'],
-        'protocol': db_parameters['protocol'],
-        'timezone': 'UTC',
-        'disable_request_pooling': True
-    }
-    cnx = snowflake.connector.connect(**config)
-    try:
+def test_disable_request_pooling(conn_cnx):
+    """Creates a connection with disabled request pooling."""
+    with conn_cnx(disable_request_pooling=True, timezone='UTC') as cnx:
         assert cnx.disable_request_pooling
-    finally:
-        cnx.close()
-
-
-def test_privatelink_ocsp_url_creation():
-    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    SnowflakeConnection.setup_ocsp_privatelink(APPLICATION_SNOWSQL, hostname)
-
-    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-    assert ocsp_cache_server == \
-        "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-
-    del os.environ['SF_OCSP_RESPONSE_CACHE_SERVER_URL']
-
-    SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
-    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-    assert ocsp_cache_server == \
-        "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-
-
-def test_privatelink_ocsp_url_multithreaded():
-    bucket = queue.Queue()
-
-    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    thread_obj = []
-    for _ in range(15):
-        thread_obj.append(ExecPrivatelinkThread(bucket, hostname, expectation, CLIENT_NAME))
-
-    for t in thread_obj:
-        t.start()
-
-    fail_flag = False
-    for t in thread_obj:
-        t.join()
-        exc = bucket.get(block=False)
-        if exc != 'Success' and not fail_flag:
-            fail_flag = True
-
-    if fail_flag:
-        raise AssertionError()
-
-    if os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None) is not None:
-        del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
-
-
-def test_privatelink_ocsp_url_multithreaded_snowsql():
-    bucket = queue.Queue()
-
-    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    thread_obj = []
-    for _ in range(15):
-        thread_obj.append(ExecPrivatelinkThread(bucket, hostname, expectation, APPLICATION_SNOWSQL))
-
-    for t in thread_obj:
-        t.start()
-
-    fail_flag = False
-    for i in range(15):
-        thread_obj[i].join()
-        exc = bucket.get(block=False)
-        if exc != 'Success' and not fail_flag:
-            fail_flag = True
-
-    if fail_flag:
-        raise AssertionError()
-
-
-class ExecPrivatelinkThread(threading.Thread):
-
-    def __init__(self, bucket, hostname, expectation, client_name):
-        threading.Thread.__init__(self)
-        self.bucket = bucket
-        self.hostname = hostname
-        self.expectation = expectation
-        self.client_name = client_name
-
-    def run(self):
-        SnowflakeConnection.setup_ocsp_privatelink(self.client_name, self.hostname)
-        ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-        if ocsp_cache_server is not None and ocsp_cache_server !=\
-                self.expectation:
-            print("Got {} Expected {}".format(ocsp_cache_server, self.expectation))
-            self.bucket.put("Fail")
-        else:
-            self.bucket.put("Success")
 
 
 @pytest.mark.skipolddriver
@@ -699,7 +584,8 @@ def test_dashed_url_account_name(db_parameters):
         ) as cnx:
             assert cnx
             cnx.commit = cnx.rollback = lambda: None  # Skip tear down, there's only a mocked rest api
-            assert any([c.args[1].startswith('https://test-account.snowflakecomputing.com:443') for c in mocked_fetch.call_args_list])
+            assert any([c.args[1].startswith('https://test-account.snowflakecomputing.com:443') for c in
+                        mocked_fetch.call_args_list])
 
 
 @pytest.mark.skipolddriver
@@ -764,7 +650,7 @@ def test_invalid_connection_parameters_turned_off(db_parameters):
 
 
 def test_invalid_connection_parameters_only_warns(db_parameters):
-    """This test supresses warnings to only have warehouse, database and schema checking."""
+    """This test suppresses warnings to only have warehouse, database and schema checking."""
     with warnings.catch_warnings(record=True) as w:
         conn_params = {
             'account': db_parameters['account'],
@@ -779,15 +665,12 @@ def test_invalid_connection_parameters_only_warns(db_parameters):
             'autocommit': "True",  # Wrong type
             'applucation': "this is a typo or my own variable",  # Wrong name
         }
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                conn = snowflake.connector.connect(**conn_params)
-            assert conn._autocommit == conn_params['autocommit']
-            assert conn._applucation == conn_params['applucation']
-            assert len(w) == 0
-        finally:
-            conn.close()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with snowflake.connector.connect(**conn_params) as conn:
+                assert conn._autocommit == conn_params['autocommit']
+                assert conn._applucation == conn_params['applucation']
+                assert len(w) == 0
 
 
 @pytest.mark.skipolddriver
@@ -840,8 +723,7 @@ def test_autocommit_invalid_type(conn_cnx):
 
 def test_autocommit_unsupported(conn_cnx, caplog):
     """Tests if server-side error is handled correctly when setting autocommit."""
-    with conn_cnx() as conn:
-        caplog.set_level(logging.DEBUG, 'snowflake.connector')
+    with conn_cnx() as conn, caplog.at_level(logging.DEBUG, 'snowflake.connector'):
         with mock.patch('snowflake.connector.cursor.SnowflakeCursor.execute',
                         side_effect=Error("Test error", sqlstate=SQLSTATE_FEATURE_NOT_SUPPORTED)):
             conn.autocommit(True)

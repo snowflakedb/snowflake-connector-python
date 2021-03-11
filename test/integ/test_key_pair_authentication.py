@@ -4,8 +4,6 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-import uuid
-
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -13,85 +11,51 @@ from cryptography.hazmat.primitives.asymmetric import dsa, rsa
 
 import snowflake.connector
 
+from ..integ_helpers import drop_user
+from ..randomize import random_string
+
+pytestmark = pytest.mark.parallel
+
 
 @pytest.mark.skipolddriver
 def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
     if is_public_test:
         pytest.skip('This test requires ACCOUNTADMIN privilege to set the public key')
 
-    test_user = "python_test_keypair_user_" + str(uuid.uuid4()).replace('-', '_')
+    test_user = "test_different_key_length" + random_string(4)
 
-    db_config = {
-        'protocol': db_parameters['protocol'],
-        'account': db_parameters['account'],
-        'user': test_user,
-        'host': db_parameters['host'],
-        'port': db_parameters['port'],
-        'database': db_parameters['database'],
-        'schema': db_parameters['schema'],
-        'timezone': 'UTC',
-    }
+    db_config = {'user': test_user, 'timezone': 'UTC'}
 
-    def fin():
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("""
-        use role accountadmin
-        """)
-            cnx.cursor().execute("""
-        drop user if exists {user}
-        """.format(user=test_user))
-
-    request.addfinalizer(fin)
+    request.addfinalizer(drop_user(conn_cnx, test_user))
 
     testcases = [2048, 4096, 8192]
 
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
-        cursor.execute("""
-    use role accountadmin
-    """)
-        cursor.execute("create user " + test_user)
+        cursor.execute("use role accountadmin")
+        cursor.execute(f"create user {test_user}")
 
         for key_length in testcases:
             private_key_der, public_key_der_encoded = generate_key_pair(key_length)
-
-            cnx.cursor().execute("""
-            alter user {user} set rsa_public_key='{public_key}'
-            """.format(user=test_user, public_key=public_key_der_encoded))
-
+            cnx.cursor().execute(f"alter user {test_user} set rsa_public_key='{public_key_der_encoded}'")
             db_config['private_key'] = private_key_der
-            with snowflake.connector.connect(**db_config) as _:
+            with conn_cnx(**db_config) as _:
                 pass
 
 
 @pytest.mark.skipolddriver
-def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
+def test_multiple_key_pair(is_public_test, request, conn_cnx):
     if is_public_test:
         pytest.skip('This test requires ACCOUNTADMIN privilege to set the public key')
 
-    test_user = "python_test_keypair_user_" + str(uuid.uuid4()).replace('-', '_')
+    test_user = "test_multiple_key_pair_" + random_string(4)
 
     db_config = {
-        'protocol': db_parameters['protocol'],
-        'account': db_parameters['account'],
         'user': test_user,
-        'host': db_parameters['host'],
-        'port': db_parameters['port'],
-        'database': db_parameters['database'],
-        'schema': db_parameters['schema'],
         'timezone': 'UTC',
     }
 
-    def fin():
-        with conn_cnx() as cnx:
-            cnx.cursor().execute("""
-        use role accountadmin
-        """)
-            cnx.cursor().execute("""
-        drop user if exists {user}
-        """.format(user=test_user))
-
-    request.addfinalizer(fin)
+    request.addfinalizer(drop_user(conn_cnx, test_user))
 
     private_key_one_der, public_key_one_der_encoded = generate_key_pair(2048)
     private_key_two_der, public_key_two_der_encoded = generate_key_pair(2048)
@@ -100,16 +64,15 @@ def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
         cnx.cursor().execute("""
     use role accountadmin
     """)
-        cnx.cursor().execute("""
-    create user {user}
-    """.format(user=test_user))
-        cnx.cursor().execute("""
-    alter user {user} set rsa_public_key='{public_key}'
-    """.format(user=test_user,
-               public_key=public_key_one_der_encoded))
+        cnx.cursor().execute(f"""
+    create user {test_user}
+    """)
+        cnx.cursor().execute(f"""
+    alter user {test_user} set rsa_public_key='{public_key_one_der_encoded}'
+    """)
 
     db_config['private_key'] = private_key_one_der
-    with snowflake.connector.connect(**db_config) as _:
+    with conn_cnx(**db_config) as _:
         pass
 
     # assert exception since different key pair is used
@@ -118,7 +81,8 @@ def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
     # key pair authentication should used and it should fail since we don't do fall back
     db_config['password'] = 'fake_password'
     with pytest.raises(snowflake.connector.errors.DatabaseError) as exec_info:
-        snowflake.connector.connect(**db_config)
+        with conn_cnx(**db_config):
+            pass
 
     assert (exec_info.value.errno == 250001)
     assert (exec_info.value.sqlstate == '08001')
@@ -128,24 +92,16 @@ def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
         cnx.cursor().execute("""
     use role accountadmin
     """)
-        cnx.cursor().execute("""
-    alter user {user} set rsa_public_key_2='{public_key}'
-    """.format(user=test_user,
-               public_key=public_key_two_der_encoded))
+        cnx.cursor().execute(f"""
+    alter user {test_user} set rsa_public_key_2='{public_key_two_der_encoded}'
+    """)
 
-    with snowflake.connector.connect(**db_config) as _:
+    with conn_cnx(**db_config) as _:
         pass
 
 
-def test_bad_private_key(db_parameters):
+def test_bad_private_key(conn_cnx):
     db_config = {
-        'protocol': db_parameters['protocol'],
-        'account': db_parameters['account'],
-        'user': db_parameters['user'],
-        'host': db_parameters['host'],
-        'port': db_parameters['port'],
-        'database': db_parameters['database'],
-        'schema': db_parameters['schema'],
         'timezone': 'UTC',
     }
 
@@ -171,7 +127,8 @@ def test_bad_private_key(db_parameters):
         db_config['private_key'] = private_key
         with pytest.raises(
                 snowflake.connector.errors.ProgrammingError) as exec_info:
-            snowflake.connector.connect(**db_config)
+            with conn_cnx(**db_config):
+                pass
         assert (exec_info.value.errno == 251008)
 
 

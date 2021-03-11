@@ -8,133 +8,79 @@ import pytest
 
 from snowflake.connector.errors import ProgrammingError
 
+from ..integ_helpers import drop_table
+from ..randomize import random_string
 
-def test_binding_security(conn_cnx, db_parameters):
+pytestmark = pytest.mark.parallel
+
+
+def test_binding_security(conn_cnx, db_parameters, request):
     """SQL Injection Tests."""
-    try:
-        with conn_cnx() as cnx:
+    table_name = random_string(3, prefix="test_binding_security_")
+    with conn_cnx() as cnx:
+        cnx.cursor().execute(f"CREATE TABLE {table_name} (aa INT, bb STRING)")
+        request.addfinalizer(drop_table(conn_cnx, table_name))
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, 'test1'))
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%(aa)s, %(bb)s)", {'aa': 2, 'bb': 'test2'})
+        for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} ORDER BY 1 DESC"):
+            break
+        assert _rec[0] == 2, 'First column'
+        assert _rec[1] == 'test2', 'Second column'
+        for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} WHERE aa=%s", (1,)):
+            break
+        assert _rec[0] == 1, 'First column'
+        assert _rec[1] == 'test1', 'Second column'
+
+        # SQL injection safe test
+        # Good Example
+        with pytest.raises(ProgrammingError):
             cnx.cursor().execute(
-                "CREATE OR REPLACE TABLE {name} "
-                "(aa INT, bb STRING)".format(
-                    name=db_parameters['name']))
+                f"SELECT * FROM {table_name} WHERE aa=%s", ("1 or aa>0",))
+
+        with pytest.raises(ProgrammingError):
             cnx.cursor().execute(
-                "INSERT INTO {name} VALUES(%s, %s)".format(
-                    name=db_parameters['name']),
-                (1, 'test1'))
-            cnx.cursor().execute(
-                "INSERT INTO {name} VALUES(%(aa)s, %(bb)s)".format(
-                    name=db_parameters['name']),
-                {'aa': 2, 'bb': 'test2'})
-            for _rec in cnx.cursor().execute(
-                    "SELECT * FROM {name} ORDER BY 1 DESC".format(
-                        name=db_parameters['name'])):
-                break
-            assert _rec[0] == 2, 'First column'
-            assert _rec[1] == 'test2', 'Second column'
-            for _rec in cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%s".format(
-                        name=db_parameters['name']), (1,)):
-                break
-            assert _rec[0] == 1, 'First column'
-            assert _rec[1] == 'test1', 'Second column'
+                f"SELECT * FROM {table_name} WHERE aa=%(aa)s", {"aa": "1 or aa>0"})
 
-            # SQL injection safe test
-            # Good Example
-            with pytest.raises(ProgrammingError):
-                cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%s".format(
-                        name=db_parameters['name']),
-                    ("1 or aa>0",))
-
-            with pytest.raises(ProgrammingError):
-                cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%(aa)s".format(
-                        name=db_parameters['name']),
-                    {"aa": "1 or aa>0"})
-
-            # Bad Example in application. DON'T DO THIS
-            c = cnx.cursor()
-            c.execute("SELECT * FROM {name} WHERE aa=%s".format(
-                name=db_parameters['name']) % ("1 or aa>0",))
-            rec = c.fetchall()
-            assert len(rec) == 2, "not raising error unlike the previous one."
-    finally:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute(
-                "drop table if exists {name}".format(
-                    name=db_parameters['name']))
+        # Bad Example in application. DON'T DO THIS
+        c = cnx.cursor()
+        c.execute(f"SELECT * FROM {table_name} WHERE aa=%s" % ("1 or aa>0",))
+        rec = c.fetchall()
+        assert len(rec) == 2, "not raising error unlike the previous one."
 
 
-def test_binding_list(conn_cnx, db_parameters):
+def test_binding_list(conn_cnx, request):
     """SQL binding list type for IN."""
-    try:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute(
-                "CREATE OR REPLACE TABLE {name} "
-                "(aa INT, bb STRING)".format(
-                    name=db_parameters['name']))
-            cnx.cursor().execute(
-                "INSERT INTO {name} VALUES(%s, %s)".format(
-                    name=db_parameters['name']),
-                (1, 'test1'))
-            cnx.cursor().execute(
-                "INSERT INTO {name} VALUES(%(aa)s, %(bb)s)".format(
-                    name=db_parameters['name']),
-                {'aa': 2, 'bb': 'test2'})
-            cnx.cursor().execute(
-                "INSERT INTO {name} VALUES(3, 'test3')".format(
-                    name=db_parameters['name']))
-            for _rec in cnx.cursor().execute("""
-SELECT * FROM {name} WHERE aa IN (%s) ORDER BY 1 DESC
-""".format(name=db_parameters['name']), ([1, 3],)):
-                break
-            assert _rec[0] == 3, 'First column'
-            assert _rec[1] == 'test3', 'Second column'
-
-            for _rec in cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%s".format(
-                        name=db_parameters['name']), (1,)):
-                break
-            assert _rec[0] == 1, 'First column'
-            assert _rec[1] == 'test1', 'Second column'
-
-            cnx.cursor().execute("""
-SELECT * FROM {name} WHERE aa IN (%s) ORDER BY 1 DESC
-""".format(name=db_parameters['name']), ((1,),))
-
-    finally:
-        with conn_cnx() as cnx:
-            cnx.cursor().execute(
-                "drop table if exists {name}".format(
-                    name=db_parameters['name']))
+    table_name = random_string(3, prefix="test_binding_list_")
+    with conn_cnx() as cnx:
+        cnx.cursor().execute(f"CREATE TABLE {table_name} (aa INT, bb STRING)")
+        request.addfinalizer(drop_table(conn_cnx, table_name))
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, 'test1'))
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%(aa)s, %(bb)s)", {'aa': 2, 'bb': 'test2'})
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(3, 'test3')")
+        for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} WHERE aa IN (%s) ORDER BY 1 DESC", ([1, 3],)):
+            break
+        assert _rec[0] == 3, 'First column'
+        assert _rec[1] == 'test3', 'Second column'
+        for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} WHERE aa=%s", (1,)):
+            break
+        assert _rec[0] == 1, 'First column'
+        assert _rec[1] == 'test1', 'Second column'
 
 
 @pytest.mark.internal
-def test_unsupported_binding(negative_conn_cnx, db_parameters):
+def test_unsupported_binding(negative_conn_cnx, request):
     """Unsupported data binding."""
-    try:
-        with negative_conn_cnx() as cnx:
-            cnx.cursor().execute(
-                "CREATE OR REPLACE TABLE {name} "
-                "(aa INT, bb STRING)".format(
-                    name=db_parameters['name']))
-            cnx.cursor().execute(
-                "INSERT INTO {name} VALUES(%s, %s)".format(
-                    name=db_parameters['name']),
-                (1, 'test1'))
+    table_name = random_string(3, prefix="test_unsupported_binding_")
+    with negative_conn_cnx() as cnx:
+        cnx.cursor().execute(f"CREATE TABLE {table_name} (aa INT, bb STRING)")
+        request.addfinalizer(drop_table(negative_conn_cnx, table_name))
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, 'test1'))
+        sql = f'select count(*) from {table_name} where aa=%s'
 
-            sql = 'select count(*) from {name} where aa=%s'.format(
-                name=db_parameters['name'])
+        with cnx.cursor() as cur:
+            rec = cur.execute(sql, (1,)).fetchone()
+            assert rec[0] is not None, 'no value is returned'
 
-            with cnx.cursor() as cur:
-                rec = cur.execute(sql, (1,)).fetchone()
-                assert rec[0] is not None, 'no value is returned'
-
-            # dict
-            with pytest.raises(ProgrammingError):
-                cnx.cursor().execute(sql, ({'value': 1},))
-    finally:
-        with negative_conn_cnx() as cnx:
-            cnx.cursor().execute(
-                "drop table if exists {name}".format(
-                    name=db_parameters['name']))
+        # dict
+        with pytest.raises(ProgrammingError):
+            cnx.cursor().execute(sql, ({'value': 1},))

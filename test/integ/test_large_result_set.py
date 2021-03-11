@@ -9,6 +9,11 @@ from mock import Mock
 
 from snowflake.connector.telemetry import TelemetryField
 
+from ..integ_helpers import drop_table
+from ..randomize import random_string
+
+pytestmark = pytest.mark.parallel
+
 NUMBER_OF_ROWS = 50000
 
 PREFETCH_THREADS = [8, 3, 1]
@@ -16,12 +21,10 @@ PREFETCH_THREADS = [8, 3, 1]
 
 @pytest.fixture()
 def ingest_data(request, conn_cnx, db_parameters):
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password']) as cnx:
-        cnx.cursor().execute("""
-    create or replace table {name} (
+    table_name = random_string(10, prefix="ingest_data_")
+    with conn_cnx() as cnx:
+        cnx.cursor().execute(f"""
+    create table {table_name} (
         c0 int,
         c1 int,
         c2 int,
@@ -32,9 +35,10 @@ def ingest_data(request, conn_cnx, db_parameters):
         c7 int,
         c8 int,
         c9 int)
-    """.format(name=db_parameters['name']))
-        cnx.cursor().execute("""
-    insert into {name}
+    """)
+        request.addfinalizer(drop_table(conn_cnx, table_name))
+        cnx.cursor().execute(f"""
+    insert into {table_name}
     select  random(100),
             random(100),
             random(100),
@@ -45,37 +49,23 @@ def ingest_data(request, conn_cnx, db_parameters):
             random(100),
             random(100),
             random(100)
-    from table(generator(rowCount=>{number_of_rows}))
-    """.format(name=db_parameters['name'], number_of_rows=NUMBER_OF_ROWS))
+    from table(generator(rowCount=>{NUMBER_OF_ROWS}))
+    """)
         first_val = cnx.cursor().execute(
-            "select c0 from {name} order by 1 limit 1".format(
-                name=db_parameters['name'])).fetchone()[0]
+            f"select c0 from {table_name} order by 1 limit 1").fetchone()[0]
         last_val = cnx.cursor().execute(
-            "select c9 from {name} order by 1 desc limit 1".format(
-                name=db_parameters['name'])).fetchone()[0]
+            f"select c9 from {table_name} order by 1 desc limit 1").fetchone()[0]
 
-    def fin():
-        with conn_cnx(
-                user=db_parameters['user'],
-                account=db_parameters['account'],
-                password=db_parameters['password']) as cnx:
-            cnx.cursor().execute("drop table if exists {name}".format(
-                name=db_parameters['name']))
-
-    request.addfinalizer(fin)
-    return first_val, last_val
+    return first_val, last_val, table_name
 
 
 @pytest.mark.aws
 @pytest.mark.parametrize('num_threads', PREFETCH_THREADS)
 def test_query_large_result_set_n_threads(
-        conn_cnx, db_parameters, ingest_data, num_threads):
-    sql = "select * from {name} order by 1".format(name=db_parameters['name'])
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password'],
-            client_prefetch_threads=num_threads) as cnx:
+        conn_cnx, ingest_data, num_threads):
+    table_name = ingest_data[2]
+    sql = f"select * from {table_name} order by 1"
+    with conn_cnx(client_prefetch_threads=num_threads) as cnx:
         assert cnx.client_prefetch_threads == num_threads
         results = []
         for rec in cnx.cursor().execute(sql):
@@ -87,13 +77,11 @@ def test_query_large_result_set_n_threads(
 
 
 @pytest.mark.aws
-def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
+def test_query_large_result_set(conn_cnx, ingest_data):
     """[s3] Gets Large Result set."""
-    sql = "select * from {name} order by 1".format(name=db_parameters['name'])
-    with conn_cnx(
-            user=db_parameters['user'],
-            account=db_parameters['account'],
-            password=db_parameters['password']) as cnx:
+    table_name = ingest_data[2]
+    sql = f"select * from {table_name} order by 1"
+    with conn_cnx() as cnx:
         telemetry_data = []
         add_log_mock = Mock()
         add_log_mock.side_effect = lambda datum: telemetry_data.append(

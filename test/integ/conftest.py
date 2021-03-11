@@ -91,13 +91,12 @@ def get_db_parameters() -> Dict[str, str]:
     if not IS_WINDOWS:
         time.tzset()
 
+    for k, v in DEFAULT_PARAMETERS.items():
+        ret[k] = v
+
     # testaccount connection info
     for k, v in CONNECTION_PARAMETERS.items():
         ret[k] = v
-
-    for k, v in DEFAULT_PARAMETERS.items():
-        if k not in ret:
-            ret[k] = v
 
     # snowflake admin account. Not available in GH actions
     for k, v in CONNECTION_PARAMETERS_ADMIN.items():
@@ -151,7 +150,7 @@ def init_test_schema(request, db_parameters) -> None:
             protocol=ret['protocol']
     ) as con:
         con.cursor().execute(
-            "CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
+            f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
 
     def fin():
         ret1 = db_parameters
@@ -165,8 +164,7 @@ def init_test_schema(request, db_parameters) -> None:
                 protocol=ret1['protocol']
         ) as con1:
             con1.cursor().execute(
-                "DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
-
+                f"DROP SCHEMA IF EXISTS {TEST_SCHEMA}")
     request.addfinalizer(fin)
 
 
@@ -223,6 +221,6 @@ def conn_cnx() -> Callable[..., 'SnowflakeConnection']:
 
 
 @pytest.fixture()
-def negative_conn_cnx() -> Callable[..., Generator['SnowflakeConnection', None, None]]:
+def negative_conn_cnx() -> Callable[..., 'SnowflakeConnection']:
     """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
     return negative_db

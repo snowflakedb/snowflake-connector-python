@@ -17,17 +17,17 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeAzureProgressPercentage, SnowflakeProgressPercentage
 
 from ..generate_test_files import generate_k_lines_of_n_files
-from ..integ_helpers import put
+from ..integ_helpers import drop_table, execute, put
 from ..randomize import random_string
 
 logger = getLogger(__name__)
 
 # Mark every test in this module as an azure and a putget test
-pytestmark = pytest.mark.azure
+pytestmark = [pytest.mark.azure, pytest.mark.parallel]
 
 
 @pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters, from_path):
+def test_put_get_with_azure(tmpdir, conn_cnx, from_path):
     """[azure] Puts and Gets a small text using Azure."""
     # create a data file
     fname = str(tmpdir.join('test_put_get_with_azure_token.txt.gz'))
@@ -35,11 +35,11 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters, from_path):
     with gzip.open(fname, 'wb') as f:
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_azure_token'))
-    table_name = random_string(5, 'snow32806_')
+    table_name = random_string(7, 'snow32806_')
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute("create or replace table {} (a int, b string)".format(table_name))
+            csr.execute("create table {} (a int, b string)".format(table_name))
             try:
                 file_stream = None if from_path else open(fname, 'rb')
                 put(csr, fname, f"%{table_name}", from_path,
@@ -72,7 +72,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters, from_path):
     assert original_contents == contents, 'Output is different from the original file'
 
 
-def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
+def test_put_copy_many_files_azure(tmpdir, conn_cnx, request):
     """[azure] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
@@ -88,31 +88,29 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, db_parameters):
             name=folder_name)
         return csr.execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
-        with cnx.cursor() as csr:
-            run(csr, """
-            create or replace table {name} (
-            aa int,
-            dt date,
-            ts timestamp,
-            tsltz timestamp_ltz,
-            tsntz timestamp_ntz,
-            tstz timestamp_tz,
-            pct float,
-            ratio number(6,2))
-            """)
-            try:
-                all_recs = run(csr, "put file://{files} @%{name}")
-                assert all([rec[6] == 'UPLOADED' for rec in all_recs])
-                run(csr, "copy into {name}")
+    with conn_cnx() as cnx, cnx.cursor() as csr:
+        run(csr, """
+        create table {name} (
+        aa int,
+        dt date,
+        ts timestamp,
+        tsltz timestamp_ltz,
+        tsntz timestamp_ntz,
+        tstz timestamp_tz,
+        pct float,
+        ratio number(6,2))
+        """)
+        request.addfinalizer(drop_table(conn_cnx, folder_name))
 
-                rows = sum([rec[0] for rec in run(csr, "select count(*) from {name}")])
-                assert rows == number_of_files * number_of_lines, 'Number of rows'
-            finally:
-                run(csr, "drop table if exists {name}")
+        all_recs = run(csr, "put file://{files} @%{name}")
+        assert all([rec[6] == 'UPLOADED' for rec in all_recs])
+        run(csr, "copy into {name}")
+
+        rows = sum([rec[0] for rec in run(csr, "select count(*) from {name}")])
+        assert rows == number_of_files * number_of_lines, 'Number of rows'
 
 
-def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, db_parameters):
+def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, request):
     """[azure] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
@@ -126,64 +124,61 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, db_parameters):
         sql = sql.format(files=files, name=table_name)
         return csr.execute(sql, _raise_put_get_error=False).fetchall()
 
-    with conn_cnx() as cnx:
-        with cnx.cursor() as csr:
-            run(csr, """
-            create or replace table {name} (
-            aa int,
-            dt date,
-            ts timestamp,
-            tsltz timestamp_ltz,
-            tsntz timestamp_ntz,
-            tstz timestamp_tz,
-            pct float,
-            ratio number(6,2))
-            """)
+    with conn_cnx() as cnx, cnx.cursor() as csr:
+        run(csr, """
+        create table {name} (
+        aa int,
+        dt date,
+        ts timestamp,
+        tsltz timestamp_ltz,
+        tsntz timestamp_ntz,
+        tstz timestamp_tz,
+        pct float,
+        ratio number(6,2))
+        """)
+        request.addfinalizer(drop_table(conn_cnx, table_name))
 
-            try:
-                success_cnt = 0
-                skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
-                    logger.info('rec=%s', rec)
-                    if rec[6] == 'UPLOADED':
-                        success_cnt += 1
-                    elif rec[6] == 'SKIPPED':
-                        skipped_cnt += 1
-                assert success_cnt == number_of_files, 'uploaded files'
-                assert skipped_cnt == 0, 'skipped files'
+        success_cnt = 0
+        skipped_cnt = 0
+        for rec in run(csr, "put file://{files} @%{name}"):
+            logger.info('rec=%s', rec)
+            if rec[6] == 'UPLOADED':
+                success_cnt += 1
+            elif rec[6] == 'SKIPPED':
+                skipped_cnt += 1
+        assert success_cnt == number_of_files, 'uploaded files'
+        assert skipped_cnt == 0, 'skipped files'
 
-                deleted_cnt = 0
-                run(csr, "rm @%{name}/file0")
-                deleted_cnt += 1
-                run(csr, "rm @%{name}/file1")
-                deleted_cnt += 1
-                run(csr, "rm @%{name}/file2")
-                deleted_cnt += 1
+        deleted_cnt = 0
+        run(csr, "rm @%{name}/file0")
+        deleted_cnt += 1
+        run(csr, "rm @%{name}/file1")
+        deleted_cnt += 1
+        run(csr, "rm @%{name}/file2")
+        deleted_cnt += 1
 
-                success_cnt = 0
-                skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
-                    logger.info('rec=%s', rec)
-                    if rec[6] == 'UPLOADED':
-                        success_cnt += 1
-                    elif rec[6] == 'SKIPPED':
-                        skipped_cnt += 1
-                assert success_cnt == deleted_cnt, \
-                    'uploaded files in the second time'
-                assert skipped_cnt == number_of_files - deleted_cnt, \
-                    'skipped files in the second time'
+        success_cnt = 0
+        skipped_cnt = 0
+        for rec in run(csr, "put file://{files} @%{name}"):
+            logger.info('rec=%s', rec)
+            if rec[6] == 'UPLOADED':
+                success_cnt += 1
+            elif rec[6] == 'SKIPPED':
+                skipped_cnt += 1
+        assert success_cnt == deleted_cnt, \
+            'uploaded files in the second time'
+        assert skipped_cnt == number_of_files - deleted_cnt, \
+            'skipped files in the second time'
 
-                run(csr, "copy into {name}")
-                rows = 0
-                for rec in run(csr, "select count(*) from {name}"):
-                    rows += rec[0]
-                assert rows == number_of_files * number_of_lines, \
-                    'Number of rows'
-            finally:
-                run(csr, "drop table if exists {name}")
+        run(csr, "copy into {name}")
+        rows = 0
+        for rec in run(csr, "select count(*) from {name}"):
+            rows += rec[0]
+        assert rows == number_of_files * number_of_lines, \
+            'Number of rows'
 
 
-def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
+def test_put_get_large_files_azure(tmpdir, conn_cnx, request):
     """[azure] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
@@ -212,32 +207,30 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
             _put_callback=cb).fetchall()
 
     with conn_cnx() as cnx:
-        try:
-            all_recs = run(cnx, "PUT file://{files} @~/{dir}")
-            assert all([rec[6] == 'UPLOADED' for rec in all_recs])
+        all_recs = run(cnx, "PUT file://{files} @~/{dir}")
+        request.addfinalizer(execute(conn_cnx, f"RM @~/{folder_name}"))
+        assert all([rec[6] == 'UPLOADED' for rec in all_recs])
 
-            for _ in range(60):
-                for _ in range(100):
-                    all_recs = run(cnx, "LIST @~/{dir}")
-                    if len(all_recs) == number_of_files:
-                        break
-                    # you may not get the files right after PUT command
-                    # due to the nature of Azure blob, which synchronizes
-                    # data eventually.
-                    time.sleep(1)
-                else:
-                    # wait for another second and retry.
-                    # this could happen if the files are partially available
-                    # but not all.
-                    time.sleep(1)
-                    continue
-                break  # success
+        for _ in range(60):
+            for _ in range(100):
+                all_recs = run(cnx, "LIST @~/{dir}")
+                if len(all_recs) == number_of_files:
+                    break
+                # you may not get the files right after PUT command
+                # due to the nature of Azure blob, which synchronizes
+                # data eventually.
+                time.sleep(1)
             else:
-                pytest.fail(
-                    'cannot list all files. Potentially '
-                    'PUT command missed uploading Files: {}'.format(all_recs))
-            all_recs = run(cnx, "GET @~/{dir} file://{output_dir}")
-            assert len(all_recs) == number_of_files
-            assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])
-        finally:
-            run(cnx, "RM @~/{dir}")
+                # wait for another second and retry.
+                # this could happen if the files are partially available
+                # but not all.
+                time.sleep(1)
+                continue
+            break  # success
+        else:
+            pytest.fail(
+                'cannot list all files. Potentially '
+                'PUT command missed uploading Files: {}'.format(all_recs))
+        all_recs = run(cnx, "GET @~/{dir} file://{output_dir}")
+        assert len(all_recs) == number_of_files
+        assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])

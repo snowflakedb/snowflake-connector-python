@@ -4,7 +4,7 @@
 #
 
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.cursor import SnowflakeCursor
@@ -37,3 +37,94 @@ def put(csr: 'SnowflakeCursor', file_path: str, stage_path: str, from_path: bool
                      stage=stage_path,
                      sql_options=sql_options)
     return csr.execute(sql, **kwargs)
+
+
+def drop_table(conn_cnx: Callable[..., 'SnowflakeConnection'], table: str, if_exists=False) -> Callable:
+    """Returns a function that drops <table> in a new Snowflake connection.
+
+    Args:
+        conn_cnx: Callable to create a Snowflake Connection object
+        table: Name of table to be dropped
+    """
+
+    def _drop():
+        with conn_cnx() as cnx, cnx.cursor() as csr:
+            csr.execute(f"DROP TABLE IF EXISTS {table}")
+
+    return _drop
+
+
+def drop_warehouse(conn_cnx: Callable[..., 'SnowflakeConnection'], warehouse: str) -> Callable:
+    """Returns a function that drops <warehouse> in a new Snowflake connection.
+
+    Args:
+        conn_cnx: Callable to create a Snowflake Connection object
+        warehouse: Name of warehouse to be dropped
+    """
+
+    def _drop():
+        with conn_cnx() as cnx, cnx.cursor() as csr:
+            csr.execute(f"DROP WAREHOUSE IF EXISTS {warehouse}")
+
+    return _drop
+
+
+def drop_database(conn_cnx: Callable[..., 'SnowflakeConnection'], database: str) -> Callable:
+    """Returns a function that drops <database> in a new Snowflake connection.
+
+    Args:
+        conn_cnx: Callable to create a Snowflake Connection object
+        database: Name of database to be dropped
+    """
+
+    def _drop():
+        with conn_cnx() as cnx, cnx.cursor() as csr:
+            csr.execute(f"DROP DATABASE IF EXISTS {database}")
+
+    return _drop
+
+
+def drop_stage(conn_cnx: Callable[..., 'SnowflakeConnection'], stage: str) -> Callable:
+    """Returns a function that drops <stage> in a new Snowflake connection.
+
+    Args:
+        conn_cnx: Callable to create a Snowflake Connection object.
+        stage: Name of stage to be dropped.
+    """
+
+    def _drop():
+        with conn_cnx() as cnx, cnx.cursor() as csr:
+            csr.execute(f"DROP STAGE IF EXISTS {stage}")
+
+    return _drop
+
+
+def drop_user(conn_cnx: Callable[..., 'SnowflakeConnection'], user: str) -> Callable:
+    """Returns a function that drops <user> in a new Snowflake connection.
+
+    Args:
+        conn_cnx: Callable to create a Snowflake Connection object
+        user: Name of user to be dropped
+    """
+
+    def _drop():
+        with conn_cnx() as cnx, cnx.cursor() as csr:
+            csr.execute("USE ROLE accountadmin")
+            csr.execute(f"DROP USER IF EXISTS {user}")
+
+    return _drop
+
+
+def execute(conn_cnx: Callable[..., 'SnowflakeConnection'], sql: str) -> Callable:
+    """Returns a function that executes <sql> in a new Snowflake connection.
+
+    Args:
+        conn_cnx: Callable to create a Snowflake Connection object
+        user: Name of user to be dropped
+    """
+
+    def _execute():
+        with conn_cnx() as cnx, cnx.cursor() as csr:
+            csr.execute(sql)
+
+    return _execute

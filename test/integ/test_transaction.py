@@ -4,115 +4,41 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-import snowflake.connector
+import pytest
+
+from ..integ_helpers import drop_table
+from ..randomize import random_string
+
+pytestmark = pytest.mark.parallel
 
 
-def test_transaction(conn_cnx, db_parameters):
+def test_transaction(request, conn_cnx):
     """Tests transaction API."""
-    with conn_cnx() as cnx:
-        cnx.cursor().execute("create table {name} (c1 int)".format(
-            name=db_parameters['name']))
-        cnx.cursor().execute("insert into {name}(c1) "
-                             "values(1234),(3456)".format(
-            name=db_parameters['name']))
-        c = cnx.cursor()
-        c.execute("select * from {name}".format(name=db_parameters['name']))
-        total = 0
-        for rec in c:
-            total += rec[0]
-        assert total == 4690, 'total integer'
+    table_name = random_string(3, prefix='test_transaction')
 
-        #
+    def assert_sum_of_select_all(cnx, target_sum):
+        c = cnx.cursor()
+        c.execute(f"select * from {table_name}")
+        assert sum(rec[0] for rec in c) == target_sum, 'incorrect sum'
+
+    with conn_cnx() as cnx:
+        cnx.cursor().execute(f"create table {table_name} (c1 int)")
+        request.addfinalizer(drop_table(conn_cnx, table_name))
+        cnx.cursor().execute(f"insert into {table_name}(c1) values(1234),(3456)")
+        assert_sum_of_select_all(cnx, 4690)
+
         cnx.cursor().execute("begin")
         cnx.cursor().execute(
-            "insert into {name}(c1) values(5678),(7890)".format(
-                name=db_parameters['name']))
-        c = cnx.cursor()
-        c.execute("select * from {name}".format(name=db_parameters['name']))
-        total = 0
-        for rec in c:
-            total += rec[0]
-        assert total == 18258, 'total integer'
+            f"insert into {table_name}(c1) values(5678),(7890)")
+        assert_sum_of_select_all(cnx, 18258)
         cnx.rollback()
 
-        c.execute("select * from {name}".format(name=db_parameters['name']))
-        total = 0
-        for rec in c:
-            total += rec[0]
-        assert total == 4690, 'total integer'
+        assert_sum_of_select_all(cnx, 4690)
 
-        #
         cnx.cursor().execute("begin")
-        cnx.cursor().execute(
-            "insert into {name}(c1) values(2345),(6789)".format(
-                name=db_parameters['name']))
-        c = cnx.cursor()
-        c.execute("select * from {name}".format(name=db_parameters['name']))
-        total = 0
-        for rec in c:
-            total += rec[0]
-        assert total == 13824, 'total integer'
+        cnx.cursor().execute(f"insert into {table_name}(c1) values(2345),(6789)")
+        assert_sum_of_select_all(cnx, 13824)
+
         cnx.commit()
         cnx.rollback()
-        c = cnx.cursor()
-        c.execute("select * from {name}".format(name=db_parameters['name']))
-        total = 0
-        for rec in c:
-            total += rec[0]
-        assert total == 13824, 'total integer'
-
-
-def test_connection_context_manager(request, db_parameters):
-    db_config = {
-        'protocol': db_parameters['protocol'],
-        'account': db_parameters['account'],
-        'user': db_parameters['user'],
-        'password': db_parameters['password'],
-        'host': db_parameters['host'],
-        'port': db_parameters['port'],
-        'database': db_parameters['database'],
-        'schema': db_parameters['schema'],
-        'timezone': 'UTC',
-    }
-
-    def fin():
-        with snowflake.connector.connect(**db_config) as cnx:
-            cnx.cursor().execute("""
-DROP TABLE IF EXISTS {name}
-""".format(name=db_parameters['name']))
-
-    request.addfinalizer(fin)
-
-    try:
-        with snowflake.connector.connect(**db_config) as cnx:
-            cnx.autocommit(False)
-            cnx.cursor().execute("""
-CREATE OR REPLACE TABLE {name} (cc1 int)
-""".format(name=db_parameters['name']))
-            cnx.cursor().execute("""
-INSERT INTO {name} VALUES(1),(2),(3)
-""".format(name=db_parameters['name']))
-            ret = cnx.cursor().execute("""
-SELECT SUM(cc1) FROM {name}
-""".format(name=db_parameters['name'])).fetchone()
-            assert ret[0] == 6
-            cnx.commit()
-            cnx.cursor().execute("""
-INSERT INTO {name} VALUES(4),(5),(6)
-""".format(name=db_parameters['name']))
-            ret = cnx.cursor().execute("""
-SELECT SUM(cc1) FROM {name}
-""".format(name=db_parameters['name'])).fetchone()
-            assert ret[0] == 21
-            cnx.cursor().execute("""
-SELECT WRONG SYNTAX QUERY
-""")
-            raise Exception("Failed to cause the syntax error")
-    except snowflake.connector.Error:
-        # syntax error should be caught here
-        # and the last change must have been rollbacked
-        with snowflake.connector.connect(**db_config) as cnx:
-            ret = cnx.cursor().execute("""
-SELECT SUM(cc1) FROM {name}
-""".format(name=db_parameters['name'])).fetchone()
-            assert ret[0] == 6
+        assert_sum_of_select_all(cnx, 13824)
