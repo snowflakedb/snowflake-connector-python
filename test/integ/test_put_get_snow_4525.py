@@ -6,12 +6,8 @@
 
 import os
 
-import pytest
-
 from ..integ_helpers import drop_table
 from ..randomize import random_string
-
-pytestmark = pytest.mark.parallel
 
 
 def test_load_bogus_file(tmpdir, conn_cnx, request):

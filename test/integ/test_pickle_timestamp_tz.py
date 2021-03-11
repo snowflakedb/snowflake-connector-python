@@ -7,10 +7,6 @@
 import os
 import pickle
 
-import pytest
-
-pytestmark = pytest.mark.parallel
-
 
 def test_pickle_timestamp_tz(tmpdir, conn_cnx):
     """Ensures the timestamp_tz result is pickle-able."""

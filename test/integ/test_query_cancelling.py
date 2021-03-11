@@ -22,12 +22,10 @@ except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
-pytestmark = pytest.mark.parallel
-
-
 @pytest.fixture()
 def conn_cnx(request, conn_cnx):
     """Overrides the fixture definition in conftest to add extra users."""
+
     def fin():
         with conn_cnx() as cnx:
             cnx.cursor().execute("use role accountadmin")
@@ -109,7 +107,7 @@ def _query_cancel(conn, shared, user, password, expected_canceled):
             logger.info("Query: %s", query)
             cnx.cursor().execute(query)
             assert expected_canceled, ("You should NOT be able to "
-                                      f"cancel the query [{shared.session_id}]")
+                                       f"cancel the query [{shared.session_id}]")
         except errors.ProgrammingError as e:
             logger.info("FAILED TO CANCEL THE QUERY: %s", e)
             assert not expected_canceled, (
@@ -134,8 +132,8 @@ def _test_helper(conn, expected_canceled, cancel_user, cancel_pass):
         conn, shared, expected_canceled))
     query_run.start()
     query_cancel = Thread(target=_query_cancel,
-                         args=(conn, shared, cancel_user, cancel_pass,
-                               expected_canceled))
+                          args=(conn, shared, cancel_user, cancel_pass,
+                                expected_canceled))
     query_cancel.start()
     query_cancel.join(5)
     query_run.join(20)

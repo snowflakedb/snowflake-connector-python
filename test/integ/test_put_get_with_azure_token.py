@@ -23,7 +23,7 @@ from ..randomize import random_string
 logger = getLogger(__name__)
 
 # Mark every test in this module as an azure and a putget test
-pytestmark = [pytest.mark.azure, pytest.mark.parallel]
+pytestmark = [pytest.mark.azure]
 
 
 @pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])

@@ -15,6 +15,8 @@ from snowflake.connector import DictCursor
 
 from ...lazy_var import LazyVar
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.options import pandas  # NOQA
     from snowflake.connector.pandas_tools import write_pandas  # NOQA

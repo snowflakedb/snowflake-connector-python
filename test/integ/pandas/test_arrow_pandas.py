@@ -12,6 +12,8 @@ from decimal import Decimal
 
 import pytest
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.options import installed_pandas, pandas  # NOQA
 except ImportError:

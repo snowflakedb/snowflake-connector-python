@@ -6,12 +6,9 @@ import datetime
 import time
 
 import numpy as np
-import pytest
 
 from ..integ_helpers import drop_table
 from ..randomize import random_string
-
-pytestmark = pytest.mark.parallel
 
 
 # TODO, fails if remove DELETE FROM

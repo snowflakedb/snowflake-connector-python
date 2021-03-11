@@ -6,11 +6,7 @@
 
 import os
 
-import pytest
-
 from ..randomize import random_string
-
-pytestmark = pytest.mark.parallel
 
 
 def test_abc(conn_cnx, tmpdir):

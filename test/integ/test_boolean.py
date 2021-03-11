@@ -3,11 +3,8 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-import pytest
 
 from ..randomize import random_string
-
-pytestmark = pytest.mark.parallel
 
 
 def test_binding_fetching_boolean(conn_cnx):

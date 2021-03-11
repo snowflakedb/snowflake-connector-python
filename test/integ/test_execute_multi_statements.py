@@ -16,8 +16,6 @@ from snowflake.connector import DictCursor, ProgrammingError
 from ..integ_helpers import drop_table
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 

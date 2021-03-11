@@ -14,8 +14,6 @@ from snowflake.connector.telemetry import TelemetryField
 
 FAILED_TO_DETECT_SYNTAX_ERR = "Failed to detect syntax error"
 
-pytestmark = pytest.mark.parallel
-
 
 def test_error_classes(conn_cnx):
     """Error classes in Connector module, object."""

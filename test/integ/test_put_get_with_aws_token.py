@@ -21,7 +21,7 @@ from ..integ_helpers import drop_table, put
 from ..randomize import random_string
 
 # Mark every test in this module as an aws test
-pytestmark = [pytest.mark.aws, pytest.mark.parallel]
+pytestmark = [pytest.mark.aws]
 
 
 @pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])

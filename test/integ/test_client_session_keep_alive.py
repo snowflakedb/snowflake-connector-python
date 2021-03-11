@@ -48,6 +48,7 @@ ALTER SYSTEM SET
     not (CONNECTION_PARAMETERS_ADMIN),
     reason="ADMIN connection parameters must be provided."
 )
+@pytest.mark.sequential
 def test_client_session_keep_alive(token_validity_test_values):
     test_connection_parameters = CONNECTION_PARAMETERS.copy()
     print("[INFO] Connected")

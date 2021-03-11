@@ -45,8 +45,6 @@ except ImportError:
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
 
-pytestmark = pytest.mark.parallel
-
 
 @pytest.fixture()
 def created_table(request, conn_cnx):

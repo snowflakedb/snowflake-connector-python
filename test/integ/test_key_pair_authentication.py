@@ -14,8 +14,6 @@ import snowflake.connector
 from ..integ_helpers import drop_user
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 
 @pytest.mark.skipolddriver
 def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):

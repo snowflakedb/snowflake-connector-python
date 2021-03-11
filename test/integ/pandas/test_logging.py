@@ -6,6 +6,10 @@
 
 import logging
 
+import pytest
+
+pytestmark = pytest.mark.sequential
+
 
 def test_rand_table_log(caplog, conn_cnx, db_parameters):
     with conn_cnx() as conn:

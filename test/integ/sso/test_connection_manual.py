@@ -25,6 +25,8 @@ import pytest
 
 import snowflake.connector
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.auth import delete_temporary_credential
 except ImportError:

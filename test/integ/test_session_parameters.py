@@ -76,5 +76,5 @@ def set_backend_client_session_keep_alive(db_parameters: object, admin_cnx: obje
     admin_cnx.cursor().execute(query)
 
     query = "alter user {}.{} set CLIENT_SESSION_KEEP_ALIVE={}".format(
-                    db_parameters['account'], db_parameters['user'], str(val))
+        db_parameters['account'], db_parameters['user'], str(val))
     admin_cnx.cursor().execute(query)

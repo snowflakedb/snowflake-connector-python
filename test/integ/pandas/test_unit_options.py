@@ -8,6 +8,8 @@ import mock
 import pytest
 from pkg_resources import working_set
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.options import MissingPandas, _import_or_missing_pandas_option  # NOQA
 except ImportError:

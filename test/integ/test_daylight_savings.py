@@ -6,13 +6,10 @@
 
 from datetime import datetime
 
-import pytest
 import pytz
 
 from ..integ_helpers import drop_table
 from ..randomize import random_string
-
-pytestmark = pytest.mark.parallel
 
 
 def test_daylight_savings_in_TIMESTAMP_LTZ(conn_cnx, request):

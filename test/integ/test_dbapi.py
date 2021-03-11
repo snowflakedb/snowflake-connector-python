@@ -16,8 +16,6 @@ from snowflake.connector import DatabaseError, errorcode, errors
 from ..integ_helpers import drop_table, execute
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 
 def _create_table(cursor, table_name):
     cursor.execute(f'create table {table_name} (name string)')

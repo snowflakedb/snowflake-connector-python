@@ -35,8 +35,6 @@ except ImportError:
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
 
-pytestmark = pytest.mark.parallel
-
 
 @pytest.fixture()
 def file_src(request) -> Tuple[str, int, IO[bytes]]:

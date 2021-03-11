@@ -14,6 +14,8 @@ import snowflake.connector
 from snowflake.connector.compat import IS_LINUX
 from snowflake.connector.errors import DatabaseError
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.compat import IS_MACOS  # NOQA
 except ImportError:

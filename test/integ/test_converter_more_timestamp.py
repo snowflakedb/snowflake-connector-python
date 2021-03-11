@@ -4,13 +4,10 @@
 
 from datetime import datetime, timedelta
 
-import pytest
 import pytz
 from dateutil.parser import parse
 
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
-
-pytestmark = pytest.mark.parallel
 
 
 def test_fetch_various_timestamps(conn_cnx):

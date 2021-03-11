@@ -11,8 +11,6 @@ from snowflake.connector.errors import ProgrammingError
 from ..integ_helpers import drop_table
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 
 def test_binding_security(conn_cnx, db_parameters, request):
     """SQL Injection Tests."""

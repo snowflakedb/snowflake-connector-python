@@ -4,12 +4,8 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-import pytest
-
 from ..integ_helpers import drop_table
 from ..randomize import random_string
-
-pytestmark = pytest.mark.parallel
 
 
 def test_transaction(request, conn_cnx):

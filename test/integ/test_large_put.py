@@ -12,8 +12,6 @@ from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import drop_table
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 
 @pytest.mark.aws
 def test_put_copy_large_files(tmpdir, conn_cnx, request):

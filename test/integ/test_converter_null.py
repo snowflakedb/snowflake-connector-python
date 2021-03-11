@@ -7,15 +7,11 @@
 import re
 from datetime import datetime, timedelta
 
-import pytest
-
 from snowflake.connector.converter import ZERO_EPOCH
 from snowflake.connector.converter_null import SnowflakeNoConverterToPython
 
 from ..integ_helpers import drop_table
 from ..randomize import random_string
-
-pytestmark = pytest.mark.parallel
 
 NUMERIC_VALUES = re.compile(r'-?[\d.]*\d$')
 

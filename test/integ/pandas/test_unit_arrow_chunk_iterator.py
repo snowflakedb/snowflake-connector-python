@@ -17,6 +17,8 @@ import pytz
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.converter import _generate_tzinfo_from_tzoffset
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.options import installed_pandas  # NOQA
 except ImportError:

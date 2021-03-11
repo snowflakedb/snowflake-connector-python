@@ -12,8 +12,6 @@ from snowflake.connector.telemetry import TelemetryField
 from ..integ_helpers import drop_table
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 NUMBER_OF_ROWS = 50000
 
 PREFETCH_THREADS = [8, 3, 1]

@@ -16,8 +16,6 @@ from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import drop_stage, drop_table, put
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 
 @pytest.mark.aws
 @pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])

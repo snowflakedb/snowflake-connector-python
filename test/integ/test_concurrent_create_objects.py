@@ -23,6 +23,7 @@ logger = getLogger(__name__)
     not CONNECTION_PARAMETERS_ADMIN,
     reason="Snowflake admin account is not accessible."
 )
+@pytest.mark.sequential
 def test_snow5871(conn_cnx, db_parameters):
     _test_snow5871(conn_cnx, db_parameters,
                    number_of_threads=5,

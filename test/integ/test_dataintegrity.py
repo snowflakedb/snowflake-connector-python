@@ -23,8 +23,6 @@ from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFro
 from ..integ_helpers import drop_table
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 
 def _generate_time(row, col, tz=None, fractional=False):
     res = time.time() + row * 86400 - col * 1313

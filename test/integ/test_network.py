@@ -11,8 +11,6 @@ import pytest
 from snowflake.connector import errorcode, errors
 from snowflake.connector.network import SnowflakeRestful
 
-pytestmark = pytest.mark.parallel
-
 logger = getLogger(__name__)
 
 

@@ -14,7 +14,7 @@ import snowflake.connector
 
 from ..integ_helpers import drop_table
 
-pytestmark = [pytest.mark.skipolddriver, pytest.mark.parallel]  # old test driver tests won't run this module
+pytestmark = [pytest.mark.skipolddriver]  # old test driver tests won't run this module
 
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA

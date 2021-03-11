@@ -15,8 +15,6 @@ import pytest
 from ..integ_helpers import drop_database, drop_stage, drop_table, drop_warehouse
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 try:
     from ..parameters import (CONNECTION_PARAMETERS_ADMIN)
 except ImportError:

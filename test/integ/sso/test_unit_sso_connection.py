@@ -11,6 +11,8 @@ from mock import Mock, patch
 
 import snowflake.connector
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.compat import IS_MACOS  # NOQA
 except ImportError:

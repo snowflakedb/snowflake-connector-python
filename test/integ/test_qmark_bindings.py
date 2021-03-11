@@ -24,8 +24,6 @@ from snowflake.connector.errors import ForbiddenError, ProgrammingError
 from ..integ_helpers import drop_table
 from ..randomize import random_string
 
-pytestmark = pytest.mark.parallel
-
 tempfile.gettempdir()
 
 PST_TZ = "America/Los_Angeles"

@@ -14,6 +14,8 @@ import pytest
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.cursor import SnowflakeCursor
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.options import installed_pandas  # NOQA
 except ImportError:
