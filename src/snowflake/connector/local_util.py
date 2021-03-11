@@ -25,14 +25,14 @@ class SnowflakeLocalUtil(object):
     def upload_one_file_with_retry(meta: 'SnowflakeFileMeta') -> None:
         logger = getLogger(__name__)
         logger.debug(f"src_file_name=[{meta.src_file_name}], real_src_file_name=[{meta.real_src_file_name}], "
-                     f"stage_info=[{meta.stage_info}], dst_file_name=[{meta.dst_file_name}]")
+                     f"stage_info=[{meta.client_meta.stage_info}], dst_file_name=[{meta.dst_file_name}]")
         frd = None
         if meta.src_stream is None:
             frd = open(meta.real_src_file_name, 'rb')
         else:
             frd = meta.real_src_stream or meta.src_stream
         with open(os.path.join(
-                os.path.expanduser(meta.stage_info['location']),
+                os.path.expanduser(meta.client_meta.stage_info['location']),
                 meta.dst_file_name), 'wb') as output:
             output.writelines(frd)
 
@@ -42,7 +42,7 @@ class SnowflakeLocalUtil(object):
     @staticmethod
     def download_one_file(meta: 'SnowflakeFileMeta') -> None:
         full_src_file_name = os.path.join(
-            os.path.expanduser(meta.stage_info['location']),
+            os.path.expanduser(meta.client_meta.stage_info['location']),
             meta.src_file_name if not meta.src_file_name.startswith(os.sep) else
             meta.src_file_name[1:])
         full_dst_file_name = os.path.join(

@@ -415,7 +415,9 @@ class SnowflakeCursor(object):
                 logger.debug('cancelled timebomb in finally')
 
         if 'data' in ret and 'parameters' in ret['data']:
-            for kv in ret['data']['parameters']:
+            parameters = ret['data']['parameters']
+            # Set session parameters for cursor object
+            for kv in parameters:
                 if 'TIMESTAMP_OUTPUT_FORMAT' in kv['name']:
                     self._timestamp_output_format = kv['value']
                 if 'TIMESTAMP_NTZ_OUTPUT_FORMAT' in kv['name']:
@@ -432,8 +434,8 @@ class SnowflakeCursor(object):
                     self._timezone = kv['value']
                 if 'BINARY_OUTPUT_FORMAT' in kv['name']:
                     self._binary_output_format = kv['value']
-            self._connection._set_parameters(
-                ret, self._connection._session_parameters)
+            # Set session parameters for connection object
+            self._connection._update_parameters({p['name']: p['value'] for p in parameters})
 
         self._sequence_counter = -1
         return ret

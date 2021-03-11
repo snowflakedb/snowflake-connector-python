@@ -50,10 +50,11 @@ class JsonResult:
                 for header_key, header_value in data[
                     'chunkHeaders'].items():
                     chunk_headers[header_key] = header_value
-                    logger.debug(
-                        'added chunk header: key=%s, value=%s',
-                        header_key,
-                        header_value)
+                    if 'encryption' not in header_key:
+                        logger.debug(
+                            'added chunk header: key=%s, value=%s',
+                            header_key,
+                            header_value)
 
             logger.debug('qrmk=%s', qrmk)
             self._chunk_downloader = self._connection._chunk_downloader_class(
