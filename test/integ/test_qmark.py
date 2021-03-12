@@ -105,6 +105,7 @@ def test_qmark_paramstyle_enabled(negative_conn_cnx, db_parameters):
 def test_binding_datetime_qmark(conn_cnx, db_parameters):
     """Ensures datetime can bound."""
     import datetime
+
     import snowflake.connector
     snowflake.connector.paramstyle = 'qmark'
     try:

@@ -20,16 +20,16 @@ except ImportError:
     installed_pandas = False
 
 try:
+    import pyarrow
+    from pyarrow import RecordBatch  # NOQA
     from pyarrow import RecordBatchStreamReader  # NOQA
     from pyarrow import RecordBatchStreamWriter  # NOQA
-    from pyarrow import RecordBatch  # NOQA
-    import pyarrow
 except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_result import ArrowResult  # NOQA
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_result import ArrowResult  # NOQA
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True

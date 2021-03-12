@@ -42,8 +42,10 @@ from .remote_storage_util import SnowflakeFileEncryptionMaterial, SnowflakeRemot
 from .s3_util import SnowflakeS3Util
 
 if TYPE_CHECKING:  # pragma: no cover
-    from snowflake.connector.cursor import SnowflakeCursor
     from azure.storage.blob import BlobServiceClient
+
+    from snowflake.connector.cursor import SnowflakeCursor
+
     from .file_compression_type import CompressionType
 
 S3_FS = 'S3'
