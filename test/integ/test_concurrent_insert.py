@@ -16,7 +16,7 @@ from ..integ_helpers import drop_table, drop_warehouse
 from ..randomize import random_string
 
 try:
-    from ..parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 

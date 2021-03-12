@@ -34,11 +34,7 @@ from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
-    from snowflake.connector.errorcode import (
-        ER_NO_ARROW_RESULT,
-        ER_NO_PYARROW,
-        ER_NO_PYARROW_SNOWSQL,
-    )
+    from snowflake.connector.errorcode import ER_NO_ARROW_RESULT, ER_NO_PYARROW, ER_NO_PYARROW_SNOWSQL
 except ImportError:
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
     ER_NO_ARROW_RESULT = None

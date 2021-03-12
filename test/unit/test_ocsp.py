@@ -25,8 +25,8 @@ from ..randomize import random_string
 pytestmark = pytest.mark.sequential
 
 try:
-    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED, \
-        ER_OCSP_RESPONSE_FETCH_FAILURE  # NOQA
+    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_FETCH_FAILURE  # NOQA
+    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 except ImportError:
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED = None
     ER_OCSP_RESPONSE_FETCH_FAILURE = None
@@ -301,8 +301,8 @@ def test_concurrent_ocsp_requests(tmpdir):
 def _validate_certs_using_ocsp(url, cache_file_name):
     """Validate OCSP response. Deleting memory cache and file cache randomly."""
     logger = logging.getLogger('test')
-    import time
     import random
+    import time
     time.sleep(random.randint(0, 3))
     if random.random() < 0.2:
         logger.info('clearing up cache: OCSP_VALIDATION_CACHE')

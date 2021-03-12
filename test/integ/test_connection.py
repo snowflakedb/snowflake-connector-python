@@ -27,7 +27,7 @@ from snowflake.connector.network import ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
 try:  # pragma: no cover
-    from ..parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 

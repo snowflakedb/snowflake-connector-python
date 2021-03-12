@@ -1268,6 +1268,7 @@ class SnowflakeOCSP(object):
                     self.read_cert_bundle(ca_bundle)
                 else:
                     import sys
+
                     # This import that depends on these libraries is to import certificates from them,
                     # we would like to have these as up to date as possible.
                     from requests import certs

@@ -42,7 +42,7 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     # force versioned dylibs onto oscrypto ssl on catalina
     if sys.platform == 'darwin' and platform.mac_ver()[0].startswith('10.15'):
-        from oscrypto import use_openssl, _module_values
+        from oscrypto import _module_values, use_openssl
         if _module_values['backend'] is None:
             use_openssl(libcrypto_path='/usr/lib/libcrypto.35.dylib', libssl_path='/usr/lib/libssl.35.dylib')
     from oscrypto import asymmetric
@@ -380,7 +380,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
     def extract_certificate_chain(self, connection):
         """Gets certificate chain and extract the key info from OpenSSL connection."""
-        from OpenSSL.crypto import dump_certificate, FILETYPE_ASN1
+        from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
         cert_map = OrderedDict()
         logger.debug(
             "# of certificates: %s",

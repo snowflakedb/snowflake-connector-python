@@ -12,7 +12,7 @@ import pytest
 from snowflake.connector import ProgrammingError
 
 try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 

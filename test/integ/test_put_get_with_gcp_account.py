@@ -287,66 +287,66 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, request):
         f.write(original_contents.encode(UTF8))
     tmp_dir = str(tmpdir.mkdir('test_put_get_with_gcp_token'))
     table_name = random_string(5, 'snow32807_')
+    with conn_cnx() as cnx:
+        with cnx.cursor() as csr:
+            csr.execute("create or replace table {} (a int, b string)".format(table_name))
+            request.addfinalizer(drop_table(conn_cnx, table_name))
 
-    with conn_cnx() as cnx, cnx.cursor() as csr:
-        csr.execute("create table {} (a int, b string)".format(table_name))
-        request.addfinalizer(drop_table(conn_cnx, table_name))
+            from snowflake.connector.vendored.requests import get, put
 
-        from snowflake.connector.vendored.requests import put, get
+            def mocked_put(*args, **kwargs):
+                if mocked_put.counter == 0:
+                    mocked_put.counter += 1
+                    exc = requests.exceptions.HTTPError(response=requests.Response())
+                    exc.response.status_code = 400
+                    raise exc
+                else:
+                    return put(*args, **kwargs)
 
-        def mocked_put(*args, **kwargs):
-            if mocked_put.counter == 0:
-                mocked_put.counter += 1
-                exc = requests.exceptions.HTTPError(response=requests.Response())
-                exc.response.status_code = 400
-                raise exc
-            else:
-                return put(*args, **kwargs)
+            mocked_put.counter = 0
 
-        mocked_put.counter = 0
+            def mocked_file_agent(*args, **kwargs):
+                agent = SnowflakeFileTransferAgent(*args, **kwargs)
+                agent._update_file_metas_with_presigned_url = mock.MagicMock(
+                    wraps=agent._update_file_metas_with_presigned_url
+                )
+                mocked_file_agent.agent = agent
+                return agent
 
-        def mocked_file_agent(*args, **kwargs):
-            agent = SnowflakeFileTransferAgent(*args, **kwargs)
-            agent._update_file_metas_with_presigned_url = mock.MagicMock(
-                wraps=agent._update_file_metas_with_presigned_url
-            )
-            mocked_file_agent.agent = agent
-            return agent
+            with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                            side_effect=mocked_file_agent):
+                with mock.patch('snowflake.connector.vendored.requests.put' if vendored_request else 'request.put',
+                                side_effect=mocked_put):
+                    csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
+                assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
+            assert csr.fetchone()[6] == 'UPLOADED'
+            csr.execute("copy into {} purge = true".format(table_name))
+            assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+            csr.execute("copy into @%{table_name} from {table_name} "
+                        "file_format=(type=csv compression='gzip')".format(table_name=table_name))
 
-        with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
-                        side_effect=mocked_file_agent):
-            with mock.patch('snowflake.connector.vendored.requests.put' if vendored_request else 'request.put',
-                            side_effect=mocked_put):
-                csr.execute("put file://{} @%{} auto_compress=true parallel=30".format(fname, table_name))
-            assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
-        assert csr.fetchone()[6] == 'UPLOADED'
-        csr.execute("copy into {} purge = true".format(table_name))
-        assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
-        csr.execute("copy into @%{table_name} from {table_name} "
-                    "file_format=(type=csv compression='gzip')".format(table_name=table_name))
+            def mocked_get(*args, **kwargs):
+                if mocked_get.counter == 0:
+                    mocked_get.counter += 1
+                    exc = requests.exceptions.HTTPError(response=requests.Response())
+                    exc.response.status_code = 400
+                    raise exc
+                else:
+                    return get(*args, **kwargs)
 
-        def mocked_get(*args, **kwargs):
-            if mocked_get.counter == 0:
-                mocked_get.counter += 1
-                exc = requests.exceptions.HTTPError(response=requests.Response())
-                exc.response.status_code = 400
-                raise exc
-            else:
-                return get(*args, **kwargs)
+            mocked_get.counter = 0
 
-        mocked_get.counter = 0
-
-        with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
-                        side_effect=mocked_file_agent):
-            with mock.patch('snowflake.connector.vendored.requests.get' if vendored_request else 'request.get',
-                            side_effect=mocked_get):
-                csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
-            assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
-        rec = csr.fetchone()
-        assert rec[0].startswith('data_'), 'A file downloaded by GET'
-        assert rec[1] == 36, 'Return right file size'
-        assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
-        assert rec[3] == '', 'Return no error message'
+            with mock.patch('snowflake.connector.cursor.SnowflakeFileTransferAgent',
+                            side_effect=mocked_file_agent):
+                with mock.patch('snowflake.connector.vendored.requests.get' if vendored_request else 'request.get',
+                                side_effect=mocked_get):
+                    csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
+                assert mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count == 2
+            rec = csr.fetchone()
+            assert rec[0].startswith('data_'), 'A file downloaded by GET'
+            assert rec[1] == 36, 'Return right file size'
+            assert rec[2] == 'DOWNLOADED', 'Return DOWNLOADED status'
+            assert rec[3] == '', 'Return no error message'
 
     files = glob.glob(os.path.join(tmp_dir, 'data_*'))
     with gzip.open(files[0], 'rb') as fd:
@@ -393,10 +393,9 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(tmpd
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             csr.execute('ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE')
-            csr.execute("create table {} (a int, b string)".format(table_name))
+            csr.execute("create or replace table {} (a int, b string)".format(table_name))
             request.addfinalizer(drop_table(conn_cnx, table_name))
-
-            from snowflake.connector.vendored.requests import put, get, head
+            from snowflake.connector.vendored.requests import get, head, put
 
             def mocked_put(*args, **kwargs):
                 if mocked_put.counter == 0:

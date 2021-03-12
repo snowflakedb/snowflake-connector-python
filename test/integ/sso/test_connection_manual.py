@@ -35,12 +35,12 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from parameters import (CONNECTION_PARAMETERS_SSO)
+    from parameters import CONNECTION_PARAMETERS_SSO
 except ImportError:
     CONNECTION_PARAMETERS_SSO = {}
 
 try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
