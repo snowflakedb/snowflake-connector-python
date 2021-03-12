@@ -22,6 +22,8 @@ from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 from ..randomize import random_string
 
+pytestmark = pytest.mark.sequential
+
 try:
     from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED, \
         ER_OCSP_RESPONSE_FETCH_FAILURE  # NOQA

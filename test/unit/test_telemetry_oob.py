@@ -12,6 +12,8 @@ from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from snowflake.connector.telemetry_oob import TelemetryService
 
+pytestmark = pytest.mark.sequential
+
 DEV_CONFIG = {
     'host': 'localhost',
     'port': 8080,

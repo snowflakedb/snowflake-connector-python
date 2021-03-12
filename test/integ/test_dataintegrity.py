@@ -57,7 +57,6 @@ def _create_table(conn_cnx, columndefs, partial_name):
     (('col1 BINARY',), 'BINARY', lambda i, j: bytes(random.getrandbits(8) for _ in range(50))),
     (('col1 TIMESTAMPNTZ',), 'TIMESTAMPNTZ', lambda i, j: _generate_time(i, j)),
     (('col1 TIMESTAMP without time zone',), 'TIMESTAMPNTZ_EXPLICIT', lambda i, j: _generate_time(i, j)),
-    (('col1 TIMESTAMP',), 'DATETIME', lambda i, j: _generate_time(i, j, "US/Pacific")),
     (('col1 TIMESTAMP_LTZ',), 'TIMESTAMP', lambda i, j: _generate_time(i, j, "US/Pacific")),
     (('col1 TIMESTAMP with local time zone',), 'TIMESTAMP_EXPLICIT',
      lambda i, j: _generate_time(i, j, "Australia/Sydney")),
