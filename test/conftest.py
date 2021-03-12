@@ -34,6 +34,7 @@ def filter_log() -> None:
     """
     import logging
     import pathlib
+
     from snowflake.connector.secret_detector import SecretDetector
 
     if not isinstance(SecretDetector, logging.Formatter):

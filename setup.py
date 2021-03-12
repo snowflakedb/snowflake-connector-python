@@ -46,10 +46,10 @@ pandas_requirements = [
 ]
 
 try:
-    from Cython.Distutils import build_ext
-    from Cython.Build import cythonize
-    import pyarrow
     import numpy
+    import pyarrow
+    from Cython.Build import cythonize
+    from Cython.Distutils import build_ext
     _ABLE_TO_COMPILE_EXTENSIONS = True
 except ImportError:
     warnings.warn("Cannot compile native C code, because of a missing build dependency")

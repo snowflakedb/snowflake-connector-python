@@ -13,7 +13,7 @@ import snowflake.connector
 from snowflake.connector.errors import ProgrammingError
 
 try:
-    from parameters import (CONNECTION_PARAMETERS_ADMIN)
+    from parameters import CONNECTION_PARAMETERS_ADMIN
 except Exception:
     CONNECTION_PARAMETERS_ADMIN = {}
 

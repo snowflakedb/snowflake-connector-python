@@ -41,7 +41,8 @@ def generate_known_ssm_file():
 
 
 if __name__ == '__main__':
-    from parameters import CONNECTION_PARAMETERS
     from jenkins_test_parameters import SNOWFLAKE_TEST_PASSWORD_NEW
+
+    from parameters import CONNECTION_PARAMETERS
     change_password()
     generate_known_ssm_file()
