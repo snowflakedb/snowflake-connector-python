@@ -37,6 +37,11 @@ def test_async_exec(conn_cnx):
     Runs a query that takes a few seconds to finish and then totally closes connection
     to Snowflake. Then waits enough time for that query to finish, opens a new connection
     and fetches results. It also tests QueryStatus related functionality too.
+
+    This test tends to hang longer than expected when the testing warehouse is overloaded.
+    Manually looking at query history reveals that when a full GH actions + Jenkins test load hits one warehouse
+    it can be queued for 15 seconds, so for now we wait 5 seconds before checking and then we give it another 25
+    seconds to finish.
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
@@ -44,11 +49,17 @@ def test_async_exec(conn_cnx):
             q_id = cur.sfqid
             status = con.get_query_status(q_id)
             assert con.is_still_running(status)
-    time.sleep(10)
+    time.sleep(5)
     with conn_cnx() as con:
         with con.cursor() as cur:
-            status = con.get_query_status(q_id)
-            assert status == QueryStatus.SUCCESS
+            for _ in range(25):
+                # Check upto 15 times once a second to see if it's done
+                status = con.get_query_status(q_id)
+                if status == QueryStatus.SUCCESS:
+                    break
+                time.sleep(1)
+            else:
+                pytest.fail(f"We should have broke out of this loop, final query status: {status}")
             status = con.get_query_status_throw_if_error(q_id)
             assert status == QueryStatus.SUCCESS
             cur.get_results_from_sfqid(q_id)
