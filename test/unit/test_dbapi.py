@@ -26,11 +26,7 @@ def test_threadsafety():
 
 
 def test_paramstyle():
-    try:
-        paramstyle = snowflake.connector.paramstyle
-        assert paramstyle == 'pyformat'
-    except AttributeError:
-        raise Exception("snowflake.connector.paramstyle not defined")
+    assert snowflake.connector.paramstyle == 'pyformat'
 
 
 def test_exceptions():
