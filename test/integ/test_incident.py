@@ -12,6 +12,7 @@ import pytest
 from mock import patch
 from pytest import fail
 
+import snowflake
 from snowflake.connector import ProgrammingError, converter
 from snowflake.connector.incident import Incident
 
@@ -98,27 +99,25 @@ def test_report_automatic_incident(negative_conn_cnx):
 @pytest.mark.internal
 @pytest.mark.parametrize('app_name', ['asd', 'mark'])
 @pytest.mark.skipif(not RUNNING_AGAINST_LOCAL_SNOWFLAKE, reason="local Snowflake is necessary")
-def test_reporting_values(app_name, db_parameters):
-    import snowflake.connector
-    original_paramstyle = snowflake.connector.paramstyle
-    snowflake.connector.paramstyle = 'qmark'
+def test_reporting_values(conn_cnx, app_name):
     original_blacklist = snowflake.connector.incident.CLS_BLACKLIST
     snowflake.connector.incident.CLS_BLACKLIST = frozenset()
     converter.PYTHON_TO_SNOWFLAKE_TYPE['nonetype'] = None
-    db_parameters['internal_application_name'] = app_name
     con = None
     try:
-        con = snowflake.connector.connect(**db_parameters)
-        con.cursor().execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
-        cursor = con.cursor()
-        with patch.object(con.rest, 'request') as incident_report:
-            cursor.execute("INSERT INTO foo VALUES (?)", [None])
-            fail("Shouldn't reach ths statement")
+        with conn_cnx(
+                paramstyle='qmark',
+                internal_application_name=app_name
+        ) as con:
+            with con.cursor() as cursor:
+                cursor.execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
+                with patch.object(con.rest, 'request') as incident_report:
+                    cursor.execute("INSERT INTO foo VALUES (?)", [None])
+                    fail("Shouldn't reach ths statement")
     except ProgrammingError:
         pass  # ignore, should be thrown
     finally:
         converter.PYTHON_TO_SNOWFLAKE_TYPE['nonetype'] = 'ANY'
-        snowflake.connector.paramstyle = original_paramstyle
         snowflake.connector.incident.CLS_BLACKLIST = original_blacklist
         for tag in incident_report.call_args[0][1]['Tags']:
             if tag['Name'] == 'driver':

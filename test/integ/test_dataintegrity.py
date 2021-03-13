@@ -35,7 +35,7 @@ def _generate_time(row, col, tz=None, fractional=False):
 
 
 def _create_table(conn_cnx, columndefs, partial_name):
-    table = random_string(5, f'"check_data_integrity_{partial_name}_"')
+    table = random_string(5, f"check_data_integrity_{partial_name}_")
     with conn_cnx() as cnx:
         cnx.cursor().execute(
             "CREATE OR REPLACE TABLE {table} ({columns})".format(
