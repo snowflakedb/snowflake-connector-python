@@ -187,6 +187,7 @@ def test_pendulum_binding(request, conn_cnx):
     pendulum_test = pendulum.now()
     table_name = random_string(3, prefix="test_pendulum_binding")
     with conn_cnx() as cnx:
+        assert cnx._paramstyle == 'pyformat'
         cnx.cursor().execute(f"create table {table_name} (c1 timestamp)")
         request.addfinalizer(drop_table(conn_cnx, table_name))
         c = cnx.cursor()
