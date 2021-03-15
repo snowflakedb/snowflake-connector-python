@@ -50,7 +50,6 @@ def test_async_exec(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
             status = con.get_query_status(q_id)
-            # TODO assert < QueryStatus.RESUMING_WAREHOUSE: 8 > == < QueryStatus.SUCCESS: 2 >
             assert status == QueryStatus.SUCCESS
             status = con.get_query_status_throw_if_error(q_id)
             assert status == QueryStatus.SUCCESS
