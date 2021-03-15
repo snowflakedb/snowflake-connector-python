@@ -380,6 +380,7 @@ def test_drop_create_user(conn_cnx, db_parameters):
         csr.execute('drop user if exists snowdog')
 
 
+@pytest.mark.sequential
 @pytest.mark.timeout(15)
 def test_invalid_account_timeout():
     with pytest.raises(ForbiddenError):
@@ -391,6 +392,7 @@ def test_invalid_account_timeout():
         )
 
 
+@pytest.mark.sequential
 @pytest.mark.timeout(15)
 def test_invalid_proxy(db_parameters):
     with pytest.raises(OperationalError):
@@ -410,6 +412,7 @@ def test_invalid_proxy(db_parameters):
     del os.environ['HTTPS_PROXY']
 
 
+@pytest.mark.sequential
 @pytest.mark.timeout(15)
 def test_eu_connection(tmpdir):
     """Tests setting custom region.
@@ -455,6 +458,7 @@ def test_us_west_connection(tmpdir):
         )
 
 
+@pytest.mark.sequential
 @pytest.mark.timeout(60)
 def test_privatelink(db_parameters):
     """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""

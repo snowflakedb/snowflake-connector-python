@@ -147,7 +147,7 @@ def init_test_schema(request, db_parameters) -> None:
             port=ret['port'],
             database=ret['database'],
             account=ret['account'],
-            protocol=ret['protocol'],
+            protocol=ret['protocol']
     ) as con:
         con.cursor().execute(
             f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
@@ -161,7 +161,7 @@ def init_test_schema(request, db_parameters) -> None:
                 port=ret1['port'],
                 database=ret1['database'],
                 account=ret1['account'],
-                protocol=ret1['protocol'],
+                protocol=ret1['protocol']
         ) as con1:
             con1.cursor().execute(
                 f"DROP SCHEMA IF EXISTS {TEST_SCHEMA}")

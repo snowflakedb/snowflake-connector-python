@@ -14,7 +14,7 @@ from ..integ_helpers import drop_table
 from ..randomize import random_string
 
 # Mark all tests in this file to time out after 2 minutes to prevent hanging forever
-pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver]
+pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver, pytest.mark.sequential]
 
 try:  # pragma: no cover
     from snowflake.connector.constants import QueryStatus
