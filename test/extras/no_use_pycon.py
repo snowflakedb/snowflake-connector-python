@@ -9,5 +9,7 @@ import requests
 
 import snowflake.connector  # NOQA
 
-r = requests.get('https://snowflake.com/', headers={"User-Agent": ""}, allow_redirects=False)
+r = requests.get(
+    "https://snowflake.com/", headers={"User-Agent": ""}, allow_redirects=False
+)
 assert r.status_code == 301

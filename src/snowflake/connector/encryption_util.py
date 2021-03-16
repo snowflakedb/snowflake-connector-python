@@ -28,35 +28,29 @@ if TYPE_CHECKING:  # pragma: no cover
 def matdesc_to_unicode(matdesc):
     """Convert Material Descriptor to Unicode String."""
     return str(
-        json.dumps({
-            'queryId': matdesc.query_id,
-            'smkId': str(matdesc.smk_id),
-            'keySize': str(matdesc.key_size)
-        },
-            separators=(',', ':')))
+        json.dumps(
+            {
+                "queryId": matdesc.query_id,
+                "smkId": str(matdesc.smk_id),
+                "keySize": str(matdesc.key_size),
+            },
+            separators=(",", ":"),
+        )
+    )
 
 
 """
 Material Description
 """
 MaterialDescriptor = namedtuple(
-    "MaterialDescriptor", [
-        "smk_id",  # SMK id
-        "query_id",  # query id
-        "key_size"  # key size, 128 or 256
-    ]
+    "MaterialDescriptor",
+    ["smk_id", "query_id", "key_size"],  # SMK id  # query id  # key size, 128 or 256
 )
 
 """
 Metadata for encryption
 """
-EncryptionMetadata = namedtuple(
-    "EncryptionMetadata", [
-        "key",
-        "iv",
-        "matdesc"
-    ]
-)
+EncryptionMetadata = namedtuple("EncryptionMetadata", ["key", "iv", "matdesc"])
 
 
 class SnowflakeEncryptionUtil(object):
@@ -65,8 +59,12 @@ class SnowflakeEncryptionUtil(object):
         return os.urandom(byte_length)
 
     @staticmethod
-    def encrypt_stream(encryption_material: 'SnowflakeFileEncryptionMaterial', src: IO[bytes], out: IO[bytes],
-                       chunk_size: int = block_size * 4 * 1024) -> 'EncryptionMetadata':
+    def encrypt_stream(
+        encryption_material: "SnowflakeFileEncryptionMaterial",
+        src: IO[bytes],
+        out: IO[bytes],
+        chunk_size: int = block_size * 4 * 1024,
+    ) -> "EncryptionMetadata":
         """Reads content from src and write the encrypted content into out.
 
         This function is sensitive to current position of src and out.
@@ -82,11 +80,12 @@ class SnowflakeEncryptionUtil(object):
             The encryption metadata.
         """
         logger = getLogger(__name__)
-        use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
+        use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         decoded_key = base64.standard_b64decode(
-            encryption_material.query_stage_master_key)
+            encryption_material.query_stage_master_key
+        )
         key_size = len(decoded_key)
-        logger.debug('key_size = %s', key_size)
+        logger.debug("key_size = %s", key_size)
 
         # Generate key for data encryption
         iv_data = SnowflakeEncryptionUtil.get_secure_random(block_size)
@@ -95,7 +94,9 @@ class SnowflakeEncryptionUtil(object):
             data_cipher = AES.new(key=file_key, mode=AES.MODE_CBC, IV=iv_data)
         else:
             backend = default_backend()
-            cipher = Cipher(algorithms.AES(file_key), modes.CBC(iv_data), backend=backend)
+            cipher = Cipher(
+                algorithms.AES(file_key), modes.CBC(iv_data), backend=backend
+            )
             encryptor = cipher.encryptor()
 
         padded = False
@@ -112,11 +113,11 @@ class SnowflakeEncryptionUtil(object):
                 out.write(encryptor.update(chunk))
         if not padded:
             if not use_openssl_only:
-                out.write(data_cipher.encrypt(
-                    block_size * chr(block_size).encode(UTF8)))
+                out.write(
+                    data_cipher.encrypt(block_size * chr(block_size).encode(UTF8))
+                )
             else:
-                out.write(encryptor.update(
-                    block_size * chr(block_size).encode(UTF8)))
+                out.write(encryptor.update(block_size * chr(block_size).encode(UTF8)))
         if use_openssl_only:
             out.write(encryptor.finalize())
 
@@ -127,22 +128,29 @@ class SnowflakeEncryptionUtil(object):
         else:
             cipher = Cipher(algorithms.AES(decoded_key), modes.ECB(), backend=backend)
             encryptor = cipher.encryptor()
-            enc_kek = encryptor.update(PKCS5_PAD(file_key, block_size)) + encryptor.finalize()
+            enc_kek = (
+                encryptor.update(PKCS5_PAD(file_key, block_size)) + encryptor.finalize()
+            )
 
         mat_desc = MaterialDescriptor(
             smk_id=encryption_material.smk_id,
             query_id=encryption_material.query_id,
-            key_size=key_size * 8)
+            key_size=key_size * 8,
+        )
         metadata = EncryptionMetadata(
-            key=base64.b64encode(enc_kek).decode('utf-8'),
-            iv=base64.b64encode(iv_data).decode('utf-8'),
+            key=base64.b64encode(enc_kek).decode("utf-8"),
+            iv=base64.b64encode(iv_data).decode("utf-8"),
             matdesc=matdesc_to_unicode(mat_desc),
         )
         return metadata
 
     @staticmethod
-    def encrypt_file(encryption_material: 'SnowflakeFileEncryptionMaterial', in_filename: str,
-                     chunk_size: int = block_size * 4 * 1024, tmp_dir: str = None) -> Tuple['EncryptionMetadata', str]:
+    def encrypt_file(
+        encryption_material: "SnowflakeFileEncryptionMaterial",
+        in_filename: str,
+        chunk_size: int = block_size * 4 * 1024,
+        tmp_dir: str = None,
+    ) -> Tuple["EncryptionMetadata", str]:
         """Encrypts a file in a temporary directory.
 
         Args:
@@ -156,19 +164,30 @@ class SnowflakeEncryptionUtil(object):
         """
         logger = getLogger(__name__)
         temp_output_fd, temp_output_file = tempfile.mkstemp(
-            text=False, dir=tmp_dir,
-            prefix=os.path.basename(in_filename) + "#")
-        logger.debug('unencrypted file: %s, temp file: %s, tmp_dir: %s',
-                     in_filename, temp_output_file, tmp_dir)
+            text=False, dir=tmp_dir, prefix=os.path.basename(in_filename) + "#"
+        )
+        logger.debug(
+            "unencrypted file: %s, temp file: %s, tmp_dir: %s",
+            in_filename,
+            temp_output_file,
+            tmp_dir,
+        )
         metadata = None
-        with open(in_filename, 'rb') as infile:
-            with os.fdopen(temp_output_fd, 'wb') as outfile:
-                metadata = SnowflakeEncryptionUtil.encrypt_stream(encryption_material, infile, outfile, chunk_size)
+        with open(in_filename, "rb") as infile:
+            with os.fdopen(temp_output_fd, "wb") as outfile:
+                metadata = SnowflakeEncryptionUtil.encrypt_stream(
+                    encryption_material, infile, outfile, chunk_size
+                )
         return metadata, temp_output_file
 
     @staticmethod
-    def decrypt_file(metadata, encryption_material, in_filename,
-                     chunk_size=block_size * 4 * 1024, tmp_dir=None):
+    def decrypt_file(
+        metadata,
+        encryption_material,
+        in_filename,
+        chunk_size=block_size * 4 * 1024,
+        tmp_dir=None,
+    ):
         """Decrypts a file and stores the output in the temporary directory.
 
         Args:
@@ -182,11 +201,12 @@ class SnowflakeEncryptionUtil(object):
             The decrypted file's location.
         """
         logger = getLogger(__name__)
-        use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
+        use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         key_base64 = metadata.key
         iv_base64 = metadata.iv
         decoded_key = base64.standard_b64decode(
-            encryption_material.query_stage_master_key)
+            encryption_material.query_stage_master_key
+        )
         key_bytes = base64.standard_b64decode(key_base64)
         iv_bytes = base64.standard_b64decode(iv_base64)
 
@@ -199,18 +219,19 @@ class SnowflakeEncryptionUtil(object):
             cipher = Cipher(algorithms.AES(decoded_key), modes.ECB(), backend=backend)
             decryptor = cipher.decryptor()
             file_key = PKCS5_UNPAD(decryptor.update(key_bytes) + decryptor.finalize())
-            cipher = Cipher(algorithms.AES(file_key), modes.CBC(iv_bytes), backend=backend)
+            cipher = Cipher(
+                algorithms.AES(file_key), modes.CBC(iv_bytes), backend=backend
+            )
             decryptor = cipher.decryptor()
 
         temp_output_fd, temp_output_file = tempfile.mkstemp(
-            text=False, dir=tmp_dir,
-            prefix=os.path.basename(in_filename) + "#")
+            text=False, dir=tmp_dir, prefix=os.path.basename(in_filename) + "#"
+        )
         total_file_size = 0
         prev_chunk = None
-        logger.debug('encrypted file: %s, tmp file: %s',
-                     in_filename, temp_output_file)
-        with open(in_filename, 'rb') as infile:
-            with os.fdopen(temp_output_fd, 'wb') as outfile:
+        logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
+        with open(in_filename, "rb") as infile:
+            with os.fdopen(temp_output_fd, "wb") as outfile:
                 while True:
                     chunk = infile.read(chunk_size)
                     if len(chunk) == 0:

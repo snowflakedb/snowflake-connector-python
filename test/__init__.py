@@ -5,9 +5,9 @@
 # This file houses functions and constants shared by both integration and unit tests
 import os
 
-CLOUD_PROVIDERS = {'aws', 'azure', 'gcp'}
-PUBLIC_SKIP_TAGS = {'internal'}
-RUNNING_ON_GH = (os.getenv('GITHUB_ACTIONS') == 'true')
+CLOUD_PROVIDERS = {"aws", "azure", "gcp"}
+PUBLIC_SKIP_TAGS = {"internal"}
+RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 
 
 def running_on_public_ci() -> bool:
