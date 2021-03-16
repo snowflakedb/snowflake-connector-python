@@ -134,7 +134,7 @@ class SnowflakeCursor(object):
     INSERT_SQL_RE = re.compile(r"^insert\s+into", flags=re.IGNORECASE)
     COMMENT_SQL_RE = re.compile(r"/\*.*\*/")
     INSERT_SQL_VALUES_RE = re.compile(
-        r".*VALUES\s*(\(.*\)).*", re.IGNORECASE | re.MULTILINE | re.DOTALL
+        r".*VALUES\s*(\(\%\(.*\)s\)).*", re.IGNORECASE | re.MULTILINE | re.DOTALL
     )
     ALTER_SESSION_RE = re.compile(
         r"alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;",
