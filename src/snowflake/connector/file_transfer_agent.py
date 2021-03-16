@@ -525,6 +525,14 @@ class SnowflakeFileTransferAgent(object):
         """
         idx = 0
         len_file_metas = len(file_metas)
+
+        cln_meta = file_metas[0].client_meta
+        client = cln_meta.storage_util.create_client(
+            cln_meta.stage_info,
+            use_accelerate_endpoint=cln_meta.use_accelerate_endpoint,
+        )
+        for meta in file_metas:
+            meta.client_meta.cloud_client = client
         while idx < len_file_metas:
             logger.debug(f"uploading files idx: {idx+1}/{len_file_metas}")
             result = SnowflakeFileTransferAgent.upload_one_file(file_metas[idx])
