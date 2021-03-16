@@ -11,6 +11,7 @@ import pytest
 from ..generate_test_files import generate_k_lines_of_n_files
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.aws
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies into large files."""
@@ -51,8 +52,11 @@ ratio number(6,2))
             files = files.replace("\\", "\\\\")
             cnx.cursor().execute(
                 "put 'file://{file}' @%{name}".format(
-                    file=files, name=db_parameters["name"]
-                )
+                    file=files,
+                    name=db_parameters["name"],
+                ),
+                # add _multipart_threshold so the PUT will not use the threshold(200MB) from server.
+                _multipart_threshold=1000000,
             )
             c = cnx.cursor()
             try:
