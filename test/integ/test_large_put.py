@@ -51,9 +51,12 @@ ratio number(6,2))
         ) as cnx:
             files = files.replace("\\", "\\\\")
             cnx.cursor().execute(
-                "put 'file://{file}' @%{name} threshold=1000000".format(
-                    file=files, name=db_parameters["name"]
-                )
+                "put 'file://{file}' @%{name}".format(
+                    file=files,
+                    name=db_parameters["name"],
+                ),
+                # add _multipart_threshold so the PUT will not use the threshold(200MB) from server.
+                _multipart_threshold=1000000,
             )
             c = cnx.cursor()
             try:
