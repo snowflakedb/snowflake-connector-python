@@ -32,5 +32,5 @@ class AuthByOAuth(AuthByPlugin):
 
         OAuth needs the authenticator and token attributes set, as well as loginname, which is set already in auth.py.
         """
-        body['data']['AUTHENTICATOR'] = OAUTH_AUTHENTICATOR
-        body['data']['TOKEN'] = self._oauth_token
+        body["data"]["AUTHENTICATOR"] = OAUTH_AUTHENTICATOR
+        body["data"]["TOKEN"] = self._oauth_token

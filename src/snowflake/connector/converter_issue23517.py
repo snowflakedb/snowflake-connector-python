@@ -22,14 +22,14 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
     def __init__(self, **kwargs):
         super(SnowflakeConverterIssue23517, self).__init__(**kwargs)
-        logger.debug('initialized')
+        logger.debug("initialized")
 
     def _TIMESTAMP_TZ_to_python(self, ctx):
         """Converts TIMESTAMP TZ to datetime.
 
         The timezone offset is piggybacked.
         """
-        scale = ctx['scale']
+        scale = ctx["scale"]
 
         def conv0(encoded_value: str) -> datetime:
             value, tz = encoded_value.split()
@@ -43,7 +43,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         def conv(encoded_value: str) -> datetime:
             value, tz = encoded_value.split()
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            microseconds = float(value[0:-scale + 6])
+            microseconds = float(value[0 : -scale + 6])
             t = ZERO_EPOCH + timedelta(seconds=microseconds)
             if pytz.utc != tzinfo:
                 t += tzinfo.utcoffset(t)
@@ -56,15 +56,15 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
         No timezone info is attached.
         """
-        scale = ctx['scale']
+        scale = ctx["scale"]
 
         def conv0(value: str) -> datetime:
-            logger.debug('timestamp_ntz: %s', value)
+            logger.debug("timestamp_ntz: %s", value)
             return ZERO_EPOCH + timedelta(seconds=(float(value)))
 
         def conv(value: str) -> datetime:
-            logger.debug('timestamp_ntz: %s', value)
-            microseconds = float(value[0:-scale + 6])
+            logger.debug("timestamp_ntz: %s", value)
+            microseconds = float(value[0 : -scale + 6])
             return ZERO_EPOCH + timedelta(seconds=(microseconds))
 
         return conv if scale > 6 else conv0
@@ -81,13 +81,13 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
         No timezone is attached.
         """
-        scale = ctx['scale']
+        scale = ctx["scale"]
 
         def conv0(value: str) -> time:
             return (ZERO_EPOCH + timedelta(seconds=(float(value)))).time()
 
         def conv(value: str) -> time:
-            microseconds = float(value[0:-scale + 6])
+            microseconds = float(value[0 : -scale + 6])
             return (ZERO_EPOCH + timedelta(seconds=(microseconds))).time()
 
         return conv if scale > 6 else conv0

@@ -15,7 +15,7 @@ except ImportError:
     QueryStatus = None
 
 
-@patch('snowflake.connector.network.SnowflakeRestful._post_request')
+@patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
     def mock_post_request(url, headers, json_body, **kwargs):
         global mock_cnt
@@ -23,16 +23,17 @@ def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
         if mock_cnt == 0:
             # return from /v1/login-request
             ret = {
-                'success': True,
-                'message': None,
-                'data': {
-                    'token': 'TOKEN',
-                    'masterToken': 'MASTER_TOKEN',
-                    'idToken': None,
-                    'parameters': [
-                        {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
+                "success": True,
+                "message": None,
+                "data": {
+                    "token": "TOKEN",
+                    "masterToken": "MASTER_TOKEN",
+                    "idToken": None,
+                    "parameters": [
+                        {"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}
                     ],
-                }}
+                },
+            }
         return ret
 
     # POST requests mock
@@ -41,24 +42,22 @@ def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
     global mock_cnt
     mock_cnt = 0
 
-    account = 'testaccount'
-    user = 'testuser'
+    account = "testaccount"
+    user = "testuser"
 
     # connection
     con = snowflake.connector.connect(
         account=account,
         user=user,
-        password='testpassword',
-        database='TESTDB',
-        warehouse='TESTWH',
+        password="testpassword",
+        database="TESTDB",
+        warehouse="TESTWH",
     )
-    assert con.service_name == 'FAKE_SERVICE_NAME'
+    assert con.service_name == "FAKE_SERVICE_NAME"
 
 
 @pytest.mark.skip(reason="Mock doesn't work as expected.")
-@patch(
-    'snowflake.connector.network.SnowflakeRestful._post_request'
-)
+@patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
     def mock_post_request(url, headers, json_body, **kwargs):
         global mock_cnt
@@ -66,22 +65,23 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
         if mock_cnt == 0:
             # return from /v1/login-request
             ret = {
-                'success': True,
-                'message': None,
-                'data': {
-                    'token': 'TOKEN',
-                    'masterToken': 'MASTER_TOKEN',
-                    'idToken': None,
-                    'parameters': [
-                        {'name': 'SERVICE_NAME', 'value': "FAKE_SERVICE_NAME"}
+                "success": True,
+                "message": None,
+                "data": {
+                    "token": "TOKEN",
+                    "masterToken": "MASTER_TOKEN",
+                    "idToken": None,
+                    "parameters": [
+                        {"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}
                     ],
-                }}
+                },
+            }
         elif mock_cnt == 1:
             ret = {
-                'success': False,
-                'message': "Session gone",
-                'data': None,
-                'code': 390111
+                "success": False,
+                "message": "Session gone",
+                "data": None,
+                "code": 390111,
             }
         mock_cnt += 1
         return ret
@@ -92,16 +92,16 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
     global mock_cnt
     mock_cnt = 0
 
-    account = 'testaccount'
-    user = 'testuser'
+    account = "testaccount"
+    user = "testuser"
 
     # connection
     con = snowflake.connector.connect(
         account=account,
         user=user,
-        password='testpassword',
-        database='TESTDB',
-        warehouse='TESTWH',
+        password="testpassword",
+        database="TESTDB",
+        warehouse="TESTWH",
     )
     # Test to see if closing connection works or raises an exception. If an exception is raised, test will fail.
     con.close()
@@ -126,4 +126,7 @@ def test_is_still_running():
         (QueryStatus.NO_DATA, True),
     ]
     for status, expected_result in statuses:
-        assert snowflake.connector.SnowflakeConnection.is_still_running(status) == expected_result
+        assert (
+            snowflake.connector.SnowflakeConnection.is_still_running(status)
+            == expected_result
+        )

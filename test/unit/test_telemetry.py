@@ -11,17 +11,23 @@ import snowflake.connector.telemetry
 
 def test_telemetry_data_to_dict():
     """Tests that TelemetryData instances are properly converted to dicts."""
-    assert snowflake.connector.telemetry.TelemetryData({}, 2000).to_dict() == {'message': {}, 'timestamp': '2000'}
+    assert snowflake.connector.telemetry.TelemetryData({}, 2000).to_dict() == {
+        "message": {},
+        "timestamp": "2000",
+    }
 
-    d = {'type': 'test', 'query_id': '1', 'value': 20}
-    assert snowflake.connector.telemetry.TelemetryData(d, 1234).to_dict() == {'message': d, 'timestamp': '1234'}
+    d = {"type": "test", "query_id": "1", "value": 20}
+    assert snowflake.connector.telemetry.TelemetryData(d, 1234).to_dict() == {
+        "message": d,
+        "timestamp": "1234",
+    }
 
 
 def get_client_and_mock():
     rest_call = Mock()
-    rest_call.return_value = {'success': True}
+    rest_call.return_value = {"success": True}
     rest = Mock()
-    rest.attach_mock(rest_call, 'request')
+    rest.attach_mock(rest_call, "request")
     client = snowflake.connector.telemetry.TelemetryClient(rest, 2)
     return (client, rest_call)
 
@@ -94,7 +100,7 @@ def test_telemetry_send_batch_clear():
 def test_telemetry_auto_disable():
     """Tests that the client will automatically disable itself if a request fails."""
     client, rest_call = get_client_and_mock()
-    rest_call.return_value = {'success': False}
+    rest_call.return_value = {"success": False}
 
     client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
     assert client.is_enabled()

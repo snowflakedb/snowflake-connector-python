@@ -23,7 +23,6 @@ logger = getLogger(__name__)
 
 
 class SnowflakeFileUtil(object):
-
     @staticmethod
     def get_digest_and_size(src: IO[bytes]) -> Tuple[str, int]:
         """Gets stream digest and size.
@@ -34,7 +33,7 @@ class SnowflakeFileUtil(object):
         Returns:
             Tuple of src's digest and src's size in bytes.
         """
-        use_openssl_only = os.getenv('SF_USE_OPENSSL_ONLY', 'False') == 'True'
+        use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         CHUNK_SIZE = 16 * 4 * 1024
         if not use_openssl_only:
             m = SHA256.new()
@@ -44,7 +43,7 @@ class SnowflakeFileUtil(object):
             hasher = hashes.Hash(chosen_hash, backend)
         while True:
             chunk = src.read(CHUNK_SIZE)
-            if chunk == b'':
+            if chunk == b"":
                 break
             if not use_openssl_only:
                 m.update(chunk)
@@ -86,11 +85,10 @@ class SnowflakeFileUtil(object):
             A tuple of gzip file name and size.
         """
         base_name = os.path.basename(file_name)
-        gzip_file_name = os.path.join(tmp_dir, base_name + '_c.gz')
-        logger.debug('gzip file: %s, original file: %s', gzip_file_name,
-                     file_name)
-        with open(file_name, 'rb') as fr:
-            with gzip.GzipFile(gzip_file_name, 'wb') as fw:
+        gzip_file_name = os.path.join(tmp_dir, base_name + "_c.gz")
+        logger.debug("gzip file: %s, original file: %s", gzip_file_name, file_name)
+        with open(file_name, "rb") as fr:
+            with gzip.GzipFile(gzip_file_name, "wb") as fw:
                 shutil.copyfileobj(fr, fw)
         SnowflakeFileUtil.normalize_gzip_header(gzip_file_name)
 
@@ -107,30 +105,30 @@ class SnowflakeFileUtil(object):
         Args:
             gzip_file_name: Local path of gzip file.
         """
-        with open(gzip_file_name, 'r+b') as f:
+        with open(gzip_file_name, "r+b") as f:
             # reset the timestamp in gzip header
             f.seek(3, 0)
             # Read flags bit
             flag_byte = f.read(1)
-            flags = struct.unpack('B', flag_byte)[0]
+            flags = struct.unpack("B", flag_byte)[0]
             f.seek(4, 0)
-            f.write(struct.pack('<L', 0))
+            f.write(struct.pack("<L", 0))
             # Reset the file name in gzip header if included
             if flags & 8:
                 f.seek(10, 0)
                 # Skip through xlen bytes and length if included
                 if flags & 4:
                     xlen_bytes = f.read(2)
-                    xlen = struct.unpack('<H', xlen_bytes)[0]
+                    xlen = struct.unpack("<H", xlen_bytes)[0]
                     f.seek(10 + 2 + xlen)
                 byte = f.read(1)
                 while byte:
-                    value = struct.unpack('B', byte)[0]
+                    value = struct.unpack("B", byte)[0]
                     # logger.debug('ch=%s, byte=%s', value, byte)
                     if value == 0:
                         break
                     f.seek(-1, 1)  # current_pos - 1
-                    f.write(struct.pack('B', 0x20))  # replace with a space
+                    f.write(struct.pack("B", 0x20))  # replace with a space
                     byte = f.read(1)
 
     @staticmethod
@@ -144,8 +142,7 @@ class SnowflakeFileUtil(object):
             Tuple of src_stream's digest and src_stream's size in bytes.
         """
         digest, size = SnowflakeFileUtil.get_digest_and_size(src_stream)
-        logger.debug('getting digest and size for stream: %s, %s', digest,
-                     size)
+        logger.debug("getting digest and size for stream: %s, %s", digest, size)
         return digest, size
 
     @staticmethod
@@ -159,8 +156,9 @@ class SnowflakeFileUtil(object):
             Tuple of file's digest and file size in bytes.
         """
         digest, size = None, None
-        with open(file_name, 'rb') as src:
+        with open(file_name, "rb") as src:
             digest, size = SnowflakeFileUtil.get_digest_and_size(src)
-        logger.debug('getting digest and size: %s, %s, file=%s', digest,
-                     size, file_name)
+        logger.debug(
+            "getting digest and size: %s, %s, file=%s", digest, size, file_name
+        )
         return digest, size

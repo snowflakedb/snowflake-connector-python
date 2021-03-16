@@ -31,14 +31,19 @@ class SnowLogger(logging.LoggerAdapter):
         self.log(logging.WARNING, msg, path_name, func_name, *args, **kwargs)
 
     def warn(self, msg, path_name=None, func_name=None, *args, **kwargs):
-        warnings.warn("The 'warn' method is deprecated, "
-                      "use 'warning' instead", DeprecationWarning, 2)
+        warnings.warn(
+            "The 'warn' method is deprecated, " "use 'warning' instead",
+            DeprecationWarning,
+            2,
+        )
         self.warning(msg, path_name, func_name, *args, **kwargs)
 
     def error(self, msg, path_name=None, func_name=None, *args, **kwargs):
         self.log(logging.ERROR, msg, path_name, func_name, *args, **kwargs)
 
-    def exception(self, msg, path_name=None, func_name=None, *args, exc_info=True, **kwargs):
+    def exception(
+        self, msg, path_name=None, func_name=None, *args, exc_info=True, **kwargs
+    ):
         """Convenience method for logging an ERROR with exception information."""
         self.error(msg, path_name, func_name, *args, exc_info=exc_info, **kwargs)
 
@@ -47,14 +52,16 @@ class SnowLogger(logging.LoggerAdapter):
 
     fatal = critical
 
-    def log(self,
-            level: int,
-            msg: str,
-            path_name: Optional[str] = None,
-            func_name: Optional[str] = None,
-            line_num: int = 0,
-            *args,
-            **kwargs):
+    def log(
+        self,
+        level: int,
+        msg: str,
+        path_name: Optional[str] = None,
+        func_name: Optional[str] = None,
+        line_num: int = 0,
+        *args,
+        **kwargs
+    ):
         """Generalized log method of SnowLogger wrapper.
 
         Args:
@@ -74,6 +81,15 @@ class SnowLogger(logging.LoggerAdapter):
             else:
                 return
         if self.logger.isEnabledFor(level):
-            record = self.logger.makeRecord(self.logger.name, level, path_name, line_num,
-                                            msg, args, None, func_name, **kwargs)
+            record = self.logger.makeRecord(
+                self.logger.name,
+                level,
+                path_name,
+                line_num,
+                msg,
+                args,
+                None,
+                func_name,
+                **kwargs
+            )
             self.logger.handle(record)
