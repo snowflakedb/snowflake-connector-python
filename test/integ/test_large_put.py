@@ -11,6 +11,7 @@ import pytest
 from ..generate_test_files import generate_k_lines_of_n_files
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.aws
 def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies into large files."""
@@ -50,7 +51,7 @@ ratio number(6,2))
         ) as cnx:
             files = files.replace("\\", "\\\\")
             cnx.cursor().execute(
-                "put 'file://{file}' @%{name}".format(
+                "put 'file://{file}' @%{name} threshold=1000000".format(
                     file=files, name=db_parameters["name"]
                 )
             )
