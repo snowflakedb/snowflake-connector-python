@@ -621,6 +621,21 @@ def test_executemany(conn, db_parameters):
         c.close()
 
 
+def test_executemany_nested_insertion(conn_cnx, request):
+    table_name = random_string(5, prefix="_test_executemany_nested_insertion")
+    sql = f"INSERT INTO {table_name}(c1) (SELECT PARSE_JSON(column1) as raw from values (%(raw)s))"
+
+    def fin():
+        with conn_cnx() as cnx, cnx.cursor() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+    request.addfinalizer(fin)
+    with conn_cnx() as cnx, cnx.cursor() as cur:
+        cur.execute(f"CREATE TABLE {table_name} (c1 int)")
+        cur.executemany(sql, [{"raw": 123}, {"raw": 456}, {"raw": 789}])
+        assert cur.rowcount == 3, "wrong number of records were inserted"
+
+
 def test_closed_cursor(conn, db_parameters):
     """Attempts to use the closed cursor. It should raise errors.
 

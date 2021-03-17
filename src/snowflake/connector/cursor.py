@@ -14,6 +14,8 @@ from logging import getLogger
 from threading import Lock, Timer
 from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
+import regex
+
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import (
@@ -129,6 +131,7 @@ class SnowflakeCursor(object):
         Calling a function is expensive in Python and most of these getters are unnecessary.
     """
 
+    BALANCED_PARENTHESES_RE = regex.compile(r"\((?>[^()]|(?R))*\)")
     PUT_SQL_RE = re.compile(r"^(?:/\*.*\*/\s*)*put\s+", flags=re.IGNORECASE)
     GET_SQL_RE = re.compile(r"^(?:/\*.*\*/\s*)*get\s+", flags=re.IGNORECASE)
     INSERT_SQL_RE = re.compile(r"^insert\s+into", flags=re.IGNORECASE)
@@ -887,8 +890,7 @@ class SnowflakeCursor(object):
                     Error.errorhandler_wrapper(
                         self.connection, self, InterfaceError, errorvalue
                     )
-
-                fmt = m.group(1)
+                fmt = self.BALANCED_PARENTHESES_RE.match(m.group(1)).group(0)
                 values = []
                 for param in seqparams:
                     logger.debug("parameter: %s", param)
