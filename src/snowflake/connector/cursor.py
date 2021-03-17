@@ -506,7 +506,6 @@ class SnowflakeCursor(object):
         _is_put_get: Optional[bool] = None,
         _raise_put_get_error: bool = True,
         _force_put_overwrite: bool = False,
-        _multipart_threshold: Optional[int] = None,
         file_stream: Optional[IO[bytes]] = None,
     ):
         """Executes a command/query.
@@ -533,7 +532,6 @@ class SnowflakeCursor(object):
             _raise_put_get_error: Whether to raise PUT and GET errors.
             _force_put_overwrite: If the SQL query is a PUT, then this flag can force overwriting of an already
                 existing file on stage.
-            _multipart_threshold: use internally to decide multipart threshold to overwrite threshold from server
             file_stream: File-like object to be uploaded with PUT
 
         Returns:
@@ -654,9 +652,7 @@ class SnowflakeCursor(object):
                     force_put_overwrite=_force_put_overwrite
                     or data.get("overwrite", False),
                     source_from_stream=file_stream,
-                    multipart_threshold=data.get("threshold")
-                    if _multipart_threshold is None
-                    else _multipart_threshold,
+                    multipart_threshold=data.get("threshold"),
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
