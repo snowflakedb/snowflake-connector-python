@@ -621,6 +621,7 @@ def test_executemany(conn, db_parameters):
         c.close()
 
 
+@pytest.mark.skipolddriver
 def test_executemany_nested_insertion(conn_cnx, request):
     table_name = random_string(5, prefix="_test_executemany_nested_insertion")
     sql = f"INSERT INTO {table_name}(c1) (SELECT PARSE_JSON(column1) as raw from values (%(raw)s))"
