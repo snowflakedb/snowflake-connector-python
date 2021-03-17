@@ -7,6 +7,9 @@
 import os
 
 import pytest
+from mock import patch
+
+from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 from ..generate_test_files import generate_k_lines_of_n_files
 
@@ -50,14 +53,26 @@ ratio number(6,2))
             password=db_parameters["password"],
         ) as cnx:
             files = files.replace("\\", "\\\\")
-            cnx.cursor().execute(
-                "put 'file://{file}' @%{name}".format(
-                    file=files,
-                    name=db_parameters["name"],
-                ),
-                # add _multipart_threshold so the PUT will not use the threshold(200MB) from server.
-                _multipart_threshold=1000000,
-            )
+
+            def mocked_file_agent(*args, **kwargs):
+                newkwargs = kwargs.copy()
+                newkwargs.update(multipart_threshold=10000)
+                agent = SnowflakeFileTransferAgent(*args, **newkwargs)
+                mocked_file_agent.agent = agent
+                return agent
+
+            with patch(
+                "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                side_effect=mocked_file_agent,
+            ):
+                cnx.cursor().execute(
+                    "put 'file://{file}' @%{name}".format(
+                        file=files,
+                        name=db_parameters["name"],
+                    ),
+                )
+                assert mocked_file_agent.agent._multipart_threshold == 10000
+
             c = cnx.cursor()
             try:
                 c.execute("copy into {}".format(db_parameters["name"]))
