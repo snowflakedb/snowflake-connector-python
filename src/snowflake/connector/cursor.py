@@ -14,8 +14,6 @@ from logging import getLogger
 from threading import Lock, Timer
 from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
-import regex
-
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import (
@@ -45,6 +43,7 @@ from .json_result import DictJsonResult, JsonResult
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
+from .util_text import parse_pyformat_insertion_values
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -131,7 +130,6 @@ class SnowflakeCursor(object):
         Calling a function is expensive in Python and most of these getters are unnecessary.
     """
 
-    BALANCED_PARENTHESES_RE = regex.compile(r"\((?>[^()]|(?R))*\)")
     PUT_SQL_RE = re.compile(r"^(?:/\*.*\*/\s*)*put\s+", flags=re.IGNORECASE)
     GET_SQL_RE = re.compile(r"^(?:/\*.*\*/\s*)*get\s+", flags=re.IGNORECASE)
     INSERT_SQL_RE = re.compile(r"^insert\s+into", flags=re.IGNORECASE)
@@ -880,17 +878,22 @@ class SnowflakeCursor(object):
         if self.INSERT_SQL_RE.match(command):
             if self._connection.is_pyformat:
                 logger.debug("rewriting INSERT query")
+                errorvalue = {
+                    "msg": "Failed to rewrite multi-row insert",
+                    "errno": ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
+                }
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
                 m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
                 if not m:
-                    errorvalue = {
-                        "msg": "Failed to rewrite multi-row insert",
-                        "errno": ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
-                    }
                     Error.errorhandler_wrapper(
                         self.connection, self, InterfaceError, errorvalue
                     )
-                fmt = self.BALANCED_PARENTHESES_RE.match(m.group(1)).group(0)
+                try:
+                    fmt = parse_pyformat_insertion_values(m.group(1))
+                except ValueError:
+                    Error.errorhandler_wrapper(
+                        self.connection, self, ProgrammingError, errorvalue
+                    )
                 values = []
                 for param in seqparams:
                     logger.debug("parameter: %s", param)

@@ -218,7 +218,6 @@ setup(
         "idna>=2.5,<3",
         "certifi>=2017.4.17",
         'dataclasses<1.0;python_version=="3.6"',
-        "regex",
     ],
     namespace_packages=["snowflake"],
     packages=[

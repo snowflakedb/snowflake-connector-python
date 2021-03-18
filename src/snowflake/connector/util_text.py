@@ -254,3 +254,30 @@ def parse_account(account):
         parsed_account = account
 
     return parsed_account
+
+
+def parse_pyformat_insertion_values(text: str) -> str:
+    """Parses the text after 'VALUES' in an insertion query and return a pair of balanced parentheses with any text
+    in between.
+
+    Args:
+        text: the VALUES clause of an insertion query, should have no leading whitespace
+    """
+    open = 0
+    in_quotes = False
+    for i in range(len(text)):
+        if not in_quotes:
+            if text[i] == "(":
+                open += 1
+            elif text[i] == ")":
+                open -= 1
+            elif text[i] == "'":
+                in_quotes = True
+        elif text[i] == "'":
+            in_quotes = False
+
+        if open == 0:
+            return text[: i + 1]
+        elif open < 0:
+            raise ValueError("Parser finds more closing brackets than opening brackets")
+    raise ValueError("Parser cannot find balanced parentheses.")
