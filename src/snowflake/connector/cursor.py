@@ -200,6 +200,7 @@ class SnowflakeCursor(object):
         self._result = None
         self._use_dict_result = use_dict_result
         self._json_result_class = json_result_class
+        self._query_result_format = None
 
         self._arraysize = 1  # PEP-0249: defaults to 1
 
@@ -885,6 +886,8 @@ class SnowflakeCursor(object):
     def fetch_pandas_batches(self, **kwargs):
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
             raise NotSupportedError
         for df in self._result._fetch_pandas_batches(**kwargs):
@@ -893,6 +896,8 @@ class SnowflakeCursor(object):
     def fetch_pandas_all(self, **kwargs):
         """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
         self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
         return self._result._fetch_pandas_all(**kwargs)
@@ -1134,6 +1139,8 @@ class SnowflakeCursor(object):
                 "select * from table(result_scan('{}'))".format(sfqid)
             )
             self._result = self._inner_cursor._result
+            self._query_result_format = self._inner_cursor._query_result_format
+            self._total_rowcount = self._inner_cursor._total_rowcount
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
