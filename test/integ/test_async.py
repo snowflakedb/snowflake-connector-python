@@ -19,7 +19,8 @@ except ImportError:
     QueryStatus = None
 
 
-def test_simple_async(conn_cnx):
+@pytest.mark.parametrize("use_pandas", [False, True])
+def test_simple_async(conn_cnx, use_pandas):
     """Simple test to that shows the most simple usage of fire and forget.
 
     This test also makes sure that wait_until_ready function's sleeping is tested.
@@ -28,7 +29,10 @@ def test_simple_async(conn_cnx):
         with con.cursor() as cur:
             cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             cur.get_results_from_sfqid(cur.sfqid)
-            assert len(cur.fetchall()) == 1
+            if use_pandas:
+                assert len(cur.fetch_pandas_all()) == 1
+            else:
+                assert len(cur.fetchall()) == 1
 
 
 def test_async_exec(conn_cnx):
