@@ -47,8 +47,7 @@ cdef class ArrowResult:
         object _use_dict_result
         object _use_numpy
 
-
-    def __init__(self, raw_response, cursor, use_dict_result=False, _chunk_downloader=None):
+    def __init__(self, raw_response, cursor, use_dict_result: bool = False, _chunk_downloader= None):
         self._reset()
         self._cursor = cursor
         self._connection = cursor.connection
@@ -72,9 +71,12 @@ cdef class ArrowResult:
         if rowset_b64:
             arrow_bytes = b64decode(rowset_b64)
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
-            self._current_chunk_row = PyArrowIterator(self._cursor, io.BytesIO(arrow_bytes),
-                                                      self._arrow_context, self._use_dict_result,
-                                                      self._use_numpy)
+            self._current_chunk_row = PyArrowIterator(
+                self._cursor, io.BytesIO(arrow_bytes),
+                self._arrow_context,
+                self._use_dict_result,
+                self._use_numpy,
+            )
         else:
             snow_logger.debug(path_name="arrow_result.pyx", func_name="_chunk_info",
                               msg="Data from first gs response is empty")
@@ -182,9 +184,10 @@ cdef class ArrowResult:
         self._arrow_context = None
         self._iter_unit = EMPTY_UNIT
 
-    def _fetch_arrow_batches(self):
+    def _fetch_arrow_batches(self, **kwargs):
         """Fetch Arrow Table in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the number of
         rows in table) may be different."""
+        number_to_decimal = kwargs.pop('number_to_decimal', False)
         if self._iter_unit == EMPTY_UNIT:
             self._iter_unit = TABLE_UNIT
         elif self._iter_unit == ROW_UNIT:
@@ -193,7 +196,10 @@ cdef class ArrowResult:
             raise RuntimeError
 
         try:
-            self._current_chunk_row.init(self._iter_unit)
+            self._current_chunk_row.init(
+                self._iter_unit,
+                number_to_decimal
+            )
             snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
                               msg='Init table iterator successfully, current chunk index: {},'
                                   'chunk count: {}'.format(self._chunk_index, self._chunk_count))
@@ -209,7 +215,10 @@ cdef class ArrowResult:
                                     msg="chunk index: {}, chunk_count: {}".format(self._chunk_index, self._chunk_count))
                     next_chunk = self._chunk_downloader.next_chunk()
                     self._current_chunk_row = next_chunk.result_data
-                    self._current_chunk_row.init(self._iter_unit)
+                    self._current_chunk_row.init(
+                        self._iter_unit,
+                        number_to_decimal
+                    )
                 self._chunk_index += 1
 
                 if stop_iteration_except:
@@ -238,9 +247,9 @@ cdef class ArrowResult:
                     TelemetryField.TIME_CONSUME_LAST_RESULT,
                     time_consume_last_result)
 
-    def _fetch_arrow_all(self):
+    def _fetch_arrow_all(self, **kwargs):
         """Fetches a single Arrow Table."""
-        tables = list(self._fetch_arrow_batches())
+        tables = list(self._fetch_arrow_batches(**kwargs))
         if tables:
             return concat_tables(tables)
         else:
@@ -249,14 +258,21 @@ cdef class ArrowResult:
     def _fetch_pandas_batches(self, **kwargs):
         """Fetches Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the
         number of rows in dataframe) is optimized by Snowflake Python Connector."""
-        for table in self._fetch_arrow_batches():
+        number_to_decimal = kwargs.pop('number_to_decimal', False)
+        for table in self._fetch_arrow_batches(
+                number_to_decimal=number_to_decimal,
+                **kwargs
+        ):
             yield table.to_pandas(**kwargs)
 
     def _fetch_pandas_all(self, **kwargs):
         """Fetches a single Pandas dataframe."""
-        table = self._fetch_arrow_all()
+        number_to_decimal = kwargs.pop('number_to_decimal', False)
+        table = self._fetch_arrow_all(
+            number_to_decimal=number_to_decimal,
+            **kwargs
+        )
         if table:
             return table.to_pandas(**kwargs)
         else:
-
             return pandas.DataFrame(columns=self._column_idx_to_name)
