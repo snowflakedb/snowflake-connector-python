@@ -63,7 +63,7 @@ cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
         CArrowTableIterator(
             PyObject* context,
             vector[shared_ptr[CRecordBatch]]* batches,
-            bint convert_number_to_decimal,
+            bint number_to_decimal,
         ) except +
 
 
@@ -253,7 +253,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         else:
             return ret
 
-    def init(self, str iter_unit, bint convert_number_to_decimal):
+    def init(self, str iter_unit, bint number_to_decimal):
         # init chunk (row) iterator or table iterator
         if iter_unit != ROW_UNIT and iter_unit != TABLE_UNIT:
             raise NotImplementedError
@@ -272,6 +272,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             self.cIterator = new CArrowTableIterator(
                 <PyObject*>self.context,
                 &self.batches,
-                convert_number_to_decimal,
+                number_to_decimal,
             )
         self.unit = iter_unit

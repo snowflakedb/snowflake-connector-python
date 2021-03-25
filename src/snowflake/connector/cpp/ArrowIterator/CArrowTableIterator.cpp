@@ -161,12 +161,12 @@ void CArrowTableIterator::reconstructRecordBatches()
 CArrowTableIterator::CArrowTableIterator(
 PyObject* context,
 std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
-const bool convert_number_to_decimal
+const bool number_to_decimal
 )
 : CArrowIterator(batches),
 m_context(context),
 m_pyTableObjRef(nullptr),
-m_convert_number_to_decimal(convert_number_to_decimal)
+m_convert_number_to_decimal(number_to_decimal)
 {
   PyObject* tz = PyObject_GetAttrString(m_context, "_timezone");
   PyArg_Parse(tz, "s", &m_timezone);

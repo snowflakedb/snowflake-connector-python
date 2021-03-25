@@ -187,7 +187,7 @@ cdef class ArrowResult:
     def _fetch_arrow_batches(self, **kwargs):
         """Fetch Arrow Table in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the number of
         rows in table) may be different."""
-        convert_number_to_decimal = kwargs.pop('convert_number_to_decimal', False)
+        number_to_decimal = kwargs.pop('number_to_decimal', False)
         if self._iter_unit == EMPTY_UNIT:
             self._iter_unit = TABLE_UNIT
         elif self._iter_unit == ROW_UNIT:
@@ -198,7 +198,7 @@ cdef class ArrowResult:
         try:
             self._current_chunk_row.init(
                 self._iter_unit,
-                convert_number_to_decimal
+                number_to_decimal
             )
             snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
                               msg='Init table iterator successfully, current chunk index: {},'
@@ -217,7 +217,7 @@ cdef class ArrowResult:
                     self._current_chunk_row = next_chunk.result_data
                     self._current_chunk_row.init(
                         self._iter_unit,
-                        convert_number_to_decimal
+                        number_to_decimal
                     )
                 self._chunk_index += 1
 
@@ -258,18 +258,18 @@ cdef class ArrowResult:
     def _fetch_pandas_batches(self, **kwargs):
         """Fetches Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the
         number of rows in dataframe) is optimized by Snowflake Python Connector."""
-        convert_number_to_decimal = kwargs.pop('convert_number_to_decimal', False)
+        number_to_decimal = kwargs.pop('number_to_decimal', False)
         for table in self._fetch_arrow_batches(
-                convert_number_to_decimal=convert_number_to_decimal,
+                number_to_decimal=number_to_decimal,
                 **kwargs
         ):
             yield table.to_pandas(**kwargs)
 
     def _fetch_pandas_all(self, **kwargs):
         """Fetches a single Pandas dataframe."""
-        convert_number_to_decimal = kwargs.pop('convert_number_to_decimal', False)
+        number_to_decimal = kwargs.pop('number_to_decimal', False)
         table = self._fetch_arrow_all(
-            convert_number_to_decimal=convert_number_to_decimal,
+            number_to_decimal=number_to_decimal,
             **kwargs
         )
         if table:

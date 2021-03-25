@@ -26,7 +26,7 @@ public:
   CArrowTableIterator(
   PyObject* context,
   std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
-  bool convert_number_to_decimal
+  bool number_to_decimal
   );
 
   /**
