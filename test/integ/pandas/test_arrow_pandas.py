@@ -935,11 +935,7 @@ def test_number_fetchbatches_retrieve_type(conn_cnx, use_decimal):
             cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
             for batch in cur.fetch_pandas_batches(number_to_decimal=use_decimal):
                 a_column = batch["A"]
-                if use_decimal:
-                    assert isinstance(a_column.values[0], decimal.Decimal), type(
-                        a_column.values[0]
-                    )
-                else:
-                    assert isinstance(a_column.values[0], numpy.float64), type(
-                        a_column.values[0]
-                    )
+                assert isinstance(
+                    a_column.values[0],
+                    decimal.Decimal if use_decimal else numpy.float64,
+                ), type(a_column.values[0])
