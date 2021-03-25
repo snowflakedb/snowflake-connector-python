@@ -3,13 +3,14 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
+import decimal
 import itertools
 import random
 import time
 from datetime import datetime
 from decimal import Decimal
 
+import numpy
 import pytest
 
 try:
@@ -908,3 +909,39 @@ def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
         if isinstance(scanned_results, pandas.DataFrame):
             scanned_results = [tuple(e) for e in scanned_results.values.tolist()]
         assert results == scanned_results
+
+
+@pytest.mark.parametrize("use_decimal", (False, True))
+def test_number_fetchall_retrieve_type(conn_cnx, use_decimal):
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
+            result_df = cur.fetch_pandas_all(convert_number_to_decimal=use_decimal)
+            a_column = result_df["A"]
+            if use_decimal:
+                assert isinstance(a_column.values[0], decimal.Decimal), type(
+                    a_column.values[0]
+                )
+            else:
+                assert isinstance(a_column.values[0], numpy.float64), type(
+                    a_column.values[0]
+                )
+
+
+@pytest.mark.parametrize("use_decimal", (False, True))
+def test_number_fetchbatches_retrieve_type(conn_cnx, use_decimal):
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
+            for batch in cur.fetch_pandas_batches(
+                convert_number_to_decimal=use_decimal
+            ):
+                a_column = batch["A"]
+                if use_decimal:
+                    assert isinstance(a_column.values[0], decimal.Decimal), type(
+                        a_column.values[0]
+                    )
+                else:
+                    assert isinstance(a_column.values[0], numpy.float64), type(
+                        a_column.values[0]
+                    )
