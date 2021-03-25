@@ -44,15 +44,27 @@ cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
 
 cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator(CArrowIterator):
-        CArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches, PyObject* use_numpy) except +
+        CArrowChunkIterator(
+                PyObject* context,
+                vector[shared_ptr[CRecordBatch]]* batches,
+                PyObject* use_numpy,
+        ) except +
 
     cdef cppclass DictCArrowChunkIterator(CArrowChunkIterator):
-        DictCArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches, PyObject* use_numpy) except +
+        DictCArrowChunkIterator(
+                PyObject* context,
+                vector[shared_ptr[CRecordBatch]]* batches,
+                PyObject* use_numpy
+        ) except +
 
 
 cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
     cdef cppclass CArrowTableIterator(CArrowIterator):
-        CArrowTableIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches) except +
+        CArrowTableIterator(
+            PyObject* context,
+            vector[shared_ptr[CRecordBatch]]* batches,
+            bint convert_number_to_decimal,
+        ) except +
 
 
 cdef extern from "arrow/api.h" namespace "arrow" nogil:
@@ -168,8 +180,14 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     # https://docs.snowflake.com/en/user-guide/sqlalchemy.html#numpy-data-type-support
     cdef object use_numpy
 
-    def __cinit__(self, object cursor, object py_inputstream, object arrow_context, object use_dict_result,
-                  object numpy):
+    def __cinit__(
+            self,
+            object cursor,
+            object py_inputstream,
+            object arrow_context,
+            object use_dict_result,
+            object numpy,
+    ):
         cdef shared_ptr[InputStream] input_stream
         cdef shared_ptr[CRecordBatch] record_batch
         cdef CStatus ret
@@ -235,15 +253,25 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         else:
             return ret
 
-    def init(self, str iter_unit):
+    def init(self, str iter_unit, bint convert_number_to_decimal):
         # init chunk (row) iterator or table iterator
         if iter_unit != ROW_UNIT and iter_unit != TABLE_UNIT:
             raise NotImplementedError
         elif iter_unit == ROW_UNIT:
-            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context, &self.batches, <PyObject *>self.use_numpy) \
-                if not self.use_dict_result \
-                else new DictCArrowChunkIterator(<PyObject*>self.context, &self.batches, <PyObject *>self.use_numpy)
+            self.cIterator = new CArrowChunkIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                <PyObject *>self.use_numpy,
+            ) if not self.use_dict_result else new DictCArrowChunkIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                <PyObject *>self.use_numpy
+            )
 
         elif iter_unit == TABLE_UNIT:
-            self.cIterator = new CArrowTableIterator(<PyObject*>self.context, &self.batches)
+            self.cIterator = new CArrowTableIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                convert_number_to_decimal,
+            )
         self.unit = iter_unit

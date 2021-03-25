@@ -23,7 +23,11 @@ public:
   /**
    * Constructor
    */
-  CArrowTableIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>>* batches);
+  CArrowTableIterator(
+  PyObject* context,
+  std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
+  bool convert_number_to_decimal
+  );
 
   /**
    * Destructor
@@ -52,6 +56,7 @@ private:
 
   /** local time zone */
   char* m_timezone;
+  const bool m_convert_number_to_decimal;
 
   /**
    * Reconstruct record batches with type conversion in place
@@ -74,10 +79,39 @@ private:
     const std::shared_ptr<arrow::Array>& newColumn,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild);
+    bool& needsRebuild
+    );
 
   /**
-   * convert scaled fixed number column to double column
+   * convert scaled fixed number column to Decimal, or Double column based on setting
+   */
+  void convertScaledFixedNumberColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const unsigned int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
+  );
+
+  /**
+   * convert scaled fixed number column to Decimal column
+   */
+  void convertScaledFixedNumberColumnToDecimalColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const unsigned int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
+    );
+
+  /**
+   * convert scaled fixed number column to Double column
    */
   void convertScaledFixedNumberColumnToDoubleColumn(
     const unsigned int batchIdx,
@@ -87,7 +121,8 @@ private:
     const unsigned int scale,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild);
+    bool& needsRebuild
+    );
 
   /**
    * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
@@ -101,7 +136,8 @@ private:
     const int scale,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild);
+    bool& needsRebuild
+    );
 
   /**
    * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp column
@@ -115,7 +151,8 @@ private:
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
     bool& needsRebuild,
-    const std::string timezone="");
+    const std::string timezone=""
+    );
 
   /**
    * convert Snowflake TimestampTZ column to Arrow Timestamp column in UTC
@@ -131,7 +168,8 @@ private:
     const int byteLength,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild);
+    bool& needsRebuild
+    );
 
   /**
    * convert scaled fixed number to double
