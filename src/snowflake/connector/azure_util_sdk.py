@@ -17,7 +17,7 @@ from .constants import HTTP_HEADER_VALUE_OCTET_STREAM, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .file_transfer_agent import SnowflakeFileMeta
+    from .file_transfer_agent_sdk import SnowflakeFileMeta
 
 logger = getLogger(__name__)
 

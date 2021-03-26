@@ -8,14 +8,12 @@ import glob
 import gzip
 import os
 
-import boto3
 import pytest
-from boto3.exceptions import S3UploadFailedError
-from botocore.exceptions import ClientError
 
 from snowflake.connector.constants import UTF8
-from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
-from snowflake.connector.s3_util import SnowflakeS3Util
+from snowflake.connector.file_transfer_agent import SnowflakeFileMeta, StorageCredential
+from snowflake.connector.s3_storage_client import S3Location, SnowflakeS3RestClient
+from snowflake.connector.vendored import requests
 
 from ..integ_helpers import put
 from ..randomize import random_string
@@ -50,8 +48,6 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
                     f"%{table_name}",
                     from_path,
                     sql_options=" auto_compress=true parallel=30",
-                    _put_callback=SnowflakeS3ProgressPercentage,
-                    _get_callback=SnowflakeS3ProgressPercentage,
                     file_stream=file_stream,
                 )
                 rec = csr.fetchone()
@@ -69,8 +65,6 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
                     "get @%{table_name} file://{}".format(
                         tmp_dir, table_name=table_name
                     ),
-                    _put_callback=SnowflakeS3ProgressPercentage,
-                    _get_callback=SnowflakeS3ProgressPercentage,
                 )
                 rec = csr.fetchone()
                 assert rec[0].startswith("data_"), "A file downloaded by GET"
@@ -88,10 +82,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
     assert original_contents == contents, "Output is different from the original file"
 
 
-@pytest.mark.parametrize(
-    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
-)
-def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, from_path):
+def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters):
     """[s3] SNOW-6154: Uses invalid combination of AWS credential."""
     # create a data file
     fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
@@ -107,106 +98,42 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, from_path):
             ret = cnx.cursor()._execute_helper(
                 "put file://{} @%{}".format(fname, table_name)
             )
-            stage_location = ret["data"]["stageInfo"]["location"]
-            stage_credentials = ret["data"]["stageInfo"]["creds"]
-
-            s3location = SnowflakeS3Util.extract_bucket_name_and_path(stage_location)
-
-            s3path = s3location.s3path + os.path.basename(fname) + ".gz"
-
-            # positive case
-            client = boto3.resource(
-                "s3",
-                aws_access_key_id=stage_credentials["AWS_ID"],
-                aws_secret_access_key=stage_credentials["AWS_KEY"],
-                aws_session_token=stage_credentials["AWS_TOKEN"],
+            stage_info = ret["data"]["stageInfo"]
+            stage_info["location"]
+            stage_credentials = stage_info["creds"]
+            creds = StorageCredential(
+                stage_credentials, cnx, "COMMAND WILL NOT BE USED"
+            )
+            statinfo = os.stat(fname)
+            meta = SnowflakeFileMeta(
+                name=os.path.basename(fname),
+                src_file_name=fname,
+                src_file_size=statinfo.st_size,
+                stage_location_type="S3",
+                encryption_material=None,
+                dst_file_name=os.path.basename(fname),
+                sha256_digest="None",
             )
 
-            file_stream = None if from_path else open(fname, "rb")
+            client = SnowflakeS3RestClient(meta, creds, stage_info, 8388608)
+            client.get_file_header(meta.name)  # positive case
 
-            if from_path:
-                client.meta.client.upload_file(fname, s3location.bucket_name, s3path)
-            else:
-                client.meta.client.upload_fileobj(
-                    file_stream, s3location.bucket_name, s3path
-                )
+            # negative case, no aws token
+            token = stage_info["creds"]["AWS_TOKEN"]
+            del stage_info["creds"]["AWS_TOKEN"]
+            with pytest.raises(requests.HTTPError, match=".*Forbidden for url.*"):
+                client.get_file_header(meta.name)
 
-            # s3 closes stream
-            file_stream = None if from_path else open(fname, "rb")
-
-            # negative: wrong location, attempting to put the file in the
-            # parent path
-            parent_s3path = os.path.dirname(os.path.dirname(s3path)) + "/"
-
-            with pytest.raises((S3UploadFailedError, ClientError)):
-                if from_path:
-                    client.meta.client.upload_file(
-                        fname, s3location.bucket_name, parent_s3path
-                    )
-                else:
-                    client.meta.client.upload_fileobj(
-                        file_stream, s3location.bucket_name, parent_s3path
-                    )
-
-            # s3 closes stream
-            file_stream = None if from_path else open(fname, "rb")
-
-            # negative: missing AWS_TOKEN
-            client = boto3.resource(
-                "s3",
-                aws_access_key_id=stage_credentials["AWS_ID"],
-                aws_secret_access_key=stage_credentials["AWS_KEY"],
-            )
-
-            with pytest.raises((S3UploadFailedError, ClientError)):
-                if from_path:
-                    client.meta.client.upload_file(
-                        fname, s3location.bucket_name, s3path
-                    )
-                else:
-                    client.meta.client.upload_fileobj(
-                        file_stream, s3location.bucket_name, s3path
-                    )
+            # negative case, wrong location
+            stage_info["creds"]["AWS_TOKEN"] = token
+            s3path = client.s3location.s3path
+            bad_path = os.path.dirname(os.path.dirname(s3path)) + "/"
+            _s3location = S3Location(client.s3location.bucket_name, bad_path)
+            client.s3location = _s3location
+            client.chunks = [b"this is a chunk"]
+            client.num_of_chunks = 1
+            client.retry_count[0] = 0
+            with pytest.raises(requests.HTTPError, match=".*Forbidden for url.*"):
+                client.upload_chunk(0)
         finally:
-            if file_stream:
-                file_stream.close()
             cnx.cursor().execute("drop table if exists {}".format(table_name))
-
-
-def _s3bucket_list(client, s3bucket):
-    """Attempts to get the keys from the list. Must raise an exception."""
-    s3bucket = client.Bucket(s3bucket)
-    return list(s3bucket.objects.iterator())  # list cast is to trigger lazy evaluation
-
-
-def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
-    """[s3] SNOW-6154: Pretends to PUT but LIST."""
-    # create a data file
-    fname = str(tmpdir.join("test_put_get_with_aws_token.txt"))
-    with gzip.open(fname, "wb") as f:
-        f.write("123,test1\n456,test2".encode(UTF8))
-    table_name = random_string(5, "snow6154_list_")
-
-    with conn_cnx() as cnx:
-        cnx.cursor().execute(
-            "create or replace table {} (a int, b string)".format(table_name)
-        )
-        ret = cnx.cursor()._execute_helper(
-            "put file://{} @%{}".format(fname, table_name)
-        )
-        stage_location = ret["data"]["stageInfo"]["location"]
-        stage_credentials = ret["data"]["stageInfo"]["creds"]
-
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(stage_location)
-
-        # listing
-        client = boto3.resource(
-            "s3",
-            aws_access_key_id=stage_credentials["AWS_ID"],
-            aws_secret_access_key=stage_credentials["AWS_KEY"],
-            aws_session_token=stage_credentials["AWS_TOKEN"],
-        )
-        from botocore.exceptions import ClientError
-
-        with pytest.raises(ClientError):
-            _s3bucket_list(client, s3location.bucket_name)
