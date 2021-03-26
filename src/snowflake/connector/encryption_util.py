@@ -22,7 +22,7 @@ from .constants import UTF8
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .remote_storage_util import SnowflakeFileEncryptionMaterial
+    from .storage_client import SnowflakeFileEncryptionMaterial
 
 
 def matdesc_to_unicode(matdesc):

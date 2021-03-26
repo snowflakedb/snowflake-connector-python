@@ -16,7 +16,7 @@ from .encryption_util import EncryptionMetadata
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .file_transfer_agent import SnowflakeFileMeta
+    from .file_transfer_agent_sdk import SnowflakeFileMeta
 
 logger = getLogger(__name__)
 
