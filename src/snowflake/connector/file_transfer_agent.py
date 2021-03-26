@@ -36,10 +36,9 @@ from .errorcode import (
 from .errors import DatabaseError, Error, InternalError, OperationalError, ProgrammingError
 from .file_compression_type import CompressionTypes, lookup_by_mime_sub_type
 from .file_util import SnowflakeFileUtil
-from .gcs_util import SnowflakeGCSUtil
+from .gcs_util import SnowflakeGCSRestClient
 from .local_util import SnowflakeLocalUtil
 from .remote_storage_util import SnowflakeFileEncryptionMaterial, SnowflakeRemoteStorageUtil
-from .s3_util import SnowflakeS3Util
 
 if TYPE_CHECKING:  # pragma: no cover
     from azure.storage.blob import BlobServiceClient
@@ -182,11 +181,11 @@ def _update_progress(
 
 
 def percent(seen_so_far: int, size: float) -> float:
-    return 1.0 if seen_so_far >= size or size <= 0\
-                else float(seen_so_far / size)
+    return 1.0 if seen_so_far >= size or size <= 0 \
+        else float(seen_so_far / size)
 
 
-class SnowflakeProgressPercentage():
+class SnowflakeProgressPercentage:
     """Built-in Progress bar for PUT commands."""
 
     def __init__(
@@ -297,11 +296,7 @@ class SnowflakeFileTransferAgent(object):
         # remote storage clients to get operated on.
         self._file_metadata: List['SnowflakeFileMeta'] = []
         self._results: List['SnowflakeFileMeta'] = []
-        if multipart_threshold is not None:
-            self._multipart_threshold = multipart_threshold
-        else:
-            # Historical value
-            self._multipart_threshold = 67108864
+        self._multipart_threshold = multipart_threshold or 67108864  # Historical value
 
     def execute(self):
         self._parse_command()
@@ -380,9 +375,7 @@ class SnowflakeFileTransferAgent(object):
             client = SnowflakeRemoteStorageUtil.create_client(
                 self._stage_info,
                 use_accelerate_endpoint=False)
-            self._use_accelerate_endpoint = SnowflakeS3Util.transfer_accelerate_config(
-                client,
-                self._stage_info)
+            self._use_accelerate_endpoint = client.transfer_accelerate_config()
 
     def _upload_files_in_parallel(self, file_metas: List['SnowflakeFileMeta']) -> None:
         """Uploads files in parallel.
@@ -463,7 +456,7 @@ class SnowflakeFileTransferAgent(object):
         idx = 0
         len_file_metas = len(file_metas)
         while idx < len_file_metas:
-            logger.debug(f'uploading files idx: {idx+1}/{len_file_metas}')
+            logger.debug(f'uploading files idx: {idx + 1}/{len_file_metas}')
             result = SnowflakeFileTransferAgent.upload_one_file(file_metas[idx])
             if result.result_status == ResultStatus.RENEW_TOKEN:
                 client = self.renew_expired_client()
@@ -523,7 +516,7 @@ class SnowflakeFileTransferAgent(object):
                     SnowflakeFileUtil.get_digest_and_size_for_stream(meta.real_src_stream or meta.src_stream)
             logger.debug('really uploading data')
             storage_client = SnowflakeFileTransferAgent.get_storage_client(meta.stage_location_type)
-            storage_client.upload_one_file_with_retry(meta)
+            storage_client.upload_one_file(meta)
             logger.debug(
                 f'done: status={meta.result_status}, file={meta.src_file_name}, real file={meta.real_src_file_name}'
             )
@@ -695,7 +688,7 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type)
 
         # presigned url only applies to GCS
-        if storage_util_class in [SnowflakeGCSUtil]:
+        if storage_util_class in [SnowflakeGCSRestClient]:
             if self._command_type == CMD_TYPE_UPLOAD:
                 logger.debug('getting presigned urls for upload')
 
@@ -1004,7 +997,8 @@ class SnowflakeFileTransferAgent(object):
                             src_file_size=statinfo.st_size,
                             stage_location_type=self._stage_location_type,
                             client_meta=SFResourceMeta(stage_info=self._stage_info),
-                            encryption_material=self._encryption_material[0] if len(self._encryption_material) > 0 else None
+                            encryption_material=self._encryption_material[0] if len(
+                                self._encryption_material) > 0 else None
                         )
                     )
             else:

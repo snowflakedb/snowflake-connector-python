@@ -39,12 +39,11 @@ GcsLocation = namedtuple(
     ])
 
 
-class SnowflakeGCSUtil:
+class SnowflakeGCSRestClient:
     """GCS Utility class."""
 
-    @staticmethod
-    def create_client(stage_info: Dict[str, Any],
-                      use_accelerate_endpoint: bool = False) -> Optional[str]:
+    def __int__(self, stage_info: Dict[str, Any],
+                use_accelerate_endpoint: bool = False):
         """Creates a client object with given stage credentials.
 
         Args:
@@ -54,22 +53,20 @@ class SnowflakeGCSUtil:
         Returns:
             The client to communicate with GCS.
         """
+        self.stage_info = stage_info
         stage_credentials = stage_info['creds']
+
         security_token = stage_credentials.get('GCS_ACCESS_TOKEN')
+        self.security_token = security_token
 
         if security_token:
             logger.debug(f"len(GCS_ACCESS_TOKEN): {len(security_token)}")
             logger.debug("Access token is saved as client for renew")
-            client = security_token
-
         else:
             logger.debug("No access token received from GS, constructing anonymous client")
-            client = None
 
-        return client
-
-    @staticmethod
-    def upload_file(data_file: str,
+    def upload_file(self,
+                    data_file: str,
                     meta: 'SnowflakeFileMeta',
                     encryption_metadata: Any,
                     max_concurrency: int,
@@ -95,9 +92,9 @@ class SnowflakeGCSUtil:
         access_token: Optional[str] = None
 
         if not upload_url:
-            upload_url = SnowflakeGCSUtil.generate_file_url(meta.client_meta.stage_info['location'],
-                                                            meta.dst_file_name.lstrip('/'))
-            access_token = meta.client_meta.cloud_client
+            upload_url = self.generate_file_url(self.stage_info['location'],
+                                                meta.dst_file_name.lstrip('/'))
+            access_token = self.security_token
 
         content_encoding = ""
         if meta.dst_compression_type is not None:
@@ -173,7 +170,7 @@ class SnowflakeGCSUtil:
                 meta.last_error = errh
                 meta.result_status = ResultStatus.RENEW_PRESIGNED_URL
                 return
-            elif access_token and SnowflakeGCSUtil.is_token_expired(errh.response):
+            elif access_token and SnowflakeGCSRestClient.is_token_expired(errh.response):
                 meta.last_error = errh
                 meta.result_status = ResultStatus.RENEW_TOKEN
                 return
@@ -205,7 +202,7 @@ class SnowflakeGCSUtil:
         meta.gcs_file_header_encryption_metadata = json.loads(gcs_headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, "null"))
 
     @staticmethod
-    def _native_download_file(meta: 'SnowflakeFileMeta', full_dst_file_name: str, max_concurrency: int):
+    def _native_download_file(self, meta: 'SnowflakeFileMeta', full_dst_file_name: str, max_concurrency: int):
         """Downloads the remote object to local file.
 
         Args:
@@ -224,9 +221,8 @@ class SnowflakeGCSUtil:
         access_token: Optional[str] = None
 
         if not download_url:
-            download_url = SnowflakeGCSUtil.generate_file_url(meta.client_meta.stage_info['location'],
-                                                              meta.src_file_name.lstrip('/'))
-            access_token = meta.client_meta.cloud_client
+            download_url = self.generate_file_url(self.stage_info['location'], meta.src_file_name.lstrip('/'))
+            access_token = self.security_token
             gcs_headers = {'Authorization': f'Bearer {access_token}'}
 
         try:
@@ -256,7 +252,7 @@ class SnowflakeGCSUtil:
                 meta.last_error = errh
                 meta.result_status = ResultStatus.RENEW_PRESIGNED_URL
                 return
-            elif access_token and SnowflakeGCSUtil.is_token_expired(errh.response):
+            elif access_token and self.is_token_expired(errh.response):
                 meta.last_error = errh
                 meta.result_status = ResultStatus.RENEW_TOKEN
                 return
@@ -303,8 +299,7 @@ class SnowflakeGCSUtil:
         meta.gcs_file_header_content_length = len(response.content)
         meta.gcs_file_header_encryption_metadata = encryption_metadata
 
-    @staticmethod
-    def get_file_header(meta: 'SnowflakeFileMeta', filename: str) -> Optional[FileHeader]:
+    def get_file_header(self, meta: 'SnowflakeFileMeta', filename: str) -> Optional[FileHeader]:
         """Gets the remote file's metadata.
 
         Args:
@@ -330,8 +325,8 @@ class SnowflakeGCSUtil:
             if meta.presigned_url:
                 meta.result_status = ResultStatus.NOT_FOUND_FILE
             else:
-                url = SnowflakeGCSUtil.generate_file_url(meta.client_meta.stage_info['location'], filename.lstrip('/'))
-                access_token: str = meta.client_meta.cloud_client
+                url = self.generate_file_url(meta.client_meta.stage_info['location'], filename.lstrip('/'))
+                access_token: str = self.security_token
                 gcs_headers = {'Authorization': f'Bearer {access_token}'}
                 try:
                     response = requests.head(url, headers=gcs_headers)
@@ -366,7 +361,7 @@ class SnowflakeGCSUtil:
                         return
                     if errh.response.status_code == 404:
                         meta.result_status = ResultStatus.NOT_FOUND_FILE
-                    elif SnowflakeGCSUtil.is_token_expired(errh.response):
+                    elif SnowflakeGCSRestClient.is_token_expired(errh.response):
                         meta.last_error = errh
                         meta.result_status = ResultStatus.RENEW_TOKEN
                     else:
@@ -396,7 +391,7 @@ class SnowflakeGCSUtil:
 
     @staticmethod
     def generate_file_url(stage_location: str, filename: str) -> str:
-        gcs_location = SnowflakeGCSUtil.extract_bucket_name_and_path(stage_location)
+        gcs_location = SnowflakeGCSRestClient.extract_bucket_name_and_path(stage_location)
         full_file_path = f'{gcs_location.path}{filename}'
         return f'https://storage.googleapis.com/{gcs_location.bucket_name}/{quote(full_file_path)}'
 

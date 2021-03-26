@@ -4,33 +4,35 @@
 
 from __future__ import division
 
-import logging
+import base64
+import hashlib
+import hmac
 import os
 from collections import namedtuple
+from datetime import datetime
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from xml.etree import ElementTree
 
-import boto3
-import botocore.exceptions
 import OpenSSL
-from boto3.exceptions import RetriesExceededError, S3UploadFailedError
-from boto3.s3.transfer import TransferConfig
-from boto3.session import Session
-from botocore.client import Config
 
 from .constants import HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_VALUE_OCTET_STREAM, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
+from .errors import S3RestCallFailedError
+from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
 
 logger = getLogger(__name__)
 
+META_PREFIX = "x-amz-meta-"
 SFC_DIGEST = 'sfc-digest'
 
-AMZ_MATDESC = "x-amz-matdesc"
-AMZ_KEY = "x-amz-key"
-AMZ_IV = "x-amz-iv"
+AMZ_MATDESC = 'x-amz-matdesc'
+AMZ_KEY = 'x-amz-key'
+AMZ_IV = 'x-amz-iv'
+
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = 'ExpiredToken'
@@ -47,44 +49,99 @@ S3Location = namedtuple(
     ])
 
 
-class SnowflakeS3Util:
-    """S3 Utility class."""
+# TODO retry and concurrent
+class SnowflakeS3RestClient:
 
-    @staticmethod
-    def create_client(stage_info, use_accelerate_endpoint=False) -> Session.resource:
-        """Creates a client object with a stage credential.
+    def __init__(self, stage_info, use_accelerate_endpoint=False):
+        """Rest client for S3 storage.
 
         Args:
-            stage_info: Information about the stage.
-            use_accelerate_endpoint: Whether or not to use accelerated endpoint (Default value = False).
-
-        Returns:
-            The client to communicate with S3.
+            stage_info:
+            use_accelerate_endpoint:
         """
+        # Signature version V4
+        # Addressing style Virtual Host
+        self.stage_info: Dict[str, Any] = stage_info
         stage_credentials = stage_info['creds']
-        security_token = stage_credentials.get('AWS_TOKEN', None)
-
+        self.region_name: str = stage_info['region']
+        self.aws_access_key_id = stage_credentials['AWS_KEY_ID']
+        self.aws_secret_access_key = stage_credentials['AWS_SECRET_KEY']
+        self.aws_security_token = stage_credentials.get('AWS_TOKEN', None)
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
-        end_point = ('https://' + stage_info['endPoint']) if stage_info['endPoint'] else None
+        if stage_info['endPoint']:
+            # TODO: test
+            self.endpoint = ('https://' + stage_info['endPoint'])
+        elif use_accelerate_endpoint:
+            self.endpoint = "https://{bucket_name}.s3-accelerate.amazonaws.com"
+        else:
+            self.endpoint = f"https://{{bucket_name}}.s3.{self.region_name}.amazonaws.com"
 
-        config = Config(
-            signature_version='s3v4',
-            s3={
-                'use_accelerate_endpoint': use_accelerate_endpoint,
-                'addressing_style': ADDRESSING_STYLE
-            })
-        session = boto3.Session(
-            region_name=stage_info['region'],
-            aws_access_key_id=stage_credentials['AWS_KEY_ID'],
-            aws_secret_access_key=stage_credentials['AWS_SECRET_KEY'],
-            aws_session_token=security_token,
-        )
-        client = session.resource(
-            's3',
-            endpoint_url=end_point,
-            config=config,
-        )
-        return client
+    @staticmethod
+    def sign(secret_key, msg):
+        return base64.encodebytes(
+            hmac.new(
+                secret_key, msg, hashlib.sha1
+            ).digest()
+        ).strip()
+
+    @staticmethod
+    def construct_canonicalized_element(bucket_name: str = None, request_uri: str = "", subresource: str = None):
+        res = ""
+        if bucket_name:
+            res += f"/{bucket_name}"
+            if request_uri:
+                res += '/' + request_uri
+        else:
+            # for GET operations without a bucket name
+            res += '/'
+        if subresource:
+            raise NotImplementedError
+        return res
+
+    @staticmethod
+    def construct_canonicalized_headers(headers: Dict[str, Union[str, List[str]]]) -> str:
+        _res = sorted([[k.lower(), v] for k, v in headers.items()])
+        res = []
+
+        for i in range(len(_res)):
+            k, v = _res[i]
+            # if value is a list, convert to string delimited by comma
+            if isinstance(v, list):
+                v = ','.join(v)
+            # if multiline header, replace withs space
+            k = k.replace('\n', ' ')
+            res.append(k.rstrip() + ':' + v.lstrip())
+
+        ans = '\n'.join(res)
+        if ans:
+            ans = ans + '\n'
+
+        return ans
+
+    @staticmethod
+    def construct_string_to_sign(verb, canonicalized_element, canonicalized_headers, amzdate: str, content_md5="",
+                                 content_type=""):
+        res = verb + "\n" + content_md5 + "\n" + content_type + "\n"
+        res += amzdate + "\n" + canonicalized_headers + canonicalized_element
+        return res.encode('UTF-8')
+
+    @staticmethod
+    def extract_error_from_xml_response(response: str) -> Tuple[str, str]:
+        """Extract error code and error message from the S3's error response.
+
+        Expected format:
+        https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses
+
+        Args:
+            response: Rest error response in XML format
+
+        Returns: A tuple of strings, i.e. (error code, error message)
+
+        """
+        if not response or response.isspace():
+            return "", ""
+        err = ElementTree.fromstring(response)
+        return err.find('Code').text, err.find('Message').text
 
     @staticmethod
     def extract_bucket_name_and_path(stage_location):
@@ -103,27 +160,9 @@ class SnowflakeS3Util:
             bucket_name=bucket_name,
             s3path=s3path)
 
-    @staticmethod
-    def _get_s3_object(meta: 'SnowflakeFileMeta', filename):
-        client = meta.client_meta.cloud_client
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(meta.client_meta.stage_info['location'])
-        s3path = s3location.s3path + filename.lstrip('/')
-
-        if logger.getEffectiveLevel() == logging.DEBUG:
-            tmp_meta = {}
-            log_black_list = ('stage_credentials', 'creds', 'encryption_material')
-            for k, v in meta.__dict__.items():
-                if k not in log_black_list:
-                    tmp_meta[k] = v
-            logger.debug(
-                f"s3location.bucket_name: {s3location.bucket_name}, "
-                f"s3location.s3path: {s3location.s3path}, "
-                f"s3full_path: {s3path}, "
-                f"meta: {tmp_meta}")
-        return client.Object(s3location.bucket_name, s3path)
-
-    @staticmethod
-    def get_file_header(meta: 'SnowflakeFileMeta', filename):
+    def get_file_header(self,
+                        meta: 'SnowflakeFileMeta',
+                        filename: str):
         """Gets the remote file's metadata.
 
         Args:
@@ -134,47 +173,66 @@ class SnowflakeS3Util:
             The file header, with expected properties populated or None, based on how the request goes with the
             storage provider.
         """
-        akey = SnowflakeS3Util._get_s3_object(meta, filename)
-        try:
-            # HTTP HEAD request
-            akey.load()
-        except botocore.exceptions.ClientError as e:
-            if e.response['Error']['Code'] == EXPIRED_TOKEN:
+        s3location = SnowflakeS3RestClient.extract_bucket_name_and_path(meta.client_meta.stage_info['location'])
+        s3path = s3location.s3path + filename.lstrip('/')
+
+        t = datetime.utcnow()
+        amzdate = t.strftime('%Y%m%dT%H%M%SZ')
+
+        url = self.endpoint.format(bucket_name=s3location.bucket_name) + f"/{s3path}"
+
+        _headers = self.construct_canonicalized_headers({'x-amz-security-token': self.aws_security_token})
+        _resource = self.construct_canonicalized_element(bucket_name=s3location.bucket_name, request_uri=s3path)
+        string_to_sign = self.construct_string_to_sign("HEAD", _resource, _headers, amzdate)
+        signature = self.sign(self.aws_secret_access_key.encode('UTF-8'), string_to_sign)
+
+        authorization_header = "AWS" + " " + self.aws_access_key_id + ":" + signature.decode()
+
+        headers = {'Date': amzdate, 'Authorization': authorization_header,
+                   'x-amz-security-token': self.aws_security_token}
+
+        # HTTP HEAD request
+        r = requests.head(url, headers=headers)
+        if r.status_code == 200:
+            meta.result_status = ResultStatus.UPLOADED
+            metadata = r.headers
+            encryption_metadata = EncryptionMetadata(
+                key=metadata.get(META_PREFIX + AMZ_KEY),
+                iv=metadata.get(META_PREFIX + AMZ_IV),
+                matdesc=metadata.get(META_PREFIX + AMZ_MATDESC),
+            ) if metadata.get(META_PREFIX + AMZ_KEY) else None
+
+            return FileHeader(
+                digest=metadata.get(META_PREFIX + SFC_DIGEST),
+                content_length=metadata.get('Content-Length'),
+                encryption_metadata=encryption_metadata
+            )
+        elif r.status_code == 404:
+            logger.debug(f'not found. bucket: {s3location.bucket_name}, path: {s3path}')
+            meta.result_status = ResultStatus.NOT_FOUND_FILE
+            return FileHeader(
+                digest=None,
+                content_length=None,
+                encryption_metadata=None,
+            )
+        else:
+            err_code, err_message = self.extract_error_from_xml_response(r.text)
+            if err_code == EXPIRED_TOKEN:
+                # TODO: verify this works
                 logger.debug("AWS Token expired. Renew and retry")
                 meta.result_status = ResultStatus.RENEW_TOKEN
                 return None
-            elif e.response['Error']['Code'] == '404':
-                logger.debug(f'not found. bucket: {akey.bucket_name}, path: {akey.key}')
-                meta.result_status = ResultStatus.NOT_FOUND_FILE
-                return FileHeader(
-                    digest=None,
-                    content_length=None,
-                    encryption_metadata=None,
-                )
-            elif e.response['Error']['Code'] == '400':
-                logger.debug(f'Bad request, token needs to be renewed: {e.response["Error"]["Message"]}. '
-                             f'bucket: {akey.bucket_name}, path: {akey.key}')
+            elif r.status_code == '400':
+                logger.debug(f'Bad request, token needs to be renewed: {err_message}. '
+                             f'bucket: {s3location.bucket_name}, path: {s3path}')
                 meta.result_status = ResultStatus.RENEW_TOKEN
                 return None
-            logger.debug(f"Failed to get metadata for {akey.bucket_name}, {akey.key}: {e}")
+            logger.debug(f"Failed to get metadata for {s3location.bucket_name}, {s3path}: {err_message}")
             meta.result_status = ResultStatus.ERROR
             return None
 
-        meta.result_status = ResultStatus.UPLOADED
-        encryption_metadata = EncryptionMetadata(
-            key=akey.metadata.get(AMZ_KEY),
-            iv=akey.metadata.get(AMZ_IV),
-            matdesc=akey.metadata.get(AMZ_MATDESC),
-        ) if akey.metadata.get(AMZ_KEY) else None
-
-        return FileHeader(
-            digest=akey.metadata.get(SFC_DIGEST),
-            content_length=akey.content_length,
-            encryption_metadata=encryption_metadata
-        )
-
-    @staticmethod
-    def upload_file(data_file: str,
+    def upload_file(self,
+                    data_file: str,
                     meta: 'SnowflakeFileMeta',
                     encryption_metadata: 'EncryptionMetadata',
                     max_concurrency: int,
@@ -195,77 +253,59 @@ class SnowflakeS3Util:
         Returns:
             None.
         """
+        t = datetime.utcnow()
+        amzdate = t.strftime('%Y%m%dT%H%M%SZ')
+
+        s3_metadata = {
+            META_PREFIX + SFC_DIGEST: meta.sha256_digest,
+        }
+        if encryption_metadata:
+            s3_metadata.update({
+                META_PREFIX + AMZ_IV: encryption_metadata.iv,
+                META_PREFIX + AMZ_KEY: encryption_metadata.key,
+                META_PREFIX + AMZ_MATDESC: encryption_metadata.matdesc,
+            })
+        s3location = SnowflakeS3RestClient.extract_bucket_name_and_path(
+            meta.client_meta.stage_info['location'])
+        s3path = s3location.s3path + meta.dst_file_name.lstrip('/')
+
+        x_amz_headers = {'x-amz-security-token': self.aws_security_token}
+        x_amz_headers.update(s3_metadata)
+
+        _headers = SnowflakeS3RestClient.construct_canonicalized_headers(x_amz_headers)
+        _resource = SnowflakeS3RestClient.construct_canonicalized_element(bucket_name=s3location.bucket_name,
+                                                                          request_uri=s3path)
+
+        string_to_sign = SnowflakeS3RestClient.construct_string_to_sign("PUT", _resource, _headers, amzdate,
+                                                                        content_type=HTTP_HEADER_VALUE_OCTET_STREAM)
+        signature = SnowflakeS3RestClient.sign(self.aws_secret_access_key.encode('UTF-8'), string_to_sign)
+
+        authorization_header = "AWS" + " " + self.aws_access_key_id + ":" + signature.decode()
+        x_amz_headers.update({'Date': amzdate, 'Authorization': authorization_header,
+                              HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM})
+
+        end_point = f"https://{s3location.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3path}"
+
+        if meta.src_stream is None:
+            fd = open(data_file, 'rb')
+        else:
+            fd = meta.real_src_stream or meta.src_stream
+            fd.seek(0)
+
         try:
-            s3_metadata = {
-                HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM,
-                SFC_DIGEST: meta.sha256_digest,
-            }
-            if encryption_metadata:
-                s3_metadata.update({
-                    AMZ_IV: encryption_metadata.iv,
-                    AMZ_KEY: encryption_metadata.key,
-                    AMZ_MATDESC: encryption_metadata.matdesc,
-                })
-            s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-                meta.client_meta.stage_info['location'])
-            s3path = s3location.s3path + meta.dst_file_name.lstrip('/')
-
-            akey = meta.client_meta.cloud_client.Object(s3location.bucket_name, s3path)
-            extra_args = {'Metadata': s3_metadata}
-            config = TransferConfig(
-                multipart_threshold=multipart_threshold,
-                max_concurrency=max_concurrency,
-                num_download_attempts=10,
-            )
-
-            if meta.src_stream is None:
-                akey.upload_file(
-                    data_file,
-                    Callback=meta.put_callback(
-                        data_file,
-                        os.path.getsize(data_file),
-                        output_stream=meta.put_callback_output_stream,
-                        show_progress_bar=meta.show_progress_bar) if meta.put_callback else None,
-                    ExtraArgs=extra_args,
-                    Config=config
-                )
+            r = requests.put(end_point, data=fd.read(), headers=x_amz_headers)
+            if r.status_code == 200:
+                logger.debug('DONE putting a file')
+                meta.dst_file_size = meta.upload_size
+                meta.result_status = ResultStatus.UPLOADED
             else:
-                upload_stream = meta.real_src_stream or meta.src_stream
-                upload_size = upload_stream.seek(0, os.SEEK_END)
-                upload_stream.seek(0)
-
-                akey.upload_fileobj(
-                    upload_stream,
-                    Callback=meta.put_callback(
-                        data_file,
-                        upload_size,
-                        output_stream=meta.put_callback_output_stream,
-                        show_progress_bar=meta.show_progress_bar) if meta.put_callback else None,
-                    ExtraArgs=extra_args,
-                    Config=config,
-                )
-
-            logger.debug('DONE putting a file')
-            meta.dst_file_size = meta.upload_size
-            meta.result_status = ResultStatus.UPLOADED
-        except botocore.exceptions.ClientError as err:
-            if err.response['Error']['Code'] == EXPIRED_TOKEN:
-                logger.debug("AWS Token expired. Renew and retry")
-                meta.result_status = ResultStatus.RENEW_TOKEN
-                return
-            logger.debug(f"Failed to upload a file: {data_file}, err: {err}", exc_info=True)
-            raise err
-        except S3UploadFailedError as err:
-            if EXPIRED_TOKEN in str(err):
-                # Since AWS token expiration error can be encapsulated in
-                # S3UploadFailedError, the text match is required to
-                # identify the case.
-                logger.debug(f'Failed to upload a file: {data_file}, err: {err}. Renewing AWS Token and Retrying')
-                meta.result_status = ResultStatus.RENEW_TOKEN
-                return
-
-            meta.last_error = err
-            meta.result_status = ResultStatus.NEED_RETRY
+                err_code, err_message = self.extract_error_from_xml_response(r.text)
+                if err_code == EXPIRED_TOKEN:
+                    logger.debug("AWS Token expired. Renew and retry")
+                    meta.result_status = ResultStatus.RENEW_TOKEN
+                    return
+                logger.debug(f"Failed to upload a file: {data_file}, err: {err_code} {err_message}")
+                raise S3RestCallFailedError
         except OpenSSL.SSL.SysCallError as err:
             meta.last_error = err
             if err.args[0] == ERRORNO_WSAECONNABORTED:
@@ -276,65 +316,90 @@ class SnowflakeS3Util:
             else:
                 meta.result_status = ResultStatus.NEED_RETRY
 
-    @staticmethod
-    def _native_download_file(meta: 'SnowflakeFileMeta', full_dst_file_name, max_concurrency):
+    def _download_chunk(self, headers, range):
+        # TODO
+        pass
+
+    def _native_download_file(self,
+                              meta,
+                              full_dst_file_name,
+                              max_concurrency):
+        s3location = self.extract_bucket_name_and_path(meta.client_meta.stage_info['location'])
+        s3path = s3location.s3path + meta.src_file_name.lstrip('/')
+
+        t = datetime.utcnow()
+        amzdate = t.strftime('%Y%m%dT%H%M%SZ')
+
+        # if GS sends us an endpoint, it's likely for FIPS. Use it.
+        url = self.endpoint.format(bucket_name=s3location.bucket_name) + f"/{s3path}"
+
+        _headers = self.construct_canonicalized_headers(
+            {'x-amz-security-token': self.aws_security_token})
+        _resource = self.construct_canonicalized_element(bucket_name=s3location.bucket_name, request_uri=s3path)
+        string_to_sign = self.construct_string_to_sign("GET", _resource, _headers, amzdate)
+        signature = self.sign(self.aws_secret_access_key.encode('UTF-8'), string_to_sign)
+
+        authorization_header = "AWS" + " " + self.aws_access_key_id + ":" + signature.decode()
+
+        headers = {'Date': amzdate, 'Authorization': authorization_header,
+                   'x-amz-security-token': self.aws_security_token}
+
+        # ************* SEND THE REQUEST *************
         try:
-            akey = SnowflakeS3Util._get_s3_object(meta, meta.src_file_name)
-            akey.download_file(
-                full_dst_file_name,
-                Callback=meta.get_callback(
-                    meta.src_file_name,
-                    meta.src_file_size,
-                    output_stream=meta.get_callback_output_stream,
-                    show_progress_bar=meta.show_progress_bar) if
-                meta.get_callback else None,
-                Config=TransferConfig(
-                    multipart_threshold=meta.multipart_threshold,
-                    max_concurrency=max_concurrency,
-                    num_download_attempts=10,
-                )
-            )
-            meta.result_status = ResultStatus.DOWNLOADED
-        except botocore.exceptions.ClientError as err:
-            if err.response['Error']['Code'] == EXPIRED_TOKEN:
-                meta.result_status = ResultStatus.RENEW_TOKEN
+            r = requests.get(url, headers=headers)
+            if r.status_code == 200:
+                with open(full_dst_file_name, 'wb+') as fd:
+                    fd.write(r.content)
+                meta.result_status = ResultStatus.DOWNLOADED
             else:
-                logger.debug(f"Failed to download a file: {full_dst_file_name}, err: {err}", exc_info=True)
-                raise err
-        except RetriesExceededError as err:
-            meta.result_status = ResultStatus.NEED_RETRY
-            meta.last_error = err
+                err_code, err_message = self.extract_error_from_xml_response(r.text)
+                if err_code == EXPIRED_TOKEN:
+                    meta.result_status = ResultStatus.RENEW_TOKEN
+                else:
+                    logger.debug(f"Failed to download a file: {full_dst_file_name}, err: {err_code} {err_message}")
+                    raise S3RestCallFailedError
         except OpenSSL.SSL.SysCallError as err:
             meta.last_error = err
             if err.args[0] == ERRORNO_WSAECONNABORTED:
                 # connection was disconnected by S3
                 # because of too many connections. retry with
                 # less concurrency to mitigate it
-
                 meta.result_status = ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY
             else:
                 meta.result_status = ResultStatus.NEED_RETRY
 
-    @staticmethod
-    def transfer_accelerate_config(
-            client: 'Session.resource',
-            stage_info: Dict[str, Any]) -> bool:
+    def transfer_accelerate_config(self) -> bool:
 
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(
-            stage_info['location']
+        s3location = SnowflakeS3RestClient.extract_bucket_name_and_path(
+            self.stage_info['location']
         )
-        try:
-            ret = client.meta.client.get_bucket_accelerate_configuration(
-                Bucket=s3location.bucket_name)
-            use_accelerate_endpoint = ret and 'Status' in ret and \
-                ret['Status'] == 'Enabled'
+
+        t = datetime.utcnow()
+        amzdate = t.strftime('%Y%m%dT%H%M%SZ')
+
+        # if GS sends us an endpoint, it's likely for FIPS. Use it.
+        url = self.endpoint.format(bucket_name=s3location.bucket_name)
+
+        _headers = self.construct_canonicalized_headers({'x-amz-security-token': self.aws_security_token})
+        _resource = self.construct_canonicalized_element(bucket_name=s3location.bucket_name, request_uri="?accelerate")
+        string_to_sign = SnowflakeS3RestClient.construct_string_to_sign("GET", _resource, _headers, amzdate)
+        signature = SnowflakeS3RestClient.sign(self.aws_secret_access_key.encode('UTF-8'), string_to_sign)
+
+        authorization_header = "AWS" + " " + self.aws_access_key_id + ":" + signature.decode()
+
+        headers = {'Date': amzdate, 'Authorization': authorization_header,
+                   'x-amz-security-token': self.aws_security_token}
+
+        r = requests.get(url + '/?accelerate', headers=headers)
+        if r.status_code == 200:
+            config = ElementTree.fromstring(r.text)
+            use_accelerate_endpoint = config.find('Status') and config.find('Status').text == 'Enabled'
             logger.debug(f'use_accelerate_endpoint: {use_accelerate_endpoint}')
             return use_accelerate_endpoint
-        except botocore.exceptions.ClientError as e:
-            if e.response['Error'].get('Code', 'Unknown') == \
-                    'AccessDenied':
-                logger.debug(e)
+        else:
+            err_code, err_message = SnowflakeS3RestClient.extract_error_from_xml_response(r.text)
+            if err_code == 'AccessDenied':
+                logger.debug(f"Cannot GET bucket accelerate configuration: {err_message}")
             else:
-                # unknown error
-                logger.debug(e, exc_info=True)
-        return False
+                logger.debug(f"Unknown error when GET bucket accelerate configuration, {err_code}, {err_message}")
+            return False

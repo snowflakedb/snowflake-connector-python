@@ -416,3 +416,8 @@ class MissingDependencyError(Error):
 class BindUploadError(Error):
     """Exception for bulk array binding stage optimization fails."""
     pass
+
+
+class S3RestCallFailedError(Error):
+    """Exception for unexpected S3 Rest calls failure."""
+    pass

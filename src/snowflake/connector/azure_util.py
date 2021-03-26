@@ -32,39 +32,28 @@ AzureLocation = namedtuple(
     ])
 
 
-class SnowflakeAzureUtil(object):
-    """Azure Utility class."""
+class SnowflakeAzureRestClient:
 
-    @staticmethod
-    def create_client(stage_info: Dict[str, Any],
-                      use_accelerate_endpoint: bool = False) -> BlobServiceClient:
-        """Creates a client object with a stage credential.
-
-        Args:
-            stage_info: Information about the stage.
-            use_accelerate_endpoint: Not used for Azure client.
-
-        Returns:
-            The client to communicate with GCS.
-        """
+    def __init__(self, stage_info: Dict[str, Any],
+                 use_accelerate_endpoint: bool = False):
+        self.stage_info = stage_info
         stage_credentials = stage_info['creds']
         sas_token = stage_credentials['AZURE_SAS_TOKEN']
         if sas_token and sas_token.startswith('?'):
             sas_token = sas_token[1:]
+        self.sas_token = sas_token
         end_point = stage_info['endPoint']
         if end_point.startswith('blob.'):
             end_point = end_point[len('blob.'):]
-        client = BlobServiceClient(
+        self.client = BlobServiceClient(
             account_url=f"https://{stage_info['storageAccount']}.blob.{end_point}",
             credential=sas_token)
-        client._config.retry_policy = ExponentialRetry(
+        self.client._config.retry_policy = ExponentialRetry(
             initial_backoff=1,
             increment_base=2,
             max_attempts=60,
             random_jitter_range=2
         )
-
-        return client
 
     @staticmethod
     def extract_container_name_and_path(stage_location):
@@ -83,11 +72,10 @@ class SnowflakeAzureUtil(object):
             container_name=container_name,
             path=path)
 
-    @staticmethod
-    def get_file_header(meta: 'SnowflakeFileMeta', filename):
+    def get_file_header(self, meta: 'SnowflakeFileMeta', filename):
         """Gets Azure file properties."""
-        client: BlobServiceClient = meta.client_meta.cloud_client
-        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(meta.client_meta.stage_info['location'])
+        client: BlobServiceClient = self.client
+        azure_location = SnowflakeAzureRestClient.extract_container_name_and_path(self.stage_info['location'])
         try:
             # HTTP HEAD request
             blob = client.get_blob_client(azure_location.container_name,
@@ -102,7 +90,7 @@ class SnowflakeAzureUtil(object):
             )
         except HttpResponseError as err:
             logger.debug(f"Caught exception's status code: {err.status_code} and message: {str(err)}")
-            if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
+            if err.status_code == 403 and SnowflakeAzureRestClient._detect_azure_token_expire_error(err):
                 logger.debug("AZURE Token expired. Renew and retry")
                 meta.result_status = ResultStatus.RENEW_TOKEN
             else:
@@ -133,8 +121,8 @@ class SnowflakeAzureUtil(object):
         return "Signature not valid in the specified time frame" in errstr or \
                "Server failed to authenticate the request." in errstr
 
-    @staticmethod
-    def upload_file(data_file: str,
+    def upload_file(self,
+                    data_file: str,
                     meta: 'SnowflakeFileMeta',
                     encryption_metadata: 'EncryptionMetadata',
                     max_concurrency: int,
@@ -179,11 +167,10 @@ class SnowflakeAzureUtil(object):
                 }),
                 'matdesc': encryption_metadata.matdesc
             })
-        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(
-            meta.client_meta.stage_info['location'])
+        azure_location = self.extract_container_name_and_path(self.stage_info['location'])
         path = azure_location.path + meta.dst_file_name.lstrip('/')
 
-        client: BlobServiceClient = meta.client_meta.cloud_client
+        client: BlobServiceClient = self.client
         callback = None
         upload_src = None
         upload_size = None
@@ -229,7 +216,7 @@ class SnowflakeAzureUtil(object):
             )
         except HttpResponseError as err:
             logger.debug(f"Caught exception's status code: {err.status_code} and message: {err}")
-            if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
+            if err.status_code == 403 and self._detect_azure_token_expire_error(err):
                 logger.debug("AZURE Token expired. Renew and retry")
                 meta.result_status = ResultStatus.RENEW_TOKEN
             else:
@@ -246,11 +233,10 @@ class SnowflakeAzureUtil(object):
         # Comparing with s3, azure haven't experienced OpenSSL.SSL.SysCallError,
         # so we will add logic to catch it only when it happens
 
-    @staticmethod
-    def _native_download_file(meta: 'SnowflakeFileMeta', full_dst_file_name, max_concurrency):
-        azure_location = SnowflakeAzureUtil.extract_container_name_and_path(meta.client_meta.stage_info['location'])
+    def _native_download_file(self, meta: 'SnowflakeFileMeta', full_dst_file_name, max_concurrency):
+        azure_location = self.extract_container_name_and_path(meta.client_meta.stage_info['location'])
         path = azure_location.path + meta.src_file_name.lstrip('/')
-        client: BlobServiceClient = meta.client_meta.cloud_client
+        client: BlobServiceClient = self.client
 
         callback = None
         if meta.get_azure_callback:
@@ -266,6 +252,7 @@ class SnowflakeAzureUtil(object):
             if current is not None:
                 callback(current)
                 logger.debug(f"data transfer progress from sdk callback. current: {current}, total: {total}")
+
         try:
             blob = client.get_blob_client(
                 azure_location.container_name,
@@ -280,7 +267,7 @@ class SnowflakeAzureUtil(object):
 
         except HttpResponseError as err:
             logger.debug(f"Caught exception's status code: {err.status_code} and message: {str(err)}")
-            if err.status_code == 403 and SnowflakeAzureUtil._detect_azure_token_expire_error(err):
+            if err.status_code == 403 and SnowflakeAzureRestClient._detect_azure_token_expire_error(err):
                 logger.debug("AZURE Token expired. Renew and retry")
                 meta.result_status = ResultStatus.RENEW_TOKEN
             else:
