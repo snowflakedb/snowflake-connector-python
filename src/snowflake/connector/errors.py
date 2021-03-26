@@ -468,3 +468,21 @@ class BindUploadError(Error):
     """Exception for bulk array binding stage optimization fails."""
 
     pass
+
+
+class RequestExceedMaxRetryError(Error):
+    """Exception for REST call to remote storage API exceeding maximum retries with transient errors."""
+
+    pass
+
+
+class TokenExpiredError(Error):
+    """Exception for REST call to remote storage API failed because of expired authentication token."""
+
+    pass
+
+
+class PresignedUrlExpiredError(Error):
+    """Exception for REST call to remote storage API failed because of expired presigned URL."""
+
+    pass

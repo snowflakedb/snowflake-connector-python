@@ -42,19 +42,18 @@ from .errors import (
 )
 from .file_compression_type import CompressionTypes, lookup_by_mime_sub_type
 from .file_util import SnowflakeFileUtil
-from .gcs_util import SnowflakeGCSUtil
-from .local_util import SnowflakeLocalUtil
-from .remote_storage_util import (
+from .gcs_util_sdk import SnowflakeGCSUtil
+from .local_util_sdk import SnowflakeLocalUtil
+from .remote_storage_util_sdk import (
     SnowflakeFileEncryptionMaterial,
     SnowflakeRemoteStorageUtil,
 )
-from .s3_util import SnowflakeS3Util
+from .s3_util_sdk import SnowflakeS3Util
 
 if TYPE_CHECKING:  # pragma: no cover
     from azure.storage.blob import BlobServiceClient
 
-    from snowflake.connector.cursor import SnowflakeCursor
-
+    from .cursor import SnowflakeCursor
     from .file_compression_type import CompressionType
 
 S3_FS = "S3"
@@ -446,7 +445,7 @@ class SnowflakeFileTransferAgent(object):
         Args:
             file_metas: List of metadata for files to be uploaded.
         """
-        qtask = Queue()
+        qtask: Queue["SnowflakeFileMeta"] = Queue()
         for meta in file_metas:
             qtask.put(meta)
         retry_round = 0
@@ -490,7 +489,8 @@ class SnowflakeFileTransferAgent(object):
                     )  # rerun the command to get the credential
                     self._stage_info = ret["data"]["stageInfo"]
 
-                    for meta in qtask:
+                    while qtask.not_empty:
+                        meta = qtask.get()
                         meta.client_meta.stage_info = self._stage_info
                     renew_token_handled = True
             retry_round += 1
@@ -758,7 +758,7 @@ class SnowflakeFileTransferAgent(object):
         len_file_metas = len(file_metas)
         while idx < len_file_metas:
             result = SnowflakeFileTransferAgent.download_one_file(file_metas[idx])
-            if result["result_status"] == ResultStatus.RENEW_TOKEN:
+            if result.result_status == ResultStatus.RENEW_TOKEN:
                 client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0].client_meta.cloud_client = client
@@ -1272,9 +1272,9 @@ class SnowflakeFileTransferAgent(object):
         elif self._source_compression == "none":
             auto_detect = False
         else:
-            user_specified_source_compression: "CompressionType" = (
-                lookup_by_mime_sub_type(self._source_compression)
-            )
+            user_specified_source_compression: Optional[
+                "CompressionType"
+            ] = lookup_by_mime_sub_type(self._source_compression)
             if (
                 user_specified_source_compression is None
                 or not user_specified_source_compression.is_supported

@@ -134,11 +134,11 @@ class SnowflakeS3Util:
             for k, v in meta.__dict__.items():
                 if k not in log_black_list:
                     tmp_meta[k] = v
-            # avoid logging tmp_meta - SNOW-372131
             logger.debug(
                 f"s3location.bucket_name: {s3location.bucket_name}, "
                 f"s3location.s3path: {s3location.s3path}, "
-                f"s3full_path: {s3path}"
+                f"s3full_path: {s3path}, "
+                f"meta: {tmp_meta}"
             )
         return client.Object(s3location.bucket_name, s3path)
 

@@ -353,6 +353,7 @@ def test_put_get_large_files_gcp(
             run(cnx, "RM @~/{dir}")
 
 
+# TODO modify
 def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters):
     fname = str(tmpdir.join("test_put_get_with_gcp_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
@@ -498,6 +499,7 @@ def test_auto_compress_off_gcp(
                 cursor.execute("drop stage {}".format(stage_name))
 
 
+# TODO
 @pytest.mark.parametrize("error_code", [401, 403, 408, 429, 500, 503])
 def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     tmpdir, conn_cnx, db_parameters, error_code, is_public_test

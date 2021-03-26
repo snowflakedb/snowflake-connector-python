@@ -18,7 +18,7 @@ from ..integ_helpers import put
 from ..randomize import random_string
 
 try:
-    from parameters import CONNECTION_PARAMETERS_ADMIN
+    from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
@@ -642,6 +642,7 @@ def test_put_overwrite(tmpdir, db_parameters, from_path):
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
+# TODO: this does not pass
 @pytest.mark.skipolddriver
 def test_utf8_filename(tmpdir, db_parameters, is_public_test):
     if is_public_test:
