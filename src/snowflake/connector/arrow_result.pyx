@@ -72,7 +72,8 @@ cdef class ArrowResult:
             arrow_bytes = b64decode(rowset_b64)
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
             self._current_chunk_row = PyArrowIterator(
-                self._cursor, io.BytesIO(arrow_bytes),
+                self._cursor,
+                io.BytesIO(arrow_bytes),
                 self._arrow_context,
                 self._use_dict_result,
                 self._use_numpy,

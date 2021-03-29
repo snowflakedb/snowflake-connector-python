@@ -32,10 +32,18 @@ with open(os.path.join(THIS_DIR, "DESCRIPTION.rst"), encoding="utf-8") as f:
 
 
 # Parse command line flags
-options = {k: "OFF" for k in ["--opt", "--debug"]}
-for flag in options.keys():
+
+# This list defines the options definitions in a set
+options_def = {
+    "--debug",
+}
+
+# Options is the final parsed command line options
+options = {e.lstrip("-"): False for e in options_def}
+
+for flag in options_def:
     if flag in sys.argv:
-        options[flag] = "ON"
+        options[flag.lstrip("-")] = True
         sys.argv.remove(flag)
 
 extensions = None
@@ -91,6 +99,9 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         }
 
         def build_extension(self, ext):
+            if options["debug"]:
+                ext.extra_compile_args.append("-g")
+                ext.extra_link_args.append("-g")
             current_dir = os.getcwd()
 
             if ext.name == "snowflake.connector.arrow_iterator":
@@ -292,4 +303,5 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: Scientific/Engineering :: Information Analysis",
     ],
+    zip_safe=False,
 )
