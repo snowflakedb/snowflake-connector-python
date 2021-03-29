@@ -442,6 +442,7 @@ class SnowflakeFileTransferAgent(object):
             qtask.put(meta)
         retry_round = 0
         presigned_url_handled = False
+
         while not qtask.empty():
             len_file_metas = qtask.qsize()
             thread_number = min(len_file_metas, self._parallel)
@@ -460,6 +461,8 @@ class SnowflakeFileTransferAgent(object):
             pool.shutdown()
 
             # update presigned url before starting next round
+            # every time we see renew_token triggers, do one renew only
+            renew_token_handled = False
             while not triggers.empty():
                 result_meta = triggers.get()
                 if (
@@ -468,7 +471,19 @@ class SnowflakeFileTransferAgent(object):
                 ):
                     self._update_file_metas_with_presigned_url()
                     presigned_url_handled = True
+                if (
+                    not renew_token_handled
+                    and result_meta.result_status == ResultStatus.RENEW_TOKEN
+                ):
+                    logger.debug("renewing expired token")
+                    ret = self._cursor._execute_helper(
+                        self._command
+                    )  # rerun the command to get the credential
+                    self._stage_info = ret["data"]["stageInfo"]
 
+                    for meta in qtask:
+                        meta.client_meta.stage_info = self._stage_info
+                    renew_token_handled = True
             retry_round += 1
 
     @staticmethod
@@ -505,10 +520,7 @@ class SnowflakeFileTransferAgent(object):
             result_meta = SnowflakeFileTransferAgent.upload_one_file(meta)
             if result_meta.result_status == ResultStatus.RENEW_TOKEN:
                 # need to retry this upload. the meta will be added back once renew is done
-                thread_client = cln_meta.storage_client.create_client(
-                    cln_meta.stage_info,
-                    use_accelerate_endpoint=cln_meta.use_accelerate_endpoint,
-                )
+                triggers.put(result_meta)
                 qtask.put(meta)
             elif result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL:
                 # now stop this round - by adding one item to triggers
