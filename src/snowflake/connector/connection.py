@@ -1338,7 +1338,7 @@ class SnowflakeConnection(object):
             QueryStatus.RUNNING,
             QueryStatus.RESUMING_WAREHOUSE,
             QueryStatus.QUEUED,
-            QueryStatus.QUEUED_REPAIRING_WAREHOUSE,
+            QueryStatus.QUEUED_REPARING_WAREHOUSE,
             QueryStatus.NO_DATA,
         )
 
