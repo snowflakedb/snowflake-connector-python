@@ -183,7 +183,7 @@ class QueryStatus(Enum):
     DISCONNECTED = 7
     RESUMING_WAREHOUSE = 8
     # purposeful typo. Is present in QueryDTO.java
-    QUEUED_REPAIRING_WAREHOUSE = 9
+    QUEUED_REPARING_WAREHOUSE = 9
     RESTARTED = 10
     BLOCKED = 11
     NO_DATA = 12

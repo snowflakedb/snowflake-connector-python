@@ -120,7 +120,7 @@ def test_is_still_running():
         (QueryStatus.FAILED_WITH_INCIDENT, False),
         (QueryStatus.DISCONNECTED, False),
         (QueryStatus.RESUMING_WAREHOUSE, True),
-        (QueryStatus.QUEUED_REPAIRING_WAREHOUSE, True),
+        (QueryStatus.QUEUED_REPARING_WAREHOUSE, True),
         (QueryStatus.RESTARTED, False),
         (QueryStatus.BLOCKED, False),
         (QueryStatus.NO_DATA, True),
