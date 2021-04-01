@@ -10,6 +10,11 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.4.2(April 03,2021)
+
+   - PUT statements are now thread-safe.
+
+
 - v2.4.1(March 04,2021)
 
    - Make connection object exit() aware of status of parameter `autocommit`
