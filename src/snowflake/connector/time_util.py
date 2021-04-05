@@ -7,6 +7,7 @@
 import random
 import time
 from logging import getLogger
+from typing import Optional
 
 logger = getLogger(__name__)
 
@@ -35,8 +36,8 @@ class HeartBeatTimer(Timer):
                     logger.debug("failed to heartbeat: %s", e)
 
 
-def get_time_millis():
-    """Returns the current time in millis."""
+def get_time_millis() -> int:
+    """Returns the current time in milliseconds."""
     return int(time.time() * 1000)
 
 
@@ -49,3 +50,33 @@ class DecorrelateJitterBackoff(object):
 
     def next_sleep(self, _, sleep):
         return min(self._cap, random.randint(self._base, sleep * 3))
+
+
+class TimeCNM:
+    """Context manager class to easily measure execution of a code block.
+
+    Once the context manager finishes, the class should be cast into an int to retrieve
+    result.
+
+    Example:
+
+        with TimeCNM() as measured_time:
+            pass
+        download_metric = int(measured_time)
+    """
+
+    def __init__(self):
+        self._start: Optional[int] = None
+        self._end: Optional[int] = None
+
+    def __enter__(self) -> "TimeCNM":
+        self._start = get_time_millis()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self._end = get_time_millis()
+
+    def __int__(self) -> int:
+        if self._start is None or self._end is None:
+            raise Exception("Trying to get timing before TimeCNM has finished")
+        return self._end - self._start
