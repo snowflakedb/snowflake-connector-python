@@ -316,11 +316,10 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
         from .arrow_iterator import PyArrowIterator
 
         gzip_decoder = GzipFile(fileobj=raw_data_fd, mode="r")
-        it = PyArrowIterator(
+        return PyArrowIterator(
             self._cursor,
             gzip_decoder,
             self._arrow_context,
             self._cursor._use_dict_result,
             self._cursor.connection._numpy,
         )
-        return it

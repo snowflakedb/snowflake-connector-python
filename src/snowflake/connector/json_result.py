@@ -5,6 +5,9 @@
 #
 
 from logging import getLogger
+from typing import List
+
+from snowflake.connector.converter import SnowflakeConverter
 
 from .constants import FIELD_ID_TO_NAME
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
@@ -24,18 +27,16 @@ class JsonResult:
         self._chunk_index = 0
         self._chunk_count = 0
 
-        self._current_chunk_row = iter(data.get("rowset"))
-        self._current_chunk_row_count = len(data.get("rowset"))
+        first_chunk_data = data.get("rowset")
+        self._current_chunk_row = iter(first_chunk_data)
+        self._current_chunk_row_count = len(first_chunk_data)
 
-        self._column_converter = []
-        self._column_idx_to_name = {}
-        for idx, column in enumerate(data["rowtype"]):
-            self._column_idx_to_name[idx] = column["name"]
-            self._column_converter.append(
-                self._connection.converter.to_python_method(
-                    column["type"].upper(), column
-                )
-            )
+        rowtypes = data["rowtype"]
+        self._column_names: List[str] = [c["name"] for c in rowtypes]
+        self._column_converters: List["SnowflakeConverter"] = [
+            self._connection.converter.to_python_method(c["type"].upper(), c)
+            for c in rowtypes
+        ]
 
         if "chunks" in data:
             chunks = data["chunks"]
@@ -137,7 +138,7 @@ class JsonResult:
         """
         idx = 0
         for col in row:
-            conv = self._column_converter[idx]
+            conv = self._column_converters[idx]
             try:
                 row[idx] = col if conv is None or col is None else conv(col)
             except Exception as e:
@@ -191,8 +192,8 @@ class DictJsonResult(JsonResult):
         res = {}
         idx = 0
         for col in row:
-            col_name = self._column_idx_to_name[idx]
-            conv = self._column_converter[idx]
+            col_name = self._column_names[idx]
+            conv = self._column_converters[idx]
             try:
                 res[col_name] = col if conv is None or col is None else conv(col)
             except Exception as e:
