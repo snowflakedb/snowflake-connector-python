@@ -230,7 +230,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_wrapper(
-        connection: "SnowflakeConnection",
+        connection: Optional["SnowflakeConnection"],
         cursor: Optional["SnowflakeCursor"],
         error_class: Union[Type["Error"], Type[Exception]],
         error_value: Dict[str, Union[str, bool]],
