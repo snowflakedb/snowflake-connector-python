@@ -32,6 +32,7 @@ except ImportError:
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
     from snowflake.connector.arrow_result import ArrowResult  # NOQA
+
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
@@ -41,18 +42,19 @@ EPSILON = 1e-8
 
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built.")
+    reason="arrow_iterator extension is not built.",
+)
 def test_fdb_result_data_empty_row_fetch():
     raw_response = {
-        'rowsetBase64': '',
-        'rowtype': [{"name": "c1"}, {"name": "c2"}],
-        'chunks': ['f1', 'f2', 'f3']
+        "rowsetBase64": "",
+        "rowtype": [{"name": "c1"}, {"name": "c2"}],
+        "chunks": ["f1", "f2", "f3"],
     }
 
     random.seed(datetime.datetime.now())
     column_meta = [
         {"logicalType": "FIXED", "precision": "38", "scale": "0"},
-        {"logicalType": "FIXED", "precision": "38", "scale": "0"}
+        {"logicalType": "FIXED", "precision": "38", "scale": "0"},
     ]
 
     def int64_generator():
@@ -65,19 +67,23 @@ def test_fdb_result_data_empty_row_fetch():
     batch_count = 9
 
     for i in range(chunk_count):
-        arrow_stream[i], expected_chunk_result[i] = generate_data([pyarrow.int64(), pyarrow.int64()],
-                                                                  column_meta,
-                                                                  int64_generator,
-                                                                  batch_count,
-                                                                  batch_row_count)
+        arrow_stream[i], expected_chunk_result[i] = generate_data(
+            [pyarrow.int64(), pyarrow.int64()],
+            column_meta,
+            int64_generator,
+            batch_count,
+            batch_row_count,
+        )
 
     con = MockConnection()
     cur = MockCursor(con)
-    res = ArrowResult(raw_response,
-                      cur,
-                      use_dict_result=False,
-                      _chunk_downloader=MockDownloader(arrow_stream))
-    cur._query_result_format = 'arrow'
+    res = ArrowResult(
+        raw_response,
+        cur,
+        use_dict_result=False,
+        _chunk_downloader=MockDownloader(arrow_stream),
+    )
+    cur._query_result_format = "arrow"
     cur._result = res
 
     count = 0
@@ -85,13 +91,25 @@ def test_fdb_result_data_empty_row_fetch():
         try:
             data = res.__next__()
 
-            expected_chunk, expected_row_index_in_chunk = divmod(count, batch_row_count * batch_count)
-            expected_batch_index, expected_row_index_in_batch = divmod(expected_row_index_in_chunk, batch_row_count)
+            expected_chunk, expected_row_index_in_chunk = divmod(
+                count, batch_row_count * batch_count
+            )
+            expected_batch_index, expected_row_index_in_batch = divmod(
+                expected_row_index_in_chunk, batch_row_count
+            )
 
-            assert data[0] == \
-                expected_chunk_result[expected_chunk][expected_batch_index][0][expected_row_index_in_batch]
-            assert data[1] == \
-                expected_chunk_result[expected_chunk][expected_batch_index][1][expected_row_index_in_batch]
+            assert (
+                data[0]
+                == expected_chunk_result[expected_chunk][expected_batch_index][0][
+                    expected_row_index_in_batch
+                ]
+            )
+            assert (
+                data[1]
+                == expected_chunk_result[expected_chunk][expected_batch_index][1][
+                    expected_row_index_in_batch
+                ]
+            )
 
             count += 1
 
@@ -103,18 +121,19 @@ def test_fdb_result_data_empty_row_fetch():
 
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built, or missing pandas.")
+    reason="arrow_iterator extension is not built, or missing pandas.",
+)
 def test_fdb_result_data_empty_pandas_fetch_all():
     raw_response = {
-        'rowsetBase64': '',
-        'rowtype': [{"name": "c1"}, {"name": "c2"}],
-        'chunks': ['f1', 'f2', 'f3']
+        "rowsetBase64": "",
+        "rowtype": [{"name": "c1"}, {"name": "c2"}],
+        "chunks": ["f1", "f2", "f3"],
     }
 
     random.seed(datetime.datetime.now())
     column_meta = [
         {"logicalType": "FIXED", "precision": "38", "scale": "0"},
-        {"logicalType": "FIXED", "precision": "38", "scale": "0"}
+        {"logicalType": "FIXED", "precision": "38", "scale": "0"},
     ]
 
     def int64_generator():
@@ -127,19 +146,23 @@ def test_fdb_result_data_empty_pandas_fetch_all():
     batch_count = 9
 
     for i in range(chunk_count):
-        arrow_stream[i], expected_chunk_result[i] = generate_data([pyarrow.int64(), pyarrow.int64()],
-                                                                  column_meta,
-                                                                  int64_generator,
-                                                                  batch_count,
-                                                                  batch_row_count)
+        arrow_stream[i], expected_chunk_result[i] = generate_data(
+            [pyarrow.int64(), pyarrow.int64()],
+            column_meta,
+            int64_generator,
+            batch_count,
+            batch_row_count,
+        )
 
     con = MockConnection()
     cur = MockCursor(con)
-    res = ArrowResult(raw_response,
-                      cur,
-                      use_dict_result=False,
-                      _chunk_downloader=MockDownloader(arrow_stream))
-    cur._query_result_format = 'arrow'
+    res = ArrowResult(
+        raw_response,
+        cur,
+        use_dict_result=False,
+        _chunk_downloader=MockDownloader(arrow_stream),
+    )
+    cur._query_result_format = "arrow"
     cur._result = res
 
     df = res._fetch_pandas_all()
@@ -153,11 +176,16 @@ def test_fdb_result_data_empty_pandas_fetch_all():
         col = df.iloc[:, i]
 
         for idx, val in col.items():
-            expected_chunk, expected_row_index_in_chunk = divmod(idx, batch_row_count * batch_count)
-            expected_batch_index, expected_row_index_in_batch = divmod(expected_row_index_in_chunk, batch_row_count)
+            expected_chunk, expected_row_index_in_chunk = divmod(
+                idx, batch_row_count * batch_count
+            )
+            expected_batch_index, expected_row_index_in_batch = divmod(
+                expected_row_index_in_chunk, batch_row_count
+            )
 
-            expected_val = \
-                expected_chunk_result[expected_chunk][expected_batch_index][i][expected_row_index_in_batch]
+            expected_val = expected_chunk_result[expected_chunk][expected_batch_index][
+                i
+            ][expected_row_index_in_batch]
 
             if math.isnan(val):
                 assert expected_val is None
@@ -167,18 +195,19 @@ def test_fdb_result_data_empty_pandas_fetch_all():
 
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built, or pandas is missing.")
+    reason="arrow_iterator extension is not built, or pandas is missing.",
+)
 def test_fdb_result_data_empty_pandas_fetch_by_batch():
     raw_response = {
-        'rowsetBase64': '',
-        'rowtype': [{"name": "c1"}, {"name": "c2"}],
-        'chunks': ['f1', 'f2', 'f3']
+        "rowsetBase64": "",
+        "rowtype": [{"name": "c1"}, {"name": "c2"}],
+        "chunks": ["f1", "f2", "f3"],
     }
 
     random.seed(datetime.datetime.now())
     column_meta = [
         {"logicalType": "FIXED", "precision": "38", "scale": "0"},
-        {"logicalType": "FIXED", "precision": "38", "scale": "0"}
+        {"logicalType": "FIXED", "precision": "38", "scale": "0"},
     ]
 
     def int64_generator():
@@ -191,18 +220,22 @@ def test_fdb_result_data_empty_pandas_fetch_by_batch():
     batch_count = 9
 
     for i in range(chunk_count):
-        arrow_stream[i], expected_chunk_result[i] = generate_data([pyarrow.int64(), pyarrow.int64()],
-                                                                  column_meta,
-                                                                  int64_generator,
-                                                                  batch_count,
-                                                                  batch_row_count)
+        arrow_stream[i], expected_chunk_result[i] = generate_data(
+            [pyarrow.int64(), pyarrow.int64()],
+            column_meta,
+            int64_generator,
+            batch_count,
+            batch_row_count,
+        )
     con = MockConnection()
     cur = MockCursor(con)
-    res = ArrowResult(raw_response,
-                      cur,
-                      use_dict_result=False,
-                      _chunk_downloader=MockDownloader(arrow_stream))
-    cur._query_result_format = 'arrow'
+    res = ArrowResult(
+        raw_response,
+        cur,
+        use_dict_result=False,
+        _chunk_downloader=MockDownloader(arrow_stream),
+    )
+    cur._query_result_format = "arrow"
     cur._result = res
 
     chunk_index = 0
@@ -216,10 +249,13 @@ def test_fdb_result_data_empty_pandas_fetch_by_batch():
             col = df.iloc[:, i]
 
             for idx, val in col.items():
-                expected_batch_index, expected_row_index_in_batch = divmod(idx, batch_row_count)
+                expected_batch_index, expected_row_index_in_batch = divmod(
+                    idx, batch_row_count
+                )
 
-                expected_val = \
-                    expected_chunk_result[chunk_index][expected_batch_index][i][expected_row_index_in_batch]
+                expected_val = expected_chunk_result[chunk_index][expected_batch_index][
+                    i
+                ][expected_row_index_in_batch]
 
                 if math.isnan(val):
                     assert expected_val is None
@@ -249,7 +285,6 @@ class MockCursor(SnowflakeCursor):
 
 
 class MockDownloader:
-
     def __init__(self, chunk_stream):
         self._arrow_stream = []
         self._current_chunk_index = -1
@@ -268,11 +303,14 @@ class MockDownloader:
 class MockChunk:
     def __init__(self, data):
         session_parameters = {"TIMEZONE": "America/Los_Angeles"}
-        self.result_data = PyArrowIterator(None, data,
-                                           ArrowConverterContext(session_parameters), False, False)
+        self.result_data = PyArrowIterator(
+            None, data, ArrowConverterContext(session_parameters), False, False
+        )
 
 
-def generate_data(pyarrow_type, column_meta, source_data_generator, batch_count, batch_row_count):
+def generate_data(
+    pyarrow_type, column_meta, source_data_generator, batch_count, batch_row_count
+):
     stream = BytesIO()
 
     assert len(pyarrow_type) == len(column_meta)
@@ -280,7 +318,9 @@ def generate_data(pyarrow_type, column_meta, source_data_generator, batch_count,
     column_size = len(pyarrow_type)
     fields = []
     for i in range(column_size):
-        fields.append(pyarrow.field("column_{}".format(i), pyarrow_type[i], True, column_meta[i]))
+        fields.append(
+            pyarrow.field("column_{}".format(i), pyarrow_type[i], True, column_meta[i])
+        )
     schema = pyarrow.schema(fields)
 
     expected_data = []
@@ -295,7 +335,9 @@ def generate_data(pyarrow_type, column_meta, source_data_generator, batch_count,
             while not_none_cnt == 0:
                 column_data = []
                 for _ in range(batch_row_count):
-                    data = None if bool(random.getrandbits(1)) else source_data_generator()
+                    data = (
+                        None if bool(random.getrandbits(1)) else source_data_generator()
+                    )
                     if data is not None:
                         not_none_cnt += 1
                     column_data.append(data)

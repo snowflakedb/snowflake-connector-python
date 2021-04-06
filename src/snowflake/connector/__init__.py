@@ -5,9 +5,9 @@
 #
 # Python Db API v2
 #
-apilevel = '2.0'
+apilevel = "2.0"
 threadsafety = 2
-paramstyle = 'pyformat'
+paramstyle = "pyformat"
 
 import logging
 from logging import NullHandler
@@ -52,37 +52,40 @@ def Connect(**kwargs):
 
 connect = Connect
 
-SNOWFLAKE_CONNECTOR_VERSION = '.'.join(str(v) for v in VERSION[0:3])
+SNOWFLAKE_CONNECTOR_VERSION = ".".join(str(v) for v in VERSION[0:3])
 __version__ = SNOWFLAKE_CONNECTOR_VERSION
 
 __all__ = [
     # Error handling
-    'Error', '_Warning',
-    'InterfaceError', 'DatabaseError',
-    'NotSupportedError', 'DataError', 'IntegrityError', 'ProgrammingError',
-    'OperationalError', 'InternalError',
-
+    "Error",
+    "_Warning",
+    "InterfaceError",
+    "DatabaseError",
+    "NotSupportedError",
+    "DataError",
+    "IntegrityError",
+    "ProgrammingError",
+    "OperationalError",
+    "InternalError",
     # Extended cursor
-    'DictCursor',
-
+    "DictCursor",
     # DBAPI PEP 249 required exports
-    'connect',
-    'apilevel',
-    'threadsafety',
-    'paramstyle',
-    'Date',
-    'Time',
-    'Timestamp',
-    'Binary',
-    'DateFromTicks',
-    'TimeFromTicks',
-    'TimestampFromTicks',
-    'STRING',
-    'BINARY',
-    'NUMBER',
-    'DATETIME',
-    'ROWID',
-
+    "connect",
+    "apilevel",
+    "threadsafety",
+    "paramstyle",
+    "Date",
+    "Time",
+    "Timestamp",
+    "Binary",
+    "DateFromTicks",
+    "TimeFromTicks",
+    "TimestampFromTicks",
+    "STRING",
+    "BINARY",
+    "NUMBER",
+    "DATETIME",
+    "ROWID",
     # Extended data type (experimental)
-    'Json',
+    "Json",
 ]

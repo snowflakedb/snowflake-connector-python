@@ -3,7 +3,7 @@
 #
 from typing import Callable, Generic, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class LazyVar(Generic[T]):

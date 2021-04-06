@@ -13,10 +13,23 @@ import webbrowser
 from .auth import Auth
 from .auth_by_plugin import AuthByPlugin
 from .compat import parse_qs, urlparse, urlsplit
-from .constants import HTTP_HEADER_ACCEPT, HTTP_HEADER_CONTENT_TYPE, HTTP_HEADER_SERVICE_NAME, HTTP_HEADER_USER_AGENT
-from .errorcode import ER_IDP_CONNECTION_ERROR, ER_NO_HOSTNAME_FOUND, ER_UNABLE_TO_OPEN_BROWSER
+from .constants import (
+    HTTP_HEADER_ACCEPT,
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_SERVICE_NAME,
+    HTTP_HEADER_USER_AGENT,
+)
+from .errorcode import (
+    ER_IDP_CONNECTION_ERROR,
+    ER_NO_HOSTNAME_FOUND,
+    ER_UNABLE_TO_OPEN_BROWSER,
+)
 from .errors import OperationalError
-from .network import CONTENT_TYPE_APPLICATION_JSON, EXTERNAL_BROWSER_AUTHENTICATOR, PYTHON_CONNECTOR_USER_AGENT
+from .network import (
+    CONTENT_TYPE_APPLICATION_JSON,
+    EXTERNAL_BROWSER_AUTHENTICATOR,
+    PYTHON_CONNECTOR_USER_AGENT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +43,16 @@ BUF_SIZE = 16384
 class AuthByWebBrowser(AuthByPlugin):
     """Authenticates user by web browser. Only used for SAML based authentication."""
 
-    def __init__(self, rest, application,
-                 webbrowser_pkg=None, socket_pkg=None,
-                 protocol=None, host=None, port=None):
+    def __init__(
+        self,
+        rest,
+        application,
+        webbrowser_pkg=None,
+        socket_pkg=None,
+        protocol=None,
+        host=None,
+        port=None,
+    ):
         self._rest = rest
         self._token = None
         self._consent_cache_id_token = True
@@ -60,14 +80,13 @@ class AuthByWebBrowser(AuthByPlugin):
         Args:
             body: existing request dictionary
         """
-        body['data']['AUTHENTICATOR'] = EXTERNAL_BROWSER_AUTHENTICATOR
-        body['data']['TOKEN'] = self._token
-        body['data']['PROOF_KEY'] = self._proof_key
+        body["data"]["AUTHENTICATOR"] = EXTERNAL_BROWSER_AUTHENTICATOR
+        body["data"]["TOKEN"] = self._token
+        body["data"]["PROOF_KEY"] = self._proof_key
 
-    def authenticate(
-            self, authenticator, service_name, account, user, password):
+    def authenticate(self, authenticator, service_name, account, user, password):
         """Web Browser based Authentication."""
-        logger.debug('authenticating by Web Browser')
+        logger.debug("authenticating by Web Browser")
 
         # ignore password. user is still needed by GS to verify
         # the assertion.
@@ -76,40 +95,45 @@ class AuthByWebBrowser(AuthByPlugin):
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             try:
-                socket_connection.bind(('localhost', 0))
+                socket_connection.bind(("localhost", 0))
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
-                        msg='localhost is not found. Ensure /etc/hosts has '
-                            'localhost entry.',
-                        errno=ER_NO_HOSTNAME_FOUND
+                        msg="localhost is not found. Ensure /etc/hosts has "
+                        "localhost entry.",
+                        errno=ER_NO_HOSTNAME_FOUND,
                     )
                 else:
                     raise ex
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
-            print("Initiating login request with your identity provider. A "
-                  "browser window should have opened for you to complete the "
-                  "login. If you can't see it, check existing browser windows, "
-                  "or your OS settings. Press CTRL+C to abort and try again...")
+            print(
+                "Initiating login request with your identity provider. A "
+                "browser window should have opened for you to complete the "
+                "login. If you can't see it, check existing browser windows, "
+                "or your OS settings. Press CTRL+C to abort and try again..."
+            )
 
-            logger.debug('step 1: query GS to obtain SSO url')
+            logger.debug("step 1: query GS to obtain SSO url")
             sso_url = self._get_sso_url(
-                authenticator, service_name, account, callback_port, user)
+                authenticator, service_name, account, callback_port, user
+            )
 
-            logger.debug('step 2: open a browser')
+            logger.debug("step 2: open a browser")
             if not self._webbrowser.open_new(sso_url):
                 logger.error(
-                    'Unable to open a browser in this environment.',
-                    exc_info=True)
-                self.handle_failure({
-                    'code': ER_UNABLE_TO_OPEN_BROWSER,
-                    'message': "Unable to open a browser in this environment."
-                })
+                    "Unable to open a browser in this environment.", exc_info=True
+                )
+                self.handle_failure(
+                    {
+                        "code": ER_UNABLE_TO_OPEN_BROWSER,
+                        "message": "Unable to open a browser in this environment.",
+                    }
+                )
                 return  # required for test case
 
-            logger.debug('step 3: accept SAML token')
+            logger.debug("step 3: accept SAML token")
             self._receive_saml_token(socket_connection)
         finally:
             socket_connection.close()
@@ -120,8 +144,7 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_client, _ = socket_connection.accept()
             try:
                 # Receive the data in small chunks and retransmit it
-                data = socket_client.recv(BUF_SIZE).decode('utf-8').split(
-                    "\r\n")
+                data = socket_client.recv(BUF_SIZE).decode("utf-8").split("\r\n")
 
                 if not self._process_options(data, socket_client):
                     self._process_receive_saml_token(data, socket_client)
@@ -151,7 +174,8 @@ class AuthByWebBrowser(AuthByPlugin):
         content = [
             "HTTP/1.1 200 OK",
             "Date: {}".format(
-                time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())),
+                time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+            ),
             "Access-Control-Allow-Methods: POST, GET",
             "Access-Control-Allow-Headers: {}".format(requested_headers),
             "Access-Control-Max-Age: 86400",
@@ -159,18 +183,22 @@ class AuthByWebBrowser(AuthByPlugin):
             "",
             "",
         ]
-        socket_client.sendall('\r\n'.join(content).encode('utf-8'))
+        socket_client.sendall("\r\n".join(content).encode("utf-8"))
         return True
 
     def _validate_origin(self, requested_origin):
         ret = urlsplit(requested_origin)
-        netloc = ret.netloc.split(':')
+        netloc = ret.netloc.split(":")
         host_got = netloc[0]
-        port_got = netloc[1] if len(netloc) > 1 else (
-            443 if self._protocol == 'https' else 80)
+        port_got = (
+            netloc[1] if len(netloc) > 1 else (443 if self._protocol == "https" else 80)
+        )
 
-        return ret.scheme == self._protocol \
-               and host_got == self._host and port_got == self._port
+        return (
+            ret.scheme == self._protocol
+            and host_got == self._host
+            and port_got == self._port
+        )
 
     def _process_receive_saml_token(self, data, socket_client):
         if not self._process_get(data) and not self._process_post(data):
@@ -181,10 +209,9 @@ class AuthByWebBrowser(AuthByPlugin):
             "Content-Type: text/html",
         ]
         if self._origin:
-            data = {'consent': self._consent_cache_id_token}
+            data = {"consent": self._consent_cache_id_token}
             msg = json.dumps(data)
-            content.append("Access-Control-Allow-Origin: {}".format(
-                self._origin))
+            content.append("Access-Control-Allow-Origin: {}".format(self._origin))
             content.append("Vary: Accept-Encoding, Origin")
         else:
             msg = """
@@ -193,12 +220,14 @@ class AuthByWebBrowser(AuthByPlugin):
 <body>
 Your identity was confirmed and propagated to Snowflake {}.
 You can close this window now and go back where you started from.
-</body></html>""".format(self._application)
+</body></html>""".format(
+                self._application
+            )
         content.append("Content-Length: {}".format(len(msg)))
         content.append("")
         content.append(msg)
 
-        socket_client.sendall('\r\n'.join(content).encode('utf-8'))
+        socket_client.sendall("\r\n".join(content).encode("utf-8"))
 
     def _check_post_requested(self, data):
         request_line = None
@@ -212,12 +241,18 @@ You can close this window now and go back where you started from.
             elif line.startswith("Origin:"):
                 origin_line = line
 
-        if not request_line or not header_line or not origin_line \
-                or request_line.split(':')[1].strip() != 'POST':
+        if (
+            not request_line
+            or not header_line
+            or not origin_line
+            or request_line.split(":")[1].strip() != "POST"
+        ):
             return None, None
 
-        return (header_line.split(':')[1].strip(),
-                ':'.join(origin_line.split(':')[1:]).strip())
+        return (
+            header_line.split(":")[1].strip(),
+            ":".join(origin_line.split(":")[1:]).strip(),
+        )
 
     def _process_get(self, data):
         for line in data:
@@ -229,7 +264,7 @@ You can close this window now and go back where you started from.
 
         self._get_user_agent(data)
         _, url, _ = target_line.split()
-        self._token = parse_qs(urlparse(url).query)['token'][0]
+        self._token = parse_qs(urlparse(url).query)["token"][0]
         return True
 
     def _process_post(self, data):
@@ -237,34 +272,35 @@ You can close this window now and go back where you started from.
             if line.startswith("POST "):
                 break
         else:
-            self.handle_failure({
-                'code': ER_IDP_CONNECTION_ERROR,
-                'message': "Invalid HTTP request from web browser. Idp "
-                            "authentication could have failed."
-            })
+            self.handle_failure(
+                {
+                    "code": ER_IDP_CONNECTION_ERROR,
+                    "message": "Invalid HTTP request from web browser. Idp "
+                    "authentication could have failed.",
+                }
+            )
             return False
 
         self._get_user_agent(data)
         try:
             # parse the response as JSON
             payload = json.loads(data[-1])
-            self._token = payload.get('token')
-            self._consent_cache_id_token = payload.get('consent', True)
+            self._token = payload.get("token")
+            self._consent_cache_id_token = payload.get("consent", True)
         except Exception:
             # key=value form.
-            self._token = parse_qs(data[-1])['token'][0]
+            self._token = parse_qs(data[-1])["token"][0]
         return True
 
     def _get_user_agent(self, data):
         for line in data:
-            if line.lower().startswith('user-agent'):
+            if line.lower().startswith("user-agent"):
                 logger.debug(line)
                 break
         else:
             logger.debug("No User-Agent")
 
-    def _get_sso_url(
-            self, authenticator, service_name, account, callback_port, user):
+    def _get_sso_url(self, authenticator, service_name, account, callback_port, user):
         """Gets SSO URL from Snowflake."""
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
@@ -276,7 +312,8 @@ You can close this window now and go back where you started from.
 
         url = "/session/authenticator-request"
         body = Auth.base_auth_data(
-            user, account,
+            user,
+            account,
             self._rest._connection.application,
             self._rest._connection._internal_application_name,
             self._rest._connection._internal_application_version,
@@ -285,19 +322,21 @@ You can close this window now and go back where you started from.
             self._rest._connection._network_timeout,
         )
 
-        body['data']['AUTHENTICATOR'] = authenticator
-        body['data']["BROWSER_MODE_REDIRECT_PORT"] = str(callback_port)
-        logger.debug('account=%s, authenticator=%s, user=%s',
-                     account, authenticator, user)
+        body["data"]["AUTHENTICATOR"] = authenticator
+        body["data"]["BROWSER_MODE_REDIRECT_PORT"] = str(callback_port)
+        logger.debug(
+            "account=%s, authenticator=%s, user=%s", account, authenticator, user
+        )
         ret = self._rest._post_request(
             url,
             headers,
             json.dumps(body),
             timeout=self._rest._connection.login_timeout,
-            socket_timeout=self._rest._connection.login_timeout)
-        if not ret['success']:
+            socket_timeout=self._rest._connection.login_timeout,
+        )
+        if not ret["success"]:
             self.handle_failure(ret)
-        data = ret['data']
-        sso_url = data['ssoUrl']
-        self._proof_key = data['proofKey']
+        data = ret["data"]
+        sso_url = data["ssoUrl"]
+        self._proof_key = data["proofKey"]
         return sso_url

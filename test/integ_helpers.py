@@ -10,8 +10,14 @@ if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.cursor import SnowflakeCursor
 
 
-def put(csr: 'SnowflakeCursor', file_path: str, stage_path: str, from_path: bool, sql_options: Optional[str] = "",
-        **kwargs) -> 'SnowflakeCursor':
+def put(
+    csr: "SnowflakeCursor",
+    file_path: str,
+    stage_path: str,
+    from_path: bool,
+    sql_options: Optional[str] = "",
+    **kwargs,
+) -> "SnowflakeCursor":
     """Execute PUT <file> <stage> <options> query with given cursor.
 
     Args:
@@ -27,19 +33,21 @@ def put(csr: 'SnowflakeCursor', file_path: str, stage_path: str, from_path: bool
     """
     sql = "put 'file://{file}' @{stage} {sql_options}"
     if from_path:
-        kwargs.pop('file_stream', None)
+        kwargs.pop("file_stream", None)
     else:
         # PUT from stream
         file_path = os.path.basename(file_path)
-    if kwargs.pop('commented', False):
-        sql = '--- test comments\n' + sql
-    sql = sql.format(file=file_path.replace('\\', '\\\\'),
-                     stage=stage_path,
-                     sql_options=sql_options)
+    if kwargs.pop("commented", False):
+        sql = "--- test comments\n" + sql
+    sql = sql.format(
+        file=file_path.replace("\\", "\\\\"), stage=stage_path, sql_options=sql_options
+    )
     return csr.execute(sql, **kwargs)
 
 
-def drop_table(conn_cnx: Callable[..., 'SnowflakeConnection'], table: str, if_exists=False) -> Callable:
+def drop_table(
+    conn_cnx: Callable[..., "SnowflakeConnection"], table: str, if_exists=False
+) -> Callable:
     """Returns a function that drops <table> in a new Snowflake connection.
 
     Args:
@@ -54,7 +62,9 @@ def drop_table(conn_cnx: Callable[..., 'SnowflakeConnection'], table: str, if_ex
     return _drop
 
 
-def drop_warehouse(conn_cnx: Callable[..., 'SnowflakeConnection'], warehouse: str) -> Callable:
+def drop_warehouse(
+    conn_cnx: Callable[..., "SnowflakeConnection"], warehouse: str
+) -> Callable:
     """Returns a function that drops <warehouse> in a new Snowflake connection.
 
     Args:
@@ -69,7 +79,9 @@ def drop_warehouse(conn_cnx: Callable[..., 'SnowflakeConnection'], warehouse: st
     return _drop
 
 
-def drop_database(conn_cnx: Callable[..., 'SnowflakeConnection'], database: str) -> Callable:
+def drop_database(
+    conn_cnx: Callable[..., "SnowflakeConnection"], database: str
+) -> Callable:
     """Returns a function that drops <database> in a new Snowflake connection.
 
     Args:
@@ -84,7 +96,7 @@ def drop_database(conn_cnx: Callable[..., 'SnowflakeConnection'], database: str)
     return _drop
 
 
-def drop_stage(conn_cnx: Callable[..., 'SnowflakeConnection'], stage: str) -> Callable:
+def drop_stage(conn_cnx: Callable[..., "SnowflakeConnection"], stage: str) -> Callable:
     """Returns a function that drops <stage> in a new Snowflake connection.
 
     Args:
@@ -99,7 +111,7 @@ def drop_stage(conn_cnx: Callable[..., 'SnowflakeConnection'], stage: str) -> Ca
     return _drop
 
 
-def drop_user(conn_cnx: Callable[..., 'SnowflakeConnection'], user: str) -> Callable:
+def drop_user(conn_cnx: Callable[..., "SnowflakeConnection"], user: str) -> Callable:
     """Returns a function that drops <user> in a new Snowflake connection.
 
     Args:
@@ -115,7 +127,7 @@ def drop_user(conn_cnx: Callable[..., 'SnowflakeConnection'], user: str) -> Call
     return _drop
 
 
-def execute(conn_cnx: Callable[..., 'SnowflakeConnection'], sql: str) -> Callable:
+def execute(conn_cnx: Callable[..., "SnowflakeConnection"], sql: str) -> Callable:
     """Returns a function that executes <sql> in a new Snowflake connection.
 
     Args:

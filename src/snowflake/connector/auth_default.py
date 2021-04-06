@@ -18,12 +18,11 @@ class AuthByDefault(AuthByPlugin):
         """Initializes an instance with a password."""
         self._password = password
 
-    def authenticate(
-            self, authenticator, service_name, account, user, password):
+    def authenticate(self, authenticator, service_name, account, user, password):
         """NOOP."""
         pass
 
     def update_body(self, body):
         """Sets the password if available."""
         if self._password:
-            body['data']["PASSWORD"] = self._password
+            body["data"]["PASSWORD"] = self._password

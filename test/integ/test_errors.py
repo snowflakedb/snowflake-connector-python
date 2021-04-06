@@ -48,4 +48,7 @@ def test_error_telemetry(conn_cnx):
             for frame in traceback.extract_tb(e.__traceback__):
                 assert frame.line not in telemetry_stacktrace
             telemetry_data = e.generate_telemetry_exception_data()
-            assert "FAILED_TO_DETECT_SYNTAX_ERR" not in telemetry_data[TelemetryField.KEY_REASON]
+            assert (
+                FAILED_TO_DETECT_SYNTAX_ERR
+                not in telemetry_data[TelemetryField.KEY_REASON]
+            )

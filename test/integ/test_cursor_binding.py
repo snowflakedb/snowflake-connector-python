@@ -18,26 +18,32 @@ def test_binding_security(conn_cnx, db_parameters, request):
     with conn_cnx() as cnx:
         cnx.cursor().execute(f"CREATE TABLE {table_name} (aa INT, bb STRING)")
         request.addfinalizer(drop_table(conn_cnx, table_name))
-        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, 'test1'))
-        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%(aa)s, %(bb)s)", {'aa': 2, 'bb': 'test2'})
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, "test1"))
+        cnx.cursor().execute(
+            f"INSERT INTO {table_name} VALUES(%(aa)s, %(bb)s)", {"aa": 2, "bb": "test2"}
+        )
         for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} ORDER BY 1 DESC"):
             break
-        assert _rec[0] == 2, 'First column'
-        assert _rec[1] == 'test2', 'Second column'
-        for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} WHERE aa=%s", (1,)):
+        assert _rec[0] == 2, "First column"
+        assert _rec[1] == "test2", "Second column"
+        for _rec in cnx.cursor().execute(
+            f"SELECT * FROM {table_name} WHERE aa=%s", (1,)
+        ):
             break
-        assert _rec[0] == 1, 'First column'
-        assert _rec[1] == 'test1', 'Second column'
+        assert _rec[0] == 1, "First column"
+        assert _rec[1] == "test1", "Second column"
 
         # SQL injection safe test
         # Good Example
         with pytest.raises(ProgrammingError):
             cnx.cursor().execute(
-                f"SELECT * FROM {table_name} WHERE aa=%s", ("1 or aa>0",))
+                f"SELECT * FROM {table_name} WHERE aa=%s", ("1 or aa>0",)
+            )
 
         with pytest.raises(ProgrammingError):
             cnx.cursor().execute(
-                f"SELECT * FROM {table_name} WHERE aa=%(aa)s", {"aa": "1 or aa>0"})
+                f"SELECT * FROM {table_name} WHERE aa=%(aa)s", {"aa": "1 or aa>0"}
+            )
 
         # Bad Example in application. DON'T DO THIS
         c = cnx.cursor()
@@ -52,17 +58,23 @@ def test_binding_list(conn_cnx, request):
     with conn_cnx() as cnx:
         cnx.cursor().execute(f"CREATE TABLE {table_name} (aa INT, bb STRING)")
         request.addfinalizer(drop_table(conn_cnx, table_name))
-        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, 'test1'))
-        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%(aa)s, %(bb)s)", {'aa': 2, 'bb': 'test2'})
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, "test1"))
+        cnx.cursor().execute(
+            f"INSERT INTO {table_name} VALUES(%(aa)s, %(bb)s)", {"aa": 2, "bb": "test2"}
+        )
         cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(3, 'test3')")
-        for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} WHERE aa IN (%s) ORDER BY 1 DESC", ([1, 3],)):
+        for _rec in cnx.cursor().execute(
+            f"SELECT * FROM {table_name} WHERE aa IN (%s) ORDER BY 1 DESC", ([1, 3],)
+        ):
             break
-        assert _rec[0] == 3, 'First column'
-        assert _rec[1] == 'test3', 'Second column'
-        for _rec in cnx.cursor().execute(f"SELECT * FROM {table_name} WHERE aa=%s", (1,)):
+        assert _rec[0] == 3, "First column"
+        assert _rec[1] == "test3", "Second column"
+        for _rec in cnx.cursor().execute(
+            f"SELECT * FROM {table_name} WHERE aa=%s", (1,)
+        ):
             break
-        assert _rec[0] == 1, 'First column'
-        assert _rec[1] == 'test1', 'Second column'
+        assert _rec[0] == 1, "First column"
+        assert _rec[1] == "test1", "Second column"
 
 
 @pytest.mark.internal
@@ -72,13 +84,13 @@ def test_unsupported_binding(negative_conn_cnx, request):
     with negative_conn_cnx() as cnx:
         cnx.cursor().execute(f"CREATE TABLE {table_name} (aa INT, bb STRING)")
         request.addfinalizer(drop_table(negative_conn_cnx, table_name))
-        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, 'test1'))
-        sql = f'select count(*) from {table_name} where aa=%s'
+        cnx.cursor().execute(f"INSERT INTO {table_name} VALUES(%s, %s)", (1, "test1"))
+        sql = f"select count(*) from {table_name} where aa=%s"
 
         with cnx.cursor() as cur:
             rec = cur.execute(sql, (1,)).fetchone()
-            assert rec[0] is not None, 'no value is returned'
+            assert rec[0] is not None, "no value is returned"
 
         # dict
         with pytest.raises(ProgrammingError):
-            cnx.cursor().execute(sql, ({'value': 1},))
+            cnx.cursor().execute(sql, ({"value": 1},))

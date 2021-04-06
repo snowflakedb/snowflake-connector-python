@@ -5,17 +5,22 @@
 # cython: profile=False
 # cython: language_level=3
 
-from base64 import b64decode
 import io
-from .telemetry import TelemetryField
-from .time_util import get_time_millis
-from .arrow_iterator import PyArrowIterator
-from .arrow_iterator import EmptyPyArrowIterator
-from .arrow_iterator import ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
-from .arrow_context import ArrowConverterContext
-from .options import pandas, installed_pandas
+from base64 import b64decode
 
 from snowflake.connector.snow_logging import getSnowLogger
+
+from .arrow_context import ArrowConverterContext
+from .arrow_iterator import (
+    EMPTY_UNIT,
+    ROW_UNIT,
+    TABLE_UNIT,
+    EmptyPyArrowIterator,
+    PyArrowIterator,
+)
+from .options import installed_pandas, pandas
+from .telemetry import TelemetryField
+from .time_util import get_time_millis
 
 snow_logger = getSnowLogger(__name__)
 

@@ -10,28 +10,51 @@ from ..randomize import random_string
 def test_binding_fetching_boolean(conn_cnx):
     table_name = random_string(3, prefix="test_binding_fetching_boolean")
     with conn_cnx() as cnx:
-        cnx.cursor().execute(f"""
+        cnx.cursor().execute(
+            f"""
 create or replace table {table_name} (c1 boolean, c2 integer)
-""")
+"""
+        )
 
     with conn_cnx() as cnx:
-        cnx.cursor().execute(f"""
+        cnx.cursor().execute(
+            f"""
 insert into {table_name} values(%s,%s), (%s,%s), (%s,%s)
-""", (True, 1, False, 2, True, 3))
-        results = cnx.cursor().execute(f"""
-select * from {table_name} order by 1""").fetchall()
+""",
+            (True, 1, False, 2, True, 3),
+        )
+        results = (
+            cnx.cursor()
+            .execute(
+                f"""
+select * from {table_name} order by 1"""
+            )
+            .fetchall()
+        )
         assert not results[0][0]
         assert results[1][0]
         assert results[2][0]
-        results = cnx.cursor().execute(f"""
+        results = (
+            cnx.cursor()
+            .execute(
+                f"""
 select c1 from {table_name} where c2=2
-""").fetchall()
+"""
+            )
+            .fetchall()
+        )
         assert not results[0][0]
 
         # SNOW-15905: boolean support
-        results = cnx.cursor().execute("""
+        results = (
+            cnx.cursor()
+            .execute(
+                """
 SELECT CASE WHEN (null LIKE trim(null)) THEN null  ELSE null END
-""").fetchall()
+"""
+            )
+            .fetchall()
+        )
         assert not results[0][0]
 
 

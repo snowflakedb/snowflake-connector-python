@@ -13,7 +13,7 @@ from snowflake.connector.converter_null import SnowflakeNoConverterToPython
 from ..integ_helpers import drop_table
 from ..randomize import random_string
 
-NUMERIC_VALUES = re.compile(r'-?[\d.]*\d$')
+NUMERIC_VALUES = re.compile(r"-?[\d.]*\d$")
 
 
 def test_converter_no_converter_to_python(request, conn_cnx):
@@ -22,17 +22,25 @@ def test_converter_no_converter_to_python(request, conn_cnx):
     This should not translate the Snowflake internal data representation to the Python native types.
     """
     table_name = random_string(3, prefix="test_converter_no_converter_to_python")
-    with conn_cnx(timezone='UTC', converter_class=SnowflakeNoConverterToPython) as con:
-        con.cursor().execute("""
+    with conn_cnx(timezone="UTC", converter_class=SnowflakeNoConverterToPython) as con:
+        con.cursor().execute(
+            """
     alter session set python_connector_query_result_format='JSON'
-    """)
+    """
+        )
 
-        ret = con.cursor().execute("""
+        ret = (
+            con.cursor()
+            .execute(
+                """
     select  current_timestamp(),
             1::NUMBER,
             2.0::FLOAT,
             'test1'
-    """).fetchone()
+    """
+            )
+            .fetchone()
+        )
         assert isinstance(ret[0], str)
         assert NUMERIC_VALUES.match(ret[0])
         assert isinstance(ret[1], str)
@@ -43,9 +51,7 @@ def test_converter_no_converter_to_python(request, conn_cnx):
         current_time = datetime.utcnow()
         # binding value should have no impact
         con.cursor().execute(
-            f"insert into {table_name}(c1) values(%s)",
-            (current_time,))
-        ret = con.cursor().execute(
-            f"select * from {table_name}"
-        ).fetchone()[0]
+            f"insert into {table_name}(c1) values(%s)", (current_time,)
+        )
+        ret = con.cursor().execute(f"select * from {table_name}").fetchone()[0]
         assert ZERO_EPOCH + timedelta(seconds=(float(ret))) == current_time

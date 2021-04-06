@@ -41,22 +41,26 @@ def file_src(request) -> Tuple[str, int, IO[bytes]]:
     file_name = request.param
     data_file = os.path.join(THIS_DIR, "../data", file_name)
     file_size = os.stat(data_file).st_size
-    stream = open(data_file, 'rb')
+    stream = open(data_file, "rb")
     yield data_file, file_size, stream
     stream.close()
 
 
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['put_get_1.txt'], indirect=['file_src'])
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+@pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
 def test_put_copy0(conn_cnx, from_path, file_src, request):
     """Puts and Copies a file."""
     file_path, _, file_stream = file_src
     unique_name = random_string(3, prefix="test_put_copy0_")
-    kwargs = {'_put_callback': SnowflakeS3ProgressPercentage,
-              '_get_callback': SnowflakeS3ProgressPercentage,
-              '_put_azure_callback': SnowflakeAzureProgressPercentage,
-              '_get_azure_callback': SnowflakeAzureProgressPercentage,
-              'file_stream': file_stream}
+    kwargs = {
+        "_put_callback": SnowflakeS3ProgressPercentage,
+        "_get_callback": SnowflakeS3ProgressPercentage,
+        "_put_azure_callback": SnowflakeAzureProgressPercentage,
+        "_get_azure_callback": SnowflakeAzureProgressPercentage,
+        "file_stream": file_stream,
+    }
 
     def run(cnx, sql):
         sql = sql.format(name=unique_name)
@@ -68,7 +72,9 @@ def test_put_copy0(conn_cnx, from_path, file_src, request):
         return c, c.execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx, """
+        run(
+            cnx,
+            """
 create table {name} (
 aa int,
 dt date,
@@ -78,26 +84,27 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(5,2))
-""")
+""",
+        )
         request.addfinalizer(drop_table(conn_cnx, unique_name))
 
         with cnx.cursor(DictCursor) as csr:
             ret = put(csr, file_path, f"%{unique_name}", from_path, **kwargs).fetchall()
             assert csr.is_file_transfer, "PUT"
             assert len(ret) == 1, "Upload one file"
-            assert ret[0]['source'] == os.path.basename(
-                file_path), "File name"
+            assert ret[0]["source"] == os.path.basename(file_path), "File name"
 
         c, ret = run_with_cursor(cnx, "copy into {name}")
         assert not c.is_file_transfer, "COPY"
-        assert len(ret) == 1 and ret[0]['status'] == "LOADED", \
-            "Failed to load data"
+        assert len(ret) == 1 and ret[0]["status"] == "LOADED", "Failed to load data"
 
-        assert ret[0]['rows_loaded'] == 3, "Failed to load 3 rows of data"
+        assert ret[0]["rows_loaded"] == 3, "Failed to load 3 rows of data"
 
 
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['gzip_sample.txt.gz'], indirect=['file_src'])
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+@pytest.mark.parametrize("file_src", ["gzip_sample.txt.gz"], indirect=["file_src"])
 def test_put_copy_compressed(conn_cnx, from_path, file_src, request):
     """Puts and Copies compressed files."""
     file_name, file_size, file_stream = file_src
@@ -111,22 +118,22 @@ def test_put_copy_compressed(conn_cnx, from_path, file_src, request):
         run(cnx, "create table {name} (value string)")
         request.addfinalizer(drop_table(conn_cnx, unique_name))
         with cnx.cursor(DictCursor) as csr:
-            ret = put(csr, file_name, f"%{unique_name}",
-                      from_path, file_stream=file_stream).fetchall()
-            assert ret[0]['source'] == os.path.basename(file_name), "File name"
-            assert ret[0]['source_size'] == file_size, "File size"
-            assert ret[0]['status'] == 'UPLOADED'
+            ret = put(
+                csr, file_name, f"%{unique_name}", from_path, file_stream=file_stream
+            ).fetchall()
+            assert ret[0]["source"] == os.path.basename(file_name), "File name"
+            assert ret[0]["source_size"] == file_size, "File size"
+            assert ret[0]["status"] == "UPLOADED"
         ret = run(cnx, "copy into {name}")
-        assert len(ret) == 1 and ret[0]['status'] == "LOADED", \
-            "Failed to load data"
-        assert ret[0]['rows_loaded'] == 1, "Failed to load 1 rows of data"
+        assert len(ret) == 1 and ret[0]["status"] == "LOADED", "Failed to load data"
+        assert ret[0]["rows_loaded"] == 1, "Failed to load 1 rows of data"
 
 
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['bzip2_sample.txt.bz2'], indirect=['file_src'])
-@pytest.mark.skip(
-    reason="BZ2 is not detected in this test case. Need investigation"
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
+@pytest.mark.parametrize("file_src", ["bzip2_sample.txt.bz2"], indirect=["file_src"])
+@pytest.mark.skip(reason="BZ2 is not detected in this test case. Need investigation")
 def test_put_copy_bz2_compressed(conn_cnx, from_path, file_src, request):
     """Put and Copy bz2 compressed files."""
     file_name, _, file_stream = file_src
@@ -140,16 +147,23 @@ def test_put_copy_bz2_compressed(conn_cnx, from_path, file_src, request):
         run(cnx, "create table {name} (value string)")
         request.addfinalizer(drop_table(conn_cnx, unique_name))
 
-        for rec in put(cnx.cursor(), file_name, f"%{unique_name}",
-                       from_path, file_stream=file_stream).fetchall():
-            assert rec[-2] == 'UPLOADED'
+        for rec in put(
+            cnx.cursor(),
+            file_name,
+            f"%{unique_name}",
+            from_path,
+            file_stream=file_stream,
+        ).fetchall():
+            assert rec[-2] == "UPLOADED"
 
         for rec in run(cnx, "copy into {name}"):
-            assert rec[1] == 'LOADED'
+            assert rec[1] == "LOADED"
 
 
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['brotli_sample.txt.br'], indirect=['file_src'])
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+@pytest.mark.parametrize("file_src", ["brotli_sample.txt.br"], indirect=["file_src"])
 def test_put_copy_brotli_compressed(conn_cnx, from_path, file_src, request):
     """Puts and Copies brotli compressed files."""
     file_name, _, file_stream = file_src
@@ -163,19 +177,25 @@ def test_put_copy_brotli_compressed(conn_cnx, from_path, file_src, request):
 
         run(cnx, "create table {name} (value string)")
         request.addfinalizer(drop_table(conn_cnx, unique_name))
-        for rec in put(cnx.cursor(), file_name, f"%{unique_name}",
-                       from_path, file_stream=file_stream).fetchall():
+        for rec in put(
+            cnx.cursor(),
+            file_name,
+            f"%{unique_name}",
+            from_path,
+            file_stream=file_stream,
+        ).fetchall():
             print(rec)
-            assert rec[-2] == 'UPLOADED'
+            assert rec[-2] == "UPLOADED"
 
-        for rec in run(
-                cnx, "copy into {name} file_format=(compression='BROTLI')"):
+        for rec in run(cnx, "copy into {name} file_format=(compression='BROTLI')"):
             print(rec)
-            assert rec[1] == 'LOADED'
+            assert rec[1] == "LOADED"
 
 
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['zstd_sample.txt.zst'], indirect=['file_src'])
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+@pytest.mark.parametrize("file_src", ["zstd_sample.txt.zst"], indirect=["file_src"])
 def test_put_copy_zstd_compressed(conn_cnx, from_path, file_src, request):
     """Puts and Copies zstd compressed files."""
     file_name, _, file_stream = file_src
@@ -188,22 +208,27 @@ def test_put_copy_zstd_compressed(conn_cnx, from_path, file_src, request):
     with conn_cnx() as cnx:
         run(cnx, "create table {name} (value string)")
         request.addfinalizer(drop_table(conn_cnx, unique_name))
-        for rec in put(cnx.cursor(), file_name, f"%{unique_name}",
-                       from_path, file_stream=file_stream).fetchall():
+        for rec in put(
+            cnx.cursor(),
+            file_name,
+            f"%{unique_name}",
+            from_path,
+            file_stream=file_stream,
+        ).fetchall():
             print(rec)
-            assert rec[-2] == 'UPLOADED'
-        for rec in run(
-                cnx, "copy into {name} file_format=(compression='ZSTD')"):
+            assert rec[-2] == "UPLOADED"
+        for rec in run(cnx, "copy into {name} file_format=(compression='ZSTD')"):
             print(rec)
-            assert rec[1] == 'LOADED'
+            assert rec[1] == "LOADED"
 
 
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin account is not accessible."
+    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['nation.impala.parquet'], indirect=['file_src'])
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+@pytest.mark.parametrize("file_src", ["nation.impala.parquet"], indirect=["file_src"])
 def test_put_copy_parquet_compressed(conn_cnx, from_path, file_src, request):
     """Puts and Copies parquet compressed files."""
     file_name, _, file_stream = file_src
@@ -215,25 +240,37 @@ def test_put_copy_parquet_compressed(conn_cnx, from_path, file_src, request):
 
     with conn_cnx() as cnx:
         run(cnx, "alter session set enable_parquet_filetype=true")
-        request.addfinalizer(execute(conn_cnx, "alter session unset enable_parquet_filetype"))
-        run(cnx, """
+        request.addfinalizer(
+            execute(conn_cnx, "alter session unset enable_parquet_filetype")
+        )
+        run(
+            cnx,
+            """
 create table {name}
 (value variant)
 stage_file_format=(type='parquet')
-""")
+""",
+        )
         request.addfinalizer(drop_table(conn_cnx, unique_name))
-        for rec in put(cnx.cursor(), file_name, f"%{unique_name}",
-                       from_path, file_stream=file_stream).fetchall():
-            assert rec[-2] == 'UPLOADED'
-            assert rec[4] == 'PARQUET'
-            assert rec[5] == 'PARQUET'
+        for rec in put(
+            cnx.cursor(),
+            file_name,
+            f"%{unique_name}",
+            from_path,
+            file_stream=file_stream,
+        ).fetchall():
+            assert rec[-2] == "UPLOADED"
+            assert rec[4] == "PARQUET"
+            assert rec[5] == "PARQUET"
 
         for rec in run(cnx, "copy into {name}"):
-            assert rec[1] == 'LOADED'
+            assert rec[1] == "LOADED"
 
 
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['TestOrcFile.test1.orc'], indirect=['file_src'])
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+@pytest.mark.parametrize("file_src", ["TestOrcFile.test1.orc"], indirect=["file_src"])
 def test_put_copy_orc_compressed(conn_cnx, from_path, file_src, request):
     """Puts and Copies ORC compressed files."""
     file_name, _, file_stream = file_src
@@ -244,42 +281,51 @@ def test_put_copy_orc_compressed(conn_cnx, from_path, file_src, request):
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx, """
+        run(
+            cnx,
+            """
 create table {name} (value variant) stage_file_format=(type='orc')
-""")
+""",
+        )
         request.addfinalizer(drop_table(conn_cnx, unique_name))
-        for rec in put(cnx.cursor(), file_name, f"%{unique_name}",
-                       from_path, file_stream=file_stream).fetchall():
-            assert rec[-2] == 'UPLOADED'
-            assert rec[4] == 'ORC'
-            assert rec[5] == 'ORC'
+        for rec in put(
+            cnx.cursor(),
+            file_name,
+            f"%{unique_name}",
+            from_path,
+            file_stream=file_stream,
+        ).fetchall():
+            assert rec[-2] == "UPLOADED"
+            assert rec[4] == "ORC"
+            assert rec[5] == "ORC"
         for rec in run(cnx, "copy into {name}"):
-            assert rec[1] == 'LOADED'
+            assert rec[1] == "LOADED"
 
 
 @pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin account is not accessible."
+    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
 def test_copy_get(tmpdir, conn_cnx, request):
     """Copies and Gets a file."""
     unique_name = random_string(3, prefix="test_copy_get_")
     name_unload = unique_name + "_unload"
-    tmp_dir = str(tmpdir.mkdir('copy_get_stage'))
-    tmp_dir_user = str(tmpdir.mkdir('user_get'))
+    tmp_dir = str(tmpdir.mkdir("copy_get_stage"))
+    tmp_dir_user = str(tmpdir.mkdir("user_get"))
 
     def run(cnx, sql):
         sql = sql.format(
             name_unload=name_unload,
             tmpdir=tmp_dir,
             tmp_dir_user=tmp_dir_user,
-            name=unique_name)
+            name=unique_name,
+        )
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx,
-            "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
-        run(cnx, """
+        run(cnx, "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
+        run(
+            cnx,
+            """
 create table {name} (
 aa int,
 dt date,
@@ -289,46 +335,57 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(5,2))
-""")
+""",
+        )
         request.addfinalizer(drop_table(conn_cnx, unique_name))
-        run(cnx, """
+        run(
+            cnx,
+            """
 create stage {name_unload}
 file_format = (
 format_name = 'common.public.csv'
 field_delimiter = '|'
 error_on_column_count_mismatch=false);
-""")
+""",
+        )
         request.addfinalizer(drop_stage(conn_cnx, name_unload))
         current_time = datetime.datetime.utcnow()
-        current_time = current_time.replace(
-            tzinfo=pytz.timezone("America/Los_Angeles"))
+        current_time = current_time.replace(tzinfo=pytz.timezone("America/Los_Angeles"))
         current_date = datetime.date.today()
         other_time = current_time.replace(tzinfo=pytz.timezone("Asia/Tokyo"))
 
         fmt = """
 insert into {name}(aa, dt, tstz)
 values(%(value)s,%(dt)s,%(tstz)s)
-""".format(name=unique_name)
-        cnx.cursor().executemany(fmt, [
-            {'value': 6543, 'dt': current_date, 'tstz': other_time},
-            {'value': 1234, 'dt': current_date, 'tstz': other_time},
-        ])
+""".format(
+            name=unique_name
+        )
+        cnx.cursor().executemany(
+            fmt,
+            [
+                {"value": 6543, "dt": current_date, "tstz": other_time},
+                {"value": 1234, "dt": current_date, "tstz": other_time},
+            ],
+        )
 
-        run(cnx, """
+        run(
+            cnx,
+            """
 copy into @{name_unload}/data_
 from {name}
 file_format=(
 format_name='common.public.csv'
 compression='gzip')
 max_file_size=10000000
-""")
+""",
+        )
         ret = run(cnx, "get @{name_unload}/ file://{tmp_dir_user}/")
 
-        assert ret[0][2] == 'DOWNLOADED', 'Failed to download'
+        assert ret[0][2] == "DOWNLOADED", "Failed to download"
         cnt = 0
         for _, _, _ in os.walk(tmp_dir_user):
             cnt += 1
-        assert cnt > 0, 'No file was downloaded'
+        assert cnt > 0, "No file was downloaded"
 
 
 @pytest.mark.flaky(reruns=3)
@@ -337,19 +394,21 @@ def test_put_copy_many_files(tmpdir, conn_cnx, request):
     # generates N files
     number_of_files = 100
     number_of_lines = 1000
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(
+        number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
+    )
 
-    files = os.path.join(tmp_dir, 'file*')
+    files = os.path.join(tmp_dir, "file*")
     unique_name = random_string(3, prefix="test_put_copy_many_files_")
 
     def run(cnx, sql):
-        sql = sql.format(
-            files=files.replace('\\', '\\\\'),
-            name=unique_name)
+        sql = sql.format(files=files.replace("\\", "\\\\"), name=unique_name)
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx, """
+        run(
+            cnx,
+            """
 create or replace table {name} (
 aa int,
 dt date,
@@ -359,14 +418,15 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(6,2))
-""")
+""",
+        )
         request.addfinalizer(drop_table(conn_cnx, unique_name))
         run(cnx, "put 'file://{files}' @%{name}")
         run(cnx, "copy into {name}")
         rows = 0
         for rec in run(cnx, "select count(*) from {name}"):
             rows += rec[0]
-        assert rows == number_of_files * number_of_lines, 'Number of rows'
+        assert rows == number_of_files * number_of_lines, "Number of rows"
 
 
 @pytest.mark.aws
@@ -375,19 +435,21 @@ def test_put_copy_many_files_s3(tmpdir, conn_cnx, request):
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(
+        number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
+    )
 
-    files = os.path.join(tmp_dir, 'file*')
+    files = os.path.join(tmp_dir, "file*")
     unique_name = random_string(3, prefix="test_put_copy_many_files_s3_")
 
     def run(cnx, sql):
-        sql = sql.format(
-            files=files.replace('\\', '\\\\'),
-            name=unique_name)
+        sql = sql.format(files=files.replace("\\", "\\\\"), name=unique_name)
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx, """
+        run(
+            cnx,
+            """
 create or replace table {name} (
 aa int,
 dt date,
@@ -397,7 +459,8 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(6,2))
-""")
+""",
+        )
     request.addfinalizer(drop_table(conn_cnx, unique_name))
 
     with conn_cnx() as cnx:
@@ -407,8 +470,7 @@ ratio number(6,2))
         rows = 0
         for rec in run(cnx, "select count(*) from {name}"):
             rows += rec[0]
-        assert rows == number_of_files * number_of_lines, \
-            'Number of rows'
+        assert rows == number_of_files * number_of_lines, "Number of rows"
 
 
 @pytest.mark.aws
@@ -419,19 +481,21 @@ def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, request):
     # generates N files
     number_of_files = 5
     number_of_lines = 100
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(
+        number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
+    )
 
-    files = os.path.join(tmp_dir, 'file*')
+    files = os.path.join(tmp_dir, "file*")
     unique_name = random_string(3, prefix="test_put_copy_duplicated_files_s3_")
 
     def run(cnx, sql):
-        sql = sql.format(
-            files=files.replace('\\', '\\\\'),
-            name=unique_name)
+        sql = sql.format(files=files.replace("\\", "\\\\"), name=unique_name)
         return cnx.cursor().execute(sql, _raise_put_get_error=False).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx, """
+        run(
+            cnx,
+            """
 create or replace table {name} (
 aa int,
 dt date,
@@ -441,20 +505,21 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(6,2))
-""")
+""",
+        )
         request.addfinalizer(drop_table(conn_cnx, unique_name))
 
     with conn_cnx() as cnx:
         success_cnt = 0
         skipped_cnt = 0
         for rec in run(cnx, "put 'file://{files}' @%{name}"):
-            logger.info('rec=%s', rec)
-            if rec[6] == 'UPLOADED':
+            logger.info("rec=%s", rec)
+            if rec[6] == "UPLOADED":
                 success_cnt += 1
-            elif rec[6] == 'SKIPPED':
+            elif rec[6] == "SKIPPED":
                 skipped_cnt += 1
-        assert success_cnt == number_of_files, 'uploaded files'
-        assert skipped_cnt == 0, 'skipped files'
+        assert success_cnt == number_of_files, "uploaded files"
+        assert skipped_cnt == 0, "skipped files"
 
         deleted_cnt = 0
         run(cnx, "rm @%{name}/file0")
@@ -467,22 +532,21 @@ ratio number(6,2))
         success_cnt = 0
         skipped_cnt = 0
         for rec in run(cnx, "put 'file://{files}' @%{name}"):
-            logger.info('rec=%s', rec)
-            if rec[6] == 'UPLOADED':
+            logger.info("rec=%s", rec)
+            if rec[6] == "UPLOADED":
                 success_cnt += 1
-            elif rec[6] == 'SKIPPED':
+            elif rec[6] == "SKIPPED":
                 skipped_cnt += 1
-        assert success_cnt == deleted_cnt, \
-            'uploaded files in the second time'
-        assert skipped_cnt == number_of_files - deleted_cnt, \
-            'skipped files in the second time'
+        assert success_cnt == deleted_cnt, "uploaded files in the second time"
+        assert (
+            skipped_cnt == number_of_files - deleted_cnt
+        ), "skipped files in the second time"
 
         run(cnx, "copy into {name}")
         rows = 0
         for rec in run(cnx, "select count(*) from {name}"):
             rows += rec[0]
-        assert rows == number_of_files * number_of_lines, \
-            'Number of rows'
+        assert rows == number_of_files * number_of_lines, "Number of rows"
 
 
 @pytest.mark.skipolddriver
@@ -493,30 +557,39 @@ def test_put_collision(tmpdir, conn_cnx, request):
     number_of_files = 5
     number_of_lines = 10
     # data set 1
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, compress=True,
-                                          tmp_dir=str(tmpdir.mkdir('data1')))
-    files1 = os.path.join(tmp_dir, 'file*')
+    tmp_dir = generate_k_lines_of_n_files(
+        number_of_lines,
+        number_of_files,
+        compress=True,
+        tmp_dir=str(tmpdir.mkdir("data1")),
+    )
+    files1 = os.path.join(tmp_dir, "file*")
 
     # data set 2
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, compress=True,
-                                          tmp_dir=str(tmpdir.mkdir('data2')))
-    files2 = os.path.join(tmp_dir, 'file*')
+    tmp_dir = generate_k_lines_of_n_files(
+        number_of_lines,
+        number_of_files,
+        compress=True,
+        tmp_dir=str(tmpdir.mkdir("data2")),
+    )
+    files2 = os.path.join(tmp_dir, "file*")
 
     stage_name = random_string(5, "test_put_collision_")
     request.addfinalizer(execute(conn_cnx, f"RM @~/{stage_name}"))
 
     with conn_cnx() as cnx:
-
         # upload all files
         success_cnt = 0
         skipped_cnt = 0
-        for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name}".format(
-                file=files1.replace('\\', '\\\\'),
-                stage_name=stage_name)):
-            logger.info('rec=%s', rec)
-            if rec[6] == 'UPLOADED':
+        for rec in cnx.cursor().execute(
+            "PUT 'file://{file}' @~/{stage_name}".format(
+                file=files1.replace("\\", "\\\\"), stage_name=stage_name
+            )
+        ):
+            logger.info("rec=%s", rec)
+            if rec[6] == "UPLOADED":
                 success_cnt += 1
-            elif rec[6] == 'SKIPPED':
+            elif rec[6] == "SKIPPED":
                 skipped_cnt += 1
         assert success_cnt == number_of_files
         assert skipped_cnt == 0
@@ -524,13 +597,15 @@ def test_put_collision(tmpdir, conn_cnx, request):
         # will skip uploading all files
         success_cnt = 0
         skipped_cnt = 0
-        for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name}".format(
-                file=files2.replace('\\', '\\\\'),
-                stage_name=stage_name)):
-            logger.info('rec=%s', rec)
-            if rec[6] == 'UPLOADED':
+        for rec in cnx.cursor().execute(
+            "PUT 'file://{file}' @~/{stage_name}".format(
+                file=files2.replace("\\", "\\\\"), stage_name=stage_name
+            )
+        ):
+            logger.info("rec=%s", rec)
+            if rec[6] == "UPLOADED":
                 success_cnt += 1
-            elif rec[6] == 'SKIPPED':
+            elif rec[6] == "SKIPPED":
                 skipped_cnt += 1
         assert success_cnt == 0
         assert skipped_cnt == number_of_files
@@ -538,21 +613,23 @@ def test_put_collision(tmpdir, conn_cnx, request):
         # will overwrite all files
         success_cnt = 0
         skipped_cnt = 0
-        for rec in cnx.cursor().execute("PUT 'file://{file}' @~/{stage_name} OVERWRITE=true".format(
-                file=files2.replace('\\', '\\\\'),
-                stage_name=stage_name)):
-            logger.info('rec=%s', rec)
-            if rec[6] == 'UPLOADED':
+        for rec in cnx.cursor().execute(
+            "PUT 'file://{file}' @~/{stage_name} OVERWRITE=true".format(
+                file=files2.replace("\\", "\\\\"), stage_name=stage_name
+            )
+        ):
+            logger.info("rec=%s", rec)
+            if rec[6] == "UPLOADED":
                 success_cnt += 1
-            elif rec[6] == 'SKIPPED':
+            elif rec[6] == "SKIPPED":
                 skipped_cnt += 1
         assert success_cnt == number_of_files
         assert skipped_cnt == 0
 
 
 def _generate_huge_value_json(tmpdir, n=1, value_size=1):
-    fname = str(tmpdir.join('test_put_get_huge_json'))
-    f = gzip.open(fname, 'wb')
+    fname = str(tmpdir.join("test_put_get_huge_json"))
+    f = gzip.open(fname, "wb")
     for i in range(n):
         logger.debug("adding a value in {}".format(i))
         f.write('{{"k":"{}"}}'.format(random_string(value_size)))
@@ -563,10 +640,10 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
 def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
     """(WIP) Huge json value data."""
     with conn_cnx() as cnx:
-        json_table = db_parameters['name'] + "_json"
+        json_table = db_parameters["name"] + "_json"
         cnx.cursor().execute(
-            "create or replace table {table} (v variant)".format(
-                table=json_table))
+            "create or replace table {table} (v variant)".format(table=json_table)
+        )
 
         rows = 2
         size = 2000
@@ -576,13 +653,14 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
             try:
                 c.execute(
                     "put 'file://{tmp_file}' @%{name}".format(
-                        tmp_file=tmp_file.replace('\\', '\\\\'),
-                        name=json_table))
+                        tmp_file=tmp_file.replace("\\", "\\\\"), name=json_table
+                    )
+                )
                 colmap = {}
                 for index, item in enumerate(c.description):
                     colmap[item[0]] = index
                 for rec in c:
-                    source = rec[colmap['source']]
+                    source = rec[colmap["source"]]
                     logger.debug(source)
             finally:
                 c.close()
@@ -591,22 +669,22 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
             try:
                 c.execute(
                     "copy into {name} on_error='skip_file' file_format=(type='json')".format(
-                        name=json_table))
+                        name=json_table
+                    )
+                )
                 cnt = 0
                 rec = []
                 for rec in c:
                     logger.debug(rec)
                     cnt += 1
-                assert rec[1] == 'LOAD_FAILED', \
-                    "Loading huge value json should fail"
-                assert cnt == 1, 'Number of PUT files'
+                assert rec[1] == "LOAD_FAILED", "Loading huge value json should fail"
+                assert cnt == 1, "Number of PUT files"
             finally:
                 c.close()
 
             c = cnx.cursor()
             try:
-                c.execute(
-                    "select count(*) from {name}".format(name=json_table))
+                c.execute("select count(*) from {name}".format(name=json_table))
                 cnt = -1
                 for rec in c:
                     cnt = rec[0]
@@ -615,7 +693,8 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
                 c.close()
 
             cnx.cursor().execute(
-                "drop table if exists {table}".format(table=json_table))
+                "drop table if exists {table}".format(table=json_table)
+            )
         finally:
             os.unlink(tmp_file)
 
@@ -626,10 +705,12 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx):
     """[s3] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
-    tmp_dir = generate_k_lines_of_n_files(number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir('data')))
+    tmp_dir = generate_k_lines_of_n_files(
+        number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
+    )
 
-    files = os.path.join(tmp_dir, 'file*')
-    output_dir = os.path.join(tmp_dir, 'output_dir')
+    files = os.path.join(tmp_dir, "file*")
+    output_dir = os.path.join(tmp_dir, "output_dir")
     os.makedirs(output_dir)
     unique_name = random_string(3, prefix="test_put_get_large_files_s3_")
 
@@ -641,15 +722,21 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx):
             pass
 
     def run(cnx, sql):
-        return cnx.cursor().execute(
-            sql.format(
-                files=files.replace('\\', '\\\\'),
-                dir=unique_name,
-                output_dir=output_dir.replace('\\', '\\\\')),
-            _put_callback_output_stream=sys.stdout,
-            _get_callback_output_stream=sys.stdout,
-            _get_callback=cb,
-            _put_callback=cb).fetchall()
+        return (
+            cnx.cursor()
+            .execute(
+                sql.format(
+                    files=files.replace("\\", "\\\\"),
+                    dir=unique_name,
+                    output_dir=output_dir.replace("\\", "\\\\"),
+                ),
+                _put_callback_output_stream=sys.stdout,
+                _get_callback_output_stream=sys.stdout,
+                _get_callback=cb,
+                _put_callback=cb,
+            )
+            .fetchall()
+        )
 
     with conn_cnx() as cnx:
         try:
@@ -662,47 +749,67 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx):
                 time.sleep(1)
             else:
                 pytest.fail(
-                    'cannot list all files. Potentially '
-                    'PUT command missed uploading Files: {}'.format(all_recs))
+                    "cannot list all files. Potentially "
+                    "PUT command missed uploading Files: {}".format(all_recs)
+                )
             all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
             assert len(all_recs) == number_of_files
-            assert all([rec[2] == 'DOWNLOADED' for rec in all_recs])
+            assert all([rec[2] == "DOWNLOADED" for rec in all_recs])
         finally:
             run(cnx, "RM @~/{dir}")
 
 
 @pytest.mark.aws
 @pytest.mark.azure
-@pytest.mark.parametrize("from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)])
-@pytest.mark.parametrize("file_src", ['put_get_1.txt'], indirect=['file_src'])
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+@pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
 def test_put_get_with_hint(tmpdir, conn_cnx, from_path, file_src):
     """SNOW-15153: PUTs and GETs with hint."""
-    tmp_dir = str(tmpdir.mkdir('put_get_with_hint'))
+    tmp_dir = str(tmpdir.mkdir("put_get_with_hint"))
     file_name, file_size, file_stream = file_src
     unique_name = random_string(7, prefix="test_put_get_with_hint_")
 
     def run(cnx, sql, _is_put_get=None):
-        sql = sql.format(
-            local_dir=tmp_dir.replace('\\', '\\\\'),
-            name=unique_name)
+        sql = sql.format(local_dir=tmp_dir.replace("\\", "\\\\"), name=unique_name)
         return cnx.cursor().execute(sql, _is_put_get=_is_put_get).fetchone()
 
     with conn_cnx() as cnx:
         # regular PUT case
-        ret = put(cnx.cursor(), file_name, f"~/{unique_name}", from_path, file_stream=file_stream).fetchone()
-        assert ret[0] == os.path.basename(file_name), 'PUT filename'
+        ret = put(
+            cnx.cursor(),
+            file_name,
+            f"~/{unique_name}",
+            from_path,
+            file_stream=file_stream,
+        ).fetchone()
+        assert ret[0] == os.path.basename(file_name), "PUT filename"
         # clean up a file
         ret = run(cnx, "RM @~/{name}")
-        assert ret[0].endswith(os.path.basename(file_name) + '.gz'), 'RM filename'
+        assert ret[0].endswith(os.path.basename(file_name) + ".gz"), "RM filename"
 
         # PUT detection failure
         with pytest.raises(ProgrammingError):
-            put(cnx.cursor(), file_name, f"~/{unique_name}", from_path, commented=True, file_stream=file_stream)
+            put(
+                cnx.cursor(),
+                file_name,
+                f"~/{unique_name}",
+                from_path,
+                commented=True,
+                file_stream=file_stream,
+            )
 
         # PUT with hint
-        ret = put(cnx.cursor(), file_name, f"~/{unique_name}", from_path,
-                  file_stream=file_stream, _is_put_get=True).fetchone()
-        assert ret[0] == os.path.basename(file_name), 'PUT filename'
+        ret = put(
+            cnx.cursor(),
+            file_name,
+            f"~/{unique_name}",
+            from_path,
+            file_stream=file_stream,
+            _is_put_get=True,
+        ).fetchone()
+        assert ret[0] == os.path.basename(file_name), "PUT filename"
 
         # GET detection failure
         commented_get_sql = """
@@ -714,4 +821,4 @@ GET @~/{name} file://{local_dir}"""
 
         # GET with hint
         ret = run(cnx, commented_get_sql, _is_put_get=True)
-        assert ret[0] == os.path.basename(file_name) + '.gz', "GET filename"
+        assert ret[0] == os.path.basename(file_name) + ".gz", "GET filename"

@@ -16,14 +16,11 @@ def test_reuse_cursor(request, conn_cnx):
         c = cnx.cursor()
         c.execute(f"create table {table_name}(c1 string)")
         request.addfinalizer(drop_table(conn_cnx, table_name))
-        c.execute(
-            f"insert into {table_name} values('123'),('456'),('678')")
-        c.execute("show tables")
+        c.execute(f"insert into {table_name} values('123'),('456'),('678')")
         c.execute("select current_date()")
         rec = c.fetchone()
         assert len(rec) == 1, "number of records is wrong"
-        c.execute(
-            f"select * from {table_name} order by 1")
+        c.execute(f"select * from {table_name} order by 1")
         recs = c.fetchall()
         assert c.description[0][0] == "C1", "first column name"
         assert len(recs) == 3, "number of records is wrong"
