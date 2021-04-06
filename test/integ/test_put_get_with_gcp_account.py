@@ -478,7 +478,6 @@ def test_auto_compress_off_gcp(
         assert cmp(fname, downloaded_file)
 
 
-# TODO fix
 @pytest.mark.parametrize("error_code", [401, 403, 408, 429, 500, 503])
 def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     tmpdir, conn_cnx, request, error_code, is_public_test
