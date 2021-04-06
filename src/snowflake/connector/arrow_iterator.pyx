@@ -160,7 +160,7 @@ cdef class EmptyPyArrowIterator:
     def __next__(self):
        raise StopIteration
 
-    def init(self, str iter_unit):
+    def init(self, str iter_unit, bint number_to_decimal):
         pass
 
 
