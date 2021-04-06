@@ -26,14 +26,13 @@ class SnowflakeBinaryFormat(object):
 
     def __init__(self, name):
         name = name.upper()
-        if name == 'HEX':
+        if name == "HEX":
             self._encode = b16encode
-        elif name == 'BASE64':
+        elif name == "BASE64":
             self._encode = standard_b64encode
         else:
-            raise InternalError(
-                'Unrecognized binary format {}'.format(name))
+            raise InternalError("Unrecognized binary format {}".format(name))
 
     def format(self, binary_value):
         """Formats a "bytes" object, returning a string."""
-        return self._encode(binary_value).decode('ascii')
+        return self._encode(binary_value).decode("ascii")

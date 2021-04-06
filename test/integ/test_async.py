@@ -26,7 +26,7 @@ def test_simple_async(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute_async('select count(*) from table(generator(timeLimit => 5))')
+            cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             cur.get_results_from_sfqid(cur.sfqid)
             assert len(cur.fetchall()) == 1
 
@@ -45,7 +45,7 @@ def test_async_exec(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute_async('select count(*) from table(generator(timeLimit => 5))')
+            cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             q_id = cur.sfqid
             status = con.get_query_status(q_id)
             assert con.is_still_running(status)
@@ -59,7 +59,9 @@ def test_async_exec(conn_cnx):
                     break
                 time.sleep(1)
             else:
-                pytest.fail(f"We should have broke out of this loop, final query status: {status}")
+                pytest.fail(
+                    f"We should have broke out of this loop, final query status: {status}"
+                )
             status = con.get_query_status_throw_if_error(q_id)
             assert status == QueryStatus.SUCCESS
             cur.get_results_from_sfqid(q_id)
@@ -74,7 +76,7 @@ def test_async_error(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute_async('select * from nonexistentTable')
+            cur.execute_async("select * from nonexistentTable")
             q_id = cur.sfqid
             while con.is_still_running(con.get_query_status(q_id)):
                 time.sleep(1)
@@ -91,50 +93,63 @@ def test_mix_sync_async(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
             # Setup
-            cur.execute('alter session set CLIENT_TIMESTAMP_TYPE_MAPPING=TIMESTAMP_TZ')
+            cur.execute("alter session set CLIENT_TIMESTAMP_TYPE_MAPPING=TIMESTAMP_TZ")
             try:
-                for table in ['smallTable', 'uselessTable']:
-                    cur.execute('create or replace table {} (colA string, colB int)'.format(table))
-                    cur.execute('insert into {} values (\'row1\', 1), (\'row2\', 2), (\'row3\', 3)'.format(table))
-                cur.execute_async('select * from smallTable')
+                for table in ["smallTable", "uselessTable"]:
+                    cur.execute(
+                        "create or replace table {} (colA string, colB int)".format(
+                            table
+                        )
+                    )
+                    cur.execute(
+                        "insert into {} values ('row1', 1), ('row2', 2), ('row3', 3)".format(
+                            table
+                        )
+                    )
+                cur.execute_async("select * from smallTable")
                 sf_qid1 = cur.sfqid
-                cur.execute_async('select * from uselessTable')
+                cur.execute_async("select * from uselessTable")
                 sf_qid2 = cur.sfqid
                 # Wait until the 2 queries finish
                 while con.is_still_running(con.get_query_status(sf_qid1)):
                     time.sleep(1)
                 while con.is_still_running(con.get_query_status(sf_qid2)):
                     time.sleep(1)
-                cur.execute('drop table uselessTable')
-                assert cur.fetchall() == [('USELESSTABLE successfully dropped.',)]
+                cur.execute("drop table uselessTable")
+                assert cur.fetchall() == [("USELESSTABLE successfully dropped.",)]
                 cur.get_results_from_sfqid(sf_qid1)
-                assert cur.fetchall() == [('row1', 1), ('row2', 2), ('row3', 3)]
+                assert cur.fetchall() == [("row1", 1), ("row2", 2), ("row3", 3)]
                 cur.get_results_from_sfqid(sf_qid2)
-                assert cur.fetchall() == [('row1', 1), ('row2', 2), ('row3', 3)]
+                assert cur.fetchall() == [("row1", 1), ("row2", 2), ("row3", 3)]
             finally:
-                for table in ['smallTable', 'uselessTable']:
-                    cur.execute('drop table if exists {}'.format(table))
+                for table in ["smallTable", "uselessTable"]:
+                    cur.execute("drop table if exists {}".format(table))
 
 
 def test_async_qmark(conn_cnx):
     """Tests that qmark parameter binding works with async queries."""
     import snowflake.connector
+
     orig_format = snowflake.connector.paramstyle
-    snowflake.connector.paramstyle = 'qmark'
+    snowflake.connector.paramstyle = "qmark"
     try:
         with conn_cnx() as con:
             with con.cursor() as cur:
                 try:
-                    cur.execute("create or replace table qmark_test (aa STRING, bb STRING)")
-                    cur.execute("insert into qmark_test VALUES(?, ?)", ('test11', 'test12'))
+                    cur.execute(
+                        "create or replace table qmark_test (aa STRING, bb STRING)"
+                    )
+                    cur.execute(
+                        "insert into qmark_test VALUES(?, ?)", ("test11", "test12")
+                    )
                     cur.execute_async("select * from qmark_test")
                     async_qid = cur.sfqid
                     with conn_cnx() as con2:
                         with con2.cursor() as cur2:
                             cur2.get_results_from_sfqid(async_qid)
-                            assert cur2.fetchall() == [('test11', 'test12')]
+                            assert cur2.fetchall() == [("test11", "test12")]
                 finally:
-                    cur.execute('drop table if exists qmark_test')
+                    cur.execute("drop table if exists qmark_test")
     finally:
         snowflake.connector.paramstyle = orig_format
 
@@ -143,9 +158,9 @@ def test_done_caching(conn_cnx):
     """Tests whether get status caching is working as expected."""
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute_async('select count(*) from table(generator(timeLimit => 5))')
+            cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             qid1 = cur.sfqid
-            cur.execute_async('select count(*) from table(generator(timeLimit => 10))')
+            cur.execute_async("select count(*) from table(generator(timeLimit => 10))")
             qid2 = cur.sfqid
             assert len(con._async_sfqids) == 2
             time.sleep(5)
@@ -167,21 +182,26 @@ def test_invalid_uuid_get_status(conn_cnx):
     """"""
     with conn_cnx() as con:
         with con.cursor() as cur:
-            with pytest.raises(ValueError, match=r"Invalid UUID: 'doesnt exist, dont even look'"):
-                cur.get_results_from_sfqid('doesnt exist, dont even look')
+            with pytest.raises(
+                ValueError, match=r"Invalid UUID: 'doesnt exist, dont even look'"
+            ):
+                cur.get_results_from_sfqid("doesnt exist, dont even look")
 
 
 def test_unknown_sfqid(conn_cnx):
     """Tests the exception that there is no Exception thrown when we attempt to get a status of a not existing query."""
     with conn_cnx() as con:
-        assert con.get_query_status('12345678-1234-4123-A123-123456789012') == QueryStatus.NO_DATA
+        assert (
+            con.get_query_status("12345678-1234-4123-A123-123456789012")
+            == QueryStatus.NO_DATA
+        )
 
 
 def test_unknown_sfqid_results(conn_cnx):
     """Tests that there is no Exception thrown when we attempt to get a status of a not existing query."""
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.get_results_from_sfqid('12345678-1234-4123-A123-123456789012')
+            cur.get_results_from_sfqid("12345678-1234-4123-A123-123456789012")
 
 
 def test_not_fetching(conn_cnx):
@@ -192,9 +212,9 @@ def test_not_fetching(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute_async('select 1')
+            cur.execute_async("select 1")
             sf_qid = cur.sfqid
             cur.get_results_from_sfqid(sf_qid)
-            cur.execute('select 2')
+            cur.execute("select 2")
             assert cur._inner_cursor is None
             assert cur._prefetch_hook is None

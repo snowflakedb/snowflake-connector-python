@@ -18,45 +18,73 @@ def _run_autocommit_off(cnx, db_parameters):
         cnx: The database connection context.
         db_parameters: Database parameters.
     """
-    def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters['name']))
 
-    exe(cnx, """
+    def exe(cnx, sql):
+        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
+
+    exe(
+        cnx,
+        """
 INSERT INTO {name} VALUES(True), (False), (False)
-""")
-    res = exe0(cnx, """
+""",
+    )
+    res = exe0(
+        cnx,
+        """
 SELECT CURRENT_TRANSACTION()
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] is not None
-    res = exe(cnx, """
+    res = exe(
+        cnx,
+        """
 SELECT COUNT(*) FROM {name} WHERE c1
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] == 1
-    res = exe(cnx, """
+    res = exe(
+        cnx,
+        """
 SELECT COUNT(*) FROM {name} WHERE NOT c1
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] == 2
     cnx.rollback()
-    res = exe0(cnx, """
+    res = exe0(
+        cnx,
+        """
 SELECT CURRENT_TRANSACTION()
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] is None
-    res = exe(cnx, """
+    res = exe(
+        cnx,
+        """
 SELECT COUNT(*) FROM {name} WHERE NOT c1
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] == 0
-    exe(cnx, """
+    exe(
+        cnx,
+        """
 INSERT INTO {name} VALUES(True), (False), (False)
-""")
+""",
+    )
     cnx.commit()
-    res = exe(cnx, """
+    res = exe(
+        cnx,
+        """
 SELECT COUNT(*) FROM {name} WHERE NOT c1
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] == 2
     cnx.rollback()
-    res = exe(cnx, """
+    res = exe(
+        cnx,
+        """
 SELECT COUNT(*) FROM {name} WHERE NOT c1
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] == 2
 
 
@@ -67,16 +95,23 @@ def _run_autocommit_on(cnx, db_parameters):
         cnx: The database connection context.
         db_parameters: Database parameters.
     """
-    def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters['name']))
 
-    exe(cnx, """
+    def exe(cnx, sql):
+        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
+
+    exe(
+        cnx,
+        """
 INSERT INTO {name} VALUES(True), (False), (False)
-""")
+""",
+    )
     cnx.rollback()
-    res = exe(cnx, """
+    res = exe(
+        cnx,
+        """
 SELECT COUNT(*) FROM {name} WHERE NOT c1
-""").fetchone()
+""",
+    ).fetchone()
     assert res[0] == 4
 
 
@@ -87,22 +122,29 @@ def test_autocommit_attribute(conn_cnx, db_parameters):
         conn_cnx: The database connection context.
         db_parameters: Database parameters.
     """
+
     def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters['name']))
+        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
 
     with conn_cnx() as cnx:
-        exe(cnx, """
+        exe(
+            cnx,
+            """
 CREATE TABLE {name} (c1 boolean)
-""")
+""",
+        )
         try:
             cnx.autocommit(False)
             _run_autocommit_off(cnx, db_parameters)
             cnx.autocommit(True)
             _run_autocommit_on(cnx, db_parameters)
         finally:
-            exe(cnx, """
+            exe(
+                cnx,
+                """
 DROP TABLE IF EXISTS {name}
-        """)
+        """,
+            )
 
 
 def test_autocommit_parameters(db_parameters):
@@ -111,37 +153,44 @@ def test_autocommit_parameters(db_parameters):
     Args:
         db_parameters: Database parameters.
     """
+
     def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters['name']))
+        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
 
     with snowflake.connector.connect(
-            user=db_parameters['user'],
-            password=db_parameters['password'],
-            host=db_parameters['host'],
-            port=db_parameters['port'],
-            account=db_parameters['account'],
-            protocol=db_parameters['protocol'],
-            schema=db_parameters['schema'],
-            database=db_parameters['database'],
-            autocommit=False,
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        protocol=db_parameters["protocol"],
+        schema=db_parameters["schema"],
+        database=db_parameters["database"],
+        autocommit=False,
     ) as cnx:
-        exe(cnx, """
+        exe(
+            cnx,
+            """
 CREATE TABLE {name} (c1 boolean)
-""")
+""",
+        )
         _run_autocommit_off(cnx, db_parameters)
 
     with snowflake.connector.connect(
-            user=db_parameters['user'],
-            password=db_parameters['password'],
-            host=db_parameters['host'],
-            port=db_parameters['port'],
-            account=db_parameters['account'],
-            protocol=db_parameters['protocol'],
-            schema=db_parameters['schema'],
-            database=db_parameters['database'],
-            autocommit=True,
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        protocol=db_parameters["protocol"],
+        schema=db_parameters["schema"],
+        database=db_parameters["database"],
+        autocommit=True,
     ) as cnx:
         _run_autocommit_on(cnx, db_parameters)
-        exe(cnx, """
+        exe(
+            cnx,
+            """
 DROP TABLE IF EXISTS {name}
-""")
+""",
+        )

@@ -11,10 +11,14 @@ from libcpp cimport bool as c_bool
 from libcpp.memory cimport shared_ptr
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
-from .errors import (Error, OperationalError, InterfaceError)
-from .errorcode import (ER_FAILED_TO_READ_ARROW_STREAM, ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE)
 
 from snowflake.connector.snow_logging import getSnowLogger
+
+from .errorcode import (
+    ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+    ER_FAILED_TO_READ_ARROW_STREAM,
+)
+from .errors import Error, InterfaceError, OperationalError
 
 snow_logger = getSnowLogger(__name__)
 

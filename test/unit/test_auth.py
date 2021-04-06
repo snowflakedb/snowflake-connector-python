@@ -22,16 +22,14 @@ def _init_rest(application, post_requset):
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=application)
-    type(connection)._internal_application_name = PropertyMock(
-        return_value=CLIENT_NAME
-    )
+    type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_version = PropertyMock(
         return_value=CLIENT_VERSION
     )
 
-    rest = SnowflakeRestful(host='testaccount.snowflakecomputing.com',
-                            port=443,
-                            connection=connection)
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
     rest._post_request = post_requset
     return rest
 
@@ -42,24 +40,24 @@ def _mock_auth_mfa_rest_response(url, headers, body, **kwargs):
     _ = url
     _ = headers
     _ = body
-    _ = kwargs.get('dummy')
+    _ = kwargs.get("dummy")
     if mock_cnt == 0:
         ret = {
-            'success': True,
-            'message': None,
-            'data': {
-                'nextAction': 'EXT_AUTHN_DUO_ALL',
-                'inFlightCtx': 'inFlightCtx',
-            }
+            "success": True,
+            "message": None,
+            "data": {
+                "nextAction": "EXT_AUTHN_DUO_ALL",
+                "inFlightCtx": "inFlightCtx",
+            },
         }
     elif mock_cnt == 1:
         ret = {
-            'success': True,
-            'message': None,
-            'data': {
-                'token': 'TOKEN',
-                'masterToken': 'MASTER_TOKEN',
-            }
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+            },
         }
 
     mock_cnt += 1
@@ -72,25 +70,25 @@ def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
     _ = url
     _ = headers
     _ = body
-    _ = kwargs.get('dummy')
+    _ = kwargs.get("dummy")
 
     if mock_cnt == 0:
         ret = {
-            'success': True,
-            'message': None,
-            'data': {
-                'nextAction': 'EXT_AUTHN_DUO_ALL',
-                'inFlightCtx': 'inFlightCtx',
-            }
+            "success": True,
+            "message": None,
+            "data": {
+                "nextAction": "EXT_AUTHN_DUO_ALL",
+                "inFlightCtx": "inFlightCtx",
+            },
         }
     elif mock_cnt == 1:
         ret = {
-            'success': True,
-            'message': None,
-            'data': {
-                'nextAction': 'BAD',
-                'inFlightCtx': 'inFlightCtx',
-            }
+            "success": True,
+            "message": None,
+            "data": {
+                "nextAction": "BAD",
+                "inFlightCtx": "inFlightCtx",
+            },
         }
 
     mock_cnt += 1
@@ -103,15 +101,15 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
     _ = url
     _ = headers
     _ = body
-    _ = kwargs.get('dummy')
+    _ = kwargs.get("dummy")
     if mock_cnt == 0:
         ret = {
-            'success': True,
-            'message': None,
-            'data': {
-                'nextAction': 'EXT_AUTHN_DUO_ALL',
-                'inFlightCtx': 'inFlightCtx',
-            }
+            "success": True,
+            "message": None,
+            "data": {
+                "nextAction": "EXT_AUTHN_DUO_ALL",
+                "inFlightCtx": "inFlightCtx",
+            },
         }
     elif mock_cnt == 1:
         time.sleep(10)  # should timeout while here
@@ -124,10 +122,10 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
 def test_auth_mfa():
     """Authentication by MFA."""
     global mock_cnt
-    application = 'testapplication'
-    account = 'testaccount'
-    user = 'testuser'
-    password = 'testpassword'
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    password = "testpassword"
 
     # success test case
     mock_cnt = 0
@@ -136,8 +134,8 @@ def test_auth_mfa():
     auth_instance = AuthByDefault(password)
     auth.authenticate(auth_instance, account, user)
     assert not rest._connection.errorhandler.called  # not error
-    assert rest.token == 'TOKEN'
-    assert rest.master_token == 'MASTER_TOKEN'
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
 
     # failure test case
     mock_cnt = 0
@@ -162,24 +160,24 @@ def _mock_auth_password_change_rest_response(url, headers, body, **kwargs):
     _ = url
     _ = headers
     _ = body
-    _ = kwargs.get('dummy')
+    _ = kwargs.get("dummy")
     if mock_cnt == 0:
         ret = {
-            'success': True,
-            'message': None,
-            'data': {
-                'nextAction': 'PWD_CHANGE',
-                'inFlightCtx': 'inFlightCtx',
-            }
+            "success": True,
+            "message": None,
+            "data": {
+                "nextAction": "PWD_CHANGE",
+                "inFlightCtx": "inFlightCtx",
+            },
         }
     elif mock_cnt == 1:
         ret = {
-            'success': True,
-            'message': None,
-            'data': {
-                'token': 'TOKEN',
-                'masterToken': 'MASTER_TOKEN',
-            }
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+            },
         }
 
     mock_cnt += 1
@@ -193,16 +191,17 @@ def test_auth_password_change():
     def _password_callback():
         return "NEW_PASSWORD"
 
-    application = 'testapplication'
-    account = 'testaccount'
-    user = 'testuser'
-    password = 'testpassword'
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    password = "testpassword"
 
     # success test case
     mock_cnt = 0
     rest = _init_rest(application, _mock_auth_password_change_rest_response)
     auth = Auth(rest)
     auth_instance = AuthByDefault(password)
-    auth.authenticate(auth_instance, account, user,
-                      password_callback=_password_callback)
+    auth.authenticate(
+        auth_instance, account, user, password_callback=_password_callback
+    )
     assert not rest._connection.errorhandler.called  # not error

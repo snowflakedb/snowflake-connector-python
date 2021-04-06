@@ -34,43 +34,43 @@ BITS_FOR_TIMEZONE = 14
 ZERO_TIMEDELTA = timedelta(seconds=0)
 ZERO_EPOCH_DATE = date(1970, 1, 1)
 ZERO_EPOCH = datetime.utcfromtimestamp(0)
-ZERO_FILL = '000000000'
+ZERO_FILL = "000000000"
 
 logger = getLogger(__name__)
 
 PYTHON_TO_SNOWFLAKE_TYPE = {
-    'int': 'FIXED',
-    'long': 'FIXED',
-    'decimal': 'FIXED',
-    'float': 'REAL',
-    'str': 'TEXT',
-    'unicode': 'TEXT',
-    'bytes': 'BINARY',
-    'bytearray': 'BINARY',
-    'bool': 'BOOLEAN',
-    'bool_': 'BOOLEAN',
-    'nonetype': 'ANY',
-    'datetime': 'TIMESTAMP_NTZ',
-    'sfdatetime': 'TIMESTAMP_NTZ',
-    'date': 'DATE',
-    'time': 'TIME',
-    'struct_time': 'TIMESTAMP_NTZ',
-    'timedelta': 'TIME',
-    'list': 'TEXT',
-    'tuple': 'TEXT',
-    'int8': 'FIXED',
-    'int16': 'FIXED',
-    'int32': 'FIXED',
-    'int64': 'FIXED',
-    'uint8': 'FIXED',
-    'uint16': 'FIXED',
-    'uint32': 'FIXED',
-    'uint64': 'FIXED',
-    'float16': 'REAL',
-    'float32': 'REAL',
-    'float64': 'REAL',
-    'datetime64': 'TIMESTAMP_NTZ',
-    'quoted_name': 'TEXT',
+    "int": "FIXED",
+    "long": "FIXED",
+    "decimal": "FIXED",
+    "float": "REAL",
+    "str": "TEXT",
+    "unicode": "TEXT",
+    "bytes": "BINARY",
+    "bytearray": "BINARY",
+    "bool": "BOOLEAN",
+    "bool_": "BOOLEAN",
+    "nonetype": "ANY",
+    "datetime": "TIMESTAMP_NTZ",
+    "sfdatetime": "TIMESTAMP_NTZ",
+    "date": "DATE",
+    "time": "TIME",
+    "struct_time": "TIMESTAMP_NTZ",
+    "timedelta": "TIME",
+    "list": "TEXT",
+    "tuple": "TEXT",
+    "int8": "FIXED",
+    "int16": "FIXED",
+    "int32": "FIXED",
+    "int64": "FIXED",
+    "uint8": "FIXED",
+    "uint16": "FIXED",
+    "uint32": "FIXED",
+    "uint64": "FIXED",
+    "float16": "REAL",
+    "float32": "REAL",
+    "float64": "REAL",
+    "datetime64": "TIMESTAMP_NTZ",
+    "quoted_name": "TEXT",
 }
 
 
@@ -87,24 +87,28 @@ def convert_datetime_to_epoch(dt: datetime) -> float:
 
 
 def _convert_datetime_to_epoch_nanoseconds(dt: datetime) -> str:
-    return "{:f}".format(convert_datetime_to_epoch(dt)).replace('.', '') + '000'
+    return "{:f}".format(convert_datetime_to_epoch(dt)).replace(".", "") + "000"
 
 
 def _convert_date_to_epoch_milliseconds(dt: datetime) -> str:
-    return '{:.3f}'.format((dt - ZERO_EPOCH_DATE).total_seconds()).replace('.', '')
+    return "{:.3f}".format((dt - ZERO_EPOCH_DATE).total_seconds()).replace(".", "")
 
 
 def _convert_time_to_epoch_nanoseconds(tm):
-    return str(tm.hour * 3600 + tm.minute * 60 + tm.second) + "{:06d}".format(tm.microsecond) + '000'
+    return (
+        str(tm.hour * 3600 + tm.minute * 60 + tm.second)
+        + "{:06d}".format(tm.microsecond)
+        + "000"
+    )
 
 
 def _extract_timestamp(value, ctx):
     """Extracts timestamp from a raw data."""
-    scale = ctx['scale']
-    microseconds = float(
-        value[0:-scale + 6]) if scale > 6 else float(value)
+    scale = ctx["scale"]
+    microseconds = float(value[0 : -scale + 6]) if scale > 6 else float(value)
     fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
-        value, ctx['max_fraction'], scale)
+        value, ctx["max_fraction"], scale
+    )
 
     return microseconds, fraction_of_nanoseconds
 
@@ -112,14 +116,14 @@ def _extract_timestamp(value, ctx):
 def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
     if scale == 0:
         return 0
-    if value[0] != '-':
-        return int(value[-scale:] + ZERO_FILL[:9 - scale])
+    if value[0] != "-":
+        return int(value[-scale:] + ZERO_FILL[: 9 - scale])
 
     frac = int(value[-scale:])
     if frac == 0:
         return 0
     else:
-        return int(str(max_fraction - frac) + ZERO_FILL[:9 - scale])
+        return int(str(max_fraction - frac) + ZERO_FILL[: 9 - scale])
 
 
 def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> pytz._FixedOffset:
@@ -130,9 +134,9 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> pytz._FixedOffset:
 class SnowflakeConverter(object):
     def __init__(self, **kwargs):
         self._parameters: Dict[str, Union[str, int, bool]] = {}
-        self._use_numpy = kwargs.get('use_numpy', False) and numpy is not None
+        self._use_numpy = kwargs.get("use_numpy", False) and numpy is not None
 
-        logger.debug('use_numpy: %s', self._use_numpy)
+        logger.debug("use_numpy: %s", self._use_numpy)
 
     def set_parameters(self, new_parameters: Dict) -> None:
         self._parameters = new_parameters
@@ -151,27 +155,27 @@ class SnowflakeConverter(object):
     #
     def to_python_method(self, type_name, column):
         ctx = column.copy()
-        if ctx.get('scale') is not None:
-            ctx['max_fraction'] = int(10 ** ctx['scale'])
-            ctx['zero_fill'] = '0' * (9 - ctx['scale'])
-        converters = ['_{type_name}_to_python'.format(type_name=type_name)]
+        if ctx.get("scale") is not None:
+            ctx["max_fraction"] = int(10 ** ctx["scale"])
+            ctx["zero_fill"] = "0" * (9 - ctx["scale"])
+        converters = ["_{type_name}_to_python".format(type_name=type_name)]
         if self._use_numpy:
-            converters.insert(0, '_{type_name}_numpy_to_python'.format(
-                type_name=type_name))
+            converters.insert(
+                0, "_{type_name}_numpy_to_python".format(type_name=type_name)
+            )
         for conv in converters:
             try:
                 return getattr(self, conv)(ctx)
             except AttributeError:
                 pass
-        logger.warning(
-            "No column converter found for type: %s", type_name)
+        logger.warning("No column converter found for type: %s", type_name)
         return None  # Skip conversion
 
     def _FIXED_to_python(self, ctx):
-        return int if ctx['scale'] == 0 else decimal.Decimal
+        return int if ctx["scale"] == 0 else decimal.Decimal
 
     def _FIXED_numpy_to_python(self, ctx):
-        if ctx['scale']:
+        if ctx["scale"]:
             return numpy.float64
         else:
 
@@ -203,8 +207,7 @@ class SnowflakeConverter(object):
                 return datetime.utcfromtimestamp(int(value) * 86400).date()
             except (OSError, ValueError) as e:
                 logger.debug("Failed to convert: %s", e)
-                ts = ZERO_EPOCH + timedelta(
-                    seconds=int(value) * (24 * 60 * 60))
+                ts = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
                 return date(ts.year, ts.month, ts.day)
 
         return conv
@@ -214,14 +217,14 @@ class SnowflakeConverter(object):
 
         No timezone is attached.
         """
-        return lambda x: numpy.datetime64(int(x), 'D')
+        return lambda x: numpy.datetime64(int(x), "D")
 
     def _TIMESTAMP_TZ_to_python(self, ctx):
         """Converts TIMESTAMP TZ to datetime.
 
         The timezone offset is piggybacked.
         """
-        scale = ctx['scale']
+        scale = ctx["scale"]
 
         def conv0(encoded_value: str) -> datetime:
             value, tz = encoded_value.split()
@@ -230,7 +233,7 @@ class SnowflakeConverter(object):
 
         def conv(encoded_value: str) -> datetime:
             value, tz = encoded_value.split()
-            microseconds = float(value[0:-scale + 6])
+            microseconds = float(value[0 : -scale + 6])
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
             return datetime.fromtimestamp(microseconds, tz=tzinfo)
 
@@ -239,12 +242,12 @@ class SnowflakeConverter(object):
     def _get_session_tz(self):
         """Gets the session timezone or use the local computer's timezone."""
         try:
-            tz = self.get_parameter('TIMEZONE')
+            tz = self.get_parameter("TIMEZONE")
             if not tz:
-                tz = 'UTC'
+                tz = "UTC"
             return pytz.timezone(tz)
         except pytz.exceptions.UnknownTimeZoneError:
-            logger.warning('converting to tzinfo failed')
+            logger.warning("converting to tzinfo failed")
             if tzlocal is not None:
                 return tzlocal.get_localzone()
             else:
@@ -271,12 +274,13 @@ class SnowflakeConverter(object):
 
     def _TIMESTAMP_LTZ_to_python(self, ctx):
         tzinfo = self._get_session_tz()
-        scale = ctx['scale']
+        scale = ctx["scale"]
 
-        conv0 = lambda value: datetime.fromtimestamp(float(value), tz=tzinfo)
+        def conv0(value):
+            return datetime.fromtimestamp(float(value), tz=tzinfo)
 
         def conv(value):
-            microseconds = float(value[0:-scale + 6])
+            microseconds = float(value[0 : -scale + 6])
             return datetime.fromtimestamp(microseconds, tz=tzinfo)
 
         return conv if scale > 6 else conv0
@@ -285,12 +289,13 @@ class SnowflakeConverter(object):
 
     def _TIMESTAMP_NTZ_to_python(self, ctx):
         """TIMESTAMP NTZ to datetime with no timezone info is attached."""
-        scale = ctx['scale']
+        scale = ctx["scale"]
 
-        conv0 = lambda value: datetime.utcfromtimestamp(float(value))
+        def conv0(value):
+            return datetime.utcfromtimestamp(float(value))
 
         def conv(value: str) -> datetime:
-            microseconds = float(value[0:-scale + 6])
+            microseconds = float(value[0 : -scale + 6])
             return datetime.utcfromtimestamp(microseconds)
 
         return conv if scale > 6 else conv0
@@ -298,20 +303,21 @@ class SnowflakeConverter(object):
     def _TIMESTAMP_NTZ_numpy_to_python(self, ctx):
         """TIMESTAMP NTZ to datetime64 with no timezone info is attached."""
 
-        def conv(value: str) -> 'numpy.datetime64':
+        def conv(value: str) -> "numpy.datetime64":
             nanoseconds = int(decimal.Decimal(value).scaleb(9))
-            return numpy.datetime64(nanoseconds, 'ns')
+            return numpy.datetime64(nanoseconds, "ns")
 
         return conv
 
     def _TIME_to_python(self, ctx):
         """TIME to formatted string, SnowflakeDateTime, or datetime.time with no timezone attached."""
-        scale = ctx['scale']
+        scale = ctx["scale"]
 
-        conv0 = lambda value: datetime.utcfromtimestamp(float(value)).time()
+        def conv0(value):
+            return datetime.utcfromtimestamp(float(value)).time()
 
         def conv(value: str) -> dt_t:
-            microseconds = float(value[0:-scale + 6])
+            microseconds = float(value[0 : -scale + 6])
             return datetime.utcfromtimestamp(microseconds).time()
 
         return conv if scale > 6 else conv0
@@ -324,7 +330,7 @@ class SnowflakeConverter(object):
     _ARRAY_to_python = _VARIANT_to_python
 
     def _BOOLEAN_to_python(self, ctx):
-        return lambda value: value in ('1', 'TRUE')
+        return lambda value: value in ("1", "TRUE")
 
     def snowflake_type(self, value):
         """Returns Snowflake data type for the value. This is used for qmark parameter style."""
@@ -337,8 +343,9 @@ class SnowflakeConverter(object):
         The output is bound in a query in the server side.
         """
         type_name = value.__class__.__name__.lower()
-        return getattr(self, "_{type_name}_to_snowflake_bindings".format(
-            type_name=type_name))(snowflake_type, value)
+        return getattr(
+            self, "_{type_name}_to_snowflake_bindings".format(type_name=type_name)
+        )(snowflake_type, value)
 
     def _str_to_snowflake_bindings(self, _, value):
         # NOTE: str type is always taken as a text data and never binary
@@ -351,7 +358,7 @@ class SnowflakeConverter(object):
     _decimal_to_snowflake_bindings = _str_to_snowflake_bindings
 
     def _bytes_to_snowflake_bindings(self, _, value):
-        return binascii.hexlify(value).decode('utf-8')
+        return binascii.hexlify(value).decode("utf-8")
 
     _bytearray_to_snowflake_bindings = _bytes_to_snowflake_bindings
 
@@ -371,21 +378,23 @@ class SnowflakeConverter(object):
 
     def _datetime_to_snowflake_bindings(self, snowflake_type, value):
         snowflake_type = snowflake_type.upper()
-        if snowflake_type == 'TIMESTAMP_LTZ':
+        if snowflake_type == "TIMESTAMP_LTZ":
             _, t = self._derive_offset_timestamp(value)
             return _convert_datetime_to_epoch_nanoseconds(t)
-        elif snowflake_type == 'TIMESTAMP_NTZ':
+        elif snowflake_type == "TIMESTAMP_NTZ":
             # nanoseconds
             return _convert_datetime_to_epoch_nanoseconds(value)
-        elif snowflake_type == 'TIMESTAMP_TZ':
+        elif snowflake_type == "TIMESTAMP_TZ":
             offset, t = self._derive_offset_timestamp(value, is_utc=True)
-            return _convert_datetime_to_epoch_nanoseconds(t) + \
-                   ' {:04d}'.format(int(offset))
+            return _convert_datetime_to_epoch_nanoseconds(t) + " {:04d}".format(
+                int(offset)
+            )
         else:
             raise ProgrammingError(
-                msg='Binding datetime object with Snowflake data type {} is '
-                    'not supported.'.format(snowflake_type),
-                errno=ER_NOT_SUPPORT_DATA_TYPE)
+                msg="Binding datetime object with Snowflake data type {} is "
+                "not supported.".format(snowflake_type),
+                errno=ER_NOT_SUPPORT_DATA_TYPE,
+            )
 
     def _derive_offset_timestamp(self, value, is_utc: bool = False):
         """Derives TZ offset and timestamp from the datetime objects."""
@@ -398,27 +407,30 @@ class SnowflakeConverter(object):
             # if tzinfo is attached, just covert to epoch time
             # as the server expects it in UTC anyway
             t = value
-        offset = tzinfo.utcoffset(
-            t.replace(tzinfo=None)).total_seconds() / 60 + 1440
+        offset = tzinfo.utcoffset(t.replace(tzinfo=None)).total_seconds() / 60 + 1440
         return offset, t
 
     def _struct_time_to_snowflake_bindings(self, snowflake_type, value):
         return self._datetime_to_snowflake_bindings(
-            snowflake_type,
-            datetime.fromtimestamp(time.mktime(value)))
+            snowflake_type, datetime.fromtimestamp(time.mktime(value))
+        )
 
     def _timedelta_to_snowflake_bindings(self, snowflake_type, value):
         snowflake_type = snowflake_type.upper()
-        if snowflake_type != 'TIME':
+        if snowflake_type != "TIME":
             raise ProgrammingError(
-                msg='Binding timedelta object with Snowflake data type {} is '
-                    'not supported.'.format(snowflake_type),
-                errno=ER_NOT_SUPPORT_DATA_TYPE)
+                msg="Binding timedelta object with Snowflake data type {} is "
+                "not supported.".format(snowflake_type),
+                errno=ER_NOT_SUPPORT_DATA_TYPE,
+            )
         (hours, r) = divmod(value.seconds, 3600)
         (mins, secs) = divmod(r, 60)
         hours += value.days * 24
-        return str(hours * 3600 + mins * 60 + secs) + \
-               "{:06d}".format(value.microseconds) + '000'
+        return (
+            str(hours * 3600 + mins * 60 + secs)
+            + "{:06d}".format(value.microseconds)
+            + "000"
+        )
 
     def to_snowflake(self, value):
         """Converts Python data to Snowflake data for pyformat/format style.
@@ -426,8 +438,9 @@ class SnowflakeConverter(object):
         The output is bound in a query in the client side.
         """
         type_name = value.__class__.__name__.lower()
-        return getattr(self, "_{type_name}_to_snowflake".format(
-            type_name=type_name))(value)
+        return getattr(self, "_{type_name}_to_snowflake".format(type_name=type_name))(
+            value
+        )
 
     def _int_to_snowflake(self, value):
         return int(value)
@@ -470,55 +483,77 @@ class SnowflakeConverter(object):
                     td = tzinfo_value.utcoffset(value, is_dst=False)
             else:
                 td = ZERO_TIMEDELTA
-            sign = '+' if td >= ZERO_TIMEDELTA else '-'
+            sign = "+" if td >= ZERO_TIMEDELTA else "-"
             td_secs = sfdatetime_total_seconds_from_timedelta(td)
             h, m = divmod(abs(td_secs // 60), 60)
             if value.microsecond:
                 return (
-                    '{year:d}-{month:02d}-{day:02d} '
-                    '{hour:02d}:{minute:02d}:{second:02d}.'
-                    '{microsecond:06d}{sign}{tzh:02d}:{tzm:02d}').format(
-                    year=value.year, month=value.month, day=value.day,
-                    hour=value.hour, minute=value.minute,
+                    "{year:d}-{month:02d}-{day:02d} "
+                    "{hour:02d}:{minute:02d}:{second:02d}."
+                    "{microsecond:06d}{sign}{tzh:02d}:{tzm:02d}"
+                ).format(
+                    year=value.year,
+                    month=value.month,
+                    day=value.day,
+                    hour=value.hour,
+                    minute=value.minute,
                     second=value.second,
-                    microsecond=value.microsecond, sign=sign, tzh=h,
-                    tzm=m
+                    microsecond=value.microsecond,
+                    sign=sign,
+                    tzh=h,
+                    tzm=m,
                 )
             return (
-                '{year:d}-{month:02d}-{day:02d} '
-                '{hour:02d}:{minute:02d}:{second:02d}'
-                '{sign}{tzh:02d}:{tzm:02d}').format(
-                year=value.year, month=value.month, day=value.day,
-                hour=value.hour, minute=value.minute,
+                "{year:d}-{month:02d}-{day:02d} "
+                "{hour:02d}:{minute:02d}:{second:02d}"
+                "{sign}{tzh:02d}:{tzm:02d}"
+            ).format(
+                year=value.year,
+                month=value.month,
+                day=value.day,
+                hour=value.hour,
+                minute=value.minute,
                 second=value.second,
-                sign=sign, tzh=h, tzm=m
+                sign=sign,
+                tzh=h,
+                tzm=m,
             )
         else:
             if value.microsecond:
-                return ('{year:d}-{month:02d}-{day:02d} '
-                        '{hour:02d}:{minute:02d}:{second:02d}.'
-                        '{microsecond:06d}').format(
-                    year=value.year, month=value.month, day=value.day,
-                    hour=value.hour, minute=value.minute,
+                return (
+                    "{year:d}-{month:02d}-{day:02d} "
+                    "{hour:02d}:{minute:02d}:{second:02d}."
+                    "{microsecond:06d}"
+                ).format(
+                    year=value.year,
+                    month=value.month,
+                    day=value.day,
+                    hour=value.hour,
+                    minute=value.minute,
                     second=value.second,
-                    microsecond=value.microsecond
+                    microsecond=value.microsecond,
                 )
-            return ('{year:d}-{month:02d}-{day:02d} '
-                    '{hour:02d}:{minute:02d}:{second:02d}').format(
-                year=value.year, month=value.month, day=value.day,
-                hour=value.hour, minute=value.minute,
-                second=value.second
+            return (
+                "{year:d}-{month:02d}-{day:02d} " "{hour:02d}:{minute:02d}:{second:02d}"
+            ).format(
+                year=value.year,
+                month=value.month,
+                day=value.day,
+                hour=value.hour,
+                minute=value.minute,
+                second=value.second,
             )
 
     def _date_to_snowflake(self, value):
         """Converts Date object to Snowflake object."""
-        return '{year:d}-{month:02d}-{day:02d}'.format(
-            year=value.year, month=value.month, day=value.day)
+        return "{year:d}-{month:02d}-{day:02d}".format(
+            year=value.year, month=value.month, day=value.day
+        )
 
     def _time_to_snowflake(self, value):
         if value.microsecond:
-            return value.strftime('%H:%M:%S.%%06d') % value.microsecond
-        return value.strftime('%H:%M:%S')
+            return value.strftime("%H:%M:%S.%%06d") % value.microsecond
+        return value.strftime("%H:%M:%S")
 
     def _struct_time_to_snowflake(self, value):
         tzinfo_value = _generate_tzinfo_from_tzoffset(time.timezone // 60)
@@ -533,14 +568,12 @@ class SnowflakeConverter(object):
         (mins, secs) = divmod(r, 60)
         hours += value.days * 24
         if value.microseconds:
-            return ('{hour:02d}:{minute:02d}:{second:02d}.'
-                    '{microsecond:06d}').format(
-                hour=hours, minute=mins,
-                second=secs,
-                microsecond=value.microseconds)
-        return '{hour:02d}:{minute:02d}:{second:02d}'.format(hour=hours,
-                                                             minute=mins,
-                                                             second=secs)
+            return ("{hour:02d}:{minute:02d}:{second:02d}." "{microsecond:06d}").format(
+                hour=hours, minute=mins, second=secs, microsecond=value.microseconds
+            )
+        return "{hour:02d}:{minute:02d}:{second:02d}".format(
+            hour=hours, minute=mins, second=secs
+        )
 
     def _decimal_to_snowflake(self, value):
         if isinstance(value, decimal.Decimal):
@@ -549,8 +582,10 @@ class SnowflakeConverter(object):
         return None
 
     def _list_to_snowflake(self, value):
-        return [SnowflakeConverter.quote(v0) for v0 in
-                [SnowflakeConverter.escape(v) for v in value]]
+        return [
+            SnowflakeConverter.quote(v0)
+            for v0 in [SnowflakeConverter.escape(v) for v in value]
+        ]
 
     _tuple_to_snowflake = _list_to_snowflake
 
@@ -570,33 +605,35 @@ class SnowflakeConverter(object):
     _float64_to_snowflake = __numpy_to_snowflake
 
     def _datetime64_to_snowflake(self, value):
-        return str(value) + '+00:00'
+        return str(value) + "+00:00"
 
     def _quoted_name_to_snowflake(self, value):
         return str(value)
 
     def __getattr__(self, item):
-        if item.endswith('_to_snowflake'):
+        if item.endswith("_to_snowflake"):
             raise ProgrammingError(
                 msg="Binding data in type ({}) is not supported.".format(
-                    item[1:item.find('_to_snowflake')]),
-                errno=ER_NOT_SUPPORT_DATA_TYPE
+                    item[1 : item.find("_to_snowflake")]
+                ),
+                errno=ER_NOT_SUPPORT_DATA_TYPE,
             )
-        elif item.endswith('to_snowflake_bindings'):
+        elif item.endswith("to_snowflake_bindings"):
             raise ProgrammingError(
                 msg="Binding data in type ({}) is not supported.".format(
-                    item[1:item.find('_to_snowflake_bindings')]),
-                errno=ER_NOT_SUPPORT_DATA_TYPE
+                    item[1 : item.find("_to_snowflake_bindings")]
+                ),
+                errno=ER_NOT_SUPPORT_DATA_TYPE,
             )
-        raise AttributeError('No method is available: {}'.format(item))
+        raise AttributeError("No method is available: {}".format(item))
 
     def to_csv_bindings(self, value: Union[Tuple[str, Any], Any]) -> Union[str, None]:
         """Convert value to a string representation in CSV-escaped format to INSERT INTO."""
         if isinstance(value, tuple) and len(value) == 2:
             _type, val = value
-            if _type in ['TIMESTAMP_TZ', 'TIME']:
+            if _type in ["TIMESTAMP_TZ", "TIME"]:
                 # unspecified timezone is considered utc
-                if getattr(val, 'tzinfo', 1) is None:
+                if getattr(val, "tzinfo", 1) is None:
                     val = self.to_snowflake(pytz.utc.localize(val))
                 else:
                     val = self.to_snowflake(val)
@@ -617,25 +654,25 @@ class SnowflakeConverter(object):
         if value is None or IS_NUMERIC(value) or IS_BINARY(value):
             return value
         res = value
-        res = res.replace('\\', '\\\\')
-        res = res.replace('\n', '\\n')
-        res = res.replace('\r', '\\r')
-        res = res.replace('\047', '\134\047')  # single quotes
+        res = res.replace("\\", "\\\\")
+        res = res.replace("\n", "\\n")
+        res = res.replace("\r", "\\r")
+        res = res.replace("\047", "\134\047")  # single quotes
         return res
 
     @staticmethod
     def quote(value) -> str:
         if isinstance(value, list):
-            return ','.join(value)
+            return ",".join(value)
         if value is None:
-            return 'NULL'
+            return "NULL"
         elif isinstance(value, bool):
-            return 'TRUE' if value else 'FALSE'
+            return "TRUE" if value else "FALSE"
         elif IS_NUMERIC(value):
             return str(repr(value))
         elif IS_BINARY(value):
             # Binary literal syntax
-            return "X'{}'".format(value.decode('ascii'))
+            return "X'{}'".format(value.decode("ascii"))
 
         return "'{}'".format(value)
 
@@ -644,13 +681,15 @@ class SnowflakeConverter(object):
         if value is None:  # NULL
             return ""
         elif not value:  # Empty string
-            return "\"\""
-        if value.find('"') >= 0 \
-                or value.find('\n') >= 0 \
-                or value.find(',') >= 0 \
-                or value.find('\\') >= 0:
+            return '""'
+        if (
+            value.find('"') >= 0
+            or value.find("\n") >= 0
+            or value.find(",") >= 0
+            or value.find("\\") >= 0
+        ):
             # replace single quote with double quotes
-            value = value.replace("\"", "\"\"")
+            value = value.replace('"', '""')
             return f'"{value}"'
         else:
             return value

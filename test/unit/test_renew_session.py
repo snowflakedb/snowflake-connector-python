@@ -16,22 +16,23 @@ def test_renew_session():
     NEW_MASTER_TOKEN = "new_master_token"
     connection = MagicMock()
     connection.errorhandler = Mock(return_value=None)
-    type(connection)._probe_connection = PropertyMock(
-        return_value=False)
+    type(connection)._probe_connection = PropertyMock(return_value=False)
 
     rest = SnowflakeRestful(
-        host='testaccount.snowflakecomputing.com',
-        port=443,
-        connection=connection)
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
     rest._token = OLD_SESSION_TOKEN
     rest._master_token = OLD_MASTER_TOKEN
 
     # inject a fake method (success)
     def fake_request_exec(**_):
-        return {'success': True,
-                'data': {
-                    "sessionToken": NEW_SESSION_TOKEN,
-                    "masterToken": NEW_MASTER_TOKEN}}
+        return {
+            "success": True,
+            "data": {
+                "sessionToken": NEW_SESSION_TOKEN,
+                "masterToken": NEW_MASTER_TOKEN,
+            },
+        }
 
     rest._request_exec = fake_request_exec
 
@@ -42,9 +43,7 @@ def test_renew_session():
 
     # inject a fake method (failure)
     def fake_request_exec(**_):
-        return {'success': False,
-                'message': "failed to renew session",
-                'code': 987654}
+        return {"success": False, "message": "failed to renew session", "code": 987654}
 
     rest._request_exec = fake_request_exec
 
