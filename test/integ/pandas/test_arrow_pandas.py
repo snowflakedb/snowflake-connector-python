@@ -911,7 +911,13 @@ def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
         assert results == scanned_results
 
 
-@pytest.mark.parametrize("use_decimal", (False, True))
+@pytest.mark.parametrize(
+    "use_decimal",
+    [
+        False,
+        pytest.param(True, marks=pytest.mark.skipolddriver),
+    ],
+)
 def test_number_fetchall_retrieve_type(conn_cnx, use_decimal):
     with conn_cnx(arrow_number_to_decimal=use_decimal) as con:
         with con.cursor() as cur:
@@ -928,7 +934,13 @@ def test_number_fetchall_retrieve_type(conn_cnx, use_decimal):
                 )
 
 
-@pytest.mark.parametrize("use_decimal", (False, True))
+@pytest.mark.parametrize(
+    "use_decimal",
+    [
+        False,
+        pytest.param(True, marks=pytest.mark.skipolddriver),
+    ],
+)
 def test_number_fetchbatches_retrieve_type(conn_cnx, use_decimal):
     with conn_cnx(arrow_number_to_decimal=use_decimal) as con:
         with con.cursor() as cur:
