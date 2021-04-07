@@ -12,7 +12,7 @@ import time
 import uuid
 from logging import getLogger
 from threading import Lock, Timer
-from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Type, Union
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
@@ -145,7 +145,7 @@ class SnowflakeCursor(object):
         self,
         connection: "SnowflakeConnection",
         use_dict_result: bool = False,
-        json_result_class: object = JsonResult,
+        json_result_class: Type["JsonResult"] = JsonResult,
     ):
         """Inits a SnowflakeCursor with a connection.
 
