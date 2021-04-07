@@ -739,7 +739,10 @@ class SnowflakeCursor(object):
         if self._query_result_format == "arrow":
             self.check_can_use_arrow_resultset()
             self._result = ArrowResult(
-                data, self, use_dict_result=self._use_dict_result
+                data,
+                self,
+                use_dict_result=self._use_dict_result,
+                number_to_decimal=self._connection.arrow_number_to_decimal,
             )
         else:
             self._result = self._json_result_class(data, self)

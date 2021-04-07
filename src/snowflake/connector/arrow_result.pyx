@@ -7,6 +7,7 @@
 
 import io
 from base64 import b64decode
+from typing import TYPE_CHECKING, Dict
 
 from snowflake.connector.snow_logging import getSnowLogger
 
@@ -29,6 +30,9 @@ if installed_pandas:
 else:
     snow_logger.info(path_name="arrow_result.pyx", msg="Failed to import optional packages, pyarrow")
 
+if TYPE_CHECKING:  # pragma: no cover
+        from snowflake.connector.cursor import SnowflakeCursor
+
 
 cdef class ArrowResult:
     cdef:
@@ -46,13 +50,22 @@ cdef class ArrowResult:
         str _iter_unit
         object _use_dict_result
         object _use_numpy
+        bint _number_to_decimal
 
-    def __init__(self, raw_response, cursor, use_dict_result: bool = False, _chunk_downloader= None):
+    def __init__(
+            self,
+            raw_response: Dict,  # TODO could be more strongly defined
+            cursor: "SnowflakeCursor",
+            use_dict_result: bool = False,
+            _chunk_downloader = None,
+            number_to_decimal: bool = False,
+    ):
         self._reset()
         self._cursor = cursor
         self._connection = cursor.connection
         self._use_dict_result = use_dict_result
         self._use_numpy = self._connection._numpy
+        self._number_to_decimal = number_to_decimal
 
         self._column_idx_to_name = []
         for idx, column in enumerate(raw_response.get('rowtype')):
@@ -114,7 +127,10 @@ cdef class ArrowResult:
     def __next__(self):
         if self._iter_unit == EMPTY_UNIT:
             self._iter_unit = ROW_UNIT
-            self._current_chunk_row.init(self._iter_unit)
+            self._current_chunk_row.init(
+                self._iter_unit,
+                self._number_to_decimal,
+            )
         elif self._iter_unit == TABLE_UNIT:
             snow_logger.debug(path_name="arrow_result.pyx", func_name="__next__",
                               msg='The iterator has been built for fetching arrow table')
@@ -132,7 +148,10 @@ cdef class ArrowResult:
                                       msg="chunk index:{}, chunk_count:{}".format(self._chunk_index, self._chunk_count))
                     next_chunk = self._chunk_downloader.next_chunk()
                     self._current_chunk_row = next_chunk.result_data
-                    self._current_chunk_row.init(self._iter_unit)
+                    self._current_chunk_row.init(
+                        self._iter_unit,
+                        self._number_to_decimal,
+                    )
                     self._chunk_index += 1
                     try:
                         row = self._current_chunk_row.__next__()
@@ -185,10 +204,9 @@ cdef class ArrowResult:
         self._arrow_context = None
         self._iter_unit = EMPTY_UNIT
 
-    def _fetch_arrow_batches(self, **kwargs):
+    def _fetch_arrow_batches(self):
         """Fetch Arrow Table in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the number of
         rows in table) may be different."""
-        number_to_decimal = kwargs.pop('number_to_decimal', False)
         if self._iter_unit == EMPTY_UNIT:
             self._iter_unit = TABLE_UNIT
         elif self._iter_unit == ROW_UNIT:
@@ -199,7 +217,7 @@ cdef class ArrowResult:
         try:
             self._current_chunk_row.init(
                 self._iter_unit,
-                number_to_decimal
+                self._number_to_decimal,
             )
             snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
                               msg='Init table iterator successfully, current chunk index: {},'
@@ -218,7 +236,7 @@ cdef class ArrowResult:
                     self._current_chunk_row = next_chunk.result_data
                     self._current_chunk_row.init(
                         self._iter_unit,
-                        number_to_decimal
+                        self._number_to_decimal,
                     )
                 self._chunk_index += 1
 
@@ -248,9 +266,9 @@ cdef class ArrowResult:
                     TelemetryField.TIME_CONSUME_LAST_RESULT,
                     time_consume_last_result)
 
-    def _fetch_arrow_all(self, **kwargs):
+    def _fetch_arrow_all(self):
         """Fetches a single Arrow Table."""
-        tables = list(self._fetch_arrow_batches(**kwargs))
+        tables = list(self._fetch_arrow_batches())
         if tables:
             return concat_tables(tables)
         else:
@@ -259,20 +277,12 @@ cdef class ArrowResult:
     def _fetch_pandas_batches(self, **kwargs):
         """Fetches Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the
         number of rows in dataframe) is optimized by Snowflake Python Connector."""
-        number_to_decimal = kwargs.pop('number_to_decimal', False)
-        for table in self._fetch_arrow_batches(
-                number_to_decimal=number_to_decimal,
-                **kwargs
-        ):
+        for table in self._fetch_arrow_batches():
             yield table.to_pandas(**kwargs)
 
     def _fetch_pandas_all(self, **kwargs):
         """Fetches a single Pandas dataframe."""
-        number_to_decimal = kwargs.pop('number_to_decimal', False)
-        table = self._fetch_arrow_all(
-            number_to_decimal=number_to_decimal,
-            **kwargs
-        )
+        table = self._fetch_arrow_all()
         if table:
             return table.to_pandas(**kwargs)
         else:
