@@ -184,6 +184,8 @@ DEFAULT_CONFIGURATION = {
         False,
         bool,
     ),  # only use openssl instead of python only crypto modules
+    # whether to convert Arrow number values to decimal instead of doubles
+    "arrow_number_to_decimal": (False, bool),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -456,6 +458,14 @@ class SnowflakeConnection(object):
     @property
     def use_openssl_only(self):
         return self._use_openssl_only
+
+    @property
+    def arrow_number_to_decimal(self):
+        return self._arrow_number_to_decimal
+
+    @arrow_number_to_decimal.setter
+    def arrow_number_to_decimal(self, value: bool):
+        self._arrow_number_to_decimal = value
 
     def connect(self, **kwargs):
         """Establishes connection to Snowflake."""
