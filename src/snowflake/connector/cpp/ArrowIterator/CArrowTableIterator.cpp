@@ -57,9 +57,24 @@ void CArrowTableIterator::reconstructRecordBatches()
                           : 0;
           if (scale > 0 && dt->id() != arrow::Type::type::DECIMAL)
           {
-            logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
-                         scale, dt->id());
-            convertScaledFixedNumberColumnToDoubleColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild);
+            logger->debug(
+              __FILE__,
+              __func__,
+              __LINE__,
+              "Convert fixed number column to double column, column scale %d, column type id: %d",
+              scale,
+              dt->id()
+            );
+            convertScaledFixedNumberColumn(
+                batchIdx,
+                colIdx,
+                field,
+                columnArray,
+                scale,
+                futureFields,
+                futureColumns,
+                needsRebuild
+            );
           }
           break;
         }
@@ -143,8 +158,15 @@ void CArrowTableIterator::reconstructRecordBatches()
   }
 }
 
-CArrowTableIterator::CArrowTableIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>>* batches)
-: CArrowIterator(batches), m_context(context), m_pyTableObjRef(nullptr)
+CArrowTableIterator::CArrowTableIterator(
+PyObject* context,
+std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
+const bool number_to_decimal
+)
+: CArrowIterator(batches),
+m_context(context),
+m_pyTableObjRef(nullptr),
+m_convert_number_to_decimal(number_to_decimal)
 {
   PyObject* tz = PyObject_GetAttrString(m_context, "_timezone");
   PyArg_Parse(tz, "s", &m_timezone);
@@ -216,6 +238,121 @@ double CArrowTableIterator::convertScaledFixedNumberToDouble(
   }
 }
 
+void CArrowTableIterator::convertScaledFixedNumberColumn(
+  const unsigned int batchIdx,
+  const int colIdx,
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const unsigned int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
+)
+{
+// Convert scaled fixed number to either Double, or Decimal based on setting
+  if (m_convert_number_to_decimal){
+    convertScaledFixedNumberColumnToDecimalColumn(
+      batchIdx,
+      colIdx,
+      field,
+      columnArray,
+      scale,
+      futureFields,
+      futureColumns,
+      needsRebuild
+      );
+  } else {
+    convertScaledFixedNumberColumnToDoubleColumn(
+      batchIdx,
+      colIdx,
+      field,
+      columnArray,
+      scale,
+      futureFields,
+      futureColumns,
+      needsRebuild
+      );
+  }
+}
+
+void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn(
+  const unsigned int batchIdx,
+  const int colIdx,
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const unsigned int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
+)
+{
+  // Convert to decimal columns
+  const std::shared_ptr<arrow::DataType> field_type = field->type();
+  const std::shared_ptr<arrow::DataType> destType = arrow::decimal128(38, scale);
+  std::shared_ptr<arrow::Field> doubleField = std::make_shared<arrow::Field>(
+      field->name(), destType, field->nullable());
+  arrow::Decimal128Builder builder(destType, m_pool);
+  arrow::Status ret;
+  for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+  {
+    if (columnArray->IsValid(rowIdx))
+    {
+      arrow::Decimal128 val;
+      switch (field_type->id())
+      {
+        case arrow::Type::type::INT8:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(0, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT16:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(0, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT32:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(0, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT64:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(0, originalVal);
+          break;
+        }
+        default:
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for FIXED data",
+              field_type->id());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          return;
+      }
+      ret = builder.Append(val);
+    }
+    else
+    {
+      ret = builder.AppendNull();
+    }
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append Decimal value: internal data type(%d), errorInfo: %s",
+      field_type->id(),  ret.message().c_str());
+  }
+
+  std::shared_ptr<arrow::Array> doubleArray;
+  ret = builder.Finish(&doubleArray);
+  SF_CHECK_ARROW_RC(ret,
+    "[Snowflake Exception] arrow failed to finish Decimal array, errorInfo: %s",
+    ret.message().c_str());
+
+  // replace the targeted column
+  replaceColumn(batchIdx, colIdx, doubleField, doubleArray, futureFields, futureColumns, needsRebuild);
+}
+
 void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
   const unsigned int batchIdx,
   const int colIdx,
@@ -279,14 +416,14 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
       ret = builder.AppendNull();
     }
     SF_CHECK_ARROW_RC(ret,
-      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+      "[Snowflake Exception] arrow failed to append Double value: internal data type(%d), errorInfo: %s",
       dt->id(),  ret.message().c_str());
   }
 
   std::shared_ptr<arrow::Array> doubleArray;
   ret = builder.Finish(&doubleArray);
   SF_CHECK_ARROW_RC(ret,
-    "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+    "[Snowflake Exception] arrow failed to finish Double array, errorInfo: %s",
     ret.message().c_str());
 
   // replace the targeted column

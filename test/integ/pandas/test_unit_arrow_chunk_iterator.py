@@ -664,7 +664,7 @@ def iterate_over_test_chunk(
     stream.seek(0)
     context = ArrowConverterContext()
     it = PyArrowIterator(None, stream, context, False, False)
-    it.init(ROW_UNIT)
+    it.init(ROW_UNIT, False)
 
     count = 0
     while True:
