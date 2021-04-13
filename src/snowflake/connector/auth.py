@@ -472,25 +472,6 @@ class Auth(object):
                 host, user, MFA_TOKEN
             )
 
-    @staticmethod
-    def get_token_from_private_key(user, account, privatekey_path, key_password):
-        encoded_password = key_password.encode() if key_password is not None else None
-        with open(privatekey_path, "rb") as key:
-            p_key = load_pem_private_key(
-                key.read(), password=encoded_password, backend=default_backend()
-            )
-
-        private_key = p_key.private_bytes(
-            encoding=Encoding.DER,
-            format=PrivateFormat.PKCS8,
-            encryption_algorithm=NoEncryption(),
-        )
-        auth_instance = AuthByKeyPair(private_key)
-        auth_instance.change_token_lifetime(1440 * 60)  # 24 hours
-        return auth_instance.authenticate(
-            KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
-        )
-
     def _write_temporary_credential(self, host, user, cred_type, cred):
         if not cred:
             logger.debug(
@@ -691,4 +672,24 @@ def delete_temporary_credential_file():
 def build_temporary_credential_name(host, user, cred_type):
     return "{host}:{user}:{driver}:{cred}".format(
         host=host.upper(), user=user.upper(), driver=KEYRING_DRIVER_NAME, cred=cred_type
+    )
+
+
+def get_token_from_private_key(
+    user: str, account: str, privatekey_path: str, key_password
+):
+    encoded_password = key_password.encode() if key_password is not None else None
+    with open(privatekey_path, "rb") as key:
+        p_key = load_pem_private_key(
+            key.read(), password=encoded_password, backend=default_backend()
+        )
+
+    private_key = p_key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+    auth_instance = AuthByKeyPair(private_key, 1440 * 60)
+    return auth_instance.authenticate(
+        KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
     )

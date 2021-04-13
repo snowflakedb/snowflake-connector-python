@@ -35,7 +35,7 @@ class AuthByKeyPair(AuthByPlugin):
     EXPIRE_TIME = "exp"
     ISSUE_TIME = "iat"
 
-    def __init__(self, private_key):
+    def __init__(self, private_key, lifetime_in_seconds: int = 120):
         """Inits AuthByKeyPair class with private key.
 
         Args:
@@ -44,9 +44,6 @@ class AuthByKeyPair(AuthByPlugin):
         self._private_key = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
-        self._lifetime = timedelta(seconds=120)
-
-    def change_token_lifetime(self, lifetime_in_seconds):
         self._lifetime = timedelta(seconds=lifetime_in_seconds)
 
     def authenticate(self, authenticator, service_name, account, user, password):
