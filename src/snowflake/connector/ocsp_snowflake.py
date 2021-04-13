@@ -538,7 +538,7 @@ class OCSPCache(object):
                 filename
             ):
                 with codecs.open(filename, "r", encoding="utf-8", errors="ignore") as f:
-                    ocsp.decode_ocsp_response_cache(json.load(f))
+                    ocsp.decode_ocsp_response_cache(json.load(f), update_cache=False)
                 logger.debug(
                     "Read OCSP response cache file: %s, count=%s",
                     filename,
@@ -1691,16 +1691,18 @@ class SnowflakeOCSP(object):
             errno=ER_OCSP_RESPONSE_CERT_STATUS_UNKNOWN,
         )
 
-    def decode_ocsp_response_cache(self, ocsp_response_cache_json):
+    def decode_ocsp_response_cache(self, ocsp_response_cache_json, update_cache=True):
         """Decodes OCSP response cache from JSON."""
         try:
             for cert_id_base64, (ts, ocsp_response) in ocsp_response_cache_json.items():
                 cert_id = self.decode_cert_id_base64(cert_id_base64)
                 if not self.is_valid_time(cert_id, b64decode(ocsp_response)):
                     continue
-                SnowflakeOCSP.OCSP_CACHE.update_or_delete_cache(
-                    self, cert_id, b64decode(ocsp_response), ts
-                )
+                # if cache should be updated (the response is from server)
+                if update_cache:
+                    SnowflakeOCSP.OCSP_CACHE.update_or_delete_cache(
+                        self, cert_id, b64decode(ocsp_response), ts
+                    )
         except Exception as ex:
             logger.debug("Caught here - %s", ex)
             ermsg = "Exception raised while decoding OCSP Response Cache {}".format(
