@@ -29,7 +29,6 @@ logger = getLogger(__name__)
 class AuthByKeyPair(AuthByPlugin):
     """Key pair based authentication."""
 
-    LIFETIME = timedelta(seconds=120)
     ALGORITHM = "RS256"
     ISSUER = "iss"
     SUBJECT = "sub"
@@ -45,6 +44,10 @@ class AuthByKeyPair(AuthByPlugin):
         self._private_key = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
+        self._lifetime = timedelta(seconds=120)
+
+    def change_token_lifetime(self, lifetime_in_seconds):
+        self._lifetime = timedelta(seconds=lifetime_in_seconds)
 
     def authenticate(self, authenticator, service_name, account, user, password):
         account = account.upper()
@@ -74,7 +77,7 @@ class AuthByKeyPair(AuthByPlugin):
 
         public_key_fp = self.calculate_public_key_fingerprint(private_key)
 
-        self._jwt_token_exp = now + self.LIFETIME
+        self._jwt_token_exp = now + self._lifetime
         payload = {
             self.ISSUER: "{}.{}.{}".format(account, user, public_key_fp),
             self.SUBJECT: "{}.{}".format(account, user),

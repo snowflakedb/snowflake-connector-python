@@ -17,6 +17,14 @@ from os.path import expanduser
 from threading import Lock, Thread
 from typing import Dict, Union
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_pem_private_key,
+)
+
 from .auth_keypair import AuthByKeyPair
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
@@ -48,6 +56,7 @@ from .network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
+    KEY_PAIR_AUTHENTICATOR,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -462,6 +471,25 @@ class Auth(object):
             self._rest.mfa_token = self._read_temporary_credential(
                 host, user, MFA_TOKEN
             )
+
+    @staticmethod
+    def get_token_from_private_key(user, account, privatekey_path, key_password):
+        encoded_password = key_password.encode() if key_password is not None else None
+        with open(privatekey_path, "rb") as key:
+            p_key = load_pem_private_key(
+                key.read(), password=encoded_password, backend=default_backend()
+            )
+
+        private_key = p_key.private_bytes(
+            encoding=Encoding.DER,
+            format=PrivateFormat.PKCS8,
+            encryption_algorithm=NoEncryption(),
+        )
+        auth_instance = AuthByKeyPair(private_key)
+        auth_instance.change_token_lifetime(1440 * 60)  # 24 hours
+        return auth_instance.authenticate(
+            KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
+        )
 
     def _write_temporary_credential(self, host, user, cred_type, cred):
         if not cred:
