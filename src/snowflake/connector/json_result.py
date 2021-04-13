@@ -5,15 +5,16 @@
 #
 
 from logging import getLogger
-from typing import List
-
-from snowflake.connector.converter import SnowflakeConverter
+from typing import TYPE_CHECKING, List
 
 from .constants import FIELD_ID_TO_NAME
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
 from .errors import Error, InterfaceError
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
+
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector.converter import SnowflakeConverterType
 
 logger = getLogger(__name__)
 
@@ -33,7 +34,7 @@ class JsonResult:
 
         rowtypes = data["rowtype"]
         self._column_names: List[str] = [c["name"] for c in rowtypes]
-        self._column_converters: List["SnowflakeConverter"] = [
+        self._column_converters: List["SnowflakeConverterType"] = [
             self._connection.converter.to_python_method(c["type"].upper(), c)
             for c in rowtypes
         ]
