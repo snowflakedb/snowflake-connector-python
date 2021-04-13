@@ -709,11 +709,11 @@ class OCSPCache(object):
         return False, None
 
     @staticmethod
-    def update_or_delete_cache(ocsp, cert_id, ocsp_response, ts):
+    def update_or_delete_cache(ocsp, cert_id, ocsp_response, ts, delete_only=False):
         try:
             current_time = int(time.time())
             found, _ = OCSPCache.find_cache(ocsp, cert_id, None)
-            if current_time - OCSPCache.CACHE_EXPIRATION <= ts:
+            if current_time - OCSPCache.CACHE_EXPIRATION <= ts and not delete_only:
                 # creation time must be new enough
                 OCSPCache.update_cache(ocsp, cert_id, ocsp_response)
             elif found:
@@ -1698,11 +1698,12 @@ class SnowflakeOCSP(object):
                 cert_id = self.decode_cert_id_base64(cert_id_base64)
                 if not self.is_valid_time(cert_id, b64decode(ocsp_response)):
                     continue
-                # if cache should be updated (the response is from server)
-                if update_cache:
-                    SnowflakeOCSP.OCSP_CACHE.update_or_delete_cache(
-                        self, cert_id, b64decode(ocsp_response), ts
-                    )
+                # if update_cache is True, then delete_only is False and vice versa
+                # https://github.com/snowflakedb/snowflake-connector-python/issues/675
+                delete_only = not update_cache
+                SnowflakeOCSP.OCSP_CACHE.update_or_delete_cache(
+                    self, cert_id, b64decode(ocsp_response), ts, delete_only
+                )
         except Exception as ex:
             logger.debug("Caught here - %s", ex)
             ermsg = "Exception raised while decoding OCSP Response Cache {}".format(
