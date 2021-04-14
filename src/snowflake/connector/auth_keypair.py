@@ -47,7 +47,7 @@ class AuthByKeyPair(AuthByPlugin):
         self._jwt_token_exp = 0
         self._lifetime = timedelta(seconds=lifetime_in_seconds)
 
-    def authenticate(self, authenticator, service_name, account, user, password):
+    def authenticate(self, authenticator, service_name, account, user, password) -> str:
         account = account.upper()
         user = user.upper()
 
