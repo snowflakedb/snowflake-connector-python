@@ -11,10 +11,14 @@ from libcpp cimport bool as c_bool
 from libcpp.memory cimport shared_ptr
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
-from .errors import (Error, OperationalError, InterfaceError)
-from .errorcode import (ER_FAILED_TO_READ_ARROW_STREAM, ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE)
 
 from snowflake.connector.snow_logging import getSnowLogger
+
+from .errorcode import (
+    ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+    ER_FAILED_TO_READ_ARROW_STREAM,
+)
+from .errors import Error, InterfaceError, OperationalError
 
 snow_logger = getSnowLogger(__name__)
 
@@ -40,15 +44,27 @@ cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
 
 cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator(CArrowIterator):
-        CArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches, PyObject* use_numpy) except +
+        CArrowChunkIterator(
+                PyObject* context,
+                vector[shared_ptr[CRecordBatch]]* batches,
+                PyObject* use_numpy,
+        ) except +
 
     cdef cppclass DictCArrowChunkIterator(CArrowChunkIterator):
-        DictCArrowChunkIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches, PyObject* use_numpy) except +
+        DictCArrowChunkIterator(
+                PyObject* context,
+                vector[shared_ptr[CRecordBatch]]* batches,
+                PyObject* use_numpy
+        ) except +
 
 
 cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
     cdef cppclass CArrowTableIterator(CArrowIterator):
-        CArrowTableIterator(PyObject* context, vector[shared_ptr[CRecordBatch]]* batches) except +
+        CArrowTableIterator(
+            PyObject* context,
+            vector[shared_ptr[CRecordBatch]]* batches,
+            bint number_to_decimal,
+        ) except +
 
 
 cdef extern from "arrow/api.h" namespace "arrow" nogil:
@@ -72,6 +88,7 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
     cdef cppclass CResult "arrow::Result"[T]:
         CResult()
         CResult(CStatus status)
+        CResult(T)
 
         c_string ToString()
         c_string message()
@@ -79,6 +96,7 @@ cdef extern from "arrow/api.h" namespace "arrow" nogil:
         c_bool ok()
         const CStatus& status()
         T& ValueOrDie()
+        T operator*()
 
     cdef cppclass CBuffer" arrow::Buffer":
         CBuffer(const uint8_t* data, int64_t size)
@@ -134,13 +152,15 @@ cdef extern from "arrow/python/api.h" namespace "arrow::py" nogil:
     cdef cppclass PyReadableFile(RandomAccessFile):
         PyReadableFile(object fo)
 
+    T GetResultValue[T](CResult[T]) except *
+
 
 cdef class EmptyPyArrowIterator:
 
     def __next__(self):
        raise StopIteration
 
-    def init(self, str iter_unit):
+    def init(self, str iter_unit, bint number_to_decimal):
         pass
 
 
@@ -160,8 +180,14 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     # https://docs.snowflake.com/en/user-guide/sqlalchemy.html#numpy-data-type-support
     cdef object use_numpy
 
-    def __cinit__(self, object cursor, object py_inputstream, object arrow_context, object use_dict_result,
-                  object numpy):
+    def __cinit__(
+            self,
+            object cursor,
+            object py_inputstream,
+            object arrow_context,
+            object use_dict_result,
+            object numpy,
+    ):
         cdef shared_ptr[InputStream] input_stream
         cdef shared_ptr[CRecordBatch] record_batch
         cdef CStatus ret
@@ -227,15 +253,25 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         else:
             return ret
 
-    def init(self, str iter_unit):
+    def init(self, str iter_unit, bint number_to_decimal):
         # init chunk (row) iterator or table iterator
         if iter_unit != ROW_UNIT and iter_unit != TABLE_UNIT:
             raise NotImplementedError
         elif iter_unit == ROW_UNIT:
-            self.cIterator = new CArrowChunkIterator(<PyObject*>self.context, &self.batches, <PyObject *>self.use_numpy) \
-                if not self.use_dict_result \
-                else new DictCArrowChunkIterator(<PyObject*>self.context, &self.batches, <PyObject *>self.use_numpy)
+            self.cIterator = new CArrowChunkIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                <PyObject *>self.use_numpy,
+            ) if not self.use_dict_result else new DictCArrowChunkIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                <PyObject *>self.use_numpy
+            )
 
         elif iter_unit == TABLE_UNIT:
-            self.cIterator = new CArrowTableIterator(<PyObject*>self.context, &self.batches)
+            self.cIterator = new CArrowTableIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                number_to_decimal,
+            )
         self.unit = iter_unit

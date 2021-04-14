@@ -36,15 +36,13 @@ class TelemetryField(object):
 
 class TelemetryData(object):
     """An instance of telemetry data which can be sent to the server."""
+
     def __init__(self, message, timestamp):
         self.message = message
         self.timestamp = timestamp
 
     def to_dict(self):
-        return {
-            'message': self.message,
-            'timestamp': str(self.timestamp)
-        }
+        return {"message": self.message, "timestamp": str(self.timestamp)}
 
     def __repr__(self):
         return str(self.to_dict())
@@ -52,6 +50,7 @@ class TelemetryData(object):
 
 class TelemetryClient(object):
     """Client to enqueue and send metrics to the telemetry endpoint in batch."""
+
     SF_PATH_TELEMETRY = "/telemetry/send"
     DEFAULT_FORCE_FLUSH_SIZE = 100
 
@@ -59,15 +58,13 @@ class TelemetryClient(object):
         self._rest = rest
         self._log_batch = []
         self._is_closed = False
-        self._flush_size = \
-            flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
+        self._flush_size = flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
         self._lock = Lock()
         self._enabled = True
 
     def add_log_to_batch(self, telemetry_data):
         if self._is_closed:
-            raise Exception(
-                "Attempted to add log when TelemetryClient is closed")
+            raise Exception("Attempted to add log when TelemetryClient is closed")
         elif not self._enabled:
             logger.debug("TelemetryClient disabled. Ignoring log.")
             return
@@ -86,8 +83,7 @@ class TelemetryClient(object):
 
     def send_batch(self):
         if self._is_closed:
-            raise Exception(
-                "Attempted to send batch when TelemetryClient is closed")
+            raise Exception("Attempted to send batch when TelemetryClient is closed")
         elif not self._enabled:
             logger.debug("TelemetryClient disabled. Not sending logs.")
             return
@@ -100,18 +96,29 @@ class TelemetryClient(object):
             logger.debug("Nothing to send to telemetry.")
             return
 
-        body = {'logs': [x.to_dict() for x in to_send]}
-        logger.debug("Sending %d logs to telemetry. Data is %s.", len(body), SecretDetector.mask_secrets(str(body))[1])
+        body = {"logs": [x.to_dict() for x in to_send]}
+        logger.debug(
+            "Sending %d logs to telemetry. Data is %s.",
+            len(body),
+            SecretDetector.mask_secrets(str(body))[1],
+        )
         if ENABLE_TELEMETRY_LOG:
             # This logger guarantees the payload won't be masked. Testing purpose.
             rt_plain_logger.debug("Inband telemetry data being sent is {}".format(body))
         try:
-            ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
-                                     method='post', client=None, timeout=5)
-            if not ret['success']:
+            ret = self._rest.request(
+                TelemetryClient.SF_PATH_TELEMETRY,
+                body=body,
+                method="post",
+                client=None,
+                timeout=5,
+            )
+            if not ret["success"]:
                 logger.info(
                     "Non-success response from telemetry server: %s. "
-                    "Disabling telemetry.", str(ret))
+                    "Disabling telemetry.",
+                    str(ret),
+                )
                 self._enabled = False
             else:
                 logger.debug("Successfully uploading metrics to telemetry.")

@@ -18,10 +18,15 @@ def main():
         print(
             "Extract certificate file. The target file can be a single file "
             "or a directory including multiple certificates. The certificate "
-            "file format should be PEM.")
-        print("""
+            "file format should be PEM."
+        )
+        print(
+            """
 Usage: {}  <input file/dir>
-""".format(path.basename(sys.argv[0])))
+""".format(
+                path.basename(sys.argv[0])
+            )
+        )
         sys.exit(2)
 
     if len(sys.argv) < 2:
@@ -29,8 +34,7 @@ Usage: {}  <input file/dir>
 
     input_filename = sys.argv[1]
     if path.isdir(input_filename):
-        files = [path.join(input_filename, f) for f in
-                 os.listdir(input_filename)]
+        files = [path.join(input_filename, f) for f in os.listdir(input_filename)]
     else:
         files = [input_filename]
 
@@ -45,10 +49,8 @@ def extract_certificate_file(input_filename):
     ocsp.read_cert_bundle(input_filename, cert_map)
 
     for cert in cert_map.values():
-        print("serial #: {}, name: {}".format(
-            cert.serial_number,
-            cert.subject.native))
+        print("serial #: {}, name: {}".format(cert.serial_number, cert.subject.native))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

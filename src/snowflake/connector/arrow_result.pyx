@@ -5,17 +5,23 @@
 # cython: profile=False
 # cython: language_level=3
 
-from base64 import b64decode
 import io
-from .telemetry import TelemetryField
-from .time_util import get_time_millis
-from .arrow_iterator import PyArrowIterator
-from .arrow_iterator import EmptyPyArrowIterator
-from .arrow_iterator import ROW_UNIT, TABLE_UNIT, EMPTY_UNIT
-from .arrow_context import ArrowConverterContext
-from .options import pandas, installed_pandas
+from base64 import b64decode
+from typing import TYPE_CHECKING, Dict
 
 from snowflake.connector.snow_logging import getSnowLogger
+
+from .arrow_context import ArrowConverterContext
+from .arrow_iterator import (
+    EMPTY_UNIT,
+    ROW_UNIT,
+    TABLE_UNIT,
+    EmptyPyArrowIterator,
+    PyArrowIterator,
+)
+from .options import installed_pandas, pandas
+from .telemetry import TelemetryField
+from .time_util import get_time_millis
 
 snow_logger = getSnowLogger(__name__)
 
@@ -23,6 +29,9 @@ if installed_pandas:
     from pyarrow import concat_tables
 else:
     snow_logger.info(path_name="arrow_result.pyx", msg="Failed to import optional packages, pyarrow")
+
+if TYPE_CHECKING:  # pragma: no cover
+        from snowflake.connector.cursor import SnowflakeCursor
 
 
 cdef class ArrowResult:
@@ -41,14 +50,22 @@ cdef class ArrowResult:
         str _iter_unit
         object _use_dict_result
         object _use_numpy
+        bint _number_to_decimal
 
-
-    def __init__(self, raw_response, cursor, use_dict_result=False, _chunk_downloader=None):
+    def __init__(
+            self,
+            raw_response: Dict,  # TODO could be more strongly defined
+            cursor: "SnowflakeCursor",
+            use_dict_result: bool = False,
+            _chunk_downloader = None,
+            number_to_decimal: bool = False,
+    ):
         self._reset()
         self._cursor = cursor
         self._connection = cursor.connection
         self._use_dict_result = use_dict_result
         self._use_numpy = self._connection._numpy
+        self._number_to_decimal = number_to_decimal
 
         self._column_idx_to_name = []
         for idx, column in enumerate(raw_response.get('rowtype')):
@@ -67,9 +84,13 @@ cdef class ArrowResult:
         if rowset_b64:
             arrow_bytes = b64decode(rowset_b64)
             self._arrow_context = ArrowConverterContext(self._connection._session_parameters)
-            self._current_chunk_row = PyArrowIterator(self._cursor, io.BytesIO(arrow_bytes),
-                                                      self._arrow_context, self._use_dict_result,
-                                                      self._use_numpy)
+            self._current_chunk_row = PyArrowIterator(
+                self._cursor,
+                io.BytesIO(arrow_bytes),
+                self._arrow_context,
+                self._use_dict_result,
+                self._use_numpy,
+            )
         else:
             snow_logger.debug(path_name="arrow_result.pyx", func_name="_chunk_info",
                               msg="Data from first gs response is empty")
@@ -106,7 +127,10 @@ cdef class ArrowResult:
     def __next__(self):
         if self._iter_unit == EMPTY_UNIT:
             self._iter_unit = ROW_UNIT
-            self._current_chunk_row.init(self._iter_unit)
+            self._current_chunk_row.init(
+                self._iter_unit,
+                self._number_to_decimal,
+            )
         elif self._iter_unit == TABLE_UNIT:
             snow_logger.debug(path_name="arrow_result.pyx", func_name="__next__",
                               msg='The iterator has been built for fetching arrow table')
@@ -124,7 +148,10 @@ cdef class ArrowResult:
                                       msg="chunk index:{}, chunk_count:{}".format(self._chunk_index, self._chunk_count))
                     next_chunk = self._chunk_downloader.next_chunk()
                     self._current_chunk_row = next_chunk.result_data
-                    self._current_chunk_row.init(self._iter_unit)
+                    self._current_chunk_row.init(
+                        self._iter_unit,
+                        self._number_to_decimal,
+                    )
                     self._chunk_index += 1
                     try:
                         row = self._current_chunk_row.__next__()
@@ -188,7 +215,10 @@ cdef class ArrowResult:
             raise RuntimeError
 
         try:
-            self._current_chunk_row.init(self._iter_unit)
+            self._current_chunk_row.init(
+                self._iter_unit,
+                self._number_to_decimal,
+            )
             snow_logger.debug(path_name="arrow_result.pyx", func_name="_fetch_arrow_batches",
                               msg='Init table iterator successfully, current chunk index: {},'
                                   'chunk count: {}'.format(self._chunk_index, self._chunk_count))
@@ -204,7 +234,10 @@ cdef class ArrowResult:
                                     msg="chunk index: {}, chunk_count: {}".format(self._chunk_index, self._chunk_count))
                     next_chunk = self._chunk_downloader.next_chunk()
                     self._current_chunk_row = next_chunk.result_data
-                    self._current_chunk_row.init(self._iter_unit)
+                    self._current_chunk_row.init(
+                        self._iter_unit,
+                        self._number_to_decimal,
+                    )
                 self._chunk_index += 1
 
                 if stop_iteration_except:
@@ -253,5 +286,4 @@ cdef class ArrowResult:
         if table:
             return table.to_pandas(**kwargs)
         else:
-
             return pandas.DataFrame(columns=self._column_idx_to_name)

@@ -34,7 +34,11 @@ class ArrowConverterContext(object):
     def __init__(self, session_parameters=None):
         if session_parameters is None:
             session_parameters = {}
-        self._timezone = None if PARAMETER_TIMEZONE not in session_parameters else session_parameters[PARAMETER_TIMEZONE]
+        self._timezone = (
+            None
+            if PARAMETER_TIMEZONE not in session_parameters
+            else session_parameters[PARAMETER_TIMEZONE]
+        )
 
     @property
     def timezone(self):
@@ -47,17 +51,17 @@ class ArrowConverterContext(object):
     def _get_session_tz(self):
         """Get the session timezone or use the local computer's timezone."""
         try:
-            tz = 'UTC' if not self.timezone else self.timezone
+            tz = "UTC" if not self.timezone else self.timezone
             return pytz.timezone(tz)
         except pytz.exceptions.UnknownTimeZoneError:
-            logger.warning('converting to tzinfo failed')
+            logger.warning("converting to tzinfo failed")
             if tzlocal is not None:
                 return tzlocal.get_localzone()
             else:
                 try:
                     return datetime.timezone.utc
                 except AttributeError:
-                    return pytz.timezone('UTC')
+                    return pytz.timezone("UTC")
 
     def TIMESTAMP_TZ_to_python(self, microseconds: float, tz: int):
         """Timestamp TZ to datetime.
@@ -107,12 +111,12 @@ class ArrowConverterContext(object):
         return numpy.float64(decimal.Decimal(py_long).scaleb(-scale))
 
     def DATE_to_numpy_datetime64(self, py_days):
-        return numpy.datetime64(py_days, 'D')
+        return numpy.datetime64(py_days, "D")
 
     def TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64(self, value, scale):
         nanoseconds = int(decimal.Decimal(value).scaleb(9 - scale))
-        return numpy.datetime64(nanoseconds, 'ns')
+        return numpy.datetime64(nanoseconds, "ns")
 
     def TIMESTAMP_NTZ_TWO_FIELD_to_numpy_datetime64(self, epoch, fraction):
         nanoseconds = int(decimal.Decimal(epoch).scaleb(9) + decimal.Decimal(fraction))
-        return numpy.datetime64(nanoseconds, 'ns')
+        return numpy.datetime64(nanoseconds, "ns")

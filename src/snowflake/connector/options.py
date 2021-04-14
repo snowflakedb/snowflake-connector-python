@@ -38,48 +38,70 @@ class MissingOptionalDependency(object):
 
 class MissingPandas(MissingOptionalDependency):
     """The class is specifically for pandas optional dependency."""
+
     _dep_name = "pandas"
 
 
 class MissingKeyring(MissingOptionalDependency):
     """The class is specifically for sso optional dependency."""
+
     _dep_name = "keyring"
 
 
 ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
-def warn_incompatible_dep(dep_name: str,
-                          installed_ver: str,
-                          expected_ver: 'pkg_resources.Requirement') -> None:
-    warnings.warn("You have an incompatible version of '{}' installed ({}), please install a version that "
-                  "adheres to: '{}'".format(dep_name, installed_ver, expected_ver),
-                  stacklevel=2)
+def warn_incompatible_dep(
+    dep_name: str, installed_ver: str, expected_ver: "pkg_resources.Requirement"
+) -> None:
+    warnings.warn(
+        "You have an incompatible version of '{}' installed ({}), please install a version that "
+        "adheres to: '{}'".format(dep_name, installed_ver, expected_ver),
+        stacklevel=2,
+    )
 
 
-def _import_or_missing_pandas_option() -> Tuple[ModuleLikeObject, ModuleLikeObject, bool]:
+def _import_or_missing_pandas_option() -> Tuple[
+    ModuleLikeObject, ModuleLikeObject, bool
+]:
     """This function tries importing the following packages: pandas, pyarrow.
 
     If available it returns pandas and pyarrow packages with a flag of whether they were imported.
     It also warns users if they have an unsupported pyarrow version installed if possible.
     """
     try:
-        pandas = importlib.import_module('pandas')  # NOQA
+        pandas = importlib.import_module("pandas")  # NOQA
         # since we enable relative imports without dots this import gives us an issues when ran from test directory
         from pandas import DataFrame  # NOQA
-        pyarrow = importlib.import_module('pyarrow')  # NOQA
+
+        pyarrow = importlib.import_module("pyarrow")  # NOQA
         # Check whether we have the currently supported pyarrow installed
         installed_packages = pkg_resources.working_set.by_key
-        if all(k in installed_packages for k in ("snowflake-connector-python", "pyarrow")):
-            _pandas_extras = installed_packages['snowflake-connector-python']._dep_map['pandas']  # NOQA
-            _expected_pyarrow_version = [dep for dep in _pandas_extras if dep.name == 'pyarrow'][0]
-            _installed_pyarrow_version = installed_packages['pyarrow']
-            if _installed_pyarrow_version and _installed_pyarrow_version.version not in _expected_pyarrow_version:
-                warn_incompatible_dep('pyarrow', _installed_pyarrow_version.version, _expected_pyarrow_version)
+        if all(
+            k in installed_packages for k in ("snowflake-connector-python", "pyarrow")
+        ):
+            _pandas_extras = installed_packages["snowflake-connector-python"]._dep_map[
+                "pandas"
+            ]  # NOQA
+            _expected_pyarrow_version = [
+                dep for dep in _pandas_extras if dep.name == "pyarrow"
+            ][0]
+            _installed_pyarrow_version = installed_packages["pyarrow"]
+            if (
+                _installed_pyarrow_version
+                and _installed_pyarrow_version.version not in _expected_pyarrow_version
+            ):
+                warn_incompatible_dep(
+                    "pyarrow",
+                    _installed_pyarrow_version.version,
+                    _expected_pyarrow_version,
+                )
 
         else:
-            logger.info("Cannot determine if compatible pyarrow is installed because of missing package(s) from "
-                        "{}".format(installed_packages.keys()))
+            logger.info(
+                "Cannot determine if compatible pyarrow is installed because of missing package(s) from "
+                "{}".format(installed_packages.keys())
+            )
         return pandas, pyarrow, True
     except ImportError:
         return MissingPandas(), MissingPandas(), False
@@ -91,7 +113,7 @@ def _import_or_missing_keyring_option() -> Tuple[ModuleLikeObject, bool]:
     If available it returns keyring package with a flag of whether it was imported.
     """
     try:
-        keyring = importlib.import_module('keyring')  # NOQA
+        keyring = importlib.import_module("keyring")  # NOQA
         return keyring, True
     except ImportError:
         return MissingKeyring(), False
