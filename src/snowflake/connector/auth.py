@@ -15,7 +15,7 @@ from datetime import datetime
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
@@ -676,8 +676,8 @@ def build_temporary_credential_name(host, user, cred_type):
 
 
 def get_token_from_private_key(
-    user: str, account: str, privatekey_path: str, key_password
-):
+    user: str, account: str, privatekey_path: str, key_password: Optional[str]
+) -> str:
     encoded_password = key_password.encode() if key_password is not None else None
     with open(privatekey_path, "rb") as key:
         p_key = load_pem_private_key(
@@ -689,6 +689,7 @@ def get_token_from_private_key(
         format=PrivateFormat.PKCS8,
         encryption_algorithm=NoEncryption(),
     )
+    # Create new AuthByKeyPair object and set its token validity to be 24 hours (1440 min * 60)
     auth_instance = AuthByKeyPair(private_key, 1440 * 60)
     return auth_instance.authenticate(
         KEY_PAIR_AUTHENTICATOR, None, account, user, key_password

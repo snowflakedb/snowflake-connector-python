@@ -40,6 +40,7 @@ class AuthByKeyPair(AuthByPlugin):
 
         Args:
             private_key: a byte array of der formats of private key
+            lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         self._private_key = private_key
         self._jwt_token = ""
