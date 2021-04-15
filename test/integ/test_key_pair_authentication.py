@@ -5,13 +5,84 @@
 #
 
 import uuid
+from datetime import datetime, timedelta
+from os import path
 
+import jwt
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives._serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
 from cryptography.hazmat.primitives.asymmetric import dsa, rsa
+from cryptography.hazmat.primitives.serialization import (
+    load_der_private_key,
+    load_pem_private_key,
+)
 
 import snowflake.connector
+from snowflake.connector.auth import get_token_from_private_key
+from snowflake.connector.auth_keypair import AuthByKeyPair
+
+
+@pytest.mark.skipolddriver
+def test_get_token_from_private_key():
+    test_user = "python_test_keypair_user_" + str(uuid.uuid4()).replace("-", "_")
+    current_dir = path.dirname(path.realpath(__file__))
+    private_key_file_path = path.join(
+        current_dir, "../data/rsa_keys", "rsa_key_encrypted.p8"
+    )
+    private_key_password = "test"
+    public_key_fingerprint = get_public_key_fingerprint(
+        private_key_file_path, private_key_password
+    )
+    # Create a dict containing input accounts and their corrected account fields used to generate the correct token
+    accounts = {
+        "s3testaccount.global": "S3TESTACCOUNT.GLOBAL",
+        "acct-with-dashes": "ACCT_WITH_DASHES",
+        "testaccount.extra": "TESTACCOUNT",
+    }
+    for a in accounts:
+        # generate the jwt token
+        jwt_token = get_token_from_private_key(
+            test_user, a, private_key_file_path, private_key_password
+        )
+        # decode the token to get its fields (iss, sub, issue time, expiration time)
+        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
+        # Assert "sub" field matches {corrected account}.{user}
+        assert accounts[a] + "." + test_user.upper() == decoded_token.get("sub")
+        # Assert "iss" field matches {corrected account}.{user}.{public key fingerprint}
+        assert (
+            accounts[a] + "." + test_user.upper() + "." + public_key_fingerprint.upper()
+            == decoded_token.get("iss").upper()
+        )
+        # Token should be valid for 24 hours. Assert that the token's expiration time is between 23 and 24 hours from now.
+        assert datetime.utcnow() + timedelta(minutes=1360) < datetime.fromtimestamp(
+            decoded_token.get("exp")
+        )
+        assert datetime.utcnow() + timedelta(minutes=1441) > datetime.fromtimestamp(
+            decoded_token.get("exp")
+        )
+
+
+# Helper function to generate the public key fingerprint from the private key file
+def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
+    with open(private_key_file, "rb") as key:
+        p_key = load_pem_private_key(
+            key.read(), password=password.encode(), backend=default_backend()
+        )
+    private_key = p_key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+    private_key = load_der_private_key(
+        data=private_key, password=None, backend=default_backend()
+    )
+    return AuthByKeyPair.calculate_public_key_fingerprint(private_key)
 
 
 @pytest.mark.skipolddriver

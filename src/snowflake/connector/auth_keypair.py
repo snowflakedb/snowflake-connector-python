@@ -34,8 +34,9 @@ class AuthByKeyPair(AuthByPlugin):
     SUBJECT = "sub"
     EXPIRE_TIME = "exp"
     ISSUE_TIME = "iat"
+    LIFETIME = 120
 
-    def __init__(self, private_key, lifetime_in_seconds: int = 120):
+    def __init__(self, private_key, lifetime_in_seconds: int = LIFETIME):
         """Inits AuthByKeyPair class with private key.
 
         Args:
@@ -48,7 +49,15 @@ class AuthByKeyPair(AuthByPlugin):
         self._lifetime = timedelta(seconds=lifetime_in_seconds)
 
     def authenticate(self, authenticator, service_name, account, user, password) -> str:
-        account = account.upper()
+        if ".global" not in account:
+            idx = account.find(".")
+            if idx > 0:
+                account = account[0:idx]
+        else:
+            idx = account.find("-")
+            if idx > 0:
+                account = account[0:idx]
+        account = account.upper().replace("-", "_")
         user = user.upper()
 
         now = datetime.utcnow()

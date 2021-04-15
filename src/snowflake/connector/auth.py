@@ -689,8 +689,7 @@ def get_token_from_private_key(
         format=PrivateFormat.PKCS8,
         encryption_algorithm=NoEncryption(),
     )
-    # Create new AuthByKeyPair object and set its token validity to be 24 hours (1440 min * 60)
-    auth_instance = AuthByKeyPair(private_key, 1440 * 60)
+    auth_instance = AuthByKeyPair(private_key, 1440 * 60)  # token valid for 24 hours
     return auth_instance.authenticate(
         KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
     )
