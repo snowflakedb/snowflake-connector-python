@@ -15,7 +15,7 @@ cd $THIS_DIR/docker/connector_build
 CONTAINER_NAME=build_pyconnector
 
 echo "[Info] Building docker image"
-docker build -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX1 -f Dockerfile .
+docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2010 -f Dockerfile .
 
 echo "[Info] Building Python Connector"
 user_id=$(id -u ${USER})

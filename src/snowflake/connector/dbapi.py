@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 """This module implements some constructors and singletons as required by the DB API v2.0 (PEP-249)."""
@@ -10,7 +10,12 @@ import datetime
 import json
 import time
 
-from .constants import get_binary_types, get_number_types, get_string_types, get_timestamp_types
+from .constants import (
+    get_binary_types,
+    get_number_types,
+    get_string_types,
+    get_timestamp_types,
+)
 from .mixin import UnicodeMixin
 
 

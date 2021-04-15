@@ -9,6 +9,55 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+
+- v2.4.2(April 03,2021)
+
+   - PUT statements are now thread-safe.
+
+
+- v2.4.1(March 04,2021)
+
+   - Make connection object exit() aware of status of parameter `autocommit`
+
+
+- v2.4.0(March 04,2021)
+
+   - Added support for Python 3.9 and PyArrow 3.0.x.
+   - Added support for the upcoming multipart PUT threshold keyword.
+   - Added support for using the PUT command with a file-like object.
+   - Added some compilation flags to ease building conda community package.
+   - Removed the pytz pin because it doesn't follow semantic versioning release format.
+   - Added support for optimizing batch inserts through bulk array binding.
+
+
+- v2.3.10(February 01,2021)
+
+   - Improved query ID logging and added request GUID logging.
+   - For dependency checking, increased the version condition for the pyjwt package from <2.0.0 to <3.0.0.
+
+
+- v2.3.9(January 27,2021)
+
+   - The fix to add proper proxy CONNECT headers for connections made over proxies.
+
+
+- v2.3.8(January 14,2021)
+
+   - Arrow result conversion speed up.
+   - Send all Python Connector exceptions to in-band or out-of-band telemetry.
+   - Vendoring requests and urllib3 to contain OCSP monkey patching to our library only.
+   - Declare dependency on setuptools.
+
+
+- v2.3.7(December 10,2020)
+
+   - Added support for upcoming downscoped GCS credentials.
+   - Tightened the pyOpenSSL dependency pin.
+   - Relaxed the boto3 dependency pin up to the next major release.
+   - Relaxed the cffi dependency pin up to the next major release.
+   - Added support for executing asynchronous queries.
+   - Dropped support for Python 3.5.
+
 - v2.3.6(November 16,2020)
 
    - Fixed a bug that was preventing the connector from working on Windows with Python 3.8.

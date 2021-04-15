@@ -1,9 +1,9 @@
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 from typing import Callable, Generic, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class LazyVar(Generic[T]):

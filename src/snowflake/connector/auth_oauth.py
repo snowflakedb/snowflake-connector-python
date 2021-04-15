@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 from .auth_by_plugin import AuthByPlugin
@@ -32,5 +32,5 @@ class AuthByOAuth(AuthByPlugin):
 
         OAuth needs the authenticator and token attributes set, as well as loginname, which is set already in auth.py.
         """
-        body['data']['AUTHENTICATOR'] = OAUTH_AUTHENTICATOR
-        body['data']['TOKEN'] = self._oauth_token
+        body["data"]["AUTHENTICATOR"] = OAUTH_AUTHENTICATOR
+        body["data"]["TOKEN"] = self._oauth_token

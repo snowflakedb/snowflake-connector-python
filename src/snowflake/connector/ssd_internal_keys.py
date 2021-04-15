@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 from binascii import unhexlify
@@ -26,8 +26,8 @@ def ret_int_pub_key_ver(issuer):
 
 
 def ret_wildcard_hkey():
-    issuer_name_hash = unhexlify('040130')
-    issuer_key_hash = unhexlify('040130')
-    serial_number = unhexlify('020100')
+    issuer_name_hash = unhexlify("040130")
+    issuer_key_hash = unhexlify("040130")
+    serial_number = unhexlify("020100")
     hkey = (issuer_name_hash, issuer_key_hash, serial_number)
     return hkey
