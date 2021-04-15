@@ -13,6 +13,9 @@ Snowflake Connector for Python
 .. image:: http://img.shields.io/:license-Apache%202-brightgreen.svg
     :target: http://www.apache.org/licenses/LICENSE-2.0.txt
 
+.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
+    :target: https://github.com/psf/black
+
 This package includes the Snowflake Connector for Python, which conforms to the Python DB API 2.0 specification:
 https://www.python.org/dev/peps/pep-0249/
 

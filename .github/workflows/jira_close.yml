@@ -8,6 +8,8 @@ jobs:
   close-issue:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Jira login
         uses: atlassian/gajira-login@master
         env:
@@ -22,8 +24,7 @@ jobs:
           jira=$(echo -n $TITLE | awk '{print $1}' | sed -e 's/://')
           echo ::set-output name=jira::$jira
       - name: Close issue
-        uses: atlassian/gajira-transition@master
+        uses: ./.github/actions/gajira-close
         if: startsWith(steps.extract.outputs.jira, 'SNOW-')
         with:
           issue: "${{ steps.extract.outputs.jira }}"
-          transitionId: 71

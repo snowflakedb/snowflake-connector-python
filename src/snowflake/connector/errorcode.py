@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
-#
 
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+#
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+#
 
 """This module contains Snowflake error codes."""
 
@@ -43,6 +42,7 @@ ER_UNSUPPORTED_METHOD = 252008
 ER_NO_DATA_FOUND = 252009
 ER_CHUNK_DOWNLOAD_FAILED = 252010
 ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE = 252011
+ER_FAILED_PROCESSING_QMARK = 252012
 
 # sfdatetime
 

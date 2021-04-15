@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2020 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 import random
@@ -32,7 +32,7 @@ class HeartBeatTimer(Timer):
                 try:
                     self.function()
                 except Exception as e:
-                    logger.debug('failed to heartbeat: %s', e)
+                    logger.debug("failed to heartbeat: %s", e)
 
 
 def get_time_millis():
