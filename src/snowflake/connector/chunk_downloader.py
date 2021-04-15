@@ -6,6 +6,7 @@
 
 import json
 import time
+from abc import ABC
 from collections import namedtuple
 from concurrent.futures.thread import ThreadPoolExecutor
 from gzip import GzipFile
@@ -271,7 +272,7 @@ class ResultIterWithTimings:
         return self._timings
 
 
-class RawBinaryDataHandler:
+class RawBinaryDataHandler(ABC):
     """Abstract class being passed to network.py to handle raw binary data."""
 
     def to_iterator(self, raw_data_fd, download_time):

@@ -12,7 +12,10 @@ import time
 import uuid
 from logging import getLogger
 from threading import Lock, Timer
-from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Type, Union
+from typing import IO, TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
+
+from snowflake.connector.result_chunk import create_chunks_from_response
+from snowflake.connector.result_set import ResultSet
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
@@ -39,7 +42,6 @@ from .errors import (
     ProgrammingError,
 )
 from .file_transfer_agent import SnowflakeFileTransferAgent
-from .json_result import DictJsonResult, JsonResult
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
@@ -57,7 +59,7 @@ except ImportError:
     pyarrow = None
 
 try:
-    from .arrow_result import ArrowResult
+    from .arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
 
     CAN_USE_ARROW_RESULT = True
 except ImportError as e:  # pragma: no cover
@@ -145,15 +147,12 @@ class SnowflakeCursor(object):
         self,
         connection: "SnowflakeConnection",
         use_dict_result: bool = False,
-        json_result_class: Type["JsonResult"] = JsonResult,
     ):
         """Inits a SnowflakeCursor with a connection.
 
         Args:
             connection: The connection that created this cursor.
-            use_dict_result: Decides whether to use dict result or not. This variable only applied to
-                arrow result. When result in json, json_result_class will be honored.
-            json_result_class: The class that used in json result.
+            use_dict_result: Decides whether to use dict result or not.
         """
         self._connection = connection
 
@@ -177,9 +176,9 @@ class SnowflakeCursor(object):
         self._time_output_format = None
         self._timezone = None
         self._binary_output_format = None
-        self._result = None
+        self._result: Optional[Iterator[Tuple]] = None
+        self._result_set: Optional["ResultSet"] = None
         self._use_dict_result = use_dict_result
-        self._json_result_class = json_result_class
 
         self._arraysize = 1  # PEP-0249: defaults to 1
 
@@ -188,8 +187,9 @@ class SnowflakeCursor(object):
         self._first_chunk_time = None
 
         self._log_max_query_length = connection.log_max_query_length
-        self._inner_cursor = None
+        self._inner_cursor: Optional["SnowflakeCursor"] = None
         self._prefetch_hook = None
+        self.rownumber: Optional[int] = None
 
         self.reset()
 
@@ -207,12 +207,6 @@ class SnowflakeCursor(object):
     @property
     def rowcount(self):
         return self._total_rowcount if self._total_rowcount >= 0 else None
-
-    @property
-    def rownumber(self):
-        return (
-            self._result.total_row_index if self._result.total_row_index >= 0 else None
-        )
 
     @property
     def sfqid(self):
@@ -737,16 +731,17 @@ class SnowflakeCursor(object):
                 )
             )
 
-        if self._query_result_format == "arrow":
-            self.check_can_use_arrow_resultset()
-            self._result = ArrowResult(
-                data,
-                self,
-                use_dict_result=self._use_dict_result,
-                number_to_decimal=self._connection.arrow_number_to_decimal,
-            )
-        else:
-            self._result = self._json_result_class(data, self)
+        result_chunks = create_chunks_from_response(
+            self,
+            self._query_result_format,
+            data,
+        )
+
+        self._result_set = ResultSet(
+            self,
+            result_chunks,
+        )
+        self.rownumber = 0
 
         if is_dml:
             updated_rows = 0
@@ -848,7 +843,7 @@ class SnowflakeCursor(object):
         self.check_can_use_pandas()
         if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
             raise NotSupportedError
-        for df in self._result._fetch_pandas_batches(**kwargs):
+        for df in self._result_set._fetch_pandas_batches(**kwargs):
             yield df
 
     def fetch_pandas_all(self, **kwargs):
@@ -856,7 +851,7 @@ class SnowflakeCursor(object):
         self.check_can_use_pandas()
         if self._query_result_format != "arrow":
             raise NotSupportedError
-        return self._result._fetch_pandas_all(**kwargs)
+        return self._result_set._fetch_pandas_all(**kwargs)
 
     def abort_query(self, qid):
         url = "/queries/{qid}/abort-request".format(qid=qid)
@@ -953,8 +948,18 @@ class SnowflakeCursor(object):
         """Fetches one row."""
         if self._prefetch_hook is not None:
             self._prefetch_hook()
+        if self._result is None and self._result_set is not None:
+            self._result = iter(self._result_set)
         try:
-            return next(self._result)
+            _next = next(self._result)
+            if isinstance(_next, Exception):
+                Error.errorhandler_wrapper_from_ready_exception(
+                    self._connection,
+                    self,
+                    _next,
+                )
+            self.rownumber += 1
+            return _next
         except StopIteration:
             return None
 
@@ -1024,7 +1029,7 @@ class SnowflakeCursor(object):
         """Resets the result set."""
         self._total_rowcount = -1  # reset the rowcount
         if self._result is not None:
-            self._result._reset()
+            self._result = None
         if self._inner_cursor is not None:
             self._inner_cursor.reset()
             self._result = None
@@ -1033,6 +1038,8 @@ class SnowflakeCursor(object):
 
     def __iter__(self):
         """Iteration over the result set."""
+        if self._result is None and self._result_set is not None:
+            self._result = iter(self._result_set)
         return iter(self._result)
 
     def __cancel_query(self, query):
@@ -1095,6 +1102,8 @@ class SnowflakeCursor(object):
                 "select * from table(result_scan('{}'))".format(sfqid)
             )
             self._result = self._inner_cursor._result
+            self._result_set = self._inner_cursor._result_set
+            self.rownumber = 0
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
@@ -1106,11 +1115,19 @@ class SnowflakeCursor(object):
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
+    # TODO: final name? get_paritions? get_batches? get_chunks?
+    def get_result_partitions(self) -> Optional[List["ResultChunk"]]:
+        if self._result_set is None:
+            return None
+        self._log_telemetry_job_data(TelemetryField.GET_PARTITIONS_USED, 1)
+        return self._result_set.partitions
+
 
 class DictCursor(SnowflakeCursor):
     """Cursor returning results in a dictionary."""
 
     def __init__(self, connection):
-        SnowflakeCursor.__init__(
-            self, connection, use_dict_result=True, json_result_class=DictJsonResult
+        super().__init__(
+            connection,
+            use_dict_result=True,
         )

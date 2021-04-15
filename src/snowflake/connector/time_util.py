@@ -52,7 +52,7 @@ class DecorrelateJitterBackoff(object):
         return min(self._cap, random.randint(self._base, sleep * 3))
 
 
-class TimeCNM:
+class TimerContextManager:
     """Context manager class to easily measure execution of a code block.
 
     Once the context manager finishes, the class should be cast into an int to retrieve
@@ -60,23 +60,26 @@ class TimeCNM:
 
     Example:
 
-        with TimeCNM() as measured_time:
+        with TimerContextManager() as measured_time:
             pass
-        download_metric = int(measured_time)
+        download_metric = measured_time.get_timing_millis()
     """
 
     def __init__(self):
         self._start: Optional[int] = None
         self._end: Optional[int] = None
 
-    def __enter__(self) -> "TimeCNM":
+    def __enter__(self) -> "TimerContextManager":
         self._start = get_time_millis()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self._end = get_time_millis()
 
-    def __int__(self) -> int:
+    def get_timing_millis(self) -> int:
+        """Get measured timing in milliseconds."""
         if self._start is None or self._end is None:
-            raise Exception("Trying to get timing before TimeCNM has finished")
+            raise Exception(
+                "Trying to get timing before TimerContextManager has finished"
+            )
         return self._end - self._start

@@ -693,9 +693,10 @@ def test_num_batch(conn_cnx):
     row_count = 1000000
     col_count = 2
     random_seed = get_random_seed()
-    sql_exec = "select seq4() as c1, uniform(1, 10, random({})) as c2 from ".format(
-        random_seed
-    ) + "table(generator(rowcount=>{})) order by c1, c2".format(row_count)
+    sql_exec = (
+        f"select seq4() as c1, uniform(1, 10, random({random_seed})) as c2 from "
+        f"table(generator(rowcount=>{row_count})) order by c1, c2"
+    )
     fetch_pandas(conn_cnx, sql_exec, row_count, col_count, "batch")
 
 
@@ -817,11 +818,9 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
                     col_old = df_old.iloc[i]
                     col_new = df_new.iloc[i]
                     for j, (c_old, c_new) in enumerate(zip(col_old, col_new)):
-                        assert (
-                            c_old == c_new
-                        ), "{} row, {} column: old value is {}, new value is {}, \
-                                              values are not equal".format(
-                            i, j, c_old, c_new
+                        assert c_old == c_new, (
+                            f"{i} row, {j} column: old value is {c_old}, new value "
+                            f"is {c_new} values are not equal"
                         )
             else:
                 assert (
@@ -946,3 +945,21 @@ def test_number_fetchbatches_retrieve_type(conn_cnx, use_decimal: bool, expected
                 assert isinstance(a_column.values[0], expected), type(
                     a_column.values[0]
                 )
+
+
+@pytest.mark.parametrize(
+    "use_decimal,expected",
+    [
+        (
+            True,
+            decimal.Decimal,
+        ),
+        pytest.param(False, numpy.float64, marks=pytest.mark.xfail),
+    ],
+)
+def test_number_iter_retrieve_type(conn_cnx, use_decimal: bool, expected: type):
+    with conn_cnx(arrow_number_to_decimal=use_decimal) as con:
+        with con.cursor() as cur:
+            cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
+            for row in cur:
+                assert isinstance(row[0], expected), type(row[0])

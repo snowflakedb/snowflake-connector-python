@@ -901,18 +901,16 @@ def test_close_twice(conn_testaccount):
     conn_testaccount.close()
 
 
-def test_fetch_out_of_range_timestamp_value(conn):
-    for result_format in ["arrow", "json"]:
-        with conn() as cnx:
-            cur = cnx.cursor()
-            cur.execute(
-                "alter session set python_connector_query_result_format='{}'".format(
-                    result_format
-                )
-            )
-            cur.execute("select '12345-01-02'::timestamp_ntz")
-            with pytest.raises(errors.InterfaceError):
-                cur.fetchone()
+@pytest.mark.parametrize("result_format", ("arrow", "json"))
+def test_fetch_out_of_range_timestamp_value(conn, result_format):
+    with conn() as cnx:
+        cur = cnx.cursor()
+        cur.execute(
+            f"alter session set python_connector_query_result_format='{result_format}'"
+        )
+        cur.execute("select '12345-01-02'::timestamp_ntz")
+        with pytest.raises(errors.InterfaceError):
+            cur.fetchone()
 
 
 def test_empty_execution(conn):
@@ -925,14 +923,16 @@ def test_empty_execution(conn):
                 cur.fetchall()
 
 
+# There was a bug about rownumber in older versions
+@pytest.mark.skipolddriver
 def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
             assert cur.execute("select * from values (1), (2)").fetchone() == (1,)
-            assert cur.rownumber == 0
-            assert cur.fetchone() == (2,)
             assert cur.rownumber == 1
+            assert cur.fetchone() == (2,)
+            assert cur.rownumber == 2
 
 
 def test_values_set(conn):

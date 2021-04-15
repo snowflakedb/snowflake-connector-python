@@ -20,9 +20,7 @@ def test_rand_table_log(caplog, conn_cnx, db_parameters):
             ).fetchall()
 
         # make assertions
-        has_batch_read = (
-            has_batch_size
-        ) = has_chunk_info = has_batch_index = has_done = False
+        has_batch_read = has_batch_size = has_chunk_info = has_batch_index = False
         for record in caplog.records:
             if "Batches read:" in record.msg:
                 has_batch_read = True
@@ -44,15 +42,5 @@ def test_rand_table_log(caplog, conn_cnx, db_parameters):
                 assert "CArrowChunkIterator.cpp" in record.filename
                 assert "next" in record.funcName
 
-            if "fetching data done" in record.msg:
-                has_done = True
-                assert "arrow_result" in record.filename  # using arrow result
-
         # each of these records appear at least once in records
-        assert (
-            has_batch_read
-            and has_batch_size
-            and has_chunk_info
-            and has_batch_index
-            and has_done
-        )
+        assert has_batch_read and has_batch_size and has_chunk_info and has_batch_index
