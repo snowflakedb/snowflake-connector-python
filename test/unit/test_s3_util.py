@@ -19,9 +19,9 @@ from boto3.exceptions import Boto3Error, RetriesExceededError, S3UploadFailedErr
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
-from snowflake.connector.remote_storage_util import (
+from snowflake.connector.remote_storage_client import (
     DEFAULT_MAX_RETRY,
-    SnowflakeRemoteStorageUtil,
+    SnowflakeRemoteStorageClient,
 )
 from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED, SnowflakeS3Util
 
@@ -46,25 +46,25 @@ def test_extract_bucket_name_and_path():
     """Extracts bucket name and S3 path."""
     s3_util = SnowflakeS3Util
 
-    s3_loc = s3_util.extract_bucket_name_and_path("sfc-dev1-regression/test_sub_dir/")
+    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression/test_sub_dir/")
     assert s3_loc.bucket_name == "sfc-dev1-regression"
     assert s3_loc.s3path == "test_sub_dir/"
 
-    s3_loc = s3_util.extract_bucket_name_and_path(
+    s3_loc = s3_util._extract_bucket_name_and_path(
         "sfc-dev1-regression/stakeda/test_stg/test_sub_dir/"
     )
     assert s3_loc.bucket_name == "sfc-dev1-regression"
     assert s3_loc.s3path == "stakeda/test_stg/test_sub_dir/"
 
-    s3_loc = s3_util.extract_bucket_name_and_path("sfc-dev1-regression/")
+    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression/")
     assert s3_loc.bucket_name == "sfc-dev1-regression"
     assert s3_loc.s3path == ""
 
-    s3_loc = s3_util.extract_bucket_name_and_path("sfc-dev1-regression//")
+    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression//")
     assert s3_loc.bucket_name == "sfc-dev1-regression"
     assert s3_loc.s3path == "/"
 
-    s3_loc = s3_util.extract_bucket_name_and_path("sfc-dev1-regression///")
+    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression///")
     assert s3_loc.bucket_name == "sfc-dev1-regression"
     assert s3_loc.s3path == "//"
 
@@ -109,7 +109,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     upload_meta["upload_size"] = os.stat(upload_meta["src_file_name"]).st_size
     meta = SnowflakeFileMeta(**upload_meta)
     with pytest.raises(OpenSSL.SSL.SysCallError):
-        SnowflakeRemoteStorageUtil.upload_one_file(meta)
+        SnowflakeRemoteStorageClient.upload_file(meta)
     assert upload_file.call_count == DEFAULT_MAX_RETRY
     assert meta.last_max_concurrency is not None
     assert meta.last_max_concurrency == initial_parallel / DEFAULT_MAX_RETRY
@@ -119,7 +119,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     initial_parallel = 4
     meta.parallel = initial_parallel
     with pytest.raises(OpenSSL.SSL.SysCallError):
-        SnowflakeRemoteStorageUtil.upload_one_file(meta)
+        SnowflakeRemoteStorageClient.upload_file(meta)
     assert upload_file.call_count == DEFAULT_MAX_RETRY
     assert meta.last_max_concurrency is not None
     assert meta.last_max_concurrency == 1
@@ -165,7 +165,7 @@ def test_upload_one_file_to_s3_econnreset():
         upload_meta["upload_size"] = os.stat(upload_meta["src_file_name"]).st_size
         meta = SnowflakeFileMeta(**upload_meta)
         with pytest.raises(OpenSSL.SSL.SysCallError):
-            SnowflakeRemoteStorageUtil.upload_one_file(meta)
+            SnowflakeRemoteStorageClient.upload_file(meta)
         assert upload_file.call_count == DEFAULT_MAX_RETRY
         assert "last_max_concurrency" not in upload_meta
 
@@ -243,7 +243,7 @@ def test_upload_file_with_s3_upload_failed_error():
     upload_meta["upload_size"] = os.stat(upload_meta["src_file_name"]).st_size
     meta = SnowflakeFileMeta(**upload_meta)
 
-    akey = SnowflakeRemoteStorageUtil.upload_one_file(meta)
+    akey = SnowflakeRemoteStorageClient.upload_file(meta)
     assert akey is None
     assert meta.result_status == ResultStatus.RENEW_TOKEN
 

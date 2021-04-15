@@ -470,7 +470,7 @@ class BindUploadError(Error):
     pass
 
 
-class S3RestCallFailedError(Error):
-    """Exception for unexpected S3 Rest calls failure."""
+class S3AbortConnectionError(Error):
+    """Exception for s3 aborting concurrent connections."""
 
     pass

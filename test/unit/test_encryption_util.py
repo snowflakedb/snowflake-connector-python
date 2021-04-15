@@ -11,7 +11,7 @@ from os import path
 
 from snowflake.connector.constants import UTF8
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
+from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
 
 from ..generate_test_files import generate_k_lines_of_n_files
 

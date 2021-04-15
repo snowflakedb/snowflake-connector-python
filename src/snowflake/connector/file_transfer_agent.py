@@ -8,18 +8,16 @@ import binascii
 import glob
 import mimetypes
 import os
-import shutil
 import sys
-import tempfile
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
-from queue import Queue
 from time import sleep, time
 from typing import IO, TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
 from boto3.session import Session
 
+from .azure_util import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS, dataclass, field
 from .constants import ResultStatus
 from .converter_snowsql import SnowflakeConverterSnowSQL
@@ -41,13 +39,11 @@ from .errors import (
     ProgrammingError,
 )
 from .file_compression_type import CompressionTypes, lookup_by_mime_sub_type
-from .file_util import SnowflakeFileUtil
 from .gcs_util import SnowflakeGCSRestClient
-from .local_util import SnowflakeLocalUtil
-from .remote_storage_util import (
-    SnowflakeFileEncryptionMaterial,
-    SnowflakeRemoteStorageUtil,
-)
+from .local_storage_client import SnowflakeLocalStorageClient
+from .remote_storage_client import SnowflakeRemoteStorageClient
+from .s3_util import SnowflakeS3RestClient
+from .storage_client import SnowflakeFileEncryptionMaterial
 
 if TYPE_CHECKING:  # pragma: no cover
     from azure.storage.blob import BlobServiceClient
@@ -63,6 +59,8 @@ LOCAL_FS = "LOCAL_FS"
 CMD_TYPE_UPLOAD = "UPLOAD"
 CMD_TYPE_DOWNLOAD = "DOWNLOAD"
 FILE_PROTOCOL = "file://"
+
+VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
 
 MB = 1024.0 * 1024.0
 
@@ -96,7 +94,7 @@ def result_fixed_column_desc(name):
 @dataclass
 class SFResourceMeta:
     storage_util: Optional[
-        Type[Union["SnowflakeRemoteStorageUtil", "SnowflakeLocalUtil"]]
+        Type[Union["SnowflakeRemoteStorageClient", "SnowflakeLocalStorageClient"]]
     ] = None
     stage_info: Optional[Dict[str, Any]] = field(
         default_factory=dict
@@ -294,7 +292,26 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
                     )
 
 
-class SnowflakeFileTransferAgent(object):
+class StorageCredentials:
+    def __init__(self, credentials: Dict[str, Any], connection, command: str, logger):
+        self.creds = credentials
+        self.timestamp = time()
+        self.lock = threading.Lock()
+        self.connection = connection
+        self.command = command
+        self.logger = logger
+
+    def update(self, cur_timestamp):
+        with self.lock:
+            if cur_timestamp < self.timestamp:
+                return
+            self.logger.debug("Renewing expired storage token.")
+            ret = self.connection.execute(self.command)
+            self.creds = ret["data"]["stageInfo"]["creds"]
+            self.timestamp = time.time()
+
+
+class SnowflakeFileTransferAgent:
     """Snowflake File Transfer Agent provides cloud provider independent implementation for putting/getting files."""
 
     def __init__(
@@ -337,6 +354,7 @@ class SnowflakeFileTransferAgent(object):
         self._file_metadata: List["SnowflakeFileMeta"] = []
         self._results: List["SnowflakeFileMeta"] = []
         self._multipart_threshold = multipart_threshold or 67108864  # Historical value
+        self.credentials = None
 
     def execute(self):
         self._parse_command()
@@ -346,7 +364,7 @@ class SnowflakeFileTransferAgent(object):
         if self._command_type == CMD_TYPE_UPLOAD:
             self._process_file_compression_type()
 
-        self._transfer_accelerate_config()
+        # self._transfer_accelerate_config()
 
         if self._command_type == CMD_TYPE_DOWNLOAD:
             if not os.path.isdir(self._local_location):
@@ -356,7 +374,8 @@ class SnowflakeFileTransferAgent(object):
             if not os.path.isdir(self._stage_info["location"]):
                 os.makedirs(self._stage_info["location"])
 
-        self._update_file_metas_with_presigned_url()
+        # TODO
+        # self._update_file_metas_with_presigned_url()
 
         small_file_metas = []
         large_file_metas = []
@@ -400,11 +419,8 @@ class SnowflakeFileTransferAgent(object):
         large_file_metas: List["SnowflakeFileMeta"],
         small_file_metas: List["SnowflakeFileMeta"],
     ):
-        storage_util = SnowflakeFileTransferAgent.get_storage_client(
-            self._stage_location_type
-        )
         client_meta = SFResourceMeta(
-            storage_util, self._stage_info, self._use_accelerate_endpoint
+            None, self._stage_info, self._use_accelerate_endpoint
         )
 
         for meta in small_file_metas:
@@ -417,9 +433,27 @@ class SnowflakeFileTransferAgent(object):
         if len(large_file_metas) > 0:
             self._upload_files_in_sequential(large_file_metas)
 
+    def _create_storage_client(
+        self, stage_info: Dict[str, Any], use_accelerate_endpoint: bool = False
+    ) -> SnowflakeRemoteStorageClient:
+        if self._stage_location_type == LOCAL_FS:
+            return SnowflakeLocalStorageClient()
+        elif self._stage_location_type == AZURE_FS:
+            return SnowflakeAzureRestClient(
+                self._chunk_pool, self.credentials, stage_info
+            )
+        elif self._stage_location_type == S3_FS:
+            return SnowflakeS3RestClient(
+                self._chunk_pool, self.credentials, stage_info, use_accelerate_endpoint
+            )
+        elif self._stage_location_type == GCS_FS:
+            return SnowflakeGCSRestClient(
+                self._chunk_pool, self.credentials, stage_info
+            )
+
     def _transfer_accelerate_config(self):
         if self._stage_location_type == S3_FS:
-            client = SnowflakeRemoteStorageUtil.create_client(
+            client = self._create_storage_client(
                 self._stage_info, use_accelerate_endpoint=False
             )
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
@@ -430,85 +464,14 @@ class SnowflakeFileTransferAgent(object):
         Args:
             file_metas: List of metadata for files to be uploaded.
         """
-        qtask = Queue()
-        for meta in file_metas:
-            qtask.put(meta)
-        retry_round = 0
-        presigned_url_handled = False
-        while not qtask.empty():
-            len_file_metas = qtask.qsize()
-            thread_number = min(len_file_metas, self._parallel)
-            logger.debug(
-                f"start {retry_round} round for {qtask.qsize()} items with {thread_number} threads"
+        # TODO hangs when one thread
+        def _helper(meta: "SnowflakeFileMeta"):
+            client = self._create_storage_client(
+                self._stage_info, use_accelerate_endpoint=False
             )
-            pool = ThreadPoolExecutor(thread_number)
-            triggers = Queue()
-            for _ in range(thread_number):
-                pool.submit(
-                    SnowflakeFileTransferAgent._upload_files_in_queue_thread,
-                    qtask,
-                    self._results,
-                    triggers,
-                )
-            pool.shutdown()
+            return client.upload_file(meta)
 
-            # update presigned url before starting next round
-            while not triggers.empty():
-                result_meta = triggers.get()
-                if (
-                    not presigned_url_handled
-                    and result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL
-                ):
-                    self._update_file_metas_with_presigned_url()
-                    presigned_url_handled = True
-
-            retry_round += 1
-
-    @staticmethod
-    def _upload_files_in_queue_thread(
-        qtask: "Queue[SnowflakeFileMeta]",
-        results: "List[SnowflakeFileMeta]",
-        triggers: "Queue[SnowflakeFileMeta]",
-    ):
-        """Worker function for a single thread to do parallel uploading.
-
-        qtask: the queue contains tasks to be processed.
-        qnext: the queue for tasks to retry in next round.
-        results: the results of finished tasks.
-        triggers: when there is results trigger extra actions after this round of threads are done,
-             e.g. RENEW_PRESIGNED_URL,
-        """
-        logger.debug(
-            f"Enter upload worker thread. tid={threading.current_thread().ident}"
-        )
-        thread_client = None
-        while not qtask.empty():
-            # triggers is not empty means a result trigger all threads to quit
-            if not triggers.empty():
-                break
-
-            meta = qtask.get()
-            # initialize resource if it is not initialized yet
-            cln_meta = meta.client_meta
-            if thread_client is None:
-                thread_client = cln_meta.storage_util.create_client(
-                    cln_meta.stage_info, cln_meta.use_accelerate_endpoint
-                )
-            cln_meta.cloud_client = thread_client
-            result_meta = SnowflakeFileTransferAgent.upload_one_file(meta)
-            if result_meta.result_status == ResultStatus.RENEW_TOKEN:
-                # need to retry this upload. the meta will be added back once renew is done
-                thread_client = cln_meta.storage_client.create_client(
-                    cln_meta.stage_info,
-                    use_accelerate_endpoint=cln_meta.use_accelerate_endpoint,
-                )
-                qtask.put(meta)
-            elif result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL:
-                # now stop this round - by adding one item to triggers
-                triggers.put(result_meta)
-                qtask.put(meta)
-            else:
-                results.append(result_meta)
+        self._results += list(self._file_pool.map(_helper, file_metas))
 
     def _upload_files_in_sequential(self, file_metas: List["SnowflakeFileMeta"]):
         """Uploads files in sequential. Retry if the access token expires.
@@ -516,133 +479,20 @@ class SnowflakeFileTransferAgent(object):
         Args:
             file_metas: List of metadata for files to be uploaded.
         """
-        idx = 0
-        len_file_metas = len(file_metas)
-
-        cln_meta = file_metas[0].client_meta
-        client = cln_meta.storage_util.create_client(
-            cln_meta.stage_info,
-            use_accelerate_endpoint=cln_meta.use_accelerate_endpoint,
-        )
         for meta in file_metas:
-            meta.client_meta.cloud_client = client
-        while idx < len_file_metas:
-            logger.debug(f"uploading files idx: {idx+1}/{len_file_metas}")
-            result = SnowflakeFileTransferAgent.upload_one_file(file_metas[idx])
-            if result.result_status == ResultStatus.RENEW_TOKEN:
-                client = self.renew_expired_client()
-                for idx0 in range(idx, len_file_metas):
-                    file_metas[idx0].client_meta.cloud_client = client
-                continue
-            elif result.result_status == ResultStatus.RENEW_PRESIGNED_URL:
-                self._update_file_metas_with_presigned_url()
-                continue
-            self._results.append(result)
-            idx += 1
+            client = self._create_storage_client(
+                meta.stage_info, use_accelerate_endpoint=meta.use_accelerate_endpoint
+            )
+            self._results.append(client.upload_file(meta))
             if INJECT_WAIT_IN_PUT > 0:
                 logger.debug(f"LONGEVITY TEST: waiting for {INJECT_WAIT_IN_PUT}")
                 sleep(INJECT_WAIT_IN_PUT)
-
-    @staticmethod
-    def get_storage_client(stage_location_type):
-        if stage_location_type == LOCAL_FS:
-            return SnowflakeLocalUtil
-        elif stage_location_type in [S3_FS, AZURE_FS, GCS_FS]:
-            return SnowflakeRemoteStorageUtil
-        else:
-            return None
-
-    @staticmethod
-    def upload_one_file(meta: "SnowflakeFileMeta") -> "SnowflakeFileMeta":
-        """Uploads one file.
-
-        Args:
-            meta: Metadata for file to be uploaded.
-
-        Returns:
-            Metadata of uploaded file.
-        """
-        logger.debug(f"uploading file={meta.src_file_name}")
-        meta.real_src_file_name = meta.src_file_name
-        tmp_dir = tempfile.mkdtemp()
-        meta.tmp_dir = tmp_dir
-        try:
-            if meta.require_compress:
-                logger.debug(f"compressing file={meta.src_file_name}")
-                if meta.src_stream is None:
-                    (
-                        meta.real_src_file_name,
-                        upload_size,
-                    ) = SnowflakeFileUtil.compress_file_with_gzip(
-                        meta.src_file_name, tmp_dir
-                    )
-                else:
-                    (
-                        meta.real_src_stream,
-                        upload_size,
-                    ) = SnowflakeFileUtil.compress_with_gzip_from_stream(
-                        meta.src_stream
-                    )
-
-            logger.debug(f"getting digest file={meta.real_src_file_name}")
-            if meta.src_stream is None:
-                (
-                    meta.sha256_digest,
-                    meta.upload_size,
-                ) = SnowflakeFileUtil.get_digest_and_size_for_file(
-                    meta.real_src_file_name
-                )
-            else:
-                (
-                    meta.sha256_digest,
-                    meta.upload_size,
-                ) = SnowflakeFileUtil.get_digest_and_size_for_stream(
-                    meta.real_src_stream or meta.src_stream
-                )
-            logger.debug("really uploading data")
-            storage_client = SnowflakeFileTransferAgent.get_storage_client(
-                meta.stage_location_type
-            )
-            storage_client.upload_one_file(meta)
-            logger.debug(
-                f"done: status={meta.result_status}, file={meta.src_file_name}, real file={meta.real_src_file_name}"
-            )
-        except Exception as e:
-            logger.exception(
-                f"Failed to upload a file: file={meta.src_file_name}, real file={meta.real_src_file_name}"
-            )
-            meta.dst_file_size = 0
-            if meta.result_status is None:
-                meta.result_status = ResultStatus.ERROR
-            meta.error_details = str(e)
-            meta.error_details += (
-                f", file={meta.src_file_name}, real file={meta.real_src_file_name}"
-            )
-        finally:
-            logger.debug(f"cleaning up tmp dir: {tmp_dir}")
-            shutil.rmtree(tmp_dir)
-            if meta.src_stream is not None:
-                meta.src_stream.seek(0)
-            if meta.real_src_stream is not None:
-                meta.real_src_stream.close()
-        return meta
 
     def download(
         self,
         large_file_metas: List["SnowflakeFileMeta"],
         small_file_metas: List["SnowflakeFileMeta"],
     ):
-        storage_client = SnowflakeFileTransferAgent.get_storage_client(
-            self._stage_location_type
-        )
-        client = storage_client.create_client(
-            self._stage_info, use_accelerate_endpoint=self._use_accelerate_endpoint
-        )
-        for meta in small_file_metas:
-            meta.client_meta.cloud_client = client
-        for meta in large_file_metas:
-            meta.client_meta.cloud_client = client
-
         if len(small_file_metas) > 0:
             self._download_files_in_parallel(small_file_metas)
         if len(large_file_metas) > 0:
@@ -654,63 +504,14 @@ class SnowflakeFileTransferAgent(object):
         Args:
             file_metas: List of metadata for files to be downloaded.
         """
-        idx = 0
-        len_file_metas = len(file_metas)
-        while idx < len_file_metas:
-            end_of_idx = (
-                idx + self._parallel
-                if idx + self._parallel <= len_file_metas
-                else len_file_metas
+
+        def _helper(meta: "SnowflakeFileMeta"):
+            client = self._create_storage_client(
+                self._stage_info, use_accelerate_endpoint=False
             )
+            return client.download_file(meta)
 
-            logger.debug("downloading files idx: {} to {}".format(idx, end_of_idx))
-
-            target_meta = file_metas[idx:end_of_idx]
-            while True:
-                pool = ThreadPoolExecutor(len(target_meta))
-                results: List["SnowflakeFileMeta"] = list(
-                    pool.map(SnowflakeFileTransferAgent.download_one_file, target_meta)
-                )
-                pool.shutdown()
-
-                # need renew AWS token?
-                retry_meta: List["SnowflakeFileMeta"] = []
-                for result_meta in results:
-                    if result_meta.result_status in [
-                        ResultStatus.RENEW_TOKEN,
-                        ResultStatus.RENEW_PRESIGNED_URL,
-                    ]:
-                        retry_meta.append(result_meta)
-                    else:
-                        self._results.append(result_meta)
-
-                if len(retry_meta) == 0:
-                    # no new AWS token is required
-                    break
-                if any(
-                    [
-                        result_meta.result_status == ResultStatus.RENEW_TOKEN
-                        for result_meta in results
-                    ]
-                ):
-                    client = self.renew_expired_client()
-                    for result_meta in retry_meta:
-                        result_meta.client_meta.cloud_client = client
-                if any(
-                    [
-                        result_meta.result_status == ResultStatus.RENEW_PRESIGNED_URL
-                        for result_meta in results
-                    ]
-                ):
-                    self._update_file_metas_with_presigned_url()
-                if end_of_idx < len_file_metas:
-                    for idx0 in range(idx + self._parallel, len_file_metas):
-                        file_metas[idx0].client_meta.cloud_client = client
-                target_meta = retry_meta
-
-            if end_of_idx == len_file_metas:
-                break
-            idx += self._parallel
+            self._results += list(self._file_pool.map(_helper, file_metas))
 
     def _download_files_in_sequential(self, file_metas: List["SnowflakeFileMeta"]):
         """Downloads files in sequential. Retry if the access token expires.
@@ -718,68 +519,14 @@ class SnowflakeFileTransferAgent(object):
         Args:
             file_metas: List of metadata for files to be downloaded.
         """
-        idx = 0
-        len_file_metas = len(file_metas)
-        while idx < len_file_metas:
-            result = SnowflakeFileTransferAgent.download_one_file(file_metas[idx])
-            if result["result_status"] == ResultStatus.RENEW_TOKEN:
-                client = self.renew_expired_client()
-                for idx0 in range(idx, len_file_metas):
-                    file_metas[idx0].client_meta.cloud_client = client
-                continue
-            elif result.result_status == ResultStatus.RENEW_PRESIGNED_URL:
-                self._update_file_metas_with_presigned_url()
-                continue
-            self._results.append(result)
-            idx += 1
+        for meta in file_metas:
+            client = self._create_storage_client(
+                meta.stage_info, use_accelerate_endpoint=meta.use_accelerate_endpoint
+            )
+            self._results.append(client.download_file(meta))
             if INJECT_WAIT_IN_PUT > 0:
                 logger.debug(f"LONGEVITY TEST: waiting for {INJECT_WAIT_IN_PUT}")
                 sleep(INJECT_WAIT_IN_PUT)
-
-    @staticmethod
-    def download_one_file(meta: "SnowflakeFileMeta") -> "SnowflakeFileMeta":
-        """Download a one file.
-
-        Args:
-            meta: Metadata for file to be downloaded.
-
-        Returns:
-            Metadata of downloaded file.
-        """
-        tmp_dir = tempfile.mkdtemp()
-        meta.tmp_dir = tmp_dir
-        try:
-            storage_client = SnowflakeFileTransferAgent.get_storage_client(
-                meta.stage_location_type
-            )
-            storage_client.download_one_file(meta)
-            logger.debug(
-                f"done: status={meta.result_status}, file={meta.dst_file_name}"
-            )
-        except Exception as e:
-            logger.exception(f"Failed to download a file: {meta.dst_file_name}")
-            meta.dst_file_size = -1
-            if meta.result_status is not None:
-                meta.result_status = ResultStatus.ERROR
-            meta.error_details = str(e)
-            meta.error_details += f", file={meta.dst_file_name}"
-        finally:
-            logger.debug(f"cleaning up tmp dir: {tmp_dir}")
-            shutil.rmtree(tmp_dir)
-        return meta
-
-    def renew_expired_client(self):
-        logger.debug("renewing expired aws token")
-        ret = self._cursor._execute_helper(
-            self._command
-        )  # rerun the command to get the credential
-        stage_info = ret["data"]["stageInfo"]
-        storage_client = SnowflakeFileTransferAgent.get_storage_client(
-            self._stage_location_type
-        )
-        return storage_client.create_client(
-            stage_info, use_accelerate_endpoint=self._use_accelerate_endpoint
-        )
 
     def _update_file_metas_with_presigned_url(self):
         """Updates the file metas with presigned urls if any.
@@ -791,10 +538,10 @@ class SnowflakeFileTransferAgent(object):
         )
 
         # presigned url only applies to remote storage
-        if storage_client_class is not SnowflakeRemoteStorageUtil:
+        if storage_client_class is not SnowflakeRemoteStorageClient:
             return
 
-        storage_util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(
+        storage_util_class = SnowflakeRemoteStorageClient.get_for_storage_type(
             self._stage_location_type
         )
 
@@ -806,7 +553,7 @@ class SnowflakeFileTransferAgent(object):
                 # Rewrite the command such that a new PUT call is made for each file
                 # represented by the regex (if present) separately. This is the only
                 # way to get the presigned url for that file.
-                file_path_to_be_replaced = self.get_local_file_path_from_put_command(
+                file_path_to_be_replaced = self._get_local_file_path_from_put_command(
                     self._command
                 )
 
@@ -986,12 +733,7 @@ class SnowflakeFileTransferAgent(object):
 
     def _init_encryption_material(self):
         self._encryption_material = []
-
-        if (
-            "data" in self._ret
-            and "encryptionMaterial" in self._ret["data"]
-            and self._ret["data"]["encryptionMaterial"] is not None
-        ):
+        if self._ret["data"].get("encryptionMaterial") is not None:
             root_node = self._ret["data"]["encryptionMaterial"]
             logger.debug(self._command_type)
 
@@ -1015,19 +757,25 @@ class SnowflakeFileTransferAgent(object):
                         )
 
     def _parse_command(self):
-        if "data" in self._ret:
-            self._command_type = self._ret["data"]["command"]
-        else:
-            self._command_type = "Unknown"
+
+        if "data" not in self._ret:
+            Error.errorhandler_wrapper(
+                self._cursor.connection,
+                self._cursor,
+                DatabaseError,
+                {
+                    "msg": "Failed to parse server's response",
+                    "errno": ER_INVALID_STAGE_LOCATION,
+                },
+            )
+
+        response = self._ret["data"]
+
+        self._command_type = response["command"]
 
         self._init_encryption_material()
-        if (
-            "data" in self._ret
-            and "src_locations" in self._ret["data"]
-            and isinstance(self._ret["data"]["src_locations"], list)
-        ):
-            self._src_locations = self._ret["data"]["src_locations"]
-        else:
+
+        if not isinstance(response.get("src_locations"), list):
             Error.errorhandler_wrapper(
                 self._cursor.connection,
                 self._cursor,
@@ -1038,26 +786,48 @@ class SnowflakeFileTransferAgent(object):
                 },
             )
 
+        self._src_locations = response["src_locations"]
+        self._parallel = response.get("parallel", 1)
+        self._file_pool = ThreadPoolExecutor(5)
+        self._chunk_pool = ThreadPoolExecutor(self._parallel)
+        self._overwrite = self._force_put_overwrite or response.get("overwrite", False)
+        self._stage_location_type = response["stageInfo"]["locationType"].upper()
+
+        if self._stage_location_type not in VALID_STORAGE:
+            Error.errorhandler_wrapper(
+                self._cursor.connection,
+                self._cursor,
+                OperationalError,
+                {
+                    "msg": f"Destination location type is not valid: {self._stage_location_type}",
+                    "errno": ER_INVALID_STAGE_FS,
+                },
+            )
+
+        self._stage_location = response["stageInfo"]["location"]
+        self._stage_info = response["stageInfo"]
+        self.credentials = StorageCredentials(
+            self._stage_info["creds"], self._cursor.connection, self._command, logger
+        )
+        self._presigned_urls = self._ret["data"].get("presignedUrls")
+
         if self._command_type == CMD_TYPE_UPLOAD:
             if self._source_from_stream:
                 self._src_files = self._src_locations
             else:
                 self._src_files = list(self._expand_filenames(self._src_locations))
             self._auto_compress = (
-                "autoCompress" not in self._ret["data"]
-                or self._ret["data"]["autoCompress"]
+                "autoCompress" not in response or response["autoCompress"]
             )
             self._source_compression = (
-                self._ret["data"]["sourceCompression"].lower()
-                if "sourceCompression" in self._ret["data"]
+                response["sourceCompression"].lower()
+                if "sourceCompression" in response
                 else ""
             )
         else:
             self._src_files = list(self._src_locations)
             self._src_file_to_encryption_material = {}
-            if len(self._ret["data"]["src_locations"]) == len(
-                self._encryption_material
-            ):
+            if len(response["src_locations"]) == len(self._encryption_material):
                 for idx, src_file in enumerate(self._src_files):
                     logger.debug(src_file)
                     self._src_file_to_encryption_material[
@@ -1072,16 +842,14 @@ class SnowflakeFileTransferAgent(object):
                     {
                         "msg": (
                             "The number of downloading files doesn't match "
-                            f"the encryption materials: files={len(self._ret['data']['src_locations'])}, "
+                            f"the encryption materials: files={len(response['src_locations'])}, "
                             f"encmat={len(self._encryption_material)}"
                         ),
                         "errno": ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL,
                     },
                 )
 
-            self._local_location = os.path.expanduser(
-                self._ret["data"]["localLocation"]
-            )
+            self._local_location = os.path.expanduser(response["localLocation"])
             if not os.path.isdir(self._local_location):
                 # NOTE: isdir follows the symlink
                 Error.errorhandler_wrapper(
@@ -1095,28 +863,6 @@ class SnowflakeFileTransferAgent(object):
                         "errno": ER_LOCAL_PATH_NOT_DIRECTORY,
                     },
                 )
-
-        self._parallel = self._ret["data"].get("parallel", 1)
-        self._overwrite = self._force_put_overwrite or self._ret["data"].get(
-            "overwrite", False
-        )
-        self._stage_location_type = self._ret["data"]["stageInfo"][
-            "locationType"
-        ].upper()
-        self._stage_location = self._ret["data"]["stageInfo"]["location"]
-        self._stage_info = self._ret["data"]["stageInfo"]
-        self._presigned_urls = self._ret["data"].get("presignedUrls")
-
-        if self.get_storage_client(self._stage_location_type) is None:
-            Error.errorhandler_wrapper(
-                self._cursor.connection,
-                self._cursor,
-                OperationalError,
-                {
-                    "msg": f"Destination location type is not valid: {self._stage_location_type}",
-                    "errno": ER_INVALID_STAGE_FS,
-                },
-            )
 
     def _init_file_metadata(self):
         logger.debug(f"command type: {self._command_type}")
@@ -1317,7 +1063,7 @@ class SnowflakeFileTransferAgent(object):
                     m.dst_file_name = m.name
                     m.dst_compression_type = None
 
-    def get_local_file_path_from_put_command(self, command):
+    def _get_local_file_path_from_put_command(self, command):
         """Get the local file path from PUT command (Logic adopted from JDBC, written by Polita).
 
         Args:

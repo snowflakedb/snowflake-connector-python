@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from .compat import quote
 from .constants import HTTP_HEADER_CONTENT_ENCODING, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
+from .remote_storage_client import SnowflakeRemoteStorageClient
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -28,6 +29,7 @@ GCS_FILE_HEADER_DIGEST = "gcs-file-header-digest"
 GCS_FILE_HEADER_CONTENT_LENGTH = "gcs-file-header-content-length"
 GCS_FILE_HEADER_ENCRYPTION_METADATA = "gcs-file-header-encryption-metadata"
 CONTENT_CHUNK_SIZE = 10 * 1024
+ACCESS_TOKEN = "GCS_ACCESS_TOKEN"
 
 """
 Gcs Location: Gcs bucket name + path
@@ -37,11 +39,15 @@ GcsLocation = namedtuple(
 )
 
 
-class SnowflakeGCSRestClient:
+class SnowflakeGCSRestClient(SnowflakeRemoteStorageClient):
     """GCS Utility class."""
 
     def __int__(
-        self, stage_info: Dict[str, Any], use_accelerate_endpoint: bool = False
+        self,
+        pool,
+        credentials,
+        stage_info: Dict[str, Any],
+        use_accelerate_endpoint: bool = False,
     ):
         """Creates a client object with given stage credentials.
 
@@ -52,21 +58,20 @@ class SnowflakeGCSRestClient:
         Returns:
             The client to communicate with GCS.
         """
+        super.__init__(pool, credentials)
         self.stage_info = stage_info
-        stage_credentials = stage_info["creds"]
 
-        security_token = stage_credentials.get("GCS_ACCESS_TOKEN")
-        self.security_token = security_token
+        security_token = credentials.creds.get("GCS_ACCESS_TOKEN")
 
         if security_token:
-            logger.debug(f"len(GCS_ACCESS_TOKEN): {len(security_token)}")
+            logger.debug(f"len(GCS_ACCESS_TOKEN): {len(security_token )}")
             logger.debug("Access token is saved as client for renew")
         else:
             logger.debug(
                 "No access token received from GS, constructing anonymous client"
             )
 
-    def upload_file(
+    def _native_upload_file(
         self,
         data_file: str,
         meta: "SnowflakeFileMeta",
@@ -92,11 +97,13 @@ class SnowflakeGCSRestClient:
         """
         upload_url = meta.presigned_url
         access_token: Optional[str] = None
+        cur_timestamp = None
 
         if not upload_url:
             upload_url = self.generate_file_url(
                 self.stage_info["location"], meta.dst_file_name.lstrip("/")
             )
+            cur_timestamp = self.credentials.timestamp
             access_token = self.security_token
 
         content_encoding = ""
@@ -181,6 +188,8 @@ class SnowflakeGCSRestClient:
             elif access_token and SnowflakeGCSRestClient.is_token_expired(
                 errh.response
             ):
+                if cur_timestamp == self.credentials.timestamp:
+                    self.credentials.update(cur_timestamp)
                 meta.last_error = errh
                 meta.result_status = ResultStatus.RENEW_TOKEN
                 return
@@ -213,7 +222,6 @@ class SnowflakeGCSRestClient:
             gcs_headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, "null")
         )
 
-    @staticmethod
     def _native_download_file(
         self, meta: "SnowflakeFileMeta", full_dst_file_name: str, max_concurrency: int
     ):
@@ -323,7 +331,7 @@ class SnowflakeGCSRestClient:
         meta.gcs_file_header_content_length = len(response.content)
         meta.gcs_file_header_encryption_metadata = encryption_metadata
 
-    def get_file_header(
+    def _get_file_header(
         self, meta: "SnowflakeFileMeta", filename: str
     ) -> Optional[FileHeader]:
         """Gets the remote file's metadata.

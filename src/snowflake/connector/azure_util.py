@@ -15,6 +15,7 @@ from azure.storage.blob import BlobServiceClient, ContentSettings, ExponentialRe
 
 from .constants import HTTP_HEADER_VALUE_OCTET_STREAM, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
+from .remote_storage_client import SnowflakeRemoteStorageClient
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
@@ -30,25 +31,21 @@ AzureLocation = namedtuple(
 )
 
 
-class SnowflakeAzureRestClient:
+class SnowflakeAzureRestClient(SnowflakeRemoteStorageClient):
     def __init__(
-        self, stage_info: Dict[str, Any], use_accelerate_endpoint: bool = False
+        self,
+        pool,
+        credentials,
+        stage_info: Dict[str, Any],
+        use_accelerate_endpoint: bool = False,
     ):
-        self.stage_info = stage_info
-        stage_credentials = stage_info["creds"]
-        sas_token = stage_credentials["AZURE_SAS_TOKEN"]
-        if sas_token and sas_token.startswith("?"):
-            sas_token = sas_token[1:]
+        super().__init__(pool, credentials)
         end_point = stage_info["endPoint"]
         if end_point.startswith("blob."):
             end_point = end_point[len("blob.") :]
-        self.client = BlobServiceClient(
-            account_url=f"https://{stage_info['storageAccount']}.blob.{end_point}",
-            credential=sas_token,
-        )
-        self.client._config.retry_policy = ExponentialRetry(
-            initial_backoff=1, increment_base=2, max_attempts=60, random_jitter_range=2
-        )
+        self.endpoint = end_point
+        self.storage_account = stage_info["storageAccount"]
+        self._renew_client()
 
     @staticmethod
     def extract_container_name_and_path(stage_location):
@@ -65,7 +62,22 @@ class SnowflakeAzureRestClient:
 
         return AzureLocation(container_name=container_name, path=path)
 
-    def get_file_header(self, meta: "SnowflakeFileMeta", filename):
+    def _renew_client(self):
+        if self.cur_timestamp == self.credentials.timestamp:
+            self.credentials.update(self.cur_timestamp)
+        self.cur_timestamp = self.credentials.timestamp
+        sas_token = self.credentials.creds["AZURE_SAS_TOKEN"]
+        if sas_token and sas_token.startswith("?"):
+            sas_token = sas_token[1:]
+        self.client = BlobServiceClient(
+            account_url=f"https://{self.storage_account}.blob.{self.endpoint}",
+            credential=sas_token,
+        )
+        self.client._config.retry_policy = ExponentialRetry(
+            initial_backoff=1, increment_base=2, max_attempts=60, random_jitter_range=2
+        )
+
+    def _get_file_header(self, meta: "SnowflakeFileMeta", filename):
         """Gets Azure file properties."""
         client: BlobServiceClient = self.client
         azure_location = SnowflakeAzureRestClient.extract_container_name_and_path(
@@ -91,7 +103,8 @@ class SnowflakeAzureRestClient:
                 and SnowflakeAzureRestClient._detect_azure_token_expire_error(err)
             ):
                 logger.debug("AZURE Token expired. Renew and retry")
-                meta.result_status = ResultStatus.RENEW_TOKEN
+                self._renew_client()
+                meta.result_status = ResultStatus.NEED_RETRY
             else:
                 logger.debug(
                     f"Unexpected Azure error: {err} "
@@ -128,7 +141,7 @@ class SnowflakeAzureRestClient:
             or "Server failed to authenticate the request." in errstr
         )
 
-    def upload_file(
+    def _native_upload_file(
         self,
         data_file: str,
         meta: "SnowflakeFileMeta",
@@ -232,7 +245,8 @@ class SnowflakeAzureRestClient:
             )
             if err.status_code == 403 and self._detect_azure_token_expire_error(err):
                 logger.debug("AZURE Token expired. Renew and retry")
-                meta.result_status = ResultStatus.RENEW_TOKEN
+                self._renew_client()
+                meta.result_status = ResultStatus.NEED_RETRY
             else:
                 meta.last_error = err
                 meta.result_status = ResultStatus.NEED_RETRY
@@ -294,7 +308,8 @@ class SnowflakeAzureRestClient:
                 and SnowflakeAzureRestClient._detect_azure_token_expire_error(err)
             ):
                 logger.debug("AZURE Token expired. Renew and retry")
-                meta.result_status = ResultStatus.RENEW_TOKEN
+                self._renew_client()
+                meta.result_status = ResultStatus.NEED_RETRY
             else:
                 meta.last_error = err
                 meta.result_status = ResultStatus.NEED_RETRY

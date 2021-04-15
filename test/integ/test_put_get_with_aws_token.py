@@ -110,7 +110,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, from_path):
             stage_location = ret["data"]["stageInfo"]["location"]
             stage_credentials = ret["data"]["stageInfo"]["creds"]
 
-            s3location = SnowflakeS3Util.extract_bucket_name_and_path(stage_location)
+            s3location = SnowflakeS3Util._extract_bucket_name_and_path(stage_location)
 
             s3path = s3location.s3path + os.path.basename(fname) + ".gz"
 
@@ -197,7 +197,7 @@ def test_pretend_to_put_but_list(tmpdir, conn_cnx, db_parameters):
         stage_location = ret["data"]["stageInfo"]["location"]
         stage_credentials = ret["data"]["stageInfo"]["creds"]
 
-        s3location = SnowflakeS3Util.extract_bucket_name_and_path(stage_location)
+        s3location = SnowflakeS3Util._extract_bucket_name_and_path(stage_location)
 
         # listing
         client = boto3.resource(

@@ -9,16 +9,13 @@ from __future__ import division
 import os
 import shutil
 import time
-from collections import namedtuple
-from io import BytesIO
+from abc import abstractmethod
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
-from .azure_util import SnowflakeAzureRestClient
 from .constants import ResultStatus
 from .encryption_util import SnowflakeEncryptionUtil
-from .gcs_util import SnowflakeGCSRestClient
-from .s3_util import SnowflakeS3RestClient
+from .storage_client import SnowflakeStorageClient
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
@@ -28,89 +25,49 @@ DEFAULT_MAX_RETRY = 5
 
 logger = getLogger(__name__)
 
-"""
-Encryption Material
-"""
-SnowflakeFileEncryptionMaterial = namedtuple(
-    "SnowflakeS3FileEncryptionMaterial",
-    [
-        "query_stage_master_key",  # query stage master key
-        "query_id",  # query id
-        "smk_id",  # SMK id
-    ],
-)
-
 
 class NeedRenewTokenError(Exception):
     pass
 
 
-class SnowflakeRemoteStorageUtil(object):
-    @staticmethod
-    def get_for_storage_type(_type):
-        if _type == "S3":
-            return SnowflakeS3RestClient
-        elif _type == "AZURE":
-            return SnowflakeAzureRestClient
-        elif _type == "GCS":
-            return SnowflakeGCSRestClient
-        else:
-            return None
+class SnowflakeRemoteStorageClient(SnowflakeStorageClient):
+    def __init__(self, pool, credentials):
+        super().__init__()
+        self.pool = pool
+        self.credentials = credentials
 
-    @staticmethod
-    def create_client(stage_info, use_accelerate_endpoint=False):
-        util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(
-            stage_info["locationType"]
-        )
-        return util_class(stage_info, use_accelerate_endpoint=use_accelerate_endpoint)
+    @abstractmethod
+    def _get_file_header(self, meta: "SnowflakeFileMeta", filename: str):
+        pass
 
-    @staticmethod
-    def upload_one_file(meta: "SnowflakeFileMeta") -> None:
+    @abstractmethod
+    def _native_upload_file(
+        self,
+        data_file: str,
+        meta: "SnowflakeFileMeta",
+        encryption_metadata: Tuple["EncryptionMetadata", None],
+        max_concurrency: int,
+        multipart_threshold: int,
+    ):
+        pass
+
+    @abstractmethod
+    def _native_download_file(
+        self, meta: "SnowflakeFileMeta", full_dst_file_name: str, max_concurrency: int
+    ):
+        pass
+
+    def _upload_file_with_retry(self, meta: "SnowflakeFileMeta") -> None:
         """Optionally encrypts and uploads a file to remote storage."""
-        encryption_metadata = None
-
-        if meta.encryption_material is not None:
-            if meta.src_stream is None:
-                (encryption_metadata, data_file) = SnowflakeEncryptionUtil.encrypt_file(
-                    meta.encryption_material,
-                    meta.real_src_file_name,
-                    tmp_dir=meta.tmp_dir,
-                )
-                logger.debug(
-                    f"encrypted data file={data_file}, size={os.path.getsize(data_file)}"
-                )
-            else:
-                encrypted_stream = BytesIO()
-                src_stream = meta.real_src_stream or meta.src_stream
-                src_stream.seek(0)
-                encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
-                    meta.encryption_material, src_stream, encrypted_stream
-                )
-                src_stream.seek(0)
-                logger.debug(
-                    f"encrypted data stream size={encrypted_stream.seek(0, os.SEEK_END)}"
-                )
-                encrypted_stream.seek(0)
-                if meta.real_src_stream is not None:
-                    meta.real_src_stream.close()
-                meta.real_src_stream = encrypted_stream
-                data_file = meta.real_src_file_name
-        else:
-            logger.debug("not encrypted data file")
-            data_file = meta.real_src_file_name
-
         logger.debug(
             f"putting a file: {meta.client_meta.stage_info['location']}, {meta.dst_file_name}"
         )
-
         max_concurrency = meta.parallel
         last_err = None
         max_retry = DEFAULT_MAX_RETRY
         for retry in range(max_retry):
             if not meta.overwrite:
-                file_header = meta.client_meta.cloud_client.get_file_header(
-                    meta, meta.dst_file_name
-                )
+                file_header = self._get_file_header(meta, meta.dst_file_name)
 
                 if file_header and meta.result_status == ResultStatus.UPLOADED:
                     logger.debug(
@@ -122,24 +79,22 @@ class SnowflakeRemoteStorageUtil(object):
                     return
 
             if meta.overwrite or meta.result_status == ResultStatus.NOT_FOUND_FILE:
-                meta.client_meta.cloud_client.upload_file(
-                    data_file,
+                self._native_upload_file(
+                    self.data_file,
                     meta,
-                    encryption_metadata,
+                    self.encryption_metadata,
                     max_concurrency,
                     multipart_threshold=meta.multipart_threshold,
                 )
 
             if meta.result_status == ResultStatus.UPLOADED:
                 return
-            elif meta.result_status == ResultStatus.RENEW_TOKEN:
-                return
             elif meta.result_status == ResultStatus.RENEW_PRESIGNED_URL:
                 return
             elif meta.result_status == ResultStatus.NEED_RETRY:
                 last_err = meta.last_error
                 logger.debug(
-                    f"Failed to upload a file: {data_file}, err: {last_err}. Retrying with "
+                    f"Failed to upload a file: {self.data_file}, err: {last_err}. Retrying with "
                     f"max concurrency: {max_concurrency}"
                 )
                 if not meta.no_sleeping_time:
@@ -153,7 +108,7 @@ class SnowflakeRemoteStorageUtil(object):
                 meta.last_max_concurrency = max_concurrency
 
                 logger.debug(
-                    f"Failed to upload a file: {data_file}, err: {last_err}. Retrying with "
+                    f"Failed to upload a file: {self.data_file}, err: {last_err}. Retrying with "
                     f"max concurrency: {max_concurrency}"
                 )
                 if meta.no_sleeping_time is None:
@@ -161,14 +116,17 @@ class SnowflakeRemoteStorageUtil(object):
                     logger.debug(f"sleeping: {sleeping_time}")
                     time.sleep(sleeping_time)
         else:
+            self._abort_multipart_upload(meta)
             if last_err:
                 raise last_err
             else:
-                msg = f"Unknown Error in uploading a file: {data_file}"
+                msg = f"Unknown Error in uploading a file: {self.data_file}"
                 raise Exception(msg)
 
-    @staticmethod
-    def download_one_file(meta: "SnowflakeFileMeta") -> None:
+    def _abort_multipart_upload(self, meta: "SnowflakeFileMeta"):
+        pass
+
+    def _download_file(self, meta: "SnowflakeFileMeta") -> None:
         """Downloads a file from remote storage."""
         full_dst_file_name = os.path.join(
             meta.local_location, os.path.basename(meta.dst_file_name)
@@ -179,9 +137,7 @@ class SnowflakeRemoteStorageUtil(object):
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
 
-        file_header = meta.client_meta.cloud_client.get_file_header(
-            meta, meta.src_file_name
-        )
+        file_header = self._get_file_header(meta, meta.src_file_name)
 
         if file_header:
             meta.src_file_size = file_header.content_length
@@ -195,9 +151,7 @@ class SnowflakeRemoteStorageUtil(object):
         last_err = None
         max_retry = DEFAULT_MAX_RETRY
         for retry in range(max_retry):
-            meta.client_meta.cloud_client._native_download_file(
-                meta, full_dst_file_name, max_concurrency
-            )
+            self._native_download_file(meta, full_dst_file_name, max_concurrency)
             if meta.result_status == ResultStatus.DOWNLOADED:
                 if meta.encryption_material is not None:
                     logger.debug(f"encrypted data file={full_dst_file_name}")
@@ -211,9 +165,7 @@ class SnowflakeRemoteStorageUtil(object):
                     # One example of this is the utils that use presigned url
                     # for upload/download and not the storage client library.
                     if meta.presigned_url is not None:
-                        file_header = meta.client_meta.cloud_client.get_file_header(
-                            meta, meta.src_file_name
-                        )
+                        file_header = self._get_file_header(meta, meta.src_file_name)
 
                     tmp_dst_file_name = SnowflakeEncryptionUtil.decrypt_file(
                         file_header.encryption_metadata,
@@ -230,8 +182,6 @@ class SnowflakeRemoteStorageUtil(object):
                 meta.dst_file_size = stat_info.st_size
                 return
             elif meta.result_status == ResultStatus.RENEW_PRESIGNED_URL:
-                return
-            elif meta.result_status == ResultStatus.RENEW_TOKEN:
                 return
             elif meta.result_status == ResultStatus.NEED_RETRY_WITH_LOWER_CONCURRENCY:
                 max_concurrency = meta.parallel - int(retry * meta.parallel / max_retry)
@@ -262,28 +212,3 @@ class SnowflakeRemoteStorageUtil(object):
             else:
                 msg = f"Unknown Error in downloading a file: {full_dst_file_name}"
                 raise Exception(msg)
-
-    # Deprecated
-    def upload_one_file_with_retry(meta: "SnowflakeFileMeta") -> None:
-        """Uploads one file with retry."""
-        for _ in range(10):
-            # retry
-            SnowflakeRemoteStorageUtil.upload_one_file(meta)
-            if meta.result_status == ResultStatus.UPLOADED:
-                for _ in range(10):
-                    meta.client_meta.cloud_client.get_file_header(
-                        meta, meta.dst_file_name
-                    )
-                    if meta.result_status == ResultStatus.NOT_FOUND_FILE:
-                        time.sleep(1)  # wait 1 second
-                        logger.debug("not found. double checking...")
-                        continue
-                    break
-                else:
-                    # not found. retry with the outer loop
-                    logger.debug("not found. gave up. re-uploading...")
-                    continue
-            break
-        else:
-            # could not upload a file even after retry
-            meta.result_status = ResultStatus.ERROR

@@ -110,6 +110,7 @@ SHA256_DIGEST = "sha256_digest"
 
 class ResultStatus(Enum):
     ERROR = "ERROR"
+    SUCCEEDED = "SUCCEEDED"
     UPLOADED = "UPLOADED"
     DOWNLOADED = "DOWNLOADED"
     COLLISION = "COLLISION"
