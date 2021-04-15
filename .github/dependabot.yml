@@ -4,5 +4,6 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    rebase-strategy: "auto"
     assignees:
       - "sfc-gh-mkeller"
