@@ -8,6 +8,7 @@ import base64
 import hashlib
 from datetime import datetime, timedelta
 from logging import getLogger
+from typing import Optional
 
 import jwt
 from cryptography.hazmat.backends import default_backend
@@ -48,15 +49,18 @@ class AuthByKeyPair(AuthByPlugin):
         self._jwt_token_exp = 0
         self._lifetime = timedelta(seconds=lifetime_in_seconds)
 
-    def authenticate(self, authenticator, service_name, account, user, password) -> str:
-        if ".global" not in account:
-            idx = account.find(".")
-            if idx > 0:
-                account = account[0:idx]
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: Optional[str],
+        account: str,
+        user: str,
+        password: Optional[str],
+    ) -> str:
+        if ".global" in account:
+            account = account.partition("-")[0]
         else:
-            idx = account.find("-")
-            if idx > 0:
-                account = account[0:idx]
+            account = account.partition(".")[0]
         account = account.upper().replace("-", "_")
         user = user.upper()
 

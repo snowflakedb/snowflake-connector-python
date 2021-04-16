@@ -696,8 +696,8 @@ def get_token_from_private_key(
     )
 
 
-# Helper function to generate the public key fingerprint from the private key file
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
+    """Helper function to generate the public key fingerprint from the private key file"""
     with open(private_key_file, "rb") as key:
         p_key = load_pem_private_key(
             key.read(), password=password.encode(), backend=default_backend()
