@@ -8,6 +8,7 @@ import base64
 import hashlib
 from datetime import datetime, timedelta
 from logging import getLogger
+from typing import Optional
 
 import jwt
 from cryptography.hazmat.backends import default_backend
@@ -29,25 +30,38 @@ logger = getLogger(__name__)
 class AuthByKeyPair(AuthByPlugin):
     """Key pair based authentication."""
 
-    LIFETIME = timedelta(seconds=120)
     ALGORITHM = "RS256"
     ISSUER = "iss"
     SUBJECT = "sub"
     EXPIRE_TIME = "exp"
     ISSUE_TIME = "iat"
+    LIFETIME = 120
 
-    def __init__(self, private_key):
+    def __init__(self, private_key, lifetime_in_seconds: int = LIFETIME):
         """Inits AuthByKeyPair class with private key.
 
         Args:
             private_key: a byte array of der formats of private key
+            lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         self._private_key = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
+        self._lifetime = timedelta(seconds=lifetime_in_seconds)
 
-    def authenticate(self, authenticator, service_name, account, user, password):
-        account = account.upper()
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: Optional[str],
+        account: str,
+        user: str,
+        password: Optional[str],
+    ) -> str:
+        if ".global" in account:
+            account = account.partition("-")[0]
+        else:
+            account = account.partition(".")[0]
+        account = account.upper().replace("-", "_")
         user = user.upper()
 
         now = datetime.utcnow()
@@ -74,7 +88,7 @@ class AuthByKeyPair(AuthByPlugin):
 
         public_key_fp = self.calculate_public_key_fingerprint(private_key)
 
-        self._jwt_token_exp = now + self.LIFETIME
+        self._jwt_token_exp = now + self._lifetime
         payload = {
             self.ISSUER: "{}.{}.{}".format(account, user, public_key_fp),
             self.SUBJECT: "{}.{}".format(account, user),
