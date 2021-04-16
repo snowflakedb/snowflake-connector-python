@@ -15,7 +15,16 @@ from datetime import datetime
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
-from typing import Dict, Union
+from typing import Dict, Optional, Union
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_der_private_key,
+    load_pem_private_key,
+)
 
 from .auth_keypair import AuthByKeyPair
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
@@ -48,6 +57,7 @@ from .network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
+    KEY_PAIR_AUTHENTICATOR,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -664,3 +674,40 @@ def build_temporary_credential_name(host, user, cred_type):
     return "{host}:{user}:{driver}:{cred}".format(
         host=host.upper(), user=user.upper(), driver=KEYRING_DRIVER_NAME, cred=cred_type
     )
+
+
+def get_token_from_private_key(
+    user: str, account: str, privatekey_path: str, key_password: Optional[str]
+) -> str:
+    encoded_password = key_password.encode() if key_password is not None else None
+    with open(privatekey_path, "rb") as key:
+        p_key = load_pem_private_key(
+            key.read(), password=encoded_password, backend=default_backend()
+        )
+
+    private_key = p_key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+    auth_instance = AuthByKeyPair(private_key, 1440 * 60)  # token valid for 24 hours
+    return auth_instance.authenticate(
+        KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
+    )
+
+
+def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
+    """Helper function to generate the public key fingerprint from the private key file"""
+    with open(private_key_file, "rb") as key:
+        p_key = load_pem_private_key(
+            key.read(), password=password.encode(), backend=default_backend()
+        )
+    private_key = p_key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+    private_key = load_der_private_key(
+        data=private_key, password=None, backend=default_backend()
+    )
+    return AuthByKeyPair.calculate_public_key_fingerprint(private_key)
