@@ -12,20 +12,9 @@ import jwt
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives._serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-)
 from cryptography.hazmat.primitives.asymmetric import dsa, rsa
-from cryptography.hazmat.primitives.serialization import (
-    load_der_private_key,
-    load_pem_private_key,
-)
 
 import snowflake.connector
-from snowflake.connector.auth import get_token_from_private_key
-from snowflake.connector.auth_keypair import AuthByKeyPair
 
 
 @pytest.mark.skipolddriver
@@ -36,7 +25,7 @@ def test_get_token_from_private_key():
         current_dir, "../data/rsa_keys", "rsa_key_encrypted.p8"
     )
     private_key_password = "test"
-    public_key_fingerprint = get_public_key_fingerprint(
+    public_key_fingerprint = snowflake.connector.auth.get_public_key_fingerprint(
         private_key_file_path, private_key_password
     )
     # Create a dict containing input accounts and their corrected account fields used to generate the correct token
@@ -47,7 +36,7 @@ def test_get_token_from_private_key():
     }
     for a in accounts:
         # generate the jwt token
-        jwt_token = get_token_from_private_key(
+        jwt_token = snowflake.connector.auth.get_token_from_private_key(
             test_user, a, private_key_file_path, private_key_password
         )
         # decode the token to get its fields (iss, sub, issue time, expiration time)
@@ -66,23 +55,6 @@ def test_get_token_from_private_key():
         assert datetime.utcnow() + timedelta(minutes=1441) > datetime.fromtimestamp(
             decoded_token.get("exp")
         )
-
-
-# Helper function to generate the public key fingerprint from the private key file
-def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
-    with open(private_key_file, "rb") as key:
-        p_key = load_pem_private_key(
-            key.read(), password=password.encode(), backend=default_backend()
-        )
-    private_key = p_key.private_bytes(
-        encoding=Encoding.DER,
-        format=PrivateFormat.PKCS8,
-        encryption_algorithm=NoEncryption(),
-    )
-    private_key = load_der_private_key(
-        data=private_key, password=None, backend=default_backend()
-    )
-    return AuthByKeyPair.calculate_public_key_fingerprint(private_key)
 
 
 @pytest.mark.skipolddriver

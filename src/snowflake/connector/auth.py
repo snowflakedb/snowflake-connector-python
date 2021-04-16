@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.serialization import (
     Encoding,
     NoEncryption,
     PrivateFormat,
+    load_der_private_key,
     load_pem_private_key,
 )
 
@@ -693,3 +694,20 @@ def get_token_from_private_key(
     return auth_instance.authenticate(
         KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
     )
+
+
+# Helper function to generate the public key fingerprint from the private key file
+def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
+    with open(private_key_file, "rb") as key:
+        p_key = load_pem_private_key(
+            key.read(), password=password.encode(), backend=default_backend()
+        )
+    private_key = p_key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+    private_key = load_der_private_key(
+        data=private_key, password=None, backend=default_backend()
+    )
+    return AuthByKeyPair.calculate_public_key_fingerprint(private_key)
