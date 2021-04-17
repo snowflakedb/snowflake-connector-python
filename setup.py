@@ -279,7 +279,7 @@ setup(
             "Cython",
             "pendulum!=2.1.1",
             "more-itertools",
-            "numpy<1.20.0",
+            "numpy<1.21.0",
         ],
     },
     classifiers=[
