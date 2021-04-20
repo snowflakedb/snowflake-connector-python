@@ -60,6 +60,63 @@ def test_put_get_large_data_via_user_stage(
     )
 
 
+@pytest.mark.aws
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+def test_put_small_data_use_s3_regional_url(
+    is_public_test, tmpdir, conn_cnx, db_parameters, from_path
+):
+    """[s3] Puts Small Data via User Stage using regional url."""
+    if is_public_test:
+        pytest.skip(
+            "This test requires to change the internal parameter and requires account admin privileges"
+        )
+    number_of_files = 5 if from_path else 1
+    number_of_lines = 1
+    _put_get_user_stage_s3_regional_url(
+        tmpdir,
+        conn_cnx,
+        db_parameters,
+        number_of_files=number_of_files,
+        number_of_lines=number_of_lines,
+        from_path=from_path,
+    )
+
+
+def _put_get_user_stage_s3_regional_url(
+    tmpdir,
+    conn_cnx,
+    db_parameters,
+    number_of_files=1,
+    number_of_lines=1,
+    from_path=True,
+):
+    try:
+        with conn_cnx(
+            user=db_parameters["user"],
+            account=db_parameters["account"],
+            password=db_parameters["password"],
+            role="accountadmin",
+        ) as cnx:
+            cnx.cursor().execute(
+                "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = true;"
+            )
+        _put_get_user_stage(
+            tmpdir, conn_cnx, db_parameters, number_of_files, number_of_lines, from_path
+        )
+    finally:
+        with conn_cnx(
+            user=db_parameters["user"],
+            account=db_parameters["account"],
+            password=db_parameters["password"],
+            role="accountadmin",
+        ) as cnx:
+            cnx.cursor().execute(
+                "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = false;"
+            )
+
+
 def _put_get_user_stage(
     tmpdir,
     conn_cnx,

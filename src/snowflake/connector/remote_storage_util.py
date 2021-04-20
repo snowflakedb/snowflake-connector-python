@@ -58,12 +58,16 @@ class SnowflakeRemoteStorageUtil(object):
             return None
 
     @staticmethod
-    def create_client(stage_info, use_accelerate_endpoint=False):
+    def create_client(
+        stage_info, use_accelerate_endpoint=False, use_s3_regional_url=False
+    ):
         util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(
             stage_info["locationType"]
         )
         return util_class.create_client(
-            stage_info, use_accelerate_endpoint=use_accelerate_endpoint
+            stage_info,
+            use_accelerate_endpoint=use_accelerate_endpoint,
+            use_s3_regional_url=use_s3_regional_url,
         )
 
     @staticmethod

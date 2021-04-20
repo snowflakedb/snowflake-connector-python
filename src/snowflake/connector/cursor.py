@@ -653,6 +653,7 @@ class SnowflakeCursor(object):
                     or data.get("overwrite", False),
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
+                    use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()

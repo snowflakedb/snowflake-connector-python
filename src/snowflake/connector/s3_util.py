@@ -53,7 +53,9 @@ class SnowflakeS3Util:
     """S3 Utility class."""
 
     @staticmethod
-    def create_client(stage_info, use_accelerate_endpoint=False) -> Session.resource:
+    def create_client(
+        stage_info, use_accelerate_endpoint=False, use_s3_regional_url=False
+    ) -> Session.resource:
         """Creates a client object with a stage credential.
 
         Args:
@@ -70,6 +72,11 @@ class SnowflakeS3Util:
         end_point = (
             ("https://" + stage_info["endPoint"]) if stage_info["endPoint"] else None
         )
+
+        # If FIPS endpoint is in us-east-1 this will still work as we are testing for stage_info['endPoint'] which
+        # is populated only in the FIPS gov deployments.
+        if use_s3_regional_url and not stage_info["endPoint"]:
+            end_point = "https://" + "s3." + stage_info["region"] + ".amazonaws.com"
 
         config = Config(
             signature_version="s3v4",

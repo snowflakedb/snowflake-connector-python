@@ -314,6 +314,7 @@ class SnowflakeFileTransferAgent(object):
         force_put_overwrite: bool = True,
         multipart_threshold: Optional[int] = None,
         source_from_stream: Optional[IO[bytes]] = None,
+        use_s3_regional_url: bool = False,
     ):
         self._cursor = cursor
         self._command = command
@@ -342,6 +343,7 @@ class SnowflakeFileTransferAgent(object):
         else:
             # Historical value
             self._multipart_threshold = 67108864
+        self._use_s3_regional_url = use_s3_regional_url
 
     def execute(self):
         self._parse_command()
@@ -409,7 +411,10 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type
         )
         client_meta = SFResourceMeta(
-            storage_util, self._stage_info, self._use_accelerate_endpoint
+            storage_util,
+            self._stage_info,
+            self._use_accelerate_endpoint,
+            self._use_s3_regional_url,
         )
 
         for meta in small_file_metas:
@@ -425,7 +430,9 @@ class SnowflakeFileTransferAgent(object):
     def _transfer_accelerate_config(self):
         if self._stage_location_type == S3_FS:
             client = SnowflakeRemoteStorageUtil.create_client(
-                self._stage_info, use_accelerate_endpoint=False
+                self._stage_info,
+                use_accelerate_endpoint=False,
+                use_s3_regional_url=self._use_s3_regional_url,
             )
             self._use_accelerate_endpoint = SnowflakeS3Util.transfer_accelerate_config(
                 client, self._stage_info
