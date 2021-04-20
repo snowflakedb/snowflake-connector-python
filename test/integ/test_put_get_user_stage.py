@@ -94,9 +94,6 @@ def _put_get_user_stage_s3_regional_url(
 ):
     try:
         with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
             role="accountadmin",
         ) as cnx:
             cnx.cursor().execute(
