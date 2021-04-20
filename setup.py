@@ -220,11 +220,13 @@ setup(
         "charset_normalizer~=2.0.0",
         "idna>=2.5,<4",
         "certifi>=2017.4.17",
+        "antlr4-python3-runtime",
     ],
     namespace_packages=["snowflake"],
     packages=[
         "snowflake.connector",
         "snowflake.connector.tool",
+        "snowflake.connector.antlr",
         "snowflake.connector.vendored",
         "snowflake.connector.vendored.requests",
         "snowflake.connector.vendored.urllib3",
