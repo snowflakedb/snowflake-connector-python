@@ -604,9 +604,7 @@ class SnowflakeConnection(object):
         **kwargs
     ) -> Generator["SnowflakeCursor", None, None]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
-        split_statements_list = split_statements(
-            stream, remove_comments=remove_comments
-        )
+        split_statements_list = split_statements(stream)
         # Note: split_statements_list is a list of tuples of sql statements and whether they are put/get
         non_empty_statements = [e for e in split_statements_list if e[0]]
         for sql, is_put_or_get in non_empty_statements:
