@@ -69,6 +69,8 @@ def test_put_small_data_use_s3_regional_url(
     is_public_test, tmpdir, conn_cnx, db_parameters, from_path
 ):
     """[s3] Puts Small Data via User Stage using regional url."""
+    if is_public_test or "AWS_ACCESS_KEY_ID" not in os.environ:
+        pytest.skip("This test requires to change the internal parameter")
     number_of_files = 5 if from_path else 1
     number_of_lines = 1
     _put_get_user_stage_s3_regional_url(
