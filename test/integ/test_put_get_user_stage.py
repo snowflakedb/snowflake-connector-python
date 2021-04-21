@@ -92,21 +92,18 @@ def _put_get_user_stage_s3_regional_url(
     number_of_lines=1,
     from_path=True,
 ):
+    with conn_cnx(
+        role="accountadmin",
+    ) as cnx:
+        cnx.cursor().execute(
+            "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = true;"
+        )
     try:
-        with conn_cnx(
-            role="accountadmin",
-        ) as cnx:
-            cnx.cursor().execute(
-                "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = true;"
-            )
         _put_get_user_stage(
             tmpdir, conn_cnx, db_parameters, number_of_files, number_of_lines, from_path
         )
     finally:
         with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
             role="accountadmin",
         ) as cnx:
             cnx.cursor().execute(

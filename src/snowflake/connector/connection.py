@@ -257,7 +257,6 @@ class SnowflakeConnection(object):
         self._done_async_sfqids = set()
         self.telemetry_enabled = False
         self._session_parameters: Dict[str, Union[str, int, bool]] = {}
-        self.enable_stage_s3_privatelink_for_us_east_1 = False
         logger.info(
             "Snowflake Connector for Python Version: %s, "
             "Python Version: %s, Platform: %s",
@@ -469,6 +468,14 @@ class SnowflakeConnection(object):
     @property
     def arrow_number_to_decimal(self):
         return self._arrow_number_to_decimal
+
+    @property
+    def enable_stage_s3_privatelink_for_us_east_1(self):
+        return self._enable_stage_s3_privatelink_for_us_east_1
+
+    @enable_stage_s3_privatelink_for_us_east_1.setter
+    def enable_stage_s3_privatelink_for_us_east_1(self, value):
+        self._enable_stage_s3_privatelink_for_us_east_1 = True if value else False
 
     @arrow_number_to_decimal.setter
     def arrow_number_to_decimal(self, value: bool):

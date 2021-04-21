@@ -14,6 +14,8 @@ from io import BytesIO
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+from boto3 import Session
+
 from .azure_util import SnowflakeAzureUtil
 from .constants import ResultStatus
 from .encryption_util import SnowflakeEncryptionUtil
@@ -59,8 +61,10 @@ class SnowflakeRemoteStorageUtil(object):
 
     @staticmethod
     def create_client(
-        stage_info, use_accelerate_endpoint=False, use_s3_regional_url=False
-    ):
+        stage_info,
+        use_accelerate_endpoint: bool = False,
+        use_s3_regional_url: bool = False,
+    ) -> Session.resource:
         util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(
             stage_info["locationType"]
         )

@@ -54,13 +54,16 @@ class SnowflakeS3Util:
 
     @staticmethod
     def create_client(
-        stage_info, use_accelerate_endpoint=False, use_s3_regional_url=False
+        stage_info,
+        use_accelerate_endpoint=False,
+        use_s3_regional_url=False,
     ) -> Session.resource:
         """Creates a client object with a stage credential.
 
         Args:
             stage_info: Information about the stage.
             use_accelerate_endpoint: Whether or not to use accelerated endpoint (Default value = False).
+            use_s3_regional_url: Whether or not to use regional url in aws deployments (Default value = False).
 
         Returns:
             The client to communicate with S3.
