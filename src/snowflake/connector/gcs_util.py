@@ -42,7 +42,9 @@ class SnowflakeGCSUtil:
 
     @staticmethod
     def create_client(
-        stage_info: Dict[str, Any], use_accelerate_endpoint: bool = False
+        stage_info: Dict[str, Any],
+        use_accelerate_endpoint: bool = False,
+        use_s3_regional_url: bool = False,
     ) -> Optional[str]:
         """Creates a client object with given stage credentials.
 

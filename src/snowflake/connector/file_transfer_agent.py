@@ -104,6 +104,7 @@ class SFResourceMeta:
     )  # TODO could be strongly defined if need be
     use_accelerate_endpoint: bool = False
     cloud_client: Union["Session.resource", "BlobServiceClient", str, None] = None
+    use_s3_regional_url: bool = False
 
 
 @dataclass
@@ -521,7 +522,9 @@ class SnowflakeFileTransferAgent(object):
             cln_meta = meta.client_meta
             if thread_client is None:
                 thread_client = cln_meta.storage_util.create_client(
-                    cln_meta.stage_info, cln_meta.use_accelerate_endpoint
+                    cln_meta.stage_info,
+                    cln_meta.use_accelerate_endpoint,
+                    cln_meta.use_s3_regional_url,
                 )
             cln_meta.cloud_client = thread_client
             result_meta = SnowflakeFileTransferAgent.upload_one_file(meta)
@@ -549,6 +552,7 @@ class SnowflakeFileTransferAgent(object):
         client = cln_meta.storage_util.create_client(
             cln_meta.stage_info,
             use_accelerate_endpoint=cln_meta.use_accelerate_endpoint,
+            use_s3_regional_url=cln_meta.use_s3_regional_url,
         )
         for meta in file_metas:
             meta.client_meta.cloud_client = client
@@ -662,7 +666,9 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type
         )
         client = storage_client.create_client(
-            self._stage_info, use_accelerate_endpoint=self._use_accelerate_endpoint
+            self._stage_info,
+            use_accelerate_endpoint=self._use_accelerate_endpoint,
+            use_s3_regional_url=self._use_s3_regional_url,
         )
         for meta in small_file_metas:
             meta.client_meta.cloud_client = client
@@ -804,7 +810,9 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type
         )
         return storage_client.create_client(
-            stage_info, use_accelerate_endpoint=self._use_accelerate_endpoint
+            stage_info,
+            use_accelerate_endpoint=self._use_accelerate_endpoint,
+            use_s3_regional_url=self._use_s3_regional_url,
         )
 
     def _update_file_metas_with_presigned_url(self):
