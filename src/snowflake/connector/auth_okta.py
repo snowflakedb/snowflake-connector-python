@@ -6,6 +6,7 @@
 
 import json
 import logging
+import time
 
 from .auth import Auth
 from .auth_by_plugin import AuthByPlugin
@@ -89,7 +90,7 @@ class AuthByOkta(AuthByPlugin):
             This provides a way for the user to 'authenticate' the IDP it is
             sending his/her credentials to.  Without such a check, the user could
             be coerced to provide credentials to an IDP impersonator.
-        3.  query IDP token url to authenticate and retrieve access token
+        3.  query IDP token url to authenticate and retrieve session access token
         4.  given access token, query IDP URL snowflake app to get SAML response
         5.  IMPORTANT Client side validation:
             validate the post back url come back with the SAML response
@@ -151,13 +152,14 @@ class AuthByOkta(AuthByPlugin):
             self.handle_failure(ret)
 
         data = ret["data"]
-        token_url = data["tokenUrl"]
+        token_url = f'{"".join(data["tokenUrl"].partition("api/v1/")[:2])}authn'
         sso_url = data["ssoUrl"]
+
         return headers, sso_url, token_url
 
     def _step2(self, authenticator, sso_url, token_url):
         logger.debug(
-            "step 2: validate Token and SSO URL has the same prefix " "as authenticator"
+            "step 2: validate Token and SSO URL has the same prefix as authenticator"
         )
         if not _is_prefix_equal(authenticator, token_url) or not _is_prefix_equal(
             authenticator, sso_url
@@ -183,12 +185,18 @@ class AuthByOkta(AuthByPlugin):
 
     def _step3(self, headers, token_url, user, password):
         logger.debug(
-            "step 3: query IDP token url to authenticate and " "retrieve access token"
+            "step 3: query IDP token url to authenticate and retrieve session access token"
         )
+
         data = {
             "username": user,
             "password": password,
+            "options": {
+                "multiOptionalFactorEnroll": False,
+                "warnBeforePasswordExpired": False,
+            }
         }
+
         ret = self._rest.fetch(
             "post",
             token_url,
@@ -198,8 +206,46 @@ class AuthByOkta(AuthByPlugin):
             socket_timeout=self._rest._connection.login_timeout,
             catch_okta_unauthorized_error=True,
         )
-        one_time_token = ret.get("cookieToken")
-        if not one_time_token:
+
+        session_token = None
+        state_token = ret["stateToken"]
+
+        if ret["status"] == 'SUCCESS':
+            session_token = ret["sessionToken"]
+
+        if ret["status"] == "MFA_REQUIRED":
+            factor_verify_link = None
+            for factor in ret["_embedded"]["factors"]:
+                if factor["factorType"] == "push":
+                    factor_verify_link = factor["_links"]["verify"]["href"]
+                    break
+
+            poll = True if factor_verify_link else False
+            while poll:
+                ret = self._rest.fetch(
+                    "post",
+                    factor_verify_link,
+                    headers,
+                    data=json.dumps({"stateToken": state_token}),
+                    timeout=self._rest._connection.login_timeout,
+                    socket_timeout=self._rest._connection.login_timeout,
+                    catch_okta_unauthorized_error=True,
+                )
+
+                if (ret["status"] == "MFA_CHALLENGE" and ret["factorResult"] == "WAITING"):
+                    factor_verify_link = ret["_links"]["next"]["href"]
+
+                elif (ret["status"] == "SUCCESS"):
+                    session_token = ret.get("sessionToken")
+                    poll = False
+
+                else:
+                    poll = False
+
+                if poll:
+                    time.sleep(1)
+
+        if not session_token:
             Error.errorhandler_wrapper(
                 self._rest._connection,
                 None,
@@ -216,7 +262,8 @@ class AuthByOkta(AuthByPlugin):
                     "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 },
             )
-        return one_time_token
+
+        return session_token
 
     def _step4(self, one_time_token, sso_url):
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
