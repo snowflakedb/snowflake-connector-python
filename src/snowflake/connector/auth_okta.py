@@ -90,7 +90,7 @@ class AuthByOkta(AuthByPlugin):
             This provides a way for the user to 'authenticate' the IDP it is
             sending his/her credentials to.  Without such a check, the user could
             be coerced to provide credentials to an IDP impersonator.
-        3.  query IDP token url to authenticate and retrieve session access token
+        3.  query IDP token url to authenticate and retrieve session token
         4.  given access token, query IDP URL snowflake app to get SAML response
         5.  IMPORTANT Client side validation:
             validate the post back url come back with the SAML response
@@ -108,8 +108,8 @@ class AuthByOkta(AuthByPlugin):
             authenticator, service_name, account, user
         )
         self._step2(authenticator, sso_url, token_url)
-        one_time_token = self._step3(headers, token_url, user, password)
-        response_html = self._step4(one_time_token, sso_url)
+        session_token = self._step3(headers, token_url, user, password)
+        response_html = self._step4(session_token, sso_url)
         self._step5(response_html)
 
     def _step1(self, authenticator, service_name, account, user):
@@ -185,7 +185,7 @@ class AuthByOkta(AuthByPlugin):
 
     def _step3(self, headers, token_url, user, password):
         logger.debug(
-            "step 3: query IDP token url to authenticate and retrieve session access token"
+            "step 3: query IDP token url to authenticate and retrieve session token"
         )
 
         data = {
@@ -265,11 +265,11 @@ class AuthByOkta(AuthByPlugin):
 
         return session_token
 
-    def _step4(self, one_time_token, sso_url):
-        logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
+    def _step4(self, session_token, sso_url):
+        logger.debug("step 4: query IDP URL snowflake app to get SAML response")
         url_parameters = {
             "RelayState": "/some/deep/link",
-            "onetimetoken": one_time_token,
+            "onetimetoken": session_token,
         }
         sso_url = sso_url + "?" + urlencode(url_parameters)
         headers = {
