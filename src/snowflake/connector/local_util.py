@@ -8,7 +8,7 @@ from __future__ import division
 
 import os
 from logging import getLogger
-from typing import Any, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
 from .constants import ResultStatus
 
