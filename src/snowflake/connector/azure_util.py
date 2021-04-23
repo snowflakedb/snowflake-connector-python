@@ -35,7 +35,9 @@ class SnowflakeAzureUtil(object):
 
     @staticmethod
     def create_client(
-        stage_info: Dict[str, Any], use_accelerate_endpoint: bool = False
+        stage_info: Dict[str, Any],
+        use_accelerate_endpoint: bool = False,
+        use_s3_regional_url: bool = False,
     ) -> BlobServiceClient:
         """Creates a client object with a stage credential.
 
