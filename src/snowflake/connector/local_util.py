@@ -8,7 +8,7 @@ from __future__ import division
 
 import os
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
 from .constants import ResultStatus
 
@@ -18,7 +18,11 @@ if TYPE_CHECKING:  # pragma: no cover
 
 class SnowflakeLocalUtil(object):
     @staticmethod
-    def create_client(stage_info, use_accelerate_endpoint=False):
+    def create_client(
+        stage_info: Dict[str, Any],
+        use_accelerate_endpoint: bool = False,
+        use_s3_regional_url: bool = False,
+    ):
         return None
 
     @staticmethod

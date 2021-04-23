@@ -54,6 +54,7 @@ from .constants import (
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
     PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
+    PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
     OCSPMode,
@@ -186,6 +187,10 @@ DEFAULT_CONFIGURATION = {
     ),  # only use openssl instead of python only crypto modules
     # whether to convert Arrow number values to decimal instead of doubles
     "arrow_number_to_decimal": (False, bool),
+    "enable_stage_s3_privatelink_for_us_east_1": (
+        False,
+        bool,
+    ),  # only use regional url when the param is set
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -237,6 +242,7 @@ class SnowflakeConnection(object):
         is_pyformat: Whether the current argument binding is pyformat or format.
         consent_cache_id_token: Consented cache ID token.
         use_openssl_only: Use OpenSSL instead of pure Python libraries for signature verification and encryption.
+        enable_stage_s3_privatelink_for_us_east_1: when true, clients use regional s3 url to upload files.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -462,6 +468,14 @@ class SnowflakeConnection(object):
     @property
     def arrow_number_to_decimal(self):
         return self._arrow_number_to_decimal
+
+    @property
+    def enable_stage_s3_privatelink_for_us_east_1(self):
+        return self._enable_stage_s3_privatelink_for_us_east_1
+
+    @enable_stage_s3_privatelink_for_us_east_1.setter
+    def enable_stage_s3_privatelink_for_us_east_1(self, value):
+        self._enable_stage_s3_privatelink_for_us_east_1 = True if value else False
 
     @arrow_number_to_decimal.setter
     def arrow_number_to_decimal(self, value: bool):
@@ -1232,6 +1246,8 @@ class SnowflakeConnection(object):
                 self.service_name = value
             elif PARAMETER_CLIENT_PREFETCH_THREADS == name:
                 self.client_prefetch_threads = value
+            elif PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 == name:
+                self.enable_stage_s3_privatelink_for_us_east_1 = value
 
     def _format_query_for_log(self, query):
         ret = " ".join(line.strip() for line in query.split("\n"))

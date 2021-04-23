@@ -104,6 +104,7 @@ class SFResourceMeta:
     )  # TODO could be strongly defined if need be
     use_accelerate_endpoint: bool = False
     cloud_client: Union["Session.resource", "BlobServiceClient", str, None] = None
+    use_s3_regional_url: bool = False
 
 
 @dataclass
@@ -314,6 +315,7 @@ class SnowflakeFileTransferAgent(object):
         force_put_overwrite: bool = True,
         multipart_threshold: Optional[int] = None,
         source_from_stream: Optional[IO[bytes]] = None,
+        use_s3_regional_url: bool = False,
     ):
         self._cursor = cursor
         self._command = command
@@ -342,6 +344,7 @@ class SnowflakeFileTransferAgent(object):
         else:
             # Historical value
             self._multipart_threshold = 67108864
+        self._use_s3_regional_url = use_s3_regional_url
 
     def execute(self):
         self._parse_command()
@@ -409,7 +412,10 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type
         )
         client_meta = SFResourceMeta(
-            storage_util, self._stage_info, self._use_accelerate_endpoint
+            storage_util,
+            self._stage_info,
+            self._use_accelerate_endpoint,
+            self._use_s3_regional_url,
         )
 
         for meta in small_file_metas:
@@ -425,7 +431,9 @@ class SnowflakeFileTransferAgent(object):
     def _transfer_accelerate_config(self):
         if self._stage_location_type == S3_FS:
             client = SnowflakeRemoteStorageUtil.create_client(
-                self._stage_info, use_accelerate_endpoint=False
+                self._stage_info,
+                use_accelerate_endpoint=False,
+                use_s3_regional_url=self._use_s3_regional_url,
             )
             self._use_accelerate_endpoint = SnowflakeS3Util.transfer_accelerate_config(
                 client, self._stage_info
@@ -514,7 +522,9 @@ class SnowflakeFileTransferAgent(object):
             cln_meta = meta.client_meta
             if thread_client is None:
                 thread_client = cln_meta.storage_util.create_client(
-                    cln_meta.stage_info, cln_meta.use_accelerate_endpoint
+                    cln_meta.stage_info,
+                    cln_meta.use_accelerate_endpoint,
+                    cln_meta.use_s3_regional_url,
                 )
             cln_meta.cloud_client = thread_client
             result_meta = SnowflakeFileTransferAgent.upload_one_file(meta)
@@ -542,6 +552,7 @@ class SnowflakeFileTransferAgent(object):
         client = cln_meta.storage_util.create_client(
             cln_meta.stage_info,
             use_accelerate_endpoint=cln_meta.use_accelerate_endpoint,
+            use_s3_regional_url=cln_meta.use_s3_regional_url,
         )
         for meta in file_metas:
             meta.client_meta.cloud_client = client
@@ -655,7 +666,9 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type
         )
         client = storage_client.create_client(
-            self._stage_info, use_accelerate_endpoint=self._use_accelerate_endpoint
+            self._stage_info,
+            use_accelerate_endpoint=self._use_accelerate_endpoint,
+            use_s3_regional_url=self._use_s3_regional_url,
         )
         for meta in small_file_metas:
             meta.client_meta.cloud_client = client
@@ -797,7 +810,9 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type
         )
         return storage_client.create_client(
-            stage_info, use_accelerate_endpoint=self._use_accelerate_endpoint
+            stage_info,
+            use_accelerate_endpoint=self._use_accelerate_endpoint,
+            use_s3_regional_url=self._use_s3_regional_url,
         )
 
     def _update_file_metas_with_presigned_url(self):
