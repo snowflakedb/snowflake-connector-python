@@ -9,9 +9,11 @@ import os
 import time
 from getpass import getuser
 from logging import getLogger
+from typing import Optional
 
 import pytest
 
+from snowflake.connector.cursor import SnowflakeCursor
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
 
@@ -73,13 +75,18 @@ def test_put_small_data_use_s3_regional_url(
         pytest.skip("This test requires to change the internal parameter")
     number_of_files = 5 if from_path else 1
     number_of_lines = 1
-    _put_get_user_stage_s3_regional_url(
+    put_cursor = _put_get_user_stage_s3_regional_url(
         tmpdir,
         conn_cnx,
         db_parameters,
         number_of_files=number_of_files,
         number_of_lines=number_of_lines,
         from_path=from_path,
+    )
+    assert (
+        put_cursor._connection._session_parameters.get(
+            "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1"
+        )
     )
 
 
@@ -90,24 +97,22 @@ def _put_get_user_stage_s3_regional_url(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-):
-    with conn_cnx(
-        role="accountadmin",
-    ) as cnx:
+) -> Optional[SnowflakeCursor]:
+    put_cursor: Optional[SnowflakeCursor] = None
+    with conn_cnx(role="accountadmin",) as cnx:
         cnx.cursor().execute(
             "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = true;"
         )
     try:
-        _put_get_user_stage(
+        put_cursor = _put_get_user_stage(
             tmpdir, conn_cnx, db_parameters, number_of_files, number_of_lines, from_path
         )
     finally:
-        with conn_cnx(
-            role="accountadmin",
-        ) as cnx:
+        with conn_cnx(role="accountadmin",) as cnx:
             cnx.cursor().execute(
                 "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = false;"
             )
+    return put_cursor
 
 
 def _put_get_user_stage(
@@ -117,7 +122,8 @@ def _put_get_user_stage(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-):
+) -> Optional[SnowflakeCursor]:
+    put_cursor: Optional[SnowflakeCursor] = None
     # sanity check
     assert "AWS_ACCESS_KEY_ID" in os.environ, "AWS_ACCESS_KEY_ID is missing"
     assert "AWS_SECRET_ACCESS_KEY" in os.environ, "AWS_SECRET_ACCESS_KEY is missing"
@@ -184,7 +190,8 @@ credentials=(
             )
             cnx.cursor().execute("rm @{stage_name}".format(stage_name=stage_name))
 
-            put(cnx.cursor(), files, stage_name, from_path, file_stream=file_stream)
+            put_cursor = cnx.cursor()
+            put(put_cursor, files, stage_name, from_path, file_stream=file_stream)
             cnx.cursor().execute(
                 "copy into {name} from @{stage_name}".format(
                     name=db_parameters["name"], stage_name=stage_name
@@ -233,6 +240,7 @@ credentials=(
             cnx.cursor().execute(
                 "drop table if exists {name}".format(name=db_parameters["name"])
             )
+    return put_cursor
 
 
 @pytest.mark.aws
