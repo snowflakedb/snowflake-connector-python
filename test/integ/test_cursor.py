@@ -923,8 +923,7 @@ def test_empty_execution(conn):
                 cur.fetchall()
 
 
-# There was a bug about rownumber in older versions
-@pytest.mark.skipolddriver
+@pytest.mark.skipolddriver(reason="There was a bug about rownumber in older versions")
 def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""
     with conn() as cnx:
@@ -1195,3 +1194,6 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         logging.WARNING,
         "Cursor failed to log to telemetry. Connection object may be None.",
     ) in caplog.record_tuples
+
+
+# def test_
