@@ -8,10 +8,7 @@ from io import StringIO
 
 import pytest
 
-try:
-    from snowflake.connector.util_text import split_statements
-except ImportError:
-    split_statements = None
+from snowflake.connector.util_text import split_statements
 
 try:
     from snowflake.connector.util_text import SQLDelimiter
@@ -283,9 +280,9 @@ show tables"""
             False,
         )
 
-        assert next(itr) == ("""!spool $outfile\n""", False)
+        assert next(itr) == ("""!spool $outfile""", False)
         assert next(itr) == ("show views like 'AAA';", False)
-        assert next(itr) == ("!spool off\n", False)
+        assert next(itr) == ("!spool off", False)
         assert next(itr) == ("drop view if exists aaa;", False)
         assert next(itr) == ("show tables", False)
         with pytest.raises(StopIteration):
@@ -432,6 +429,7 @@ def test_sql_delimiter():
         next(itr)
 
 
+# In new approach, we are not using SQLDelimiter so this test is always skipped
 @pytest.mark.skipif(
     split_statements is None or SQLDelimiter is None,
     reason="No split_statements or SQLDelimiter is available",
@@ -555,6 +553,8 @@ def test_sql_createproc_sql():
         )
         assert next(itr) == ("call create_tables();", False)
         assert next(itr) == ("put file:///a.txt @stage1;", True)
+        with pytest.raises(StopIteration):
+            next(itr)
 
 
 def test_sql_nested_anonymous_block():
@@ -659,5 +659,104 @@ def test_sql_creatproc_declare_stmt():
             False,
         )
         assert next(itr) == ("""GET file:///a.txt @stage1;""", True)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+
+def test_auto_off():
+    with StringIO(
+        """
+        --SF:auto_split off
+        insert into table1 (i) values ('This is not a valid integer.');
+        select a from b;
+        --SF:<<
+    create or replace procedure create_tables() as             DECLARE
+              X NUMBER DEFAULT 0;
+              Y NUMBER DEFAULT X;
+            BEGIN
+              DECLARE
+                Z NUMBER DEFAULT X+Y;
+              BEGIN
+                SET X := 5;
+                RETURN Z;
+              END;
+            END;
+            --SF:>>
+            GET file:///a.txt @stage1;"""
+    ) as f:
+        itr = split_statements(f)
+        stmt = next(itr)
+        print(stmt[0])
+        assert stmt == (
+            """--SF:auto_split off
+        insert into table1 (i) values ('This is not a valid integer.');
+        select a from b;""",
+            False,
+        )
+        stmt = next(itr)
+        print(stmt)
+        assert stmt == (
+            """create or replace procedure create_tables() as             DECLARE
+              X NUMBER DEFAULT 0;
+              Y NUMBER DEFAULT X;
+            BEGIN
+              DECLARE
+                Z NUMBER DEFAULT X+Y;
+              BEGIN
+                SET X := 5;
+                RETURN Z;
+              END;
+            END;""",
+            False,
+        )
+        stmt = next(itr)
+        print(stmt)
+        assert stmt == ("GET file:///a.txt @stage1;", True)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+
+def test_auto_with_comments():
+    with StringIO(
+        """
+        insert into table1 (i) values ('This is not a valid integer.');
+        --SF:<<>>
+        select a from b;
+        --SF:<<
+        insert into table1 (i) values ('!@#$%^&*()?<>--<<>>');
+    create or replace procedure create_tables() as             DECLARE
+              X NUMBER DEFAULT 0;
+            BEGIN
+              DECLARE
+                Z NUMBER DEFAULT X;
+              BEGIN
+                SET X := 5;
+                RETURN Z;
+              END;
+            END;
+            --SF:>>
+            GET file:///a.txt @stage1;"""
+    ) as f:
+        itr = split_statements(f)
+        assert next(itr) == (
+            """insert into table1 (i) values ('This is not a valid integer.');""",
+            False,
+        )
+        assert next(itr) == ("""select a from b;""", False)
+        assert next(itr) == (
+            """insert into table1 (i) values ('!@#$%^&*()?<>--<<>>');
+    create or replace procedure create_tables() as             DECLARE
+              X NUMBER DEFAULT 0;
+            BEGIN
+              DECLARE
+                Z NUMBER DEFAULT X;
+              BEGIN
+                SET X := 5;
+                RETURN Z;
+              END;
+            END;""",
+            False,
+        )
+        assert next(itr) == ("GET file:///a.txt @stage1;", True)
         with pytest.raises(StopIteration):
             next(itr)

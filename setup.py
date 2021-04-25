@@ -55,6 +55,103 @@ pandas_requirements = [
     "pandas>=1.0.0,<1.4.0",
 ]
 
+cmd_class = {}
+try:
+    import distutils.command.build as dist_build
+    import distutils.command.sdist as dist_sdist
+    import subprocess
+    import urllib.request
+
+    _ABLE_TO_ANTLR_CODEGEN = True
+except ImportError as ie:
+    warnings.warn(f"Cannot do codegen, because of a missing build dependency {ie}")
+    _ABLE_TO_ANTLR_CODEGEN = False
+
+
+if _ABLE_TO_ANTLR_CODEGEN:
+
+    class Codegen(object):
+        ANTLR_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "antlr")
+        ANTLR_VER = "4.9.2"
+        ANTLR_JAR = f"antlr-{ANTLR_VER}-complete.jar"
+
+        def init_options(self):
+            """set default values for options"""
+            self.grammar_file = os.path.join(Codegen.ANTLR_SRC_DIR, "querySeparator.g")
+            self.target_language = "Python3"
+            self.antlr_url = "https://www.antlr.org/download/antlr-4.9.2-complete.jar"
+
+        def finalize_options(self):
+            if self.grammar_file:
+                assert os.path.exists(self.grammar_file), (
+                    "grammar file %s does not exist." % self.grammar_file
+                )
+
+        def run(self):
+            # download antlr-4.9.2-complete.jar
+            jar_path = os.path.join(THIS_DIR, self.ANTLR_JAR)
+
+            if not os.path.exists(jar_path):
+                urllib.request.urlretrieve(self.antlr_url, jar_path)
+
+            # run command to generate python stub
+            command = [
+                "java",
+                "-cp",
+                jar_path,
+                "org.antlr.v4.Tool",
+                "-Dlanguage=%s" % self.target_language,
+                self.grammar_file,
+            ]
+
+            subprocess.check_call(command)
+            # no need to remove the antlr jar since it is not copied to dist
+            # if remove_jar_flag:
+            #    os.remove(jar_path)
+
+    class CodegenBuild(dist_build.build):
+        """Codegen command to generate python code from ANTLR4 definition"""
+
+        description = "download then run antlr4 to generate ANTLR4 python stub"
+        user_options = [
+            ("grammar-file=", None, "path to grammar file"),
+            ("target-language=", None, "target language(default=Python3)"),
+            ("antlr-url=", None, "url to download antlr-X.Y.Z-complete.jar"),
+        ]
+
+        def initialize_options(self):
+            self.codegen = Codegen()
+            self.codegen.init_options()
+            dist_build.build.initialize_options(self)
+
+        def finalize_options(self):
+            self.codegen.finalize_options()
+            dist_build.build.finalize_options(self)
+
+        def run(self):
+            print("build codegen run")
+            self.codegen.run()
+            dist_build.build.run(self)
+
+    cmd_class["build"] = CodegenBuild
+
+    class CodegenSdist(dist_sdist.sdist):
+        def initialize_options(self):
+            self.codegen = Codegen()
+            self.codegen.init_options()
+            dist_sdist.sdist.initialize_options(self)
+
+        def finalize_options(self):
+            self.codegen.finalize_options()
+            dist_sdist.sdist.finalize_options(self)
+
+        def run(self):
+            print("sdist codegen run")
+            self.codegen.run()
+            dist_sdist.sdist.run(self)
+
+    cmd_class["sdist"] = CodegenSdist
+
 try:
     import numpy
     import pyarrow
@@ -62,8 +159,10 @@ try:
     from Cython.Distutils import build_ext
 
     _ABLE_TO_COMPILE_EXTENSIONS = True
-except ImportError:
-    warnings.warn("Cannot compile native C code, because of a missing build dependency")
+except ImportError as ie:
+    warnings.warn(
+        f"Cannot compile native C code, because of a missing build dependency {ie}"
+    )
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
@@ -180,7 +279,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             return ret
 
-    cmd_class = {"build_ext": MyBuildExt}
+    cmd_class["build_ext"] = MyBuildExt
 
 setup(
     name="snowflake-connector-python",
@@ -241,7 +340,7 @@ setup(
         "": "src",
     },
     package_data={
-        "snowflake.connector": ["*.pem", "*.json", "*.rst", "LICENSE.txt"],
+        "snowflake.connector": ["*.pem", "*.json", "*.rst", "LICENSE.txt", "antlr/*.g"],
     },
     entry_points={
         "console_scripts": [

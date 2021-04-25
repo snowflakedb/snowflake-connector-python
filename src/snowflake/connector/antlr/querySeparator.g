@@ -1,9 +1,6 @@
 grammar querySeparator;
 
-// Method for hacky StorageUrlIdentifier fix
-// https://stackoverflow.com/questions/8797484/antlr-lexer-tokens-that-match-similar-strings-what-if-the-greedy-lexer-makes-a?rq=1
-// Uses look ahead to check if given string is next up in the input
-
+// Method for hacky look ahead for createFuncProc pattern detection
 
 @parser::members {
     import re
