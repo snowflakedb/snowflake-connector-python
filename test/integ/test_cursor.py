@@ -32,7 +32,6 @@ from snowflake.connector.errorcode import (
     ER_INVALID_VALUE,
     ER_NOT_POSITIVE_SIZE,
 )
-from snowflake.connector.result_chunk import ArrowResultChunk, JSONResultChunk
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
@@ -47,11 +46,13 @@ try:
         ER_NO_PYARROW,
         ER_NO_PYARROW_SNOWSQL,
     )
+    from snowflake.connector.result_chunk import ArrowResultChunk, JSONResultChunk
 except ImportError:
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
     ER_NO_ARROW_RESULT = None
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
+    ArrowResultChunk = JSONResultChunk = None
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.result_chunk import ResultChunk
