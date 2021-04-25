@@ -49,6 +49,8 @@ from .time_util import get_time_millis
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
+    from .result_chunk import ResultChunk
+
 
 logger = getLogger(__name__)
 

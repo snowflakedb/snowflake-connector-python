@@ -8,8 +8,10 @@ import decimal
 import json
 import logging
 import os
+import pickle
 import time
 from datetime import datetime
+from typing import TYPE_CHECKING, List
 
 import mock
 import pytest
@@ -30,7 +32,9 @@ from snowflake.connector.errorcode import (
     ER_INVALID_VALUE,
     ER_NOT_POSITIVE_SIZE,
 )
+from snowflake.connector.result_chunk import ArrowResultChunk, JSONResultChunk
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
+from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
 
@@ -48,6 +52,9 @@ except ImportError:
     ER_NO_ARROW_RESULT = None
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
+
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector.result_chunk import ResultChunk
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -1196,4 +1203,63 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
     ) in caplog.record_tuples
 
 
-# def test_
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize(
+    "result_format,expected_chunk_type",
+    (
+        ("json", JSONResultChunk),
+        ("arrow", ArrowResultChunk),
+    ),
+)
+def test_resultchunk_pickling(
+    conn_cnx,
+    result_format,
+    expected_chunk_type,
+):
+    """This test checks the following things:
+    1. After executing a query can we pickle the result partitions
+    2. When we get the partitions, do we emit a telemetry log
+    3. Whether we can iterate through ResultChunks multiple times
+    4. Whether the results make sense
+    """
+    rowcount = 100000
+    with conn_cnx(
+        session_parameters={
+            "python_connector_query_result_format": result_format,
+        }
+    ) as con:
+        # TODO: add a fixture to easily capture telemetry data
+        telemetry_data = []
+        add_log_mock = mock.Mock()
+        add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
+        con._telemetry.add_log_to_batch = add_log_mock
+        with con.cursor() as cur:
+            cur.execute(f"select seq4() from table(generator(rowcount => {rowcount}));")
+            pre_pickle_partitions = cur.get_result_partitions()
+            assert len(pre_pickle_partitions) > 1
+            assert pre_pickle_partitions is not None
+            assert all(
+                isinstance(p, expected_chunk_type) for p in pre_pickle_partitions
+            )
+            pickle_str = pickle.dumps(pre_pickle_partitions)
+            assert any(
+                t.message["type"] == TelemetryField.GET_PARTITIONS_USED
+                for t in telemetry_data
+            )
+    post_pickle_partitions: List["ResultChunk"] = pickle.loads(pickle_str)
+    total_rows = 0
+    # Make sure the partitions can be iterated over individually
+    for partition in post_pickle_partitions:
+        for row in partition:
+            col1 = row[0]
+            assert col1 == total_rows
+            total_rows += 1
+    assert total_rows == rowcount
+    total_rows = 0
+    # Make sure the partitions can be iterated over again
+    for partition in post_pickle_partitions:
+        for row in partition:
+            col1 = row[0]
+            assert col1 == total_rows
+            total_rows += 1
+    assert total_rows == rowcount
