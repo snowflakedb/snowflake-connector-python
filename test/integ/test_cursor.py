@@ -931,15 +931,16 @@ def test_empty_execution(conn):
                 cur.fetchall()
 
 
-@pytest.mark.skipolddriver(reason="There was a bug about rownumber in older versions")
 def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
-            assert cur.execute("select * from values (1), (2)").fetchone() == (1,)
-            assert cur.rownumber == 1
+            assert cur.execute("select * from values (1), (2)")
+            assert cur.rownumber is None
+            assert cur.fetchone() == (1,)
+            assert cur.rownumber == 0
             assert cur.fetchone() == (2,)
-            assert cur.rownumber == 2
+            assert cur.rownumber == 1
 
 
 def test_values_set(conn):
