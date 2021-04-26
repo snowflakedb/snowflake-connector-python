@@ -65,7 +65,7 @@ def create_chunks_from_response(
     cursor: "SnowflakeCursor",
     _format: str,
     data: Dict[str, Any],
-) -> List["ResultChunk"]:
+) -> List["ResultBatch"]:
     column_converters: List[Tuple[str, "SnowflakeConverterType"]] = []
     arrow_context: Optional["ArrowConverterContext"] = None
     rowtypes = data["rowtype"]
@@ -78,7 +78,7 @@ def create_chunks_from_response(
             )
             for c in rowtypes
         ]
-        first_chunk = JSONResultChunk.from_data(
+        first_chunk = JSONResultBatch.from_data(
             data.get("rowset"),
             column_names,
             column_converters,
@@ -89,7 +89,7 @@ def create_chunks_from_response(
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
 
         if rowset_b64:
-            first_chunk = ArrowResultChunk.from_data(
+            first_chunk = ArrowResultBatch.from_data(
                 rowset_b64,
                 arrow_context,
                 cursor._use_dict_result,
@@ -99,7 +99,7 @@ def create_chunks_from_response(
             )
         else:
             # Log
-            first_chunk = ArrowResultChunk.from_data(
+            first_chunk = ArrowResultBatch.from_data(
                 [],
                 arrow_context,
                 cursor._use_dict_result,
@@ -133,7 +133,7 @@ def create_chunks_from_response(
 
         if _format == "json":
             return [first_chunk] + [
-                JSONResultChunk(
+                JSONResultBatch(
                     c["rowCount"],
                     chunk_headers,
                     RemoteChunkInfo(
@@ -149,7 +149,7 @@ def create_chunks_from_response(
             ]
         else:
             return [first_chunk] + [
-                ArrowResultChunk(
+                ArrowResultBatch(
                     c["rowCount"],
                     chunk_headers,
                     RemoteChunkInfo(
@@ -167,7 +167,7 @@ def create_chunks_from_response(
             ]
 
 
-class ResultChunk(abc.ABC):
+class ResultBatch(abc.ABC):
     def __init__(
         self,
         rowcount: int,
@@ -227,7 +227,7 @@ class ResultChunk(abc.ABC):
         raise NotImplementedError()
 
 
-class JSONResultChunk(ResultChunk):
+class JSONResultBatch(ResultBatch):
     def __init__(
         self,
         rowcount: int,
@@ -366,7 +366,7 @@ class JSONResultChunk(ResultChunk):
         return iter(parsed_data)
 
 
-class ArrowResultChunk(ResultChunk):
+class ArrowResultBatch(ResultBatch):
     def __init__(
         self,
         rowcount: int,

@@ -46,16 +46,16 @@ try:
         ER_NO_PYARROW,
         ER_NO_PYARROW_SNOWSQL,
     )
-    from snowflake.connector.result_chunk import ArrowResultChunk, JSONResultChunk
+    from snowflake.connector.result_batch import ArrowResultBatch, JSONResultBatch
 except ImportError:
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
     ER_NO_ARROW_RESULT = None
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
-    ArrowResultChunk = JSONResultChunk = None
+    ArrowResultBatch = JSONResultBatch = None
 
 if TYPE_CHECKING:  # pragma: no cover
-    from snowflake.connector.result_chunk import ResultChunk
+    from snowflake.connector.result_batch import ResultBatch
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -1209,19 +1209,19 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
 @pytest.mark.parametrize(
     "result_format,expected_chunk_type",
     (
-        ("json", JSONResultChunk),
-        ("arrow", ArrowResultChunk),
+        ("json", JSONResultBatch),
+        ("arrow", ArrowResultBatch),
     ),
 )
-def test_resultchunk_pickling(
+def test_resultbatch_pickling(
     conn_cnx,
     result_format,
     expected_chunk_type,
 ):
     """This test checks the following things:
-    1. After executing a query can we pickle the result partitions
-    2. When we get the partitions, do we emit a telemetry log
-    3. Whether we can iterate through ResultChunks multiple times
+    1. After executing a query can we pickle the result batches
+    2. When we get the batches, do we emit a telemetry log
+    3. Whether we can iterate through ResultBatches multiple times
     4. Whether the results make sense
     """
     rowcount = 100000
@@ -1237,7 +1237,7 @@ def test_resultchunk_pickling(
         con._telemetry.add_log_to_batch = add_log_mock
         with con.cursor() as cur:
             cur.execute(f"select seq4() from table(generator(rowcount => {rowcount}));")
-            pre_pickle_partitions = cur.get_result_partitions()
+            pre_pickle_partitions = cur.get_result_batches()
             assert len(pre_pickle_partitions) > 1
             assert pre_pickle_partitions is not None
             assert all(
@@ -1248,7 +1248,7 @@ def test_resultchunk_pickling(
                 t.message["type"] == TelemetryField.GET_PARTITIONS_USED
                 for t in telemetry_data
             )
-    post_pickle_partitions: List["ResultChunk"] = pickle.loads(pickle_str)
+    post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the partitions can be iterated over individually
     for partition in post_pickle_partitions:

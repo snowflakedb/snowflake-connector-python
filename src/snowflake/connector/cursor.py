@@ -14,7 +14,7 @@ from logging import getLogger
 from threading import Lock, Timer
 from typing import IO, TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
 
-from snowflake.connector.result_chunk import create_chunks_from_response
+from snowflake.connector.result_batch import create_chunks_from_response
 from snowflake.connector.result_set import ResultSet
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
@@ -49,7 +49,7 @@ from .time_util import get_time_millis
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
-    from .result_chunk import ResultChunk
+    from .result_batch import ResultBatch
 
 
 logger = getLogger(__name__)
@@ -1121,8 +1121,7 @@ class SnowflakeCursor(object):
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
-    # TODO: final name? get_paritions? get_batches? get_chunks?
-    def get_result_partitions(self) -> Optional[List["ResultChunk"]]:
+    def get_result_batches(self) -> Optional[List["ResultBatch"]]:
         if self._result_set is None:
             return None
         self._log_telemetry_job_data(TelemetryField.GET_PARTITIONS_USED, 1)

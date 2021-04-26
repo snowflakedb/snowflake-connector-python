@@ -19,7 +19,7 @@ from typing import (
 from .arrow_iterator import TABLE_UNIT
 from .errors import NotSupportedError
 from .options import installed_pandas, pandas
-from .result_chunk import ArrowResultChunk, DownloadMetrics, ResultChunk
+from .result_batch import ArrowResultBatch, DownloadMetrics, ResultBatch
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
 
@@ -36,7 +36,7 @@ logger = getLogger(__name__)
 
 def result_set_iterator(
     pre_iter: Iterator[Iterator[Tuple]],
-    post_iter: Iterable["ResultChunk"],
+    post_iter: Iterable["ResultBatch"],
     final: Callable[[], None],
     **kw: Any,
 ) -> Iterator[Tuple]:
@@ -67,7 +67,7 @@ class ResultSet(Iterable[List[Any]]):
     def __init__(
         self,
         cursor: "SnowflakeCursor",
-        result_chunks: List["ResultChunk"],
+        result_chunks: List["ResultBatch"],
     ):
         """Initialize a ResultSet with a connection and a list of ResultChunks."""
         self.partitions = result_chunks
@@ -103,7 +103,7 @@ class ResultSet(Iterable[List[Any]]):
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
         head_type = type(self.partitions[0])
-        if head_type != ArrowResultChunk:
+        if head_type != ArrowResultBatch:
             raise NotSupportedError(
                 f"Trying to use arrow fetching on {head_type} which "
                 f"is not ArrowResultChunk"
