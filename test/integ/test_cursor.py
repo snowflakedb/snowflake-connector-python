@@ -1237,6 +1237,7 @@ def test_resultbatch(
         con._telemetry.add_log_to_batch = add_log_mock
         with con.cursor() as cur:
             cur.execute(f"select seq4() from table(generator(rowcount => {rowcount}));")
+            assert cur._result_set.total_row_index() == rowcount
             pre_pickle_partitions = cur.get_result_batches()
             assert len(pre_pickle_partitions) > 1
             assert pre_pickle_partitions is not None

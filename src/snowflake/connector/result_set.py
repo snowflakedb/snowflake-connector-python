@@ -187,7 +187,6 @@ class ResultSet(Iterable[List[Any]]):
             **kwargs,
         )
 
-    @property
     def total_row_index(self) -> int:
         """Returns the total rowcount of the `ResultSet` ."""
         total = 0

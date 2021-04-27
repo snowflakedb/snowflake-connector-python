@@ -502,6 +502,7 @@ class ArrowResultBatch(ResultBatch):
             number_to_decimal,
         )
         new_chunk._data = data
+        new_chunk.rowcount = len(list(new_chunk._from_data(data, ROW_UNIT)))
         return new_chunk
 
     def _download(
