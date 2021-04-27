@@ -191,7 +191,7 @@ class SnowflakeCursor(object):
         self._log_max_query_length = connection.log_max_query_length
         self._inner_cursor: Optional["SnowflakeCursor"] = None
         self._prefetch_hook = None
-        self._rownumber: Optional[int] = None
+        self.rownumber: Optional[int] = None
 
         self.reset()
 
@@ -209,10 +209,6 @@ class SnowflakeCursor(object):
     @property
     def rowcount(self):
         return self._total_rowcount if self._total_rowcount >= 0 else None
-
-    @property
-    def rownumber(self):
-        return self._rownumber if self._rownumber >= 0 else None
 
     @property
     def sfqid(self):
@@ -747,7 +743,7 @@ class SnowflakeCursor(object):
             self,
             result_chunks,
         )
-        self._rownumber = -1
+        self.rownumber = 0
 
         if is_dml:
             updated_rows = 0
@@ -964,7 +960,7 @@ class SnowflakeCursor(object):
                     self,
                     _next,
                 )
-            self._rownumber += 1
+            self.rownumber += 1
             return _next
         except StopIteration:
             return None
@@ -1109,7 +1105,7 @@ class SnowflakeCursor(object):
             )
             self._result = self._inner_cursor._result
             self._result_set = self._inner_cursor._result_set
-            self._rownumber = 0
+            self.rownumber = 0
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
