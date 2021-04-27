@@ -23,7 +23,10 @@ from snowflake.connector.remote_storage_client import (
     DEFAULT_MAX_RETRY,
     SnowflakeRemoteStorageClient,
 )
-from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED, SnowflakeS3Util
+from snowflake.connector.s3_storage_client import (
+    ERRORNO_WSAECONNABORTED,
+    SnowflakeS3RestClient,
+)
 
 try:
     from snowflake.connector.file_transfer_agent import (
@@ -42,33 +45,29 @@ MINIMAL_METADATA = SnowflakeFileMeta(
 )
 
 
-def test_extract_bucket_name_and_path():
+@pytest.mark.parametrize(
+    "input, bucket_name, s3path",
+    [
+        ("sfc-dev1-regression/test_sub_dir/", "sfc-dev1-regression", "test_sub_dir/"),
+        (
+            "sfc-dev1-regression/stakeda/test_stg/test_sub_dir/",
+            "sfc-dev1-regression",
+            "stakeda/test_stg/test_sub_dir/",
+        ),
+        ("sfc-dev1-regression/", "sfc-dev1-regression", ""),
+        ("sfc-dev1-regression//", "sfc-dev1-regression", "/"),
+        ("sfc-dev1-regression///", "sfc-dev1-regression", "//"),
+    ],
+)
+def test_extract_bucket_name_and_path(input, bucket_name, s3path):
     """Extracts bucket name and S3 path."""
-    s3_util = SnowflakeS3Util
-
-    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression/test_sub_dir/")
-    assert s3_loc.bucket_name == "sfc-dev1-regression"
-    assert s3_loc.s3path == "test_sub_dir/"
-
-    s3_loc = s3_util._extract_bucket_name_and_path(
-        "sfc-dev1-regression/stakeda/test_stg/test_sub_dir/"
-    )
-    assert s3_loc.bucket_name == "sfc-dev1-regression"
-    assert s3_loc.s3path == "stakeda/test_stg/test_sub_dir/"
-
-    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression/")
-    assert s3_loc.bucket_name == "sfc-dev1-regression"
-    assert s3_loc.s3path == ""
-
-    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression//")
-    assert s3_loc.bucket_name == "sfc-dev1-regression"
-    assert s3_loc.s3path == "/"
-
-    s3_loc = s3_util._extract_bucket_name_and_path("sfc-dev1-regression///")
-    assert s3_loc.bucket_name == "sfc-dev1-regression"
-    assert s3_loc.s3path == "//"
+    s3_util = SnowflakeS3RestClient
+    s3_loc = s3_util._extract_bucket_name_and_path(input)
+    assert s3_loc.bucket_name == bucket_name
+    assert s3_loc.s3path == s3path
 
 
+# TODO
 def test_upload_one_file_to_s3_wsaeconnaborted():
     """Tests Upload one file to S3 with retry on ERRORNO_WSAECONNABORTED.
 
@@ -125,6 +124,7 @@ def test_upload_one_file_to_s3_wsaeconnaborted():
     assert meta.last_max_concurrency == 1
 
 
+# TODO
 def test_upload_one_file_to_s3_econnreset():
     """Tests Upload one file to S3 with retry on errno.ECONNRESET.
 

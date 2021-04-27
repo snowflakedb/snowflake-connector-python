@@ -15,7 +15,7 @@ from botocore.exceptions import ClientError
 
 from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
-from snowflake.connector.s3_util import SnowflakeS3Util
+from snowflake.connector.s3_storage_client import SnowflakeS3Util
 
 from ..integ_helpers import put
 from ..randomize import random_string

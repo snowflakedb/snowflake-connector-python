@@ -22,7 +22,7 @@ except ImportError:  # NOQA
 pytestmark = pytest.mark.gcp
 
 try:
-    from snowflake.connector.gcs_util import SnowflakeGCSRestClient  # NOQA
+    from snowflake.connector.gcs_storage_client import SnowflakeGCSRestClient  # NOQA
 except ImportError:
     SnowflakeGCSUtil = None
 

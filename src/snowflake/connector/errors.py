@@ -470,7 +470,7 @@ class BindUploadError(Error):
     pass
 
 
-class S3AbortConnectionError(Error):
-    """Exception for s3 aborting concurrent connections."""
+class RequestExceedMaxRetryError(Error):
+    """Exception for REST call to remote storage API exceeding maximum retries with transient errors"""
 
     pass
