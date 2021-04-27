@@ -1213,7 +1213,7 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         ("arrow", ArrowResultBatch),
     ),
 )
-def test_resultbatch_pickling(
+def test_resultbatch(
     conn_cnx,
     result_format,
     expected_chunk_type,
@@ -1250,7 +1250,7 @@ def test_resultbatch_pickling(
             )
     post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
     total_rows = 0
-    # Make sure the partitions can be iterated over individually
+    # Make sure the batches can be iterated over individually
     for partition in post_pickle_partitions:
         for row in partition:
             col1 = row[0]
@@ -1258,7 +1258,7 @@ def test_resultbatch_pickling(
             total_rows += 1
     assert total_rows == rowcount
     total_rows = 0
-    # Make sure the partitions can be iterated over again
+    # Make sure the batches can be iterated over again
     for partition in post_pickle_partitions:
         for row in partition:
             col1 = row[0]

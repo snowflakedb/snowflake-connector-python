@@ -1125,7 +1125,7 @@ class SnowflakeCursor(object):
         if self._result_set is None:
             return None
         self._log_telemetry_job_data(TelemetryField.GET_PARTITIONS_USED, 1)
-        return self._result_set.partitions
+        return self._result_set.batches
 
 
 class DictCursor(SnowflakeCursor):

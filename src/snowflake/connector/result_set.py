@@ -14,6 +14,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Union,
 )
 
 from .arrow_iterator import TABLE_UNIT
@@ -39,14 +40,21 @@ def result_set_iterator(
     post_iter: Iterable["ResultBatch"],
     final: Callable[[], None],
     **kw: Any,
-) -> Iterator[Tuple]:
+) -> Union[
+    Iterator[Union[Dict, Exception]],
+    Iterator[Union[Tuple, Exception]],
+    Iterator[Table],
+]:
     """Creates an iterator over some other iterators.
 
     Very similar to itertools.chain but we need some keywords to be propagated to
-    _download functions later.
+    `_download` functions later.
 
     We need this to have ResultChunks fall out of usage so that they can be garbage
     collected.
+
+    Just like `ResultBatch` iterator, this might yield an `Exception` to allow users to
+    continue iterating through the rest of the `ResultBatch`.
     """
     for it in pre_iter:
         for element in it:
@@ -61,7 +69,11 @@ class ResultSet(Iterable[List[Any]]):
     """This class retrieves the results of a query with the historical strategy.
 
     It pre-downloads the first up to 4 ResultChunks (this doesn't include the 1st chunk
-    as that is embedded in the response JSON from Snowflake).
+    as that is embedded in the response JSON from Snowflake) upon creating an Iterator
+    on it.
+
+    It also reports telemetry data about its `ResultBatch`es once it's done iterating
+    through them.
     """
 
     def __init__(
@@ -69,8 +81,7 @@ class ResultSet(Iterable[List[Any]]):
         cursor: "SnowflakeCursor",
         result_chunks: List["ResultBatch"],
     ):
-        """Initialize a ResultSet with a connection and a list of ResultChunks."""
-        self.partitions = result_chunks
+        self.batches = result_chunks
         self._cursor = cursor
         self._iter: Optional[Iterator[Tuple]] = None
 
@@ -102,7 +113,7 @@ class ResultSet(Iterable[List[Any]]):
         """Fetches a all the results as Arrow Tables, chunked by Snowflake back-end."""
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
-        head_type = type(self.partitions[0])
+        head_type = type(self.batches[0])
         if head_type != ArrowResultBatch:
             raise NotSupportedError(
                 f"Trying to use arrow fetching on {head_type} which "
@@ -111,7 +122,7 @@ class ResultSet(Iterable[List[Any]]):
         return self._create_iter(iter_unit=TABLE_UNIT)
 
     def _fetch_arrow_all(self):
-        """Fetches a single Arrow Table."""
+        """Fetches a single Arrow Table from all of the `ResultBatch`."""
         tables = list(self._fetch_arrow_batches())
         if tables:
             return concat_tables(tables)
@@ -119,8 +130,11 @@ class ResultSet(Iterable[List[Any]]):
             return None
 
     def _fetch_pandas_batches(self, **kwargs):
-        """Fetches Pandas dataframes in batch, where 'batch' refers to Snowflake Chunk. Thus, the batch size (the
-        number of rows in dataframe) is optimized by Snowflake Python Connector."""
+        """Fetches Pandas dataframes in batches, where batch refers to Snowflake Chunk.
+
+        Thus, the batch size (the number of rows in dataframe) is determined by
+        Snowflake's back-end.
+        """
         for table in self._fetch_arrow_batches():
             yield table.to_pandas(**kwargs)
 
@@ -130,30 +144,41 @@ class ResultSet(Iterable[List[Any]]):
         if table:
             return table.to_pandas(**kwargs)
         else:
-            return pandas.DataFrame(columns=self.partitions[0]._column_names)
+            return pandas.DataFrame(columns=self.batches[0]._column_names)
 
     def _get_metrics(self) -> Dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""
         overall_metrics: Dict[str, int] = {}
-        for c in self.partitions:
+        for c in self.batches:
             for n, v in c._metrics.items():
                 overall_metrics[n] = overall_metrics.get(n, 0) + v
         return overall_metrics
 
     def __iter__(self) -> Iterator[Tuple]:
-        """Returns a new iterator through all partitions with default values."""
+        """Returns a new iterator through all batches with default values."""
         return self._create_iter()
 
-    def _create_iter(self, **kwargs) -> Iterator[Tuple]:
-        """Set up a new iterator through all partitions with first 5 chunks ready."""
+    def _create_iter(
+        self,
+        **kwargs,
+    ) -> Union[
+        Iterator[Union[Dict, Exception]],
+        Iterator[Union[Tuple, Exception]],
+        Iterator[Table],
+    ]:
+        """Set up a new iterator through all batches with first 5 chunks downloaded.
+
+        This function is a helper function to `__iter__` and it was introduced for the
+        cases where we need to propagate some values to later `_download` calls.
+        """
         futures: List[Future[Iterator[Tuple]]] = []
         with ThreadPoolExecutor(4) as pool:
-            for p in self.partitions[1:5]:
+            for p in self.batches[1:5]:
                 futures.append(pool.submit(p._download, **kwargs))
         pre_downloaded_iters: List[Iterator[Tuple]] = [
-            self.partitions[0]._download(**kwargs)
+            self.batches[0]._download(**kwargs)
         ] + [r.result() for r in futures]
-        post_download_iters = self.partitions[5:]
+        post_download_iters = self.batches[5:]
 
         return result_set_iterator(
             iter(pre_downloaded_iters),
@@ -164,7 +189,8 @@ class ResultSet(Iterable[List[Any]]):
 
     @property
     def total_row_index(self) -> int:
+        """Returns the total rowcount of the `ResultSet` ."""
         total = 0
-        for p in self.partitions:
+        for p in self.batches:
             total += p.rowcount
         return total

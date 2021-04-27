@@ -26,6 +26,7 @@ from .arrow_context import ArrowConverterContext
 from .arrow_iterator import ROW_UNIT, TABLE_UNIT
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
 from .errors import Error, InterfaceError
+from .options import installed_pandas
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
 from .vendored import requests
 
@@ -37,6 +38,12 @@ DOWNLOAD_TIMEOUT = 7  # seconds
 if TYPE_CHECKING:  # pragma: no cover
     from .converter import SnowflakeConverterType
     from .cursor import SnowflakeCursor
+    from .vendored.requests import Response
+
+if installed_pandas:
+    from pyarrow import Table
+else:
+    Table = None
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
@@ -100,7 +107,7 @@ def create_chunks_from_response(
         else:
             # Log
             first_chunk = ArrowResultBatch.from_data(
-                [],
+                "",
                 arrow_context,
                 cursor._use_dict_result,
                 cursor._connection._numpy,
@@ -168,6 +175,26 @@ def create_chunks_from_response(
 
 
 class ResultBatch(abc.ABC):
+    """Represents what the back-end calls a result chunk.
+
+    These are parts of a result set of a query. They each know how to retrieve their
+    own results and convert them into Python native formats.
+
+    As you are iterating through a ResultBatch you should check whether the yielded
+    value is an `Exception` in case there was some error parsing the current row
+    we might yield on of these to allow iteration to continue instead of raising the
+    `Exception` when it occures.
+
+    These objects are pickleable for easy distribution and replication.
+
+    Please note that the URLs stored in these do expire. The lifetime is dictated by the
+    Snowflake back-end, at the time of writing this this is 6 hours.
+
+    They can be iterated over multiple times and in different ways. Please follow the
+    code in `cursor.py` to make sure that you are using this class correctly.
+
+    """
+
     def __init__(
         self,
         rowcount: int,
@@ -182,7 +209,7 @@ class ResultBatch(abc.ABC):
         self._column_names = column_names
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
-        self._data: Optional[List[List[Any, ...]]] = None
+        self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
 
     @property
     def _local(self) -> bool:
@@ -195,9 +222,9 @@ class ResultBatch(abc.ABC):
 
         If it's a local chunk this function returns None.
         """
-        if self._remote_chunk_info:
-            return self._remote_chunk_info.compressedSize
-        return None
+        if self._local:
+            return None
+        return self._remote_chunk_info.compressedSize
 
     @property
     def uncompressed_size(self) -> Optional[int]:
@@ -205,25 +232,37 @@ class ResultBatch(abc.ABC):
 
         If it's a local chunk this function returns None.
         """
-        if self._remote_chunk_info:
-            return self._remote_chunk_info.uncompressedSize
-        return None
+        if self._local:
+            return None
+        return self._remote_chunk_info.uncompressedSize
 
     def __iter__(
         self,
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         """Returns an iterator through the data this chunk holds.
 
-        In case of this being a local chunk it iterates through the local already parsed
-        data and if it's a remote chunk it will download, parse its data and return an
-        iterator for it.
+        In case of this chunk being a local one it iterates through the local already
+        parsed data and if it's a remote chunk it will download, parse its data and
+        return an iterator through it.
         """
         return self._download()
 
     @abc.abstractmethod
     def _download(
         self, **kwargs
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+    ) -> Union[
+        Iterator[Union[Dict, Exception]],
+        Iterator[Union[Tuple, Exception]],
+        Iterator[Table],
+    ]:
+        """Downloads the data from from blob storage that this ResultChunk points at.
+
+        This function is the one that does the actual work for `self.__iter__`.
+
+        It is necessary because a `ResultBatch` can return multiple types of iterators.
+        A good example of this is simply iterating through `SnowflakeCursor` and calling
+        `fetch_pandas_batches` on it.
+        """
         raise NotImplementedError()
 
 
@@ -254,6 +293,7 @@ class JSONResultBatch(ResultBatch):
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
     ):
+        """Initializes a `JSONResultBatch` from static, local data."""
         new_chunk = cls(
             len(data),
             None,
@@ -265,15 +305,22 @@ class JSONResultBatch(ResultBatch):
         new_chunk._data = list(new_chunk._parse(data))
         return new_chunk
 
-    def _load(self, response):  # TODO types
+    def _load(self, response: "Response") -> List:
+        """This function loads a compressed JSON file into memory.
+
+        Returns:
+            Whatever `json.loads` return, but in a list.
+            Unfortunately there's not type hint for this.
+            For context: https://github.com/python/typing/issues/182
+        """
         with GzipFile(fileobj=response.raw, mode="r") as gfd:
-            # Read in decompressed data
             read_data: str = gfd.read().decode("utf-8", "replace")
             return json.loads("".join(["[", read_data, "]"]))
 
     def _parse(
         self, downloaded_data
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+        """Parses downloaded data into its final form."""
         if self._use_dict_result:
             for row in downloaded_data:
                 row_result = {}
@@ -289,10 +336,7 @@ class JSONResultBatch(ResultBatch):
                     logger.exception(msg)
                     yield Error.errorhandler_make_exception(
                         InterfaceError,
-                        {
-                            "msg": msg,
-                            "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
-                        },
+                        {"msg": msg, "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE},
                     )
                 yield row_result
         else:
@@ -312,10 +356,7 @@ class JSONResultBatch(ResultBatch):
                     logger.exception(msg)
                     yield Error.errorhandler_make_exception(
                         InterfaceError,
-                        {
-                            "msg": msg,
-                            "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
-                        },
+                        {"msg": msg, "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE},
                     )
                 yield tuple(row_result)
 
@@ -391,6 +432,11 @@ class ArrowResultBatch(ResultBatch):
     def _load(
         self, response, row_unit: str
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+        """Creates a `PyArrowIterator` from a response.
+
+        This is used to iterate through results in different ways depending on which
+        mode that `PyArrowIterator` is in.
+        """
         from .arrow_iterator import PyArrowIterator
 
         gfd = GzipFile(fileobj=response.raw, mode="r")
@@ -407,10 +453,14 @@ class ArrowResultBatch(ResultBatch):
             iter.init_table_unit()
         return iter
 
-    def parse(self, downloaded_data):
-        return downloaded_data
+    def _from_data(
+        self, data: str, iter_unit: str
+    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+        """Creates a `PyArrowIterator` files from a str.
 
-    def _from_data(self, data: str, iter_unit: int):
+        This is used to iterate through results in different ways depending on which
+        mode that `PyArrowIterator` is in.
+        """
         from .arrow_iterator import PyArrowIterator
 
         if len(data) == 0:
@@ -433,13 +483,14 @@ class ArrowResultBatch(ResultBatch):
     @classmethod
     def from_data(
         cls,
-        data: Sequence[Sequence[Any]],
+        data: str,
         context: "ArrowConverterContext",
         use_dict_result: bool,
         numpy: bool,
         column_names: Sequence[str],
         number_to_decimal: bool,
     ):
+        """Initializes an `ArrowResultBatch` from static, local data."""
         new_chunk = cls(
             len(data),
             None,
@@ -455,7 +506,11 @@ class ArrowResultBatch(ResultBatch):
 
     def _download(
         self, **kwargs
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+    ) -> Union[
+        Iterator[Union[Dict, Exception]],
+        Iterator[Union[Tuple, Exception]],
+        Iterator[Table],
+    ]:
         iter_unit = kwargs.pop("iter_unit", ROW_UNIT)
         if self._local:
             return self._from_data(self._data, iter_unit)
