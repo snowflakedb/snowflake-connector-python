@@ -1223,6 +1223,7 @@ def test_resultbatch(
     2. When we get the batches, do we emit a telemetry log
     3. Whether we can iterate through ResultBatches multiple times
     4. Whether the results make sense
+    5. See whether getter functions are working
     """
     rowcount = 100000
     with conn_cnx(
@@ -1252,7 +1253,14 @@ def test_resultbatch(
     post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually
-    for partition in post_pickle_partitions:
+    for i, partition in enumerate(post_pickle_partitions):
+        # Tests whether the getter functions are working
+        if i == 0:
+            assert partition.compressed_size is None
+            assert partition.uncompressed_size is None
+        else:
+            assert partition.compressed_size is not None
+            assert partition.uncompressed_size is not None
         for row in partition:
             col1 = row[0]
             assert col1 == total_rows
