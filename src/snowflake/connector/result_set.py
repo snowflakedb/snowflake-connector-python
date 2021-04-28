@@ -20,7 +20,12 @@ from typing import (
 from .arrow_iterator import TABLE_UNIT
 from .errors import NotSupportedError
 from .options import installed_pandas, pandas
-from .result_batch import ArrowResultBatch, DownloadMetrics, ResultBatch
+from .result_batch import (
+    ArrowResultBatch,
+    DownloadMetrics,
+    JSONResultBatch,
+    ResultBatch,
+)
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
 
@@ -74,12 +79,15 @@ class ResultSet(Iterable[List[Any]]):
 
     It also reports telemetry data about its ``ResultBatch``es once it's done iterating
     through them.
+
+    Currently we do not support mixing multiple ``ResultBatch`` types and having
+    different column definitions types per ``ResultBatch``.
     """
 
     def __init__(
         self,
         cursor: "SnowflakeCursor",
-        result_chunks: List["ResultBatch"],
+        result_chunks: Union[List["JSONResultBatch"], List["ArrowResultBatch"]],
     ):
         self.batches = result_chunks
         self._cursor = cursor
