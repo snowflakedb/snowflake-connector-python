@@ -87,13 +87,28 @@ if _ABLE_TO_ANTLR_CODEGEN:
                     "grammar file %s does not exist." % self.grammar_file
                 )
 
+        def download_with_certifi(self, url, dstpath):
+            try:
+                import certifi
+
+                has_certifi = True
+            except ImportError as ie:
+                warnings.warn(f"No certifi package installed {ie}")
+                has_certifi = False
+
+            if not os.path.exists(dstpath):
+                if has_certifi:
+                    resp = urllib.request.urlopen(url, cafile=certifi.where())
+                else:
+                    resp = urllib.request.urlopen(url)
+                file_data = resp.read()
+                with open(dstpath, "wb") as f:
+                    f.write(file_data)
+
         def run(self):
             # download antlr-4.9.2-complete.jar
             jar_path = os.path.join(THIS_DIR, self.ANTLR_JAR)
-
-            if not os.path.exists(jar_path):
-                urllib.request.urlretrieve(self.antlr_url, jar_path)
-
+            self.download_with_certifi(self.antlr_url, jar_path)
             # run command to generate python stub
             command = [
                 "java",

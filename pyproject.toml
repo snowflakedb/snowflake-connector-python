@@ -7,4 +7,5 @@ requires = [
     "cython",
     # Must be kept in sync with the `setup_requirements` in `setup.py`
     "pyarrow>=5.0.0,<5.1.0",
+    'certifi>=2017.4.17'
 ]
