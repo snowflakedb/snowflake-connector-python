@@ -12,6 +12,7 @@ from decimal import Decimal
 
 import numpy
 import pytest
+from pyarrow import concat_tables
 
 try:
     from snowflake.connector.options import installed_pandas, pandas  # NOQA
@@ -26,7 +27,7 @@ except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
@@ -963,3 +964,22 @@ def test_number_iter_retrieve_type(conn_cnx, use_decimal: bool, expected: type):
             cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
             for row in cur:
                 assert isinstance(row[0], expected), type(row[0])
+
+
+def test_resultbatches_pandas_functionality(conn_cnx):
+    """Fetch ArrowResultBatches as pandas dataframes and check its result."""
+    rowcount = 100000
+    expected_df = pandas.DataFrame(data={"A": range(rowcount)})
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                f"select seq4() a from table(generator(rowcount => {rowcount}));"
+            )
+            assert cur._result_set.total_row_index() == rowcount
+            result_batches = cur.get_result_batches()
+            assert len(result_batches) > 1
+    tables = itertools.chain.from_iterable(
+        list(b._download(iter_unit=TABLE_UNIT)) for b in result_batches
+    )
+    final_df = concat_tables(tables).to_pandas()
+    assert numpy.array_equal(expected_df, final_df)
