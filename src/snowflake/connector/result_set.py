@@ -65,7 +65,7 @@ def result_set_iterator(
         for element in it:
             yield element
     for it in post_iter:
-        for element in it._download(**kw):
+        for element in it.create_iter(**kw):
             yield element
     final()
 
@@ -182,9 +182,9 @@ class ResultSet(Iterable[List[Any]]):
         futures: List[Future[Iterator[Tuple]]] = []
         with ThreadPoolExecutor(4) as pool:
             for p in self.batches[1:5]:
-                futures.append(pool.submit(p._download, **kwargs))
+                futures.append(pool.submit(p.create_iter, **kwargs))
         pre_downloaded_iters: List[Iterator[Tuple]] = [
-            self.batches[0]._download(**kwargs)
+            self.batches[0].create_iter(**kwargs)
         ] + [r.result() for r in futures]
         post_download_iters = self.batches[5:]
 

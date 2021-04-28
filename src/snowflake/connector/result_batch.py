@@ -252,10 +252,42 @@ class ResultBatch(abc.ABC):
         parsed data and if it's a remote chunk it will download, parse its data and
         return an iterator through it.
         """
-        return self._download()
+        return self.create_iter()
+
+    def _download(self, **kwargs) -> "Response":
+        """Downloads the data that the ``ResultBatch`` is pointing at."""
+        sleep_timer = 1
+        backoff = DecorrelateJitterBackoff(1, 16)
+        for retry in range(MAX_DOWNLOAD_RETRY):
+            try:
+                with TimerContextManager() as download_metric:
+                    response = requests.get(
+                        self._remote_chunk_info.url,
+                        headers=self._chunk_headers,
+                        timeout=DOWNLOAD_TIMEOUT,
+                        stream=True,
+                    )
+                    if response.ok:
+                        break
+            except Exception as e:
+                if retry == MAX_DOWNLOAD_RETRY - 1:
+                    # Re-throw if we failed on the last retry
+                    raise
+                sleep_timer = backoff.next_sleep(1, sleep_timer)
+                logger.exception(
+                    f"Failed to fetch the large result set batch "
+                    f"{self._remote_chunk_info.url} for the {retry + 1} th time, "
+                    f"backing off for {sleep_timer}s for the reason: '{e}'"
+                )
+                time.sleep(sleep_timer)
+
+        self._metrics[
+            DownloadMetrics.download.value
+        ] = download_metric.get_timing_millis()
+        return response
 
     @abc.abstractmethod
-    def _download(
+    def create_iter(
         self, **kwargs
     ) -> Union[
         Iterator[Union[Dict, Exception]],
@@ -371,39 +403,12 @@ class JSONResultBatch(ResultBatch):
     def __repr__(self) -> str:
         return f"JSONResultChunk({self.rowcount})"
 
-    def _download(
+    def create_iter(
         self, **kwargs
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         if self._local:
             return iter(self._data)
-        sleep_timer = 1
-        backoff = DecorrelateJitterBackoff(1, 16)
-        for retry in range(MAX_DOWNLOAD_RETRY):
-            try:
-                with TimerContextManager() as download_metric:
-                    response = requests.get(
-                        self._remote_chunk_info.url,
-                        headers=self._chunk_headers,
-                        timeout=DOWNLOAD_TIMEOUT,
-                        stream=True,  # Default to non-streaming unless arrow
-                    )
-                    if response.ok:
-                        break
-            except Exception:
-                if retry == MAX_DOWNLOAD_RETRY - 1:
-                    # Re-throw if we failed on the last retry
-                    raise
-                sleep_timer = backoff.next_sleep(1, sleep_timer)
-                logger.exception(
-                    f"Failed to fetch the large result set chunk "
-                    f"{self._remote_chunk_info.url} for the {retry + 1} th time, "
-                    f"backing off for {sleep_timer}s"
-                )
-                time.sleep(sleep_timer)
-
-        self._metrics[
-            DownloadMetrics.download.value
-        ] = download_metric.get_timing_millis()
+        response = self._download()
         # Load data to a intermediate form
         with TimerContextManager() as load_metric:
             downloaded_data = self._load(response)
@@ -514,7 +519,7 @@ class ArrowResultBatch(ResultBatch):
 
         return new_chunk
 
-    def _download(
+    def create_iter(
         self, **kwargs
     ) -> Union[
         Iterator[Union[Dict, Exception]],
@@ -524,34 +529,7 @@ class ArrowResultBatch(ResultBatch):
         iter_unit = kwargs.pop("iter_unit", ROW_UNIT)
         if self._local:
             return self._from_data(self._data, iter_unit)
-        sleep_timer = 1
-        backoff = DecorrelateJitterBackoff(1, 16)
-        for retry in range(MAX_DOWNLOAD_RETRY):
-            try:
-                with TimerContextManager() as download_metric:
-                    response = requests.get(
-                        self._remote_chunk_info.url,
-                        headers=self._chunk_headers,
-                        timeout=DOWNLOAD_TIMEOUT,
-                        stream=True,
-                    )
-                    if response.ok:
-                        break
-            except Exception:
-                if retry == MAX_DOWNLOAD_RETRY - 1:
-                    # Re-throw if we failed on the last retry
-                    raise
-                sleep_timer = backoff.next_sleep(1, sleep_timer)
-                logger.exception(
-                    f"Failed to fetch the large result set chunk "
-                    f"{self._remote_chunk_info.url} for the {retry + 1} th time, "
-                    f"backing off for {sleep_timer}s"
-                )
-                time.sleep(sleep_timer)
-
-        self._metrics[
-            DownloadMetrics.download.value
-        ] = download_metric.get_timing_millis()
+        response = self._download()
         with TimerContextManager() as load_metric:
             loaded_data = self._load(response, iter_unit)
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()

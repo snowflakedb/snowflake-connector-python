@@ -1280,8 +1280,8 @@ def test_resultbatch(
 @pytest.mark.parametrize(
     "result_format,patch_path",
     (
-        ("json", "snowflake.connector.result_batch.JSONResultBatch._download"),
-        ("arrow", "snowflake.connector.result_batch.ArrowResultBatch._download"),
+        ("json", "snowflake.connector.result_batch.JSONResultBatch.create_iter"),
+        ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
     ),
 )
 def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):

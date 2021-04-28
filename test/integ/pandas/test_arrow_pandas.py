@@ -974,7 +974,7 @@ def test_resultbatches_pandas_functionality(conn_cnx):
             result_batches = cur.get_result_batches()
             assert len(result_batches) > 1
     tables = itertools.chain.from_iterable(
-        list(b._download(iter_unit=TABLE_UNIT)) for b in result_batches
+        list(b.create_iter(iter_unit=TABLE_UNIT)) for b in result_batches
     )
     final_df = pyarrow.concat_tables(tables).to_pandas()
     assert numpy.array_equal(expected_df, final_df)
