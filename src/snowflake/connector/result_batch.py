@@ -80,7 +80,7 @@ def create_batches_from_response(
     total_len: int = data.get("total", 0)
     first_chunk_len = total_len
     rest_of_chunks: List["ResultBatch"] = []
-    if format == "json":
+    if _format == "json":
         column_converters: List[Tuple[str, "SnowflakeConverterType"]] = [
             (
                 c["type"],

@@ -15,16 +15,12 @@ import pytest
 from pyarrow import concat_tables
 
 try:
-    from snowflake.connector.options import installed_pandas, pandas  # NOQA
+    from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
 except ImportError:
     installed_pandas = False
     pandas = None
+    pyarrow = None
 
-
-try:
-    import pyarrow  # NOQA
-except ImportError:
-    pass
 
 try:
     from snowflake.connector.arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
