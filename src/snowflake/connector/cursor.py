@@ -14,7 +14,7 @@ from logging import getLogger
 from threading import Lock, Timer
 from typing import IO, TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
 
-from snowflake.connector.result_batch import create_chunks_from_response
+from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
@@ -737,7 +737,7 @@ class SnowflakeCursor(object):
                 )
             )
 
-        result_chunks = create_chunks_from_response(
+        result_chunks = create_batches_from_response(
             self,
             self._query_result_format,
             data,

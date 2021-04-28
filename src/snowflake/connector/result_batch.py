@@ -68,7 +68,7 @@ class RemoteChunkInfo(NamedTuple):
     compressedSize: int
 
 
-def create_chunks_from_response(
+def create_batches_from_response(
     cursor: "SnowflakeCursor",
     _format: str,
     data: Dict[str, Any],
@@ -77,7 +77,10 @@ def create_chunks_from_response(
     arrow_context: Optional["ArrowConverterContext"] = None
     rowtypes = data["rowtype"]
     column_names: List[str] = [c["name"] for c in rowtypes]
-    if _format == "json":
+    total_len: int = data.get("total", 0)
+    first_chunk_len = total_len
+    rest_of_chunks: List["ResultBatch"] = []
+    if format == "json":
         column_converters: List[Tuple[str, "SnowflakeConverterType"]] = [
             (
                 c["type"],
@@ -85,39 +88,10 @@ def create_chunks_from_response(
             )
             for c in rowtypes
         ]
-        first_chunk = JSONResultBatch.from_data(
-            data.get("rowset"),
-            column_names,
-            column_converters,
-            cursor._use_dict_result,
-        )
     else:
         rowset_b64 = data.get("rowsetBase64")
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
-
-        if rowset_b64:
-            first_chunk = ArrowResultBatch.from_data(
-                rowset_b64,
-                arrow_context,
-                cursor._use_dict_result,
-                cursor._connection._numpy,
-                column_names,
-                cursor._connection._arrow_number_to_decimal,
-            )
-        else:
-            # Log
-            first_chunk = ArrowResultBatch.from_data(
-                "",
-                arrow_context,
-                cursor._use_dict_result,
-                cursor._connection._numpy,
-                column_names,
-                cursor._connection._arrow_number_to_decimal,
-            )
-
-    if "chunks" not in data:
-        return [first_chunk]
-    else:
+    if "chunks" in data:
         chunks = data["chunks"]
         logger.debug("chunk size=%s", len(chunks))
         # prepare the downloader for further fetch
@@ -139,7 +113,7 @@ def create_chunks_from_response(
             chunk_headers[SSE_C_KEY] = qrmk
 
         if _format == "json":
-            return [first_chunk] + [
+            rest_of_chunks = [
                 JSONResultBatch(
                     c["rowCount"],
                     chunk_headers,
@@ -155,7 +129,7 @@ def create_chunks_from_response(
                 for c in chunks
             ]
         else:
-            return [first_chunk] + [
+            rest_of_chunks = [
                 ArrowResultBatch(
                     c["rowCount"],
                     chunk_headers,
@@ -172,6 +146,39 @@ def create_chunks_from_response(
                 )
                 for c in chunks
             ]
+    for c in rest_of_chunks:
+        first_chunk_len -= c.rowcount
+    if _format == "json":
+        first_chunk = JSONResultBatch.from_data(
+            data.get("rowset"),
+            first_chunk_len,
+            column_names,
+            column_converters,
+            cursor._use_dict_result,
+        )
+    elif rowset_b64:
+        first_chunk = ArrowResultBatch.from_data(
+            rowset_b64,
+            first_chunk_len,
+            arrow_context,
+            cursor._use_dict_result,
+            cursor._connection._numpy,
+            column_names,
+            cursor._connection._arrow_number_to_decimal,
+        )
+    else:
+        logger.error(f"Don't know how to construct ResultBatches from response: {data}")
+        first_chunk = ArrowResultBatch.from_data(
+            "",
+            0,
+            arrow_context,
+            cursor._use_dict_result,
+            cursor._connection._numpy,
+            column_names,
+            cursor._connection._arrow_number_to_decimal,
+        )
+
+    return [first_chunk] + rest_of_chunks
 
 
 class ResultBatch(abc.ABC):
@@ -289,6 +296,7 @@ class JSONResultBatch(ResultBatch):
     def from_data(
         cls,
         data: Sequence[Sequence[Any]],
+        data_len: int,
         column_names: Sequence[str],
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
@@ -484,6 +492,7 @@ class ArrowResultBatch(ResultBatch):
     def from_data(
         cls,
         data: str,
+        data_len: int,
         context: "ArrowConverterContext",
         use_dict_result: bool,
         numpy: bool,
@@ -492,7 +501,7 @@ class ArrowResultBatch(ResultBatch):
     ):
         """Initializes an `ArrowResultBatch` from static, local data."""
         new_chunk = cls(
-            len(data),
+            data_len,
             None,
             None,
             context,
@@ -502,7 +511,7 @@ class ArrowResultBatch(ResultBatch):
             number_to_decimal,
         )
         new_chunk._data = data
-        new_chunk.rowcount = len(list(new_chunk._from_data(data, ROW_UNIT)))
+
         return new_chunk
 
     def _download(
