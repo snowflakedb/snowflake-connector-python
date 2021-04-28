@@ -1122,6 +1122,11 @@ class SnowflakeCursor(object):
         self._prefetch_hook = wait_until_ready
 
     def get_result_batches(self) -> Optional[List["ResultBatch"]]:
+        """Get the previously executed query's ``ResultBatch`` s.
+
+        For a detailed description please see the docstring of:
+        ``snowflake.connector.result_batches.ResultBatch``
+        """
         if self._result_set is None:
             return None
         self._log_telemetry_job_data(TelemetryField.GET_PARTITIONS_USED, 1)
