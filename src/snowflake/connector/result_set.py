@@ -48,13 +48,13 @@ def result_set_iterator(
     """Creates an iterator over some other iterators.
 
     Very similar to itertools.chain but we need some keywords to be propagated to
-    `_download` functions later.
+    ``_download`` functions later.
 
     We need this to have ResultChunks fall out of usage so that they can be garbage
     collected.
 
-    Just like `ResultBatch` iterator, this might yield an `Exception` to allow users to
-    continue iterating through the rest of the `ResultBatch`.
+    Just like ``ResultBatch`` iterator, this might yield an ``Exception`` to allow users
+    to continue iterating through the rest of the ``ResultBatch``.
     """
     for it in pre_iter:
         for element in it:
@@ -72,7 +72,7 @@ class ResultSet(Iterable[List[Any]]):
     as that is embedded in the response JSON from Snowflake) upon creating an Iterator
     on it.
 
-    It also reports telemetry data about its `ResultBatch`es once it's done iterating
+    It also reports telemetry data about its ``ResultBatch``es once it's done iterating
     through them.
     """
 
@@ -122,7 +122,7 @@ class ResultSet(Iterable[List[Any]]):
         return self._create_iter(iter_unit=TABLE_UNIT)
 
     def _fetch_arrow_all(self):
-        """Fetches a single Arrow Table from all of the `ResultBatch`."""
+        """Fetches a single Arrow Table from all of the ``ResultBatch``."""
         tables = list(self._fetch_arrow_batches())
         if tables:
             return concat_tables(tables)
@@ -168,8 +168,8 @@ class ResultSet(Iterable[List[Any]]):
     ]:
         """Set up a new iterator through all batches with first 5 chunks downloaded.
 
-        This function is a helper function to `__iter__` and it was introduced for the
-        cases where we need to propagate some values to later `_download` calls.
+        This function is a helper function to ``__iter__`` and it was introduced for the
+        cases where we need to propagate some values to later ``_download`` calls.
         """
         futures: List[Future[Iterator[Tuple]]] = []
         with ThreadPoolExecutor(4) as pool:
@@ -188,7 +188,7 @@ class ResultSet(Iterable[List[Any]]):
         )
 
     def total_row_index(self) -> int:
-        """Returns the total rowcount of the `ResultSet` ."""
+        """Returns the total rowcount of the ``ResultSet`` ."""
         total = 0
         for p in self.batches:
             total += p.rowcount

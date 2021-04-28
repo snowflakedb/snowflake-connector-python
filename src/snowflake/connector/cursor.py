@@ -1122,9 +1122,12 @@ class SnowflakeCursor(object):
         self._prefetch_hook = wait_until_ready
 
     def get_result_batches(self) -> Optional[List["ResultBatch"]]:
-        """Get the previously executed query's ``ResultBatch`` s.
+        """Get the previously executed query's ``ResultBatch`` s if available.
 
-        For a detailed description please see the docstring of:
+        If they are unavailable, in case nothing has been executed yet None will
+        be returned.
+
+        For a detailed description of ``ResultBatch`` s please see the docstring of:
         ``snowflake.connector.result_batches.ResultBatch``
         """
         if self._result_set is None:

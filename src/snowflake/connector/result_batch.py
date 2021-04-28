@@ -188,9 +188,9 @@ class ResultBatch(abc.ABC):
     own results and convert them into Python native formats.
 
     As you are iterating through a ResultBatch you should check whether the yielded
-    value is an `Exception` in case there was some error parsing the current row
+    value is an ``Exception`` in case there was some error parsing the current row
     we might yield on of these to allow iteration to continue instead of raising the
-    `Exception` when it occures.
+    ``Exception`` when it occures.
 
     These objects are pickleable for easy distribution and replication.
 
@@ -198,7 +198,7 @@ class ResultBatch(abc.ABC):
     Snowflake back-end, at the time of writing this this is 6 hours.
 
     They can be iterated over multiple times and in different ways. Please follow the
-    code in `cursor.py` to make sure that you are using this class correctly.
+    code in ``cursor.py`` to make sure that you are using this class correctly.
 
     """
 
@@ -264,11 +264,11 @@ class ResultBatch(abc.ABC):
     ]:
         """Downloads the data from from blob storage that this ResultChunk points at.
 
-        This function is the one that does the actual work for `self.__iter__`.
+        This function is the one that does the actual work for ``self.__iter__``.
 
-        It is necessary because a `ResultBatch` can return multiple types of iterators.
-        A good example of this is simply iterating through `SnowflakeCursor` and calling
-        `fetch_pandas_batches` on it.
+        It is necessary because a ``ResultBatch`` can return multiple types of
+        iterators. A good example of this is simply iterating through
+        ``SnowflakeCursor`` and calling ``fetch_pandas_batches`` on it.
         """
         raise NotImplementedError()
 
@@ -301,7 +301,7 @@ class JSONResultBatch(ResultBatch):
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
     ):
-        """Initializes a `JSONResultBatch` from static, local data."""
+        """Initializes a ``JSONResultBatch`` from static, local data."""
         new_chunk = cls(
             len(data),
             None,
@@ -317,7 +317,7 @@ class JSONResultBatch(ResultBatch):
         """This function loads a compressed JSON file into memory.
 
         Returns:
-            Whatever `json.loads` return, but in a list.
+            Whatever ``json.loads`` return, but in a list.
             Unfortunately there's not type hint for this.
             For context: https://github.com/python/typing/issues/182
         """
@@ -440,10 +440,10 @@ class ArrowResultBatch(ResultBatch):
     def _load(
         self, response, row_unit: str
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
-        """Creates a `PyArrowIterator` from a response.
+        """Creates a ``PyArrowIterator`` from a response.
 
         This is used to iterate through results in different ways depending on which
-        mode that `PyArrowIterator` is in.
+        mode that ``PyArrowIterator`` is in.
         """
         from .arrow_iterator import PyArrowIterator
 
@@ -464,10 +464,10 @@ class ArrowResultBatch(ResultBatch):
     def _from_data(
         self, data: str, iter_unit: str
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
-        """Creates a `PyArrowIterator` files from a str.
+        """Creates a ``PyArrowIterator`` files from a str.
 
         This is used to iterate through results in different ways depending on which
-        mode that `PyArrowIterator` is in.
+        mode that ``PyArrowIterator`` is in.
         """
         from .arrow_iterator import PyArrowIterator
 
@@ -499,7 +499,7 @@ class ArrowResultBatch(ResultBatch):
         column_names: Sequence[str],
         number_to_decimal: bool,
     ):
-        """Initializes an `ArrowResultBatch` from static, local data."""
+        """Initializes an ``ArrowResultBatch`` from static, local data."""
         new_chunk = cls(
             data_len,
             None,
