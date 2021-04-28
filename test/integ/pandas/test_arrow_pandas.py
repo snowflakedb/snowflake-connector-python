@@ -12,7 +12,6 @@ from decimal import Decimal
 
 import numpy
 import pytest
-from pyarrow import concat_tables
 
 try:
     from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
@@ -977,5 +976,5 @@ def test_resultbatches_pandas_functionality(conn_cnx):
     tables = itertools.chain.from_iterable(
         list(b._download(iter_unit=TABLE_UNIT)) for b in result_batches
     )
-    final_df = concat_tables(tables).to_pandas()
+    final_df = pyarrow.concat_tables(tables).to_pandas()
     assert numpy.array_equal(expected_df, final_df)
