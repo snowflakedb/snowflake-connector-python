@@ -1274,3 +1274,36 @@ def test_resultbatch(
             assert col1 == total_rows
             total_rows += 1
     assert total_rows == rowcount
+
+
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize(
+    "result_format,patch_path",
+    (
+        ("json", "snowflake.connector.result_batch.JSONResultBatch._download"),
+        ("arrow", "snowflake.connector.result_batch.ArrowResultBatch._download"),
+    ),
+)
+def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
+    """Tests whether pre-fetching results chunks fetches the right amount of them."""
+    rowcount = 1000000  # We need at least 5 chunks for this test
+    with conn_cnx(
+        session_parameters={
+            "python_connector_query_result_format": result_format,
+        }
+    ) as con:
+        with con.cursor() as cur:
+            # Dummy return value necessary to not iterate through every batch with
+            #  first fetchone call
+            with mock.patch(patch_path, return_value=iter([(1,)])) as patched_download:
+                cur.execute(
+                    f"select seq4() from table(generator(rowcount => {rowcount}));"
+                )
+                result_batches = cur.get_result_batches()
+                assert len(result_batches) > 5
+                assert result_batches[0]._local  # Sanity check first chunk being local
+                cur.fetchone()  # Trigger pre-fetching
+                # While the first chunk is local we still call _download on it, which
+                #  short circuits and just parses (for JSON batches) and then return an
+                #  an iterator through that data, so we expect the call count to be 5
+                assert patched_download.call_count == 5
