@@ -13,6 +13,7 @@ import threading
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
+from queue import Queue
 from random import randint
 from time import sleep, time
 from typing import IO, TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
@@ -46,7 +47,9 @@ from .errors import (
     Error,
     InternalError,
     OperationalError,
+    PresignedUrlExpiredError,
     ProgrammingError,
+    TokenExpiredError,
 )
 from .file_compression_type import CompressionTypes, lookup_by_mime_sub_type
 from .gcs_storage_client import SnowflakeGCSRestClient
@@ -109,7 +112,6 @@ class SnowflakeFileMeta:
     get_callback_output_stream: Optional[IO[str]] = None
     show_progress_bar: bool = False
     multipart_threshold: int = 67108864  # Historical value
-    parallel: int = 1
     presigned_url: Optional[str] = None
     overwrite: bool = False
     tmp_dir: Optional[str] = None
@@ -117,7 +119,6 @@ class SnowflakeFileMeta:
     upload_size: Optional[int] = None
     real_src_file_name: Optional[str] = None
     error_details: Optional[str] = None
-    last_max_concurrency: int = -1
     last_error: Optional[Exception] = None
     no_sleeping_time: bool = False
     gcs_file_header_digest: Optional[str] = None
@@ -394,10 +395,15 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: List["SnowflakeFileMeta"]):
-        tpe_size = 8
-        tpe = ThreadPoolExecutor(tpe_size)
-        logger.debug(f"TPE size: {tpe_size}")
-        cv = threading.Condition()
+        max_concurrency = self._parallel
+        chunk_tpe = ThreadPoolExecutor(max_concurrency)
+        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
+        cv_1 = threading.Condition()  # to signal the main thread
+        cv_2 = threading.Condition()  # to get more chunks into the chunk_tpe
+        files_unstarted = Queue()
+        for m in metas:
+            files_unstarted.put(self._create_file_transfer_client(m))
         num_total_files = len(metas)
         transfer_metadata_lock = threading.Lock()
         transfer_metadata = TransferMetadata(
@@ -409,91 +415,133 @@ class SnowflakeFileTransferAgent:
         is_upload = self._command_type == CMD_TYPE_UPLOAD
 
         def register_future(
-            future: Future, _file_transfer: "SnowflakeStorageClient", _chunk_id: int
+            future: Future,
+            _file_transfer: "SnowflakeStorageClient",
+            _chunk_id: Optional[int] = None,
         ):
             futures_to_file[future] = _file_transfer
-            futures_to_chunk[future] = _chunk_id
+            if _chunk_id is not None:
+                futures_to_chunk[future] = _chunk_id
 
-        def done_callback(future: Future):
+        def done_callback_chunk(future: Future):
             done_client = futures_to_file[future]
             done_id = futures_to_chunk[future]
-            logger.debug(f"Done callback with chunk id {done_id}")  # TODO log file name
-            with cv:
-                if (
-                    future.exception()
-                    and done_client.should_retry_on_error(future.exception())
-                    and done_client.retry_count[done_id] < self.MAX_RETRY
+            logger.debug(
+                f"Chunk {done_id} of file {done_client.meta.name} reached callback"
+            )
+            with transfer_metadata_lock:
+                transfer_metadata.chunks_in_queue -= 1
+            with cv_2:
+                cv_2.notify()
+            if future.exception():
+                with done_client.lock:
+                    done_client.failed_transfers += 1
+                exc = future.exception()
+                if isinstance(
+                    exc,
+                    (
+                        TokenExpiredError,
+                        PresignedUrlExpiredError,
+                    ),
                 ):
-                    time.sleep(
-                        min(
-                            (2 ** done_client.retry_count[done_id]) * 100,
-                            self.SLEEP_MAX,
-                        )  # TODO random jitter
-                    )
-                    done_client.retry_count[done_id] += 1
-                    if is_upload:
-                        new_future = tpe.submit(done_client.upload_chunk, done_id)
-                    else:
-                        new_future = tpe.submit(done_client.download_chunk, done_id)
-                    register_future(new_future, done_client, done_id)
-                    new_future.add_done_callback(done_callback)
-                else:  # TODO rewrite if else
-                    with done_client.lock:
-                        if not future.exception():
-                            done_client.successful_transfers += 1
-                        else:
-                            done_client.failed_transfers += 1
-                    with transfer_metadata_lock:
-                        transfer_metadata.chunks_in_queue -= 1
-                    if (
-                        done_client.successful_transfers + done_client.failed_transfers
-                        == done_client.num_of_chunks
-                    ):
-                        if is_upload:
-                            done_client.finish_upload()
-                        else:
-                            done_client.finish_download()
-                        with transfer_metadata_lock:
-                            transfer_metadata.num_files_completed += 1
-                cv.notify()
-
-        while transfer_metadata.num_files_started < num_total_files:
-            file_transfer = self._create_file_transfer_client(
-                metas[transfer_metadata.num_files_started]
-            )
-            transfer_metadata.num_files_started += (
-                1  # No need for lock because this field is only modified here
-            )
-            if is_upload:
-                file_transfer.prepare_upload()
-                if file_transfer.meta.result_status == ResultStatus.SKIPPED:
-                    with transfer_metadata_lock:
-                        transfer_metadata.num_files_completed += 1
-                        continue
-            else:
-                file_transfer.prepare_download()
-            with cv:
-                if transfer_metadata.chunks_in_queue < tpe_size + delta:
-                    # There are not enough chunks in the queue to keep threads busy, prepare to start next file
-                    if is_upload:
-                        file_transfer.chunkify()
-                    for chunk_id in range(file_transfer.num_of_chunks):
-                        if is_upload:
-                            logger.debug(f"PUT: submitting chunk {chunk_id}")
-                            _future = tpe.submit(file_transfer.upload_chunk, chunk_id)
-                        else:
-                            _future = tpe.submit(file_transfer.download_chunk, chunk_id)
-                        transfer_metadata.chunks_in_queue += 1
-                        register_future(_future, file_transfer, chunk_id)
-                        _future.add_done_callback(done_callback)
+                    raise NotImplementedError()
                 else:
                     logger.debug(
-                        f"Waiting for {transfer_metadata.num_files_started} files and {transfer_metadata.chunks_in_queue} chunks to finish"
+                        f"Chunk {done_id} of file {done_client.meta.name} failed to transfer for unexpected exception {exc}"
                     )
-                    # There are too many chunks in the queue, wait
-                    cv.wait()
+            else:
+                with done_client.lock:
+                    done_client.successful_transfers += 1
+            if (
+                done_client.successful_transfers + done_client.failed_transfers
+                == done_client.num_of_chunks
+            ):
+                if is_upload:
+                    done_client.finish_upload()
+                else:
+                    done_client.finish_download()
+                with transfer_metadata_lock:
+                    transfer_metadata.num_files_completed += 1
+            with cv_1:
+                cv_1.notify()
 
-        tpe.shutdown()
+        def done_callback_preprocess(future: Future):
+            done_client = futures_to_file[future]
+            logger.debug(f"Preprocessing of file {done_client.meta.name} finished")
+            if future.exception():
+                logger.debug(
+                    f"Preprocessing file {done_client.meta.name} failed, not uploading."
+                )
+                done_client.finish_upload()
+                with transfer_metadata_lock:
+                    transfer_metadata.num_files_completed += 1
+                with cv_1:
+                    cv_1.notify()
+            elif done_client.meta.result_status == ResultStatus.SKIPPED:
+                with transfer_metadata_lock:
+                    transfer_metadata.num_files_completed += 1
+                with cv_1:
+                    cv_1.notify()
+            else:
+                with cv_2:
+                    logger.debug("Obtained cv_2")
+                    while transfer_metadata.chunks_in_queue > 2 * max_concurrency:
+                        logger.debug(
+                            "Waiting in preprocess done callback to add chunks."
+                        )
+                        cv_2.wait()
+                    for _chunk_id in range(done_client.num_of_chunks):
+                        logger.debug(
+                            f"PUT: submitting chunk {_chunk_id} of file {done_client.meta.name}"
+                        )
+                        upload_future = chunk_tpe.submit(
+                            done_client.upload_chunk, _chunk_id
+                        )
+                        with transfer_metadata_lock:
+                            transfer_metadata.chunks_in_queue += 1
+                        register_future(upload_future, done_client, _chunk_id)
+                        upload_future.add_done_callback(done_callback_chunk)
+                    cv_2.notify()
+
+        def start_preprocessing_all_waiting_files():
+            while not files_unstarted.empty():
+                _transfer = files_unstarted.get()
+                proc_future = preprocess_tpe.submit(_transfer.prepare_upload)
+                register_future(proc_future, _transfer)
+                proc_future.add_done_callback(done_callback_preprocess)
+                transfer_metadata.num_files_started += 1
+
+        if is_upload:
+            start_preprocessing_all_waiting_files()
+            with cv_1:
+                while transfer_metadata.num_files_completed < num_total_files:
+                    if transfer_metadata.chunks_in_queue < max_concurrency + delta:
+                        with cv_2:
+                            start_preprocessing_all_waiting_files()
+                            cv_2.notify()
+                    cv_1.wait()
+        else:
+            with cv_1:
+                while transfer_metadata.num_files_completed < num_total_files:
+                    if (
+                        transfer_metadata.chunks_in_queue < max_concurrency + delta
+                        and transfer_metadata.num_files_started < num_total_files
+                    ):
+                        file_transfer = files_unstarted.get()
+                        file_transfer.prepare_download()  # one HEAD call
+                        with transfer_metadata_lock:
+                            transfer_metadata.num_files_started += 1
+                        for chunk_id in range(file_transfer.num_of_chunks):
+                            _future = chunk_tpe.submit(
+                                file_transfer.download_chunk, chunk_id
+                            )
+                            with transfer_metadata_lock:
+                                transfer_metadata.chunks_in_queue += 1
+                            register_future(_future, file_transfer, chunk_id)
+                            _future.add_done_callback(done_callback_chunk)
+                    else:
+                        cv_1.wait()
+
         self._results = metas
 
     def _create_file_transfer_client(

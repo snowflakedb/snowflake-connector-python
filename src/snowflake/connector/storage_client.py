@@ -21,7 +21,11 @@ from requests import ConnectionError, Timeout
 
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
-from .errors import RequestExceedMaxRetryError
+from .errors import (
+    PresignedUrlExpiredError,
+    RequestExceedMaxRetryError,
+    TokenExpiredError,
+)
 from .file_util import SnowflakeFileUtil
 
 # from .vendored.requests import Timeout, ConnectionError
@@ -79,6 +83,9 @@ class SnowflakeStorageClient(ABC):
         # UPLOAD
         meta.real_src_file_name = meta.src_file_name
         meta.upload_size = meta.src_file_size
+        self.preprocessed = (
+            False  # so we don't repeat compression/file digest when re-encrypting
+        )
         # DOWNLOAD
         self.full_dst_file_name = ""
         # CHUNK
@@ -89,7 +96,7 @@ class SnowflakeStorageClient(ABC):
         self.successful_transfers: int = 0
         self.failed_transfers: int = 0
         self.chunks: List[bytes] = []
-        # only used for PRESIGNED_URL
+        # only used when PRESIGNED_URL expires
         self.last_err_is_presigned_url = False
 
     def compress(self):
@@ -162,10 +169,9 @@ class SnowflakeStorageClient(ABC):
         """
         pass
 
-    def prepare_upload(self):
-
-        logger.debug("Preparing upload")
+    def preprocess(self):
         meta = self.meta
+        logger.debug(f"Preprocessing {meta.src_file_name}")
 
         self.get_file_header(meta.dst_file_name)  # Check if file exists on remote
 
@@ -182,22 +188,41 @@ class SnowflakeStorageClient(ABC):
             if meta.require_compress:
                 self.compress()
             self.get_digest()
-            if meta.encryption_material:
-                self.encrypt()
-            else:
-                self.data_file = meta.real_src_file_name
-            logger.debug("finished preprocessing")
-            if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
-                self.num_of_chunks = 1
-            else:
-                self.num_of_chunks = ceil(meta.upload_size / self.chunk_size)
-            logger.debug(f"number of chunks {self.num_of_chunks}")
-            for chunk_id in range(self.num_of_chunks):
-                self.retry_count[chunk_id] = 0
-            if self.chunked_transfer and self.num_of_chunks > 1:
-                self._initiate_multipart_upload()
+
+        self.preprocessed = True
+
+    def prepare_upload(self):
+        meta = self.meta
+
+        if not self.preprocessed:
+            self.preprocess()
+        elif meta.encryption_material:
+            # need to clean up previous encrypted file
+            os.remove(self.data_file)
+
+        logger.debug(f"Preparing to upload {meta.src_file_name}")
+
+        if meta.encryption_material:
+            self.encrypt()
+        else:
+            self.data_file = meta.real_src_file_name
+        logger.debug("finished preprocessing")
+        if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
+            self.num_of_chunks = 1
+        else:
+            self.num_of_chunks = ceil(meta.upload_size / self.chunk_size)
+        logger.debug(f"number of chunks {self.num_of_chunks}")
+        # clean up
+        self.retry_count = {}
+
+        for chunk_id in range(self.num_of_chunks):
+            self.retry_count[chunk_id] = 0
+        if self.chunked_transfer and self.num_of_chunks > 1:
+            self._initiate_multipart_upload()
+        self.chunkify()
 
     def chunkify(self):
+        self.chunks = []
         meta = self.meta
         if meta.result_status == ResultStatus.SKIPPED:
             return
@@ -239,13 +264,14 @@ class SnowflakeStorageClient(ABC):
     ):
         rest_call = METHODS[verb]
         while self.retry_count[retry_id] < self.max_retry:
-            cur_timestamp = self.credentials.timestamp
+            # cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             try:
                 response = rest_call(url, **rest_kwargs)
                 if self._has_expired_presigned_url(response):
-                    self._update_presigned_url()
-                    continue
+                    raise PresignedUrlExpiredError(
+                        f"Presigned url expired for file {self.meta.name}"
+                    )
                 else:
                     self.last_err_is_presigned_url = False
                     if response.status_code in self.TRANSIENT_HTTP_ERR:
@@ -254,8 +280,9 @@ class SnowflakeStorageClient(ABC):
                         )
                         self.retry_count[retry_id] += 1
                     elif self._has_expired_token(response):
-                        self.credentials.update(cur_timestamp)
-                        continue
+                        raise TokenExpiredError(
+                            f"Token expired for file {self.meta.name}"
+                        )
                     else:
                         return response
             except self.TRANSIENT_ERRORS:

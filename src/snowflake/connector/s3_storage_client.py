@@ -341,7 +341,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             response.raise_for_status()
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes):
-        logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
         s3path = self.s3location.s3path + self.meta.dst_file_name.lstrip("/")
         url = self.endpoint + f"/{s3path}"
 
@@ -376,7 +375,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             if response.status_code == 200:
                 self.etags[chunk_id] = response.headers["ETag"]
             response.raise_for_status()
-        logger.debug(f"Chunk {chunk_id} uploaded.")
 
     def _complete_multipart_upload(self):
         s3path = self.s3location.s3path + self.meta.dst_file_name.lstrip("/")
