@@ -62,6 +62,7 @@ class SnowflakeStorageClient(ABC):
         self,
         meta: "SnowflakeFileMeta",
         stage_info: Dict[str, Any],
+        chunk_size: int,
         chunked_transfer: Optional[bool] = True,
         credentials: Optional["StorageCredential"] = None,
     ):
@@ -82,6 +83,7 @@ class SnowflakeStorageClient(ABC):
         self.full_dst_file_name = ""
         # CHUNK
         self.chunked_transfer = chunked_transfer  # only true for GCS
+        self.chunk_size = chunk_size
         self.num_of_chunks = 0
         self.lock = threading.Lock()
         self.successful_transfers: int = 0
@@ -185,12 +187,10 @@ class SnowflakeStorageClient(ABC):
             else:
                 self.data_file = meta.real_src_file_name
             logger.debug("finished preprocessing")
-
-            self.num_of_chunks = (
-                ceil(meta.upload_size / meta.multipart_threshold)
-                if self.chunked_transfer
-                else 1
-            )
+            if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
+                self.num_of_chunks = 1
+            else:
+                self.num_of_chunks = ceil(meta.upload_size / self.chunk_size)
             logger.debug(f"number of chunks {self.num_of_chunks}")
             for chunk_id in range(self.num_of_chunks):
                 self.retry_count[chunk_id] = 0
@@ -201,19 +201,14 @@ class SnowflakeStorageClient(ABC):
         meta = self.meta
         if meta.result_status == ResultStatus.SKIPPED:
             return
-        if meta.src_stream is None:
-            fd = open(self.data_file, "rb")
-        else:
+        if meta.src_stream:
             fd = meta.real_src_stream or meta.src_stream
             fd.seek(0)
-        if self.num_of_chunks > 1:
-            chunk_size = meta.multipart_threshold
-            for _ in range(self.num_of_chunks):
-                self.chunks.append(fd.read(chunk_size))
-        else:
-            self.chunks.append(fd.read())
-        if meta.src_stream is None:
-            fd.close()
+            if self.num_of_chunks == 1:
+                self.chunk_size.append(fd.read())
+            else:
+                for _ in range(self.num_of_chunks):
+                    self.chunks.append(fd.read(self.chunk_size))
 
     def finish_upload(self):
         meta = self.meta
@@ -289,16 +284,11 @@ class SnowflakeStorageClient(ABC):
         if file_header and file_header.encryption_metadata:
             self.encryption_metadata = file_header.encryption_metadata
 
+        self.num_of_chunks = 1
         if file_header and file_header.content_length:
             meta.src_file_size = file_header.content_length
-            if self.chunked_transfer:
-                self.num_of_chunks = ceil(
-                    file_header.content_length / meta.multipart_threshold
-                )
-            else:
-                self.num_of_chunks = 1
-        else:
-            self.num_of_chunks = 1
+            if self.chunked_transfer and meta.src_file_size > meta.multipart_threshold:
+                self.num_of_chunks = ceil(file_header.content_length / self.chunk_size)
 
         self.chunks = [b""] * self.num_of_chunks
         for chunk_id in range(self.num_of_chunks):
@@ -358,8 +348,22 @@ class SnowflakeStorageClient(ABC):
             and exc.response.status_code in self.TRANSIENT_HTTP_ERR
         )
 
-    @abstractmethod
     def upload_chunk(self, chunk_id: int):
+        if not self.chunks:
+            with open(self.data_file, "rb") as fd:
+                if self.num_of_chunks == 1:
+                    _data = fd.read()
+                else:
+                    fd.seek(chunk_id * self.chunk_size)
+                    _data = fd.read(self.chunk_size)
+        else:
+            _data = self.chunks[chunk_id]
+        logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
+        self._upload_chunk(chunk_id, _data)
+        logger.debug(f"Successfully uploaded chunk {chunk_id} of file {self.data_file}")
+
+    @abstractmethod
+    def _upload_chunk(self, chunk_id: int, chunk: bytes):
         pass
 
     @abstractmethod
@@ -389,7 +393,5 @@ class SnowflakeStorageClient(ABC):
     def __del__(self):
         logger.debug(f"cleaning up tmp dir: {self.tmp_dir}")
         shutil.rmtree(self.tmp_dir)
-        if self.meta.src_stream is not None:
-            self.meta.src_stream.seek(0)
-        if self.meta.real_src_stream is not None:
+        if self.meta.real_src_stream and not self.meta.real_src_stream.closed:
             self.meta.real_src_stream.close()

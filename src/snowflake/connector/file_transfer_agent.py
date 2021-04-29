@@ -292,7 +292,7 @@ class StorageCredential:
             if cur_timestamp < self.timestamp:
                 return
             self.logger.debug("Renewing expired storage token.")
-            ret = self.connection.execute_string(self.command)[0].fetchone()
+            ret = self.connection.cursor()._execute_helper(self._command)
             self.creds = ret["data"]["stageInfo"]["creds"]
             self.timestamp = time.time()
 
@@ -502,12 +502,15 @@ class SnowflakeFileTransferAgent:
         if self._stage_location_type == LOCAL_FS:
             return SnowflakeLocalStorageClient(meta, self._stage_info)
         elif self._stage_location_type == AZURE_FS:
-            return SnowflakeAzureRestClient(meta, self.credentials, self._stage_info)
-        elif self._stage_location_type == S3_FS:
-            return SnowflakeS3RestClient(
+            return SnowflakeAzureRestClient(
                 meta,
                 self.credentials,
                 self._stage_info,
+                4 * 1024 * 1024 + 1,
+            )
+        elif self._stage_location_type == S3_FS:
+            return SnowflakeS3RestClient(
+                meta, self.credentials, self._stage_info, 8388608  # boto3 default
             )
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
@@ -779,8 +782,6 @@ class SnowflakeFileTransferAgent:
         self._src_locations = response["src_locations"]
 
         self._parallel = response.get("parallel", 1)
-        self._file_pool = ThreadPoolExecutor(5)
-        self._chunk_pool = ThreadPoolExecutor(self._parallel)
         self._overwrite = self._force_put_overwrite or response.get("overwrite", False)
         self._stage_location_type = response["stageInfo"]["locationType"].upper()
 

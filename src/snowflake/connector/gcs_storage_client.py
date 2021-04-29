@@ -62,7 +62,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             The client to communicate with GCS.
         """
         super().__init__(
-            meta, stage_info, credentials=credentials, chunked_transfer=False
+            meta, stage_info, -1, credentials=credentials, chunked_transfer=False
         )
         self.stage_info = stage_info
         self._command = command
@@ -96,7 +96,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.last_err_is_presigned_url = presigned_url_expired
         return presigned_url_expired
 
-    def upload_chunk(self, chunk_id: int):
+    def _upload_chunk(self, chunk_id: int, chunk: bytes):
         meta = self.meta
 
         content_encoding = ""
@@ -150,7 +150,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 access_token: Optional[str] = None
             if access_token:
                 gcs_headers.update({"Authorization": f"Bearer {access_token}"})
-            rest_args = {"headers": gcs_headers, "data": self.chunks[chunk_id]}
+            rest_args = {"headers": gcs_headers, "data": chunk}
             return upload_url, rest_args
 
         response = self._send_request_with_retry(
@@ -340,6 +340,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             )
             if response.status_code == 404:
                 meta.result_status = ResultStatus.NOT_FOUND_FILE
+                return None
             elif response.status_code == 200:
                 digest = response.headers.get(GCS_METADATA_SFC_DIGEST, None)
                 content_length = response.headers.get("content-length", None)

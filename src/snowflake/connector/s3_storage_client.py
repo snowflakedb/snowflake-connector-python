@@ -62,6 +62,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         meta: "SnowflakeFileMeta",
         credentials: "StorageCredential",
         stage_info: Dict[str, Any],
+        chunk_size: int,
         use_accelerate_endpoint: bool = False,
     ):
         """Rest client for S3 storage.
@@ -70,7 +71,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             stage_info:
             use_accelerate_endpoint:
         """
-        super().__init__(meta, stage_info, credentials=credentials)
+        super().__init__(meta, stage_info, chunk_size, credentials=credentials)
         # Signature version V4
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]
@@ -339,10 +340,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         else:
             response.raise_for_status()
 
-    def upload_chunk(self, chunk_id: int):
+    def _upload_chunk(self, chunk_id: int, chunk: bytes):
         logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
         s3path = self.s3location.s3path + self.meta.dst_file_name.lstrip("/")
         url = self.endpoint + f"/{s3path}"
+
         if self.num_of_chunks == 1:  # single request
             s3_metadata = self._prepare_file_metadata()
             _resource = self._construct_canonicalized_element(
@@ -353,7 +355,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 "PUT",
                 _resource,
                 chunk_id,
-                data=self.chunks[0],
+                data=chunk,
                 x_amz_headers=s3_metadata,
                 headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
                 content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
@@ -369,12 +371,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 subresource=query_params,
             )
             response = self._send_request_with_authentication_and_retry(
-                chunk_url, "PUT", chunk_resource, chunk_id, data=self.chunks[chunk_id]
+                chunk_url, "PUT", chunk_resource, chunk_id, data=chunk
             )
             if response.status_code == 200:
                 self.etags[chunk_id] = response.headers["ETag"]
             response.raise_for_status()
-        self.chunks[chunk_id] = None  # Garbage collection
         logger.debug(f"Chunk {chunk_id} uploaded.")
 
     def _complete_multipart_upload(self):
@@ -442,8 +443,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.meta.result_status = ResultStatus.DOWNLOADED
             response.raise_for_status()
         else:
-            chunk_size = self.meta.multipart_threshold
-            if chunk_id < len(self.chunks) - 1:
+            chunk_size = self.chunk_size
+            if chunk_id < self.num_of_chunks - 1:
                 _range = f"{chunk_id * chunk_size}-{(chunk_id+1)*chunk_size-1}"
             else:
                 _range = f"{chunk_id * chunk_size}-"

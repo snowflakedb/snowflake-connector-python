@@ -51,9 +51,10 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         self,
         meta: "SnowflakeFileMeta",
         credentials,
+        chunk_size: int,
         stage_info: Dict[str, Any],
     ):
-        super().__init__(meta, stage_info, credentials=credentials)
+        super().__init__(meta, stage_info, chunk_size, credentials=credentials)
         end_point = stage_info["endPoint"]
         if end_point.startswith("blob."):
             end_point = end_point[len("blob.") :]
@@ -183,17 +184,18 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             for _ in range(self.num_of_chunks)
         ]
 
-    def upload_chunk(self, chunk_id):
+    def _upload_chunk(self, chunk_id: int, chunk: bytes):
         path = self.azure_location.path + self.meta.dst_file_name.lstrip("/")
+
         if self.num_of_chunks > 1:
             block_id = self.block_ids[chunk_id]
             url = (
                 f"https://{self.storage_account}.blob.{self.endpoint}/{self.azure_location.container_name}/{path}?comp=block"
                 f"&blockid={block_id}"
             )
-            headers = {"Content-Length": str(len(self.chunks[chunk_id]))}
+            headers = {"Content-Length": str(len(chunk))}
             r = self._send_request_with_authentication_and_retry(
-                "PUT", url, chunk_id, headers=headers, data=self.chunks[chunk_id]
+                "PUT", url, chunk_id, headers=headers, data=chunk
             )
         else:
             # single request
@@ -205,7 +207,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             }
             headers.update(azure_metadata)
             r = self._send_request_with_authentication_and_retry(
-                "PUT", url, chunk_id, headers=headers, data=self.chunks[chunk_id]
+                "PUT", url, chunk_id, headers=headers, data=chunk
             )
         r.raise_for_status()  # expect status code 201
 
@@ -234,8 +236,8 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         path = self.azure_location.path + self.meta.src_file_name.lstrip("/")
         url = f"https://{self.storage_account}.blob.{self.endpoint}/{self.azure_location.container_name}/{path}"
         if self.num_of_chunks > 1:
-            chunk_size = self.meta.multipart_threshold
-            if chunk_id < len(self.chunks) - 1:
+            chunk_size = self.chunk_size
+            if chunk_id < self.num_of_chunks - 1:
                 _range = f"{chunk_id * chunk_size}-{(chunk_id+1)*chunk_size-1}"
             else:
                 _range = f"{chunk_id * chunk_size}-"
