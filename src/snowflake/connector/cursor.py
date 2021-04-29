@@ -63,13 +63,13 @@ except ImportError:
 try:
     from .arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
 
-    CAN_USE_ARROW_RESULT = True
+    CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
     logger.debug(
         "Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s",
         e,
     )
-    CAN_USE_ARROW_RESULT = False
+    CAN_USE_ARROW_RESULT_FORMAT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
 STATEMENT_TYPE_ID_INSERT = STATEMENT_TYPE_ID_DML + 0x100
@@ -353,7 +353,7 @@ class SnowflakeCursor(object):
 
         # check if current installation include arrow extension or not,
         # if not, we set statement level query result format to be JSON
-        if not CAN_USE_ARROW_RESULT:
+        if not CAN_USE_ARROW_RESULT_FORMAT:
             logger.debug("Cannot use arrow result format, fallback to json format")
             if statement_params is None:
                 statement_params = {
@@ -768,9 +768,9 @@ class SnowflakeCursor(object):
                 self._total_rowcount += updated_rows
 
     def check_can_use_arrow_resultset(self):
-        global CAN_USE_ARROW_RESULT
+        global CAN_USE_ARROW_RESULT_FORMAT
 
-        if not CAN_USE_ARROW_RESULT:
+        if not CAN_USE_ARROW_RESULT_FORMAT:
             if self._connection.application == "SnowSQL":
                 msg = "Currently SnowSQL doesn't support the result set in Apache Arrow format."
                 errno = ER_NO_PYARROW_SNOWSQL

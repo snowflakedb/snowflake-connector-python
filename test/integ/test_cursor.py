@@ -1001,7 +1001,9 @@ def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
     """Tests whether cannot use arrow is handled correctly inside of _execute_helper."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
+            ):
                 if result_format is False:
                     result_format = None
                 else:
@@ -1023,7 +1025,9 @@ def test_execute_helper_cannot_use_arrow_exception(conn_cnx):
     """Like test_execute_helper_cannot_use_arrow but when we are trying to force arrow an Exception should be raised."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
+            ):
                 with pytest.raises(
                     ProgrammingError,
                     match="The result set in Apache Arrow format is not supported for the platform.",
@@ -1041,7 +1045,9 @@ def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     """Tests check_can_use_arrow_resultset has no effect when we can use arrow."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", True):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", True
+            ):
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
                 cur.check_can_use_arrow_resultset()
     assert "Arrow" not in caplog.text
@@ -1056,7 +1062,9 @@ def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
         config["application"] = "SnowSQL"
     with conn_cnx(**config) as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
+            ):
                 with pytest.raises(
                     ProgrammingError,
                     match="Currently SnowSQL doesn't support the result set in Apache Arrow format."
