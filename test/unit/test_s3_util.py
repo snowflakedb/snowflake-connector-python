@@ -10,19 +10,12 @@ import os
 from collections import defaultdict
 from os import path
 
-import botocore
-import botocore.exceptions
 import mock
 import OpenSSL
 import pytest
-from boto3.exceptions import Boto3Error, RetriesExceededError, S3UploadFailedError
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
-from snowflake.connector.remote_storage_client import (
-    DEFAULT_MAX_RETRY,
-    SnowflakeRemoteStorageClient,
-)
 from snowflake.connector.s3_storage_client import (
     ERRORNO_WSAECONNABORTED,
     SnowflakeS3RestClient,
@@ -65,63 +58,6 @@ def test_extract_bucket_name_and_path(input, bucket_name, s3path):
     s3_loc = s3_util._extract_bucket_name_and_path(input)
     assert s3_loc.bucket_name == bucket_name
     assert s3_loc.s3path == s3path
-
-
-# TODO
-def test_upload_one_file_to_s3_wsaeconnaborted():
-    """Tests Upload one file to S3 with retry on ERRORNO_WSAECONNABORTED.
-
-    Notes:
-        The last attempted max_currency should be (initial_parallel/max_retry).
-    """
-    upload_file = MagicMock(
-        side_effect=OpenSSL.SSL.SysCallError(
-            ERRORNO_WSAECONNABORTED, "mock err. connection aborted"
-        )
-    )
-    s3object = MagicMock(metadata=defaultdict(str), upload_file=upload_file)
-    client = Mock()
-    client.Object.return_value = s3object
-    initial_parallel = 100
-    client_meta_dict = {
-        "stage_info": {
-            "location": "sfc-customer-stage/rwyi-testacco/users/9220/",
-            "locationType": "S3",
-        },
-        "cloud_client": client,
-    }
-    client_meta = SFResourceMeta(**client_meta_dict)
-    upload_meta = {
-        "name": "data1.txt.gz",
-        "stage_location_type": "S3",
-        "no_sleeping_time": True,
-        "parallel": initial_parallel,
-        "put_callback": None,
-        "put_callback_output_stream": None,
-        "client_meta": client_meta,
-        SHA256_DIGEST: "123456789abcdef",
-        "dst_file_name": "data1.txt.gz",
-        "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
-        "overwrite": True,
-    }
-    upload_meta["real_src_file_name"] = upload_meta["src_file_name"]
-    upload_meta["upload_size"] = os.stat(upload_meta["src_file_name"]).st_size
-    meta = SnowflakeFileMeta(**upload_meta)
-    with pytest.raises(OpenSSL.SSL.SysCallError):
-        SnowflakeRemoteStorageClient.upload_file(meta)
-    assert upload_file.call_count == DEFAULT_MAX_RETRY
-    assert meta.last_max_concurrency is not None
-    assert meta.last_max_concurrency == initial_parallel / DEFAULT_MAX_RETRY
-
-    # min parallel == 1
-    upload_file.reset_mock()
-    initial_parallel = 4
-    meta.parallel = initial_parallel
-    with pytest.raises(OpenSSL.SSL.SysCallError):
-        SnowflakeRemoteStorageClient.upload_file(meta)
-    assert upload_file.call_count == DEFAULT_MAX_RETRY
-    assert meta.last_max_concurrency is not None
-    assert meta.last_max_concurrency == 1
 
 
 # TODO

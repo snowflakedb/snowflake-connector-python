@@ -164,6 +164,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         )
 
     def download_chunk(self, chunk_id: int):
+        self.chunks = []  # because GCS writes the entire file using streaming download
         meta = self.meta
 
         def generate_url_and_rest_args():

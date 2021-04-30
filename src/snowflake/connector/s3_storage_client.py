@@ -292,7 +292,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
             self.meta.result_status = ResultStatus.NOT_FOUND_FILE
             return None
-        response.raise_for_status()
+        else:
+            response.raise_for_status()
 
     def _prepare_file_metadata(self) -> Dict[str, Any]:
         """Construct metadata for a file to be uploaded.

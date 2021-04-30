@@ -18,8 +18,6 @@ from random import randint
 from time import sleep, time
 from typing import IO, TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
-import OpenSSL
-
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS, dataclass
 from .constants import (
@@ -280,19 +278,18 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
 
 
 class StorageCredential:
-    def __init__(self, credentials: Dict[str, Any], connection, command: str, logger):
+    def __init__(self, credentials: Dict[str, Any], connection, command: str):
         self.creds = credentials
         self.timestamp = time()
         self.lock = threading.Lock()
         self.connection = connection
         self.command = command
-        self.logger = logger
 
     def update(self, cur_timestamp):
         with self.lock:
             if cur_timestamp < self.timestamp:
                 return
-            self.logger.debug("Renewing expired storage token.")
+            logger.debug("Renewing expired storage token.")
             ret = self.connection.cursor()._execute_helper(self._command)
             self.creds = ret["data"]["stageInfo"]["creds"]
             self.timestamp = time.time()
@@ -307,10 +304,6 @@ class TransferMetadata:
 
 class SnowflakeFileTransferAgent:
     """Snowflake File Transfer Agent provides cloud provider independent implementation for putting/getting files."""
-
-    MAX_RETRY = 5
-    SLEEP_MAX = float("inf")
-    TRANSIENT_ERRORS = [OpenSSL.SSL.SysCallError, Timeout, ConnectionError]
 
     def __init__(
         self,
@@ -433,24 +426,15 @@ class SnowflakeFileTransferAgent:
                 transfer_metadata.chunks_in_queue -= 1
             with cv_2:
                 cv_2.notify()
-            if future.exception():
-                with done_client.lock:
+
+            with done_client.lock:
+                if future.exception():
                     done_client.failed_transfers += 1
-                exc = future.exception()
-                if isinstance(
-                    exc,
-                    (
-                        TokenExpiredError,
-                        PresignedUrlExpiredError,
-                    ),
-                ):
-                    raise NotImplementedError()
-                else:
+                    exc = future.exception()
                     logger.debug(
                         f"Chunk {done_id} of file {done_client.meta.name} failed to transfer for unexpected exception {exc}"
                     )
-            else:
-                with done_client.lock:
+                else:
                     done_client.successful_transfers += 1
             if (
                 done_client.successful_transfers + done_client.failed_transfers
@@ -465,82 +449,66 @@ class SnowflakeFileTransferAgent:
             with cv_1:
                 cv_1.notify()
 
-        def done_callback_preprocess(future: Future):
+        def done_callback_file(future: Future):
             done_client = futures_to_file[future]
-            logger.debug(f"Preprocessing of file {done_client.meta.name} finished")
             if future.exception():
-                logger.debug(
-                    f"Preprocessing file {done_client.meta.name} failed, not uploading."
-                )
-                done_client.finish_upload()
+                logger.debug(f"Failed to prepare {done_client.meta.name}.")
+                if is_upload:
+                    done_client.finish_upload()
+                else:
+                    done_client.finish_download()
                 with transfer_metadata_lock:
                     transfer_metadata.num_files_completed += 1
                 with cv_1:
                     cv_1.notify()
             elif done_client.meta.result_status == ResultStatus.SKIPPED:
+                # this case applies to upload only
                 with transfer_metadata_lock:
                     transfer_metadata.num_files_completed += 1
                 with cv_1:
                     cv_1.notify()
             else:
+                logger.debug(f"Finished preparing file {done_client.meta.name}")
                 with cv_2:
-                    logger.debug("Obtained cv_2")
                     while transfer_metadata.chunks_in_queue > 2 * max_concurrency:
                         logger.debug(
-                            "Waiting in preprocess done callback to add chunks."
+                            "Chunk queue busy, waiting in file done callback..."
                         )
                         cv_2.wait()
                     for _chunk_id in range(done_client.num_of_chunks):
-                        logger.debug(
-                            f"PUT: submitting chunk {_chunk_id} of file {done_client.meta.name}"
-                        )
-                        upload_future = chunk_tpe.submit(
-                            done_client.upload_chunk, _chunk_id
-                        )
+                        if is_upload:
+                            chunk_future = chunk_tpe.submit(
+                                done_client.upload_chunk, _chunk_id
+                            )
+                        else:
+                            chunk_future = chunk_tpe.submit(
+                                done_client.download_chunk, _chunk_id
+                            )
                         with transfer_metadata_lock:
                             transfer_metadata.chunks_in_queue += 1
-                        register_future(upload_future, done_client, _chunk_id)
-                        upload_future.add_done_callback(done_callback_chunk)
+                        register_future(chunk_future, done_client, _chunk_id)
+                        chunk_future.add_done_callback(done_callback_chunk)
                     cv_2.notify()
 
-        def start_preprocessing_all_waiting_files():
+        def start_all_waiting_files():
             while not files_unstarted.empty():
                 _transfer = files_unstarted.get()
-                proc_future = preprocess_tpe.submit(_transfer.prepare_upload)
+                if is_upload:
+                    proc_future = preprocess_tpe.submit(_transfer.prepare_upload)
+                else:
+                    proc_future = preprocess_tpe.submit(_transfer.prepare_download)
                 register_future(proc_future, _transfer)
-                proc_future.add_done_callback(done_callback_preprocess)
+                proc_future.add_done_callback(done_callback_file)
                 transfer_metadata.num_files_started += 1
 
-        if is_upload:
-            start_preprocessing_all_waiting_files()
-            with cv_1:
-                while transfer_metadata.num_files_completed < num_total_files:
-                    if transfer_metadata.chunks_in_queue < max_concurrency + delta:
-                        with cv_2:
-                            start_preprocessing_all_waiting_files()
-                            cv_2.notify()
-                    cv_1.wait()
-        else:
-            with cv_1:
-                while transfer_metadata.num_files_completed < num_total_files:
-                    if (
-                        transfer_metadata.chunks_in_queue < max_concurrency + delta
-                        and transfer_metadata.num_files_started < num_total_files
-                    ):
-                        file_transfer = files_unstarted.get()
-                        file_transfer.prepare_download()  # one HEAD call
-                        with transfer_metadata_lock:
-                            transfer_metadata.num_files_started += 1
-                        for chunk_id in range(file_transfer.num_of_chunks):
-                            _future = chunk_tpe.submit(
-                                file_transfer.download_chunk, chunk_id
-                            )
-                            with transfer_metadata_lock:
-                                transfer_metadata.chunks_in_queue += 1
-                            register_future(_future, file_transfer, chunk_id)
-                            _future.add_done_callback(done_callback_chunk)
-                    else:
-                        cv_1.wait()
+        start_all_waiting_files()
+        with cv_1:
+            while transfer_metadata.num_files_completed < num_total_files:
+                if transfer_metadata.chunks_in_queue < max_concurrency + delta:
+                    with cv_2:
+                        start_all_waiting_files()
+                        cv_2.notify()
+                cv_1.wait()
 
         self._results = metas
 
@@ -573,68 +541,6 @@ class SnowflakeFileTransferAgent:
         if self._stage_location_type == S3_FS:
             client = self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
-
-    def _upload_files_in_parallel(self, file_metas: List["SnowflakeFileMeta"]) -> None:
-        """Uploads files in parallel.
-
-        Args:
-            file_metas: List of metadata for files to be uploaded.
-        """
-
-        def _helper(meta: "SnowflakeFileMeta"):
-            client = self._create_file_transfer_client(meta)
-            return client.upload_file(meta)
-
-        self._results += list(self._file_pool.map(_helper, file_metas))
-
-    def _upload_files_in_sequential(self, file_metas: List["SnowflakeFileMeta"]):
-        """Uploads files in sequential. Retry if the access token expires.
-
-        Args:
-            file_metas: List of metadata for files to be uploaded.
-        """
-        for meta in file_metas:
-            client = self._create_file_transfer_client(meta)
-            self._results.append(client.upload_file(meta))
-            if INJECT_WAIT_IN_PUT > 0:
-                logger.debug(f"LONGEVITY TEST: waiting for {INJECT_WAIT_IN_PUT}")
-                sleep(INJECT_WAIT_IN_PUT)
-
-    def download(
-        self,
-        large_file_metas: List["SnowflakeFileMeta"],
-        small_file_metas: List["SnowflakeFileMeta"],
-    ):
-        if len(small_file_metas) > 0:
-            self._download_files_in_parallel(small_file_metas)
-        if len(large_file_metas) > 0:
-            self._download_files_in_sequential(large_file_metas)
-
-    def _download_files_in_parallel(self, file_metas: List["SnowflakeFileMeta"]):
-        """Downloads files in parallel.
-
-        Args:
-            file_metas: List of metadata for files to be downloaded.
-        """
-
-        def _helper(meta: "SnowflakeFileMeta"):
-            client = self._create_file_transfer_client(meta)
-            return client.download_file(meta)
-
-        self._results += list(self._file_pool.map(_helper, file_metas))
-
-    def _download_files_in_sequential(self, file_metas: List["SnowflakeFileMeta"]):
-        """Downloads files in sequential. Retry if the access token expires.
-
-        Args:
-            file_metas: List of metadata for files to be downloaded.
-        """
-        for meta in file_metas:
-            client = self._create_file_transfer_client(meta)
-            self._results.append(client.download_file(meta))
-            if INJECT_WAIT_IN_PUT > 0:
-                logger.debug(f"LONGEVITY TEST: waiting for {INJECT_WAIT_IN_PUT}")
-                sleep(INJECT_WAIT_IN_PUT)
 
     def result(self):
         converter_class = self._cursor._connection.converter_class
@@ -847,7 +753,7 @@ class SnowflakeFileTransferAgent:
         self._stage_location = response["stageInfo"]["location"]
         self._stage_info = response["stageInfo"]
         self.credentials = StorageCredential(
-            self._stage_info["creds"], self._cursor.connection, self._command, logger
+            self._stage_info["creds"], self._cursor.connection, self._command
         )
         self._presigned_urls = self._ret["data"].get("presignedUrls")
 

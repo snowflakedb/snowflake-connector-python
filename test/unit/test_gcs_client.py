@@ -5,6 +5,7 @@
 #
 
 import logging
+from unittest.mock import Mock
 
 import mock
 import pytest
@@ -37,16 +38,6 @@ except ImportError:  # pragma: no cover
     vendored_request = False
 
 
-def test_create_client(caplog):
-    """Creates a GCSUtil with an access token."""
-    caplog.set_level(logging.DEBUG, "snowflake.connector")
-    client = SnowflakeGCSRestClient.create_client(
-        {"creds": {"GCS_ACCESS_TOKEN": "fake_token"}}
-    )
-    assert client is not None
-    assert client == "fake_token"
-
-
 @pytest.mark.parametrize("errno", [403, 408, 429, 500, 503])
 def test_upload_retry_errors(errno, tmpdir):
     """Tests whether retryable errors are handled correctly when upploading."""
@@ -60,6 +51,7 @@ def test_upload_retry_errors(errno, tmpdir):
         presigned_url="some_url",
         sha256_digest="asd",
     )
+    client = SnowflakeGCSRestClient()
     with open(f_name, "w") as f:
         f.write(random_string(15))
     with mock.patch(
@@ -68,6 +60,7 @@ def test_upload_retry_errors(errno, tmpdir):
         else "requests.put",
         side_effect=requests.exceptions.HTTPError(response=resp),
     ):
+        client.upload_chunk(0)
         SnowflakeGCSRestClient.upload_file(f_name, meta, None, 99, 64000)
         assert isinstance(meta.last_error, requests.exceptions.HTTPError)
         assert meta.result_status == ResultStatus.NEED_RETRY
@@ -213,7 +206,12 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
         stage_location_type="GCS",
         presigned_url="www.example.com",
     )
-    file_header = SnowflakeGCSRestClient.get_file_header(meta, "file")
-    assert file_header.digest is None
-    assert file_header.content_length is None
-    assert file_header.encryption_metadata is None
+    storage_credentials = Mock()
+    storage_credentials.creds = {}
+    stage_info = Mock()
+    connection = Mock()
+    client = SnowflakeGCSRestClient(
+        meta, storage_credentials, stage_info, connection, ""
+    )
+    file_header = client.get_file_header(meta.name)
+    assert file_header is None

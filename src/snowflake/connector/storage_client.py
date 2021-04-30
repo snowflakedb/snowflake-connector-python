@@ -16,19 +16,14 @@ from logging import getLogger
 from math import ceil
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
-import requests
-from requests import ConnectionError, Timeout
-
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import (
-    PresignedUrlExpiredError,
     RequestExceedMaxRetryError,
-    TokenExpiredError,
 )
 from .file_util import SnowflakeFileUtil
-
-# from .vendored.requests import Timeout, ConnectionError
+from .vendored import requests
+from .vendored.requests import ConnectionError, Timeout
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -69,6 +64,7 @@ class SnowflakeStorageClient(ABC):
         chunk_size: int,
         chunked_transfer: Optional[bool] = True,
         credentials: Optional["StorageCredential"] = None,
+        max_retry: int = 5,
     ):
         self.meta = meta
         self.stage_info = stage_info
@@ -77,7 +73,7 @@ class SnowflakeStorageClient(ABC):
         self.data_file: str = None
         self.encryption_metadata: "EncryptionMetadata" = None
 
-        self.max_retry = 3  # TODO
+        self.max_retry = max_retry  # TODO
         self.credentials = credentials
         meta.tmp_dir = self.tmp_dir
         # UPLOAD
@@ -230,7 +226,7 @@ class SnowflakeStorageClient(ABC):
             fd = meta.real_src_stream or meta.src_stream
             fd.seek(0)
             if self.num_of_chunks == 1:
-                self.chunk_size.append(fd.read())
+                self.chunks.append(fd.read())
             else:
                 for _ in range(self.num_of_chunks):
                     self.chunks.append(fd.read(self.chunk_size))
@@ -264,14 +260,12 @@ class SnowflakeStorageClient(ABC):
     ):
         rest_call = METHODS[verb]
         while self.retry_count[retry_id] < self.max_retry:
-            # cur_timestamp = self.credentials.timestamp
+            cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             try:
                 response = rest_call(url, **rest_kwargs)
                 if self._has_expired_presigned_url(response):
-                    raise PresignedUrlExpiredError(
-                        f"Presigned url expired for file {self.meta.name}"
-                    )
+                    self._update_presigned_url()
                 else:
                     self.last_err_is_presigned_url = False
                     if response.status_code in self.TRANSIENT_HTTP_ERR:
@@ -280,9 +274,7 @@ class SnowflakeStorageClient(ABC):
                         )
                         self.retry_count[retry_id] += 1
                     elif self._has_expired_token(response):
-                        raise TokenExpiredError(
-                            f"Token expired for file {self.meta.name}"
-                        )
+                        self.credentials.update(cur_timestamp)
                     else:
                         return response
             except self.TRANSIENT_ERRORS:
@@ -331,8 +323,7 @@ class SnowflakeStorageClient(ABC):
             full_dst_file_name = self.full_dst_file_name
 
             meta.result_status = ResultStatus.DOWNLOADED
-            if self.chunked_transfer:
-                # TODO: workaround for gcs
+            if self.chunks:
                 with open(self.full_dst_file_name, "wb+") as fd:
                     for chunk in self.chunks:
                         fd.write(chunk)
@@ -364,6 +355,7 @@ class SnowflakeStorageClient(ABC):
             stat_info = os.stat(full_dst_file_name)
             meta.dst_file_size = stat_info.st_size
         else:
+            self.chunks = []  # Garbage collection
             # TODO: add more error details to result/meta
             logger.exception(f"Failed to download a file: {meta.dst_file_name}")
             meta.dst_file_size = -1
