@@ -43,10 +43,6 @@ ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = "ExpiredToken"
 ADDRESSING_STYLE = "virtual"  # explicit force to use virtual addressing style
-MAXIMUM_RETRY = 3
-TRANSIENT_HTTP_CODE = (408, 429, 500, 502, 503, 504)
-TRANSIENT_ERRORS = (OpenSSL.SSL.SysCallError, Timeout, ConnectionError)
-SLEEP_MAX = float("inf")
 
 """
 S3 Location: S3 bucket name + path

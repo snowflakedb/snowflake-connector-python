@@ -41,11 +41,6 @@ SFCDIGEST = "x-ms-meta-sfcdigest"
 ENCRYPTION_DATA = "x-ms-meta-encryptiondata"
 MATDESC = "x-ms-meta-matdesc"
 
-REST_VERBS = {"GET": requests.get, "PUT": requests.put, "HEAD": requests.head}
-TRANSIENT_ERROR_HTTP_CODE = (408, 429, 500, 502, 503, 504)
-TRANSIENT_ERRORS = (Timeout, ConnectionError)
-
-
 class SnowflakeAzureRestClient(SnowflakeStorageClient):
     def __init__(
         self,

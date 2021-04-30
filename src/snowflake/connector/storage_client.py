@@ -16,6 +16,8 @@ from logging import getLogger
 from math import ceil
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
+import OpenSSL
+
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import (
@@ -54,7 +56,7 @@ METHODS = {
 class SnowflakeStorageClient(ABC):
     TRANSIENT_HTTP_ERR = (408, 429, 500, 502, 503, 504)
 
-    TRANSIENT_ERRORS = (Timeout, ConnectionError)
+    TRANSIENT_ERRORS = (OpenSSL.SSL.SysCallError, Timeout, ConnectionError)
     SLEEP_MAX = float("inf")
 
     def __init__(
@@ -360,12 +362,6 @@ class SnowflakeStorageClient(ABC):
             logger.exception(f"Failed to download a file: {meta.dst_file_name}")
             meta.dst_file_size = -1
             meta.result_status = ResultStatus.ERROR
-
-    def should_retry_on_error(self, exc: Exception) -> bool:
-        return isinstance(exc, self.TRANSIENT_ERRORS) or (
-            isinstance(exc, requests.HTTPError)
-            and exc.response.status_code in self.TRANSIENT_HTTP_ERR
-        )
 
     def upload_chunk(self, chunk_id: int):
         if not self.chunks:
