@@ -13,6 +13,8 @@ from decimal import Decimal
 import numpy
 import pytest
 
+from snowflake.connector.constants import TABLE_UNIT
+
 try:
     from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
 except ImportError:
@@ -22,7 +24,7 @@ except ImportError:
 
 
 try:
-    from snowflake.connector.arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
