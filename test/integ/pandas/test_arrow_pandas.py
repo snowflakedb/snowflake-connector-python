@@ -13,7 +13,11 @@ from decimal import Decimal
 import numpy
 import pytest
 
-from snowflake.connector.constants import TABLE_UNIT
+try:
+    from snowflake.connector.constants import TABLE_UNIT
+except ImportError:
+    # This is because of olddriver tests
+    TABLE_UNIT = "table"
 
 try:
     from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
