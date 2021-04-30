@@ -25,6 +25,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     Union,
 )
 
@@ -38,11 +39,6 @@ from .auth_okta import AuthByOkta
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
 from .bind_upload_agent import BindUploadError
-from .chunk_downloader import (
-    DEFAULT_CLIENT_PREFETCH_THREADS,
-    MAX_CLIENT_PREFETCH_THREADS,
-    SnowflakeChunkDownloader,
-)
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
     PARAMETER_AUTOCOMMIT,
@@ -101,6 +97,9 @@ from .time_util import (
     get_time_millis,
 )
 from .util_text import construct_hostname, parse_account, split_statements
+
+DEFAULT_CLIENT_PREFETCH_THREADS = 4
+MAX_CLIENT_PREFETCH_THREADS = 10
 
 
 def DefaultConverterClass():
@@ -168,7 +167,6 @@ DEFAULT_CONFIGURATION = {
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
-    "chunk_downloader_class": (SnowflakeChunkDownloader, object),  # snowflake internal
     "validate_default_parameters": (False, bool),  # snowflake
     "probe_connection": (False, bool),  # snowflake
     "paramstyle": (None, (type(None), str)),  # standard/snowflake
@@ -566,7 +564,7 @@ class SnowflakeConnection(object):
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(self, cursor_class: SnowflakeCursor = SnowflakeCursor):
+    def cursor(self, cursor_class: Type["SnowflakeCursor"] = SnowflakeCursor):
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
         if not self.rest:

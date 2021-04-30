@@ -663,8 +663,8 @@ def iterate_over_test_chunk(
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     context = ArrowConverterContext()
-    it = PyArrowIterator(None, stream, context, False, False)
-    it.init(ROW_UNIT, False)
+    it = PyArrowIterator(None, stream, context, False, False, False)
+    it.init(ROW_UNIT)
 
     count = 0
     while True:
