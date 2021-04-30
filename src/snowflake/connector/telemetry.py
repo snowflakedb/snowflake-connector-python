@@ -20,6 +20,7 @@ class TelemetryField(object):
     TIME_DOWNLOADING_CHUNKS = "client_time_downloading_chunks"
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
     SQL_EXCEPTION = "client_sql_exception"
+    GET_PARTITIONS_USED = "client_get_partitions_used"
 
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
