@@ -14,7 +14,6 @@ Release Notes
 
    - Uses s3 regional URL in private links when a param is set.
    - New Arrow NUMBER to Decimal converter option.
-   - Update pyopenssl requirement from <20.0.0,>=16.2.0 to >=16.2.0,<21.0.0.
    - Update pandas requirement from <1.2.0,>=1.0.0 to >=1.0.0,<1.3.0.
    - Update numpy requirement from <1.20.0 to <1.21.0.
 
