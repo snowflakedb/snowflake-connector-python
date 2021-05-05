@@ -1314,3 +1314,19 @@ def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
                 #  short circuits and just parses (for JSON batches) and then return an
                 #  an iterator through that data, so we expect the call count to be 5
                 assert patched_download.call_count == 5
+
+
+def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
+    """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            with capture_sf_telemetry.patch_connection(con, False) as telemetry:
+                cur.execute("select 1;")
+                cur._first_chunk_time = None
+                assert cur.fetchall() == [
+                    (1,),
+                ]
+            assert not any(
+                r.message.get("type", "") == TelemetryField.TIME_CONSUME_LAST_RESULT
+                for r in telemetry.records
+            )
