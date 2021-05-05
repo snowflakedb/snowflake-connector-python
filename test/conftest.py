@@ -3,14 +3,66 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
 import os
+from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
+from typing import Generator, List
 
 import pytest
 
+from snowflake.connector import SnowflakeConnection
+from snowflake.connector.telemetry import TelemetryClient, TelemetryData
+
 from . import CLOUD_PROVIDERS, PUBLIC_SKIP_TAGS, running_on_public_ci
+
+
+class TelemetryCaptureHandler(TelemetryClient):
+    def __init__(
+        self,
+        real_telemetry: "TelemetryClient",
+        propagate: bool = True,
+    ):
+        super().__init__(real_telemetry._rest)
+        self.records: List["TelemetryData"] = []
+        self._real_telemetry = real_telemetry
+        self._propagate = propagate
+
+    def add_log_to_batch(self, telemetry_data):
+        self.records.append(telemetry_data)
+        if self._propagate:
+            super().add_log_to_batch(telemetry_data)
+
+    def send_batch(self):
+        self.records = []
+        if self._propagate:
+            super().send_batch()
+
+
+class TelemetryCaptureFixture:
+    """Provides a way to capture Snowflake telemetry messages."""
+
+    @contextmanager
+    def patch_connection(
+        self,
+        con: "SnowflakeConnection",
+        propagate: bool = True,
+    ) -> Generator["TelemetryCaptureHandler", None, None]:
+        original_telemetry = con._telemetry
+        new_telemetry = TelemetryCaptureHandler(
+            original_telemetry,
+            propagate,
+        )
+        con._telemetry = new_telemetry
+        try:
+            yield new_telemetry
+        finally:
+            con._telemetry = original_telemetry
+
+
+@pytest.fixture(scope="session")
+def capture_sf_telemetry() -> "TelemetryCaptureFixture":
+    return TelemetryCaptureFixture()
 
 
 def pytest_collection_modifyitems(items) -> None:
