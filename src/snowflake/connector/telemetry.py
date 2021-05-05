@@ -63,7 +63,7 @@ class TelemetryClient(object):
         self._lock = Lock()
         self._enabled = True
 
-    def add_log_to_batch(self, telemetry_data):
+    def add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
         if self._is_closed:
             raise Exception("Attempted to add log when TelemetryClient is closed")
         elif not self._enabled:
@@ -76,7 +76,7 @@ class TelemetryClient(object):
         if len(self._log_batch) >= self._flush_size:
             self.send_batch()
 
-    def try_add_log_to_batch(self, telemetry_data):
+    def try_add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
         try:
             self.add_log_to_batch(telemetry_data)
         except Exception:
