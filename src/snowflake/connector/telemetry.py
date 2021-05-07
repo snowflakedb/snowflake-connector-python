@@ -40,6 +40,8 @@ class TelemetryField(object):
 class TelemetryData(object):
     """An instance of telemetry data which can be sent to the server."""
 
+    DUMMY_VALUE = 1
+
     def __init__(self, message, timestamp):
         self.message = message
         self.timestamp = timestamp
