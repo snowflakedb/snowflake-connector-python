@@ -5,19 +5,23 @@
 #
 
 import math
+import uuid
 from datetime import datetime
 from typing import Callable, Dict, Generator
 
 import mock
+import pandas as pd
 import pytest
+from sqlalchemy import create_engine
 
-from snowflake.connector import DictCursor
+from snowflake.connector import DictCursor, ProgrammingError
+from snowflake.sqlalchemy import URL
 
 from ...lazy_var import LazyVar
 
 try:
     from snowflake.connector.options import pandas  # NOQA
-    from snowflake.connector.pandas_tools import write_pandas  # NOQA
+    from snowflake.connector.pandas_tools import make_pd_writer, write_pandas  # NOQA
 except ImportError:
     pandas = None
     write_pandas = None
@@ -108,6 +112,55 @@ def test_write_pandas(
             # Make sure we uploaded in as many chunk as we wanted to
             assert nchunks == num_of_chunks
         finally:
+            cnx.execute_string(drop_sql)
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"quote_identifiers": False}, {"quote_identifiers": True}]
+)
+def test_make_pd_writer(db_parameters: Dict[str, str], conn_cnx, kwargs: Dict):
+    with conn_cnx(
+        user=db_parameters["user"],
+        account=db_parameters["account"],
+        password=db_parameters["password"],
+    ) as cnx:  # type: SnowflakeConnection
+        engine = create_engine(
+            URL(
+                user=db_parameters["user"],
+                password=db_parameters["password"],
+                account=db_parameters["account"],
+                database=db_parameters["database"],
+                schema=db_parameters["schema"],
+                warehouse=db_parameters["warehouse"],
+                numpy=True,
+            )
+        )
+
+        df = pd.DataFrame({"a": range(10), "b": range(10, 20)})
+        test_table_uuid = uuid.uuid4().hex
+        table_name = f"testtable{test_table_uuid}".upper()
+
+        def write_to_db():
+            df.to_sql(
+                name=table_name,
+                con=engine,
+                index=False,
+                if_exists="append",
+                method=make_pd_writer(**kwargs),
+            )
+
+        if kwargs["quote_identifiers"]:
+            with pytest.raises(ProgrammingError) as e:
+                write_to_db()
+            err_msg = str(e.value)
+            assert "invalid identifier '\"a\"'" in err_msg
+            assert "SQL compilation error" in err_msg
+        else:
+            write_to_db()
+            select_sql = 'SELECT * FROM "{}"'.format(table_name)
+            results = set(cnx.cursor().execute(select_sql).fetchall())
+            assert len(results) == 10
+            drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
             cnx.execute_string(drop_sql)
 
 

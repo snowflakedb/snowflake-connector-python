@@ -5,10 +5,12 @@
 import os
 import random
 import string
+from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
+    Callable,
     Iterable,
     Iterator,
     Optional,
@@ -50,7 +52,7 @@ def write_pandas(
     compression: str = "gzip",
     on_error: str = "abort_statement",
     parallel: int = 4,
-    quote_identifiers: bool = True,
+    **kwargs
 ) -> Tuple[
     bool,
     int,
@@ -120,7 +122,7 @@ def write_pandas(
                 compression, compression_map.keys()
             )
         )
-    if quote_identifiers:
+    if kwargs["quote_identifiers"]:
         location = (
             (('"' + database + '".') if database else "")
             + (('"' + schema + '".') if schema else "")
@@ -171,7 +173,7 @@ def write_pandas(
             cursor.execute(upload_sql, _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
-    if quote_identifiers:
+    if kwargs["quote_identifiers"]:
         columns = '"' + '","'.join(list(df.columns)) + '"'
     else:
         columns = ",".join(list(df.columns))
@@ -204,12 +206,40 @@ def write_pandas(
     )
 
 
+def make_pd_writer(**kwargs) -> Callable:
+    """This returns a pd_writer with the desired arguments.
+
+        Example usage:
+            import pandas as pd
+            from snowflake.connector.pandas_tools import make_pd_writer
+
+            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
+            sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=make_pd_writer(quote_identifiers=False))
+
+            # to keep quote_identifiers=True
+            from functools import partial
+            sf_connector_version_df.to_sql(
+                'driver_versions', engine, index=False, method=make_pd_writer()))
+
+    Args:
+        kwargs: A dictionary that specifies which arguments to pass to pd_writer
+    """
+    # default argument map
+    default_args = {"quote_identifiers": True}
+    # overwrite with value in kwargs, if it exists
+    for k in default_args.keys():
+        if k in kwargs:
+            default_args[k] = kwargs[k]
+
+    return partial(pd_writer, **default_args)
+
+
 def pd_writer(
     table: "pandas.io.sql.SQLTable",
     conn: Union["sqlalchemy.engine.Engine", "sqlalchemy.engine.Connection"],
     keys: Iterable,
     data_iter: Iterable,
-    quote_identifiers: bool = True,
+    **kwargs
 ) -> None:
     """This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
 
@@ -241,5 +271,5 @@ def pd_writer(
         # Note: Our sqlalchemy connector creates tables case insensitively
         table_name=table.name.upper(),
         schema=table.schema,
-        quote_identifiers=quote_identifiers,
+        **kwargs
     )
