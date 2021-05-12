@@ -179,7 +179,6 @@ def test_done_caching(conn_cnx):
 
 
 def test_invalid_uuid_get_status(conn_cnx):
-    """"""
     with conn_cnx() as con:
         with con.cursor() as cur:
             with pytest.raises(
