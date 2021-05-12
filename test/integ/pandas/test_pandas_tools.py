@@ -5,7 +5,6 @@
 #
 
 import math
-import uuid
 from datetime import datetime
 from typing import Callable, Dict, Generator
 
@@ -18,11 +17,13 @@ from snowflake.connector import DictCursor, ProgrammingError
 from snowflake.sqlalchemy import URL
 
 from ...lazy_var import LazyVar
+from ...randomize import random_string
 
 try:
     from snowflake.connector.options import pandas  # NOQA
     from snowflake.connector.pandas_tools import make_pd_writer, write_pandas  # NOQA
 except ImportError:
+    make_pd_writer = None
     pandas = None
     write_pandas = None
 
@@ -115,30 +116,27 @@ def test_write_pandas(
             cnx.execute_string(drop_sql)
 
 
-@pytest.mark.parametrize(
-    "kwargs", [{"quote_identifiers": False}, {"quote_identifiers": True}]
-)
-def test_make_pd_writer(db_parameters: Dict[str, str], conn_cnx, kwargs: Dict):
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:  # type: SnowflakeConnection
+@pytest.mark.parametrize("quote_identifiers", [False, True])
+def test_make_pd_writer(
+    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+    db_parameters: Dict[str, str],
+    quote_identifiers: bool,
+):
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
         engine = create_engine(
             URL(
-                user=db_parameters["user"],
+                user=cnx.user,
                 password=db_parameters["password"],
-                account=db_parameters["account"],
-                database=db_parameters["database"],
-                schema=db_parameters["schema"],
-                warehouse=db_parameters["warehouse"],
+                account=cnx.account,
+                database=cnx.database,
+                schema=cnx.schema,
+                warehouse=cnx.warehouse,
                 numpy=True,
             )
         )
 
         df = pd.DataFrame({"a": range(10), "b": range(10, 20)})
-        test_table_uuid = uuid.uuid4().hex
-        table_name = f"testtable{test_table_uuid}".upper()
+        table_name = random_string(6, "SNOW12345_").upper()
 
         def write_to_db():
             df.to_sql(
@@ -146,22 +144,23 @@ def test_make_pd_writer(db_parameters: Dict[str, str], conn_cnx, kwargs: Dict):
                 con=engine,
                 index=False,
                 if_exists="append",
-                method=make_pd_writer(**kwargs),
+                method=make_pd_writer(quote_identifiers=quote_identifiers),
             )
 
-        if kwargs["quote_identifiers"]:
-            with pytest.raises(ProgrammingError) as e:
+        if quote_identifiers:
+            with pytest.raises(ProgrammingError, match="invalid identifier '\"a\"'"):
                 write_to_db()
-            err_msg = str(e.value)
-            assert "invalid identifier '\"a\"'" in err_msg
-            assert "SQL compilation error" in err_msg
         else:
             write_to_db()
-            select_sql = 'SELECT * FROM "{}"'.format(table_name)
-            results = set(cnx.cursor().execute(select_sql).fetchall())
+            select_sql = f"SELECT * FROM {table_name}"
+            results = sorted(
+                cnx.cursor().execute(select_sql).fetchall(), key=lambda x: x[0]
+            )
+            for i, elem in enumerate(results):
+                assert elem == (i, i + 10)
             assert len(results) == 10
-            drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
-            cnx.execute_string(drop_sql)
+            drop_sql = f"DROP TABLE {table_name}"
+            cnx.cursor().execute(drop_sql)
 
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])

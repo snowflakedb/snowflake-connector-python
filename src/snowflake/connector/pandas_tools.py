@@ -10,7 +10,9 @@ from logging import getLogger
 from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
+    Any,
     Callable,
+    Dict,
     Iterable,
     Iterator,
     Optional,
@@ -122,7 +124,8 @@ def write_pandas(
                 compression, compression_map.keys()
             )
         )
-    if kwargs["quote_identifiers"]:
+    quote_identifiers = kwargs.get("quote_identifiers", True)
+    if quote_identifiers:
         location = (
             (('"' + database + '".') if database else "")
             + (('"' + schema + '".') if schema else "")
@@ -173,7 +176,7 @@ def write_pandas(
             cursor.execute(upload_sql, _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
-    if kwargs["quote_identifiers"]:
+    if quote_identifiers:
         columns = '"' + '","'.join(list(df.columns)) + '"'
     else:
         columns = ",".join(list(df.columns))
@@ -206,24 +209,17 @@ def write_pandas(
     )
 
 
-def make_pd_writer(**kwargs) -> Callable:
-    """This returns a pd_writer with the desired arguments.
-
-        Example usage:
-            import pandas as pd
-            from snowflake.connector.pandas_tools import make_pd_writer
-
-            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
-            sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=make_pd_writer(quote_identifiers=False))
-
-            # to keep quote_identifiers=True
-            from functools import partial
-            sf_connector_version_df.to_sql(
-                'driver_versions', engine, index=False, method=make_pd_writer()))
-
-    Args:
-        kwargs: A dictionary that specifies which arguments to pass to pd_writer
-    """
+def make_pd_writer(
+    **kwargs: Dict[str, Any]
+) -> Callable[
+    [
+        "pandas.io.sql.SQLTable",
+        Union["sqlalchemy.engine.Engine", "sqlalchemy.engine.Connection"],
+        Iterable,
+        Iterable,
+    ],
+    None,
+]:
     # default argument map
     default_args = {"quote_identifiers": True}
     # overwrite with value in kwargs, if it exists
