@@ -37,7 +37,7 @@ else
         echo "[Info] Testing with ${PYTHON_VERSION}"
         SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux2014*.whl | sort -r | head -n 1)
-        TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{extras,unit-parallel,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
+        TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{extras,unit,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 
         python3 -m tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
