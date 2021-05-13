@@ -4,18 +4,23 @@
 # NOTES:
 #   - To compile only a specific version(s) pass in versions like: `./build_docker.sh "3.5 3.6"`
 set -o pipefail
+arch=$(uname -p)
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source $THIS_DIR/set_base_image.sh
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
 mkdir -p $CONNECTOR_DIR/dist
-cd $THIS_DIR/docker/connector_build
+cd $THIS_DIR/docker/connector_build/$arch
 
 CONTAINER_NAME=build_pyconnector
 
 echo "[Info] Building docker image"
-docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2010 -f Dockerfile .
+if [[ $arch == x86_64 ]]; then
+  docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2010 -f Dockerfile .
+else
+  docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64 -f Dockerfile .
+fi
 
 echo "[Info] Building Python Connector"
 user_id=$(id -u ${USER})
