@@ -1344,7 +1344,12 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type):
         }
     ) as con:
         with con.cursor(cursor_type) as cur:
-            with pytest.raises(InterfaceError, match="year 10000 is out of range"):
+            with pytest.raises(
+                InterfaceError,
+                match="date value out of range"
+                if IS_WINDOWS
+                else "year 10000 is out of range",
+            ):
                 cur.execute(
                     "select * from VALUES(TO_TIMESTAMP('10000-01-01 00:00:00'))"
                 )
