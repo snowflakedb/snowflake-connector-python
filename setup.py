@@ -83,13 +83,13 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
+            "linux": ["libarrow.so.400", "libarrow_python.so.400"],
             "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
             "win32": ["arrow.dll", "arrow_python.dll"],
         }
 
         arrow_libs_to_link = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
+            "linux": ["libarrow.so.400", "libarrow_python.so.400"],
             "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
             "win32": ["arrow.lib", "arrow_python.lib"],
         }
