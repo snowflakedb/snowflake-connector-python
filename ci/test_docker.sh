@@ -20,7 +20,12 @@ cd $THIS_DIR/docker/connector_test
 CONTAINER_NAME=test_pyconnector
 
 echo "[Info] Building docker image"
-docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014 -f Dockerfile .
+arch=$(uname -p)
+if [[ $arch == x86_64 ]]; then
+  docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64 -f Dockerfile .
+else
+  docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014 -f Dockerfile .
+fi
 
 user_id=$(id -u ${USER})
 docker run --network=host \
