@@ -6,7 +6,7 @@ FROM $BASE_IMAGE
 RUN curl -o /usr/local/bin/gosu -SL "https://github.com/tianon/gosu/releases/download/1.12/gosu-arm64"
 RUN chmod +x /usr/local/bin/gosu
 
-COPY ../scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /home/user
