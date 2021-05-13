@@ -442,8 +442,11 @@ void DictCArrowChunkIterator::createRowPyObject()
   for (int i = 0; i < m_currentSchema->num_fields(); i++)
   {
     PyObject* value = m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch);
-    PyDict_SetItemString(m_latestReturnedRow.get(), m_currentSchema->field(i)->name().c_str(), value);
-    Py_XDECREF(value);
+    if (value != nullptr)
+    {
+      PyDict_SetItemString(m_latestReturnedRow.get(), m_currentSchema->field(i)->name().c_str(), value);
+      Py_DECREF(value);
+    }
   }
   return;
 }
