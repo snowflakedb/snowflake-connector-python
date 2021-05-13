@@ -217,6 +217,24 @@ def make_pd_writer(
     ],
     None,
 ]:
+    """This returns a pd_writer with the desired arguments
+
+        Example usage:
+            import pandas as pd
+            from snowflake.connector.pandas_tools import pd_writer
+
+            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
+            sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=make_pd_writer())
+
+            # to use quote_identifiers=False,
+            from functools import partial
+            sf_connector_version_df.to_sql(
+                'driver_versions', engine, index=False, method=make_pd_writer(quote_identifiers=False)))
+
+    Args:
+        quote_identifiers: if True (default), the pd_writer will pass quote identifiers to Snowflake.
+            If False, the created pd_writer will not quote identifiers (and typically coerced to uppercase by Snowflake)
+    """
     return partial(pd_writer, quote_identifiers=quote_identifiers)
 
 
@@ -236,10 +254,7 @@ def pd_writer(
             sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
             sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
 
-            # to use quote_identifiers=False
-            from functools import partial
-            sf_connector_version_df.to_sql(
-                'driver_versions', engine, index=False, method=partial(pd_writer, quote_identifiers=False))
+            # to use quote_identifiers=False, see `make_pd_writer`
 
     Args:
         table: Pandas package's table object.

@@ -17,9 +17,8 @@ from ...lazy_var import LazyVar
 
 try:
     from snowflake.connector.options import pandas  # NOQA
-    from snowflake.connector.pandas_tools import make_pd_writer, write_pandas  # NOQA
+    from snowflake.connector.pandas_tools import write_pandas  # NOQA
 except ImportError:
-    make_pd_writer = None
     pandas = None
     write_pandas = None
 
