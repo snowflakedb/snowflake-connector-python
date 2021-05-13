@@ -42,9 +42,9 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
     # On Linux we should repair wheel(s) generated
 if [[ $arch == x86_64 ]]; then
-  auditwheel repair --plat manylinux2014_aarch64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
-else
   auditwheel repair --plat manylinux2014_x86_64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+else
+  auditwheel repair --plat manylinux2014_aarch64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 fi
 
     # Generate reqs files
