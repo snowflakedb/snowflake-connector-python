@@ -9,15 +9,11 @@ from datetime import datetime
 from typing import Callable, Dict, Generator
 
 import mock
-import pandas as pd
 import pytest
-from sqlalchemy import create_engine
 
-from snowflake.connector import DictCursor, ProgrammingError
-from snowflake.sqlalchemy import URL
+from snowflake.connector import DictCursor
 
 from ...lazy_var import LazyVar
-from ...randomize import random_string
 
 try:
     from snowflake.connector.options import pandas  # NOQA
@@ -114,53 +110,6 @@ def test_write_pandas(
             assert nchunks == num_of_chunks
         finally:
             cnx.execute_string(drop_sql)
-
-
-@pytest.mark.parametrize("quote_identifiers", [False, True])
-def test_make_pd_writer(
-    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
-    db_parameters: Dict[str, str],
-    quote_identifiers: bool,
-):
-    with conn_cnx() as cnx:  # type: SnowflakeConnection
-        engine = create_engine(
-            URL(
-                user=cnx.user,
-                password=db_parameters["password"],
-                account=cnx.account,
-                database=cnx.database,
-                schema=cnx.schema,
-                warehouse=cnx.warehouse,
-                numpy=True,
-            )
-        )
-
-        df = pd.DataFrame({"a": range(10), "b": range(10, 20)})
-        table_name = random_string(6, "SNOW12345_").upper()
-
-        def write_to_db():
-            df.to_sql(
-                name=table_name,
-                con=engine,
-                index=False,
-                if_exists="append",
-                method=make_pd_writer(quote_identifiers=quote_identifiers),
-            )
-
-        if quote_identifiers:
-            with pytest.raises(ProgrammingError, match="invalid identifier '\"a\"'"):
-                write_to_db()
-        else:
-            write_to_db()
-            select_sql = f"SELECT * FROM {table_name}"
-            results = sorted(
-                cnx.cursor().execute(select_sql).fetchall(), key=lambda x: x[0]
-            )
-            for i, elem in enumerate(results):
-                assert elem == (i, i + 10)
-            assert len(results) == 10
-            drop_sql = f"DROP TABLE {table_name}"
-            cnx.cursor().execute(drop_sql)
 
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])

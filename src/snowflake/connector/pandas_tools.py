@@ -10,9 +10,7 @@ from logging import getLogger
 from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
-    Any,
     Callable,
-    Dict,
     Iterable,
     Iterator,
     Optional,
@@ -54,7 +52,7 @@ def write_pandas(
     compression: str = "gzip",
     on_error: str = "abort_statement",
     parallel: int = 4,
-    **kwargs
+    quote_identifiers: bool = True,
 ) -> Tuple[
     bool,
     int,
@@ -124,7 +122,6 @@ def write_pandas(
                 compression, compression_map.keys()
             )
         )
-    quote_identifiers = kwargs.get("quote_identifiers", True)
     if quote_identifiers:
         location = (
             (('"' + database + '".') if database else "")
@@ -210,7 +207,7 @@ def write_pandas(
 
 
 def make_pd_writer(
-    **kwargs: Dict[str, Any]
+    quote_identifiers: bool = True,
 ) -> Callable[
     [
         "pandas.io.sql.SQLTable",
@@ -220,14 +217,7 @@ def make_pd_writer(
     ],
     None,
 ]:
-    # default argument map
-    default_args = {"quote_identifiers": True}
-    # overwrite with value in kwargs, if it exists
-    for k in default_args.keys():
-        if k in kwargs:
-            default_args[k] = kwargs[k]
-
-    return partial(pd_writer, **default_args)
+    return partial(pd_writer, quote_identifiers=quote_identifiers)
 
 
 def pd_writer(
@@ -235,7 +225,7 @@ def pd_writer(
     conn: Union["sqlalchemy.engine.Engine", "sqlalchemy.engine.Connection"],
     keys: Iterable,
     data_iter: Iterable,
-    **kwargs
+    quote_identifiers: bool = True,
 ) -> None:
     """This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
 
@@ -267,5 +257,5 @@ def pd_writer(
         # Note: Our sqlalchemy connector creates tables case insensitively
         table_name=table.name.upper(),
         schema=table.schema,
-        **kwargs
+        quote_identifiers=quote_identifiers,
     )
