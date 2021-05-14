@@ -13,6 +13,7 @@ from logging import getLogger
 
 import pytest
 
+from snowflake.connector import OperationalError
 from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import (
     SnowflakeAzureProgressPercentage,
@@ -274,3 +275,76 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
             assert all([rec[2] == "DOWNLOADED" for rec in all_recs])
         finally:
             run(cnx, "RM @~/{dir}")
+
+
+try:
+    from azure.core.exceptions import ServiceResponseError
+
+    from ..mock_util import MockUnknownError, patch_blob_client
+
+    @pytest.mark.skipolddriver
+    @pytest.mark.parametrize("to_raise_err", [MockUnknownError, ServiceResponseError])
+    @pytest.mark.parametrize("to_test_threshold", [-1, 100])
+    def test_put_copy_raise_error_azure(
+        tmpdir, conn_cnx, db_parameters, to_raise_err, to_test_threshold, is_public_test
+    ):
+        """[azure] Puts and Copies many files. Testing raised error handling"""
+        # generates N files
+        number_of_files = 10
+        number_of_lines = 1000
+        tmp_dir = generate_k_lines_of_n_files(
+            number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
+        )
+        folder_name = random_string(5, "test_put_copy_raise_error_azure")
+
+        files = os.path.join(tmp_dir, "file*")
+
+        def run(csr, sql, threshold=-1):
+            sql = sql.format(files=files, name=folder_name)
+            if threshold > 0:
+                if is_public_test:
+                    pytest.xfail(
+                        reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+                    )
+                sql = sql + f" threshold={threshold}"
+            return csr.execute(sql).fetchall()
+
+        with conn_cnx() as cnx, cnx.cursor() as csr, patch_blob_client(
+            "file4", to_raise_err
+        ):
+            run(
+                csr,
+                """
+            create or replace table {name} (
+            aa int,
+            dt date,
+            ts timestamp,
+            tsltz timestamp_ltz,
+            tsntz timestamp_ntz,
+            tstz timestamp_tz,
+            pct float,
+            ratio number(6,2))
+            """,
+            )
+            try:
+                if to_raise_err is MockUnknownError:
+                    with pytest.raises(OperationalError, match=r"mock err"):
+                        run(
+                            csr,
+                            "put file://{files} @%{name}",
+                            threshold=to_test_threshold,
+                        )
+                else:
+                    all_recs = run(csr, "put file://{files} @%{name}")
+                    assert all([rec[6] == "UPLOADED" for rec in all_recs])
+                    run(csr, "copy into {name}")
+                    rows = sum(
+                        [rec[0] for rec in run(csr, "select count(*) from {name}")]
+                    )
+                    assert rows == number_of_files * number_of_lines, "Number of rows"
+            finally:
+                run(csr, "drop table if exists {name}")
+
+
+except ImportError:
+    pass

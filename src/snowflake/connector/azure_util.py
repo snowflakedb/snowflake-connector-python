@@ -10,7 +10,12 @@ from collections import namedtuple
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Dict
 
-from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
+from azure.core.exceptions import (
+    HttpResponseError,
+    ResourceNotFoundError,
+    ServiceRequestError,
+    ServiceResponseError,
+)
 from azure.storage.blob import BlobServiceClient, ContentSettings, ExponentialRetry
 
 from .constants import HTTP_HEADER_VALUE_OCTET_STREAM, FileHeader, ResultStatus
@@ -256,6 +261,11 @@ class SnowflakeAzureUtil(object):
                 meta.last_error = err
                 meta.result_status = ResultStatus.NEED_RETRY
             return
+        except (ServiceResponseError, ServiceRequestError) as err:
+            logger.debug(f"Caught exception {str(err)}")
+            meta.last_error = err
+            meta.result_status = ResultStatus.NEED_RETRY
+            return
         finally:
             if meta.src_stream is None:
                 upload_src.close()
@@ -319,4 +329,9 @@ class SnowflakeAzureUtil(object):
                 meta.last_error = err
                 meta.result_status = ResultStatus.NEED_RETRY
             return
+        except (ServiceResponseError, ServiceRequestError) as err:
+            meta.last_error = err
+            meta.result_status = ResultStatus.NEED_RETRY
+            return
+
         meta.result_status = ResultStatus.DOWNLOADED
