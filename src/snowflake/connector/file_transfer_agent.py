@@ -451,7 +451,7 @@ class SnowflakeFileTransferAgent(object):
         retry_round = 0
         presigned_url_handled = False
 
-        while not qtask.empty():
+        while not qtask.empty() and retry_round < 10:
             len_file_metas = qtask.qsize()
             thread_number = min(len_file_metas, self._parallel)
             logger.debug(
@@ -512,6 +512,7 @@ class SnowflakeFileTransferAgent(object):
             f"Enter upload worker thread. tid={threading.current_thread().ident}"
         )
         thread_client = None
+        max_retry = qtask.qsize() + 10
         while not qtask.empty():
             # triggers is not empty means a result trigger all threads to quit
             if not triggers.empty():
@@ -536,6 +537,13 @@ class SnowflakeFileTransferAgent(object):
                 # now stop this round - by adding one item to triggers
                 triggers.put(result_meta)
                 qtask.put(meta)
+            elif result_meta.result_status == ResultStatus.ERROR:
+                # this upload failed, add back to qtask to retry
+                max_retry -= 1
+                if max_retry >= 0:
+                    qtask.put(meta)
+                else:  # we have retried too many times
+                    results.append(result_meta)
             else:
                 results.append(result_meta)
 

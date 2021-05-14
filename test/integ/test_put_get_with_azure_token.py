@@ -12,6 +12,7 @@ import time
 from logging import getLogger
 
 import pytest
+from azure.core.exceptions import ServiceResponseError
 
 from snowflake.connector.constants import UTF8
 from snowflake.connector.file_transfer_agent import (
@@ -21,6 +22,7 @@ from snowflake.connector.file_transfer_agent import (
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
+from ..mock_util import patch_blob_client
 from ..randomize import random_string
 
 logger = getLogger(__name__)
@@ -274,3 +276,47 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
             assert all([rec[2] == "DOWNLOADED" for rec in all_recs])
         finally:
             run(cnx, "RM @~/{dir}")
+
+
+def test_put_copy_raise_error_azure(tmpdir, conn_cnx, db_parameters):
+    """[azure] Puts and Copies many files. Testing raised error handling"""
+    # generates N files
+    number_of_files = 10
+    number_of_lines = 1000
+    tmp_dir = generate_k_lines_of_n_files(
+        number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
+    )
+    folder_name = random_string(5, "test_put_copy_raise_error_azure")
+
+    files = os.path.join(tmp_dir, "file*")
+
+    def run(csr, sql):
+        sql = sql.format(files=files, name=folder_name)
+        return csr.execute(sql).fetchall()
+
+    with conn_cnx() as cnx, cnx.cursor() as csr, patch_blob_client(
+        "file4", ServiceResponseError
+    ):
+        run(
+            csr,
+            """
+        create or replace table {name} (
+        aa int,
+        dt date,
+        ts timestamp,
+        tsltz timestamp_ltz,
+        tsntz timestamp_ntz,
+        tstz timestamp_tz,
+        pct float,
+        ratio number(6,2))
+        """,
+        )
+        try:
+            all_recs = run(csr, "put file://{files} @%{name}")
+            assert all([rec[6] == "UPLOADED" for rec in all_recs])
+            run(csr, "copy into {name}")
+
+            rows = sum([rec[0] for rec in run(csr, "select count(*) from {name}")])
+            assert rows == number_of_files * number_of_lines, "Number of rows"
+        finally:
+            run(csr, "drop table if exists {name}")
