@@ -217,7 +217,7 @@ def make_pd_writer(
     ],
     None,
 ]:
-    """This returns a pd_writer with the desired arguments
+    """This returns a pd_writer with the desired arguments.
 
         Example usage:
             import pandas as pd
