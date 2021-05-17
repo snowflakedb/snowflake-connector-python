@@ -5,10 +5,12 @@
 import os
 import random
 import string
+from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
+    Callable,
     Iterable,
     Iterator,
     Optional,
@@ -204,6 +206,38 @@ def write_pandas(
     )
 
 
+def make_pd_writer(
+    quote_identifiers: bool = True,
+) -> Callable[
+    [
+        "pandas.io.sql.SQLTable",
+        Union["sqlalchemy.engine.Engine", "sqlalchemy.engine.Connection"],
+        Iterable,
+        Iterable,
+    ],
+    None,
+]:
+    """This returns a pd_writer with the desired arguments.
+
+        Example usage:
+            import pandas as pd
+            from snowflake.connector.pandas_tools import pd_writer
+
+            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
+            sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=make_pd_writer())
+
+            # to use quote_identifiers=False,
+            from functools import partial
+            sf_connector_version_df.to_sql(
+                'driver_versions', engine, index=False, method=make_pd_writer(quote_identifiers=False)))
+
+    Args:
+        quote_identifiers: if True (default), the pd_writer will pass quote identifiers to Snowflake.
+            If False, the created pd_writer will not quote identifiers (and typically coerced to uppercase by Snowflake)
+    """
+    return partial(pd_writer, quote_identifiers=quote_identifiers)
+
+
 def pd_writer(
     table: "pandas.io.sql.SQLTable",
     conn: Union["sqlalchemy.engine.Engine", "sqlalchemy.engine.Connection"],
@@ -220,10 +254,7 @@ def pd_writer(
             sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
             sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
 
-            # to use quote_identifiers=False
-            from functools import partial
-            sf_connector_version_df.to_sql(
-                'driver_versions', engine, index=False, method=partial(pd_writer, quote_identifiers=False))
+            # to use quote_identifiers=False, see `make_pd_writer`
 
     Args:
         table: Pandas package's table object.
