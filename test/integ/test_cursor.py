@@ -19,6 +19,7 @@ import pytz
 
 import snowflake.connector
 from snowflake.connector import (
+    DictCursor,
     InterfaceError,
     NotSupportedError,
     ProgrammingError,
@@ -27,6 +28,7 @@ from snowflake.connector import (
     errors,
 )
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
+from snowflake.connector.cursor import SnowflakeCursor
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
@@ -1330,3 +1332,25 @@ def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
                 r.message.get("type", "") == TelemetryField.TIME_CONSUME_LAST_RESULT
                 for r in telemetry.records
             )
+
+
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+@pytest.mark.parametrize("cursor_type", (SnowflakeCursor, DictCursor))
+def test_out_of_range_year(conn_cnx, result_format, cursor_type):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        with con.cursor(cursor_type) as cur:
+            with pytest.raises(
+                InterfaceError,
+                match="date value out of range"
+                if IS_WINDOWS
+                else "year 10000 is out of range",
+            ):
+                cur.execute(
+                    "select * from VALUES(TO_TIMESTAMP('10000-01-01 00:00:00'))"
+                )
+                cur.fetchall()
