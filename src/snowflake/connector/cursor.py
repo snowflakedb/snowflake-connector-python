@@ -808,6 +808,14 @@ class SnowflakeCursor(object):
                 },
             )
 
+    def arrow_avail(self):
+        """
+        Check to see if current query result is an arrow compatible and if pyarrow is installed.
+        Use to safely call fetch_pandas_X() methods
+        """
+        global pyarrow
+        return pyarrow is not None and self._query_result_format == "arrow"
+
     def query_result(self, qid):
         url = "/queries/{qid}/result".format(qid=qid)
         ret = self._connection.rest.request(url=url, method="get")
