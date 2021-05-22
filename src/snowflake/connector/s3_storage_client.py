@@ -11,13 +11,11 @@ from collections import namedtuple
 from datetime import datetime
 from io import IOBase
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-import OpenSSL
-import requests
 from cryptography.hazmat.primitives import hashes, hmac
-from requests.exceptions import ConnectionError, Timeout
 
+from .compat import quote
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_VALUE_OCTET_STREAM,
@@ -26,6 +24,7 @@ from .constants import (
 )
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
+from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -48,7 +47,7 @@ ADDRESSING_STYLE = "virtual"  # explicit force to use virtual addressing style
 S3 Location: S3 bucket name + path
 """
 S3Location = namedtuple(
-    "S3Location", ["bucket_name", "s3path"]  # S3 bucket name  # S3 path name
+    "S3Location", ["bucket_name", "path"]  # S3 bucket name  # S3 path name
 )
 
 
@@ -107,7 +106,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         bucket_name: str = None,
         request_uri: str = "",
         subresource: Dict[str, Union[str, int, None]] = None,
-    ):
+    ) -> str:
         if not subresource:
             subresource = {}
         res = ""
@@ -155,13 +154,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     @staticmethod
     def _construct_string_to_sign(
-        verb,
-        canonicalized_element,
-        canonicalized_headers,
+        verb: str,
+        canonicalized_element: str,
+        canonicalized_headers: str,
         amzdate: str,
-        content_md5="",
-        content_type="",
-    ):
+        content_md5: str = "",
+        content_type: str = "",
+    ) -> bytes:
         res = verb + "\n" + content_md5 + "\n" + content_type + "\n"
         res += amzdate + "\n" + canonicalized_headers + canonicalized_element
         return res.encode("UTF-8")
@@ -191,16 +190,16 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def _extract_bucket_name_and_path(stage_location):
         stage_location = os.path.expanduser(stage_location)
         bucket_name = stage_location
-        s3path = ""
+        path = ""
 
         # split stage location as bucket name and path
         if "/" in stage_location:
             bucket_name = stage_location[0 : stage_location.index("/")]
-            s3path = stage_location[stage_location.index("/") + 1 :]
-            if s3path and not s3path.endswith("/"):
-                s3path += "/"
+            path = stage_location[stage_location.index("/") + 1 :]
+            if path and not path.endswith("/"):
+                path += "/"
 
-        return S3Location(bucket_name=bucket_name, s3path=s3path)
+        return S3Location(bucket_name=bucket_name, path=path)
 
     def _send_request_with_authentication_and_retry(
         self,
@@ -208,17 +207,17 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         verb: str,
         resources: str,
         retry_id: Union[int, str],
-        x_amz_headers: Dict[str, str] = None,
-        headers: Dict[str, str] = None,
+        x_amz_headers: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
         content_type: str = "",
-        data: Union[bytes, bytearray, IOBase] = None,
+        data: Union[bytes, bytearray, IOBase, None] = None,
     ) -> requests.Response:
         if not x_amz_headers:
             x_amz_headers = {}
         if not headers:
             headers = {}
 
-        def generate_authenticated_url_and_args():
+        def generate_authenticated_url_and_args() -> Tuple[bytes, Dict[str, bytes]]:
             t = datetime.utcnow()
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
 
@@ -259,11 +258,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         Returns:
             None if HEAD returns 404, otherwise a FileHeader instance populated with metadata
         """
-        s3path = self.s3location.s3path + filename.lstrip("/")
-        url = self.endpoint + f"/{s3path}"
+        path = quote(self.s3location.path + filename.lstrip("/"))
+        url = self.endpoint + f"/{path}"
 
         _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name, request_uri=s3path
+            bucket_name=self.s3location.bucket_name, request_uri=path
         )
         retry_id = "HEAD"
         self.retry_count[retry_id] = 0
@@ -289,7 +288,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
         elif response.status_code == 404:
             logger.debug(
-                f"not found. bucket: {self.s3location.bucket_name}, path: {s3path}"
+                f"not found. bucket: {self.s3location.bucket_name}, path: {path}"
             )
             self.meta.result_status = ResultStatus.NOT_FOUND_FILE
             return None
@@ -316,13 +315,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         return s3_metadata
 
     def _initiate_multipart_upload(self):
-        s3path = self.s3location.s3path + self.meta.dst_file_name.lstrip("/")
-        url = self.endpoint + f"/{s3path}?uploads"
+        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        url = self.endpoint + f"/{path}?uploads"
         s3_metadata = self._prepare_file_metadata()
         # initiate multipart upload
         _resource = self._construct_canonicalized_element(
             bucket_name=self.s3location.bucket_name,
-            request_uri=s3path,
+            request_uri=path,
             subresource={"uploads": None},
         )
         retry_id = "Initiate"
@@ -343,13 +342,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             response.raise_for_status()
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes):
-        s3path = self.s3location.s3path + self.meta.dst_file_name.lstrip("/")
-        url = self.endpoint + f"/{s3path}"
+        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        url = self.endpoint + f"/{path}"
 
         if self.num_of_chunks == 1:  # single request
             s3_metadata = self._prepare_file_metadata()
             _resource = self._construct_canonicalized_element(
-                bucket_name=self.s3location.bucket_name, request_uri=s3path
+                bucket_name=self.s3location.bucket_name, request_uri=path
             )
             response = self._send_request_with_authentication_and_retry(
                 url,
@@ -368,7 +367,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             query_params = {"partNumber": chunk_id + 1, "uploadId": self.upload_id}
             chunk_resource = self._construct_canonicalized_element(
                 bucket_name=self.s3location.bucket_name,
-                request_uri=s3path,
+                request_uri=path,
                 subresource=query_params,
             )
             response = self._send_request_with_authentication_and_retry(
@@ -379,13 +378,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             response.raise_for_status()
 
     def _complete_multipart_upload(self):
-        s3path = self.s3location.s3path + self.meta.dst_file_name.lstrip("/")
-        url = self.endpoint + f"/{s3path}?uploadId={self.upload_id}"
+        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        url = self.endpoint + f"/{path}?uploadId={self.upload_id}"
         logger.debug("Initiating multipart upload complete")
         # Complete multipart upload
         _resource = self._construct_canonicalized_element(
             bucket_name=self.s3location.bucket_name,
-            request_uri=s3path,
+            request_uri=path,
             subresource={"uploadId": self.upload_id},
         )
         root = ET.Element("CompleteMultipartUpload")
@@ -412,14 +411,14 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def _abort_multipart_upload(self):
         if self.upload_id is None:
             return
-        s3path = self.s3location.s3path + self.meta.dst_file_name.lstrip("/")
-        url = self.endpoint + f"/{s3path}?uploadId={self.upload_id}"
+        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        url = self.endpoint + f"/{path}?uploadId={self.upload_id}"
 
         retry_id = "Abort"
         self.retry_count[retry_id] = 0
         _resource = self._construct_canonicalized_element(
             bucket_name=self.s3location.bucket_name,
-            request_uri=s3path,
+            request_uri=path,
             subresource={"uploadId": self.upload_id},
         )
         response = self._send_request_with_authentication_and_retry(
@@ -429,10 +428,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def download_chunk(self, chunk_id: int):
         logger.debug(f"Downloading chunk {chunk_id}")
-        s3path = self.s3location.s3path + self.meta.src_file_name.lstrip("/")
-        url = self.endpoint + f"/{s3path}"
+        path = quote(self.s3location.path + self.meta.src_file_name.lstrip("/"))
+        url = self.endpoint + f"/{path}"
         _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name, request_uri=s3path
+            bucket_name=self.s3location.bucket_name, request_uri=path
         )
         if self.num_of_chunks == 1:
             response = self._send_request_with_authentication_and_retry(

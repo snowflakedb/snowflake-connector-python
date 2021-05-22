@@ -14,11 +14,11 @@ from random import choice
 from string import hexdigits
 from typing import TYPE_CHECKING, Any, Dict, Union
 
+from .compat import quote
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
 from .vendored import requests
-from .vendored.requests import ConnectionError, Timeout
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
@@ -40,6 +40,7 @@ TOKEN_EXPIRATION_ERR_MESSAGE = (
 SFCDIGEST = "x-ms-meta-sfcdigest"
 ENCRYPTION_DATA = "x-ms-meta-encryptiondata"
 MATDESC = "x-ms-meta-matdesc"
+
 
 class SnowflakeAzureRestClient(SnowflakeStorageClient):
     def __init__(
@@ -113,10 +114,12 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         )
 
     def get_file_header(self, filename: str) -> Union[FileHeader, None]:
-        meta = self.meta
         """Gets Azure file properties."""
+        container_name = quote(self.azure_location.container_name)
+        path = quote(self.azure_location.path) + quote(filename)
+        meta = self.meta
         # HTTP HEAD request
-        url = f"https://{self.storage_account}.blob.{self.endpoint}/{self.azure_location.container_name}/{self.azure_location.path}{filename}"
+        url = f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}"
         retry_id = "HEAD"
         self.retry_count[retry_id] = 0
         r = self._send_request_with_authentication_and_retry("HEAD", url, retry_id)
@@ -181,12 +184,13 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         ]
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes):
-        path = self.azure_location.path + self.meta.dst_file_name.lstrip("/")
+        container_name = quote(self.azure_location.container_name)
+        path = quote(self.azure_location.path + self.meta.dst_file_name.lstrip("/"))
 
         if self.num_of_chunks > 1:
             block_id = self.block_ids[chunk_id]
             url = (
-                f"https://{self.storage_account}.blob.{self.endpoint}/{self.azure_location.container_name}/{path}?comp=block"
+                f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}?comp=block"
                 f"&blockid={block_id}"
             )
             headers = {"Content-Length": str(len(chunk))}
@@ -196,7 +200,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         else:
             # single request
             azure_metadata = self._prepare_file_metadata()
-            url = f"https://{self.storage_account}.blob.{self.endpoint}/{self.azure_location.container_name}/{path}"
+            url = f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}"
             headers = {
                 "x-ms-blob-type": "BlockBlob",
                 "Content-Encoding": "utf-8",
@@ -208,9 +212,10 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         r.raise_for_status()  # expect status code 201
 
     def _complete_multipart_upload(self):
-        path = self.azure_location.path + self.meta.dst_file_name.lstrip("/")
+        container_name = quote(self.azure_location.container_name)
+        path = quote(self.azure_location.path + self.meta.dst_file_name.lstrip("/"))
         url = (
-            f"https://{self.storage_account}.blob.{self.endpoint}/{self.azure_location.container_name}/{path}?comp"
+            f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}?comp"
             f"=blocklist"
         )
         root = ET.Element("BlockList")
@@ -229,8 +234,9 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         r.raise_for_status()  # expects status code 201
 
     def download_chunk(self, chunk_id: int):
-        path = self.azure_location.path + self.meta.src_file_name.lstrip("/")
-        url = f"https://{self.storage_account}.blob.{self.endpoint}/{self.azure_location.container_name}/{path}"
+        container_name = quote(self.azure_location.container_name)
+        path = quote(self.azure_location.path + self.meta.src_file_name.lstrip("/"))
+        url = f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}"
         if self.num_of_chunks > 1:
             chunk_size = self.chunk_size
             if chunk_id < self.num_of_chunks - 1:
