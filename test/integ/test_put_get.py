@@ -642,33 +642,20 @@ def test_put_overwrite(tmpdir, db_parameters, from_path):
         cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
-# TODO: this does not pass
 @pytest.mark.skipolddriver
-def test_utf8_filename(tmpdir, db_parameters, is_public_test):
-    if is_public_test:
-        pytest.skip("account missing on public CI")
-    test_file = tmpdir.join("utf卡豆.csv")
-    with open(str(test_file), "w") as f:
-        f.write("1,2,3\n")
+def test_utf8_filename(tmp_path, conn_cnx):
+    test_file = tmp_path / "utf卡豆.csv"
+    test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_utf8_filename_")
-    with snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-    ) as con:
+    with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute("create temporary stage {}".format(stage_name))
+            cur.execute(f"create temporary stage {stage_name}")
             cur.execute(
                 "PUT 'file://{}' @{}".format(
                     str(test_file).replace("\\", "/"), stage_name
                 )
             ).fetchall()
-            cur.execute("select $1, $2, $3 from  @{}".format(stage_name))
+            cur.execute(f"select $1, $2, $3 from  @{stage_name}")
             assert cur.fetchone() == ("1", "2", "3")
 
 
