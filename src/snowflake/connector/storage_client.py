@@ -20,9 +20,7 @@ import OpenSSL
 
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
-from .errors import (
-    RequestExceedMaxRetryError,
-)
+from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
@@ -167,7 +165,7 @@ class SnowflakeStorageClient(ABC):
         """
         pass
 
-    def preprocess(self):
+    def preprocess(self) -> None:
         meta = self.meta
         logger.debug(f"Preprocessing {meta.src_file_name}")
 
@@ -257,7 +255,7 @@ class SnowflakeStorageClient(ABC):
     def _send_request_with_retry(
         self,
         verb: str,
-        get_request_args: Callable[[], Tuple[str, Dict[str, Any]]],
+        get_request_args: Callable[[], Tuple[bytes, Dict[str, Any]]],
         retry_id: str,
     ):
         rest_call = METHODS[verb]

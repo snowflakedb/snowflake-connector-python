@@ -140,8 +140,11 @@ def get_db_parameters() -> Dict[str, str]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def init_test_schema(request, db_parameters) -> None:
-    """Initializes and Deinitializes the test schema. This is automatically called per test session."""
+def init_test_schema(db_parameters) -> Generator[None, None, None]:
+    """Initializes and destroys the schema specific to this pytest session.
+
+    This is automatically called per test session.
+    """
     ret = db_parameters
     with snowflake.connector.connect(
         user=ret["user"],
@@ -153,21 +156,8 @@ def init_test_schema(request, db_parameters) -> None:
         protocol=ret["protocol"],
     ) as con:
         con.cursor().execute("CREATE SCHEMA IF NOT EXISTS {}".format(TEST_SCHEMA))
-
-    def fin():
-        ret1 = db_parameters
-        with snowflake.connector.connect(
-            user=ret1["user"],
-            password=ret1["password"],
-            host=ret1["host"],
-            port=ret1["port"],
-            database=ret1["database"],
-            account=ret1["account"],
-            protocol=ret1["protocol"],
-        ) as con1:
-            con1.cursor().execute("DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
-
-    request.addfinalizer(fin)
+        yield
+        con.cursor().execute("DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
 
 
 def create_connection(**kwargs) -> "SnowflakeConnection":
