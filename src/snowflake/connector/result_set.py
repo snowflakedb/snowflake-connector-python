@@ -99,13 +99,10 @@ class ResultSet(Iterable[List[Any]]):
         This includes TIME_CONSUME_LAST_RESULT, TIME_DOWNLOADING_CHUNKS and
         TIME_PARSING_CHUNKS in that order.
         """
-        if self._cursor._first_chunk_time is not None:
-            time_consume_last_result = (
-                get_time_millis() - self._cursor._first_chunk_time
-            )
-            self._cursor._log_telemetry_job_data(
-                TelemetryField.TIME_CONSUME_LAST_RESULT, time_consume_last_result
-            )
+        time_consume_last_result = get_time_millis() - self._cursor._first_chunk_time
+        self._cursor._log_telemetry_job_data(
+            TelemetryField.TIME_CONSUME_LAST_RESULT, time_consume_last_result
+        )
         metrics = self._get_metrics()
         if DownloadMetrics.download.value in metrics:
             self._cursor._log_telemetry_job_data(
