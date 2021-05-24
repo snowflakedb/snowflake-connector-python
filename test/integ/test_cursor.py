@@ -1227,7 +1227,6 @@ def test_resultbatch(
     conn_cnx,
     result_format,
     expected_chunk_type,
-    capture_sf_telemetry,
 ):
     """This test checks the following things:
     1. After executing a query can we pickle the result batches
@@ -1242,23 +1241,25 @@ def test_resultbatch(
             "python_connector_query_result_format": result_format,
         }
     ) as con:
-        with capture_sf_telemetry.patch_connection(con) as telemetry_data:
-            with con.cursor() as cur:
-                cur.execute(
-                    f"select seq4() from table(generator(rowcount => {rowcount}));"
-                )
-                assert cur._result_set.total_row_index() == rowcount
-                pre_pickle_partitions = cur.get_result_batches()
-                assert len(pre_pickle_partitions) > 1
-                assert pre_pickle_partitions is not None
-                assert all(
-                    isinstance(p, expected_chunk_type) for p in pre_pickle_partitions
-                )
-                pickle_str = pickle.dumps(pre_pickle_partitions)
-                assert any(
-                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED
-                    for t in telemetry_data.records
-                )
+        # TODO: add a fixture to easily capture telemetry data
+        telemetry_data = []
+        add_log_mock = mock.Mock()
+        add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
+        con._telemetry.add_log_to_batch = add_log_mock
+        with con.cursor() as cur:
+            cur.execute(f"select seq4() from table(generator(rowcount => {rowcount}));")
+            assert cur._result_set.total_row_index() == rowcount
+            pre_pickle_partitions = cur.get_result_batches()
+            assert len(pre_pickle_partitions) > 1
+            assert pre_pickle_partitions is not None
+            assert all(
+                isinstance(p, expected_chunk_type) for p in pre_pickle_partitions
+            )
+            pickle_str = pickle.dumps(pre_pickle_partitions)
+            assert any(
+                t.message["type"] == TelemetryField.GET_PARTITIONS_USED
+                for t in telemetry_data
+            )
     post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually
@@ -1316,22 +1317,6 @@ def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
                 #  short circuits and just parses (for JSON batches) and then return an
                 #  an iterator through that data, so we expect the call count to be 5
                 assert patched_download.call_count == 5
-
-
-def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
-    """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            with capture_sf_telemetry.patch_connection(con, False) as telemetry:
-                cur.execute("select 1;")
-                cur._first_chunk_time = None
-                assert cur.fetchall() == [
-                    (1,),
-                ]
-            assert not any(
-                r.message.get("type", "") == TelemetryField.TIME_CONSUME_LAST_RESULT
-                for r in telemetry.records
-            )
 
 
 @pytest.mark.parametrize("result_format", ("json", "arrow"))
