@@ -8,10 +8,8 @@ import decimal
 import json
 import logging
 import os
-import pickle
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, List
 
 import mock
 import pytest
@@ -35,7 +33,6 @@ from snowflake.connector.errorcode import (
     ER_NOT_POSITIVE_SIZE,
 )
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
-from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
 
@@ -48,16 +45,11 @@ try:
         ER_NO_PYARROW,
         ER_NO_PYARROW_SNOWSQL,
     )
-    from snowflake.connector.result_batch import ArrowResultBatch, JSONResultBatch
 except ImportError:
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
     ER_NO_ARROW_RESULT = None
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
-    ArrowResultBatch = JSONResultBatch = None
-
-if TYPE_CHECKING:  # pragma: no cover
-    from snowflake.connector.result_batch import ResultBatch
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -911,16 +903,18 @@ def test_close_twice(conn_testaccount):
     conn_testaccount.close()
 
 
-@pytest.mark.parametrize("result_format", ("arrow", "json"))
-def test_fetch_out_of_range_timestamp_value(conn, result_format):
-    with conn() as cnx:
-        cur = cnx.cursor()
-        cur.execute(
-            f"alter session set python_connector_query_result_format='{result_format}'"
-        )
-        cur.execute("select '12345-01-02'::timestamp_ntz")
-        with pytest.raises(errors.InterfaceError):
-            cur.fetchone()
+def test_fetch_out_of_range_timestamp_value(conn):
+    for result_format in ["arrow", "json"]:
+        with conn() as cnx:
+            cur = cnx.cursor()
+            cur.execute(
+                "alter session set python_connector_query_result_format='{}'".format(
+                    result_format
+                )
+            )
+            cur.execute("select '12345-01-02'::timestamp_ntz")
+            with pytest.raises(errors.InterfaceError):
+                cur.fetchone()
 
 
 def test_empty_execution(conn):
@@ -937,9 +931,7 @@ def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
-            assert cur.execute("select * from values (1), (2)")
-            assert cur.rownumber is None
-            assert cur.fetchone() == (1,)
+            assert cur.execute("select * from values (1), (2)").fetchone() == (1,)
             assert cur.rownumber == 0
             assert cur.fetchone() == (2,)
             assert cur.rownumber == 1
@@ -1003,9 +995,7 @@ def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
     """Tests whether cannot use arrow is handled correctly inside of _execute_helper."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch(
-                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
-            ):
+            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
                 if result_format is False:
                     result_format = None
                 else:
@@ -1027,9 +1017,7 @@ def test_execute_helper_cannot_use_arrow_exception(conn_cnx):
     """Like test_execute_helper_cannot_use_arrow but when we are trying to force arrow an Exception should be raised."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch(
-                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
-            ):
+            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
                 with pytest.raises(
                     ProgrammingError,
                     match="The result set in Apache Arrow format is not supported for the platform.",
@@ -1047,9 +1035,7 @@ def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     """Tests check_can_use_arrow_resultset has no effect when we can use arrow."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch(
-                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", True
-            ):
+            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", True):
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
                 cur.check_can_use_arrow_resultset()
     assert "Arrow" not in caplog.text
@@ -1064,9 +1050,7 @@ def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
         config["application"] = "SnowSQL"
     with conn_cnx(**config) as cnx:
         with cnx.cursor() as cur:
-            with mock.patch(
-                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
-            ):
+            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
                 with pytest.raises(
                     ProgrammingError,
                     match="Currently SnowSQL doesn't support the result set in Apache Arrow format."
@@ -1213,110 +1197,6 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         logging.WARNING,
         "Cursor failed to log to telemetry. Connection object may be None.",
     ) in caplog.record_tuples
-
-
-@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
-@pytest.mark.parametrize(
-    "result_format,expected_chunk_type",
-    (
-        ("json", JSONResultBatch),
-        ("arrow", ArrowResultBatch),
-    ),
-)
-def test_resultbatch(
-    conn_cnx,
-    result_format,
-    expected_chunk_type,
-):
-    """This test checks the following things:
-    1. After executing a query can we pickle the result batches
-    2. When we get the batches, do we emit a telemetry log
-    3. Whether we can iterate through ResultBatches multiple times
-    4. Whether the results make sense
-    5. See whether getter functions are working
-    """
-    rowcount = 100000
-    with conn_cnx(
-        session_parameters={
-            "python_connector_query_result_format": result_format,
-        }
-    ) as con:
-        # TODO: add a fixture to easily capture telemetry data
-        telemetry_data = []
-        add_log_mock = mock.Mock()
-        add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
-        con._telemetry.add_log_to_batch = add_log_mock
-        with con.cursor() as cur:
-            cur.execute(f"select seq4() from table(generator(rowcount => {rowcount}));")
-            assert cur._result_set.total_row_index() == rowcount
-            pre_pickle_partitions = cur.get_result_batches()
-            assert len(pre_pickle_partitions) > 1
-            assert pre_pickle_partitions is not None
-            assert all(
-                isinstance(p, expected_chunk_type) for p in pre_pickle_partitions
-            )
-            pickle_str = pickle.dumps(pre_pickle_partitions)
-            assert any(
-                t.message["type"] == TelemetryField.GET_PARTITIONS_USED
-                for t in telemetry_data
-            )
-    post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
-    total_rows = 0
-    # Make sure the batches can be iterated over individually
-    for i, partition in enumerate(post_pickle_partitions):
-        # Tests whether the getter functions are working
-        if i == 0:
-            assert partition.compressed_size is None
-            assert partition.uncompressed_size is None
-        else:
-            assert partition.compressed_size is not None
-            assert partition.uncompressed_size is not None
-        for row in partition:
-            col1 = row[0]
-            assert col1 == total_rows
-            total_rows += 1
-    assert total_rows == rowcount
-    total_rows = 0
-    # Make sure the batches can be iterated over again
-    for partition in post_pickle_partitions:
-        for row in partition:
-            col1 = row[0]
-            assert col1 == total_rows
-            total_rows += 1
-    assert total_rows == rowcount
-
-
-@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
-@pytest.mark.parametrize(
-    "result_format,patch_path",
-    (
-        ("json", "snowflake.connector.result_batch.JSONResultBatch.create_iter"),
-        ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
-    ),
-)
-def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
-    """Tests whether pre-fetching results chunks fetches the right amount of them."""
-    rowcount = 1000000  # We need at least 5 chunks for this test
-    with conn_cnx(
-        session_parameters={
-            "python_connector_query_result_format": result_format,
-        }
-    ) as con:
-        with con.cursor() as cur:
-            # Dummy return value necessary to not iterate through every batch with
-            #  first fetchone call
-            with mock.patch(patch_path, return_value=iter([(1,)])) as patched_download:
-                cur.execute(
-                    f"select seq4() from table(generator(rowcount => {rowcount}));"
-                )
-                result_batches = cur.get_result_batches()
-                assert len(result_batches) > 5
-                assert result_batches[0]._local  # Sanity check first chunk being local
-                cur.fetchone()  # Trigger pre-fetching
-                # While the first chunk is local we still call _download on it, which
-                #  short circuits and just parses (for JSON batches) and then return an
-                #  an iterator through that data, so we expect the call count to be 5
-                assert patched_download.call_count == 5
 
 
 @pytest.mark.parametrize("result_format", ("json", "arrow"))

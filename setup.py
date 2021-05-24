@@ -74,6 +74,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 name="snowflake.connector.arrow_iterator",
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
             ),
+            Extension(
+                name="snowflake.connector.arrow_result",
+                sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_result.pyx")],
+            ),
         ],
     )
 

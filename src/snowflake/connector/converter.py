@@ -11,7 +11,7 @@ from datetime import date, datetime
 from datetime import time as dt_t
 from datetime import timedelta
 from logging import getLogger
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import pytz
 
@@ -72,9 +72,6 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
     "datetime64": "TIMESTAMP_NTZ",
     "quoted_name": "TEXT",
 }
-
-# Type alias
-SnowflakeConverterType = Callable[[Any], Any]
 
 
 def convert_datetime_to_epoch(dt: datetime) -> float:
@@ -153,8 +150,10 @@ class SnowflakeConverter(object):
     def get_parameter(self, param: str) -> Optional[Union[str, int, bool]]:
         return self._parameters.get(param)
 
-    def to_python_method(self, type_name, column) -> "SnowflakeConverterType":
-        """FROM Snowflake to Python Objects"""
+    #
+    # FROM Snowflake to Python Objects
+    #
+    def to_python_method(self, type_name, column):
         ctx = column.copy()
         if ctx.get("scale") is not None:
             ctx["max_fraction"] = int(10 ** ctx["scale"])
