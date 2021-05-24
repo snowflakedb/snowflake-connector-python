@@ -190,10 +190,3 @@ class QueryStatus(Enum):
     RESTARTED = 10
     BLOCKED = 11
     NO_DATA = 12
-
-
-# ArrowResultChunk constants the unit in this iterator
-# EMPTY_UNIT: default
-# ROW_UNIT: fetch row by row if the user call `fetchone()`
-# TABLE_UNIT: fetch one arrow table if the user call `fetch_pandas()`
-ROW_UNIT, TABLE_UNIT = "row", "table"

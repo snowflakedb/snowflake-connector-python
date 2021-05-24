@@ -61,7 +61,7 @@ except ImportError:
     pyarrow = None
 
 try:
-    from .arrow_iterator import PyArrowIterator  # NOQA
+    from .arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
 
     CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
