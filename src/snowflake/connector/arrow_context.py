@@ -8,7 +8,6 @@ import decimal
 import time
 from datetime import datetime, timedelta
 from logging import getLogger
-from typing import Dict, Optional, Union
 
 import pytz
 
@@ -32,10 +31,7 @@ logger = getLogger(__name__)
 
 
 class ArrowConverterContext(object):
-    def __init__(
-        self,
-        session_parameters: Optional[Dict[str, Union[str, int, bool]]] = None,
-    ):
+    def __init__(self, session_parameters=None):
         if session_parameters is None:
             session_parameters = {}
         self._timezone = (
