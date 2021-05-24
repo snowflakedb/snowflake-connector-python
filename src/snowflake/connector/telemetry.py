@@ -21,9 +21,7 @@ class TelemetryField(object):
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
     SQL_EXCEPTION = "client_sql_exception"
     GET_PARTITIONS_USED = "client_get_partitions_used"
-    # fetch_pandas_* usage
-    PANDAS_FETCH_ALL = "client_fetch_pandas_all"
-    PANDAS_FETCH_BATCHES = "client_fetch_pandas_batches"
+
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SFQID = "QueryID"
@@ -39,8 +37,6 @@ class TelemetryField(object):
 
 class TelemetryData(object):
     """An instance of telemetry data which can be sent to the server."""
-
-    DUMMY_VALUE = 1
 
     def __init__(self, message, timestamp):
         self.message = message
