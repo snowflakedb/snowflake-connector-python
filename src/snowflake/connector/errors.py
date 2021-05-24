@@ -230,7 +230,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_wrapper(
-        connection: Optional["SnowflakeConnection"],
+        connection: "SnowflakeConnection",
         cursor: Optional["SnowflakeCursor"],
         error_class: Union[Type["Error"], Type[Exception]],
         error_value: Dict[str, Union[str, bool]],
@@ -247,87 +247,29 @@ class Error(BASE_EXCEPTION_CLASS):
             None if no exceptions are raised by the connection's and cursor's error handlers.
 
         Raises:
-            A Snowflake error if connection, or cursor are None. Otherwise it gives the
-            exception to the first handler in that order.
+            A Snowflake error if connection and cursor are None.
         """
+        error_value.setdefault("done_format_msg", False)
 
-        handed_over = Error.hand_to_other_handler(
-            connection,
-            cursor,
-            error_class,
-            error_value,
-        )
-        if not handed_over:
-            raise Error.errorhandler_make_exception(
-                error_class,
-                error_value,
-            )
-
-    @staticmethod
-    def errorhandler_wrapper_from_ready_exception(
-        connection: Optional["SnowflakeConnection"],
-        cursor: Optional["SnowflakeCursor"],
-        error_exc: Union["Error", Exception],
-    ) -> None:
-        """Like errorhandler_wrapper, but it takes a ready to go Exception."""
-        if isinstance(error_exc, Error):
-            error_value = {
-                "msg": error_exc.msg,
-                "errno": error_exc.errno,
-                "sqlstate": error_exc.sqlstate,
-                "sfqid": error_exc.sfqid,
-            }
-        else:
-            error_value = error_exc.args
-
-        handed_over = Error.hand_to_other_handler(
-            connection,
-            cursor,
-            type(error_exc),
-            error_value,
-        )
-        if not handed_over:
-            raise error_exc
-
-    @staticmethod
-    def hand_to_other_handler(
-        connection: Optional["SnowflakeConnection"],
-        cursor: Optional["SnowflakeCursor"],
-        error_class: Union[Type["Error"], Type[Exception]],
-        error_value: Dict[str, Union[str, bool]],
-    ) -> bool:
-        """If possible give error to a higher error handler in connection, or cursor.
-
-        Returns:
-            Whether it error was successfully given to a handler.
-        """
         if connection is not None:
             connection.messages.append((error_class, error_value))
         if cursor is not None:
             cursor.messages.append((error_class, error_value))
             cursor.errorhandler(connection, cursor, error_class, error_value)
-            return True
+            return
         elif connection is not None:
             connection.errorhandler(connection, cursor, error_class, error_value)
-            return True
-        return False
-
-    @staticmethod
-    def errorhandler_make_exception(
-        error_class: Union[Type["Error"], Type[Exception]],
-        error_value: Dict[str, Union[str, bool]],
-    ) -> Union["Error", Exception]:
-        """Helper function to errorhandler_wrapper that creates the exception."""
-        error_value.setdefault("done_format_msg", False)
+            return
 
         if issubclass(error_class, Error):
-            return error_class(
+            raise error_class(
                 msg=error_value["msg"],
                 errno=error_value.get("errno"),
                 sqlstate=error_value.get("sqlstate"),
                 sfqid=error_value.get("sfqid"),
             )
-        return error_class(error_value)
+        else:
+            raise error_class(error_value)
 
 
 class _Warning(BASE_EXCEPTION_CLASS):

@@ -4,7 +4,6 @@
 
 # distutils: language = c++
 # cython: language_level=3
-from typing import Iterator
 
 from cpython.ref cimport PyObject
 from libc.stdint cimport *
@@ -30,7 +29,7 @@ EMPTY_UNIT: default
 ROW_UNIT: fetch row by row if the user call `fetchone()`
 TABLE_UNIT: fetch one arrow table if the user call `fetch_pandas()`
 '''
-ROW_UNIT, TABLE_UNIT = 'row', 'table'
+ROW_UNIT, TABLE_UNIT, EMPTY_UNIT = 'row', 'table', ''
 
 
 cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
@@ -158,9 +157,6 @@ cdef extern from "arrow/python/api.h" namespace "arrow::py" nogil:
 
 cdef class EmptyPyArrowIterator:
 
-    def __iter__(self):
-        return self
-
     def __next__(self):
        raise StopIteration
 
@@ -183,7 +179,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     # still be converted into native python types.
     # https://docs.snowflake.com/en/user-guide/sqlalchemy.html#numpy-data-type-support
     cdef object use_numpy
-    cdef object number_to_decimal
 
     def __cinit__(
             self,
@@ -192,7 +187,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             object arrow_context,
             object use_dict_result,
             object numpy,
-            object number_to_decimal,
     ):
         cdef shared_ptr[InputStream] input_stream
         cdef shared_ptr[CRecordBatch] record_batch
@@ -201,11 +195,11 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         cdef CResult[shared_ptr[CRecordBatchReader]] readerRet = CRecordBatchStreamReader.Open(input_stream.get())
         if not readerRet.ok():
             Error.errorhandler_wrapper(
-                cursor.connection if cursor is not None else None,
+                cursor.connection,
                 cursor,
                 OperationalError,
                 {
-                    'msg': f'Failed to open arrow stream: {readerRet.status().message()}',
+                    'msg': 'Failed to open arrow stream: ' + str(readerRet.status().message()),
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
 
@@ -215,21 +209,20 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             ret = reader.get().ReadNext(&record_batch)
             if not ret.ok():
                 Error.errorhandler_wrapper(
-                    cursor.connection if cursor is not None else None,
+                    cursor.connection,
                     cursor,
                     OperationalError,
                     {
-                        'msg': f'Failed to read next arrow batch: {ret.message()}',
+                        'msg': 'Failed to read next arrow batch: ' + str(ret.message()),
                         'errno': ER_FAILED_TO_READ_ARROW_STREAM
-                    }
-                )
+                    })
 
             if record_batch.get() is NULL:
                 break
 
             self.batches.push_back(record_batch)
 
-        snow_logger.debug(msg=f"Batches read: {self.batches.size()}", path_name=__file__, func_name="__cinit__")
+        snow_logger.debug(msg="Batches read: {}".format(self.batches.size()), path_name=__file__, func_name="__cinit__")
 
         self.context = arrow_context
         self.cIterator = NULL
@@ -237,29 +230,20 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.use_dict_result = use_dict_result
         self.cursor = cursor
         self.use_numpy = numpy
-        self.number_to_decimal = number_to_decimal
 
     def __dealloc__(self):
         del self.cIterator
 
-    def __iter__(self):
-        return self
-
     def __next__(self):
-        if self.cIterator is NULL:
-            self.init_row_unit()
         self.cret = self.cIterator.next()
 
         if not self.cret.get().successObj:
-            Error.errorhandler_wrapper(
-                self.cursor.connection if self.cursor is not None else None,
-                self.cursor,
-                InterfaceError,
-                {
-                    'msg': f'Failed to convert current row, cause: {<object>self.cret.get().exception}',
-                    'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
-                }
-            )
+            msg = 'Failed to convert current row, cause: ' + str(<object>self.cret.get().exception)
+            Error.errorhandler_wrapper(self.cursor.connection, self.cursor, InterfaceError,
+                                       {
+                                           'msg': msg,
+                                           'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
+                                       })
             # it looks like this line can help us get into python and detect the global variable immediately
             # however, this log will not show up for unclear reason
         ret = <object>self.cret.get().successObj
@@ -269,29 +253,25 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         else:
             return ret
 
-    def init(self, str iter_unit):
-        if iter_unit == ROW_UNIT:
-            self.init_row_unit()
-        elif iter_unit == TABLE_UNIT:
-            self.init_table_unit()
-        self.unit = iter_unit
-
-    def init_row_unit(self) -> None:
-        self.cIterator = new CArrowChunkIterator(
-            <PyObject *> self.context,
-            &self.batches,
-            <PyObject *> self.use_numpy
-        ) \
-            if not self.use_dict_result \
-            else new DictCArrowChunkIterator(
-            <PyObject *> self.context,
-            &self.batches,
-            <PyObject *> self.use_numpy
+    def init(self, str iter_unit, bint number_to_decimal):
+        # init chunk (row) iterator or table iterator
+        if iter_unit != ROW_UNIT and iter_unit != TABLE_UNIT:
+            raise NotImplementedError
+        elif iter_unit == ROW_UNIT:
+            self.cIterator = new CArrowChunkIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                <PyObject *>self.use_numpy,
+            ) if not self.use_dict_result else new DictCArrowChunkIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                <PyObject *>self.use_numpy
             )
 
-    def init_table_unit(self) -> None:
-        self.cIterator = new CArrowTableIterator(
-            <PyObject *> self.context,
-            &self.batches,
-            self.number_to_decimal,
-        )
+        elif iter_unit == TABLE_UNIT:
+            self.cIterator = new CArrowTableIterator(
+                <PyObject*>self.context,
+                &self.batches,
+                number_to_decimal,
+            )
+        self.unit = iter_unit
