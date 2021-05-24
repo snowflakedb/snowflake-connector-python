@@ -17,7 +17,7 @@ from typing import (
     Union,
 )
 
-from .constants import TABLE_UNIT
+from .arrow_iterator import TABLE_UNIT
 from .errors import NotSupportedError
 from .options import installed_pandas, pandas
 from .result_batch import (

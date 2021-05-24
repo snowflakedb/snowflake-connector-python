@@ -14,12 +14,6 @@ import numpy
 import pytest
 
 try:
-    from snowflake.connector.constants import TABLE_UNIT
-except ImportError:
-    # This is because of olddriver tests
-    TABLE_UNIT = "table"
-
-try:
     from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
 except ImportError:
     installed_pandas = False
@@ -28,7 +22,7 @@ except ImportError:
 
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
