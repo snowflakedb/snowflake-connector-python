@@ -1219,3 +1219,18 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type):
                     "select * from VALUES(TO_TIMESTAMP('10000-01-01 00:00:00'))"
                 )
                 cur.fetchall()
+
+
+def test_describe(conn_cnx):
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.describe(
+                "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
+            )
+            assert cur.description is not None
+            column_types = [column[1] for column in cur.description]
+            assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
+            assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
+            assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
+            assert constants.FIELD_ID_TO_NAME[column_types[3]] == "TIMESTAMP_NTZ"
+            assert not cur.fetchall()

@@ -335,6 +335,7 @@ class SnowflakeCursor(object):
         binding_params: Union[Tuple, Dict[str, Dict[str, str]]] = None,
         binding_stage: Optional[str] = None,
         is_internal: bool = False,
+        describe_only: bool = False,
         _no_results: bool = False,
         _is_put_get=None,
     ):
@@ -439,6 +440,7 @@ class SnowflakeCursor(object):
                 is_file_transfer=bool(self._is_file_transfer),
                 statement_params=statement_params,
                 is_internal=is_internal,
+                describe_only=describe_only,
                 _no_results=_no_results,
             )
         finally:
@@ -501,6 +503,7 @@ class SnowflakeCursor(object):
         _show_progress_bar: bool = True,
         _statement_params: Optional[Dict[str, str]] = None,
         _is_internal: bool = False,
+        _describe_only: bool = False,
         _no_results: bool = False,
         _use_ijson: bool = False,
         _is_put_get: Optional[bool] = None,
@@ -525,6 +528,8 @@ class SnowflakeCursor(object):
             _get_callback_output_stream: The output stream a GET command's callback should report on.
             _show_progress_bar: Whether or not to show progress bar.
             _statement_params: Extra information that should be sent to Snowflake with query.
+            _is_internal: This flag indicates whether the query is issued internally.
+            _describe_only: If true, the query will not be executed but return the schema/description of this query.
             _no_results: This flag tells the back-end to not return the result, just fire the query and return the
                 query id of the running query.
             _use_ijson: This flag doesn't do anything as ijson support has ended.
@@ -559,6 +564,7 @@ class SnowflakeCursor(object):
             "timeout": timeout,
             "statement_params": _statement_params,
             "is_internal": _is_internal,
+            "describe_only": _describe_only,
             "_no_results": _no_results,
             "_is_put_get": _is_put_get,
         }
@@ -702,6 +708,11 @@ class SnowflakeCursor(object):
         for documentation.
         """
         kwargs["_exec_async"] = True
+        return self.execute(*args, **kwargs)
+
+    def describe(self, *args, **kwargs):
+        """Obtain the schema/description of the result without executing the query"""
+        kwargs["_describe_only"] = kwargs["_is_internal"] = True
         return self.execute(*args, **kwargs)
 
     def _format_query_for_log(self, query):
