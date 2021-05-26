@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from io import BytesIO
 from logging import getLogger
 from math import ceil
@@ -55,7 +55,8 @@ class SnowflakeStorageClient(ABC):
     TRANSIENT_HTTP_ERR = (408, 429, 500, 502, 503, 504)
 
     TRANSIENT_ERRORS = (OpenSSL.SSL.SysCallError, Timeout, ConnectionError)
-    SLEEP_MAX = float("inf")
+    SLEEP_MAX = 16.0
+    SLEEP_UNIT = 1.0
 
     def __init__(
         self,
@@ -68,10 +69,10 @@ class SnowflakeStorageClient(ABC):
     ):
         self.meta = meta
         self.stage_info = stage_info
-        self.retry_count: Dict[Union[int, str], int] = {}
+        self.retry_count: Dict[Union[int, str], int] = defaultdict(lambda: 0)
         self.tmp_dir = tempfile.mkdtemp()
-        self.data_file: str = None
-        self.encryption_metadata: "EncryptionMetadata" = None
+        self.data_file: Optional[str] = None
+        self.encryption_metadata: Optional["EncryptionMetadata"] = None
 
         self.max_retry = max_retry  # TODO
         self.credentials = credentials
@@ -256,7 +257,7 @@ class SnowflakeStorageClient(ABC):
         self,
         verb: str,
         get_request_args: Callable[[], Tuple[bytes, Dict[str, Any]]],
-        retry_id: str,
+        retry_id: int,
     ):
         rest_call = METHODS[verb]
         while self.retry_count[retry_id] < self.max_retry:
@@ -270,7 +271,12 @@ class SnowflakeStorageClient(ABC):
                     self.last_err_is_presigned_url = False
                     if response.status_code in self.TRANSIENT_HTTP_ERR:
                         time.sleep(
-                            min((2 ** self.retry_count[retry_id]) * 100, self.SLEEP_MAX)
+                            min(
+                                # TODO should SLEEP_UNIT come from the parent
+                                #  SnowflakeConnection and be customizable by users?
+                                (2 ** self.retry_count[retry_id]) * self.SLEEP_UNIT,
+                                self.SLEEP_MAX,
+                            )
                         )
                         self.retry_count[retry_id] += 1
                     elif self._has_expired_token(response):
@@ -279,7 +285,12 @@ class SnowflakeStorageClient(ABC):
                         return response
             except self.TRANSIENT_ERRORS:
                 self.last_err_is_presigned_url = False
-                time.sleep(min((2 ** self.retry_count[retry_id]) * 100, self.SLEEP_MAX))
+                time.sleep(
+                    min(
+                        (2 ** self.retry_count[retry_id]) * self.SLEEP_UNIT,
+                        self.SLEEP_MAX,
+                    )
+                )
                 self.retry_count[retry_id] += 1
         else:
             raise RequestExceedMaxRetryError(
