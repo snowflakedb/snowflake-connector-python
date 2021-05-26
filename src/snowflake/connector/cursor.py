@@ -105,7 +105,8 @@ class SnowflakeCursor(object):
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
     Attributes:
-        description: tuple of name, type_code, display_size, internal_size, precisio, scale, null_ok
+        description: A list of tuples containing (name, type_code, display_size, internal_size, precision, scale,
+            null_ok) for all columns.
         rowcount: The number of records updated or selected. If not clear, -1 is returned.
         rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
             determined.
@@ -710,10 +711,19 @@ class SnowflakeCursor(object):
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
-    def describe(self, *args, **kwargs):
-        """Obtain the schema/description of the result without executing the query"""
+    def describe(self, *args, **kwargs) -> List[Tuple]:
+        """Obtain the schema/description of the result without executing the query.
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+
+        Returns:
+            The schema/description of the result, which is a list of tuples containing (name, type_code, display_size,
+            internal_size, precision, scale, null_ok) for all columns.
+        """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
-        return self.execute(*args, **kwargs)
+        self.execute(*args, **kwargs)
+        return self._description
 
     def _format_query_for_log(self, query):
         return self._connection._format_query_for_log(query)
