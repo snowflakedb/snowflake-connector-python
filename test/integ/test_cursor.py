@@ -1233,5 +1233,5 @@ def test_describe(conn_cnx):
             assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
             assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
             assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
-            assert constants.FIELD_ID_TO_NAME[column_types[3]] == "TIMESTAMP_NTZ"
+            assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
             assert len(cur.fetchall()) == 0
