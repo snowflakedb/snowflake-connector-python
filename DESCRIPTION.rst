@@ -10,6 +10,12 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.4.4(May 30,2021)
+
+   - Fixed a segfault issue when using DictCursor and arrow result format with out of range dates.
+   - Adds new make_pd_writer helper function
+
+
 - v2.4.3(April 29,2021)
 
    - Uses s3 regional URL in private links when a param is set.
