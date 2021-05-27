@@ -1314,6 +1314,34 @@ def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
                 assert patched_download.call_count == 5
 
 
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize(
+    "result_format,patch_path",
+    (
+        ("json", "snowflake.connector.result_batch.JSONResultBatch.create_iter"),
+        ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
+    ),
+)
+def test_resultbatches_can_access_schema(conn_cnx, result_format, patch_path):
+    rowcount = 1000000
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": result_format}
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute(
+                f"select seq4() as c1, randstr(1,random()) as c2 "
+                f"from table(generator(rowcount => {rowcount}));"
+            )
+            result_batches = cur.get_result_batches()
+            batch_schemas = [batch._schema for batch in result_batches]
+            for schema in batch_schemas:
+                # 2 columns in result
+                assert len(schema) == 2
+                # all batches should have the same schema
+                assert schema[0] == ("C1", 0, None, None, 10, 0, False)
+                assert schema[1] == ("C2", 2, None, 16777216, None, None, False)
+
+
 def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
     """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
     with conn_cnx() as con:

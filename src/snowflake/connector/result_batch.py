@@ -72,6 +72,7 @@ def create_batches_from_response(
     cursor: "SnowflakeCursor",
     _format: str,
     data: Dict[str, Any],
+    schema: List[Tuple[str, int, int, int, int, bool]],
 ) -> List["ResultBatch"]:
     column_converters: List[Tuple[str, "SnowflakeConverterType"]] = []
     arrow_context: Optional["ArrowConverterContext"] = None
@@ -123,6 +124,7 @@ def create_batches_from_response(
                         compressedSize=c["compressedSize"],
                     ),
                     column_names,
+                    schema,
                     column_converters,
                     cursor._use_dict_result,
                 )
@@ -142,6 +144,7 @@ def create_batches_from_response(
                     cursor._use_dict_result,
                     cursor._connection._numpy,
                     column_names,
+                    schema,
                     cursor._connection._arrow_number_to_decimal,
                 )
                 for c in chunks
@@ -153,6 +156,7 @@ def create_batches_from_response(
             data.get("rowset"),
             first_chunk_len,
             column_names,
+            schema,
             column_converters,
             cursor._use_dict_result,
         )
@@ -164,6 +168,7 @@ def create_batches_from_response(
             cursor._use_dict_result,
             cursor._connection._numpy,
             column_names,
+            schema,
             cursor._connection._arrow_number_to_decimal,
         )
     else:
@@ -175,6 +180,7 @@ def create_batches_from_response(
             cursor._use_dict_result,
             cursor._connection._numpy,
             column_names,
+            schema,
             cursor._connection._arrow_number_to_decimal,
         )
 
@@ -208,12 +214,14 @@ class ResultBatch(abc.ABC):
         chunk_headers: Optional[Dict[str, str]],
         remote_chunk_info: Optional["RemoteChunkInfo"],
         column_names: Sequence[str],
+        schema: List[Tuple[str, int, int, int, int, bool]],
         use_dict_result: bool,
     ):
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
         self._column_names = column_names
+        self._schema = schema
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
         self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
@@ -337,6 +345,7 @@ class JSONResultBatch(ResultBatch):
         chunk_headers: Optional[Dict[str, str]],
         remote_chunk_info: Optional["RemoteChunkInfo"],
         column_names: Sequence[str],
+        schema: List[Tuple[str, int, int, int, int, bool]],
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
     ):
@@ -345,6 +354,7 @@ class JSONResultBatch(ResultBatch):
             chunk_headers,
             remote_chunk_info,
             column_names,
+            schema,
             use_dict_result,
         )
         self.column_converters = column_converters
@@ -355,6 +365,7 @@ class JSONResultBatch(ResultBatch):
         data: Sequence[Sequence[Any]],
         data_len: int,
         column_names: Sequence[str],
+        schema: List[Tuple[str, int, int, int, int, bool]],
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
     ):
@@ -364,6 +375,7 @@ class JSONResultBatch(ResultBatch):
             None,
             None,
             column_names,
+            schema,
             column_converters,
             use_dict_result,
         )
@@ -467,10 +479,16 @@ class ArrowResultBatch(ResultBatch):
         use_dict_result: bool,
         numpy: bool,
         column_names: Sequence[str],
+        schema: List[Tuple[str, int, int, int, int, bool]],
         number_to_decimal: bool,
     ):
         super().__init__(
-            rowcount, chunk_headers, remote_chunk_info, column_names, use_dict_result
+            rowcount,
+            chunk_headers,
+            remote_chunk_info,
+            column_names,
+            schema,
+            use_dict_result,
         )
         self._context = context
         self._numpy = numpy
@@ -539,6 +557,7 @@ class ArrowResultBatch(ResultBatch):
         use_dict_result: bool,
         numpy: bool,
         column_names: Sequence[str],
+        schema: List[Tuple[str, int, int, int, int, bool]],
         number_to_decimal: bool,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
@@ -550,6 +569,7 @@ class ArrowResultBatch(ResultBatch):
             use_dict_result,
             numpy,
             column_names,
+            schema,
             number_to_decimal,
         )
         new_chunk._data = data
