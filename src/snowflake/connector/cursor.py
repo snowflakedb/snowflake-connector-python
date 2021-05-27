@@ -776,7 +776,6 @@ class SnowflakeCursor(object):
             for column in data["rowtype"]
         ]
 
-        # could copy description here
         result_chunks = create_batches_from_response(
             self, self._query_result_format, data, self._description
         )
