@@ -1257,6 +1257,25 @@ def test_resultbatch(
                     t.message["type"] == TelemetryField.GET_PARTITIONS_USED
                     for t in telemetry_data.records
                 )
+        # TODO: add a fixture to easily capture telemetry data
+        telemetry_data = []
+        add_log_mock = mock.Mock()
+        add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
+        con._telemetry.add_log_to_batch = add_log_mock
+        with con.cursor() as cur:
+            cur.execute(f"select seq4() from table(generator(rowcount => {rowcount}));")
+            assert cur._result_set.total_row_index() == rowcount
+            pre_pickle_partitions = cur.get_result_batches()
+            assert len(pre_pickle_partitions) > 1
+            assert pre_pickle_partitions is not None
+            assert all(
+                isinstance(p, expected_chunk_type) for p in pre_pickle_partitions
+            )
+            pickle_str = pickle.dumps(pre_pickle_partitions)
+            assert any(
+                t.message["type"] == TelemetryField.GET_PARTITIONS_USED
+                for t in telemetry_data
+            )
     post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually

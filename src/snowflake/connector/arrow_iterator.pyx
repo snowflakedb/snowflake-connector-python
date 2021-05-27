@@ -4,6 +4,7 @@
 
 # distutils: language = c++
 # cython: language_level=3
+from typing import Iterator
 
 from cpython.ref cimport PyObject
 from libc.stdint cimport *
