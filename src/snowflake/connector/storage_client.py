@@ -14,7 +14,8 @@ from collections import defaultdict, namedtuple
 from io import BytesIO
 from logging import getLogger
 from math import ceil
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Union
 
 import OpenSSL
 
@@ -76,7 +77,6 @@ class SnowflakeStorageClient(ABC):
 
         self.max_retry = max_retry  # TODO
         self.credentials = credentials
-        meta.tmp_dir = self.tmp_dir
         # UPLOAD
         meta.real_src_file_name = meta.src_file_name
         meta.upload_size = meta.src_file_size
@@ -84,7 +84,20 @@ class SnowflakeStorageClient(ABC):
             False  # so we don't repeat compression/file digest when re-encrypting
         )
         # DOWNLOAD
-        self.full_dst_file_name = ""
+        self.full_dst_file_name: Optional[str] = (
+            os.path.realpath(
+                os.path.join(
+                    self.meta.local_location, os.path.basename(self.meta.dst_file_name)
+                )
+            )
+            if self.meta.local_location
+            else None
+        )
+        self.intermediate_dst_path: Optional[Path] = (
+            Path(self.full_dst_file_name + ".part")
+            if self.meta.local_location
+            else None
+        )
         # CHUNK
         self.chunked_transfer = chunked_transfer  # only true for GCS
         self.chunk_size = chunk_size
@@ -92,7 +105,6 @@ class SnowflakeStorageClient(ABC):
         self.lock = threading.Lock()
         self.successful_transfers: int = 0
         self.failed_transfers: int = 0
-        self.chunks: List[bytes] = []
         # only used when PRESIGNED_URL expires
         self.last_err_is_presigned_url = False
 
@@ -216,25 +228,9 @@ class SnowflakeStorageClient(ABC):
             self.retry_count[chunk_id] = 0
         if self.chunked_transfer and self.num_of_chunks > 1:
             self._initiate_multipart_upload()
-        self.chunkify()
-
-    def chunkify(self):
-        self.chunks = []
-        meta = self.meta
-        if meta.result_status == ResultStatus.SKIPPED:
-            return
-        if meta.src_stream:
-            fd = meta.real_src_stream or meta.src_stream
-            fd.seek(0)
-            if self.num_of_chunks == 1:
-                self.chunks.append(fd.read())
-            else:
-                for _ in range(self.num_of_chunks):
-                    self.chunks.append(fd.read(self.chunk_size))
 
     def finish_upload(self):
         meta = self.meta
-        self.chunks = []  # For garbage collection
         if self.successful_transfers == self.num_of_chunks:
             if self.num_of_chunks > 1:
                 self._complete_multipart_upload()
@@ -298,49 +294,43 @@ class SnowflakeStorageClient(ABC):
             )
 
     def prepare_download(self):
-        meta = self.meta
-        full_dst_file_name = os.path.join(
-            meta.local_location, os.path.basename(meta.dst_file_name)
-        )
-        full_dst_file_name = os.path.realpath(full_dst_file_name)
-        # TODO: validate full_dst_file_name is under the writable directory
-        base_dir = os.path.dirname(full_dst_file_name)
+        # TODO: add nicer error message for when target directory is not writeable
+        #  but this should be done before we get here
+        base_dir = os.path.dirname(self.full_dst_file_name)
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
 
         # HEAD
-        file_header = self.get_file_header(meta.dst_file_name)
+        file_header = self.get_file_header(self.meta.dst_file_name)
 
         if file_header and file_header.encryption_metadata:
             self.encryption_metadata = file_header.encryption_metadata
 
         self.num_of_chunks = 1
         if file_header and file_header.content_length:
-            meta.src_file_size = file_header.content_length
-            if self.chunked_transfer and meta.src_file_size > meta.multipart_threshold:
+            self.meta.src_file_size = file_header.content_length
+            if (
+                self.chunked_transfer
+                and self.meta.src_file_size > self.meta.multipart_threshold
+            ):
                 self.num_of_chunks = ceil(file_header.content_length / self.chunk_size)
 
-        self.chunks = [b""] * self.num_of_chunks
-        for chunk_id in range(self.num_of_chunks):
-            self.retry_count[chunk_id] = 0
+        # Preallocate encrypted file.
+        with self.intermediate_dst_path.open("wb+") as fd:
+            fd.truncate(self.meta.src_file_size)
 
-        self.full_dst_file_name = os.path.realpath(
-            os.path.join(meta.local_location, os.path.basename(meta.dst_file_name))
-        )
+    def write_downloaded_chunk(self, chunk_id: int, chunk_data: bytes):
+        with self.intermediate_dst_path.open("wb") as fd:
+            fd.seek(self.chunk_size * chunk_id)
+            fd.write(chunk_data)
 
     def finish_download(self):
         meta = self.meta
         if self.successful_transfers == self.num_of_chunks:
-            full_dst_file_name = self.full_dst_file_name
 
             meta.result_status = ResultStatus.DOWNLOADED
-            if self.chunks:
-                with open(self.full_dst_file_name, "wb+") as fd:
-                    for chunk in self.chunks:
-                        fd.write(chunk)
-            self.chunks = []  # Garbage collection
             if meta.encryption_material:
-                logger.debug(f"encrypted data file={full_dst_file_name}")
+                logger.debug(f"encrypted data file={self.full_dst_file_name}")
                 # For storage utils that do not have the privilege of
                 # getting the metadata early, both object and metadata
                 # are downloaded at once. In which case, the file meta will
@@ -356,32 +346,32 @@ class SnowflakeStorageClient(ABC):
                 tmp_dst_file_name = SnowflakeEncryptionUtil.decrypt_file(
                     self.encryption_metadata,
                     meta.encryption_material,
-                    full_dst_file_name,
-                    tmp_dir=meta.tmp_dir,
+                    str(self.intermediate_dst_path),
+                    tmp_dir=self.tmp_dir,
                 )
-                shutil.copyfile(tmp_dst_file_name, full_dst_file_name)
+                shutil.copyfile(tmp_dst_file_name, self.full_dst_file_name)
+                self.intermediate_dst_path.unlink()
                 os.unlink(tmp_dst_file_name)
             else:
-                logger.debug(f"not encrypted data file={full_dst_file_name}")
-            stat_info = os.stat(full_dst_file_name)
+                logger.debug(f"not encrypted data file={self.full_dst_file_name}")
+            stat_info = os.stat(self.full_dst_file_name)
             meta.dst_file_size = stat_info.st_size
         else:
-            self.chunks = []  # Garbage collection
             # TODO: add more error details to result/meta
+            os.unlink(self.full_dst_file_name)
             logger.exception(f"Failed to download a file: {meta.dst_file_name}")
             meta.dst_file_size = -1
             meta.result_status = ResultStatus.ERROR
 
     def upload_chunk(self, chunk_id: int):
-        if not self.chunks:
-            with open(self.data_file, "rb") as fd:
-                if self.num_of_chunks == 1:
-                    _data = fd.read()
-                else:
-                    fd.seek(chunk_id * self.chunk_size)
-                    _data = fd.read(self.chunk_size)
-        else:
-            _data = self.chunks[chunk_id]
+        with open(
+            self.data_file or self.meta.real_src_stream or self.meta.src_stream, "rb"
+        ) as fd:
+            if self.num_of_chunks == 1:
+                _data = fd.read()
+            else:
+                fd.seek(chunk_id * self.chunk_size)
+                _data = fd.read(self.chunk_size)
         logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
         self._upload_chunk(chunk_id, _data)
         logger.debug(f"Successfully uploaded chunk {chunk_id} of file {self.data_file}")

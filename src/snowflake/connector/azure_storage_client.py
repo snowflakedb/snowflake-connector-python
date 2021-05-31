@@ -12,7 +12,7 @@ from datetime import datetime
 from logging import getLogger
 from random import choice
 from string import hexdigits
-from typing import TYPE_CHECKING, Any, Dict, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from .compat import quote
 from .constants import FileHeader, ResultStatus
@@ -63,7 +63,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         self.block_ids = []
 
     @staticmethod
-    def extract_container_name_and_path(stage_location):
+    def extract_container_name_and_path(stage_location) -> AzureLocation:
         stage_location = os.path.expanduser(stage_location)
         container_name = stage_location
         path = ""
@@ -77,7 +77,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
 
         return AzureLocation(container_name=container_name, path=path)
 
-    def _has_expired_token(self, response: requests.Response):
+    def _has_expired_token(self, response: requests.Response) -> bool:
         return response.status_code == 403 and any(
             message in response.reason for message in TOKEN_EXPIRATION_ERR_MESSAGE
         )
@@ -113,7 +113,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             verb, generate_authenticated_url_and_rest_args, retry_id
         )
 
-    def get_file_header(self, filename: str) -> Union[FileHeader, None]:
+    def get_file_header(self, filename: str) -> Optional[FileHeader]:
         """Gets Azure file properties."""
         container_name = quote(self.azure_location.container_name)
         path = quote(self.azure_location.path) + quote(filename)
@@ -148,7 +148,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         else:
             r.raise_for_status()
 
-    def _prepare_file_metadata(self):
+    def _prepare_file_metadata(self) -> None:
         azure_metadata = {
             SFCDIGEST: self.meta.sha256_digest,
         }
@@ -177,13 +177,13 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             )
         return azure_metadata
 
-    def _initiate_multipart_upload(self):
+    def _initiate_multipart_upload(self) -> None:
         self.block_ids = [
             "".join(choice(hexdigits) for _ in range(20))
             for _ in range(self.num_of_chunks)
         ]
 
-    def _upload_chunk(self, chunk_id: int, chunk: bytes):
+    def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
         container_name = quote(self.azure_location.container_name)
         path = quote(self.azure_location.path + self.meta.dst_file_name.lstrip("/"))
 
@@ -211,7 +211,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             )
         r.raise_for_status()  # expect status code 201
 
-    def _complete_multipart_upload(self):
+    def _complete_multipart_upload(self) -> None:
         container_name = quote(self.azure_location.container_name)
         path = quote(self.azure_location.path + self.meta.dst_file_name.lstrip("/"))
         url = (
@@ -233,7 +233,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         )
         r.raise_for_status()  # expects status code 201
 
-    def download_chunk(self, chunk_id: int):
+    def download_chunk(self, chunk_id: int) -> None:
         container_name = quote(self.azure_location.container_name)
         path = quote(self.azure_location.path + self.meta.src_file_name.lstrip("/"))
         url = f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}"
@@ -251,5 +251,5 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             # single request
             r = self._send_request_with_authentication_and_retry("GET", url, chunk_id)
         if r.status_code in (200, 206):
-            self.chunks[chunk_id] = r.content
+            self.write_downloaded_chunk(chunk_id, r.content)
         r.raise_for_status()

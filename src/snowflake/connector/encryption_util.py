@@ -8,7 +8,6 @@ import base64
 import json
 import os
 import tempfile
-from collections import namedtuple
 from logging import getLogger
 from typing import IO, TYPE_CHECKING, Tuple
 
@@ -17,7 +16,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
-from .constants import UTF8
+from .constants import UTF8, EncryptionMetadata, MaterialDescriptor
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
@@ -37,20 +36,6 @@ def matdesc_to_unicode(matdesc):
             separators=(",", ":"),
         )
     )
-
-
-"""
-Material Description
-"""
-MaterialDescriptor = namedtuple(
-    "MaterialDescriptor",
-    ["smk_id", "query_id", "key_size"],  # SMK id  # query id  # key size, 128 or 256
-)
-
-"""
-Metadata for encryption
-"""
-EncryptionMetadata = namedtuple("EncryptionMetadata", ["key", "iv", "matdesc"])
 
 
 class SnowflakeEncryptionUtil(object):
@@ -184,8 +169,8 @@ class SnowflakeEncryptionUtil(object):
     def decrypt_file(
         metadata,
         encryption_material,
-        in_filename,
-        chunk_size=block_size * 4 * 1024,
+        in_filename: str,
+        chunk_size: int = block_size * 4 * 1024,
         tmp_dir=None,
     ):
         """Decrypts a file and stores the output in the temporary directory.
