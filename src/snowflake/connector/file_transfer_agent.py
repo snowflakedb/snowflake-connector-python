@@ -12,9 +12,8 @@ import sys
 import threading
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
+from functools import partial
 from logging import getLogger
-from queue import Queue
-from random import randint
 from time import time
 from typing import IO, TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
@@ -89,6 +88,13 @@ def result_fixed_column_desc(name):
     }
 
 
+# TODO: rewrite, we use this class to store information about file transfers
+#  It'd make more sense to define a new object, like FileTransferMeta that then has
+#  more FileMetas inside of it. This would help in some cases, where for example
+#  consider the case where we run into an unrecoverable error for the whole transfer
+#  job and we need to convey an error to the main thread and that error needs to be
+#  raised by the main thread. Where should this go? Currently the answer could be
+#  all of the current FileMetas. Hmmm...
 @dataclass
 class SnowflakeFileMeta:
     """Class to keep track of information necessary for file operations."""
@@ -109,7 +115,6 @@ class SnowflakeFileMeta:
     multipart_threshold: int = 67108864  # Historical value
     presigned_url: Optional[str] = None
     overwrite: bool = False
-    tmp_dir: Optional[str] = None
     sha256_digest: Optional[str] = None
     upload_size: Optional[int] = None
     real_src_file_name: Optional[str] = None
@@ -388,126 +393,165 @@ class SnowflakeFileTransferAgent:
 
     def transfer(self, metas: List["SnowflakeFileMeta"]):
         max_concurrency = self._parallel
-        chunk_tpe = ThreadPoolExecutor(max_concurrency)
+        network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
-        cv_1 = threading.Condition()  # to signal the main thread
-        cv_2 = threading.Condition()  # to get more chunks into the chunk_tpe
-        files_unstarted = Queue()
-        for m in metas:
-            files_unstarted.put(self._create_file_transfer_client(m))
+        cv_main_thread = threading.Condition()  # to signal the main thread
+        cv_chunk_process = (
+            threading.Condition()
+        )  # to get more chunks into the chunk_tpe
+        files = [self._create_file_transfer_client(m) for m in metas]
         num_total_files = len(metas)
-        transfer_metadata_lock = threading.Lock()
-        transfer_metadata = TransferMetadata(
-            num_files_started=0, num_files_completed=0, chunks_in_queue=0
-        )
-        delta = randint(1, 10)  # random small number
-        futures_to_file: Dict[Future, "SnowflakeStorageClient"] = {}
-        futures_to_chunk: Dict[Future, int] = {}
+        transfer_metadata = TransferMetadata()  # this is protected by cv_chunk_process
         is_upload = self._command_type == CMD_TYPE_UPLOAD
 
-        def register_future(
-            future: Future,
-            _file_transfer: "SnowflakeStorageClient",
-            _chunk_id: Optional[int] = None,
-        ):
-            futures_to_file[future] = _file_transfer
-            if _chunk_id is not None:
-                futures_to_chunk[future] = _chunk_id
+        def notify_file_completed():
+            # Increment the number of completed files, then notify the main thread.
+            with cv_main_thread:
+                transfer_metadata.num_files_completed += 1
+                cv_main_thread.notify()
 
-        def done_callback_chunk(future: Future):
-            done_client = futures_to_file[future]
-            done_id = futures_to_chunk[future]
-            logger.debug(
-                f"Chunk {done_id} of file {done_client.meta.name} reached callback"
-            )
-            with transfer_metadata_lock:
-                transfer_metadata.chunks_in_queue -= 1
-            with cv_2:
-                cv_2.notify()
+        def postprocess_done_cb(future: Future, done_client: "SnowflakeStorageClient"):
+            try:
+                logger.debug(
+                    f"File {done_client.meta.name} reached postprocess callback"
+                )
 
-            with done_client.lock:
-                if future.exception():
-                    done_client.failed_transfers += 1
-                    exc = future.exception()
-                    logger.debug(
-                        f"Chunk {done_id} of file {done_client.meta.name} failed to transfer for unexpected exception {exc}"
-                    )
-                else:
-                    done_client.successful_transfers += 1
-            if (
-                done_client.successful_transfers + done_client.failed_transfers
-                == done_client.num_of_chunks
-            ):
-                if is_upload:
-                    done_client.finish_upload()
-                else:
-                    done_client.finish_download()
-                with transfer_metadata_lock:
-                    transfer_metadata.num_files_completed += 1
-            with cv_1:
-                cv_1.notify()
-
-        def done_callback_file(future: Future):
-            done_client = futures_to_file[future]
-            if future.exception():
-                logger.debug(f"Failed to prepare {done_client.meta.name}.")
-                if is_upload:
-                    done_client.finish_upload()
-                else:
-                    done_client.finish_download()
-                with transfer_metadata_lock:
-                    transfer_metadata.num_files_completed += 1
-                with cv_1:
-                    cv_1.notify()
-            elif done_client.meta.result_status == ResultStatus.SKIPPED:
-                # this case applies to upload only
-                with transfer_metadata_lock:
-                    transfer_metadata.num_files_completed += 1
-                with cv_1:
-                    cv_1.notify()
-            else:
-                logger.debug(f"Finished preparing file {done_client.meta.name}")
-                with cv_2:
-                    while transfer_metadata.chunks_in_queue > 2 * max_concurrency:
+                with done_client.lock:
+                    if future.exception():
+                        done_client.failed_transfers += 1
+                        exc = future.exception()
                         logger.debug(
-                            "Chunk queue busy, waiting in file done callback..."
+                            f"File {done_client.meta.name} failed to transfer for unexpected exception {exc}"
                         )
-                        cv_2.wait()
-                    for _chunk_id in range(done_client.num_of_chunks):
+                    # Whether there was an exception or not, we're done the file.
+                    notify_file_completed()
+            except Exception:  # NOQA
+                # TODO: if an exception happens in a callback, the exception will not
+                #  propagate to the main thread. We need to save these Exceptions
+                #  somewhere and then re-raise by the main thread. For now let's log
+                #  this exception, but for a long term solution see my
+                #  TODO comment for SnowflakeFileMeta
+                logger.error(
+                    "An exception was raised in postprocess_done_cb", exc_info=True
+                )
+
+        def transfer_done_cb(
+            future: Future, done_client: "SnowflakeStorageClient", chunk_id: int
+        ):
+            try:
+                # Note: chunk_id is 0 based while num_of_chunks is count
+                logger.debug(
+                    f"Chunk {chunk_id}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
+                )
+                with cv_chunk_process:
+                    transfer_metadata.chunks_in_queue -= 1
+                    cv_chunk_process.notify()
+
+                with done_client.lock:
+                    if future.exception():
+                        # TODO: Cancel other chunks?
+                        done_client.failed_transfers += 1
+                        exc = future.exception()
+                        logger.debug(
+                            f"Chunk {chunk_id} of file {done_client.meta.name} failed to transfer for unexpected exception {exc}"
+                        )
+                    else:
+                        done_client.successful_transfers += 1
+                    logger.debug(
+                        f"Chunk progress: {done_client.meta.name}: completed: {done_client.successful_transfers} failed: {done_client.failed_transfers} total: {done_client.num_of_chunks}"
+                    )
+                    if (
+                        done_client.successful_transfers + done_client.failed_transfers
+                        == done_client.num_of_chunks
+                    ):
                         if is_upload:
-                            chunk_future = chunk_tpe.submit(
-                                done_client.upload_chunk, _chunk_id
-                            )
+                            done_client.finish_upload()
+                            notify_file_completed()
                         else:
-                            chunk_future = chunk_tpe.submit(
-                                done_client.download_chunk, _chunk_id
+                            postprocess_future = postprocess_tpe.submit(
+                                done_client.finish_download
                             )
-                        with transfer_metadata_lock:
-                            transfer_metadata.chunks_in_queue += 1
-                        register_future(chunk_future, done_client, _chunk_id)
-                        chunk_future.add_done_callback(done_callback_chunk)
-                    cv_2.notify()
+                            logger.debug(
+                                f"submitting {done_client.meta.name} to done_postprocess"
+                            )
 
-        def start_all_waiting_files():
-            while not files_unstarted.empty():
-                _transfer = files_unstarted.get()
-                if is_upload:
-                    proc_future = preprocess_tpe.submit(_transfer.prepare_upload)
+                            postprocess_future.add_done_callback(
+                                partial(postprocess_done_cb, done_client=done_client)
+                            )
+            except Exception:  # NOQA
+                # TODO: if an exception happens in a callback, the exception will not
+                #  propagate to the main thread. We need to save these Exceptions
+                #  somewhere and then re-raise by the main thread. For now let's log
+                #  this exception, but for a long term solution see my
+                #  TODO comment for SnowflakeFileMeta
+                logger.error(
+                    "An exception was raised in transfer_done_cb", exc_info=True
+                )
+
+        def preprocess_done_cb(future: Future, done_client: "SnowflakeStorageClient"):
+            try:
+                if future.exception():
+                    logger.debug(f"Failed to prepare {done_client.meta.name}.")
+                    if is_upload:
+                        done_client.finish_upload()
+                    else:
+                        done_client.finish_download()
+                    notify_file_completed()
+                elif done_client.meta.result_status == ResultStatus.SKIPPED:
+                    # this case applies to upload only
+                    notify_file_completed()
                 else:
-                    proc_future = preprocess_tpe.submit(_transfer.prepare_download)
-                register_future(proc_future, _transfer)
-                proc_future.add_done_callback(done_callback_file)
-                transfer_metadata.num_files_started += 1
+                    logger.debug(f"Finished preparing file {done_client.meta.name}")
+                    with cv_chunk_process:
+                        while transfer_metadata.chunks_in_queue > 2 * max_concurrency:
+                            logger.debug(
+                                "Chunk queue busy, waiting in file done callback..."
+                            )
+                            cv_chunk_process.wait()
+                        for _chunk_id in range(done_client.num_of_chunks):
+                            if is_upload:
+                                chunk_future = network_tpe.submit(
+                                    done_client.upload_chunk, _chunk_id
+                                )
+                            else:
+                                chunk_future = network_tpe.submit(
+                                    done_client.download_chunk, _chunk_id
+                                )
+                            transfer_metadata.chunks_in_queue += 1
+                            chunk_future.add_done_callback(
+                                partial(
+                                    transfer_done_cb,
+                                    done_client=done_client,
+                                    chunk_id=_chunk_id,
+                                )
+                            )
+                        cv_chunk_process.notify()
+            except Exception:  # NOQA
+                # TODO: if an exception happens in a callback, the exception will not
+                #  propagate to the main thread. We need to save these Exceptions
+                #  somewhere and then re-raise by the main thread. For now let's log
+                #  this exception, but for a long term solution see my
+                #  TODO comment for SnowflakeFileMeta
+                logger.error(
+                    "An exception was raised in preprocess_done_cb", exc_info=True
+                )
 
-        start_all_waiting_files()
-        with cv_1:
-            while transfer_metadata.num_files_completed < num_total_files:
-                if transfer_metadata.chunks_in_queue < max_concurrency + delta:
-                    with cv_2:
-                        start_all_waiting_files()
-                        cv_2.notify()
-                cv_1.wait()
+        for file_client in files:
+            if is_upload:
+                proc_future = preprocess_tpe.submit(file_client.prepare_upload)
+            else:
+                proc_future = preprocess_tpe.submit(file_client.prepare_download)
+            proc_future.add_done_callback(
+                partial(preprocess_done_cb, done_client=file_client)
+            )
+            transfer_metadata.num_files_started += 1  # TODO: do we need this?
+
+        with cv_main_thread:
+            current_files_competed = transfer_metadata.num_files_completed
+            while current_files_competed < num_total_files:
+                cv_main_thread.wait()
 
         self._results = metas
 
