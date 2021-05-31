@@ -4,8 +4,9 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from enum import Enum, unique
+from typing import NamedTuple, Optional
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -131,9 +132,29 @@ class ResultStatus(Enum):
     NEED_RETRY_WITH_LOWER_CONCURRENCY = "NEED_RETRY_WITH_LOWER_CONCURRENCY"
 
 
-FileHeader = namedtuple(
-    "FileReader", ["digest", "content_length", "encryption_metadata"]
-)
+class SnowflakeS3FileEncryptionMaterial(NamedTuple):
+    query_id: str
+    query_stage_master_key: str
+    smk_id: int
+
+
+class MaterialDescriptor(NamedTuple):
+    smk_id: str
+    query_id: str
+    key_size: int
+
+
+class EncryptionMetadata(NamedTuple):
+    key: str
+    iv: str
+    matdesc: str
+
+
+class FileHeader(NamedTuple):
+    digest: str
+    content_length: int
+    encryption_metadata: Optional[EncryptionMetadata]
+
 
 PARAMETER_AUTOCOMMIT = "AUTOCOMMIT"
 PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY = (

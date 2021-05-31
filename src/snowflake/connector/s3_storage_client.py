@@ -438,7 +438,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 url, "GET", _resource, chunk_id
             )
             if response.status_code == 200:
-                self.chunks[0] = response.content
+                self.write_downloaded_chunk(0, response.content)
                 self.meta.result_status = ResultStatus.DOWNLOADED
             response.raise_for_status()
         else:
@@ -456,7 +456,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 headers={"Range": f"bytes={_range}"},
             )
             if response.status_code in (200, 206):
-                self.chunks[chunk_id] = response.content
+                self.write_downloaded_chunk(chunk_id, response.content)
             response.raise_for_status()
 
     def transfer_accelerate_config(self) -> bool:
