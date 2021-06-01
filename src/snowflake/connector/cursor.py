@@ -103,18 +103,15 @@ ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 INCIDENT_BLACKLIST = (KeyError, ValueError, TypeError)
 
-ResultMetadata = NamedTuple(
-    "ResultMetadata",
-    [
-        ("name", str),
-        ("type_code", int),
-        ("display_size", int),
-        ("internal_size", int),
-        ("precision", int),
-        ("scale", int),
-        ("is_nullable", bool),
-    ],
-)
+
+class ResultMetadata(NamedTuple):
+    name: str
+    type_code: int
+    display_size: int
+    internal_size: int
+    precision: int
+    scale: int
+    is_nullable: bool
 
 
 def exit_handler(*_):  # pragma: no cover
