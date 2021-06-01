@@ -89,6 +89,7 @@ void CArrowChunkIterator::createRowPyObject()
   m_latestReturnedRow.reset(PyTuple_New(m_columnCount));
   for (int i = 0; i < m_columnCount; i++)
   {
+    // PyTuple_SET_ITEM steals a reference to the PyObject returned by toPyObject below
     PyTuple_SET_ITEM(
         m_latestReturnedRow.get(), i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
@@ -444,6 +445,7 @@ void DictCArrowChunkIterator::createRowPyObject()
     py::UniqueRef value = py::UniqueRef(m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
     if (!value.empty())
     {
+      // PyDict_SetItemString doesn't steal a reference to value.get().
       PyDict_SetItemString(
           m_latestReturnedRow.get(),
           m_currentSchema->field(i)->name().c_str(),
