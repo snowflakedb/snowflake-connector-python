@@ -843,6 +843,24 @@ class SnowflakeCursor(object):
             )
         return self
 
+    def fetch_arrow_batches(self):
+        self.check_can_use_pandas()
+        if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
+            raise NotSupportedError
+        self._log_telemetry_job_data(
+            TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.DUMMY_VALUE
+        )
+        return self._result_set._fetch_arrow_batches()
+
+    def fetch_arrow_all(self):
+        self.check_can_use_pandas()
+        if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
+            raise NotSupportedError
+        self._log_telemetry_job_data(
+            TelemetryField.ARROW_FETCH_ALL, TelemetryData.DUMMY_VALUE
+        )
+        return self._result_set._fetch_arrow_all()
+
     def fetch_pandas_batches(self, **kwargs):
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
@@ -851,8 +869,7 @@ class SnowflakeCursor(object):
         self._log_telemetry_job_data(
             TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.DUMMY_VALUE
         )
-        for df in self._result_set._fetch_pandas_batches(**kwargs):
-            yield df
+        return self._result_set._fetch_pandas_batches(**kwargs)
 
     def fetch_pandas_all(self, **kwargs):
         """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""

@@ -17,7 +17,7 @@ from typing import (
     Union,
 )
 
-from .constants import TABLE_UNIT
+from .constants import IterUnit
 from .errors import NotSupportedError
 from .options import installed_pandas, pandas
 from .result_batch import (
@@ -118,10 +118,7 @@ class ResultSet(Iterable[List[Any]]):
                 metrics.get(DownloadMetrics.parse.value),
             )
 
-    def _fetch_arrow_batches(
-        self,
-    ) -> Iterator[Table]:
-        """Fetches a all the results as Arrow Tables, chunked by Snowflake back-end."""
+    def __can_create_arrow_iter(self):
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
         head_type = type(self.batches[0])
@@ -130,7 +127,13 @@ class ResultSet(Iterable[List[Any]]):
                 f"Trying to use arrow fetching on {head_type} which "
                 f"is not ArrowResultChunk"
             )
-        return self._create_iter(iter_unit=TABLE_UNIT)
+
+    def _fetch_arrow_batches(
+        self,
+    ) -> Iterator[Table]:
+        """Fetches all the results as Arrow Tables, chunked by Snowflake back-end."""
+        self.__can_create_arrow_iter()
+        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
 
     def _fetch_arrow_all(self):
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
@@ -146,16 +149,13 @@ class ResultSet(Iterable[List[Any]]):
         Thus, the batch size (the number of rows in dataframe) is determined by
         Snowflake's back-end.
         """
-        for table in self._fetch_arrow_batches():
-            yield table.to_pandas(**kwargs)
+        self.__can_create_arrow_iter()
+        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas")
 
     def _fetch_pandas_all(self, **kwargs):
         """Fetches a single Pandas dataframe."""
-        table = self._fetch_arrow_all()
-        if table:
-            return table.to_pandas(**kwargs)
-        else:
-            return pandas.DataFrame(columns=self.batches[0]._column_names)
+        dataframes = list(self._fetch_pandas_batches())
+        return pandas.concat(dataframes, **kwargs)
 
     def _get_metrics(self) -> Dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""
