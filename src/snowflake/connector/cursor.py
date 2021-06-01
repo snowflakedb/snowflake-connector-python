@@ -12,7 +12,17 @@ import time
 import uuid
 from logging import getLogger
 from threading import Lock, Timer
-from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Type, Union
+from typing import (
+    IO,
+    TYPE_CHECKING,
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
@@ -93,6 +103,19 @@ ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 INCIDENT_BLACKLIST = (KeyError, ValueError, TypeError)
 
+ResultMetadata = NamedTuple(
+    "ResultMetadata",
+    [
+        ("name", str),
+        ("type_code", int),
+        ("display_size", int),
+        ("internal_size", int),
+        ("precision", int),
+        ("scale", int),
+        ("is_nullable", bool),
+    ],
+)
+
 
 def exit_handler(*_):  # pragma: no cover
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
@@ -105,8 +128,7 @@ class SnowflakeCursor(object):
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
     Attributes:
-        description: A list of tuples containing (name, type_code, display_size, internal_size, precision, scale,
-            null_ok) for all columns.
+        description: A list of namedtuples about metadata for all columns.
         rowcount: The number of records updated or selected. If not clear, -1 is returned.
         rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
             determined.
@@ -529,7 +551,7 @@ class SnowflakeCursor(object):
             _get_callback_output_stream: The output stream a GET command's callback should report on.
             _show_progress_bar: Whether or not to show progress bar.
             _statement_params: Extra information that should be sent to Snowflake with query.
-            _is_internal: This flag indicates whether the query is issued internally.
+            _is_internal: This flag indicates whether the query is issued internally by the connector.
             _describe_only: If true, the query will not be executed but return the schema/description of this query.
             _no_results: This flag tells the back-end to not return the result, just fire the query and return the
                 query id of the running query.
@@ -711,15 +733,14 @@ class SnowflakeCursor(object):
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
-    def describe(self, *args, **kwargs) -> List[Tuple]:
-        """Obtain the schema/description of the result without executing the query.
+    def describe(self, *args, **kwargs) -> List[ResultMetadata]:
+        """Obtain the schema of the result without executing the query.
 
         This function takes the same arguments as execute, please refer to that function
         for documentation.
 
         Returns:
-            The schema/description of the result, which is a list of tuples containing (name, type_code, display_size,
-            internal_size, precision, scale, null_ok) for all columns.
+            The schema of the result.
         """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
@@ -747,7 +768,7 @@ class SnowflakeCursor(object):
         for column in data["rowtype"]:
             type_value = FIELD_NAME_TO_ID[column["type"].upper()]
             self._description.append(
-                (
+                ResultMetadata(
                     column["name"],
                     type_value,
                     None,
