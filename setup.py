@@ -211,7 +211,7 @@ setup(
         "boto3>=1.4.4,<2.0.0",
         # While requests is vendored, we use regular requests to perform OCSP checks
         "requests<3.0.0",
-        "certifi<2021.0.0",
+        "certifi<2022.0.0>=2017.4.17",
         "pytz",
         "pycryptodomex>=3.2,!=3.5.0,<4.0.0",
         "pyOpenSSL>=16.2.0,<21.0.0",
@@ -227,7 +227,7 @@ setup(
         # requests requirements
         "chardet>=3.0.2,<4",
         "idna>=2.5,<3",
-        "certifi>=2017.4.17",
+        # "certifi>=2017.4.17",
         'dataclasses<1.0;python_version=="3.6"',
     ],
     namespace_packages=["snowflake"],
