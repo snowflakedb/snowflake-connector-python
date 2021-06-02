@@ -28,6 +28,7 @@ except ImportError:
 
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
