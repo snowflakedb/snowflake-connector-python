@@ -37,7 +37,7 @@ DOWNLOAD_TIMEOUT = 7  # seconds
 
 if TYPE_CHECKING:  # pragma: no cover
     from .converter import SnowflakeConverterType
-    from .cursor import SnowflakeCursor
+    from .cursor import ResultMetadata, SnowflakeCursor
     from .vendored.requests import Response
 
 if installed_pandas:
@@ -72,7 +72,7 @@ def create_batches_from_response(
     cursor: "SnowflakeCursor",
     _format: str,
     data: Dict[str, Any],
-    schema: List[Tuple[str, int, int, int, int, bool]],
+    schema: List["ResultMetadata"],
 ) -> List["ResultBatch"]:
     column_converters: List[Tuple[str, "SnowflakeConverterType"]] = []
     arrow_context: Optional["ArrowConverterContext"] = None
@@ -214,7 +214,7 @@ class ResultBatch(abc.ABC):
         chunk_headers: Optional[Dict[str, str]],
         remote_chunk_info: Optional["RemoteChunkInfo"],
         column_names: Sequence[str],
-        schema: List[Tuple[str, int, int, int, int, bool]],
+        schema: List["ResultMetadata"],
         use_dict_result: bool,
     ):
         self.rowcount = rowcount
@@ -345,7 +345,7 @@ class JSONResultBatch(ResultBatch):
         chunk_headers: Optional[Dict[str, str]],
         remote_chunk_info: Optional["RemoteChunkInfo"],
         column_names: Sequence[str],
-        schema: List[Tuple[str, int, int, int, int, bool]],
+        schema: List["ResultMetadata"],
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
     ):
@@ -365,7 +365,7 @@ class JSONResultBatch(ResultBatch):
         data: Sequence[Sequence[Any]],
         data_len: int,
         column_names: Sequence[str],
-        schema: List[Tuple[str, int, int, int, int, bool]],
+        schema: List["ResultMetadata"],
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
     ):
@@ -479,7 +479,7 @@ class ArrowResultBatch(ResultBatch):
         use_dict_result: bool,
         numpy: bool,
         column_names: Sequence[str],
-        schema: List[Tuple[str, int, int, int, int, bool]],
+        schema: List["ResultMetadata"],
         number_to_decimal: bool,
     ):
         super().__init__(
@@ -557,7 +557,7 @@ class ArrowResultBatch(ResultBatch):
         use_dict_result: bool,
         numpy: bool,
         column_names: Sequence[str],
-        schema: List[Tuple[str, int, int, int, int, bool]],
+        schema: List["ResultMetadata"],
         number_to_decimal: bool,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
