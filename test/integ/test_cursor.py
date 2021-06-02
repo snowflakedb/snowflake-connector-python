@@ -28,7 +28,7 @@ from snowflake.connector import (
     errors,
 )
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
-from snowflake.connector.cursor import SnowflakeCursor
+from snowflake.connector.cursor import ResultMetadata, SnowflakeCursor
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
@@ -1333,13 +1333,49 @@ def test_resultbatches_can_access_schema(conn_cnx, result_format, patch_path):
                 f"from table(generator(rowcount => {rowcount}));"
             )
             result_batches = cur.get_result_batches()
-            batch_schemas = [batch._schema for batch in result_batches]
+            batch_schemas = [batch.schema for batch in result_batches]
             for schema in batch_schemas:
                 # 2 columns in result
                 assert len(schema) == 2
                 # all batches should have the same schema
-                assert schema[0] == ("C1", 0, None, None, 10, 0, False)
-                assert schema[1] == ("C2", 2, None, 16777216, None, None, False)
+                assert schema[0] == ResultMetadata("C1", 0, None, None, 10, 0, False)
+                assert schema[1] == ResultMetadata(
+                    "C2", 2, None, 16777216, None, None, False
+                )
+
+
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize(
+    "result_format,patch_path",
+    (
+        ("json", "snowflake.connector.result_batch.JSONResultBatch.create_iter"),
+        ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
+    ),
+)
+def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, patch_path):
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": result_format}
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute(
+                "select seq4() as c1, randstr(1,random()) as c2 from table(generator(rowcount => 1)) where 1=0"
+            )
+            result_batches = cur.get_result_batches()
+            # verify there is 1 batch and 0 rows in that batch
+            assert len(result_batches) == 1
+            assert result_batches[0].rowcount == 0
+            # verify that the schema is correct
+            schema = result_batches[0].schema
+            assert schema[0] == ResultMetadata("C1", 0, None, None, 10, 0, False)
+            assert schema[1] == ResultMetadata(
+                "C2",
+                2,
+                None,
+                16777216,
+                None,
+                None,
+                False,
+            )
 
 
 def test_optional_telemetry(conn_cnx, capture_sf_telemetry):

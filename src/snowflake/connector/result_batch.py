@@ -221,7 +221,7 @@ class ResultBatch(abc.ABC):
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
         self._column_names = column_names
-        self._schema = schema
+        self.schema = schema
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
         self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
