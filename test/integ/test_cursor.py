@@ -1368,13 +1368,7 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, patch
             schema = result_batches[0].schema
             assert schema[0] == ResultMetadata("C1", 0, None, None, 10, 0, False)
             assert schema[1] == ResultMetadata(
-                "C2",
-                2,
-                None,
-                16777216,
-                None,
-                None,
-                False,
+                "C2", 2, None, 16777216, None, None, False
             )
 
 
