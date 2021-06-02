@@ -905,6 +905,7 @@ class SnowflakeConnection(object):
         is_file_transfer: bool = False,
         statement_params: Optional[Dict[str, str]] = None,
         is_internal: bool = False,
+        describe_only: bool = False,
         _no_results: bool = False,
         _update_current_object: bool = True,
     ):
@@ -920,6 +921,8 @@ class SnowflakeConnection(object):
             data["parameters"] = statement_params
         if is_internal:
             data["isInternal"] = is_internal
+        if describe_only:
+            data["describeOnly"] = describe_only
         if binding_stage is not None:
             # binding stage for bulk array binding
             data["bindStage"] = binding_stage
