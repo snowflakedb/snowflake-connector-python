@@ -77,7 +77,6 @@ def create_batches_from_response(
     column_converters: List[Tuple[str, "SnowflakeConverterType"]] = []
     arrow_context: Optional["ArrowConverterContext"] = None
     rowtypes = data["rowtype"]
-    column_names: List[str] = [c["name"] for c in rowtypes]
     total_len: int = data.get("total", 0)
     first_chunk_len = total_len
     rest_of_chunks: List["ResultBatch"] = []
@@ -113,17 +112,19 @@ def create_batches_from_response(
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 
+        def remote_chunk_info(c):
+            return RemoteChunkInfo(
+                url=c["url"],
+                uncompressedSize=c["uncompressedSize"],
+                compressedSize=c["compressedSize"],
+            )
+
         if _format == "json":
             rest_of_chunks = [
                 JSONResultBatch(
                     c["rowCount"],
                     chunk_headers,
-                    RemoteChunkInfo(
-                        url=c["url"],
-                        uncompressedSize=c["uncompressedSize"],
-                        compressedSize=c["compressedSize"],
-                    ),
-                    column_names,
+                    remote_chunk_info(c),
                     schema,
                     column_converters,
                     cursor._use_dict_result,
@@ -135,15 +136,10 @@ def create_batches_from_response(
                 ArrowResultBatch(
                     c["rowCount"],
                     chunk_headers,
-                    RemoteChunkInfo(
-                        url=c["url"],
-                        uncompressedSize=c["uncompressedSize"],
-                        compressedSize=c["compressedSize"],
-                    ),
+                    remote_chunk_info(c),
                     arrow_context,
                     cursor._use_dict_result,
                     cursor._connection._numpy,
-                    column_names,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
                 )
@@ -155,7 +151,6 @@ def create_batches_from_response(
         first_chunk = JSONResultBatch.from_data(
             data.get("rowset"),
             first_chunk_len,
-            column_names,
             schema,
             column_converters,
             cursor._use_dict_result,
@@ -167,7 +162,6 @@ def create_batches_from_response(
             arrow_context,
             cursor._use_dict_result,
             cursor._connection._numpy,
-            column_names,
             schema,
             cursor._connection._arrow_number_to_decimal,
         )
@@ -179,7 +173,6 @@ def create_batches_from_response(
             arrow_context,
             cursor._use_dict_result,
             cursor._connection._numpy,
-            column_names,
             schema,
             cursor._connection._arrow_number_to_decimal,
         )
@@ -213,14 +206,12 @@ class ResultBatch(abc.ABC):
         rowcount: int,
         chunk_headers: Optional[Dict[str, str]],
         remote_chunk_info: Optional["RemoteChunkInfo"],
-        column_names: Sequence[str],
         schema: List["ResultMetadata"],
         use_dict_result: bool,
     ):
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
-        self._column_names = column_names
         self.schema = schema
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
@@ -344,7 +335,6 @@ class JSONResultBatch(ResultBatch):
         rowcount: int,
         chunk_headers: Optional[Dict[str, str]],
         remote_chunk_info: Optional["RemoteChunkInfo"],
-        column_names: Sequence[str],
         schema: List["ResultMetadata"],
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
@@ -353,7 +343,6 @@ class JSONResultBatch(ResultBatch):
             rowcount,
             chunk_headers,
             remote_chunk_info,
-            column_names,
             schema,
             use_dict_result,
         )
@@ -364,7 +353,6 @@ class JSONResultBatch(ResultBatch):
         cls,
         data: Sequence[Sequence[Any]],
         data_len: int,
-        column_names: Sequence[str],
         schema: List["ResultMetadata"],
         column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
         use_dict_result: bool,
@@ -374,7 +362,6 @@ class JSONResultBatch(ResultBatch):
             len(data),
             None,
             None,
-            column_names,
             schema,
             column_converters,
             use_dict_result,
@@ -402,14 +389,14 @@ class JSONResultBatch(ResultBatch):
             for row in downloaded_data:
                 row_result = {}
                 try:
-                    for (_t, c), v, n in zip(
+                    for (_t, c), v, col in zip(
                         self.column_converters,
                         row,
-                        self._column_names,
+                        self.schema,
                     ):
-                        row_result[n] = v if c is None or v is None else c(v)
+                        row_result[col.name] = v if c is None or v is None else c(v)
                 except Exception as error:
-                    msg = f"Failed to convert: field {n}: {_t}::{v}, Error: {error}"
+                    msg = f"Failed to convert: field {col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
                     yield Error.errorhandler_make_exception(
                         InterfaceError,
@@ -418,18 +405,18 @@ class JSONResultBatch(ResultBatch):
                 yield row_result
         else:
             for row in downloaded_data:
-                row_result = [None] * len(self._column_names)
+                row_result = [None] * len(self.schema)
                 try:
                     idx = 0
-                    for (_t, c), v, _n in zip(
+                    for (_t, c), v, _col in zip(
                         self.column_converters,
                         row,
-                        self._column_names,
+                        self.schema,
                     ):
                         row_result[idx] = v if c is None or v is None else c(v)
                         idx += 1
                 except Exception as error:
-                    msg = f"Failed to convert: field {_n}: {_t}::{v}, Error: {error}"
+                    msg = f"Failed to convert: field {_col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
                     yield Error.errorhandler_make_exception(
                         InterfaceError,
@@ -469,6 +456,18 @@ class JSONResultBatch(ResultBatch):
         raise self._arrow_fetching_error()
 
 
+# TODO: remove
+#    def get_column_converters(self, cursor) -> List[Tuple[str, "SnowflakeConverterType"]]:
+#        def col_data_to_column_converter(col):
+#            type_name = FIELD_ID_TO_NAME[col.type_code].upper()
+#            col_dict = {"scale": col.scale}
+#            python_method = cursor._connection.to_python(type_name, col_dict)
+#            return type_name, python_method
+#
+#        return [col_data_to_column_converter(col) for col in self.schema ]
+#
+
+
 class ArrowResultBatch(ResultBatch):
     def __init__(
         self,
@@ -478,7 +477,6 @@ class ArrowResultBatch(ResultBatch):
         context: "ArrowConverterContext",
         use_dict_result: bool,
         numpy: bool,
-        column_names: Sequence[str],
         schema: List["ResultMetadata"],
         number_to_decimal: bool,
     ):
@@ -486,7 +484,6 @@ class ArrowResultBatch(ResultBatch):
             rowcount,
             chunk_headers,
             remote_chunk_info,
-            column_names,
             schema,
             use_dict_result,
         )
@@ -556,7 +553,6 @@ class ArrowResultBatch(ResultBatch):
         context: "ArrowConverterContext",
         use_dict_result: bool,
         numpy: bool,
-        column_names: Sequence[str],
         schema: List["ResultMetadata"],
         number_to_decimal: bool,
     ):
@@ -568,7 +564,6 @@ class ArrowResultBatch(ResultBatch):
             context,
             use_dict_result,
             numpy,
-            column_names,
             schema,
             number_to_decimal,
         )

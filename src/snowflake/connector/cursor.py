@@ -118,6 +118,19 @@ class ResultMetadata(NamedTuple):
     scale: int
     is_nullable: bool
 
+    @classmethod
+    def from_column(cls, col):
+        type_value = FIELD_NAME_TO_ID[col["type"].upper()]
+        return cls(
+            col["name"],
+            type_value,
+            None,
+            col["length"],
+            col["precision"],
+            col["scale"],
+            col["nullable"],
+        )
+
 
 def exit_handler(*_):  # pragma: no cover
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
@@ -226,7 +239,7 @@ class SnowflakeCursor(object):
                 logger.info(e)
 
     @property
-    def description(self):
+    def description(self) -> List[ResultMetadata]:
         return self._description
 
     @property
@@ -763,17 +776,8 @@ class SnowflakeCursor(object):
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description = [
-            ResultMetadata(
-                column["name"],
-                FIELD_NAME_TO_ID[column["type"].upper()],
-                None,
-                column["length"],
-                column["precision"],
-                column["scale"],
-                column["nullable"],
-            )
-            for column in data["rowtype"]
+        self._description: List[ResultMetadata] = [
+            ResultMetadata.from_column(col) for col in data["rowtype"]
         ]
 
         result_chunks = create_batches_from_response(
