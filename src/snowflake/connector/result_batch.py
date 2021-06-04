@@ -81,12 +81,16 @@ def create_batches_from_response(
     first_chunk_len = total_len
     rest_of_chunks: List["ResultBatch"] = []
     if _format == "json":
-        column_converters: List[Tuple[str, "SnowflakeConverterType"]] = [
-            (
-                c["type"],
-                cursor._connection.converter.to_python_method(c["type"].upper(), c),
+
+        def col_to_converter(col):
+            type_name = col["type"].upper()
+            python_method = cursor._connection.converter.to_python_method(
+                type_name, col
             )
-            for c in rowtypes
+            return type_name, python_method
+
+        column_converters: List[Tuple[str, "SnowflakeConverterType"]] = [
+            col_to_converter(c) for c in rowtypes
         ]
     else:
         rowset_b64 = data.get("rowsetBase64")
@@ -454,18 +458,6 @@ class JSONResultBatch(ResultBatch):
 
     def to_arrow(self):
         raise self._arrow_fetching_error()
-
-
-# TODO: remove
-#    def get_column_converters(self, cursor) -> List[Tuple[str, "SnowflakeConverterType"]]:
-#        def col_data_to_column_converter(col):
-#            type_name = FIELD_ID_TO_NAME[col.type_code].upper()
-#            col_dict = {"scale": col.scale}
-#            python_method = cursor._connection.to_python(type_name, col_dict)
-#            return type_name, python_method
-#
-#        return [col_data_to_column_converter(col) for col in self.schema ]
-#
 
 
 class ArrowResultBatch(ResultBatch):
