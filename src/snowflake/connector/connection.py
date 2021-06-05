@@ -25,7 +25,8 @@ from typing import (
     List,
     Optional,
     Tuple,
-    Type, Union,
+    Type,
+    Union,
 )
 
 from . import errors, proxy

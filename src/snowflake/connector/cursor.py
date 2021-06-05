@@ -200,7 +200,8 @@ class SnowflakeCursor(object):
         self._result = None
         self._use_dict_result = use_dict_result
         self._json_result_class = json_result_class
-        self._query_result_format = None
+        # TODO: self._query_result_format could be defined as an enum
+        self._query_result_format: Optional[str] = None
 
         self._arraysize = 1  # PEP-0249: defaults to 1
 
