@@ -33,6 +33,8 @@ def test_simple_async(conn_cnx, use_pandas):
                 assert len(cur.fetch_pandas_all()) == 1
             else:
                 assert len(cur.fetchall()) == 1
+            assert cur.rowcount
+            assert cur.description
 
 
 def test_async_exec(conn_cnx):

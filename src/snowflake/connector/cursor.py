@@ -761,21 +761,18 @@ class SnowflakeCursor(object):
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description = []
-
-        for column in data["rowtype"]:
-            type_value = FIELD_NAME_TO_ID[column["type"].upper()]
-            self._description.append(
-                ResultMetadata(
-                    column["name"],
-                    type_value,
-                    None,
-                    column["length"],
-                    column["precision"],
-                    column["scale"],
-                    column["nullable"],
-                )
+        self._description = [
+            ResultMetadata(
+                column["name"],
+                FIELD_NAME_TO_ID[column["type"].upper()],
+                None,
+                column["length"],
+                column["precision"],
+                column["scale"],
+                column["nullable"],
             )
+            for column in data["rowtype"]
+        ]
 
         if self._query_result_format == "arrow":
             self.check_can_use_arrow_resultset()
@@ -1141,6 +1138,7 @@ class SnowflakeCursor(object):
             self._result = self._inner_cursor._result
             self._query_result_format = self._inner_cursor._query_result_format
             self._total_rowcount = self._inner_cursor._total_rowcount
+            self._description = self._inner_cursor._description
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
