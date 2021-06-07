@@ -155,7 +155,9 @@ class ResultSet(Iterable[List[Any]]):
     def _fetch_pandas_all(self, **kwargs) -> "pandas.DataFrame":
         """Fetches a single Pandas dataframe."""
         dataframes = list(self._fetch_pandas_batches())
-        return pandas.concat(dataframes, **kwargs)
+        if dataframes:
+            return pandas.concat(dataframes, **kwargs)
+        return pandas.DataFrame(columns=self.batches[0]._column_names)
 
     def _get_metrics(self) -> Dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""

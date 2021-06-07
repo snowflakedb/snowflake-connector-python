@@ -741,8 +741,7 @@ def test_empty(conn_cnx):
         df_count = 0
         for _ in cursor.fetch_pandas_batches():
             df_count += 1
-        # an empty df is yielded
-        assert df_count == 1
+        assert df_count == 0
 
 
 def get_random_seed():
