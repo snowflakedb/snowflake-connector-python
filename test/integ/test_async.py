@@ -22,13 +22,16 @@ except ImportError:
 def test_simple_async(conn_cnx):
     """Simple test to that shows the most simple usage of fire and forget.
 
-    This test also makes sure that wait_until_ready function's sleeping is tested.
+    This test also makes sure that wait_until_ready function's sleeping is tested and
+    that some fields are copied over correctly from the original query.
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             cur.get_results_from_sfqid(cur.sfqid)
             assert len(cur.fetchall()) == 1
+            assert cur.rowcount
+            assert cur.description
 
 
 def test_async_exec(conn_cnx):
