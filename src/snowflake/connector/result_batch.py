@@ -293,6 +293,7 @@ class ResultBatch(abc.ABC):
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
         Iterator[Table],
+        Iterator["pandas.DataFrame"],
     ]:
         """Downloads the data from from blob storage that this ResultChunk points at.
 
@@ -305,18 +306,14 @@ class ResultBatch(abc.ABC):
         raise NotImplementedError()
 
     def check_can_use_pandas(self):
-        global Table
-
-        if Table is None:
+        if not installed_pandas:
             msg = (
                 "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
                 "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
             )
             errno = ER_NO_PYARROW
 
-            Error.errorhandler_wrapper(
-                self.connection,
-                self,
+            Error.errorhandler_make_exception(
                 ProgrammingError,
                 {
                     "msg": msg,
@@ -447,14 +444,17 @@ class JSONResultBatch(ResultBatch):
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
         return iter(parsed_data)
 
-    def to_pandas(self):
-        raise NotSupportedError
-
-    def to_arrow(self):
-        raise NotSupportedError(
+    def _arrow_fetching_error(self):
+        return NotSupportedError(
             f"Trying to use arrow fetching on {type(self)} which "
             f"is not ArrowResultChunk"
         )
+
+    def to_pandas(self):
+        raise self._arrow_fetching_error()
+
+    def to_arrow(self):
+        raise self._arrow_fetching_error()
 
 
 class ArrowResultBatch(ResultBatch):
@@ -578,35 +578,35 @@ class ArrowResultBatch(ResultBatch):
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
         Iterator[Table],
+        Iterator["pandas.DataFrame"],
     ]:
         """The interface used by ResultSet to create an iterator for this ResultBatch."""
         iter_unit: IterUnit = kwargs.pop("iter_unit", IterUnit.ROW_UNIT)
         if iter_unit == IterUnit.TABLE_UNIT:
             structure = kwargs.pop("structure", "pandas")
             if structure == "pandas":
-                return self.get_pandas_iter(**kwargs)
+                return self._get_pandas_iter(**kwargs)
             else:
-                return self.get_arrow_iter()
+                return self._get_arrow_iter()
         else:
             return self._create_iter(iter_unit=iter_unit)
 
-    def get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
+    def _get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
         """Returns an iterator for this batch which yields a pandas DataFrame"""
-        self.check_can_use_pandas()
-        table = next(self.get_arrow_iter(), None)
-        if table:
-            yield table.to_pandas(**kwargs)
-        else:
-            yield pandas.DataFrame(columns=self._column_names)
+        yield self.to_pandas(**kwargs)
 
-    def to_pandas(self) -> "pandas.DataFrame":
+    def to_pandas(self, **kwargs) -> "pandas.DataFrame":
         """Returns this batch as a pandas DataFrame"""
-        return next(self.get_pandas_iter())
+        self.check_can_use_pandas()
+        table = next(self._get_arrow_iter(), None)
+        if table:
+            return table.to_pandas(**kwargs)
+        return pandas.DataFrame(columns=self._column_names)
 
-    def get_arrow_iter(self) -> Iterator[Table]:
+    def _get_arrow_iter(self) -> Iterator[Table]:
         """Returns an iterator for this batch which yields a pyarrow Table"""
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT)
 
-    def to_arrow(self) -> "pandas.DataFrame":
+    def to_arrow(self) -> Optional[Table]:
         """Returns this batch as a pyarrow Table"""
-        return next(self.get_arrow_iter())
+        return next(self.get_arrow_iter(), None)

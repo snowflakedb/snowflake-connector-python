@@ -118,7 +118,7 @@ class ResultSet(Iterable[List[Any]]):
                 metrics.get(DownloadMetrics.parse.value),
             )
 
-    def __can_create_arrow_iter(self):
+    def __can_create_arrow_iter(self) -> None:
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
         head_type = type(self.batches[0])
@@ -135,7 +135,7 @@ class ResultSet(Iterable[List[Any]]):
         self.__can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
 
-    def _fetch_arrow_all(self):
+    def _fetch_arrow_all(self) -> Optional[Table]:
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
         tables = list(self._fetch_arrow_batches())
         if tables:
@@ -143,7 +143,7 @@ class ResultSet(Iterable[List[Any]]):
         else:
             return None
 
-    def _fetch_pandas_batches(self, **kwargs):
+    def _fetch_pandas_batches(self, **kwargs) -> Iterator["pandas.DataFrame"]:
         """Fetches Pandas dataframes in batches, where batch refers to Snowflake Chunk.
 
         Thus, the batch size (the number of rows in dataframe) is determined by
@@ -152,7 +152,7 @@ class ResultSet(Iterable[List[Any]]):
         self.__can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas")
 
-    def _fetch_pandas_all(self, **kwargs):
+    def _fetch_pandas_all(self, **kwargs) -> "pandas.DataFrame":
         """Fetches a single Pandas dataframe."""
         dataframes = list(self._fetch_pandas_batches())
         return pandas.concat(dataframes, **kwargs)
@@ -176,6 +176,7 @@ class ResultSet(Iterable[List[Any]]):
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
         Iterator[Table],
+        Iterator["pandas.DataFrame"],
     ]:
         """Set up a new iterator through all batches with first 5 chunks downloaded.
 
