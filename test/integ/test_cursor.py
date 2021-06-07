@@ -1306,13 +1306,6 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                     f"from table(generator(rowcount => {rowcount}));"
                 )
                 result_batches = cur.get_result_batches()
-                assert len(result_batches) > 5
-                assert result_batches[0]._local  # Sanity check first chunk being local
-                cur.fetchone()  # Trigger pre-fetching
-                # While the first chunk is local we still call _download on it, which
-                #  short circuits and just parses (for JSON batches) and then return an
-                #  an iterator through that data, so we expect the call count to be 5
-                assert patched_download.call_count == 5
                 batch_schemas = [batch.schema for batch in result_batches]
                 for schema in batch_schemas:
                     # all batches should have the same schema
@@ -1320,6 +1313,14 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                         ResultMetadata("C1", 0, None, None, 10, 0, False),
                         ResultMetadata("C2", 2, None, 16777216, None, None, False),
                     ]
+                assert patched_download.call_count == 0
+                assert len(result_batches) > 5
+                assert result_batches[0]._local  # Sanity check first chunk being local
+                cur.fetchone()  # Trigger pre-fetching
+                # While the first chunk is local we still call _download on it, which
+                #  short circuits and just parses (for JSON batches) and then return an
+                #  an iterator through that data, so we expect the call count to be 5
+                assert patched_download.call_count == 5
 
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")
