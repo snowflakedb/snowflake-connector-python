@@ -25,6 +25,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     Union,
 )
 
@@ -566,7 +567,9 @@ class SnowflakeConnection(object):
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(self, cursor_class: SnowflakeCursor = SnowflakeCursor):
+    def cursor(
+        self, cursor_class: Type[SnowflakeCursor] = SnowflakeCursor
+    ) -> SnowflakeCursor:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
         if not self.rest:
