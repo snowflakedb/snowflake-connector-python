@@ -305,7 +305,7 @@ class ResultBatch(abc.ABC):
         """
         raise NotImplementedError()
 
-    def check_can_use_pandas(self):
+    def _check_can_use_pandas(self) -> None:
         if not installed_pandas:
             msg = (
                 "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
@@ -572,6 +572,26 @@ class ArrowResultBatch(ResultBatch):
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
 
+    def _get_arrow_iter(self) -> Iterator[Table]:
+        """Returns an iterator for this batch which yields a pyarrow Table"""
+        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT)
+
+    def to_arrow(self) -> Optional[Table]:
+        """Returns this batch as a pyarrow Table"""
+        return next(self._get_arrow_iter(), None)
+
+    def to_pandas(self, **kwargs) -> "pandas.DataFrame":
+        """Returns this batch as a pandas DataFrame"""
+        self._check_can_use_pandas()
+        table = next(self._get_arrow_iter())
+        if table:
+            return table.to_pandas(**kwargs)
+        return pandas.DataFrame(columns=self._column_names)
+
+    def _get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
+        """An iterator for this batch which yields a pandas DataFrame"""
+        yield self.to_pandas(**kwargs)
+
     def create_iter(
         self, **kwargs
     ) -> Union[
@@ -590,23 +610,3 @@ class ArrowResultBatch(ResultBatch):
                 return self._get_arrow_iter()
         else:
             return self._create_iter(iter_unit=iter_unit)
-
-    def _get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
-        """An iterator for this batch which yields a pandas DataFrame"""
-        yield self.to_pandas(**kwargs)
-
-    def to_pandas(self, **kwargs) -> "pandas.DataFrame":
-        """Returns this batch as a pandas DataFrame"""
-        self.check_can_use_pandas()
-        table = next(self._get_arrow_iter())
-        if table:
-            return table.to_pandas(**kwargs)
-        return pandas.DataFrame(columns=self._column_names)
-
-    def _get_arrow_iter(self) -> Iterator[Table]:
-        """Returns an iterator for this batch which yields a pyarrow Table"""
-        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT)
-
-    def to_arrow(self) -> Optional[Table]:
-        """Returns this batch as a pyarrow Table"""
-        return next(self._get_arrow_iter(), None)

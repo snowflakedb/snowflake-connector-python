@@ -1257,7 +1257,6 @@ def test_resultbatch(
                     t.message["type"] == TelemetryField.GET_PARTITIONS_USED
                     for t in telemetry_data.records
                 )
-        # TODO: add a fixture to easily capture telemetry data
         telemetry_data = []
         add_log_mock = mock.Mock()
         add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
