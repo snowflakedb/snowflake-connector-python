@@ -5,10 +5,6 @@
 #ifndef PC_PYTHON_HELPERS_HPP
 #define PC_PYTHON_HELPERS_HPP
 
-/** this two header files will be removed when we replace arrow::Status with our
- * own status data structure */
-#include <arrow/python/platform.h>
-#include <arrow/api.h>
 #include "logging.hpp"
 
 namespace sf
@@ -20,9 +16,6 @@ namespace py
 class UniqueRef;
 
 using Logger = ::sf::Logger;
-
-/** All arrow::Status will be replaced by our own data structure in the future
- */
 
 /**
  * \brief: import a python module
