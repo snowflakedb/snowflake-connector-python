@@ -35,13 +35,13 @@ public:
   {
   }
 
-  UniqueRef(UniqueRef&& other) : UniqueRef(other.detach())
+  explicit UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
   {
   }
 
   UniqueRef& operator=(UniqueRef&& other)
   {
-    m_pyObj = other.detach();
+    reset(other.release());
     return *this;
   }
 
@@ -50,30 +50,25 @@ public:
     reset();
   }
 
-  void reset()
-  {
-    reset(nullptr);
-  }
-
-  void reset(PyObject* pyObj)
+  void reset(PyObject* pyObj = nullptr)
   {
     Py_XDECREF(m_pyObj);
     m_pyObj = pyObj;
   }
 
-  PyObject* detach()
+  PyObject* release() noexcept
   {
     PyObject* tmp = m_pyObj;
     m_pyObj = nullptr;
     return tmp;
   }
 
-  PyObject* get() const
+  PyObject* get() const noexcept
   {
     return m_pyObj;
   }
 
-  bool empty() const
+  bool empty() const noexcept
   {
     return m_pyObj == nullptr;
   }
@@ -96,37 +91,18 @@ public:
   PyUniqueLock(PyUniqueLock&&) = delete;
   PyUniqueLock& operator=(PyUniqueLock&&) = delete;
 
-  PyUniqueLock() : m_isLocked(false)
+  PyUniqueLock()
   {
-    acquire();
+    m_state = PyGILState_Ensure();
   }
 
   ~PyUniqueLock()
   {
-    release();
-  }
-
-  void acquire()
-  {
-    if (!m_isLocked)
-    {
-      m_state = PyGILState_Ensure();
-      m_isLocked = true;
-    }
-  }
-
-  void release()
-  {
-    if (m_isLocked)
-    {
-      PyGILState_Release(m_state);
-      m_isLocked = false;
-    }
+    PyGILState_Release(m_state);
   }
 
 private:
   PyGILState_STATE m_state;
-  bool m_isLocked;
 };
 
 }  // namespace py
