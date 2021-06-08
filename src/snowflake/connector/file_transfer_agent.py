@@ -405,6 +405,7 @@ class SnowflakeFileTransferAgent:
         num_total_files = len(metas)
         transfer_metadata = TransferMetadata()  # this is protected by cv_chunk_process
         is_upload = self._command_type == CMD_TYPE_UPLOAD
+        exception_caught_in_callback: Optional[Exception] = None
 
         def notify_file_completed():
             # Increment the number of completed files, then notify the main thread.
@@ -450,7 +451,7 @@ class SnowflakeFileTransferAgent:
                                 )
                             )
                         cv_chunk_process.notify()
-            except Exception:  # NOQA
+            except Exception as e:  # NOQA
                 # TODO: if an exception happens in a callback, the exception will not
                 #  propagate to the main thread. We need to save these Exceptions
                 #  somewhere and then re-raise by the main thread. For now let's log
@@ -459,6 +460,10 @@ class SnowflakeFileTransferAgent:
                 logger.error(
                     "An exception was raised in preprocess_done_cb", exc_info=True
                 )
+                with cv_main_thread:
+                    nonlocal exception_caught_in_callback
+                    exception_caught_in_callback = e
+                    cv_main_thread.notify()
 
         def transfer_done_cb(
             future: Future, done_client: "SnowflakeStorageClient", chunk_id: int
@@ -503,7 +508,7 @@ class SnowflakeFileTransferAgent:
                             postprocess_future.add_done_callback(
                                 partial(postprocess_done_cb, done_client=done_client)
                             )
-            except Exception:  # NOQA
+            except Exception as e:  # NOQA
                 # TODO: if an exception happens in a callback, the exception will not
                 #  propagate to the main thread. We need to save these Exceptions
                 #  somewhere and then re-raise by the main thread. For now let's log
@@ -512,6 +517,10 @@ class SnowflakeFileTransferAgent:
                 logger.error(
                     "An exception was raised in transfer_done_cb", exc_info=True
                 )
+                with cv_main_thread:
+                    nonlocal exception_caught_in_callback
+                    exception_caught_in_callback = e
+                    cv_main_thread.notify()
 
         def postprocess_done_cb(future: Future, done_client: "SnowflakeStorageClient"):
             try:
@@ -528,7 +537,7 @@ class SnowflakeFileTransferAgent:
                         )
                     # Whether there was an exception or not, we're done the file.
                     notify_file_completed()
-            except Exception:  # NOQA
+            except Exception as e:  # NOQA
                 # TODO: if an exception happens in a callback, the exception will not
                 #  propagate to the main thread. We need to save these Exceptions
                 #  somewhere and then re-raise by the main thread. For now let's log
@@ -537,6 +546,10 @@ class SnowflakeFileTransferAgent:
                 logger.error(
                     "An exception was raised in postprocess_done_cb", exc_info=True
                 )
+                with cv_main_thread:
+                    nonlocal exception_caught_in_callback
+                    exception_caught_in_callback = e
+                    cv_main_thread.notify()
 
         for file_client in files:
             if is_upload:
@@ -552,6 +565,8 @@ class SnowflakeFileTransferAgent:
             current_files_competed = transfer_metadata.num_files_completed
             while current_files_competed < num_total_files:
                 cv_main_thread.wait()
+                if exception_caught_in_callback is not None:
+                    raise exception_caught_in_callback
 
         self._results = metas
 
