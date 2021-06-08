@@ -168,7 +168,7 @@ m_context(context),
 m_pyTableObjRef(nullptr),
 m_convert_number_to_decimal(number_to_decimal)
 {
-  py::UniqueRef tz = py::UniqueRef(PyObject_GetAttrString(m_context, "_timezone"));
+  py::UniqueRef tz(PyObject_GetAttrString(m_context, "_timezone"));
   PyArg_Parse(tz.get(), "s", &m_timezone);
 }
 
