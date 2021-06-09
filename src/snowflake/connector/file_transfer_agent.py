@@ -576,7 +576,7 @@ class SnowflakeFileTransferAgent:
         if self._stage_location_type == LOCAL_FS:
             return SnowflakeLocalStorageClient(
                 meta,
-                self._stage_infom
+                self._stage_info,
                 self._use_s3_regional_url,
             )
         elif self._stage_location_type == AZURE_FS:
