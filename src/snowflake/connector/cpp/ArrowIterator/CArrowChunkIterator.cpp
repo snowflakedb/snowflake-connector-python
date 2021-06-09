@@ -442,7 +442,7 @@ void DictCArrowChunkIterator::createRowPyObject()
   m_latestReturnedRow.reset(PyDict_New());
   for (int i = 0; i < m_currentSchema->num_fields(); i++)
   {
-    py::UniqueRef value = py::UniqueRef(m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+    py::UniqueRef value(m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
     if (!value.empty())
     {
       // PyDict_SetItemString doesn't steal a reference to value.get().
