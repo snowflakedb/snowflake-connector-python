@@ -16,11 +16,11 @@ from typing import TYPE_CHECKING
 
 from boto3 import Session
 
-from .azure_util import SnowflakeAzureUtil
+from .azure_util_sdk import SnowflakeAzureUtil
 from .constants import ResultStatus
 from .encryption_util import SnowflakeEncryptionUtil
-from .gcs_util import SnowflakeGCSUtil
-from .s3_util import SnowflakeS3Util
+from .gcs_util_sdk import SnowflakeGCSUtil
+from .s3_util_sdk import SnowflakeS3Util
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
