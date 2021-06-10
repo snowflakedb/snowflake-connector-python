@@ -562,8 +562,7 @@ class SnowflakeFileTransferAgent:
             transfer_metadata.num_files_started += 1  # TODO: do we need this?
 
         with cv_main_thread:
-            current_files_competed = transfer_metadata.num_files_completed
-            while current_files_competed < num_total_files:
+            while transfer_metadata.num_files_completed < num_total_files:
                 cv_main_thread.wait()
                 if exception_caught_in_callback is not None:
                     raise exception_caught_in_callback
