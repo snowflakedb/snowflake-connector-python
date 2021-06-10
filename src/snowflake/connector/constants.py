@@ -5,7 +5,7 @@
 #
 
 from collections import defaultdict
-from enum import Enum, unique
+from enum import Enum, auto, unique
 from typing import NamedTuple, Optional
 
 DBAPI_TYPE_STRING = 0
@@ -206,6 +206,13 @@ class OCSPMode(Enum):
     FAIL_CLOSED = "FAIL_CLOSED"
     FAIL_OPEN = "FAIL_OPEN"
     INSECURE = "INSECURE"
+
+
+class FileTransferType(Enum):
+    """This enum keeps track of the possible file transfer types."""
+
+    PUT = auto()
+    GET = auto()
 
 
 @unique
