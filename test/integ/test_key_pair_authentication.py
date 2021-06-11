@@ -22,7 +22,7 @@ import snowflake.connector
     "input_account,expected_account",
     [
         ("s3testaccount.global", "S3TESTACCOUNT.GLOBAL"),
-        ("acct-with-dashes", "ACCT_WITH_DASHES"),
+        ("acct-with-dashes", "ACCT-WITH-DASHES"),
         ("testaccount.extra", "TESTACCOUNT"),
         ("testaccount-user.global", "TESTACCOUNT"),
         ("normalaccount", "NORMALACCOUNT"),
@@ -62,6 +62,49 @@ def test_get_token_from_private_key(input_account, expected_account):
     assert datetime.utcnow() + timedelta(minutes=1441) > datetime.fromtimestamp(
         decoded_token.get("exp")
     )
+
+
+@pytest.mark.skipolddriver
+def test_regionless_url_JWT_token_validity(request, db_parameters):
+
+    test_user = "admin"
+
+    db_config = {
+        "account": "amoghorgurl-keypairauth_test_alias.testdns",
+        "user": "admin",
+        "role": "ACCOUNTADMIN",
+        "timezone": "UTC",
+    }
+
+    db_config_with_pw = {
+        "account": "amoghorgurl-keypairauth_test_alias.testdns",
+        "user": "admin",
+        "password": "Password1",
+        "role": "ACCOUNTADMIN",
+        "timezone": "UTC",
+    }
+
+    cnx = snowflake.connector.connect(**db_config_with_pw)
+    cursor = cnx.cursor()
+    cursor.execute(
+        """
+    use role accountadmin
+    """
+    )
+
+    private_key_der, public_key_der_encoded = generate_key_pair(2048)
+
+    cnx.cursor().execute(
+        """
+    alter user {user} set rsa_public_key='{public_key}'
+    """.format(
+            user=test_user, public_key=public_key_der_encoded
+        )
+    )
+
+    db_config["private_key"] = private_key_der
+    with snowflake.connector.connect(**db_config) as _:
+        pass
 
 
 @pytest.mark.skipolddriver
