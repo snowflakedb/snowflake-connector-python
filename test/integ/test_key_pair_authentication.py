@@ -84,26 +84,16 @@ def test_regionless_url_JWT_token_validity(request, db_parameters):
         "timezone": "UTC",
     }
 
-    cnx = snowflake.connector.connect(**db_config_with_pw)
-    cursor = cnx.cursor()
-    cursor.execute(
-        """
-    use role accountadmin
-    """
-    )
-
-    private_key_der, public_key_der_encoded = generate_key_pair(2048)
-
-    cnx.cursor().execute(
-        """
-    alter user {user} set rsa_public_key='{public_key}'
-    """.format(
-            user=test_user, public_key=public_key_der_encoded
-        )
-    )
+    with snowflake.connector.connect(**db_config_with_pw) as cnx:
+        with cnx.cursor() as cursor:
+            cursor.execute("use role accountadmin")
+            private_key_der, public_key_der_encoded = generate_key_pair(2048)
+            cursor.execute(
+                f"alter user {test_user} set rsa_public_key='{public_key_der_encoded}'"
+            )
 
     db_config["private_key"] = private_key_der
-    with snowflake.connector.connect(**db_config) as _:
+    with snowflake.connector.connect(**db_config):
         pass
 
 
