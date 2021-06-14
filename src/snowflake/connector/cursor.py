@@ -845,7 +845,7 @@ class SnowflakeCursor(object):
 
     def fetch_arrow_batches(self) -> Iterator[Table]:
         self.check_can_use_arrow_resultset()
-        if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
+        if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(
             TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
@@ -854,7 +854,7 @@ class SnowflakeCursor(object):
 
     def fetch_arrow_all(self) -> Optional[Table]:
         self.check_can_use_arrow_resultset()
-        if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
+        if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
         return self._result_set._fetch_arrow_all()
@@ -862,7 +862,7 @@ class SnowflakeCursor(object):
     def fetch_pandas_batches(self, **kwargs) -> Iterator["pandas.DataFrame"]:
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
-        if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
+        if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(
             TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
