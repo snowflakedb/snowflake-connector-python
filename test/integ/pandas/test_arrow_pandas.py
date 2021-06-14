@@ -1047,23 +1047,25 @@ def test_pandas_telemetry(
 def test_batch_to_pandas_arrow(conn_cnx, result_format):
     rowcount = 10
     with conn_cnx() as cnx:
-        cursor = cnx.cursor()
-        cursor.execute(SQL_ENABLE_ARROW)
-        cursor.execute(
-            f"select seq4() as foo, seq4() as bar from table(generator(rowcount=>{rowcount})) order by foo asc"
-        )
-        batches = cursor.get_result_batches()
-        assert len(batches) == 1
-        batch = batches[0]
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            cur.execute(
+                f"select seq4() as foo, seq4() as bar from table(generator(rowcount=>{rowcount})) order by foo asc"
+            )
+            batches = cur.get_result_batches()
+            assert len(batches) == 1
+            batch = batches[0]
 
-        # check that size, columns, and FOO column data is correct
-        if result_format == "pandas":
-            df = batch.to_pandas()
-            assert df.shape == (10, 2)
-            assert all(df.columns == ["FOO", "BAR"])
-            assert list(df.FOO) == list(range(rowcount))
-        elif result_format == "arrow":
-            arrow_table = batch.to_arrow()
-            assert arrow_table.shape == (10, 2)
-            assert arrow_table.column_names == ["FOO", "BAR"]
-            assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
+            # check that size, columns, and FOO column data is correct
+            if result_format == "pandas":
+                df = batch.to_pandas()
+                assert type(df) is pandas.DataFrame
+                assert df.shape == (10, 2)
+                assert all(df.columns == ["FOO", "BAR"])
+                assert list(df.FOO) == list(range(rowcount))
+            elif result_format == "arrow":
+                arrow_table = batch.to_arrow()
+                assert type(arrow_table) is pyarrow.Table
+                assert arrow_table.shape == (10, 2)
+                assert arrow_table.column_names == ["FOO", "BAR"]
+                assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))

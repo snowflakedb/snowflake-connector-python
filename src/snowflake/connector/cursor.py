@@ -59,7 +59,7 @@ if installed_pandas:
     from pyarrow import Table
 else:
     logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
-    pyarrow = None
+    Table = None
 
 try:
     from .arrow_iterator import PyArrowIterator  # NOQA
