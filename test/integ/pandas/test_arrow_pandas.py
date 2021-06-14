@@ -9,6 +9,7 @@ import random
 import time
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
 
 import numpy
 import pytest
@@ -17,7 +18,10 @@ try:
     from snowflake.connector.constants import IterUnit
 except ImportError:
     # This is because of olddriver tests
-    IterUnit.TABLE_UNIT = "table"
+    class IterUnit(Enum):
+        ROW_UNIT = "row"
+        TABLE_UNIT = "table"
+
 
 try:
     from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
