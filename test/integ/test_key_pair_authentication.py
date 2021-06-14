@@ -7,6 +7,7 @@
 import uuid
 from datetime import datetime, timedelta
 from os import path
+from test.integ.conftest import RUNNING_AGAINST_LOCAL_SNOWFLAKE
 
 import jwt
 import pytest
@@ -64,8 +65,12 @@ def test_get_token_from_private_key(input_account, expected_account):
     )
 
 
-@pytest.mark.skipolddriver
-def test_regionless_url_JWT_token_validity(request, db_parameters):
+@pytest.mark.internal
+@pytest.mark.skipif(
+    not RUNNING_AGAINST_LOCAL_SNOWFLAKE,
+    reason="connection timeouts occur when attempting to connect to this external account with automated testing",
+)
+def test_regionless_url_JWT_token_validity(db_parameters):
 
     test_user = "admin"
 
