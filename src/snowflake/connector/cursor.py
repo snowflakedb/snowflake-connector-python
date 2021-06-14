@@ -15,6 +15,7 @@ from threading import Lock, Timer
 from typing import (
     IO,
     TYPE_CHECKING,
+    Any,
     Dict,
     Iterator,
     List,
@@ -119,11 +120,11 @@ class ResultMetadata(NamedTuple):
     is_nullable: bool
 
     @classmethod
-    def from_column(cls, col):
-        type_value = FIELD_NAME_TO_ID[col["type"].upper()]
+    def from_column(cls, col: Dict[str, Any]):
+        """Initializes a ResultMetadata object from the column description in the query response"""
         return cls(
             col["name"],
-            type_value,
+            FIELD_NAME_TO_ID[col["type"].upper()],
             None,
             col["length"],
             col["precision"],
