@@ -248,6 +248,10 @@ class ResultBatch(abc.ABC):
             return None
         return self._remote_chunk_info.uncompressedSize
 
+    @property
+    def column_names(self) -> List[str]:
+        return [col.name for col in self.schema]
+
     def __iter__(
         self,
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
