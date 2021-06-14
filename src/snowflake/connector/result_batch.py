@@ -30,6 +30,8 @@ from .options import installed_pandas, pandas
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
 from .vendored import requests
 
+# from threading import Lock
+
 logger = getLogger(__name__)
 
 MAX_DOWNLOAD_RETRY = 10
@@ -49,6 +51,8 @@ else:
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
+
+# load_lock = Lock()
 
 
 @unique
@@ -577,12 +581,15 @@ class ArrowResultBatch(ResultBatch):
         Iterator[Table],
     ]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
+        logger.info("DOWNLOAD START %d", self.rowcount)
+        iter_unit = kwargs.pop("iter_unit", ROW_UNIT)
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download()
         with TimerContextManager() as load_metric:
             loaded_data = self._load(response, iter_unit)
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
+        logger.info("DOWNLOAD FINISH %d", self.rowcount)
         return loaded_data
 
     def _get_arrow_iter(self) -> Iterator[Table]:
