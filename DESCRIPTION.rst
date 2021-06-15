@@ -9,6 +9,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+- v2.4.5(June 15,2021)
+
+   - Fix for incorrect JWT token invalidity when an account alias with a dash in it is used for regionless account URL.
 
 - v2.4.4(May 30,2021)
 
