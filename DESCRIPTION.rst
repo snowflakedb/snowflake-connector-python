@@ -10,6 +10,11 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.4.5(June 18,2021)
+
+   - Fix for incorrect JWT token invalidity when an account alias with a dash in it is used for regionless account URL.
+
+
 - v2.4.4(May 30,2021)
 
    - Fixed a segfault issue when using DictCursor and arrow result format with out of range dates.
