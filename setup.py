@@ -51,7 +51,7 @@ cmd_class = {}
 
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
-    "pyarrow>=3.0.0,<3.1.0",
+    "pyarrow>=4.0.0,<4.1.0",
     "pandas>=1.0.0,<1.3.0",
 ]
 
@@ -87,14 +87,14 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
-            "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
+            "linux": ["libarrow.so.400", "libarrow_python.so.400"],
+            "darwin": ["libarrow.400.dylib", "libarrow_python.400.dylib"],
             "win32": ["arrow.dll", "arrow_python.dll"],
         }
 
         arrow_libs_to_link = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
-            "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
+            "linux": ["libarrow.so.400", "libarrow_python.so.400"],
+            "darwin": ["libarrow.400.dylib", "libarrow_python.400.dylib"],
             "win32": ["arrow.lib", "arrow_python.lib"],
         }
 
@@ -211,7 +211,6 @@ setup(
         "boto3>=1.4.4,<2.0.0",
         # While requests is vendored, we use regular requests to perform OCSP checks
         "requests<3.0.0",
-        "certifi<2021.0.0",
         "pytz",
         "pycryptodomex>=3.2,!=3.5.0,<4.0.0",
         "pyOpenSSL>=16.2.0,<21.0.0",
@@ -266,7 +265,7 @@ setup(
         ],
         "pandas": pandas_requirements,
         "development": [
-            "pytest<6.2.0",
+            "pytest<6.3.0",
             "pytest-cov",
             "pytest-rerunfailures",
             "pytest-timeout",

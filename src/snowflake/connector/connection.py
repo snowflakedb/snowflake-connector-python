@@ -25,6 +25,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     Union,
 )
 
@@ -95,11 +96,7 @@ from .network import (
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient
 from .telemetry_oob import TelemetryService
-from .time_util import (
-    DEFAULT_MASTER_VALIDITY_IN_SECONDS,
-    HeartBeatTimer,
-    get_time_millis,
-)
+from .time_util import HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
 
 
@@ -159,7 +156,7 @@ DEFAULT_CONFIGURATION = {
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
     "autocommit": (None, (type(None), bool)),  # snowflake
-    "client_session_keep_alive": (False, bool),  # snowflake
+    "client_session_keep_alive": (None, (type(None), bool)),  # snowflake
     "client_session_keep_alive_heartbeat_frequency": (
         None,
         (type(None), int),
@@ -371,15 +368,11 @@ class SnowflakeConnection(object):
 
     @client_session_keep_alive.setter
     def client_session_keep_alive(self, value):
-        self._client_session_keep_alive = True if value else False
+        self._client_session_keep_alive = value
 
     @property
     def client_session_keep_alive_heartbeat_frequency(self):
-        return (
-            self._client_session_keep_alive_heartbeat_frequency
-            if self._client_session_keep_alive_heartbeat_frequency
-            else DEFAULT_MASTER_VALIDITY_IN_SECONDS / 16
-        )
+        return self._client_session_keep_alive_heartbeat_frequency
 
     @client_session_keep_alive_heartbeat_frequency.setter
     def client_session_keep_alive_heartbeat_frequency(self, value):
@@ -566,7 +559,9 @@ class SnowflakeConnection(object):
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(self, cursor_class: SnowflakeCursor = SnowflakeCursor):
+    def cursor(
+        self, cursor_class: Type[SnowflakeCursor] = SnowflakeCursor
+    ) -> SnowflakeCursor:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
         if not self.rest:
@@ -697,10 +692,12 @@ class SnowflakeConnection(object):
                 PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS
             ] = True
 
-        if self.client_session_keep_alive:
-            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = True
+        if self.client_session_keep_alive is not None:
+            self._session_parameters[
+                PARAMETER_CLIENT_SESSION_KEEP_ALIVE
+            ] = self._client_session_keep_alive
 
-        if self.client_session_keep_alive_heartbeat_frequency:
+        if self.client_session_keep_alive_heartbeat_frequency is not None:
             self._session_parameters[
                 PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY
             ] = self._validate_client_session_keep_alive_heartbeat_frequency()
@@ -728,6 +725,9 @@ class SnowflakeConnection(object):
         self._password = None  # ensure password won't persist
 
         if self.client_session_keep_alive:
+            # This will be called after the heartbeat frequency has actually been set.
+            # By this point it should have been decided if the heartbeat has to be enabled
+            # and what would the heartbeat frequency be
             self._add_heartbeat()
 
     def __preprocess_auth_instance(self, auth_instance):
@@ -905,6 +905,7 @@ class SnowflakeConnection(object):
         is_file_transfer: bool = False,
         statement_params: Optional[Dict[str, str]] = None,
         is_internal: bool = False,
+        describe_only: bool = False,
         _no_results: bool = False,
         _update_current_object: bool = True,
     ):
@@ -920,6 +921,8 @@ class SnowflakeConnection(object):
             data["parameters"] = statement_params
         if is_internal:
             data["isInternal"] = is_internal
+        if describe_only:
+            data["describeOnly"] = describe_only
         if binding_stage is not None:
             # binding stage for bulk array binding
             data["bindStage"] = binding_stage
@@ -1203,7 +1206,10 @@ class SnowflakeConnection(object):
         """Validate and return heartbeat frequency in seconds."""
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
-        if self.client_session_keep_alive_heartbeat_frequency > real_max:
+        if self.client_session_keep_alive_heartbeat_frequency is None:
+            # This is an unlikely scenario but covering it just in case.
+            self._client_session_keep_alive_heartbeat_frequency = real_min
+        elif self.client_session_keep_alive_heartbeat_frequency > real_max:
             self._client_session_keep_alive_heartbeat_frequency = real_max
         elif self.client_session_keep_alive_heartbeat_frequency < real_min:
             self._client_session_keep_alive_heartbeat_frequency = real_min
@@ -1239,8 +1245,15 @@ class SnowflakeConnection(object):
                 else:
                     TelemetryService.get_instance().disable()
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
-                self.client_session_keep_alive = value
-            elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == name:
+                # Only set if the local config is None.
+                # Always give preference to user config.
+                if self.client_session_keep_alive is None:
+                    self.client_session_keep_alive = value
+            elif (
+                PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == name
+                and self.client_session_keep_alive_heartbeat_frequency is None
+            ):
+                # Only set if local value hasn't been set already.
                 self.client_session_keep_alive_heartbeat_frequency = value
             elif PARAMETER_SERVICE_NAME == name:
                 self.service_name = value

@@ -12,7 +12,17 @@ import time
 import uuid
 from logging import getLogger
 from threading import Lock, Timer
-from typing import IO, TYPE_CHECKING, Dict, List, Optional, Tuple, Type, Union
+from typing import (
+    IO,
+    TYPE_CHECKING,
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
@@ -94,6 +104,16 @@ ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 INCIDENT_BLACKLIST = (KeyError, ValueError, TypeError)
 
 
+class ResultMetadata(NamedTuple):
+    name: str
+    type_code: int
+    display_size: int
+    internal_size: int
+    precision: int
+    scale: int
+    is_nullable: bool
+
+
 def exit_handler(*_):  # pragma: no cover
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
     print("\nForce exit")
@@ -105,7 +125,7 @@ class SnowflakeCursor(object):
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
     Attributes:
-        description: tuple of name, type_code, display_size, internal_size, precisio, scale, null_ok
+        description: A list of namedtuples about metadata for all columns.
         rowcount: The number of records updated or selected. If not clear, -1 is returned.
         rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
             determined.
@@ -180,6 +200,8 @@ class SnowflakeCursor(object):
         self._result = None
         self._use_dict_result = use_dict_result
         self._json_result_class = json_result_class
+        # TODO: self._query_result_format could be defined as an enum
+        self._query_result_format: Optional[str] = None
 
         self._arraysize = 1  # PEP-0249: defaults to 1
 
@@ -335,6 +357,7 @@ class SnowflakeCursor(object):
         binding_params: Union[Tuple, Dict[str, Dict[str, str]]] = None,
         binding_stage: Optional[str] = None,
         is_internal: bool = False,
+        describe_only: bool = False,
         _no_results: bool = False,
         _is_put_get=None,
     ):
@@ -439,6 +462,7 @@ class SnowflakeCursor(object):
                 is_file_transfer=bool(self._is_file_transfer),
                 statement_params=statement_params,
                 is_internal=is_internal,
+                describe_only=describe_only,
                 _no_results=_no_results,
             )
         finally:
@@ -501,6 +525,7 @@ class SnowflakeCursor(object):
         _show_progress_bar: bool = True,
         _statement_params: Optional[Dict[str, str]] = None,
         _is_internal: bool = False,
+        _describe_only: bool = False,
         _no_results: bool = False,
         _use_ijson: bool = False,
         _is_put_get: Optional[bool] = None,
@@ -525,6 +550,8 @@ class SnowflakeCursor(object):
             _get_callback_output_stream: The output stream a GET command's callback should report on.
             _show_progress_bar: Whether or not to show progress bar.
             _statement_params: Extra information that should be sent to Snowflake with query.
+            _is_internal: This flag indicates whether the query is issued internally by the connector.
+            _describe_only: If true, the query will not be executed but return the schema/description of this query.
             _no_results: This flag tells the back-end to not return the result, just fire the query and return the
                 query id of the running query.
             _use_ijson: This flag doesn't do anything as ijson support has ended.
@@ -559,6 +586,7 @@ class SnowflakeCursor(object):
             "timeout": timeout,
             "statement_params": _statement_params,
             "is_internal": _is_internal,
+            "describe_only": _describe_only,
             "_no_results": _no_results,
             "_is_put_get": _is_put_get,
         }
@@ -704,6 +732,19 @@ class SnowflakeCursor(object):
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
+    def describe(self, *args, **kwargs) -> List[ResultMetadata]:
+        """Obtain the schema of the result without executing the query.
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+
+        Returns:
+            The schema of the result.
+        """
+        kwargs["_describe_only"] = kwargs["_is_internal"] = True
+        self.execute(*args, **kwargs)
+        return self._description
+
     def _format_query_for_log(self, query):
         return self._connection._format_query_for_log(query)
 
@@ -721,21 +762,18 @@ class SnowflakeCursor(object):
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description = []
-
-        for column in data["rowtype"]:
-            type_value = FIELD_NAME_TO_ID[column["type"].upper()]
-            self._description.append(
-                (
-                    column["name"],
-                    type_value,
-                    None,
-                    column["length"],
-                    column["precision"],
-                    column["scale"],
-                    column["nullable"],
-                )
+        self._description = [
+            ResultMetadata(
+                column["name"],
+                FIELD_NAME_TO_ID[column["type"].upper()],
+                None,
+                column["length"],
+                column["precision"],
+                column["scale"],
+                column["nullable"],
             )
+            for column in data["rowtype"]
+        ]
 
         if self._query_result_format == "arrow":
             self.check_can_use_arrow_resultset()
@@ -846,6 +884,8 @@ class SnowflakeCursor(object):
     def fetch_pandas_batches(self, **kwargs):
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
             raise NotSupportedError
         for df in self._result._fetch_pandas_batches(**kwargs):
@@ -854,6 +894,8 @@ class SnowflakeCursor(object):
     def fetch_pandas_all(self, **kwargs):
         """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
         self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
         return self._result._fetch_pandas_all(**kwargs)
@@ -1095,6 +1137,9 @@ class SnowflakeCursor(object):
                 "select * from table(result_scan('{}'))".format(sfqid)
             )
             self._result = self._inner_cursor._result
+            self._query_result_format = self._inner_cursor._query_result_format
+            self._total_rowcount = self._inner_cursor._total_rowcount
+            self._description = self._inner_cursor._description
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 

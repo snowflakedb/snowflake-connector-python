@@ -62,7 +62,6 @@ class AuthByKeyPair(AuthByPlugin):
         else:
             account = account.partition(".")[0]
         account = account.upper()
-
         user = user.upper()
 
         now = datetime.utcnow()

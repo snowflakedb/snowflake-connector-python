@@ -168,9 +168,8 @@ m_context(context),
 m_pyTableObjRef(nullptr),
 m_convert_number_to_decimal(number_to_decimal)
 {
-  PyObject* tz = PyObject_GetAttrString(m_context, "_timezone");
-  PyArg_Parse(tz, "s", &m_timezone);
-  Py_XDECREF(tz);
+  py::UniqueRef tz(PyObject_GetAttrString(m_context, "_timezone"));
+  PyArg_Parse(tz.get(), "s", &m_timezone);
 }
 
 std::shared_ptr<ReturnVal> CArrowTableIterator::next()
