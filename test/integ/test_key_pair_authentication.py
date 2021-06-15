@@ -22,7 +22,7 @@ import snowflake.connector
     "input_account,expected_account",
     [
         ("s3testaccount.global", "S3TESTACCOUNT.GLOBAL"),
-        ("acct-with-dashes", "ACCT_WITH_DASHES"),
+        ("acct-with-dashes", "ACCT-WITH-DASHES"),
         ("testaccount.extra", "TESTACCOUNT"),
         ("testaccount-user.global", "TESTACCOUNT"),
         ("normalaccount", "NORMALACCOUNT"),
