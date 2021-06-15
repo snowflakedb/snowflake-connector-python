@@ -118,7 +118,7 @@ class ResultSet(Iterable[List[Any]]):
                 metrics.get(DownloadMetrics.parse.value),
             )
 
-    def __can_create_arrow_iter(self) -> None:
+    def _can_create_arrow_iter(self) -> None:
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
         head_type = type(self.batches[0])
@@ -132,7 +132,7 @@ class ResultSet(Iterable[List[Any]]):
         self,
     ) -> Iterator[Table]:
         """Fetches all the results as Arrow Tables, chunked by Snowflake back-end."""
-        self.__can_create_arrow_iter()
+        self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
 
     def _fetch_arrow_all(self) -> Optional[Table]:
@@ -149,7 +149,7 @@ class ResultSet(Iterable[List[Any]]):
         Thus, the batch size (the number of rows in dataframe) is determined by
         Snowflake's back-end.
         """
-        self.__can_create_arrow_iter()
+        self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas")
 
     def _fetch_pandas_all(self, **kwargs) -> "pandas.DataFrame":
