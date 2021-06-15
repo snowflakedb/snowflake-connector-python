@@ -583,14 +583,16 @@ class ArrowResultBatch(ResultBatch):
     def to_pandas(self, **kwargs) -> "pandas.DataFrame":
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
-        table = next(self._get_arrow_iter())
+        table = self.to_arrow()
         if table:
             return table.to_pandas(**kwargs)
         return pandas.DataFrame(columns=self._column_names)
 
     def _get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
         """An iterator for this batch which yields a pandas DataFrame"""
-        yield self.to_pandas(**kwargs)
+        dataframe = self.to_pandas(**kwargs)
+        if not dataframe.empty:
+            yield dataframe
 
     def create_iter(
         self, **kwargs
