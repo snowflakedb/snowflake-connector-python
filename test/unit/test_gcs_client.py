@@ -5,6 +5,7 @@
 #
 
 import logging
+import os
 from unittest.mock import Mock
 
 import mock
@@ -12,24 +13,27 @@ import pytest
 
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import ResultStatus
-from snowflake.connector.errors import RequestExceedMaxRetryError
-from snowflake.connector.storage_client import METHODS
 
 from ..randomize import random_string
 
 try:
+    from snowflake.connector.errors import RequestExceedMaxRetryError
     from snowflake.connector.file_transfer_agent import (
         SnowflakeFileMeta,
         StorageCredential,
     )
+    from snowflake.connector.storage_client import METHODS
 except ImportError:  # NOQA
     # Compatibility for olddriver tests
     SnowflakeFileMeta = dict
+    RequestExceedMaxRetryError = None
+    METHODS = {}
 
 pytestmark = pytest.mark.gcp
 
 try:
     from snowflake.connector.gcs_storage_client import SnowflakeGCSRestClient  # NOQA
+    from snowflake.connector.gcs_util_sdk import SnowflakeGCSUtil  # NOQA
 except ImportError:
     SnowflakeGCSUtil = None
 
@@ -44,8 +48,23 @@ except ImportError:  # pragma: no cover
     vendored_request = False
 
 
+@pytest.fixture(
+    autouse=True,
+    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
+    ids=["sdkless", "sdkfull"],
+)
+def sdkless(request):
+    if request.param:
+        os.environ["SF_SDKLESS_PUT"] = "true"
+        os.environ["SF_SDKLESS_GET"] = "true"
+    else:
+        os.environ["SF_SDKLESS_PUT"] = "false"
+        os.environ["SF_SDKLESS_GET"] = "false"
+    return request.param
+
+
 @pytest.mark.parametrize("errno", [408, 429, 500, 503])
-def test_upload_retry_errors(errno, tmpdir):
+def test_upload_retry_errors(errno, tmpdir, sdkless):
     """Tests whether retryable errors are handled correctly when upploading."""
     f_name = str(tmpdir.join("some_file.txt"))
     resp = requests.Response()
@@ -57,26 +76,54 @@ def test_upload_retry_errors(errno, tmpdir):
         presigned_url="some_url",
         sha256_digest="asd",
     )
-    mock_connection = mock.create_autospec(SnowflakeConnection)
-    client = SnowflakeGCSRestClient(
-        meta, StorageCredential({}, mock_connection, ""), {}, mock_connection, ""
-    )
+    if sdkless:
+        if RequestExceedMaxRetryError is not None:
+            mock_connection = mock.create_autospec(SnowflakeConnection)
+            client = SnowflakeGCSRestClient(
+                meta,
+                StorageCredential({}, mock_connection, ""),
+                {},
+                mock_connection,
+                "",
+            )
     with open(f_name, "w") as f:
         f.write(random_string(15))
-    client.data_file = f_name
+    if sdkless:
+        if RequestExceedMaxRetryError is None:
+            with mock.patch(
+                "snowflake.connector.vendored.requests.put"
+                if vendored_request
+                else "requests.put",
+                side_effect=requests.exceptions.HTTPError(response=resp),
+            ):
+                SnowflakeGCSUtil.upload_file(f_name, meta, None, 99, 64000)
+                assert isinstance(meta.last_error, requests.exceptions.HTTPError)
+                assert meta.result_status == ResultStatus.NEED_RETRY
+        else:
+            client.data_file = f_name
 
-    if vendored_request:
-        with mock.patch.dict(
-            METHODS,
-            {"PUT": lambda *a, **kw: resp},
-        ):
-            with pytest.raises(RequestExceedMaxRetryError):
-                # Retry quickly during unit tests
-                client.SLEEP_UNIT = 0.0
-                client.upload_chunk(0)
+            if vendored_request:
+                with mock.patch.dict(
+                    METHODS,
+                    {"PUT": lambda *a, **kw: resp},
+                ):
+                    with pytest.raises(RequestExceedMaxRetryError):
+                        # Retry quickly during unit tests
+                        client.SLEEP_UNIT = 0.0
+                        client.upload_chunk(0)
+            else:
+                # Old Driver test specific code
+                with mock.patch("requests.put"):
+                    SnowflakeGCSUtil.upload_file(f_name, meta, None, 99, 64000)
+                    assert isinstance(meta.last_error, requests.exceptions.HTTPError)
+                    assert meta.result_status == ResultStatus.NEED_RETRY
     else:
-        # Old Driver test specific code
-        with mock.patch("requests.put"):
+        with mock.patch(
+            "snowflake.connector.vendored.requests.put"
+            if vendored_request
+            else "requests.put",
+            side_effect=requests.exceptions.HTTPError(response=resp),
+        ):
             SnowflakeGCSUtil.upload_file(f_name, meta, None, 99, 64000)
             assert isinstance(meta.last_error, requests.exceptions.HTTPError)
             assert meta.result_status == ResultStatus.NEED_RETRY

@@ -16,19 +16,27 @@ import pytest
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
-from snowflake.connector.s3_storage_client import (
-    ERRORNO_WSAECONNABORTED,
-    SnowflakeS3RestClient,
-)
 
 try:
-    from snowflake.connector.file_transfer_agent import (
-        SFResourceMeta,
-        SnowflakeFileMeta,
+    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
+    from snowflake.connector.file_transfer_agent_sdk import SFResourceMeta
+    from snowflake.connector.s3_storage_client import (  # TODO
+        ERRORNO_WSAECONNABORTED,
+        SnowflakeS3RestClient,
     )
+
+    SnowflakeS3Util = None
+    sdkless = True
 except ImportError:  # NOQA
     # Compatibility for olddriver tests
+    from snowflake.connector.s3_util import (  # NOQA
+        ERRORNO_WSAECONNABORTED,
+        SnowflakeS3Util,
+    )
+
     SnowflakeFileMeta = dict
+    SnowflakeS3RestClient = None
+    sdkless = False
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 MINIMAL_METADATA = SnowflakeFileMeta(
@@ -54,10 +62,13 @@ MINIMAL_METADATA = SnowflakeFileMeta(
 )
 def test_extract_bucket_name_and_path(input, bucket_name, s3path):
     """Extracts bucket name and S3 path."""
-    s3_util = SnowflakeS3RestClient
+    s3_util = SnowflakeS3RestClient if sdkless else SnowflakeS3Util
     s3_loc = s3_util._extract_bucket_name_and_path(input)
     assert s3_loc.bucket_name == bucket_name
-    assert s3_loc.s3path == s3path
+    if sdkless:
+        assert s3_loc.path == s3path
+    else:
+        assert s3_loc.s3path == s3path
 
 
 # TODO
