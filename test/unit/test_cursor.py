@@ -3,8 +3,19 @@
 #
 import pytest
 
-from snowflake.connector.constants import FileTransferType
 from snowflake.connector.cursor import SnowflakeCursor
+
+try:
+    from snowflake.connector.constants import FileTransferType
+except ImportError:
+    from enum import Enum
+
+    class FileTransferType(Enum):
+        GET = "get"
+        PUT = "put"
+
+
+pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
 
 @pytest.mark.parametrize(

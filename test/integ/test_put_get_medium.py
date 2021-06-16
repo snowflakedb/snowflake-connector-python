@@ -36,6 +36,21 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
 
 
+@pytest.fixture(
+    autouse=True,
+    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
+    ids=["sdkless", "sdkfull"],
+)
+def sdkless(request):
+    if request.param:
+        os.environ["SF_SDKLESS_PUT"] = "true"
+        os.environ["SF_SDKLESS_GET"] = "true"
+    else:
+        os.environ["SF_SDKLESS_PUT"] = "false"
+        os.environ["SF_SDKLESS_GET"] = "false"
+    return request.param
+
+
 @pytest.fixture()
 def file_src(request) -> Tuple[str, int, IO[bytes]]:
     file_name = request.param

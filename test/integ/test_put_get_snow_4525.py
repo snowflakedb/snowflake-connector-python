@@ -6,6 +6,23 @@
 
 import os
 
+import pytest
+
+
+@pytest.fixture(
+    autouse=True,
+    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
+    ids=["sdkless", "sdkfull"],
+)
+def sdkless(request):
+    if request.param:
+        os.environ["SF_SDKLESS_PUT"] = "true"
+        os.environ["SF_SDKLESS_GET"] = "true"
+    else:
+        os.environ["SF_SDKLESS_PUT"] = "false"
+        os.environ["SF_SDKLESS_GET"] = "false"
+    return request.param
+
 
 def test_load_bogus_file(tmpdir, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus file and should fail."""
