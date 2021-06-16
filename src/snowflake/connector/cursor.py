@@ -121,7 +121,7 @@ class ResultMetadata(NamedTuple):
 
     @classmethod
     def from_column(cls, col: Dict[str, Any]):
-        """Initializes a ResultMetadata object from the column description in the query response"""
+        """Initializes a ResultMetadata object from the column description in the query response."""
         return cls(
             col["name"],
             FIELD_NAME_TO_ID[col["type"].upper()],
