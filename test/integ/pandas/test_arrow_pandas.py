@@ -1059,13 +1059,13 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
             # check that size, columns, and FOO column data is correct
             if result_format == "pandas":
                 df = batch.to_pandas()
-                assert type(df) is pandas.DataFrame
+                assert type(df) == pandas.DataFrame
                 assert df.shape == (10, 2)
                 assert all(df.columns == ["FOO", "BAR"])
                 assert list(df.FOO) == list(range(rowcount))
             elif result_format == "arrow":
                 arrow_table = batch.to_arrow()
-                assert type(arrow_table) is pyarrow.Table
+                assert type(arrow_table) == pyarrow.Table
                 assert arrow_table.shape == (10, 2)
                 assert arrow_table.column_names == ["FOO", "BAR"]
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
