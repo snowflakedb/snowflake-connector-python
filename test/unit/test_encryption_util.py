@@ -11,7 +11,14 @@ from os import path
 
 from snowflake.connector.constants import UTF8
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
+
+try:  # pragma: no cover
+    from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
+except ImportError:  # keep olddrivertest from breaking
+    from snowflake.connector.remote_storage_util import (  # NOQA
+        SnowflakeFileEncryptionMaterial,
+    )
+
 
 from ..generate_test_files import generate_k_lines_of_n_files
 

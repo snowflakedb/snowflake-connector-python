@@ -27,6 +27,21 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 logger = getLogger(__name__)
 
 
+@pytest.fixture(
+    autouse=True,
+    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
+    ids=["sdkless", "sdkfull"],
+)
+def sdkless(request):
+    if request.param:
+        os.environ["SF_SDKLESS_PUT"] = "true"
+        os.environ["SF_SDKLESS_GET"] = "true"
+    else:
+        os.environ["SF_SDKLESS_PUT"] = "false"
+        os.environ["SF_SDKLESS_GET"] = "false"
+    return request.param
+
+
 @pytest.fixture()
 def test_data(request, conn_cnx, db_parameters):
     def connection():

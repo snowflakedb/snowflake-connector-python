@@ -9,7 +9,10 @@ import os
 import pytest
 from mock import patch
 
-from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+try:  # pragma: no cover
+    from snowflake.connector.file_transfer_agent_sdk import SnowflakeFileTransferAgent
+except ImportError:  # keep olddrivertest from breaking
+    from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 from ..generate_test_files import generate_k_lines_of_n_files
 
@@ -62,7 +65,7 @@ ratio number(6,2))
                 return agent
 
             with patch(
-                "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                "snowflake.connector.cursor.SnowflakeFileTransferAgentSdk",
                 side_effect=mocked_file_agent,
             ):
                 cnx.cursor().execute(
