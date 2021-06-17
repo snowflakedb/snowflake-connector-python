@@ -225,6 +225,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, db_parameters):
                 run(csr, "drop table if exists {name}")
 
 
+@pytest.mark.skip
 def test_put_get_large_files_azure(tmpdir, conn_cnx, db_parameters):
     """[azure] Puts and Gets Large files."""
     number_of_files = 3
