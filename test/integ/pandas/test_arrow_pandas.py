@@ -9,15 +9,19 @@ import random
 import time
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
 
 import numpy
 import pytest
 
 try:
-    from snowflake.connector.constants import TABLE_UNIT
+    from snowflake.connector.constants import IterUnit
 except ImportError:
     # This is because of olddriver tests
-    TABLE_UNIT = "table"
+    class IterUnit(Enum):
+        ROW_UNIT = "row"
+        TABLE_UNIT = "table"
+
 
 try:
     from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
@@ -25,7 +29,6 @@ except ImportError:
     installed_pandas = False
     pandas = None
     pyarrow = None
-
 
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
@@ -1004,7 +1007,8 @@ def test_resultbatches_pandas_functionality(conn_cnx):
             result_batches = cur.get_result_batches()
             assert len(result_batches) > 1
     tables = itertools.chain.from_iterable(
-        list(b.create_iter(iter_unit=TABLE_UNIT)) for b in result_batches
+        list(b.create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow"))
+        for b in result_batches
     )
     final_df = pyarrow.concat_tables(tables).to_pandas()
     assert numpy.array_equal(expected_df, final_df)
@@ -1052,3 +1056,31 @@ def test_pandas_telemetry(
         assert occurence == 1
 
         finish(conn, table)
+
+
+@pytest.mark.parametrize("result_format", ["pandas", "arrow"])
+def test_batch_to_pandas_arrow(conn_cnx, result_format):
+    rowcount = 10
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            cur.execute(
+                f"select seq4() as foo, seq4() as bar from table(generator(rowcount=>{rowcount})) order by foo asc"
+            )
+            batches = cur.get_result_batches()
+            assert len(batches) == 1
+            batch = batches[0]
+
+            # check that size, columns, and FOO column data is correct
+            if result_format == "pandas":
+                df = batch.to_pandas()
+                assert type(df) == pandas.DataFrame
+                assert df.shape == (10, 2)
+                assert all(df.columns == ["FOO", "BAR"])
+                assert list(df.FOO) == list(range(rowcount))
+            elif result_format == "arrow":
+                arrow_table = batch.to_arrow()
+                assert type(arrow_table) == pyarrow.Table
+                assert arrow_table.shape == (10, 2)
+                assert arrow_table.column_names == ["FOO", "BAR"]
+                assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))

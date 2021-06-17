@@ -24,6 +24,9 @@ class TelemetryField(object):
     # fetch_pandas_* usage
     PANDAS_FETCH_ALL = "client_fetch_pandas_all"
     PANDAS_FETCH_BATCHES = "client_fetch_pandas_batches"
+    # fetch_arrow_* usage
+    ARROW_FETCH_ALL = "client_fetch_arrow_all"
+    ARROW_FETCH_BATCHES = "client_fetch_arrow_batches"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SFQID = "QueryID"
@@ -40,7 +43,8 @@ class TelemetryField(object):
 class TelemetryData(object):
     """An instance of telemetry data which can be sent to the server."""
 
-    DUMMY_VALUE = 1
+    TRUE = 1
+    FALSE = 0
 
     def __init__(self, message, timestamp):
         self.message = message

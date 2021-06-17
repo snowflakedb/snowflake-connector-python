@@ -196,4 +196,7 @@ class QueryStatus(Enum):
 # EMPTY_UNIT: default
 # ROW_UNIT: fetch row by row if the user call `fetchone()`
 # TABLE_UNIT: fetch one arrow table if the user call `fetch_pandas()`
-ROW_UNIT, TABLE_UNIT = "row", "table"
+@unique
+class IterUnit(Enum):
+    ROW_UNIT = "row"
+    TABLE_UNIT = "table"
