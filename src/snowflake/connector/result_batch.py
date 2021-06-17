@@ -23,7 +23,7 @@ from typing import (
 )
 
 from .arrow_context import ArrowConverterContext
-from .arrow_iterator import ROW_UNIT, TABLE_UNIT
+from .constants import ROW_UNIT, TABLE_UNIT
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
 from .errors import Error, InterfaceError
 from .options import installed_pandas
