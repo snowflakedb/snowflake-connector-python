@@ -1084,9 +1084,7 @@ def test_check_can_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has no effect when we can import pandas."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch(
-                "snowflake.connector.cursor.pyarrow", "Something other than None"
-            ):
+            with mock.patch("snowflake.connector.cursor.installed_pandas", True):
                 cur.check_can_use_pandas()
 
 
@@ -1095,7 +1093,7 @@ def test_check_cannot_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has expected outcomes."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.pyarrow", None):
+            with mock.patch("snowflake.connector.cursor.installed_pandas", False):
                 with pytest.raises(
                     ProgrammingError,
                     match=r"Optional dependency: 'pyarrow' is not installed, please see the "
@@ -1112,9 +1110,7 @@ def test_not_supported_pandas(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute("select 1", _statement_params=result_format)
-            with mock.patch(
-                "snowflake.connector.cursor.pyarrow", "Something other than None"
-            ):
+            with mock.patch("snowflake.connector.cursor.installed_pandas", True):
                 with pytest.raises(NotSupportedError):
                     cur.fetch_pandas_all()
                 with pytest.raises(NotSupportedError):

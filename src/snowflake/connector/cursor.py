@@ -52,6 +52,7 @@ from .errors import (
     ProgrammingError,
 )
 from .file_transfer_agent import SnowflakeFileTransferAgent
+from .options import installed_pandas, pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
@@ -64,11 +65,11 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = getLogger(__name__)
 
-try:
-    import pyarrow
-except ImportError:
+if installed_pandas:
+    from pyarrow import Table
+else:
     logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
-    pyarrow = None
+    Table = None
 
 try:
     from .arrow_iterator import PyArrowIterator  # NOQA
@@ -828,9 +829,7 @@ class SnowflakeCursor(object):
             )
 
     def check_can_use_pandas(self):
-        global pyarrow
-
-        if pyarrow is None:
+        if not installed_pandas:
             msg = (
                 "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
                 "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
@@ -883,20 +882,34 @@ class SnowflakeCursor(object):
             )
         return self
 
-    def fetch_pandas_batches(self, **kwargs):
+    def fetch_arrow_batches(self) -> Iterator[Table]:
+        self.check_can_use_arrow_resultset()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        self._log_telemetry_job_data(
+            TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
+        )
+        return self._result_set._fetch_arrow_batches()
+
+    def fetch_arrow_all(self) -> Optional[Table]:
+        self.check_can_use_arrow_resultset()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
+        return self._result_set._fetch_arrow_all()
+
+    def fetch_pandas_batches(self, **kwargs) -> Iterator["pandas.DataFrame"]:
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
-        if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
             raise NotSupportedError
         self._log_telemetry_job_data(
-            TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.DUMMY_VALUE
+            TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
         )
-        for df in self._result_set._fetch_pandas_batches(**kwargs):
-            yield df
+        return self._result_set._fetch_pandas_batches(**kwargs)
 
-    def fetch_pandas_all(self, **kwargs):
+    def fetch_pandas_all(self, **kwargs) -> "pandas.DataFrame":
         """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
@@ -904,7 +917,7 @@ class SnowflakeCursor(object):
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(
-            TelemetryField.PANDAS_FETCH_ALL, TelemetryData.DUMMY_VALUE
+            TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
         )
         return self._result_set._fetch_pandas_all(**kwargs)
 
@@ -1189,7 +1202,7 @@ class SnowflakeCursor(object):
         if self._result_set is None:
             return None
         self._log_telemetry_job_data(
-            TelemetryField.GET_PARTITIONS_USED, TelemetryData.DUMMY_VALUE
+            TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
         )
         return self._result_set.batches
 

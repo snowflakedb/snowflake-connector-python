@@ -23,10 +23,10 @@ from typing import (
 )
 
 from .arrow_context import ArrowConverterContext
-from .constants import ROW_UNIT, TABLE_UNIT
-from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
-from .errors import Error, InterfaceError
-from .options import installed_pandas
+from .constants import IterUnit
+from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
+from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
+from .options import installed_pandas, pandas
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
 from .vendored import requests
 
@@ -293,6 +293,7 @@ class ResultBatch(abc.ABC):
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
         Iterator[Table],
+        Iterator["pandas.DataFrame"],
     ]:
         """Downloads the data from from blob storage that this ResultChunk points at.
 
@@ -302,6 +303,30 @@ class ResultBatch(abc.ABC):
         iterators. A good example of this is simply iterating through
         ``SnowflakeCursor`` and calling ``fetch_pandas_batches`` on it.
         """
+        raise NotImplementedError()
+
+    def _check_can_use_pandas(self) -> None:
+        if not installed_pandas:
+            msg = (
+                "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+                "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
+            )
+            errno = ER_NO_PYARROW
+
+            Error.errorhandler_make_exception(
+                ProgrammingError,
+                {
+                    "msg": msg,
+                    "errno": errno,
+                },
+            )
+
+    @abc.abstractmethod
+    def to_pandas(self) -> "pandas.DataFrame":
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def to_arrow(self) -> Table:
         raise NotImplementedError()
 
 
@@ -419,6 +444,18 @@ class JSONResultBatch(ResultBatch):
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
         return iter(parsed_data)
 
+    def _arrow_fetching_error(self):
+        return NotSupportedError(
+            f"Trying to use arrow fetching on {type(self)} which "
+            f"is not ArrowResultChunk"
+        )
+
+    def to_pandas(self):
+        raise self._arrow_fetching_error()
+
+    def to_arrow(self):
+        raise self._arrow_fetching_error()
+
 
 class ArrowResultBatch(ResultBatch):
     def __init__(
@@ -443,7 +480,7 @@ class ArrowResultBatch(ResultBatch):
         return f"ArrowResultChunk({self.rowcount})"
 
     def _load(
-        self, response, row_unit: str
+        self, response, row_unit: IterUnit
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         """Creates a ``PyArrowIterator`` from a response.
 
@@ -462,12 +499,12 @@ class ArrowResultBatch(ResultBatch):
             self._numpy,
             self._number_to_decimal,
         )
-        if row_unit == TABLE_UNIT:
+        if row_unit == IterUnit.TABLE_UNIT:
             iter.init_table_unit()
         return iter
 
     def _from_data(
-        self, data: str, iter_unit: str
+        self, data: str, iter_unit: IterUnit
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         """Creates a ``PyArrowIterator`` files from a str.
 
@@ -487,7 +524,7 @@ class ArrowResultBatch(ResultBatch):
             self._numpy,
             self._number_to_decimal,
         )
-        if iter_unit == TABLE_UNIT:
+        if iter_unit == IterUnit.TABLE_UNIT:
             _iter.init_table_unit()
         else:
             _iter.init_row_unit()
@@ -519,14 +556,14 @@ class ArrowResultBatch(ResultBatch):
 
         return new_chunk
 
-    def create_iter(
-        self, **kwargs
+    def _create_iter(
+        self, iter_unit: IterUnit
     ) -> Union[
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
         Iterator[Table],
     ]:
-        iter_unit = kwargs.pop("iter_unit", ROW_UNIT)
+        """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download()
@@ -534,3 +571,44 @@ class ArrowResultBatch(ResultBatch):
             loaded_data = self._load(response, iter_unit)
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
+
+    def _get_arrow_iter(self) -> Iterator[Table]:
+        """Returns an iterator for this batch which yields a pyarrow Table"""
+        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT)
+
+    def to_arrow(self) -> Optional[Table]:
+        """Returns this batch as a pyarrow Table"""
+        return next(self._get_arrow_iter(), None)
+
+    def to_pandas(self, **kwargs) -> "pandas.DataFrame":
+        """Returns this batch as a pandas DataFrame"""
+        self._check_can_use_pandas()
+        table = self.to_arrow()
+        if table:
+            return table.to_pandas(**kwargs)
+        return pandas.DataFrame(columns=self._column_names)
+
+    def _get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
+        """An iterator for this batch which yields a pandas DataFrame"""
+        dataframe = self.to_pandas(**kwargs)
+        if not dataframe.empty:
+            yield dataframe
+
+    def create_iter(
+        self, **kwargs
+    ) -> Union[
+        Iterator[Union[Dict, Exception]],
+        Iterator[Union[Tuple, Exception]],
+        Iterator[Table],
+        Iterator["pandas.DataFrame"],
+    ]:
+        """The interface used by ResultSet to create an iterator for this ResultBatch."""
+        iter_unit: IterUnit = kwargs.pop("iter_unit", IterUnit.ROW_UNIT)
+        if iter_unit == IterUnit.TABLE_UNIT:
+            structure = kwargs.pop("structure", "pandas")
+            if structure == "pandas":
+                return self._get_pandas_iter(**kwargs)
+            else:
+                return self._get_arrow_iter()
+        else:
+            return self._create_iter(iter_unit=iter_unit)
