@@ -165,7 +165,6 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         )
 
     def download_chunk(self, chunk_id: int):
-        self.chunks = []  # because GCS writes the entire file using streaming download
         meta = self.meta
 
         def generate_url_and_rest_args():
@@ -186,9 +185,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         )
         response.raise_for_status()
 
-        with open(self.full_dst_file_name, "wb") as fd:
-            for chunk in response.raw.stream(CONTENT_CHUNK_SIZE, decode_content=False):
-                fd.write(chunk)
+        self.write_downloaded_chunk(chunk_id, response.content)
 
         encryption_metadata = None
 
@@ -206,14 +203,16 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                     else None,
                 )
 
-        # Sadly, we can only determine the src file size after we've
-        # downloaded it, unlike the other cloud providers where the
-        # metadata can be read beforehand.
-        meta.src_file_size = os.path.getsize(self.full_dst_file_name)
-
         meta.gcs_file_header_digest = response.headers.get(GCS_METADATA_SFC_DIGEST)
         meta.gcs_file_header_content_length = len(response.content)
         meta.gcs_file_header_encryption_metadata = encryption_metadata
+
+    def finish_download(self):
+        super().finish_download()
+        # Sadly, we can only determine the src file size after we've
+        # downloaded it, unlike the other cloud providers where the
+        # metadata can be read beforehand.
+        self.meta.src_file_size = os.path.getsize(self.intermediate_dst_path)
 
     def _update_presigned_url(self):
         """Updates the file metas with presigned urls if any.
