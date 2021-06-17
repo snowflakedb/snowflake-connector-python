@@ -880,6 +880,9 @@ class SnowflakeCursor(object):
             self._prefetch_hook()
         if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
             raise NotSupportedError
+        self._log_telemetry_job_data(
+            TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.DUMMY_VALUE
+        )
         for df in self._result_set._fetch_pandas_batches(**kwargs):
             yield df
 
@@ -890,6 +893,9 @@ class SnowflakeCursor(object):
             self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
+        self._log_telemetry_job_data(
+            TelemetryField.PANDAS_FETCH_ALL, TelemetryData.DUMMY_VALUE
+        )
         return self._result_set._fetch_pandas_all(**kwargs)
 
     def abort_query(self, qid):
@@ -1089,7 +1095,11 @@ class SnowflakeCursor(object):
 
     def _log_telemetry_job_data(self, telemetry_field, value):
         """Builds an instance of TelemetryData with the given field and logs it."""
-        obj = {"type": telemetry_field, "query_id": self._sfqid, "value": int(value)}
+        obj = {
+            "type": telemetry_field,
+            "query_id": self._sfqid,
+            "value": int(value),
+        }
         ts = get_time_millis()
         try:
             self._connection._log_telemetry(TelemetryData(obj, ts))
@@ -1168,7 +1178,9 @@ class SnowflakeCursor(object):
         """
         if self._result_set is None:
             return None
-        self._log_telemetry_job_data(TelemetryField.GET_PARTITIONS_USED, 1)
+        self._log_telemetry_job_data(
+            TelemetryField.GET_PARTITIONS_USED, TelemetryData.DUMMY_VALUE
+        )
         return self._result_set.batches
 
 
