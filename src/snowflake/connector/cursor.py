@@ -15,6 +15,7 @@ from threading import Lock, Timer
 from typing import (
     IO,
     TYPE_CHECKING,
+    Any,
     Dict,
     Iterator,
     List,
@@ -117,6 +118,19 @@ class ResultMetadata(NamedTuple):
     precision: int
     scale: int
     is_nullable: bool
+
+    @classmethod
+    def from_column(cls, col: Dict[str, Any]):
+        """Initializes a ResultMetadata object from the column description in the query response."""
+        return cls(
+            col["name"],
+            FIELD_NAME_TO_ID[col["type"].upper()],
+            None,
+            col["length"],
+            col["precision"],
+            col["scale"],
+            col["nullable"],
+        )
 
 
 def exit_handler(*_):  # pragma: no cover
@@ -226,7 +240,7 @@ class SnowflakeCursor(object):
                 logger.info(e)
 
     @property
-    def description(self):
+    def description(self) -> List[ResultMetadata]:
         return self._description
 
     @property
@@ -763,23 +777,12 @@ class SnowflakeCursor(object):
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description = [
-            ResultMetadata(
-                column["name"],
-                FIELD_NAME_TO_ID[column["type"].upper()],
-                None,
-                column["length"],
-                column["precision"],
-                column["scale"],
-                column["nullable"],
-            )
-            for column in data["rowtype"]
+        self._description: List[ResultMetadata] = [
+            ResultMetadata.from_column(col) for col in data["rowtype"]
         ]
 
         result_chunks = create_batches_from_response(
-            self,
-            self._query_result_format,
-            data,
+            self, self._query_result_format, data, self._description
         )
 
         self._result_set = ResultSet(
