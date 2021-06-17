@@ -11,7 +11,7 @@ import os
 import pickle
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, NamedTuple
 
 import mock
 import pytest
@@ -29,6 +29,21 @@ from snowflake.connector import (
 )
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
 from snowflake.connector.cursor import SnowflakeCursor
+
+try:
+    from snowflake.connector.cursor import ResultMetadata
+except ImportError:
+
+    class ResultMetadata(NamedTuple):
+        name: str
+        type_code: int
+        display_size: int
+        internal_size: int
+        precision: int
+        scale: int
+        is_nullable: bool
+
+
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
@@ -1289,7 +1304,7 @@ def test_resultbatch(
         ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
     ),
 )
-def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
+def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_path):
     """Tests whether pre-fetching results chunks fetches the right amount of them."""
     rowcount = 1000000  # We need at least 5 chunks for this test
     with conn_cnx(
@@ -1302,9 +1317,18 @@ def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
             #  first fetchone call
             with mock.patch(patch_path, return_value=iter([(1,)])) as patched_download:
                 cur.execute(
-                    f"select seq4() from table(generator(rowcount => {rowcount}));"
+                    f"select seq4() as c1, randstr(1,random()) as c2 "
+                    f"from table(generator(rowcount => {rowcount}));"
                 )
                 result_batches = cur.get_result_batches()
+                batch_schemas = [batch.schema for batch in result_batches]
+                for schema in batch_schemas:
+                    # all batches should have the same schema
+                    assert schema == [
+                        ResultMetadata("C1", 0, None, None, 10, 0, False),
+                        ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                    ]
+                assert patched_download.call_count == 0
                 assert len(result_batches) > 5
                 assert result_batches[0]._local  # Sanity check first chunk being local
                 cur.fetchone()  # Trigger pre-fetching
@@ -1312,6 +1336,28 @@ def test_resultbatch_lazy_fetching(conn_cnx, result_format, patch_path):
                 #  short circuits and just parses (for JSON batches) and then return an
                 #  an iterator through that data, so we expect the call count to be 5
                 assert patched_download.call_count == 5
+
+
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize("result_format", ["json", "arrow"])
+def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": result_format}
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute(
+                "select seq4() as c1, randstr(1,random()) as c2 from table(generator(rowcount => 1)) where 1=0"
+            )
+            result_batches = cur.get_result_batches()
+            # verify there is 1 batch and 0 rows in that batch
+            assert len(result_batches) == 1
+            assert result_batches[0].rowcount == 0
+            # verify that the schema is correct
+            schema = result_batches[0].schema
+            assert schema == [
+                ResultMetadata("C1", 0, None, None, 10, 0, False),
+                ResultMetadata("C2", 2, None, 16777216, None, None, False),
+            ]
 
 
 def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
