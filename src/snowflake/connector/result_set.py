@@ -157,7 +157,7 @@ class ResultSet(Iterable[List[Any]]):
         dataframes = list(self._fetch_pandas_batches())
         if dataframes:
             return pandas.concat(dataframes, **kwargs)
-        return pandas.DataFrame(columns=self.batches[0]._column_names)
+        return pandas.DataFrame(columns=self.batches[0].column_names)
 
     def _get_metrics(self) -> Dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""
