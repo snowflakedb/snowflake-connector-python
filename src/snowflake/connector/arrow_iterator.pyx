@@ -4,7 +4,6 @@
 
 # distutils: language = c++
 # cython: language_level=3
-from typing import Iterator
 
 from cpython.ref cimport PyObject
 from libc.stdint cimport *
@@ -13,24 +12,15 @@ from libcpp.memory cimport shared_ptr
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 
-from snowflake.connector.snow_logging import getSnowLogger
-
+from .constants import ROW_UNIT, TABLE_UNIT
 from .errorcode import (
     ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
     ER_FAILED_TO_READ_ARROW_STREAM,
 )
 from .errors import Error, InterfaceError, OperationalError
+from .snow_logging import getSnowLogger
 
 snow_logger = getSnowLogger(__name__)
-
-
-'''
-the unit in this iterator
-EMPTY_UNIT: default
-ROW_UNIT: fetch row by row if the user call `fetchone()`
-TABLE_UNIT: fetch one arrow table if the user call `fetch_pandas()`
-'''
-ROW_UNIT, TABLE_UNIT = 'row', 'table'
 
 
 cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
