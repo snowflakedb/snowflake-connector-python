@@ -11,7 +11,7 @@ import os
 import pickle
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, NamedTuple
 
 import mock
 import pytest
@@ -28,7 +28,22 @@ from snowflake.connector import (
     errors,
 )
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
-from snowflake.connector.cursor import ResultMetadata, SnowflakeCursor
+from snowflake.connector.cursor import SnowflakeCursor
+
+try:
+    from snowflake.connector.cursor import ResultMetadata
+except ImportError:
+
+    class ResultMetadata(NamedTuple):
+        name: str
+        type_code: int
+        display_size: int
+        internal_size: int
+        precision: int
+        scale: int
+        is_nullable: bool
+
+
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,

@@ -599,7 +599,7 @@ class ArrowResultBatch(ResultBatch):
         table = self.to_arrow()
         if table:
             return table.to_pandas(**kwargs)
-        return pandas.DataFrame(columns=self._column_names)
+        return pandas.DataFrame(columns=self.column_names)
 
     def _get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
         """An iterator for this batch which yields a pandas DataFrame"""
