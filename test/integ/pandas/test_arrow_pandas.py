@@ -14,19 +14,15 @@ import numpy
 import pytest
 
 try:
-    from snowflake.connector.options import installed_pandas, pandas  # NOQA
+    from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
 except ImportError:
     installed_pandas = False
     pandas = None
+    pyarrow = None
 
 
 try:
-    import pyarrow  # NOQA
-except ImportError:
-    pass
-
-try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_iterator import TABLE_UNIT, PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
@@ -693,9 +689,10 @@ def test_num_batch(conn_cnx):
     row_count = 1000000
     col_count = 2
     random_seed = get_random_seed()
-    sql_exec = "select seq4() as c1, uniform(1, 10, random({})) as c2 from ".format(
-        random_seed
-    ) + "table(generator(rowcount=>{})) order by c1, c2".format(row_count)
+    sql_exec = (
+        f"select seq4() as c1, uniform(1, 10, random({random_seed})) as c2 from "
+        f"table(generator(rowcount=>{row_count})) order by c1, c2"
+    )
     fetch_pandas(conn_cnx, sql_exec, row_count, col_count, "batch")
 
 
@@ -817,11 +814,9 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
                     col_old = df_old.iloc[i]
                     col_new = df_new.iloc[i]
                     for j, (c_old, c_new) in enumerate(zip(col_old, col_new)):
-                        assert (
-                            c_old == c_new
-                        ), "{} row, {} column: old value is {}, new value is {}, \
-                                              values are not equal".format(
-                            i, j, c_old, c_new
+                        assert c_old == c_new, (
+                            f"{i} row, {j} column: old value is {c_old}, new value "
+                            f"is {c_new} values are not equal"
                         )
             else:
                 assert (
@@ -961,3 +956,40 @@ def test_simple_async_arrow(conn_cnx):
             assert len(cur.fetch_pandas_all()) == 1
             assert cur.rowcount
             assert cur.description
+
+
+@pytest.mark.parametrize(
+    "use_decimal,expected",
+    [
+        (
+            True,
+            decimal.Decimal,
+        ),
+        pytest.param(False, numpy.float64, marks=pytest.mark.xfail),
+    ],
+)
+def test_number_iter_retrieve_type(conn_cnx, use_decimal: bool, expected: type):
+    with conn_cnx(arrow_number_to_decimal=use_decimal) as con:
+        with con.cursor() as cur:
+            cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
+            for row in cur:
+                assert isinstance(row[0], expected), type(row[0])
+
+
+def test_resultbatches_pandas_functionality(conn_cnx):
+    """Fetch ArrowResultBatches as pandas dataframes and check its result."""
+    rowcount = 100000
+    expected_df = pandas.DataFrame(data={"A": range(rowcount)})
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                f"select seq4() a from table(generator(rowcount => {rowcount}));"
+            )
+            assert cur._result_set.total_row_index() == rowcount
+            result_batches = cur.get_result_batches()
+            assert len(result_batches) > 1
+    tables = itertools.chain.from_iterable(
+        list(b.create_iter(iter_unit=TABLE_UNIT)) for b in result_batches
+    )
+    final_df = pyarrow.concat_tables(tables).to_pandas()
+    assert numpy.array_equal(expected_df, final_df)

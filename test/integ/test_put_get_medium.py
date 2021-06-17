@@ -78,7 +78,7 @@ def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
         run(
             cnx,
             """
-create table {name} (
+create or replace table {name} (
 aa int,
 dt date,
 ts timestamp,
