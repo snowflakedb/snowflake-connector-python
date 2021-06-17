@@ -12,7 +12,7 @@ from libcpp.memory cimport shared_ptr
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 
-from .constants import ROW_UNIT, TABLE_UNIT
+from .constants import IterUnit
 from .errorcode import (
     ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
     ER_FAILED_TO_READ_ARROW_STREAM,
@@ -260,9 +260,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             return ret
 
     def init(self, str iter_unit):
-        if iter_unit == ROW_UNIT:
+        if iter_unit == IterUnit.ROW_UNIT.value:
             self.init_row_unit()
-        elif iter_unit == TABLE_UNIT:
+        elif iter_unit == IterUnit.TABLE_UNIT.value:
             self.init_table_unit()
         self.unit = iter_unit
 
