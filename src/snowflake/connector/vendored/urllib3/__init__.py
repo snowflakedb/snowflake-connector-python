@@ -1,25 +1,24 @@
 """
-urllib3 - Thread-safe connection pooling and re-using.
+Python HTTP library with thread-safe connection pooling, file post support, user friendly, and more
 """
-from __future__ import absolute_import
-import warnings
-
-from .connectionpool import HTTPConnectionPool, HTTPSConnectionPool, connection_from_url
-
-from . import exceptions
-from .filepost import encode_multipart_formdata
-from .poolmanager import PoolManager, ProxyManager, proxy_from_url
-from .response import HTTPResponse
-from .util.request import make_headers
-from .util.url import get_host
-from .util.timeout import Timeout
-from .util.retry import Retry
-from ._version import __version__
-
 
 # Set default logging handler to avoid "No handler found" warnings.
 import logging
+import warnings
 from logging import NullHandler
+from typing import Mapping, Optional, Type, Union
+
+from . import exceptions
+from ._collections import HTTPHeaderDict
+from ._version import __version__
+from .connection import HTTPBody
+from .connectionpool import HTTPConnectionPool, HTTPSConnectionPool, connection_from_url
+from .filepost import _TYPE_FIELDS, encode_multipart_formdata
+from .poolmanager import PoolManager, ProxyManager, proxy_from_url
+from .response import BaseHTTPResponse, HTTPResponse
+from .util.request import make_headers
+from .util.retry import Retry
+from .util.timeout import Timeout
 
 __author__ = "Andrey Petrov (andrey.petrov@shazow.net)"
 __license__ = "MIT"
@@ -27,6 +26,7 @@ __version__ = __version__
 
 __all__ = (
     "HTTPConnectionPool",
+    "HTTPHeaderDict",
     "HTTPSConnectionPool",
     "PoolManager",
     "ProxyManager",
@@ -37,15 +37,15 @@ __all__ = (
     "connection_from_url",
     "disable_warnings",
     "encode_multipart_formdata",
-    "get_host",
     "make_headers",
     "proxy_from_url",
+    "request",
 )
 
 logging.getLogger(__name__).addHandler(NullHandler())
 
 
-def add_stderr_logger(level=logging.DEBUG):
+def add_stderr_logger(level: int = logging.DEBUG) -> logging.StreamHandler:
     """
     Helper for quickly adding a StreamHandler to the logger. Useful for
     debugging.
@@ -72,16 +72,48 @@ del NullHandler
 # mechanisms to silence them.
 # SecurityWarning's always go off by default.
 warnings.simplefilter("always", exceptions.SecurityWarning, append=True)
-# SubjectAltNameWarning's should go off once per host
-warnings.simplefilter("default", exceptions.SubjectAltNameWarning, append=True)
 # InsecurePlatformWarning's don't vary between requests, so we keep it default.
 warnings.simplefilter("default", exceptions.InsecurePlatformWarning, append=True)
 # SNIMissingWarnings should go off only once.
 warnings.simplefilter("default", exceptions.SNIMissingWarning, append=True)
 
 
-def disable_warnings(category=exceptions.HTTPWarning):
+def disable_warnings(category: Type[Warning] = exceptions.HTTPWarning) -> None:
     """
     Helper for quickly disabling all urllib3 warnings.
     """
     warnings.simplefilter("ignore", category)
+
+
+_DEFAULT_POOL = PoolManager()
+
+
+def request(
+    method: str,
+    url: str,
+    body: Optional[HTTPBody] = None,
+    fields: Optional[_TYPE_FIELDS] = None,
+    headers: Optional[Mapping[str, str]] = None,
+    preload_content: Optional[bool] = True,
+    redirect: Optional[bool] = True,
+    retries: Optional[Union[Retry, bool, int]] = None,
+    timeout: Optional[Union[Timeout, float, int]] = 3,
+) -> BaseHTTPResponse:
+    """
+    A convenience, top-level request method. It uses a module-global ``PoolManager`` instance.
+    Therefore, its side effects could be shared across dependencies relying on it.
+    To avoid side effects create a new ``PoolManager`` instance and use it instead.
+    The method does not accept low-level ``**urlopen_kw`` keyword arguments.
+    """
+
+    return _DEFAULT_POOL.request(
+        method,
+        url,
+        body=body,
+        fields=fields,
+        headers=headers,
+        preload_content=preload_content,
+        redirect=redirect,
+        retries=retries,
+        timeout=timeout,
+    )

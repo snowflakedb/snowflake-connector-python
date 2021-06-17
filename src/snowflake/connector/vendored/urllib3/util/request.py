@@ -1,12 +1,21 @@
-from __future__ import absolute_import
 from base64 import b64encode
+from typing import IO, Any, AnyStr, Dict, List, Optional, Union
 
-from ..packages.six import b, integer_types
 from ..exceptions import UnrewindableBodyError
+
+# Pass as a value within ``headers`` to skip
+# emitting some HTTP headers that are added automatically.
+# The only headers that are supported are ``Accept-Encoding``,
+# ``Host``, and ``User-Agent``.
+SKIP_HEADER = "@@@SKIP_HEADER@@@"
+SKIPPABLE_HEADERS = frozenset(["accept-encoding", "host", "user-agent"])
 
 ACCEPT_ENCODING = "gzip,deflate"
 try:
-    import brotli as _unused_module_brotli  # noqa: F401
+    try:
+        import brotlicffi as _unused_module_brotli  # type: ignore # noqa: F401
+    except ImportError:
+        import brotli as _unused_module_brotli  # type: ignore # noqa: F401
 except ImportError:
     pass
 else:
@@ -16,13 +25,13 @@ _FAILEDTELL = object()
 
 
 def make_headers(
-    keep_alive=None,
-    accept_encoding=None,
-    user_agent=None,
-    basic_auth=None,
-    proxy_basic_auth=None,
-    disable_cache=None,
-):
+    keep_alive: Optional[bool] = None,
+    accept_encoding: Optional[Union[bool, List[str], str]] = None,
+    user_agent: Optional[str] = None,
+    basic_auth: Optional[str] = None,
+    proxy_basic_auth: Optional[str] = None,
+    disable_cache: Optional[bool] = None,
+) -> Dict[str, str]:
     """
     Shortcuts for generating request headers.
 
@@ -31,7 +40,8 @@ def make_headers(
 
     :param accept_encoding:
         Can be a boolean, list, or string.
-        ``True`` translates to 'gzip,deflate'.
+        ``True`` translates to 'gzip,deflate'.  If either the ``brotli`` or
+        ``brotlicffi`` package is installed 'gzip,deflate,br' is used instead.
         List will get joined by comma.
         String will be used as provided.
 
@@ -50,14 +60,18 @@ def make_headers(
     :param disable_cache:
         If ``True``, adds 'cache-control: no-cache' header.
 
-    Example::
+    Example:
 
-        >>> make_headers(keep_alive=True, user_agent="Batman/1.0")
-        {'connection': 'keep-alive', 'user-agent': 'Batman/1.0'}
-        >>> make_headers(accept_encoding=True)
-        {'accept-encoding': 'gzip,deflate'}
+    .. code-block:: python
+
+        import urllib3
+
+        print(urllib3.util.make_headers(keep_alive=True, user_agent="Batman/1.0"))
+        # {'connection': 'keep-alive', 'user-agent': 'Batman/1.0'}
+        print(urllib3.util.make_headers(accept_encoding=True))
+        # {'accept-encoding': 'gzip,deflate'}
     """
-    headers = {}
+    headers: Dict[str, str] = {}
     if accept_encoding:
         if isinstance(accept_encoding, str):
             pass
@@ -74,12 +88,14 @@ def make_headers(
         headers["connection"] = "keep-alive"
 
     if basic_auth:
-        headers["authorization"] = "Basic " + b64encode(b(basic_auth)).decode("utf-8")
+        headers[
+            "authorization"
+        ] = f"Basic {b64encode(basic_auth.encode('latin-1')).decode()}"
 
     if proxy_basic_auth:
-        headers["proxy-authorization"] = "Basic " + b64encode(
-            b(proxy_basic_auth)
-        ).decode("utf-8")
+        headers[
+            "proxy-authorization"
+        ] = f"Basic {b64encode(proxy_basic_auth.encode('latin-1')).decode()}"
 
     if disable_cache:
         headers["cache-control"] = "no-cache"
@@ -87,7 +103,9 @@ def make_headers(
     return headers
 
 
-def set_file_position(body, pos):
+def set_file_position(
+    body: Any, pos: Optional[Union[int, object]]
+) -> Optional[Union[int, object]]:
     """
     If a position is provided, move file to that point.
     Otherwise, we'll attempt to record a position for future use.
@@ -97,7 +115,7 @@ def set_file_position(body, pos):
     elif getattr(body, "tell", None) is not None:
         try:
             pos = body.tell()
-        except (IOError, OSError):
+        except OSError:
             # This differentiates from None, allowing us to catch
             # a failed `tell()` later when trying to rewind the body.
             pos = _FAILEDTELL
@@ -105,7 +123,7 @@ def set_file_position(body, pos):
     return pos
 
 
-def rewind_body(body, body_pos):
+def rewind_body(body: IO[AnyStr], body_pos: Optional[Union[int, object]]) -> None:
     """
     Attempt to rewind body to a certain position.
     Primarily used for request redirects and retries.
@@ -117,10 +135,10 @@ def rewind_body(body, body_pos):
         Position to seek to in file.
     """
     body_seek = getattr(body, "seek", None)
-    if body_seek is not None and isinstance(body_pos, integer_types):
+    if body_seek is not None and isinstance(body_pos, int):
         try:
             body_seek(body_pos)
-        except (IOError, OSError):
+        except OSError:
             raise UnrewindableBodyError(
                 "An error occurred when rewinding request body for redirect/retry."
             )
@@ -131,5 +149,5 @@ def rewind_body(body, body_pos):
         )
     else:
         raise ValueError(
-            "body_pos must be of type integer, instead it was %s." % type(body_pos)
+            f"body_pos must be of type integer, instead it was {type(body_pos)}."
         )

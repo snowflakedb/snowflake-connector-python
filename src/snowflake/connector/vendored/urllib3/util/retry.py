@@ -1,22 +1,26 @@
-from __future__ import absolute_import
-import time
+import email
 import logging
+import re
+import time
 from collections import namedtuple
 from itertools import takewhile
-import email
-import re
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Collection, Optional, Tuple, Union
 
 from ..exceptions import (
     ConnectTimeoutError,
+    InvalidHeader,
     MaxRetryError,
     ProtocolError,
+    ProxyError,
     ReadTimeoutError,
     ResponseError,
-    InvalidHeader,
-    ProxyError,
 )
-from ..packages import six
+from .util import reraise
 
+if TYPE_CHECKING:
+    from urllib3.connectionpool import ConnectionPool
+    from urllib3.response import HTTPResponse
 
 log = logging.getLogger(__name__)
 
@@ -27,25 +31,31 @@ RequestHistory = namedtuple(
 )
 
 
-class Retry(object):
-    """ Retry configuration.
+class Retry:
+    """Retry configuration.
 
     Each retry attempt will create a new Retry object with updated values, so
     they can be safely reused.
 
-    Retries can be defined as a default for a pool::
+    Retries can be defined as a default for a pool:
+
+    .. code-block:: python
 
         retries = Retry(connect=5, read=2, redirect=5)
         http = PoolManager(retries=retries)
-        response = http.request('GET', 'http://example.com/')
+        response = http.request("GET", "https://example.com/")
 
-    Or per-request (which overrides the default for the pool)::
+    Or per-request (which overrides the default for the pool):
 
-        response = http.request('GET', 'http://example.com/', retries=Retry(10))
+    .. code-block:: python
 
-    Retries can be disabled by passing ``False``::
+        response = http.request("GET", "https://example.com/", retries=Retry(10))
 
-        response = http.request('GET', 'http://example.com/', retries=False)
+    Retries can be disabled by passing ``False``:
+
+    .. code-block:: python
+
+        response = http.request("GET", "https://example.com/", retries=False)
 
     Errors will be wrapped in :class:`~urllib3.exceptions.MaxRetryError` unless
     retries are disabled, in which case the causing exception will be raised.
@@ -54,8 +64,7 @@ class Retry(object):
         Total number of retries to allow. Takes precedence over other counts.
 
         Set to ``None`` to remove this constraint and fall back on other
-        counts. It's a good idea to set this to some sensibly-high value to
-        account for unexpected edge cases and avoid infinite retry loops.
+        counts.
 
         Set to ``0`` to fail on the first retry.
 
@@ -96,18 +105,30 @@ class Retry(object):
 
         Set to ``0`` to fail on the first retry of this type.
 
-    :param iterable method_whitelist:
+    :param int other:
+        How many times to retry on other errors.
+
+        Other errors are errors that are not connect, read, redirect or status errors.
+        These errors might be raised after the request was sent to the server, so the
+        request might have side-effects.
+
+        Set to ``0`` to fail on the first retry of this type.
+
+        If ``total`` is not set, it's a good idea to set this to 0 to account
+        for unexpected edge cases and avoid infinite retry loops.
+
+    :param iterable allowed_methods:
         Set of uppercased HTTP method verbs that we should retry on.
 
         By default, we only retry on methods which are considered to be
         idempotent (multiple requests with the same parameters end with the
-        same state). See :attr:`Retry.DEFAULT_METHOD_WHITELIST`.
+        same state). See :attr:`Retry.DEFAULT_ALLOWED_METHODS`.
 
-        Set to a ``False`` value to retry on any verb.
+        Set to a ``None`` value to retry on any verb.
 
     :param iterable status_forcelist:
         A set of integer HTTP status codes that we should force a retry on.
-        A retry is initiated if the request method is in ``method_whitelist``
+        A retry is initiated if the request method is in ``allowed_methods``
         and the response status code is in ``status_forcelist``.
 
         By default, this is disabled with ``None``.
@@ -148,38 +169,44 @@ class Retry(object):
         request.
     """
 
-    DEFAULT_METHOD_WHITELIST = frozenset(
+    #: Default methods to be used for ``allowed_methods``
+    DEFAULT_ALLOWED_METHODS = frozenset(
         ["HEAD", "GET", "PUT", "DELETE", "OPTIONS", "TRACE"]
     )
 
+    #: Default status codes to be used for ``status_forcelist``
     RETRY_AFTER_STATUS_CODES = frozenset([413, 429, 503])
 
-    DEFAULT_REDIRECT_HEADERS_BLACKLIST = frozenset(["Authorization"])
+    #: Default headers to be used for ``remove_headers_on_redirect``
+    DEFAULT_REMOVE_HEADERS_ON_REDIRECT = frozenset(["Authorization"])
 
     #: Maximum backoff time.
     BACKOFF_MAX = 120
 
     def __init__(
         self,
-        total=10,
-        connect=None,
-        read=None,
-        redirect=None,
-        status=None,
-        method_whitelist=DEFAULT_METHOD_WHITELIST,
-        status_forcelist=None,
-        backoff_factor=0,
-        raise_on_redirect=True,
-        raise_on_status=True,
-        history=None,
-        respect_retry_after_header=True,
-        remove_headers_on_redirect=DEFAULT_REDIRECT_HEADERS_BLACKLIST,
-    ):
-
+        total: Optional[Union[bool, int]] = 10,
+        connect: Optional[int] = None,
+        read: Optional[int] = None,
+        redirect: Optional[Union[bool, int]] = None,
+        status: Optional[int] = None,
+        other: Optional[int] = None,
+        allowed_methods: Optional[Collection[str]] = DEFAULT_ALLOWED_METHODS,
+        status_forcelist: Optional[Collection[int]] = None,
+        backoff_factor: float = 0,
+        raise_on_redirect: bool = True,
+        raise_on_status: bool = True,
+        history: Optional[Tuple[RequestHistory, ...]] = None,
+        respect_retry_after_header: bool = True,
+        remove_headers_on_redirect: Collection[
+            str
+        ] = DEFAULT_REMOVE_HEADERS_ON_REDIRECT,
+    ) -> None:
         self.total = total
         self.connect = connect
         self.read = read
         self.status = status
+        self.other = other
 
         if redirect is False or total is False:
             redirect = 0
@@ -187,24 +214,25 @@ class Retry(object):
 
         self.redirect = redirect
         self.status_forcelist = status_forcelist or set()
-        self.method_whitelist = method_whitelist
+        self.allowed_methods = allowed_methods
         self.backoff_factor = backoff_factor
         self.raise_on_redirect = raise_on_redirect
         self.raise_on_status = raise_on_status
-        self.history = history or tuple()
+        self.history = history or ()
         self.respect_retry_after_header = respect_retry_after_header
         self.remove_headers_on_redirect = frozenset(
             [h.lower() for h in remove_headers_on_redirect]
         )
 
-    def new(self, **kw):
+    def new(self, **kw: Any) -> "Retry":
         params = dict(
             total=self.total,
             connect=self.connect,
             read=self.read,
             redirect=self.redirect,
             status=self.status,
-            method_whitelist=self.method_whitelist,
+            other=self.other,
+            allowed_methods=self.allowed_methods,
             status_forcelist=self.status_forcelist,
             backoff_factor=self.backoff_factor,
             raise_on_redirect=self.raise_on_redirect,
@@ -213,14 +241,20 @@ class Retry(object):
             remove_headers_on_redirect=self.remove_headers_on_redirect,
             respect_retry_after_header=self.respect_retry_after_header,
         )
+
         params.update(kw)
-        return type(self)(**params)
+        return type(self)(**params)  # type: ignore
 
     @classmethod
-    def from_int(cls, retries, redirect=True, default=None):
+    def from_int(
+        cls,
+        retries: Optional[Union["Retry", bool, int]],
+        redirect: Optional[Union[bool, int]] = True,
+        default: Optional[Union["Retry", bool, int]] = None,
+    ) -> "Retry":
         """ Backwards-compatibility for the old retries format."""
         if retries is None:
-            retries = default if default is not None else cls.DEFAULT
+            retries = default if default is not None else cls.DEFAULT  # type: ignore
 
         if isinstance(retries, Retry):
             return retries
@@ -230,8 +264,8 @@ class Retry(object):
         log.debug("Converted retries value: %r -> %r", retries, new_retries)
         return new_retries
 
-    def get_backoff_time(self):
-        """ Formula for computing the current backoff
+    def get_backoff_time(self) -> float:
+        """Formula for computing the current backoff
 
         :rtype: float
         """
@@ -245,25 +279,26 @@ class Retry(object):
             return 0
 
         backoff_value = self.backoff_factor * (2 ** (consecutive_errors_len - 1))
-        return min(self.BACKOFF_MAX, backoff_value)
+        return float(min(self.BACKOFF_MAX, backoff_value))
 
-    def parse_retry_after(self, retry_after):
+    def parse_retry_after(self, retry_after: str) -> float:
+        seconds: float
         # Whitespace: https://tools.ietf.org/html/rfc7230#section-3.2.4
         if re.match(r"^\s*[0-9]+\s*$", retry_after):
             seconds = int(retry_after)
         else:
-            retry_date_tuple = email.utils.parsedate(retry_after)
+            retry_date_tuple = email.utils.parsedate_tz(retry_after)
             if retry_date_tuple is None:
-                raise InvalidHeader("Invalid Retry-After header: %s" % retry_after)
-            retry_date = time.mktime(retry_date_tuple)
+                raise InvalidHeader(f"Invalid Retry-After header: {retry_after}")
+
+            retry_date = email.utils.mktime_tz(retry_date_tuple)
             seconds = retry_date - time.time()
 
-        if seconds < 0:
-            seconds = 0
+        seconds = max(seconds, 0)
 
         return seconds
 
-    def get_retry_after(self, response):
+    def get_retry_after(self, response: "HTTPResponse") -> Optional[float]:
         """ Get the value of Retry-After in seconds. """
 
         retry_after = response.getheader("Retry-After")
@@ -273,7 +308,7 @@ class Retry(object):
 
         return self.parse_retry_after(retry_after)
 
-    def sleep_for_retry(self, response=None):
+    def sleep_for_retry(self, response: "HTTPResponse") -> bool:
         retry_after = self.get_retry_after(response)
         if retry_after:
             time.sleep(retry_after)
@@ -281,14 +316,14 @@ class Retry(object):
 
         return False
 
-    def _sleep_backoff(self):
+    def _sleep_backoff(self) -> None:
         backoff = self.get_backoff_time()
         if backoff <= 0:
             return
         time.sleep(backoff)
 
-    def sleep(self, response=None):
-        """ Sleep between retry attempts.
+    def sleep(self, response: Optional["HTTPResponse"] = None) -> None:
+        """Sleep between retry attempts.
 
         This method will respect a server's ``Retry-After`` response header
         and sleep the duration of the time requested. If that is not present, it
@@ -303,31 +338,32 @@ class Retry(object):
 
         self._sleep_backoff()
 
-    def _is_connection_error(self, err):
-        """ Errors when we're fairly sure that the server did not receive the
+    def _is_connection_error(self, err: Exception) -> bool:
+        """Errors when we're fairly sure that the server did not receive the
         request, so it should be safe to retry.
         """
         if isinstance(err, ProxyError):
             err = err.original_error
         return isinstance(err, ConnectTimeoutError)
 
-    def _is_read_error(self, err):
-        """ Errors that occur after the request has been started, so we should
+    def _is_read_error(self, err: Exception) -> bool:
+        """Errors that occur after the request has been started, so we should
         assume that the server began processing it.
         """
         return isinstance(err, (ReadTimeoutError, ProtocolError))
 
-    def _is_method_retryable(self, method):
-        """ Checks if a given HTTP method should be retried upon, depending if
-        it is included on the method whitelist.
+    def _is_method_retryable(self, method: str) -> bool:
+        """Checks if a given HTTP method should be retried upon, depending if
+        it is included in the allowed_methods
         """
-        if self.method_whitelist and method.upper() not in self.method_whitelist:
+        if self.allowed_methods and method.upper() not in self.allowed_methods:
             return False
-
         return True
 
-    def is_retry(self, method, status_code, has_retry_after=False):
-        """ Is this method/status code retryable? (Based on whitelists and control
+    def is_retry(
+        self, method: str, status_code: int, has_retry_after: bool = False
+    ) -> bool:
+        """Is this method/status code retryable? (Based on allowlists and control
         variables such as the number of total retries to allow, whether to
         respect the Retry-After header, whether this header is present, and
         whether the returned status code is on the list of status codes to
@@ -339,17 +375,27 @@ class Retry(object):
         if self.status_forcelist and status_code in self.status_forcelist:
             return True
 
-        return (
+        return bool(
             self.total
             and self.respect_retry_after_header
             and has_retry_after
             and (status_code in self.RETRY_AFTER_STATUS_CODES)
         )
 
-    def is_exhausted(self):
+    def is_exhausted(self) -> bool:
         """ Are we out of retries? """
-        retry_counts = (self.total, self.connect, self.read, self.redirect, self.status)
-        retry_counts = list(filter(None, retry_counts))
+        retry_counts = [
+            x
+            for x in (
+                self.total,
+                self.connect,
+                self.read,
+                self.redirect,
+                self.status,
+                self.other,
+            )
+            if x
+        ]
         if not retry_counts:
             return False
 
@@ -357,14 +403,14 @@ class Retry(object):
 
     def increment(
         self,
-        method=None,
-        url=None,
-        response=None,
-        error=None,
-        _pool=None,
-        _stacktrace=None,
-    ):
-        """ Return a new Retry object with incremented retry counters.
+        method: Optional[str] = None,
+        url: Optional[str] = None,
+        response: Optional["HTTPResponse"] = None,
+        error: Optional[Exception] = None,
+        _pool: Optional["ConnectionPool"] = None,
+        _stacktrace: Optional[TracebackType] = None,
+    ) -> "Retry":
+        """Return a new Retry object with incremented retry counters.
 
         :param response: A response object, or None, if the server did not
             return a response.
@@ -376,7 +422,7 @@ class Retry(object):
         """
         if self.total is False and error:
             # Disabled, indicate to re-raise the error.
-            raise six.reraise(type(error), error, _stacktrace)
+            raise reraise(type(error), error, _stacktrace)
 
         total = self.total
         if total is not None:
@@ -386,6 +432,7 @@ class Retry(object):
         read = self.read
         redirect = self.redirect
         status_count = self.status
+        other = self.other
         cause = "unknown"
         status = None
         redirect_location = None
@@ -393,16 +440,21 @@ class Retry(object):
         if error and self._is_connection_error(error):
             # Connect retry?
             if connect is False:
-                raise six.reraise(type(error), error, _stacktrace)
+                raise reraise(type(error), error, _stacktrace)
             elif connect is not None:
                 connect -= 1
 
         elif error and self._is_read_error(error):
             # Read retry?
-            if read is False or not self._is_method_retryable(method):
-                raise six.reraise(type(error), error, _stacktrace)
+            if read is False or method is None or not self._is_method_retryable(method):
+                raise reraise(type(error), error, _stacktrace)
             elif read is not None:
                 read -= 1
+
+        elif error:
+            # Other retry?
+            if other is not None:
+                other -= 1
 
         elif response and response.get_redirect_location():
             # Redirect retry?
@@ -414,7 +466,7 @@ class Retry(object):
 
         else:
             # Incrementing because of a server error like a 500 in
-            # status_forcelist and a the given method is in the whitelist
+            # status_forcelist and the given method is in the allowed_methods
             cause = ResponseError.GENERIC_ERROR
             if response and response.status:
                 if status_count is not None:
@@ -432,22 +484,23 @@ class Retry(object):
             read=read,
             redirect=redirect,
             status=status_count,
+            other=other,
             history=history,
         )
 
         if new_retry.is_exhausted():
-            raise MaxRetryError(_pool, url, error or ResponseError(cause))
+            raise MaxRetryError(_pool, url, error or ResponseError(cause))  # type: ignore
 
         log.debug("Incremented Retry for (url='%s'): %r", url, new_retry)
 
         return new_retry
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
-            "{cls.__name__}(total={self.total}, connect={self.connect}, "
-            "read={self.read}, redirect={self.redirect}, status={self.status})"
-        ).format(cls=type(self), self=self)
+            f"{type(self).__name__}(total={self.total}, connect={self.connect}, "
+            f"read={self.read}, redirect={self.redirect}, status={self.status})"
+        )
 
 
 # For backwards compatibility (equivalent to pre-v1.9):
-Retry.DEFAULT = Retry(3)
+Retry.DEFAULT = Retry(3)  # type: ignore

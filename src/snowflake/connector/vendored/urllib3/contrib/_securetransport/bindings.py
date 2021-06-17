@@ -29,24 +29,23 @@ license and by oscrypto's:
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
     DEALINGS IN THE SOFTWARE.
 """
-from __future__ import absolute_import
 
 import platform
-from ctypes.util import find_library
 from ctypes import (
-    c_void_p,
-    c_int32,
-    c_char_p,
-    c_size_t,
+    CDLL,
+    CFUNCTYPE,
+    POINTER,
+    c_bool,
     c_byte,
+    c_char_p,
+    c_int32,
+    c_long,
+    c_size_t,
     c_uint32,
     c_ulong,
-    c_long,
-    c_bool,
+    c_void_p,
 )
-from ctypes import CDLL, POINTER, CFUNCTYPE
-from snowflake.connector.vendored.urllib3.packages.six import raise_from
-
+from ctypes.util import find_library
 
 if platform.system() != "Darwin":
     raise ImportError("Only macOS is supported")
@@ -55,8 +54,7 @@ version = platform.mac_ver()[0]
 version_info = tuple(map(int, version.split(".")))
 if version_info < (10, 8):
     raise OSError(
-        "Only OS X 10.8 and newer are supported, not %s.%s"
-        % (version_info[0], version_info[1])
+        f"Only OS X 10.8 and newer are supported, not {version_info[0]}.{version_info[1]}"
     )
 
 
@@ -73,7 +71,7 @@ def load_cdll(name, macos10_16_path):
             raise OSError  # Caught and reraised as 'ImportError'
         return CDLL(path, use_errno=True)
     except OSError:
-        raise_from(ImportError("The library %s failed to load" % name), None)
+        raise ImportError(f"The library {name} failed to load") from None
 
 
 Security = load_cdll(
@@ -293,6 +291,13 @@ try:
     Security.SSLSetProtocolVersionMax.argtypes = [SSLContextRef, SSLProtocol]
     Security.SSLSetProtocolVersionMax.restype = OSStatus
 
+    try:
+        Security.SSLSetALPNProtocols.argtypes = [SSLContextRef, CFArrayRef]
+        Security.SSLSetALPNProtocols.restype = OSStatus
+    except AttributeError:
+        # Supported only in 10.12+
+        pass
+
     Security.SecCopyErrorMessageString.argtypes = [OSStatus, c_void_p]
     Security.SecCopyErrorMessageString.restype = CFStringRef
 
@@ -407,11 +412,11 @@ try:
     CoreFoundation.CFStringRef = CFStringRef
     CoreFoundation.CFDictionaryRef = CFDictionaryRef
 
-except (AttributeError):
+except AttributeError:
     raise ImportError("Error initializing ctypes")
 
 
-class CFConst(object):
+class CFConst:
     """
     A class object that acts as essentially a namespace for CoreFoundation
     constants.
@@ -420,7 +425,7 @@ class CFConst(object):
     kCFStringEncodingUTF8 = CFStringEncoding(0x08000100)
 
 
-class SecurityConst(object):
+class SecurityConst:
     """
     A class object that acts as essentially a namespace for Security constants.
     """
@@ -475,36 +480,3 @@ class SecurityConst(object):
     errSecNoTrustSettings = -25263
     errSecItemNotFound = -25300
     errSecInvalidTrustSettings = -25262
-
-    # Cipher suites. We only pick the ones our default cipher string allows.
-    # Source: https://developer.apple.com/documentation/security/1550981-ssl_cipher_suite_values
-    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 = 0xC02C
-    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = 0xC030
-    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = 0xC02B
-    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = 0xC02F
-    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 = 0xCCA9
-    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 = 0xCCA8
-    TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 = 0x009F
-    TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 = 0x009E
-    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 = 0xC024
-    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 = 0xC028
-    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA = 0xC00A
-    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA = 0xC014
-    TLS_DHE_RSA_WITH_AES_256_CBC_SHA256 = 0x006B
-    TLS_DHE_RSA_WITH_AES_256_CBC_SHA = 0x0039
-    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 = 0xC023
-    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 = 0xC027
-    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA = 0xC009
-    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA = 0xC013
-    TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 = 0x0067
-    TLS_DHE_RSA_WITH_AES_128_CBC_SHA = 0x0033
-    TLS_RSA_WITH_AES_256_GCM_SHA384 = 0x009D
-    TLS_RSA_WITH_AES_128_GCM_SHA256 = 0x009C
-    TLS_RSA_WITH_AES_256_CBC_SHA256 = 0x003D
-    TLS_RSA_WITH_AES_128_CBC_SHA256 = 0x003C
-    TLS_RSA_WITH_AES_256_CBC_SHA = 0x0035
-    TLS_RSA_WITH_AES_128_CBC_SHA = 0x002F
-    TLS_AES_128_GCM_SHA256 = 0x1301
-    TLS_AES_256_GCM_SHA384 = 0x1302
-    TLS_AES_128_CCM_8_SHA256 = 0x1305
-    TLS_AES_128_CCM_SHA256 = 0x1304

@@ -1,33 +1,101 @@
-from __future__ import absolute_import
-
-try:
-    from collections.abc import Mapping, MutableMapping
-except ImportError:
-    from collections import Mapping, MutableMapping
-try:
-    from threading import RLock
-except ImportError:  # Platform-specific: No threads available
-
-    class RLock:
-        def __enter__(self):
-            pass
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            pass
-
-
+import sys
 from collections import OrderedDict
-from .exceptions import InvalidHeader
-from .packages.six import iterkeys, itervalues, PY3
+from enum import Enum, auto
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Generic,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    MutableMapping,
+    NoReturn,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
+
+if TYPE_CHECKING:
+    from threading import RLock
+
+    # We can only import Protocol if TYPE_CHECKING because it's a development
+    # dependency, and is not available at runtime.
+    from typing_extensions import Protocol
+
+    class HasGettableStringKeys(Protocol):
+        def keys(self) -> Iterator[str]:
+            ...
+
+        def __getitem__(self, key: str) -> str:
+            ...
+
+
+else:
+    try:
+        from threading import RLock
+    except ImportError:  # Python 3.6
+        from ._compat import RLock
+
+
+# Starting in Python 3.7 the 'dict' class is guaranteed to be
+# ordered by insertion. This behavior was an implementation
+# detail in Python 3.6. OrderedDict is implemented in C in
+# later Python versions but still requires a lot more memory
+# due to being implemented as a linked list.
+if sys.version_info >= (3, 7):
+    _ordered_dict = dict
+else:
+    _ordered_dict = OrderedDict
 
 
 __all__ = ["RecentlyUsedContainer", "HTTPHeaderDict"]
 
 
-_Null = object()
+# Key type
+_KT = TypeVar("_KT")
+# Value type
+_VT = TypeVar("_VT")
+# Default type
+_DT = TypeVar("_DT")
+
+ValidHTTPHeaderSource = Union[
+    "HTTPHeaderDict",
+    Mapping[str, str],
+    Iterable[Tuple[str, str]],
+    "HasGettableStringKeys",
+]
 
 
-class RecentlyUsedContainer(MutableMapping):
+class _Sentinel(Enum):
+    not_passed = auto()
+
+
+def ensure_can_construct_http_header_dict(
+    potential: object,
+) -> Optional[ValidHTTPHeaderSource]:
+    if isinstance(potential, HTTPHeaderDict):
+        return potential
+    elif isinstance(potential, Mapping):
+        # Full runtime checking of the contents of a Mapping is expensive, so for the
+        # purposes of typechecking, we assume that any Mapping is the right shape.
+        return cast(Mapping[str, str], potential)
+    elif isinstance(potential, Iterable):
+        # Similarly to Mapping, full runtime checking of the contents of an Iterable is
+        # expensive, so for the purposes of typechecking, we assume that any Iterable
+        # is the right shape.
+        return cast(Iterable[Tuple[str, str]], potential)
+    elif hasattr(potential, "keys") and hasattr(potential, "__getitem__"):
+        return cast("HasGettableStringKeys", potential)
+    else:
+        return None
+
+
+class RecentlyUsedContainer(Generic[_KT, _VT], MutableMapping[_KT, _VT]):
     """
     Provides a thread-safe dict-like container which maintains up to
     ``maxsize`` keys while throwing away the least-recently-used keys beyond
@@ -41,69 +109,128 @@ class RecentlyUsedContainer(MutableMapping):
         ``dispose_func(value)`` is called.  Callback which will get called
     """
 
-    ContainerCls = OrderedDict
+    _container: "OrderedDict[_KT, _VT]"
+    _maxsize: int
+    dispose_func: Optional[Callable[[_VT], None]]
+    lock: RLock
 
-    def __init__(self, maxsize=10, dispose_func=None):
+    def __init__(
+        self, maxsize: int = 10, dispose_func: Optional[Callable[[_VT], None]] = None
+    ) -> None:
+        super().__init__()
         self._maxsize = maxsize
         self.dispose_func = dispose_func
-
-        self._container = self.ContainerCls()
+        self._container = OrderedDict()
         self.lock = RLock()
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: _KT) -> _VT:
         # Re-insert the item, moving it to the end of the eviction line.
         with self.lock:
             item = self._container.pop(key)
             self._container[key] = item
             return item
 
-    def __setitem__(self, key, value):
-        evicted_value = _Null
+    def __setitem__(self, key: _KT, value: _VT) -> None:
+        evicted_item = None
         with self.lock:
             # Possibly evict the existing value of 'key'
-            evicted_value = self._container.get(key, _Null)
+            try:
+                # If the key exists, we'll overwrite it, which won't change the
+                # size of the pool. Because accessing a key should move it to
+                # the end of the eviction line, we pop it out first.
+                evicted_item = key, self._container.pop(key)
+            except KeyError:
+                if len(self._container) >= self._maxsize:
+                    # If we didn't evict an existing value, and we've hit our maximum
+                    # size, then we have to evict the least recently used item from
+                    # the beginning of the container.
+                    evicted_item = self._container.popitem(last=False)
+
+            # Finally, insert the new value.
             self._container[key] = value
 
-            # If we didn't evict an existing value, we might have to evict the
-            # least recently used item from the beginning of the container.
-            if len(self._container) > self._maxsize:
-                _key, evicted_value = self._container.popitem(last=False)
-
-        if self.dispose_func and evicted_value is not _Null:
+        # After releasing the lock on the pool, dispose of any evicted value.
+        if evicted_item is not None and self.dispose_func:
+            _, evicted_value = evicted_item
             self.dispose_func(evicted_value)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: _KT) -> None:
         with self.lock:
             value = self._container.pop(key)
 
         if self.dispose_func:
             self.dispose_func(value)
 
-    def __len__(self):
+    def __len__(self) -> int:
         with self.lock:
             return len(self._container)
 
-    def __iter__(self):
+    def __iter__(self) -> NoReturn:
         raise NotImplementedError(
             "Iteration over this class is unlikely to be threadsafe."
         )
 
-    def clear(self):
+    def clear(self) -> None:
         with self.lock:
             # Copy pointers to all values, then wipe the mapping
-            values = list(itervalues(self._container))
+            values = list(self._container.values())
             self._container.clear()
 
         if self.dispose_func:
             for value in values:
                 self.dispose_func(value)
 
-    def keys(self):
+    def keys(self) -> Set[_KT]:
         with self.lock:
-            return list(iterkeys(self._container))
+            return set(self._container.keys())
 
 
-class HTTPHeaderDict(MutableMapping):
+class HTTPHeaderDictItemView(Set[Tuple[str, str]]):
+    """
+    HTTPHeaderDict is unusual for a Mapping[str, str] in that it has two modes of
+    address.
+
+    If we directly try to get an item with a particular name, we will get a string
+    back that is the concatenated version of all the values:
+
+    >>> d['X-Header-Name']
+    'Value1, Value2, Value3'
+
+    However, if we iterate over an HTTPHeaderDict's items, we want to get a
+    distinct item for every different value of a header:
+
+    >>> list(d.items())
+    [
+        ('X-Header-Name', 'Value1')
+        ('X-Header-Name', 'Value2')
+        ('X-Header-Name', 'Value3')
+    ]
+
+    This class conforms to the interface required by the MutableMapping ABC while
+    also giving us the nonstandard iteration behavior we want; items with duplicate
+    keys, ordered by time of first insertion.
+    """
+
+    _headers: "HTTPHeaderDict"
+
+    def __init__(self, headers: "HTTPHeaderDict") -> None:
+        self._headers = headers
+
+    def __len__(self) -> int:
+        return len(list(self._headers.iteritems()))
+
+    def __iter__(self) -> Iterator[Tuple[str, str]]:
+        return self._headers.iteritems()
+
+    def __contains__(self, item: object) -> bool:
+        if isinstance(item, tuple) and len(item) == 2:
+            passed_key, passed_val = item
+            if isinstance(passed_key, str) and isinstance(passed_val, str):
+                return self._headers._has_value_for_header(passed_key, passed_val)
+        return False
+
+
+class HTTPHeaderDict(MutableMapping[str, str]):
     """
     :param headers:
         An iterable of field-value pairs. Must not contain multiple field names
@@ -137,9 +264,11 @@ class HTTPHeaderDict(MutableMapping):
     '7'
     """
 
-    def __init__(self, headers=None, **kwargs):
-        super(HTTPHeaderDict, self).__init__()
-        self._container = OrderedDict()
+    _container: MutableMapping[str, List[str]]
+
+    def __init__(self, headers: Optional[ValidHTTPHeaderSource] = None, **kwargs: str):
+        super().__init__()
+        self._container = _ordered_dict()
         if headers is not None:
             if isinstance(headers, HTTPHeaderDict):
                 self._copy_from(headers)
@@ -148,70 +277,50 @@ class HTTPHeaderDict(MutableMapping):
         if kwargs:
             self.extend(kwargs)
 
-    def __setitem__(self, key, val):
+    def __setitem__(self, key: str, val: str) -> None:
         self._container[key.lower()] = [key, val]
-        return self._container[key.lower()]
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> str:
         val = self._container[key.lower()]
         return ", ".join(val[1:])
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: str) -> None:
         del self._container[key.lower()]
 
-    def __contains__(self, key):
-        return key.lower() in self._container
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            return key.lower() in self._container
+        return False
 
-    def __eq__(self, other):
-        if not isinstance(other, Mapping) and not hasattr(other, "keys"):
+    def __eq__(self, other: object) -> bool:
+        maybe_constructable = ensure_can_construct_http_header_dict(other)
+        if maybe_constructable is None:
             return False
-        if not isinstance(other, type(self)):
-            other = type(self)(other)
-        return dict((k.lower(), v) for k, v in self.itermerged()) == dict(
-            (k.lower(), v) for k, v in other.itermerged()
-        )
+        else:
+            other_as_http_header_dict = type(self)(maybe_constructable)
 
-    def __ne__(self, other):
+        return {k.lower(): v for k, v in self.itermerged()} == {
+            k.lower(): v for k, v in other_as_http_header_dict.itermerged()
+        }
+
+    def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
-    if not PY3:  # Python 2
-        iterkeys = MutableMapping.iterkeys
-        itervalues = MutableMapping.itervalues
-
-    __marker = object()
-
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._container)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         # Only provide the originally cased names
         for vals in self._container.values():
             yield vals[0]
 
-    def pop(self, key, default=__marker):
-        """D.pop(k[,d]) -> v, remove specified key and return the corresponding value.
-          If key is not found, d is returned if given, otherwise KeyError is raised.
-        """
-        # Using the MutableMapping function directly fails due to the private marker.
-        # Using ordinary dict.pop would expose the internal structures.
-        # So let's reinvent the wheel.
-        try:
-            value = self[key]
-        except KeyError:
-            if default is self.__marker:
-                raise
-            return default
-        else:
-            del self[key]
-            return value
-
-    def discard(self, key):
+    def discard(self, key: str) -> None:
         try:
             del self[key]
         except KeyError:
             pass
 
-    def add(self, key, val):
+    def add(self, key: str, val: str) -> None:
         """Adds a (name, value) pair, doesn't overwrite the value if it already
         exists.
 
@@ -227,15 +336,14 @@ class HTTPHeaderDict(MutableMapping):
         if new_vals is not vals:
             vals.append(val)
 
-    def extend(self, *args, **kwargs):
+    def extend(self, *args: ValidHTTPHeaderSource, **kwargs: str) -> None:
         """Generic import function for any type of header-like object.
         Adapted version of MutableMapping.update in order to insert items
         with self.add instead of self.__setitem__
         """
         if len(args) > 1:
             raise TypeError(
-                "extend() takes at most 1 positional "
-                "arguments ({0} given)".format(len(args))
+                f"extend() takes at most 1 positional arguments ({len(args)} given)"
             )
         other = args[0] if len(args) >= 1 else ()
 
@@ -243,28 +351,48 @@ class HTTPHeaderDict(MutableMapping):
             for key, val in other.iteritems():
                 self.add(key, val)
         elif isinstance(other, Mapping):
-            for key in other:
-                self.add(key, other[key])
-        elif hasattr(other, "keys"):
-            for key in other.keys():
-                self.add(key, other[key])
-        else:
+            for key, val in other.items():
+                self.add(key, val)
+        elif isinstance(other, Iterable):
+            other = cast(Iterable[Tuple[str, str]], other)
             for key, value in other:
                 self.add(key, value)
+        elif hasattr(other, "keys") and hasattr(other, "__getitem__"):
+            # THIS IS NOT A TYPESAFE BRANCH
+            # In this branch, the object has a `keys` attr but is not a Mapping or any of
+            # the other types indicated in the method signature. We do some stuff with
+            # it as though it partially implements the Mapping interface, but we're not
+            # doing that stuff safely AT ALL.
+            for key in other.keys():
+                self.add(key, other[key])
 
         for key, value in kwargs.items():
             self.add(key, value)
 
-    def getlist(self, key, default=__marker):
+    @overload
+    def getlist(self, key: str) -> List[str]:
+        ...
+
+    @overload
+    def getlist(self, key: str, default: _DT) -> Union[List[str], _DT]:
+        ...
+
+    def getlist(
+        self, key: str, default: Union[_Sentinel, _DT] = _Sentinel.not_passed
+    ) -> Union[List[str], _DT]:
         """Returns a list of all the values for the named field. Returns an
         empty list if the key doesn't exist."""
         try:
             vals = self._container[key.lower()]
         except KeyError:
-            if default is self.__marker:
+            if default is _Sentinel.not_passed:
+                # _DT is unbound; empty list is instance of List[str]
                 return []
+            # _DT is bound; default is instance of _DT
             return default
         else:
+            # _DT may or may not be bound; vals[1:] is instance of List[str], which
+            # meets our external interface requirement of `Union[List[str], _DT]`.
             return vals[1:]
 
     # Backwards compatibility for httplib
@@ -275,62 +403,36 @@ class HTTPHeaderDict(MutableMapping):
     # Backwards compatibility for http.cookiejar
     get_all = getlist
 
-    def __repr__(self):
-        return "%s(%s)" % (type(self).__name__, dict(self.itermerged()))
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({dict(self.itermerged())})"
 
-    def _copy_from(self, other):
+    def _copy_from(self, other: "HTTPHeaderDict") -> None:
         for key in other:
             val = other.getlist(key)
-            if isinstance(val, list):
-                # Don't need to convert tuples
-                val = list(val)
-            self._container[key.lower()] = [key] + val
+            self._container[key.lower()] = [key, *val]
 
-    def copy(self):
+    def copy(self) -> "HTTPHeaderDict":
         clone = type(self)()
         clone._copy_from(self)
         return clone
 
-    def iteritems(self):
+    def iteritems(self) -> Iterator[Tuple[str, str]]:
         """Iterate over all header lines, including duplicate ones."""
         for key in self:
             vals = self._container[key.lower()]
             for val in vals[1:]:
                 yield vals[0], val
 
-    def itermerged(self):
+    def itermerged(self) -> Iterator[Tuple[str, str]]:
         """Iterate over all headers, merging duplicate ones together."""
         for key in self:
             val = self._container[key.lower()]
             yield val[0], ", ".join(val[1:])
 
-    def items(self):
-        return list(self.iteritems())
+    def items(self) -> HTTPHeaderDictItemView:
+        return HTTPHeaderDictItemView(self)
 
-    @classmethod
-    def from_httplib(cls, message):  # Python 2
-        """Read headers from a Python 2 httplib message object."""
-        # python2.7 does not expose a proper API for exporting multiheaders
-        # efficiently. This function re-reads raw lines from the message
-        # object and extracts the multiheaders properly.
-        obs_fold_continued_leaders = (" ", "\t")
-        headers = []
-
-        for line in message.headers:
-            if line.startswith(obs_fold_continued_leaders):
-                if not headers:
-                    # We received a header line that starts with OWS as described
-                    # in RFC-7230 S3.2.4. This indicates a multiline header, but
-                    # there exists no previous header to which we can attach it.
-                    raise InvalidHeader(
-                        "Header continuation with no previous header: %s" % line
-                    )
-                else:
-                    key, value = headers[-1]
-                    headers[-1] = (key, value + " " + line.strip())
-                    continue
-
-            key, value = line.split(":", 1)
-            headers.append((key, value.strip()))
-
-        return cls(headers)
+    def _has_value_for_header(self, header_name: str, potential_value: str) -> bool:
+        if header_name in self:
+            return potential_value in self._container[header_name.lower()][1:]
+        return False

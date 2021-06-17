@@ -1,63 +1,90 @@
-from __future__ import absolute_import
-from .packages.six.moves.http_client import IncompleteRead as httplib_IncompleteRead
+from http.client import IncompleteRead as httplib_IncompleteRead
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from email.errors import MessageDefect
+
+    from urllib3.connectionpool import ConnectionPool
+    from urllib3.response import HTTPResponse
+    from urllib3.util.retry import Retry
 
 # Base Exceptions
 
 
 class HTTPError(Exception):
-    "Base exception used by this module."
+    """Base exception used by this module."""
+
     pass
 
 
 class HTTPWarning(Warning):
-    "Base warning used by this module."
+    """Base warning used by this module."""
+
     pass
 
 
+ReduceResult = Tuple[Callable[..., object], Tuple[object, ...]]
+
+
 class PoolError(HTTPError):
-    "Base exception for errors caused within a pool."
+    """Base exception for errors caused within a pool."""
 
-    def __init__(self, pool, message):
+    pool: "ConnectionPool"
+
+    def __init__(self, pool: "ConnectionPool", message: str) -> None:
         self.pool = pool
-        HTTPError.__init__(self, "%s: %s" % (pool, message))
+        super().__init__(f"{pool}: {message}")
 
-    def __reduce__(self):
+    def __reduce__(self) -> ReduceResult:
         # For pickling purposes.
         return self.__class__, (None, None)
 
 
 class RequestError(PoolError):
-    "Base exception for PoolErrors that have associated URLs."
+    """Base exception for PoolErrors that have associated URLs."""
 
-    def __init__(self, pool, url, message):
+    url: str
+
+    def __init__(self, pool: "ConnectionPool", url: str, message: str) -> None:
         self.url = url
-        PoolError.__init__(self, pool, message)
+        super().__init__(pool, message)
 
-    def __reduce__(self):
+    def __reduce__(self) -> ReduceResult:
         # For pickling purposes.
         return self.__class__, (None, self.url, None)
 
 
 class SSLError(HTTPError):
-    "Raised when SSL certificate fails in an HTTPS connection."
+    """Raised when SSL certificate fails in an HTTPS connection."""
+
     pass
 
 
 class ProxyError(HTTPError):
-    "Raised when the connection to a proxy fails."
+    """Raised when the connection to a proxy fails."""
 
-    def __init__(self, message, error, *args):
-        super(ProxyError, self).__init__(message, error, *args)
+    original_error: Exception
+
+    def __init__(self, message: str, error: Exception) -> None:
+        super().__init__(message, error)
         self.original_error = error
 
 
+class HTTPSProxyError(ProxyError):
+    """Used only when establishing a TLS connection to a proxy"""
+
+    pass
+
+
 class DecodeError(HTTPError):
-    "Raised when automatic decoding based on Content-Type fails."
+    """Raised when automatic decoding based on Content-Type fails."""
+
     pass
 
 
 class ProtocolError(HTTPError):
-    "Raised when something unexpected happens mid-request/response."
+    """Raised when something unexpected happens mid-request/response."""
+
     pass
 
 
@@ -78,31 +105,39 @@ class MaxRetryError(RequestError):
 
     """
 
-    def __init__(self, pool, url, reason=None):
+    reason: Optional[Exception]
+
+    def __init__(
+        self, pool: "ConnectionPool", url: str, reason: Optional[Exception] = None
+    ) -> None:
         self.reason = reason
 
-        message = "Max retries exceeded with url: %s (Caused by %r)" % (url, reason)
+        message = f"Max retries exceeded with url: {url} (Caused by {reason!r})"
 
-        RequestError.__init__(self, pool, url, message)
+        super().__init__(pool, url, message)
 
 
 class HostChangedError(RequestError):
-    "Raised when an existing pool gets a request for a foreign host."
+    """Raised when an existing pool gets a request for a foreign host."""
 
-    def __init__(self, pool, url, retries=3):
-        message = "Tried to open a foreign host with url: %s" % url
-        RequestError.__init__(self, pool, url, message)
+    retries: Union["Retry", int]
+
+    def __init__(
+        self, pool: "ConnectionPool", url: str, retries: Union["Retry", int] = 3
+    ) -> None:
+        message = f"Tried to open a foreign host with url: {url}"
+        super().__init__(pool, url, message)
         self.retries = retries
 
 
 class TimeoutStateError(HTTPError):
-    """ Raised when passing an invalid state to a timeout """
+    """Raised when passing an invalid state to a timeout"""
 
     pass
 
 
 class TimeoutError(HTTPError):
-    """ Raised when a socket timeout error occurs.
+    """Raised when a socket timeout error occurs.
 
     Catching this error will catch both :exc:`ReadTimeoutErrors
     <ReadTimeoutError>` and :exc:`ConnectTimeoutErrors <ConnectTimeoutError>`.
@@ -112,80 +147,107 @@ class TimeoutError(HTTPError):
 
 
 class ReadTimeoutError(TimeoutError, RequestError):
-    "Raised when a socket timeout occurs while receiving data from a server"
+    """Raised when a socket timeout occurs while receiving data from a server"""
+
     pass
 
 
 # This timeout error does not have a URL attached and needs to inherit from the
 # base HTTPError
 class ConnectTimeoutError(TimeoutError):
-    "Raised when a socket timeout occurs while connecting to a server"
+    """Raised when a socket timeout occurs while connecting to a server"""
+
     pass
 
 
 class NewConnectionError(ConnectTimeoutError, PoolError):
-    "Raised when we fail to establish a new connection. Usually ECONNREFUSED."
+    """Raised when we fail to establish a new connection. Usually ECONNREFUSED."""
+
     pass
 
 
 class EmptyPoolError(PoolError):
-    "Raised when a pool runs out of connections and no more are allowed."
+    """Raised when a pool runs out of connections and no more are allowed."""
+
+    pass
+
+
+class FullPoolError(PoolError):
+    """Raised when we try to add a connection to a full pool in blocking mode."""
+
     pass
 
 
 class ClosedPoolError(PoolError):
-    "Raised when a request enters a pool after the pool has been closed."
+    """Raised when a request enters a pool after the pool has been closed."""
+
     pass
 
 
 class LocationValueError(ValueError, HTTPError):
-    "Raised when there is something wrong with a given URL input."
+    """Raised when there is something wrong with a given URL input."""
+
     pass
 
 
 class LocationParseError(LocationValueError):
-    "Raised when get_host or similar fails to parse the URL input."
+    """Raised when get_host or similar fails to parse the URL input."""
 
-    def __init__(self, location):
-        message = "Failed to parse: %s" % location
-        HTTPError.__init__(self, message)
+    location: str
+
+    def __init__(self, location: str) -> None:
+        message = f"Failed to parse: {location}"
+        super().__init__(message)
 
         self.location = location
 
 
+class URLSchemeUnknown(LocationValueError):
+    """Raised when a URL input has an unsupported scheme."""
+
+    scheme: str
+
+    def __init__(self, scheme: str):
+        message = f"Not supported URL scheme {scheme}"
+        super().__init__(message)
+
+        self.scheme = scheme
+
+
 class ResponseError(HTTPError):
-    "Used as a container for an error reason supplied in a MaxRetryError."
+    """Used as a container for an error reason supplied in a MaxRetryError."""
+
     GENERIC_ERROR = "too many error responses"
     SPECIFIC_ERROR = "too many {status_code} error responses"
 
 
 class SecurityWarning(HTTPWarning):
-    "Warned when performing security reducing actions"
-    pass
+    """Warned when performing security reducing actions"""
 
-
-class SubjectAltNameWarning(SecurityWarning):
-    "Warned when connecting to a host with a certificate missing a SAN."
     pass
 
 
 class InsecureRequestWarning(SecurityWarning):
-    "Warned when making an unverified HTTPS request."
+    """Warned when making an unverified HTTPS request."""
+
     pass
 
 
 class SystemTimeWarning(SecurityWarning):
-    "Warned when system time is suspected to be wrong"
+    """Warned when system time is suspected to be wrong"""
+
     pass
 
 
 class InsecurePlatformWarning(SecurityWarning):
-    "Warned when certain SSL configuration is not available on a platform."
+    """Warned when certain TLS/SSL configuration is not available on a platform."""
+
     pass
 
 
 class SNIMissingWarning(HTTPWarning):
-    "Warned when making a HTTPS request without SNI available."
+    """Warned when making a HTTPS request without SNI available."""
+
     pass
 
 
@@ -198,29 +260,16 @@ class DependencyWarning(HTTPWarning):
     pass
 
 
-class InvalidProxyConfigurationWarning(HTTPWarning):
-    """
-    Warned when using an HTTPS proxy and an HTTPS URL. Currently
-    urllib3 doesn't support HTTPS proxies and the proxy will be
-    contacted via HTTP instead. This warning can be fixed by
-    changing your HTTPS proxy URL into an HTTP proxy URL.
-
-    If you encounter this warning read this:
-    https://github.com/urllib3/urllib3/issues/1850
-    """
-
-    pass
-
-
 class ResponseNotChunked(ProtocolError, ValueError):
-    "Response needs to be chunked in order to read it as chunks."
+    """Response needs to be chunked in order to read it as chunks."""
+
     pass
 
 
 class BodyNotHttplibCompatible(HTTPError):
     """
-    Body should be httplib.HTTPResponse like (have an fp attribute which
-    returns raw chunks) for read_chunked().
+    Body should be :class:`http.client.HTTPResponse` like
+    (have an fp attribute which returns raw chunks) for read_chunked().
     """
 
     pass
@@ -230,43 +279,83 @@ class IncompleteRead(HTTPError, httplib_IncompleteRead):
     """
     Response length doesn't match expected Content-Length
 
-    Subclass of http_client.IncompleteRead to allow int value
-    for `partial` to avoid creating large objects on streamed
-    reads.
+    Subclass of :class:`http.client.IncompleteRead` to allow int value
+    for ``partial`` to avoid creating large objects on streamed reads.
     """
 
-    def __init__(self, partial, expected):
-        super(IncompleteRead, self).__init__(partial, expected)
+    partial: int
+    expected: int
 
-    def __repr__(self):
+    def __init__(self, partial: int, expected: int) -> None:
+        super().__init__(partial, expected)
+
+    def __repr__(self) -> str:
         return "IncompleteRead(%i bytes read, %i more expected)" % (
             self.partial,
             self.expected,
         )
 
 
+class InvalidChunkLength(HTTPError, httplib_IncompleteRead):
+    """Invalid chunk length in a chunked response."""
+
+    partial: int
+    expected: int
+    response: "HTTPResponse"
+    length: int
+
+    def __init__(self, response: "HTTPResponse", length: int) -> None:
+        super().__init__(response.tell(), response.length_remaining)
+        self.response = response
+        self.length = length
+
+    def __repr__(self) -> str:
+        return "InvalidChunkLength(got length %r, %i bytes read)" % (
+            self.length,
+            self.partial,
+        )
+
+
 class InvalidHeader(HTTPError):
-    "The header provided was somehow invalid."
+    """The header provided was somehow invalid."""
+
     pass
 
 
-class ProxySchemeUnknown(AssertionError, ValueError):
-    "ProxyManager does not support the supplied scheme"
+class ProxySchemeUnknown(AssertionError, URLSchemeUnknown):
+    """ProxyManager does not support the supplied scheme"""
+
     # TODO(t-8ch): Stop inheriting from AssertionError in v2.0.
 
-    def __init__(self, scheme):
-        message = "Not supported proxy scheme %s" % scheme
-        super(ProxySchemeUnknown, self).__init__(message)
+    def __init__(self, scheme: Optional[str]) -> None:
+        # 'localhost' is here because our URL parser parses
+        # localhost:8080 -> scheme=localhost, remove if we fix this.
+        if scheme == "localhost":
+            scheme = None
+        if scheme is None:
+            message = "Proxy URL had no scheme, should start with http:// or https://"
+        else:
+            message = f"Proxy URL had unsupported scheme {scheme}, should use http:// or https://"
+        super().__init__(message)
+
+
+class ProxySchemeUnsupported(ValueError):
+    """Fetching HTTPS resources through HTTPS proxies is unsupported"""
+
+    pass
 
 
 class HeaderParsingError(HTTPError):
-    "Raised by assert_header_parsing, but we convert it to a log.warning statement."
+    """Raised by assert_header_parsing, but we convert it to a log.warning statement."""
 
-    def __init__(self, defects, unparsed_data):
-        message = "%s, unparsed data: %r" % (defects or "Unknown", unparsed_data)
-        super(HeaderParsingError, self).__init__(message)
+    def __init__(
+        self, defects: List["MessageDefect"], unparsed_data: Optional[Union[bytes, str]]
+    ) -> None:
+        message = f"{defects or 'Unknown'}, unparsed data: {unparsed_data!r}"
+        super().__init__(message)
 
 
 class UnrewindableBodyError(HTTPError):
-    "urllib3 encountered an error when trying to rewind a body"
+    """urllib3 encountered an error when trying to rewind a body"""
+
     pass

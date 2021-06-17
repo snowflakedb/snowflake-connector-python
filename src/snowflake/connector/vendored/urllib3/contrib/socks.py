@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 This module contains provisional support for SOCKS proxies from within
 urllib3. This module supports SOCKS4, SOCKS4A (an extension of SOCKS4), and
@@ -14,32 +13,36 @@ supports the following SOCKS features:
 - SOCKS5 with local DNS (``proxy_url='socks5://...``)
 - Usernames and passwords for the SOCKS proxy
 
- .. note::
-    It is recommended to use ``socks5h://`` or ``socks4a://`` schemes in
-    your ``proxy_url`` to ensure that DNS resolution is done from the remote
-    server instead of client-side when connecting to a domain name.
+.. note::
+   It is recommended to use ``socks5h://`` or ``socks4a://`` schemes in
+   your ``proxy_url`` to ensure that DNS resolution is done from the remote
+   server instead of client-side when connecting to a domain name.
 
 SOCKS4 supports IPv4 and domain names with the SOCKS4A extension. SOCKS5
 supports IPv4, IPv6, and domain names.
 
 When connecting to a SOCKS4 proxy the ``username`` portion of the ``proxy_url``
-will be sent as the ``userid`` section of the SOCKS request::
+will be sent as the ``userid`` section of the SOCKS request:
+
+.. code-block:: python
 
     proxy_url="socks4a://<userid>@proxy-host"
 
 When connecting to a SOCKS5 proxy the ``username`` and ``password`` portion
 of the ``proxy_url`` will be sent as the username/password to authenticate
-with the proxy::
+with the proxy:
+
+.. code-block:: python
 
     proxy_url="socks5h://<username>:<password>@proxy-host"
 
 """
-from __future__ import absolute_import
 
 try:
     import socks
 except ImportError:
     import warnings
+
     from ..exceptions import DependencyWarning
 
     warnings.warn(
@@ -52,7 +55,7 @@ except ImportError:
     )
     raise
 
-from socket import error as SocketError, timeout as SocketTimeout
+from socket import timeout as SocketTimeout
 
 from ..connection import HTTPConnection, HTTPSConnection
 from ..connectionpool import HTTPConnectionPool, HTTPSConnectionPool
@@ -73,7 +76,7 @@ class SOCKSConnection(HTTPConnection):
 
     def __init__(self, *args, **kwargs):
         self._socks_options = kwargs.pop("_socks_options")
-        super(SOCKSConnection, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def _new_conn(self):
         """
@@ -96,14 +99,13 @@ class SOCKSConnection(HTTPConnection):
                 proxy_password=self._socks_options["password"],
                 proxy_rdns=self._socks_options["rdns"],
                 timeout=self.timeout,
-                **extra_kw
+                **extra_kw,
             )
 
         except SocketTimeout:
             raise ConnectTimeoutError(
                 self,
-                "Connection to %s timed out. (connect timeout=%s)"
-                % (self.host, self.timeout),
+                f"Connection to {self.host} timed out. (connect timeout={self.timeout})",
             )
 
         except socks.ProxyError as e:
@@ -114,22 +116,19 @@ class SOCKSConnection(HTTPConnection):
                 if isinstance(error, SocketTimeout):
                     raise ConnectTimeoutError(
                         self,
-                        "Connection to %s timed out. (connect timeout=%s)"
-                        % (self.host, self.timeout),
+                        f"Connection to {self.host} timed out. (connect timeout={self.timeout})",
                     )
                 else:
                     raise NewConnectionError(
-                        self, "Failed to establish a new connection: %s" % error
+                        self, f"Failed to establish a new connection: {error}"
                     )
             else:
                 raise NewConnectionError(
-                    self, "Failed to establish a new connection: %s" % e
+                    self, f"Failed to establish a new connection: {e}"
                 )
 
-        except SocketError as e:  # Defensive: PySocks should catch all these.
-            raise NewConnectionError(
-                self, "Failed to establish a new connection: %s" % e
-            )
+        except OSError as e:  # Defensive: PySocks should catch all these.
+            raise NewConnectionError(self, f"Failed to establish a new connection: {e}")
 
         return conn
 
@@ -168,7 +167,7 @@ class SOCKSProxyManager(PoolManager):
         password=None,
         num_pools=10,
         headers=None,
-        **connection_pool_kw
+        **connection_pool_kw,
     ):
         parsed = parse_url(proxy_url)
 
@@ -189,7 +188,7 @@ class SOCKSProxyManager(PoolManager):
             socks_version = socks.PROXY_TYPE_SOCKS4
             rdns = True
         else:
-            raise ValueError("Unable to determine SOCKS version from %s" % proxy_url)
+            raise ValueError(f"Unable to determine SOCKS version from {proxy_url}")
 
         self.proxy_url = proxy_url
 
@@ -203,8 +202,6 @@ class SOCKSProxyManager(PoolManager):
         }
         connection_pool_kw["_socks_options"] = socks_options
 
-        super(SOCKSProxyManager, self).__init__(
-            num_pools, headers, **connection_pool_kw
-        )
+        super().__init__(num_pools, headers, **connection_pool_kw)
 
         self.pool_classes_by_scheme = SOCKSProxyManager.pool_classes_by_scheme
