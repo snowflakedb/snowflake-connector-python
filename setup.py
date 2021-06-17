@@ -236,12 +236,9 @@ setup(
         "snowflake.connector.vendored",
         "snowflake.connector.vendored.requests",
         "snowflake.connector.vendored.urllib3",
-        "snowflake.connector.vendored.urllib3.packages",
-        "snowflake.connector.vendored.urllib3.packages.ssl_match_hostname",
-        "snowflake.connector.vendored.urllib3.packages.backports",
+        "snowflake.connector.vendored.urllib3.util",
         "snowflake.connector.vendored.urllib3.contrib",
         "snowflake.connector.vendored.urllib3.contrib._securetransport",
-        "snowflake.connector.vendored.urllib3.util",
     ],
     package_dir={
         "": "src",
