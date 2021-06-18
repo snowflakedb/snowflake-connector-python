@@ -36,15 +36,15 @@ timestamps {
         string(name: 'parent_job', value: env.JOB_NAME),
         string(name: 'parent_build_number', value: env.BUILD_NUMBER)
       ]
-      // stage('Test') {
-      //   parallel (
-      //     'Test Python 36': { build job: 'RT-PyConnector36-PC',parameters: params},
-      //     'Test Python 37': { build job: 'RT-PyConnector37-PC',parameters: params},
-      //     'Test Python 38': { build job: 'RT-PyConnector38-PC',parameters: params},
-      //     'Test Python 39': { build job: 'RT-PyConnector39-PC',parameters: params},
-      //     'Test Python Lambda 37': { build job: 'RT-PyConnector37-PC-Lambda',parameters: params}
-      //     )
-      //   }
+      stage('Test') {
+        parallel (
+          'Test Python 36': { build job: 'RT-PyConnector36-PC',parameters: params},
+          'Test Python 37': { build job: 'RT-PyConnector37-PC',parameters: params},
+          'Test Python 38': { build job: 'RT-PyConnector38-PC',parameters: params},
+          'Test Python 39': { build job: 'RT-PyConnector39-PC',parameters: params},
+          'Test Python Lambda 37': { build job: 'RT-PyConnector37-PC-Lambda',parameters: params}
+          )
+        }
       }
     }
 
