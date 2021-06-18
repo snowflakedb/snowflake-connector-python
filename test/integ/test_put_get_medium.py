@@ -795,7 +795,6 @@ def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
 
 
 @pytest.mark.aws
-@pytest.mark.skip
 def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Gets Large files."""
     number_of_files = 3
