@@ -7,7 +7,7 @@ import sys
 import ssl
 
 import idna
-import urllib3
+from .. import urllib3
 import chardet
 
 from . import __version__ as requests_version
