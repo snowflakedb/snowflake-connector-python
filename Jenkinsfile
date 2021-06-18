@@ -53,6 +53,7 @@ pipeline {
   agent { label 'test-dynamic-slave' }
   options { timestamps() }
   environment {
+    COMMIT_SHA_LONG = sh(returnStdout: true, script: "echo \$(git rev-parse " + "HEAD)").trim()
     SEMGREP_DEPLOYMENT_ID = 1
     INPUT_PUBLISHURL      = "https://semgrep.snowflake.com"
 
