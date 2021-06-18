@@ -111,7 +111,7 @@ pipeline {
 }
 
 def wgetUpdateGithub(String state, String folder, String targetUrl, String seconds) {
-    def ghURL = "https://api.github.com/repos/snowflakedb/classic-ui/statuses/$COMMIT_SHA_LONG"
+    def ghURL = "https://api.github.com/repos/snowflakedb/snowflake-connector-python/statuses/$COMMIT_SHA_LONG"
     def data = JsonOutput.toJson([state: "${state}", context: "jenkins/${folder}",target_url: "${targetUrl}"])
     sh "wget ${ghURL} --spider -q --header='Authorization: token $GIT_PASSWORD' --post-data='${data}'"
 }
