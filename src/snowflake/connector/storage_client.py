@@ -200,7 +200,7 @@ class SnowflakeStorageClient(ABC):
 
         self.preprocessed = True
 
-    def prepare_upload(self):
+    def prepare_upload(self) -> None:
         meta = self.meta
 
         if not self.preprocessed:
@@ -229,7 +229,7 @@ class SnowflakeStorageClient(ABC):
         if self.chunked_transfer and self.num_of_chunks > 1:
             self._initiate_multipart_upload()
 
-    def finish_upload(self):
+    def finish_upload(self) -> None:
         meta = self.meta
         if self.successful_transfers == self.num_of_chunks:
             if self.num_of_chunks > 1:
@@ -293,7 +293,7 @@ class SnowflakeStorageClient(ABC):
                 f"{verb} with url {url} failed for exceeding maximum retries."
             )
 
-    def prepare_download(self):
+    def prepare_download(self) -> None:
         # TODO: add nicer error message for when target directory is not writeable
         #  but this should be done before we get here
         base_dir = os.path.dirname(self.full_dst_file_name)
@@ -319,13 +319,13 @@ class SnowflakeStorageClient(ABC):
         with self.intermediate_dst_path.open("wb+") as fd:
             fd.truncate(self.meta.src_file_size)
 
-    def write_downloaded_chunk(self, chunk_id: int, chunk_data: bytes):
+    def write_downloaded_chunk(self, chunk_id: int, chunk_data: bytes) -> None:
         # TODO: should we use chunking and write content in smaller chunks?
         with self.intermediate_dst_path.open("wb") as fd:
             fd.seek(self.chunk_size * chunk_id)
             fd.write(chunk_data)
 
-    def finish_download(self):
+    def finish_download(self) -> None:
         meta = self.meta
         if self.successful_transfers == self.num_of_chunks:
 
@@ -364,7 +364,7 @@ class SnowflakeStorageClient(ABC):
             meta.dst_file_size = -1
             meta.result_status = ResultStatus.ERROR
 
-    def upload_chunk(self, chunk_id: int):
+    def upload_chunk(self, chunk_id: int) -> None:
         fd = (
             self.meta.real_src_stream
             or self.meta.src_stream
