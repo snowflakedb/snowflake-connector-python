@@ -30,8 +30,6 @@ from .options import installed_pandas, pandas
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
 from .vendored import requests
 
-# from threading import Lock
-
 logger = getLogger(__name__)
 
 MAX_DOWNLOAD_RETRY = 10
@@ -51,8 +49,6 @@ else:
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
-
-# load_lock = Lock()
 
 
 @unique
