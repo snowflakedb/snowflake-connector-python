@@ -65,9 +65,7 @@ def test_scaled_tinyint(conn_cnx):
     cases = ["NULL", 0.11, -0.11, "NULL", 1.27, -1.28, "NULL"]
     table = "test_arrow_tiny_int"
     column = "(a number(5,2))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -83,9 +81,7 @@ def test_scaled_smallint(conn_cnx):
     cases = ["NULL", 0, 0.11, -0.11, "NULL", 32.767, -32.768, "NULL"]
     table = "test_arrow_small_int"
     column = "(a number(5,3))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -110,9 +106,7 @@ def test_scaled_int(conn_cnx):
     ]
     table = "test_arrow_int"
     column = "(a number(10,9))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -141,9 +135,7 @@ def test_scaled_bigint(conn_cnx):
     ]
     table = "test_arrow_big_int"
     column = "(a number(38,18))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -170,9 +162,7 @@ def test_decimal(conn_cnx):
     ]
     table = "test_arrow_decimal"
     column = "(a number(38,0))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -199,9 +189,7 @@ def test_scaled_decimal(conn_cnx):
     ]
     table = "test_arrow_decimal"
     column = "(a number(38,37))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -234,9 +222,7 @@ def test_scaled_decimal_SNOW_133561(conn_cnx):
     ]
     table = "test_scaled_decimal_SNOW_133561"
     column = "(a number(38,10))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -252,9 +238,7 @@ def test_boolean(conn_cnx):
     cases = ["NULL", True, "NULL", False, True, True, "NULL", True, False, "NULL"]
     table = "test_arrow_boolean"
     column = "(a boolean)"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -283,9 +267,7 @@ def test_double(conn_cnx):
     ]
     table = "test_arrow_double"
     column = "(a double)"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -362,15 +344,8 @@ def test_date(conn_cnx):
     ]
     table = "test_arrow_date"
     column = "(a date)"
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
@@ -402,15 +377,8 @@ def test_time(conn_cnx, scale):
     ]
     table = "test_arrow_time"
     column = "(a time({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
@@ -447,15 +415,9 @@ def test_timestampntz(conn_cnx, scale):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestampntz({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
@@ -499,15 +461,8 @@ def test_timestamptz(conn_cnx, scale, timezone):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestamptz({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values, timezone=timezone)
@@ -558,15 +513,8 @@ def test_timestampltz(conn_cnx, scale, timezone):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestampltz({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values, timezone=timezone)
@@ -1040,9 +988,7 @@ def test_pandas_telemetry(
     cases = ["NULL", 0.11, -0.11, "NULL", 1.27, -1.28, "NULL"]
     table = "test_telemetry"
     column = "(a number(5,2))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
         conn, False
     ) as telemetry_test:
