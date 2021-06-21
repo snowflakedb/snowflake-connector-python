@@ -578,7 +578,6 @@ class ArrowResultBatch(ResultBatch):
     ]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         logger.info("DOWNLOAD START %d", self.rowcount)
-        iter_unit = kwargs.pop("iter_unit", ROW_UNIT)
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download()
