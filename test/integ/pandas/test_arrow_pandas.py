@@ -1038,3 +1038,16 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
                 assert arrow_table.shape == (10, 2)
                 assert arrow_table.column_names == ["FOO", "BAR"]
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
+
+
+def test_simple_arrow_fetchall(conn_cnx):
+    rowcount = 100000
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            cur.execute(
+                f"select seq4() as foo from table(generator(rowcount=>{rowcount})) order by foo asc"
+            )
+            arrow_table = cur.fetch_arrow_all()
+            assert arrow_table.shape == (rowcount, 1)
+            assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
