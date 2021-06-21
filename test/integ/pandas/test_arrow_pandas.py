@@ -725,7 +725,11 @@ def test_num_batch(conn_cnx):
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing.",
 )
-def test_empty(conn_cnx):
+@pytest.mark.parametrize(
+    "result_format",
+    ["pandas", "arrow"],
+)
+def test_empty(conn_cnx, result_format):
     print("Test fetch empty dataframe")
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
@@ -733,17 +737,21 @@ def test_empty(conn_cnx):
         cursor.execute(
             "select seq4() as foo, seq4() as bar from table(generator(rowcount=>1)) limit 0"
         )
-        result = cursor.fetch_pandas_all()
-        assert result.empty
-        assert len(list(result)) == 2
-        assert list(result)[0] == "FOO"
-        assert list(result)[1] == "BAR"
+        fetch_all_fn = getattr(cursor, f"fetch_{result_format}_all")
+        fetch_batches_fn = getattr(cursor, f"fetch_{result_format}_batches")
+        result = fetch_all_fn()
+        if result_format == "pandas":
+            assert len(list(result)) == 2
+            assert list(result)[0] == "FOO"
+            assert list(result)[1] == "BAR"
+        else:
+            assert result is None
 
         cursor.execute(
             "select seq4() as foo from table(generator(rowcount=>1)) limit 0"
         )
         df_count = 0
-        for _ in cursor.fetch_pandas_batches():
+        for _ in fetch_batches_fn():
             df_count += 1
         assert df_count == 0
 
