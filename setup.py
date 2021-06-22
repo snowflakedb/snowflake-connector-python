@@ -219,15 +219,15 @@ setup(
         "pyjwt<3.0.0",
         "oscrypto<2.0.0",
         "asn1crypto>0.24.0,<2.0.0",
+        'dataclasses<1.0;python_version=="3.6"',
         # A functioning pkg_resources.working_set.by_key and pkg_resources.Requirement is
         # required. Python 3.6 was released at the end of 2016. setuptools 34.0.0 was released
         # in early 2017, so we pick this version as a reasonably modern base.
         "setuptools>34.0.0",
         # requests requirements
-        "chardet>=3.0.2,<4",
+        "chardet>=3.0.2,<5",
         "idna>=2.5,<3",
         "certifi>=2017.4.17",
-        'dataclasses<1.0;python_version=="3.6"',
     ],
     namespace_packages=["snowflake"],
     packages=[
