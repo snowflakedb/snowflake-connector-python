@@ -8,10 +8,12 @@ from __future__ import division
 
 import os
 from logging import getLogger
+from math import ceil
 from typing import TYPE_CHECKING, Any, Dict
 
 from .constants import ResultStatus
 from .storage_client import SnowflakeStorageClient
+from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
@@ -24,9 +26,14 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         self,
         meta: "SnowflakeFileMeta",
         stage_info: Dict[str, Any],
+        chunk_size: int,
         use_s3_regional_url=False,
     ):
-        super().__init__(meta, stage_info)
+        super().__init__(meta, stage_info, chunk_size)
+        self.data_file = meta.src_file_name
+        self.full_dst_file_name = os.path.join(
+            stage_info["location"], os.path.basename(meta.dst_file_name)
+        )
 
     def _native_download_chunk(self, chunk_id: int):
         pass
@@ -47,52 +54,41 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
 
         return None
 
-    def _native_upload_chunk(self, chunk_id: int):
-        """
-        Notes:
-            Local storage ignores chunking and writes the entire file to target directory.
-        """
-        meta = self.meta
-        logger.debug(
-            f"src_file_name=[{meta.src_file_name}], real_src_file_name=[{meta.real_src_file_name}], "
-            f"stage_info=[{self.stage_info}], dst_file_name=[{meta.dst_file_name}]"
-        )
-        if meta.src_stream is None:
-            frd = open(meta.real_src_file_name, "rb")
-        else:
-            frd = meta.real_src_stream or meta.src_stream
-        with open(
-            os.path.join(
-                os.path.expanduser(self.stage_info["location"]),
-                meta.dst_file_name,
-            ),
-            "wb",
-        ) as output:
-            output.writelines(frd)
-
-        if meta.src_stream is None:
-            frd.close()
-
-        meta.dst_file_size = meta.upload_size
-        meta.result_status = ResultStatus.UPLOADED
-
-    def _download_file(self, meta: "SnowflakeFileMeta") -> None:
-        full_src_file_name = os.path.join(
-            os.path.expanduser(self.stage_info["location"]),
-            meta.src_file_name
-            if not meta.src_file_name.startswith(os.sep)
-            else meta.src_file_name[1:],
-        )
-        full_dst_file_name = os.path.join(
-            meta.local_location, os.path.basename(meta.dst_file_name)
-        )
-        base_dir = os.path.dirname(full_dst_file_name)
+    def prepare_download(self) -> None:
+        base_dir = os.path.dirname(self.full_dst_file_name)
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
+        with open(self.full_dst_file_name, "w") as tfd:
+            tfd.truncate(os.stat(self.data_file).st_size)
 
-        with open(full_src_file_name, "rb") as frd:
-            with open(full_dst_file_name, "wb+") as output:
-                output.writelines(frd)
-        statinfo = os.stat(full_dst_file_name)
-        meta.dst_file_size = statinfo.st_size
+    def download_chunk(self, chunk_id: int) -> None:
+        with open(self.full_dst_file_name, "wb") as tfd:
+            with open(self.data_file, "rb") as sfd:
+                tfd.seek(chunk_id * self.chunk_size)
+                sfd.seek(chunk_id * self.chunk_size)
+                tfd.write(sfd.read(self.chunk_size))
+
+    def finish_download(self, meta: "SnowflakeFileMeta") -> None:
+        meta.dst_file_size = os.stat(self.full_dst_file_name).st_size
         meta.result_status = ResultStatus.DOWNLOADED
+
+    def _has_expired_token(self, response: requests.Response) -> bool:
+        return False
+
+    def prepare_upload(self) -> None:
+        if (
+            self.meta.upload_size < self.meta.multipart_threshold
+            or not self.chunked_transfer
+        ):
+            self.num_of_chunks = 1
+        else:
+            self.num_of_chunks = ceil(self.meta.upload_size / self.chunk_size)
+
+    def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
+        with open(self.full_dst_file_name, "wb") as tfd:
+            tfd.seek(chunk_id * self.chunk_size)
+            tfd.write(chunk)
+
+    def finish_upload(self) -> None:
+        self.meta.result_status = ResultStatus.UPLOADED
+        self.meta.dst_file_size = self.meta.upload_size
