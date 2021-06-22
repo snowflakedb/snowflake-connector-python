@@ -9,6 +9,16 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 Release Notes
 -------------------------------------------------------------------------------
 
+
+- v2.4.6(June 25,2021)
+
+   - Fixed a potential memory leak.
+   - Removed upper certifi version pin.
+   - Updated vendored libraries , urllib(1.26.5) and requests(2.25.1).
+   - Replace pointers with UniqueRefs.
+   - Changed default value of client_session_keep_alive to None.
+   - Added the ability to retrieve metadata/schema without executing the query (describe method).
+
 - v2.4.5(June 15,2021)
 
    - Fix for incorrect JWT token invalidity when an account alias with a dash in it is used for regionless account URL.
