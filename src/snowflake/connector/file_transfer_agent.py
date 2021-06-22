@@ -424,7 +424,10 @@ class SnowflakeFileTransferAgent:
                 cv_main_thread.notify()
 
         def preprocess_done_cb(
-            success: bool, result: Any, done_client: "SnowflakeStorageClient"
+            success: bool,
+            result: Any,
+            file_meta: SnowflakeFileMeta,
+            done_client: "SnowflakeStorageClient",
         ):
             if not success:
                 logger.debug(f"Failed to prepare {done_client.meta.name}.")
@@ -457,6 +460,7 @@ class SnowflakeFileTransferAgent:
                                 done_client.upload_chunk,
                                 # Callback fn
                                 _callback,
+                                file_meta,
                                 # Arguments for work fn
                                 _chunk_id,
                             )
@@ -467,6 +471,7 @@ class SnowflakeFileTransferAgent:
                                 done_client.download_chunk,
                                 # Callback fn
                                 _callback,
+                                file_meta,
                                 # Arguments for work fn
                                 _chunk_id,
                             )
@@ -476,6 +481,7 @@ class SnowflakeFileTransferAgent:
         def transfer_done_cb(
             success: bool,
             result: Any,
+            file_meta: "SnowflakeFileMeta",
             done_client: "SnowflakeStorageClient",
             chunk_id: int,
         ):
@@ -491,9 +497,8 @@ class SnowflakeFileTransferAgent:
                 if not success:
                     # TODO: Cancel other chunks?
                     done_client.failed_transfers += 1
-                    exc = result
                     logger.debug(
-                        f"Chunk {chunk_id} of file {done_client.meta.name} failed to transfer for unexpected exception {exc}"
+                        f"Chunk {chunk_id} of file {done_client.meta.name} failed to transfer for unexpected exception {result}"
                     )
                 else:
                     done_client.successful_transfers += 1
@@ -514,13 +519,17 @@ class SnowflakeFileTransferAgent:
                             done_client.finish_download,
                             # Callback fn
                             partial(postprocess_done_cb, done_client=done_client),
+                            transfer_metadata,
                         )
                         logger.debug(
                             f"submitting {done_client.meta.name} to done_postprocess"
                         )
 
         def postprocess_done_cb(
-            success: bool, result: Any, done_client: "SnowflakeStorageClient"
+            success: bool,
+            result: Any,
+            file_meta: "SnowflakeFileMeta",
+            done_client: "SnowflakeStorageClient",
         ):
             logger.debug(f"File {done_client.meta.name} reached postprocess callback")
 
@@ -537,7 +546,10 @@ class SnowflakeFileTransferAgent:
 
         def function_and_callback_wrapper(
             work: Callable[..., _T],
-            _callback: Callable[[bool, Union[_T, Exception]], None],
+            _callback: Callable[
+                [bool, Union[_T, Exception], "SnowflakeFileMeta"], None
+            ],
+            file_meta: "SnowflakeFileMeta",
             *args: Any,
             **kwargs: Any,
         ) -> None:
@@ -551,9 +563,10 @@ class SnowflakeFileTransferAgent:
                 result = (True, work(*args, **kwargs))
             except Exception as e:
                 logger.error(f"An exception was raised in {repr(work)}", exc_info=True)
+                file_meta.error_details = e
                 result = (False, e)
             try:
-                _callback(*result)
+                _callback(*result, file_meta)
             except Exception as e:  # NOQA
                 # TODO: if an exception happens in a callback, the exception will not
                 #  propagate to the main thread. We need to save these Exceptions
@@ -564,9 +577,12 @@ class SnowflakeFileTransferAgent:
                     nonlocal exception_caught_in_callback
                     exception_caught_in_callback = e
                     cv_main_thread.notify()
-                logger.error(
-                    f"An exception was raised in {repr(callback)}", exc_info=True
-                )
+                if not result[0]:
+                    # Re-raising the exception from the work function, it would already
+                    #  be logged at this point
+                    logger.error(
+                        f"An exception was raised in {repr(callback)}", exc_info=True
+                    )
 
         for file_client in files:
             callback = partial(preprocess_done_cb, done_client=file_client)
@@ -577,6 +593,7 @@ class SnowflakeFileTransferAgent:
                     file_client.prepare_upload,
                     # Callback fn
                     callback,
+                    file_client.meta,
                 )
             else:
                 preprocess_tpe.submit(
@@ -585,6 +602,7 @@ class SnowflakeFileTransferAgent:
                     file_client.prepare_download,
                     # Callback fn
                     callback,
+                    file_client.meta,
                 )
             transfer_metadata.num_files_started += 1  # TODO: do we need this?
 
@@ -603,13 +621,14 @@ class SnowflakeFileTransferAgent:
             return SnowflakeLocalStorageClient(
                 meta,
                 self._stage_info,
+                4 * 1024 * 1024,
                 self._use_s3_regional_url,
             )
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
                 meta,
                 self.credentials,
-                4 * 1024 * 1024 + 1,
+                4 * 1024 * 1024,
                 self._stage_info,
                 self._use_s3_regional_url,
             )

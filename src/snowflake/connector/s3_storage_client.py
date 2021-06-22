@@ -93,7 +93,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             if self.use_s3_regional_url:
                 self.endpoint = f"https://{self.s3location.bucket_name}.s3.{self.region_name}.amazonaws.com"
             else:
-                self.endpoint = f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
+                self.endpoint = (
+                    f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
+                )
 
     @staticmethod
     def sign(secret_key, msg):
@@ -426,7 +428,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         )
         response.raise_for_status()
 
-    def download_chunk(self, chunk_id: int):
+    def download_chunk(self, chunk_id: int) -> None:
         logger.debug(f"Downloading chunk {chunk_id}")
         path = quote(self.s3location.path + self.meta.src_file_name.lstrip("/"))
         url = self.endpoint + f"/{path}"

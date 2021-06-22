@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
+import os
 from os import chmod, path
 
 import pytest
@@ -16,19 +16,33 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeFileTransferAgent,
     SnowflakeS3ProgressPercentage,
 )
+from snowflake.connector.file_transfer_agent_sdk import (
+    SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
+)
+
+
+@pytest.fixture(
+    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
+    ids=["sdkless", "sdkfull"],
+)
+def sdkless(request):
+    if request.param:
+        os.environ["SF_SDKLESS_PUT"] = "true"
+        os.environ["SF_SDKLESS_GET"] = "true"
+    else:
+        os.environ["SF_SDKLESS_PUT"] = "false"
+        os.environ["SF_SDKLESS_GET"] = "false"
+    return request.param
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="permission model is different")
-def test_put_error(tmpdir):
+def test_put_error(tmpdir, sdkless):
     """Tests for raise_put_get_error flag (now turned on by default) in SnowflakeFileTransferAgent."""
     tmp_dir = str(tmpdir.mkdir("putfiledir"))
     file1 = path.join(tmp_dir, "file1")
     remote_location = path.join(tmp_dir, "remote_loc")
     with open(file1, "w") as f:
         f.write("test1")
-
-    # nobody can read now.
-    chmod(file1, 0o000)
 
     con = MagicMock()
     cursor = con.cursor()
@@ -41,6 +55,7 @@ def test_put_error(tmpdir):
             "src_locations": [file1],
             "sourceCompression": "none",
             "stageInfo": {
+                "creds": {},
                 "location": remote_location,
                 "locationType": "LOCAL_FS",
                 "path": "remote_loc",
@@ -49,23 +64,25 @@ def test_put_error(tmpdir):
         "success": True,
     }
 
-    # no error is raised
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(
-        cursor, query, ret, raise_put_get_error=False
+    agent_class = (
+        SnowflakeFileTransferAgent if sdkless else SnowflakeFileTransferAgentSDK
     )
+
+    # no error is raised
+    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=False)
     sf_file_transfer_agent.execute()
     sf_file_transfer_agent.result()
 
+    # nobody can read now.
+    chmod(file1, 0o000)
     # Permission error should be raised
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(
-        cursor, query, ret, raise_put_get_error=True
-    )
+    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=True)
     sf_file_transfer_agent.execute()
     with pytest.raises(Exception):
         sf_file_transfer_agent.result()
 
     # unspecified, should fail because flag is on by default now
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(cursor, query, ret)
+    sf_file_transfer_agent = agent_class(cursor, query, ret)
     sf_file_transfer_agent.execute()
     with pytest.raises(Exception):
         sf_file_transfer_agent.result()

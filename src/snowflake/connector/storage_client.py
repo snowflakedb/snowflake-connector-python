@@ -246,7 +246,7 @@ class SnowflakeStorageClient(ABC):
             meta.result_status = ResultStatus.ERROR
 
     @abstractmethod
-    def _has_expired_token(self, response: requests.Response):
+    def _has_expired_token(self, response: requests.Response) -> bool:
         pass
 
     def _send_request_with_retry(
@@ -254,7 +254,7 @@ class SnowflakeStorageClient(ABC):
         verb: str,
         get_request_args: Callable[[], Tuple[bytes, Dict[str, Any]]],
         retry_id: int,
-    ):
+    ) -> requests.Response:
         rest_call = METHODS[verb]
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
@@ -381,11 +381,11 @@ class SnowflakeStorageClient(ABC):
         logger.debug(f"Successfully uploaded chunk {chunk_id} of file {self.data_file}")
 
     @abstractmethod
-    def _upload_chunk(self, chunk_id: int, chunk: bytes):
+    def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
         pass
 
     @abstractmethod
-    def download_chunk(self, chunk_id: int):
+    def download_chunk(self, chunk_id: int) -> None:
         pass
 
     # Override in GCS
