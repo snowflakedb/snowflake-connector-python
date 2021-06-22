@@ -1040,8 +1040,8 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
 
 
-def test_simple_arrow_fetchall(conn_cnx):
-    rowcount = 100000
+def test_simple_arrow_fetch(conn_cnx):
+    rowcount = 250_000
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(SQL_ENABLE_ARROW)
@@ -1051,3 +1051,21 @@ def test_simple_arrow_fetchall(conn_cnx):
             arrow_table = cur.fetch_arrow_all()
             assert arrow_table.shape == (rowcount, 1)
             assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
+
+            cur.execute(
+                f"select seq4() as foo from table(generator(rowcount=>{rowcount})) order by foo asc"
+            )
+            assert len(cur.get_result_batches()) > 1  # non-trivial number of batches
+
+            # the start and end points of each batch
+            lo, hi = 0, 0
+            for table in cur.fetch_arrow_batches():
+                assert type(table) == pyarrow.Table  # sanity type check
+
+                # check that data is correct
+                length = len(table)
+                hi += length
+                assert table.to_pydict()["FOO"] == list(range(lo, hi))
+                lo += length
+
+            assert lo == rowcount
