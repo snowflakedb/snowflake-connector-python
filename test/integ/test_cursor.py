@@ -1315,7 +1315,12 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
         with con.cursor() as cur:
             # Dummy return value necessary to not iterate through every batch with
             #  first fetchone call
-            with mock.patch(patch_path, return_value=iter([(1,)])) as patched_download:
+            first_expected = (1,)
+            second_expected = (2,)
+            with mock.patch(
+                patch_path,
+                side_effect=[iter([first_expected]), iter([second_expected])],
+            ) as patched_download:
                 cur.execute(
                     f"select seq4() as c1, randstr(1,random()) as c2 "
                     f"from table(generator(rowcount => {rowcount}));"
@@ -1331,11 +1336,19 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                 assert patched_download.call_count == 0
                 assert len(result_batches) > 5
                 assert result_batches[0]._local  # Sanity check first chunk being local
-                cur.fetchone()  # Trigger pre-fetching
-                # While the first chunk is local we still call _download on it, which
-                #  short circuits and just parses (for JSON batches) and then return an
-                #  an iterator through that data, so we expect the call count to be 5
-                assert patched_download.call_count == 5
+                first_output = cur.fetchone()
+                second_output = cur.fetchone()  # Trigger pre-fetching
+                assert first_output == first_expected
+                assert second_output == second_expected
+                import time
+
+                time.sleep(1)
+                # Though the 0th chunk is local, we still call _download on it.
+                # When we fetch the second chunk, it will schedule 4 download jobs
+                # for chunks 1, 2, 3, 4. Finally, when retrieving chunk 1, we schedule the
+                # download job for chunk 5. In summary, we expect _download to be
+                # called for chunks 0 to 5, inclusive (6 total)
+                assert patched_download.call_count == 6
 
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")
