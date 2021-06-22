@@ -365,6 +365,6 @@ class ArrowBinaryHandler(RawBinaryDataHandler):
             gzip_decoder,
             self._arrow_context,
             self._cursor._use_dict_result,
-            self._cursor.connection._numpy,
+            bool(self._cursor.connection and self._cursor.connection._numpy),
         )
         return it
