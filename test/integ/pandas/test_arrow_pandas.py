@@ -65,9 +65,7 @@ def test_scaled_tinyint(conn_cnx):
     cases = ["NULL", 0.11, -0.11, "NULL", 1.27, -1.28, "NULL"]
     table = "test_arrow_tiny_int"
     column = "(a number(5,2))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -83,9 +81,7 @@ def test_scaled_smallint(conn_cnx):
     cases = ["NULL", 0, 0.11, -0.11, "NULL", 32.767, -32.768, "NULL"]
     table = "test_arrow_small_int"
     column = "(a number(5,3))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -110,9 +106,7 @@ def test_scaled_int(conn_cnx):
     ]
     table = "test_arrow_int"
     column = "(a number(10,9))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -141,9 +135,7 @@ def test_scaled_bigint(conn_cnx):
     ]
     table = "test_arrow_big_int"
     column = "(a number(38,18))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -170,9 +162,7 @@ def test_decimal(conn_cnx):
     ]
     table = "test_arrow_decimal"
     column = "(a number(38,0))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -199,9 +189,7 @@ def test_scaled_decimal(conn_cnx):
     ]
     table = "test_arrow_decimal"
     column = "(a number(38,37))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -234,9 +222,7 @@ def test_scaled_decimal_SNOW_133561(conn_cnx):
     ]
     table = "test_scaled_decimal_SNOW_133561"
     column = "(a number(38,10))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -252,9 +238,7 @@ def test_boolean(conn_cnx):
     cases = ["NULL", True, "NULL", False, True, True, "NULL", True, False, "NULL"]
     table = "test_arrow_boolean"
     column = "(a boolean)"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -283,9 +267,7 @@ def test_double(conn_cnx):
     ]
     table = "test_arrow_double"
     column = "(a double)"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
         sql_text = "select a from {} order by s".format(table)
@@ -362,15 +344,8 @@ def test_date(conn_cnx):
     ]
     table = "test_arrow_date"
     column = "(a date)"
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
@@ -402,15 +377,8 @@ def test_time(conn_cnx, scale):
     ]
     table = "test_arrow_time"
     column = "(a time({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
@@ -447,15 +415,9 @@ def test_timestampntz(conn_cnx, scale):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestampntz({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
@@ -499,15 +461,8 @@ def test_timestamptz(conn_cnx, scale, timezone):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestamptz({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values, timezone=timezone)
@@ -558,15 +513,8 @@ def test_timestampltz(conn_cnx, scale, timezone):
     ]
     table = "test_arrow_timestamp"
     column = "(a timestampltz({}))".format(scale)
-    values = (
-        "("
-        + "),(".join(
-            [
-                "{}, {}".format(i, c) if c == "NULL" else "{}, '{}'".format(i, c)
-                for i, c in enumerate(cases)
-            ]
-        )
-        + ")"
+    values = ",".join(
+        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values, timezone=timezone)
@@ -725,7 +673,11 @@ def test_num_batch(conn_cnx):
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing.",
 )
-def test_empty(conn_cnx):
+@pytest.mark.parametrize(
+    "result_format",
+    ["pandas", "arrow"],
+)
+def test_empty(conn_cnx, result_format):
     print("Test fetch empty dataframe")
     with conn_cnx() as cnx:
         cursor = cnx.cursor()
@@ -733,17 +685,21 @@ def test_empty(conn_cnx):
         cursor.execute(
             "select seq4() as foo, seq4() as bar from table(generator(rowcount=>1)) limit 0"
         )
-        result = cursor.fetch_pandas_all()
-        assert result.empty
-        assert len(list(result)) == 2
-        assert list(result)[0] == "FOO"
-        assert list(result)[1] == "BAR"
+        fetch_all_fn = getattr(cursor, f"fetch_{result_format}_all")
+        fetch_batches_fn = getattr(cursor, f"fetch_{result_format}_batches")
+        result = fetch_all_fn()
+        if result_format == "pandas":
+            assert len(list(result)) == 2
+            assert list(result)[0] == "FOO"
+            assert list(result)[1] == "BAR"
+        else:
+            assert result is None
 
         cursor.execute(
             "select seq4() as foo from table(generator(rowcount=>1)) limit 0"
         )
         df_count = 0
-        for _ in cursor.fetch_pandas_batches():
+        for _ in fetch_batches_fn():
             df_count += 1
         assert df_count == 0
 
@@ -1032,9 +988,7 @@ def test_pandas_telemetry(
     cases = ["NULL", 0.11, -0.11, "NULL", 1.27, -1.28, "NULL"]
     table = "test_telemetry"
     column = "(a number(5,2))"
-    values = (
-        "(" + "),(".join(["{}, {}".format(i, c) for i, c in enumerate(cases)]) + ")"
-    )
+    values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
         conn, False
     ) as telemetry_test:
@@ -1084,3 +1038,34 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
                 assert arrow_table.shape == (10, 2)
                 assert arrow_table.column_names == ["FOO", "BAR"]
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
+
+
+def test_simple_arrow_fetch(conn_cnx):
+    rowcount = 250_000
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            cur.execute(
+                f"select seq4() as foo from table(generator(rowcount=>{rowcount})) order by foo asc"
+            )
+            arrow_table = cur.fetch_arrow_all()
+            assert arrow_table.shape == (rowcount, 1)
+            assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
+
+            cur.execute(
+                f"select seq4() as foo from table(generator(rowcount=>{rowcount})) order by foo asc"
+            )
+            assert len(cur.get_result_batches()) > 1  # non-trivial number of batches
+
+            # the start and end points of each batch
+            lo, hi = 0, 0
+            for table in cur.fetch_arrow_batches():
+                assert type(table) == pyarrow.Table  # sanity type check
+
+                # check that data is correct
+                length = len(table)
+                hi += length
+                assert table.to_pydict()["FOO"] == list(range(lo, hi))
+                lo += length
+
+            assert lo == rowcount
