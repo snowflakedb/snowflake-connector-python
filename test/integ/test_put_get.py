@@ -671,6 +671,7 @@ def test_utf8_filename(tmpdir, db_parameters, is_public_test):
             assert cur.fetchone() == ("1", "2", "3")
 
 
+@pytest.mark.skipolddriver
 def test_put_threshold(tmp_path, conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
