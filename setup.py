@@ -226,7 +226,7 @@ setup(
         "setuptools>34.0.0",
         # requests requirements
         "chardet>=3.0.2,<5",
-        "idna>=2.5,<3",
+        "idna>=2.5,<4",
         "certifi>=2017.4.17",
     ],
     namespace_packages=["snowflake"],
