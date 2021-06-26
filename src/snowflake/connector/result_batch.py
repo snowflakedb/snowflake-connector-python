@@ -270,6 +270,9 @@ class ResultBatch(abc.ABC):
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
+                    logger.debug(
+                        "started downloading result batch of size %d", self.rowcount
+                    )
                     response = requests.get(
                         self._remote_chunk_info.url,
                         headers=self._chunk_headers,
@@ -277,6 +280,10 @@ class ResultBatch(abc.ABC):
                         stream=True,
                     )
                     if response.ok:
+                        logger.debug(
+                            "successfully downloaded result batch of size %d",
+                            self.rowcount,
+                        )
                         break
             except Exception as e:
                 if retry == MAX_DOWNLOAD_RETRY - 1:
@@ -444,8 +451,10 @@ class JSONResultBatch(ResultBatch):
             return iter(self._data)
         response = self._download()
         # Load data to a intermediate form
+        logger.debug("started loading result batch of size %d", self.rowcount)
         with TimerContextManager() as load_metric:
             downloaded_data = self._load(response)
+        logger.debug("finished loading result batch of size %d", self.rowcount)
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         with TimerContextManager() as parse_metric:
@@ -577,14 +586,14 @@ class ArrowResultBatch(ResultBatch):
         Iterator[Table],
     ]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
-        logger.info("DOWNLOAD START %d", self.rowcount)
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download()
+        logger.debug("started loading result batch of size %d", self.rowcount)
         with TimerContextManager() as load_metric:
             loaded_data = self._load(response, iter_unit)
+        logger.debug("finished loading result batch of size %d", self.rowcount)
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
-        logger.info("DOWNLOAD FINISH %d", self.rowcount)
         return loaded_data
 
     def _get_arrow_iter(self) -> Iterator[Table]:

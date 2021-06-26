@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-from collections import deque  # TODO: make a queue
+from collections import deque
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
@@ -43,8 +43,8 @@ logger = getLogger(__name__)
 
 
 def result_set_iterator(
-    first_batch_iter: Iterator[Tuple],  # TODO: fix type hint
-    unconsumed_batches: Deque[Future],  # Future[Iterator[Tuple]]], # TODO: type hint
+    first_batch_iter: Iterator[Tuple],
+    unconsumed_batches: "Deque[Future[Iterator[Tuple]]]",
     unfetched_batches: Deque["ResultBatch"],
     final: Callable[[], None],
     **kw: Any,
@@ -67,7 +67,7 @@ def result_set_iterator(
 
     yield from first_batch_iter
 
-    logger.info("Onwards!")  # TODO: change logging
+    logger.debug("beginning to schedule result batch downloads")
     with ThreadPoolExecutor(4) as pool:
         # Fill up window
         for _ in range(min(4, len(unfetched_batches))):
@@ -77,17 +77,25 @@ def result_set_iterator(
 
         i = 1
         while unconsumed_batches:
-            logger.info("REQUESTING -- %d", i)
+            logger.debug("user requesting to consume result batch %d", i)
 
-            # Submit the next unfetched batch to the pool
+            # Submit the next un-fetched batch to the pool
             if unfetched_batches:
-                logger.info("SUBMITTING -- %d", unfetched_batches[0].rowcount)
+                logger.debug(
+                    "queuing download of result batch of size %d",
+                    unfetched_batches[0].rowcount,
+                )
                 future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
                 unconsumed_batches.append(future)
 
             future = unconsumed_batches.popleft()
-            yield from future.result()
-            logger.info("CONSUMED -- %d", i)
+
+            # this will raise an exception if one has occurred
+            batch_iterator = future.result()
+
+            logger.debug("user began consuming result batch %d", i)
+            yield from batch_iterator
+            logger.debug("user finished consuming result batch %d", i)
 
             i += 1
     final()
@@ -215,6 +223,8 @@ class ResultSet(Iterable[List[Any]]):
 
         # batches that have not been fetched
         unfetched_batches = deque(self.batches[1:])
+        for num, batch in enumerate(unfetched_batches):
+            logger.debug("result batch %d has size %d", num + 1, batch.rowcount)
 
         return result_set_iterator(
             first_batch_iter,
