@@ -24,8 +24,8 @@ applications that can connect to Snowflake and perform all standard operations. 
 provides a programming alternative to developing applications in Java or C/C++
 using the Snowflake JDBC or ODBC drivers.
 
-The connector is a native, pure Python package that has no dependencies on JDBC or
-ODBC. It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
+The connector has no dependencies on JDBC or ODBC.
+It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
 where Python 3.6.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
