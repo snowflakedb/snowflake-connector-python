@@ -273,12 +273,23 @@ class ResultBatch(abc.ABC):
                     logger.debug(
                         "started downloading result batch of size %d", self.rowcount
                     )
-                    response = requests.get(
-                        self._remote_chunk_info.url,
-                        headers=self._chunk_headers,
-                        timeout=DOWNLOAD_TIMEOUT,
-                        stream=True,
-                    )
+                    if "connection" in kwargs and True:
+                        connection: "SnowflakeConnection" = kwargs["connection"]
+                        response = connection.rest.fetch(
+                            "get",
+                            self._remote_chunk_info.url,
+                            self._chunk_headers,
+                            timeout=DOWNLOAD_TIMEOUT,
+                            is_raw_binary=True,
+                            kushan=True,
+                        )
+                    else:
+                        response = requests.get(
+                            self._remote_chunk_info.url,
+                            headers=self._chunk_headers,
+                            timeout=DOWNLOAD_TIMEOUT,
+                            stream=True,
+                        )
                     if response.ok:
                         logger.debug(
                             "successfully downloaded result batch of size %d",
@@ -449,7 +460,7 @@ class JSONResultBatch(ResultBatch):
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         if self._local:
             return iter(self._data)
-        response = self._download()
+        response = self._download(**kwargs)
         # Load data to a intermediate form
         logger.debug("started loading result batch of size %d", self.rowcount)
         with TimerContextManager() as load_metric:
@@ -523,6 +534,7 @@ class ArrowResultBatch(ResultBatch):
         )
         if row_unit == IterUnit.TABLE_UNIT:
             iter.init_table_unit()
+        response.close()
         return iter
 
     def _from_data(
@@ -579,7 +591,7 @@ class ArrowResultBatch(ResultBatch):
         return new_chunk
 
     def _create_iter(
-        self, iter_unit: IterUnit
+        self, iter_unit: IterUnit, **kwargs
     ) -> Union[
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
@@ -588,7 +600,7 @@ class ArrowResultBatch(ResultBatch):
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
             return self._from_data(self._data, iter_unit)
-        response = self._download()
+        response = self._download(**kwargs)
         logger.debug("started loading result batch of size %d", self.rowcount)
         with TimerContextManager() as load_metric:
             loaded_data = self._load(response, iter_unit)
@@ -596,20 +608,20 @@ class ArrowResultBatch(ResultBatch):
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
 
-    def _get_arrow_iter(self) -> Iterator[Table]:
+    def _get_arrow_iter(self, **kwargs) -> Iterator[Table]:
         """Returns an iterator for this batch which yields a pyarrow Table"""
-        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT)
+        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, **kwargs)
 
-    def to_arrow(self) -> Optional[Table]:
+    def to_arrow(self, **kwargs) -> Optional[Table]:
         """Returns this batch as a pyarrow Table"""
-        return next(self._get_arrow_iter(), None)
+        return next(self._get_arrow_iter(**kwargs), None)
 
     def to_pandas(self, **kwargs) -> "pandas.DataFrame":
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
-        table = self.to_arrow()
+        table = self.to_arrow(**kwargs)
         if table:
-            return table.to_pandas(**kwargs)
+            return table.to_pandas()
         return pandas.DataFrame(columns=self.column_names)
 
     def _get_pandas_iter(self, **kwargs) -> Iterator["pandas.DataFrame"]:
@@ -633,6 +645,6 @@ class ArrowResultBatch(ResultBatch):
             if structure == "pandas":
                 return self._get_pandas_iter(**kwargs)
             else:
-                return self._get_arrow_iter()
+                return self._get_arrow_iter(**kwargs)
         else:
             return self._create_iter(iter_unit=iter_unit)

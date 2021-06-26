@@ -902,6 +902,7 @@ class SnowflakeRestful(object):
         is_raw_binary=False,
         binary_data_handler=None,
         socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+        **kwargs,
     ):
         if socket_timeout > DEFAULT_SOCKET_CONNECT_TIMEOUT:
             # socket timeout should not be more than the default.
@@ -933,6 +934,12 @@ class SnowflakeRestful(object):
                 stream=is_raw_binary,
                 auth=SnowflakeAuth(token),
             )
+            logger.debug(
+                "making %s request to %s... using session %s",
+                method,
+                full_url[:30],
+                repr(session),
+            )
             download_end_time = get_time_millis()
 
             try:
@@ -941,6 +948,9 @@ class SnowflakeRestful(object):
                     if is_raw_text:
                         ret = raw_ret.text
                     elif is_raw_binary:
+                        if "kushan" in kwargs:
+                            logger.debug("returning raw response in kushan mode")
+                            return raw_ret
                         ret = binary_data_handler.to_iterator(
                             raw_ret.raw, download_end_time - download_start_time
                         )
@@ -1002,7 +1012,8 @@ class SnowflakeRestful(object):
                     )
                     return None  # required for tests
             finally:
-                raw_ret.close()  # ensure response is closed
+                if "kushan" not in kwargs:
+                    raw_ret.close()  # ensure response is closed
         except SSLError as se:
             logger.debug("Hit non-retryable SSL error, %s", str(se))
             TelemetryService.get_instance().log_http_request_error(
