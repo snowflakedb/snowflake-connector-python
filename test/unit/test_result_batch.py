@@ -29,7 +29,16 @@ from snowflake.connector.errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_REQUEST,
 )
-from snowflake.connector.network import RetryRequest
+from snowflake.connector.errors import (
+    BadGatewayError,
+    BadRequest,
+    ForbiddenError,
+    GatewayTimeoutError,
+    InternalServerError,
+    MethodNotAllowed,
+    OtherHTTPRetryableError,
+    ServiceUnavailableError,
+)
 from snowflake.connector.result_batch import MAX_DOWNLOAD_RETRY, JSONResultBatch
 from snowflake.connector.sqlstate import (
     SQLSTATE_CONNECTION_REJECTED,
@@ -66,20 +75,20 @@ def test_ok_response_download(mock_get):
 
 
 @pytest.mark.parametrize(
-    "errcode",
+    "errcode,error_class",
     [
-        BAD_REQUEST,  # 400
-        FORBIDDEN,  # 403
-        METHOD_NOT_ALLOWED,  # 405
-        REQUEST_TIMEOUT,  # 408
-        INTERNAL_SERVER_ERROR,  # 500
-        BAD_GATEWAY,  # 502
-        SERVICE_UNAVAILABLE,  # 503
-        GATEWAY_TIMEOUT,  # 504
-        555,  # random 5xx error
+        (BAD_REQUEST, BadRequest),  # 400
+        (FORBIDDEN, ForbiddenError),  # 403
+        (METHOD_NOT_ALLOWED, MethodNotAllowed),  # 405
+        (REQUEST_TIMEOUT, OtherHTTPRetryableError),  # 408
+        (INTERNAL_SERVER_ERROR, InternalServerError),  # 500
+        (BAD_GATEWAY, BadGatewayError),  # 502
+        (SERVICE_UNAVAILABLE, ServiceUnavailableError),  # 503
+        (GATEWAY_TIMEOUT, GatewayTimeoutError),  # 504
+        (555, OtherHTTPRetryableError),  # random 5xx error
     ],
 )
-def test_retryable_response_download(errcode):
+def test_retryable_response_download(errcode, error_class):
     # retryable exceptions
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(errcode)
@@ -87,9 +96,9 @@ def test_retryable_response_download(errcode):
         chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
         result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
         with mock.patch("time.sleep", return_value=None):
-            with pytest.raises(RetryRequest) as ex:
+            with pytest.raises(error_class) as ex:
                 _ = result_batch._download()
-            err_msg = ex.value.args[0].msg
+            err_msg = ex.value.msg
             if isinstance(errcode, HTTPStatus):
                 assert str(errcode.value) in err_msg
             else:
