@@ -359,10 +359,9 @@ class SnowflakeFileTransferAgent:
         self._results: List["SnowflakeFileMeta"] = []
         self._multipart_threshold = multipart_threshold or 67108864  # Historical value
         self._use_s3_regional_url = use_s3_regional_url
-        self.credentials = None
-        self._local_path = None
+        self._credentials: Optional[StorageCredential] = None
 
-    def execute(self):
+    def execute(self) -> None:
         self._parse_command()
         self._init_file_metadata()
 
@@ -401,7 +400,7 @@ class SnowflakeFileTransferAgent:
         for result in self._results:
             result.result_status = result.result_status.value
 
-    def transfer(self, metas: List["SnowflakeFileMeta"]):
+    def transfer(self, metas: List["SnowflakeFileMeta"]) -> None:
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
@@ -627,7 +626,7 @@ class SnowflakeFileTransferAgent:
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
                 meta,
-                self.credentials,
+                self._credentials,
                 4 * 1024 * 1024,
                 self._stage_info,
                 self._use_s3_regional_url,
@@ -635,7 +634,7 @@ class SnowflakeFileTransferAgent:
         elif self._stage_location_type == S3_FS:
             return SnowflakeS3RestClient(
                 meta,
-                self.credentials,
+                self._credentials,
                 self._stage_info,
                 8388608,  # boto3 default
                 self._use_s3_regional_url,
@@ -643,14 +642,14 @@ class SnowflakeFileTransferAgent:
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
                 meta,
-                self.credentials,
+                self._credentials,
                 self._stage_info,
                 self._cursor._connection,
                 self._command,
                 self._use_s3_regional_url,
             )
 
-    def _transfer_accelerate_config(self):
+    def _transfer_accelerate_config(self) -> None:
         if self._stage_location_type == S3_FS:
             client = self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
@@ -791,7 +790,7 @@ class SnowflakeFileTransferAgent:
 
         return canonical_locations
 
-    def _init_encryption_material(self):
+    def _init_encryption_material(self) -> None:
         self._encryption_material = []
         if self._ret["data"].get("encryptionMaterial") is not None:
             root_node = self._ret["data"]["encryptionMaterial"]
@@ -816,7 +815,7 @@ class SnowflakeFileTransferAgent:
                             )
                         )
 
-    def _parse_command(self):
+    def _parse_command(self) -> None:
 
         if "data" not in self._ret:
             Error.errorhandler_wrapper(
@@ -865,7 +864,7 @@ class SnowflakeFileTransferAgent:
 
         self._stage_location = response["stageInfo"]["location"]
         self._stage_info = response["stageInfo"]
-        self.credentials = StorageCredential(
+        self._credentials = StorageCredential(
             self._stage_info["creds"], self._cursor.connection, self._command
         )
         self._presigned_urls = self._ret["data"].get("presignedUrls")
@@ -923,7 +922,7 @@ class SnowflakeFileTransferAgent:
                     },
                 )
 
-    def _init_file_metadata(self):
+    def _init_file_metadata(self) -> None:
         logger.debug(f"command type: {self._command_type}")
 
         if self._command_type == CMD_TYPE_UPLOAD:
@@ -1019,7 +1018,7 @@ class SnowflakeFileTransferAgent:
                     )
                 )
 
-    def _process_file_compression_type(self):
+    def _process_file_compression_type(self) -> None:
         user_specified_source_compression = None
         if self._source_compression == "auto_detect":
             auto_detect = True
