@@ -170,7 +170,7 @@ class SnowflakeStorageClient(ABC):
             self.data_file = meta.real_src_file_name
 
     @abstractmethod
-    def get_file_header(self, filename: str) -> Union[FileHeader, None]:
+    def get_file_header(self, filename: str) -> Optional[FileHeader]:
         """Check if file exists in target location and obtain file metadata if exists.
 
         Notes:
@@ -389,23 +389,23 @@ class SnowflakeStorageClient(ABC):
         pass
 
     # Override in GCS
-    def _has_expired_presigned_url(self, response: requests.Response):
+    def _has_expired_presigned_url(self, response: requests.Response) -> bool:
         return False
 
     # Override in GCS
-    def _update_presigned_url(self):
+    def _update_presigned_url(self) -> None:
         pass
 
     # Override in S3
-    def _initiate_multipart_upload(self):
+    def _initiate_multipart_upload(self) -> None:
         pass
 
     # Override in S3
-    def _complete_multipart_upload(self):
+    def _complete_multipart_upload(self) -> None:
         pass
 
     # Override in S3
-    def _abort_multipart_upload(self):
+    def _abort_multipart_upload(self) -> None:
         pass
 
     def __del__(self):

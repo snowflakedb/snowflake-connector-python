@@ -72,8 +72,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]
         # Multipart upload only
-        self.upload_id = None
-        self.etags = None
+        self.upload_id: Optional[str] = None
+        self.etags: Optional[List[str]] = None
         self.s3location: "S3Location" = (
             SnowflakeS3RestClient._extract_bucket_name_and_path(
                 self.stage_info["location"]
@@ -316,7 +316,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
         return s3_metadata
 
-    def _initiate_multipart_upload(self):
+    def _initiate_multipart_upload(self) -> None:
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
         url = self.endpoint + f"/{path}?uploads"
         s3_metadata = self._prepare_file_metadata()
@@ -379,7 +379,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.etags[chunk_id] = response.headers["ETag"]
             response.raise_for_status()
 
-    def _complete_multipart_upload(self):
+    def _complete_multipart_upload(self) -> None:
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
         url = self.endpoint + f"/{path}?uploadId={self.upload_id}"
         logger.debug("Initiating multipart upload complete")
@@ -410,7 +410,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         )
         response.raise_for_status()
 
-    def _abort_multipart_upload(self):
+    def _abort_multipart_upload(self) -> None:
         if self.upload_id is None:
             return
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))

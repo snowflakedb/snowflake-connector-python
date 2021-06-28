@@ -675,7 +675,7 @@ def test_utf8_filename(tmp_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_put_threshold(tmp_path, conn_cnx, is_public_test):
+def test_put_threshold(tmp_path, conn_cnx, is_public_test, sdkless):
     if is_public_test:
         pytest.xfail(
             reason="This feature hasn't been rolled out for public Snowflake deployments yet."
@@ -689,7 +689,9 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
         from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
         with patch(
-            "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+            "snowflake.connector.cursor.SnowflakeFileTransferAgent"
+            if sdkless
+            else "snowflake.connector.cursor.SnowflakeFileTransferAgentSdk",
             autospec=SnowflakeFileTransferAgent,
         ) as mock_agent:
             cur.execute(f"put file://{file} @{stage_name} threshold=156")
