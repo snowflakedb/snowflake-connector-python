@@ -52,15 +52,15 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         use_s3_regional_url=False,
     ):
         super().__init__(meta, stage_info, chunk_size, credentials=credentials)
-        end_point = stage_info["endPoint"]
+        end_point: str = stage_info["endPoint"]
         if end_point.startswith("blob."):
             end_point = end_point[len("blob.") :]
         self.endpoint = end_point
-        self.storage_account = stage_info["storageAccount"]
+        self.storage_account: str = stage_info["storageAccount"]
         self.azure_location = self.extract_container_name_and_path(
             stage_info["location"]
         )
-        self.block_ids = []
+        self.block_ids: list[str] = []
 
     @staticmethod
     def extract_container_name_and_path(stage_location) -> AzureLocation:

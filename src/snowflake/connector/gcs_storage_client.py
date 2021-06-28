@@ -70,7 +70,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.meta = meta
         self._cursor = cnx.cursor()
         # presigned_url in meta is for downloading
-        self.presigned_url = meta.presigned_url or stage_info.get("presignedUrl")
+        self.presigned_url: str = meta.presigned_url or stage_info.get("presignedUrl")
         self.security_token = credentials.creds.get("GCS_ACCESS_TOKEN")
 
         if self.security_token:
@@ -82,7 +82,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
     def _has_expired_token(self, response: requests.Response):
         return self.security_token and response.status_code == 401
 
-    def _has_expired_presigned_url(self, response: requests.Response):
+    def _has_expired_presigned_url(self, response: requests.Response) -> bool:
         # Presigned urls can be generated for any xml-api operation
         # offered by GCS. Hence the error codes expected are similar
         # to xml api.
@@ -164,7 +164,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             gcs_headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, "null")
         )
 
-    def download_chunk(self, chunk_id: int):
+    def download_chunk(self, chunk_id: int) -> None:
         meta = self.meta
 
         def generate_url_and_rest_args():
@@ -255,7 +255,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.meta.presigned_url = stage_info.get("presignedUrl")
         self.presigned_url = stage_info.get("presignedUrl")
 
-    def _get_local_file_path_from_put_command(self):
+    def _get_local_file_path_from_put_command(self) -> Optional[str]:
         """Get the local file path from PUT command (Logic adopted from JDBC, written by Polita).
 
         Args:

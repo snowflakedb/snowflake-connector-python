@@ -35,14 +35,12 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
             stage_info["location"], os.path.basename(meta.dst_file_name)
         )
 
-    def _native_download_chunk(self, chunk_id: int):
-        pass
-
     def get_file_header(self, filename: str) -> None:
         """
         Notes:
             Checks whether the file exits in specified directory, does not return FileHeader
         """
+        # TODO return a FileHeader sometime
         target_dir = os.path.join(
             os.path.expanduser(self.stage_info["location"]),
             filename,
@@ -54,28 +52,27 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
 
         return None
 
-    def prepare_download(self) -> None:
-        base_dir = os.path.dirname(self.full_dst_file_name)
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir)
-        with open(self.full_dst_file_name, "w") as tfd:
-            tfd.truncate(os.stat(self.data_file).st_size)
-
     def download_chunk(self, chunk_id: int) -> None:
-        with open(self.full_dst_file_name, "wb") as tfd:
-            with open(self.data_file, "rb") as sfd:
+        with open(self.full_dst_file_name, "rb") as sfd:
+            with open(
+                os.path.join(
+                    self.meta.local_location, os.path.basename(self.meta.dst_file_name)
+                ),
+                "wb",
+            ) as tfd:
                 tfd.seek(chunk_id * self.chunk_size)
                 sfd.seek(chunk_id * self.chunk_size)
                 tfd.write(sfd.read(self.chunk_size))
 
-    def finish_download(self, meta: "SnowflakeFileMeta") -> None:
-        meta.dst_file_size = os.stat(self.full_dst_file_name).st_size
-        meta.result_status = ResultStatus.DOWNLOADED
+    def finish_download(self) -> None:
+        self.meta.dst_file_size = os.stat(self.full_dst_file_name).st_size
+        self.meta.result_status = ResultStatus.DOWNLOADED
 
     def _has_expired_token(self, response: requests.Response) -> bool:
         return False
 
     def prepare_upload(self) -> None:
+        super().prepare_upload()
         if (
             self.meta.upload_size < self.meta.multipart_threshold
             or not self.chunked_transfer
