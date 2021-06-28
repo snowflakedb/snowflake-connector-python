@@ -1005,9 +1005,7 @@ class SnowflakeRestful(object):
                     and catch_okta_unauthorized_error
                 ):
                     # OKTA Unauthorized errors
-                    raise_okta_unauthorized_error(
-                        self._connection, raw_ret.status_code, raw_ret.reason
-                    )
+                    raise_okta_unauthorized_error(self._connection, raw_ret)
                     return None  # required for tests
                 else:
                     raise_failed_request_error(
