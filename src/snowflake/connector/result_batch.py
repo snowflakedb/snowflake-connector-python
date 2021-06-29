@@ -274,6 +274,10 @@ class ResultBatch(abc.ABC):
                         "started downloading result batch of size %d", self.rowcount
                     )
                     if "connection" in kwargs and True:
+                        logger.debug(
+                            "downloading result batch of size %d with existing session",
+                            self.rowcount,
+                        )
                         connection: "SnowflakeConnection" = kwargs["connection"]
                         response = connection.rest.fetch(
                             "get",
@@ -284,6 +288,10 @@ class ResultBatch(abc.ABC):
                             kushan=True,
                         )
                     else:
+                        logger.debug(
+                            "downloading result batch of size %d with new session",
+                            self.rowcount,
+                        )
                         response = requests.get(
                             self._remote_chunk_info.url,
                             headers=self._chunk_headers,
@@ -647,4 +655,4 @@ class ArrowResultBatch(ResultBatch):
             else:
                 return self._get_arrow_iter(**kwargs)
         else:
-            return self._create_iter(iter_unit=iter_unit)
+            return self._create_iter(iter_unit=iter_unit, **kwargs)
