@@ -1315,11 +1315,12 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
         with con.cursor() as cur:
             # Dummy return value necessary to not iterate through every batch with
             #  first fetchone call
-            first_expected = (1,)
-            second_expected = (2,)
+
+            downloads = [iter([(i,)]) for i in range(10)]
+
             with mock.patch(
                 patch_path,
-                side_effect=[iter([first_expected]), iter([second_expected])],
+                side_effect=downloads,
             ) as patched_download:
                 cur.execute(
                     f"select seq4() as c1, randstr(1,random()) as c2 "
@@ -1338,11 +1339,12 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                 assert result_batches[0]._local  # Sanity check first chunk being local
                 first_output = cur.fetchone()
                 second_output = cur.fetchone()  # Trigger pre-fetching
-                assert first_output == first_expected
-                assert second_output == second_expected
-                import time
+                assert first_output == (0,)
+                assert second_output == (1,)
 
+                # delay so that the thread pool downloads for all submitted chunks
                 time.sleep(1)
+
                 # Though the 0th chunk is local, we still call _download on it.
                 # When we fetch the second chunk, it will schedule 4 download jobs
                 # for chunks 1, 2, 3, 4. Finally, when retrieving chunk 1, we schedule the
