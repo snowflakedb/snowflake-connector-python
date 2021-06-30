@@ -1,4 +1,4 @@
-# Generated on: Python 3.6.12
+# Generated on: Python 3.9.1
 # With snowflake-connector-python version: 2.4.6
 asn1crypto==1.4.0
 azure-common==1.1.27
@@ -10,7 +10,6 @@ certifi==2021.5.30
 cffi==1.14.5
 chardet==4.0.0
 cryptography==3.4.7
-dataclasses==0.8
 idna==2.10
 isodate==0.6.0
 jmespath==0.10.0
