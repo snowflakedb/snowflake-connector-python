@@ -3,7 +3,6 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-import os
 from os import chmod, path
 
 import pytest
@@ -16,23 +15,15 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeFileTransferAgent,
     SnowflakeS3ProgressPercentage,
 )
-from snowflake.connector.file_transfer_agent_sdk import (
-    SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
-)
 
-
-@pytest.fixture(
-    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
-    ids=["sdkless", "sdkfull"],
-)
-def sdkless(request):
-    if request.param:
-        os.environ["SF_SDKLESS_PUT"] = "true"
-        os.environ["SF_SDKLESS_GET"] = "true"
-    else:
-        os.environ["SF_SDKLESS_PUT"] = "false"
-        os.environ["SF_SDKLESS_GET"] = "false"
-    return request.param
+try:
+    from snowflake.connector.file_transfer_agent_sdk import (
+        SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
+    )
+except ImportError:
+    from snowflake.connector.file_transfer_agent import (
+        SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
+    )
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="permission model is different")
@@ -91,7 +82,7 @@ def test_put_error(tmpdir, sdkless):
 
 
 @pytest.mark.skipolddriver
-def test_percentage(tmp_path):
+def test_percentage(tmp_path, sdkless):
     """Tests for ProgressPercentage classes."""
     from snowflake.connector.file_transfer_agent import percent
 
