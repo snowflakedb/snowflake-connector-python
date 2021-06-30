@@ -279,7 +279,7 @@ class SnowflakeStorageClient(ABC):
                         self.credentials.update(cur_timestamp)
                     else:
                         return response
-            except self.TRANSIENT_ERRORS:
+            except self.TRANSIENT_ERRORS as e:
                 self.last_err_is_presigned_url = False
                 time.sleep(
                     min(
@@ -287,6 +287,7 @@ class SnowflakeStorageClient(ABC):
                         self.SLEEP_MAX,
                     )
                 )
+                logger.warning(f"{verb} with url {url} failed for transient error: {e}")
                 self.retry_count[retry_id] += 1
         else:
             raise RequestExceedMaxRetryError(
@@ -327,8 +328,7 @@ class SnowflakeStorageClient(ABC):
 
     def finish_download(self) -> None:
         meta = self.meta
-        if self.successful_transfers == self.num_of_chunks:
-
+        if self.num_of_chunks != 0 and self.successful_transfers == self.num_of_chunks:
             meta.result_status = ResultStatus.DOWNLOADED
             if meta.encryption_material:
                 logger.debug(f"encrypted data file={self.full_dst_file_name}")
@@ -359,8 +359,9 @@ class SnowflakeStorageClient(ABC):
             meta.dst_file_size = stat_info.st_size
         else:
             # TODO: add more error details to result/meta
-            os.unlink(self.full_dst_file_name)
-            logger.exception(f"Failed to download a file: {meta.dst_file_name}")
+            if os.path.isfile(self.full_dst_file_name):
+                os.unlink(self.full_dst_file_name)
+            logger.exception(f"Failed to download a file: {self.full_dst_file_name}")
             meta.dst_file_size = -1
             meta.result_status = ResultStatus.ERROR
 

@@ -10,12 +10,15 @@ import os
 from collections import defaultdict
 from os import path
 
+import botocore
 import mock
 import OpenSSL
 import pytest
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
+from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+from snowflake.connector.vendored.requests import Response
 
 try:
     from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
@@ -24,9 +27,7 @@ try:
         ERRORNO_WSAECONNABORTED,
         SnowflakeS3RestClient,
     )
-
-    SnowflakeS3Util = None
-    sdkless = True
+    from snowflake.connector.s3_util_sdk import SnowflakeS3Util
 except ImportError:  # NOQA
     # Compatibility for olddriver tests
     from snowflake.connector.s3_util import (  # NOQA
@@ -36,7 +37,6 @@ except ImportError:  # NOQA
 
     SnowflakeFileMeta = dict
     SnowflakeS3RestClient = None
-    sdkless = False
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 MINIMAL_METADATA = SnowflakeFileMeta(
@@ -60,7 +60,7 @@ MINIMAL_METADATA = SnowflakeFileMeta(
         ("sfc-dev1-regression///", "sfc-dev1-regression", "//"),
     ],
 )
-def test_extract_bucket_name_and_path(input, bucket_name, s3path):
+def test_extract_bucket_name_and_path(input, bucket_name, s3path, sdkless):
     """Extracts bucket name and S3 path."""
     s3_util = SnowflakeS3RestClient if sdkless else SnowflakeS3Util
     s3_loc = s3_util._extract_bucket_name_and_path(input)
@@ -371,44 +371,84 @@ def test_download_expiry_error(caplog):
     assert meta.result_status == ResultStatus.RENEW_TOKEN
 
 
-def test_download_unknown_error(caplog):
+def test_download_unknown_error(caplog, sdkless):
     """Tests whether an unknown error is handled as expected when downloading."""
     caplog.set_level(logging.DEBUG, "snowflake.connector")
-    mock_resource = MagicMock()
-    mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
-        {"Error": {"Code": "unknown", "Message": "Just testing"}}, "Testing"
-    )
-    client_meta = {
-        "cloud_client": mock_resource,
-        "stage_info": {"location": "loc"},
-    }
-    meta = {
-        "name": "f",
-        "src_file_name": "f",
-        "stage_location_type": "S3",
-        "client_meta": SFResourceMeta(**client_meta),
-        "sha256_digest": "asd",
-        "src_file_size": 99,
-        "get_callback_output_stream": None,
-        "show_progress_bar": False,
-        "get_callback": None,
-    }
-    meta = SnowflakeFileMeta(**meta)
-    with mock.patch(
-        "snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object",
-        return_value=mock_resource,
-    ):
-        with pytest.raises(
-            botocore.exceptions.ClientError,
-            match=r"An error occurred \(unknown\) when calling the Testing operation: Just testing",
+    if sdkless:
+        agent = SnowflakeFileTransferAgent(
+            MagicMock(),
+            "get @~/f /tmp",
+            {
+                "data": {
+                    "command": "DOWNLOAD",
+                    "src_locations": ["/tmp/a"],
+                    "stageInfo": {
+                        "locationType": "S3",
+                        "location": "",
+                        "creds": {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""},
+                        "region": "",
+                        "endPoint": None,
+                    },
+                    "localLocation": "/tmp",
+                }
+            },
+        )
+        resp = Response()
+        resp.status_code = 400
+        resp.reason = "No, just chuck testing..."
+        with mock.patch(
+            "snowflake.connector.s3_storage_client.SnowflakeS3RestClient._send_request_with_authentication_and_retry",
+            return_value=resp,
+        ), mock.patch(
+            "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent._transfer_accelerate_config",
+            side_effect=None,
         ):
-            SnowflakeS3Util._native_download_file(meta, "f", 4)
-    assert (
-        "snowflake.connector.s3_util",
-        logging.DEBUG,
-        "Failed to download a file: f, err: An error occurred (unknown) when "
-        "calling the Testing operation: Just testing",
-    ) in caplog.record_tuples
+            agent.execute()
+        assert (
+            str(agent._file_metadata[0].error_details)
+            == "400 Client Error: No, just chuck testing... for url: None"
+        )
+        assert (
+            "snowflake.connector.storage_client",
+            logging.ERROR,
+            "Failed to download a file: /tmp/a",
+        ) in caplog.record_tuples
+    else:
+        mock_resource = MagicMock()
+        mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
+            {"Error": {"Code": "unknown", "Message": "Just testing"}}, "Testing"
+        )
+        client_meta = {
+            "cloud_client": mock_resource,
+            "stage_info": {"location": "loc"},
+        }
+        meta = {
+            "name": "f",
+            "src_file_name": "f",
+            "stage_location_type": "S3",
+            "self": SFResourceMeta(**client_meta),
+            "sha256_digest": "asd",
+            "src_file_size": 99,
+            "get_callback_output_stream": None,
+            "show_progress_bar": False,
+            "get_callback": None,
+        }
+        meta = SnowflakeFileMeta(**meta)
+        with mock.patch(
+            "snowflake.connector.s3_util_sdk.SnowflakeS3Util._get_s3_object",
+            return_value=mock_resource,
+        ):
+            with pytest.raises(
+                botocore.exceptions.ClientError,
+                match=r"An error occurred \(unknown\) when calling the Testing operation: Just testing",
+            ):
+                SnowflakeS3Util._native_download_file(meta, "f", 4)
+                assert (
+                    "snowflake.connector.s3_util_sdk",
+                    logging.DEBUG,
+                    "Failed to download a file: f, err: An error occurred (unknown) when "
+                    "calling the Testing operation: Just testing",
+                ) in caplog.record_tuples
 
 
 def test_download_retry_exceeded_error(caplog):
@@ -448,7 +488,7 @@ def test_download_retry_exceeded_error(caplog):
         (100, ResultStatus.NEED_RETRY),
     ],
 )
-def test_download_syscall_error(caplog, error_no, result_status):
+def test_download_syscall_error(caplog, error_no, result_status, sdkless):
     """Tests whether a syscall error is handled as expected when downloading."""
     caplog.set_level(logging.DEBUG, "snowflake.connector")
     mock_resource = MagicMock()
@@ -460,7 +500,7 @@ def test_download_syscall_error(caplog, error_no, result_status):
     meta = {
         "name": "f",
         "stage_location_type": "S3",
-        "client_meta": SFResourceMeta(**client_meta),
+        "self": SFResourceMeta(**client_meta),
         "sha256_digest": "asd",
         "src_file_name": "f",
         "src_file_size": 99,
@@ -469,10 +509,13 @@ def test_download_syscall_error(caplog, error_no, result_status):
         "get_callback": None,
     }
     meta = SnowflakeFileMeta(**meta)
-    with mock.patch(
-        "snowflake.connector.s3_util.SnowflakeS3Util._get_s3_object",
-        return_value=mock_resource,
-    ):
-        SnowflakeS3Util._native_download_file(meta, "f", 4)
-    assert meta.last_error is mock_resource.download_file.side_effect
-    assert meta.result_status == result_status
+    if sdkless:
+        assert False  # TODO
+    else:
+        with mock.patch(
+            "snowflake.connector.s3_util_sdk.SnowflakeS3Util._get_s3_object",
+            return_value=mock_resource,
+        ):
+            SnowflakeS3Util._native_download_file(meta, "f", 4)
+        assert meta.last_error is mock_resource.download_file.side_effect
+        assert meta.result_status == result_status
