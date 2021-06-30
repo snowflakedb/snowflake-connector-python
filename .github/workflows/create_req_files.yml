@@ -64,7 +64,8 @@ jobs:
       - name: Create reqs file
         shell: bash
         run: |
-          reqs_file="tested_requirements/requirements_$(python -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').reqs"
+          mkdir temp_requirements
+          reqs_file="temp_requirements/requirements_$(python -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').reqs"
           echo "# Generated on: $(python --version)" >${reqs_file}
           echo "# With snowflake-connector-python version: $(python -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${reqs_file}
           python -m pip freeze | grep -v snowflake-connector-python 1>>${reqs_file} 2>/dev/null
@@ -72,7 +73,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: requirements
-          path: tested_requirements/
+          path: temp_requirements
 
   push-files:
     needs: create-req-files
