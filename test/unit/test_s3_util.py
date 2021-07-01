@@ -18,7 +18,6 @@ from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
-from snowflake.connector.vendored.requests import Response
 
 try:
     from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
@@ -28,8 +27,11 @@ try:
         SnowflakeS3RestClient,
     )
     from snowflake.connector.s3_util_sdk import SnowflakeS3Util
+    from snowflake.connector.vendored.requests import Response
 except ImportError:  # NOQA
     # Compatibility for olddriver tests
+    from requests import Response
+
     from snowflake.connector.s3_util import (  # NOQA
         ERRORNO_WSAECONNABORTED,
         SnowflakeS3Util,
