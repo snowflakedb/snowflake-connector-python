@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
     Callable,
+    Dict,
     Iterable,
     Iterator,
     Optional,
@@ -53,6 +54,7 @@ def write_pandas(
     on_error: str = "abort_statement",
     parallel: int = 4,
     quote_identifiers: bool = True,
+    column_formats: Optional[Dict[str, string.Template]] = None,
 ) -> Tuple[
     bool,
     int,
@@ -104,11 +106,14 @@ def write_pandas(
         quote_identifiers: By default, identifiers, specifically database, schema, table and column names
             (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
             I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
+        column_formats: Allow custom formatting of columns using a string.Template for each column.
+            The Example: {"listColumnExample": string.Template("TRY_PARSE_JSON($$1:$col)::variant")}
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
         ingested correctly, # of chunks, # of ingested rows, and ingest's output.
     """
+    column_formats = column_formats or {}
     if database is not None and schema is None:
         raise ProgrammingError(
             "Schema has to be provided to write_pandas when a database is provided"
@@ -180,7 +185,12 @@ def write_pandas(
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
-    parquet_columns = "$1:" + ",$1:".join(df.columns)
+    parquet_columns = ",".join(
+        [
+            "$1:"+x if x not in column_formats else column_formats[x].substitute(col=x)
+            for x in df.columns
+        ]
+    )
     copy_into_sql = (
         "COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         "({columns}) "
