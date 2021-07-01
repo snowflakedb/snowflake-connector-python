@@ -12,7 +12,6 @@ import pytest
 
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import ResultStatus
-from snowflake.connector.vendored.requests import Response
 
 from ..randomize import random_string
 
@@ -24,8 +23,11 @@ try:
         StorageCredential,
     )
     from snowflake.connector.storage_client import METHODS
+    from snowflake.connector.vendored.requests import Response
 except ImportError:  # NOQA
     # Compatibility for olddriver tests
+    from requests import Response
+
     SnowflakeFileMeta = dict
     RequestExceedMaxRetryError = None
     METHODS = {}
