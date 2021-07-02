@@ -310,3 +310,40 @@ def test_autoincrement_insertion(
                 ) in df_data
         finally:
             cnx.execute_string(drop_sql)
+
+
+def test_special_name_quoting(
+    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+):
+    """Tests whether special column names get quoted as expected."""
+    table_name = "users"
+    df_data = [("Mark", 10), ("Luke", 20)]
+
+    df = pandas.DataFrame(df_data, columns=["00name", "bAlance"])
+    create_sql = (
+        f'CREATE OR REPLACE TABLE "{table_name}"'
+        '("00name" STRING, "bAlance" INT, "id" INT AUTOINCREMENT)'
+    )
+    select_sql = f'SELECT * FROM "{table_name}"'
+    drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            success, nchunks, nrows, _ = write_pandas(
+                cnx, df, table_name, quote_identifiers=True
+            )
+
+            # Check write_pandas output
+            assert success
+            assert nrows == len(df_data)
+            assert nchunks == 1
+            # Check table's contents
+            result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
+            for row in result:
+                assert row["id"] in (1, 2)
+                assert (
+                    row["00name"],
+                    row["bAlance"],
+                ) in df_data
+        finally:
+            cnx.execute_string(drop_sql)
