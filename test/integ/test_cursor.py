@@ -1337,20 +1337,13 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                 assert patched_download.call_count == 0
                 assert len(result_batches) > 5
                 assert result_batches[0]._local  # Sanity check first chunk being local
-                first_output = cur.fetchone()
-                second_output = cur.fetchone()  # Trigger pre-fetching
-                assert first_output == (0,)
-                assert second_output == (1,)
+                cur.fetchone()  # Trigger pre-fetching
 
-                # delay so that the thread pool downloads for all submitted chunks
-                time.sleep(1)
-
-                # Though the 0th chunk is local, we still call _download on it.
-                # When we fetch the second chunk, it will schedule 4 download jobs
-                # for chunks 1, 2, 3, 4. Finally, when retrieving chunk 1, we schedule the
-                # download job for chunk 5. In summary, we expect _download to be
-                # called for chunks 0 to 5, inclusive (6 total)
-                assert patched_download.call_count == 6
+                # While the first chunk is local we still call _download on it, which
+                # short circuits and just parses (for JSON batches) and then returns
+                # an iterator through that data, so we expect the call count to be 5.
+                # (0 local and 1, 2, 3, 4 pre-fetched) = 5 total
+                assert patched_download.call_count == 5
 
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")

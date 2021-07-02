@@ -65,9 +65,6 @@ def result_set_iterator(
     to continue iterating through the rest of the ``ResultBatch``.
     """
 
-    yield from first_batch_iter
-
-    logger.debug("beginning to schedule result batch downloads")
     with ThreadPoolExecutor(4) as pool:
         # Fill up window
         for _ in range(min(4, len(unfetched_batches))):
@@ -75,15 +72,18 @@ def result_set_iterator(
                 pool.submit(unfetched_batches.popleft().create_iter, **kw)
             )
 
+        yield from first_batch_iter
+
+        logger.debug("beginning to schedule result batch downloads")
+
         i = 1
         while unconsumed_batches:
-            logger.debug("user requesting to consume result batch %d", i)
+            logger.debug(f"user requesting to consume result batch {i}")
 
             # Submit the next un-fetched batch to the pool
             if unfetched_batches:
                 logger.debug(
-                    "queuing download of result batch of size %d",
-                    unfetched_batches[0].rowcount,
+                    f"queuing download of result batch of size {unfetched_batches[0].rowcount}"
                 )
                 future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
                 unconsumed_batches.append(future)
@@ -93,9 +93,9 @@ def result_set_iterator(
             # this will raise an exception if one has occurred
             batch_iterator = future.result()
 
-            logger.debug("user began consuming result batch %d", i)
+            logger.debug(f"user began consuming result batch {i}")
             yield from batch_iterator
-            logger.debug("user finished consuming result batch %d", i)
+            logger.debug(f"user finished consuming result batch {i}")
 
             i += 1
     final()
@@ -224,7 +224,7 @@ class ResultSet(Iterable[List[Any]]):
         # batches that have not been fetched
         unfetched_batches = deque(self.batches[1:])
         for num, batch in enumerate(unfetched_batches):
-            logger.debug("result batch %d has size %d", num + 1, batch.rowcount)
+            logger.debug(f"result batch {num + 1} has size {batch.rowcount}")
 
         return result_set_iterator(
             first_batch_iter,

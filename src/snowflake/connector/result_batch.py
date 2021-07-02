@@ -99,7 +99,7 @@ def create_batches_from_response(
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
     if "chunks" in data:
         chunks = data["chunks"]
-        logger.debug("chunk size=%s", len(chunks))
+        logger.debug(f"chunk size={len(chunks)}")
         # prepare the downloader for further fetch
         qrmk = data.get("qrmk")
         chunk_headers: Dict[str, Any] = {}
@@ -109,9 +109,7 @@ def create_batches_from_response(
                 chunk_headers[header_key] = header_value
                 if "encryption" not in header_key:
                     logger.debug(
-                        "added chunk header: key=%s, value=%s",
-                        header_key,
-                        header_value,
+                        f"added chunk header: key={header_key}, value={header_value}"
                     )
         elif qrmk is not None:
             logger.debug(f"qrmk={qrmk}")
@@ -271,7 +269,7 @@ class ResultBatch(abc.ABC):
             try:
                 with TimerContextManager() as download_metric:
                     logger.debug(
-                        "started downloading result batch of size %d", self.rowcount
+                        f"started downloading result batch of size {self.rowcount}"
                     )
                     response = requests.get(
                         self._remote_chunk_info.url,
@@ -281,8 +279,7 @@ class ResultBatch(abc.ABC):
                     )
                     if response.ok:
                         logger.debug(
-                            "successfully downloaded result batch of size %d",
-                            self.rowcount,
+                            f"successfully downloaded result batch of size {self.rowcount}"
                         )
                         break
             except Exception as e:
@@ -451,10 +448,10 @@ class JSONResultBatch(ResultBatch):
             return iter(self._data)
         response = self._download()
         # Load data to a intermediate form
-        logger.debug("started loading result batch of size %d", self.rowcount)
+        logger.debug(f"started loading result batch of size {self.rowcount}")
         with TimerContextManager() as load_metric:
             downloaded_data = self._load(response)
-        logger.debug("finished loading result batch of size %d", self.rowcount)
+        logger.debug(f"finished loading result batch of size {self.rowcount}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         with TimerContextManager() as parse_metric:
@@ -589,10 +586,10 @@ class ArrowResultBatch(ResultBatch):
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download()
-        logger.debug("started loading result batch of size %d", self.rowcount)
+        logger.debug(f"started loading result batch of size {self.rowcount}")
         with TimerContextManager() as load_metric:
             loaded_data = self._load(response, iter_unit)
-        logger.debug("finished loading result batch of size %d", self.rowcount)
+        logger.debug(f"finished loading result batch of size {self.rowcount}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
 
