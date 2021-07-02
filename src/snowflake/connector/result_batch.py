@@ -305,9 +305,9 @@ class ResultBatch(abc.ABC):
                         raise_failed_request_error(None, chunk_url, "get", response)
 
             except (RetryRequest, Exception) as e:
-                e = e.args[0] if isinstance(e, RetryRequest) else e
                 if retry == MAX_DOWNLOAD_RETRY - 1:
                     # Re-throw if we failed on the last retry
+                    e = e.args[0] if isinstance(e, RetryRequest) else e
                     raise e
                 sleep_timer = backoff.next_sleep(1, sleep_timer)
                 logger.exception(

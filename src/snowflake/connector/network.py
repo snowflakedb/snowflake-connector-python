@@ -149,15 +149,7 @@ COMPILER = COMPILER
 
 CLIENT_NAME = CLIENT_NAME  # don't change!
 CLIENT_VERSION = CLIENT_VERSION
-PYTHON_CONNECTOR_USER_AGENT = (
-    "{name}/{version} ({platform}) {python_implementation}/{python_version}".format(
-        name=CLIENT_NAME,
-        version=SNOWFLAKE_CONNECTOR_VERSION,
-        python_implementation=IMPLEMENTATION,
-        python_version=PYTHON_VERSION,
-        platform=PLATFORM,
-    )
-)
+PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 NO_TOKEN = "no-token"
 
@@ -621,12 +613,7 @@ class SnowflakeRestful(object):
         if "Content-Length" in headers:
             del headers["Content-Length"]
 
-        full_url = "{protocol}://{host}:{port}{url}".format(
-            protocol=self._protocol,
-            host=self._host,
-            port=self._port,
-            url=url,
-        )
+        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
         ret = self.fetch(
             "get",
             full_url,
@@ -664,12 +651,7 @@ class SnowflakeRestful(object):
         socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
         _include_retry_params=False,
     ):
-        full_url = "{protocol}://{host}:{port}{url}".format(
-            protocol=self._protocol,
-            host=self._host,
-            port=self._port,
-            url=url,
-        )
+        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
         if self._connection._probe_connection:
             from pprint import pprint
 
@@ -916,14 +898,9 @@ class SnowflakeRestful(object):
             except Exception:
                 logger.info("data is not JSON")
         logger.error(
-            "Failed to get the response. Hanging? "
-            "method: {method}, url: {url}, headers:{headers}, "
-            "data: {data}".format(
-                method=method,
-                url=full_url,
-                headers=headers,
-                data=data,
-            )
+            f"Failed to get the response. Hanging? "
+            f"method: {method}, url: {full_url}, headers:{headers}, "
+            f"data: {data}"
         )
         Error.errorhandler_wrapper(
             conn,
@@ -996,7 +973,7 @@ class SnowflakeRestful(object):
 
                 if is_retryable_http_code(raw_ret.status_code):
                     error = get_http_retryable_error(raw_ret.status_code)
-                    logger.debug("%s. Retrying...", error)
+                    logger.debug(f"{error}. Retrying...")
                     # retryable server exceptions
                     raise RetryRequest(error)
 

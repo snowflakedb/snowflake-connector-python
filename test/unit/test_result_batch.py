@@ -7,10 +7,10 @@
 import importlib
 from collections import namedtuple
 from http import HTTPStatus
+from test.helpers import create_mock_response
 from unittest import mock
 
 import pytest
-from mock import Mock
 
 from snowflake.connector import DatabaseError, InterfaceError
 from snowflake.connector.compat import (
@@ -52,21 +52,14 @@ REQUEST_MODULE_PATH = (
 )
 
 MockRemoteChunkInfo = namedtuple("MockRemoteChunkInfo", "url")
-
-
-def create_mock_response(status_code):
-    mock_resp = Mock()
-    mock_resp.status_code = status_code
-    mock_resp.raw = "success" if status_code == OK else "fail"
-    return mock_resp
+chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
+result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
 
 
 @mock.patch(REQUEST_MODULE_PATH + ".get")
 def test_ok_response_download(mock_get):
     mock_get.return_value = create_mock_response(200)
-    chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
 
-    result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
     response = result_batch._download()
 
     # successful on first try
@@ -93,8 +86,6 @@ def test_retryable_response_download(errcode, error_class):
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(errcode)
 
-        chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
-        result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
         with mock.patch("time.sleep", return_value=None):
             with pytest.raises(error_class) as ex:
                 _ = result_batch._download()
@@ -111,8 +102,6 @@ def test_unauthorized_response_download():
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(UNAUTHORIZED)
 
-        chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
-        result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
         with mock.patch("time.sleep", return_value=None):
             with pytest.raises(DatabaseError) as ex:
                 _ = result_batch._download()
@@ -129,8 +118,6 @@ def test_non_200_response_download(status_code):
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(status_code)
 
-        chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
-        result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
         with mock.patch("time.sleep", return_value=None):
             with pytest.raises(InterfaceError) as ex:
                 _ = result_batch._download()
@@ -146,8 +133,6 @@ def test_retries_until_success():
         mock_responses = [create_mock_response(code) for code in error_codes + [OK]]
         mock_get.side_effect = mock_responses
 
-        chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
-        result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
         with mock.patch("time.sleep", return_value=None):
             res = result_batch._download()
             assert res.raw == "success"
