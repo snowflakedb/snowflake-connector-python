@@ -551,3 +551,53 @@ drop table if exists identifier(?)
 """,
                 (db_parameters["name"],),
             )
+
+
+@pytest.mark.skipolddriver
+def test_tuple(conn_cnx, db_parameters):
+    try:
+        CREATE_TABLE = """create or replace table {name} (
+                c1 BOOLEAN,
+                c2 INTEGER
+                )
+            """
+        INSERT = """
+        insert into {name} values(
+        ?,?)
+        """
+        data1 = (True, 1)
+        data2 = (False, 2)
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(CREATE_TABLE.format(name=db_parameters["name"]))
+        with conn_cnx(paramstyle="qmark", timezone=PST_TZ) as cnx:
+            csr = cnx.cursor()
+            csr.executemany(INSERT.format(name=db_parameters["name"]), [data1, data2])
+
+        with conn_cnx() as cnx:
+            try:
+                result0 = (
+                    cnx.cursor()
+                    .execute(
+                        f"select p.c1, p.c2 from {db_parameters['name']} p where p.c2 in (%(things)s)",
+                        params={"things": [1]},
+                    )
+                    .fetchall()
+                )
+                assert len(result0) == 1
+
+                result = (
+                    cnx.cursor()
+                    .execute(
+                        f"select p.c1, p.c2 from {db_parameters['name']} p where (p.c1, p.c2) in (%(things)s)",
+                        params={"things": [(True, 1)]},
+                    )
+                    .fetchall()
+                )
+                assert len(result) == 1
+            finally:
+                with conn_cnx() as cnx:
+                    cnx.cursor().execute(
+                        f"drop table if exists {db_parameters['name']}"
+                    )
+    finally:
+        pass
