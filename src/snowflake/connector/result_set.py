@@ -220,6 +220,11 @@ class ResultSet(Iterable[List[Any]]):
         This function is a helper function to ``__iter__`` and it was introduced for the
         cases where we need to propagate some values to later ``_download`` calls.
         """
+        # setup result batches to use sessions
+        kwargs["connection"] = self._cursor.connection
+        for b in self.batches:
+            b.set_use_sessions(True)
+
         first_batch_iter = self.batches[0].create_iter(**kwargs)
 
         # Iterator[Tuple] Futures that have not been consumed by the user
