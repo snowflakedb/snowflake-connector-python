@@ -1315,7 +1315,13 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
         with con.cursor() as cur:
             # Dummy return value necessary to not iterate through every batch with
             #  first fetchone call
-            with mock.patch(patch_path, return_value=iter([(1,)])) as patched_download:
+
+            downloads = [iter([(i,)]) for i in range(10)]
+
+            with mock.patch(
+                patch_path,
+                side_effect=downloads,
+            ) as patched_download:
                 cur.execute(
                     f"select seq4() as c1, randstr(1,random()) as c2 "
                     f"from table(generator(rowcount => {rowcount}));"
@@ -1332,9 +1338,11 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                 assert len(result_batches) > 5
                 assert result_batches[0]._local  # Sanity check first chunk being local
                 cur.fetchone()  # Trigger pre-fetching
+
                 # While the first chunk is local we still call _download on it, which
-                #  short circuits and just parses (for JSON batches) and then return an
-                #  an iterator through that data, so we expect the call count to be 5
+                # short circuits and just parses (for JSON batches) and then returns
+                # an iterator through that data, so we expect the call count to be 5.
+                # (0 local and 1, 2, 3, 4 pre-fetched) = 5 total
                 assert patched_download.call_count == 5
 
 
