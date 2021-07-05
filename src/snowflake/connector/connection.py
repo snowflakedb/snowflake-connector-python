@@ -148,7 +148,7 @@ DEFAULT_CONFIGURATION = {
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
-    "application": (CLIENT_NAME, (type(None), str)),
+    "application": (os.environ.get('SNOWFLAKE_PARTNER', CLIENT_NAME), (type(None), str)),
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
     "insecure_mode": (False, bool),  # Error security fix requirement
