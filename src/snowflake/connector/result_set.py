@@ -67,14 +67,18 @@ def result_set_iterator(
 
     with ThreadPoolExecutor(4) as pool:
         # Fill up window
+
+        logger.debug("beginning to schedule result batch downloads")
+
         for _ in range(min(4, len(unfetched_batches))):
+            logger.debug(
+                f"queuing download of result batch of size {unfetched_batches[0].rowcount}"
+            )
             unconsumed_batches.append(
                 pool.submit(unfetched_batches.popleft().create_iter, **kw)
             )
 
         yield from first_batch_iter
-
-        logger.debug("beginning to schedule result batch downloads")
 
         i = 1
         while unconsumed_batches:
