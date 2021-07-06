@@ -1247,4 +1247,4 @@ def test_describe(conn_cnx, db_parameters):
                 )
             )
             assert description[0][0].startswith("number of rows inserted")
-            assert cur._total_rowcount == -1
+            assert cur.rowcount is None
