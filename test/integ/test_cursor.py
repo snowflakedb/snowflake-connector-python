@@ -1222,9 +1222,10 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type):
 
 
 @pytest.mark.skipolddriver
-def test_describe(conn_cnx):
+def test_describe(conn_cnx, db_parameters):
     with conn_cnx() as con:
         with con.cursor() as cur:
+            # test select
             description = cur.describe(
                 "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
             )
@@ -1235,3 +1236,15 @@ def test_describe(conn_cnx):
             assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
             assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
             assert len(cur.fetchall()) == 0
+
+            # test insert
+            cur.execute(
+                "create table {name} (aa int)".format(name=db_parameters["name"])
+            )
+            description = cur.describe(
+                "insert into {name}(aa) values({value})".format(
+                    name=db_parameters["name"], value="1234"
+                )
+            )
+            assert description[0][0].startswith("number of rows inserted")
+            assert cur._total_rowcount == -1
