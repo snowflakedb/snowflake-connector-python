@@ -259,7 +259,12 @@ class ResultBatch(abc.ABC):
     def column_names(self) -> List[str]:
         return [col.name for col in self.schema]
 
-    def set_use_sessions(self, use_sessions):
+    @property
+    def use_sessions(self):
+        return self._use_sessions
+
+    @use_sessions.setter
+    def use_sessions(self, use_sessions: bool):
         self._use_sessions = use_sessions
 
     def __iter__(

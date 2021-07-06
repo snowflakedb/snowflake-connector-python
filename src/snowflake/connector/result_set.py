@@ -223,7 +223,7 @@ class ResultSet(Iterable[List[Any]]):
         # setup result batches to use sessions
         kwargs["connection"] = self._cursor.connection
         for b in self.batches:
-            b.set_use_sessions(True)
+            b.use_sessions = True
 
         first_batch_iter = self.batches[0].create_iter(**kwargs)
 

@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from unittest import mock
 
 import numpy
 import pytest
@@ -1069,3 +1070,31 @@ def test_simple_arrow_fetch(conn_cnx):
                 lo += length
 
             assert lo == rowcount
+
+
+@pytest.mark.parametrize("fetch_fn_name", ["to_arrow", "to_pandas", "create_iter"])
+@pytest.mark.parametrize("pass_connection", [True, False])
+@pytest.mark.parametrize("use_sessions", [True, False])
+def test_sessions_used(conn_cnx, fetch_fn_name, pass_connection, use_sessions):
+    rowcount = 250_000
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            cur.execute(f"select seq1() from table(generator(rowcount=>{rowcount}))")
+            batches = cur.get_result_batches()
+            assert len(batches) > 1
+            batch = batches[-1]
+            batch.use_sessions = use_sessions
+
+            connection = cnx if pass_connection else None
+            fetch_fn = getattr(batch, fetch_fn_name)
+
+            # check that sessions are used when connection is supplied
+            with mock.patch(
+                "snowflake.connector.network.SnowflakeRestful._use_requests_session",
+                side_effect=cnx._rest._use_requests_session,
+            ) as get_session_mock:
+                fetch_fn(connection=connection)
+                assert get_session_mock.call_count == (
+                    1 if pass_connection and use_sessions else 0
+                )

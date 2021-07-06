@@ -58,6 +58,9 @@ result_batch = JSONResultBatch(100, None, chunk_info, [], [], True)
 
 @mock.patch(REQUEST_MODULE_PATH + ".get")
 def test_ok_response_download(mock_get):
+    # set true but don't provide connection on download
+    result_batch.use_sessions = True
+
     mock_get.return_value = create_mock_response(200)
 
     response = result_batch._download()
