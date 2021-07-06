@@ -1246,5 +1246,5 @@ def test_describe(conn_cnx, db_parameters):
                     name=db_parameters["name"], value="1234"
                 )
             )
-            assert description[0][0].startswith("number of rows inserted")
+            assert description[0][0] == "number of rows inserted"
             assert cur.rowcount is None
