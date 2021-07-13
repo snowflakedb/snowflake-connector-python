@@ -97,7 +97,7 @@ pipeline {
           ]) {
             script {
               try {
-                sh 'env && git fetch https://$GIT_USERNAME:$GIT_PASSWORD@github.com/$SEMGREP_REPO_NAME.git $BASELINE_BRANCH:refs/remotes/origin/$BASELINE_BRANCH && python -m semgrep_agent --baseline-ref origin/$BASELINE_BRANCH --publish-token $SEMGREP_APP_TOKEN --publish-deployment $SEMGREP_DEPLOYMENT_ID'
+                sh 'export SEMGREP_DIR=semgrep-scan-$(pwd | rev | cut -d \'/\' -f1 | rev) && mkdir -p ../$SEMGREP_DIR && cp -R . ../$SEMGREP_DIR  && cd ../$SEMGREP_DIR && git fetch https://$GIT_USERNAME:$GIT_PASSWORD@github.com/$SEMGREP_REPO_NAME.git $BASELINE_BRANCH:refs/remotes/origin/$BASELINE_BRANCH && python -m semgrep_agent --baseline-ref $(git merge-base origin/$BASELINE_BRANCH HEAD) --publish-token $SEMGREP_APP_TOKEN --publish-deployment $SEMGREP_DEPLOYMENT_ID && cd ../ && rm -r $SEMGREP_DIR'
                 wgetUpdateGithub('success', 'semgrep', "${BUILD_URL}", '123')
               } catch (err) {
                 wgetUpdateGithub('failure', 'semgrep', "${BUILD_URL}", '123')
