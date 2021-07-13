@@ -31,6 +31,9 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = getLogger(__name__)
 
+DEFAULT_S3_CONNECTION_POOL_SIZE = 10
+MAX_S3_CONNECTION_POOL_SIZE = 20
+
 SFC_DIGEST = "sfc-digest"
 
 AMZ_MATDESC = "x-amz-matdesc"
@@ -57,6 +60,7 @@ class SnowflakeS3Util:
         stage_info,
         use_accelerate_endpoint=False,
         use_s3_regional_url=False,
+        s3_connection_pool_size: int = DEFAULT_S3_CONNECTION_POOL_SIZE,
     ) -> Session.resource:
         """Creates a client object with a stage credential.
 
@@ -87,6 +91,7 @@ class SnowflakeS3Util:
                 "use_accelerate_endpoint": use_accelerate_endpoint,
                 "addressing_style": ADDRESSING_STYLE,
             },
+            max_pool_connections=s3_connection_pool_size,
         )
         session = boto3.Session(
             region_name=stage_info["region"],

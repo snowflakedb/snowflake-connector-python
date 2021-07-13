@@ -434,6 +434,7 @@ class SnowflakeFileTransferAgent(object):
                 self._stage_info,
                 use_accelerate_endpoint=False,
                 use_s3_regional_url=self._use_s3_regional_url,
+                s3_connection_pool_size=self._cursor._connection.s3_connection_pool_size,
             )
             self._use_accelerate_endpoint = SnowflakeS3Util.transfer_accelerate_config(
                 client, self._stage_info
@@ -525,6 +526,7 @@ class SnowflakeFileTransferAgent(object):
                     cln_meta.stage_info,
                     cln_meta.use_accelerate_endpoint,
                     cln_meta.use_s3_regional_url,
+                    s3_connection_pool_size=self._cursor._connection.s3_connection_pool_size,
                 )
             cln_meta.cloud_client = thread_client
             result_meta = SnowflakeFileTransferAgent.upload_one_file(meta)
@@ -553,6 +555,7 @@ class SnowflakeFileTransferAgent(object):
             cln_meta.stage_info,
             use_accelerate_endpoint=cln_meta.use_accelerate_endpoint,
             use_s3_regional_url=cln_meta.use_s3_regional_url,
+            s3_connection_pool_size=self._cursor._connection.s3_connection_pool_size,
         )
         for meta in file_metas:
             meta.client_meta.cloud_client = client
@@ -669,6 +672,7 @@ class SnowflakeFileTransferAgent(object):
             self._stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint,
             use_s3_regional_url=self._use_s3_regional_url,
+            s3_connection_pool_size=self._cursor._connection.s3_connection_pool_size,
         )
         for meta in small_file_metas:
             meta.client_meta.cloud_client = client
@@ -813,6 +817,7 @@ class SnowflakeFileTransferAgent(object):
             stage_info,
             use_accelerate_endpoint=self._use_accelerate_endpoint,
             use_s3_regional_url=self._use_s3_regional_url,
+            s3_connection_pool_size=self._cursor._connection.s3_connection_pool_size,
         )
 
     def _update_file_metas_with_presigned_url(self):
