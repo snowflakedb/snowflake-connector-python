@@ -1222,9 +1222,10 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type):
 
 
 @pytest.mark.skipolddriver
-def test_describe(conn_cnx, db_parameters):
+def test_describe(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
+            table_name = random_string(5, "test_describe_")
             # test select
             description = cur.describe(
                 "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
@@ -1239,12 +1240,17 @@ def test_describe(conn_cnx, db_parameters):
 
             # test insert
             cur.execute(
-                "create table {name} (aa int)".format(name=db_parameters["name"])
+                f"create table {table_name} (aa int)"
             )
-            description = cur.describe(
-                "insert into {name}(aa) values({value})".format(
-                    name=db_parameters["name"], value="1234"
+            try:
+                description = cur.describe(
+                    "insert into {name}(aa) values({value})".format(
+                        name=table_name, value="1234"
+                    )
                 )
-            )
-            assert description[0][0] == "number of rows inserted"
-            assert cur.rowcount is None
+                assert description[0][0] == "number of rows inserted"
+                assert cur.rowcount is None
+            finally:
+                cur.execute(
+                    f"drop table if exists {table_name}"
+                )
