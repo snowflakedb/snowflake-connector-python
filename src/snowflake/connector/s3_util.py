@@ -19,9 +19,11 @@ from boto3.session import Session
 from botocore.client import Config
 
 from .constants import (
+    DEFAULT_S3_CONNECTION_POOL_SIZE,
+    FileHeader,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_VALUE_OCTET_STREAM,
-    FileHeader,
+    MAX_S3_CONNECTION_POOL_SIZE,
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata
@@ -30,9 +32,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
 
 logger = getLogger(__name__)
-
-DEFAULT_S3_CONNECTION_POOL_SIZE = 10
-MAX_S3_CONNECTION_POOL_SIZE = 20
 
 SFC_DIGEST = "sfc-digest"
 

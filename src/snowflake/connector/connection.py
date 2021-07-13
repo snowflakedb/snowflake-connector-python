@@ -44,11 +44,10 @@ from .chunk_downloader import (
     MAX_CLIENT_PREFETCH_THREADS,
     SnowflakeChunkDownloader,
 )
-from .s3_util import (
-    DEFAULT_S3_CONNECTION_POOL_SIZE
-)
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
+    DEFAULT_S3_CONNECTION_POOL_SIZE,
+    MAX_S3_CONNECTION_POOL_SIZE,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -165,7 +164,7 @@ DEFAULT_CONFIGURATION = {
         (type(None), int),
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
-    "s3_connection_pool_size": (10, int), #s3 boto
+    "s3_connection_pool_size": (DEFAULT_S3_CONNECTION_POOL_SIZE, int), # s3 boto
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -386,11 +385,7 @@ class SnowflakeConnection(object):
 
     @property
     def s3_connection_pool_size(self):
-        return (
-            self._s3_connection_pool_size
-            if self._s3_connection_pool_size
-            else DEFAULT_S3_CONNECTION_POOL_SIZE
-        )
+        return self._s3_connection_pool_size
 
     @s3_connection_pool_size.setter
     def s3_connection_pool_size(self, value):
