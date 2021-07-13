@@ -526,7 +526,7 @@ class SnowflakeFileTransferAgent(object):
                     cln_meta.stage_info,
                     cln_meta.use_accelerate_endpoint,
                     cln_meta.use_s3_regional_url,
-                    s3_connection_pool_size=self._cursor._connection.s3_connection_pool_size,
+                    s3_connection_pool_size=meta.self._cursor._connection.s3_connection_pool_size,
                 )
             cln_meta.cloud_client = thread_client
             result_meta = SnowflakeFileTransferAgent.upload_one_file(meta)
