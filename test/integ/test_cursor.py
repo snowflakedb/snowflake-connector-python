@@ -1343,7 +1343,12 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                 # short circuits and just parses (for JSON batches) and then returns
                 # an iterator through that data, so we expect the call count to be 5.
                 # (0 local and 1, 2, 3, 4 pre-fetched) = 5 total
-                assert patched_download.call_count == 5
+                start_time = time.time()
+                while time.time() < start_time + 1:
+                    if patched_download.call_count == 5:
+                        break
+                else:
+                    assert patched_download.call_count == 5
 
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")
