@@ -15,6 +15,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
+from typing import Dict, Optional, Type
 
 import OpenSSL.SSL
 
@@ -86,6 +87,7 @@ from .time_util import (
 )
 from .tool.probe_connection import probe_connection
 from .vendored import requests
+from .vendored.requests import Response
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
@@ -147,19 +149,11 @@ COMPILER = COMPILER
 
 CLIENT_NAME = CLIENT_NAME  # don't change!
 CLIENT_VERSION = CLIENT_VERSION
-PYTHON_CONNECTOR_USER_AGENT = (
-    "{name}/{version} ({platform}) {python_implementation}/{python_version}".format(
-        name=CLIENT_NAME,
-        version=SNOWFLAKE_CONNECTOR_VERSION,
-        python_implementation=IMPLEMENTATION,
-        python_version=PYTHON_VERSION,
-        platform=PLATFORM,
-    )
-)
+PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 NO_TOKEN = "no-token"
 
-STATUS_TO_EXCEPTION = {
+STATUS_TO_EXCEPTION: Dict[int, Type[Error]] = {
     INTERNAL_SERVER_ERROR: InternalServerError,
     FORBIDDEN: ForbiddenError,
     SERVICE_UNAVAILABLE: ServiceUnavailableError,
@@ -184,6 +178,54 @@ def is_retryable_http_code(code: int) -> bool:
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
         REQUEST_TIMEOUT,  # 408
+    )
+
+
+def get_http_retryable_error(status_code: int) -> Error:
+    error_class: Type[Error] = STATUS_TO_EXCEPTION.get(
+        status_code, OtherHTTPRetryableError
+    )
+    return error_class(code=status_code)
+
+
+def raise_okta_unauthorized_error(
+    connection: Optional["SnowflakeConnection"], response: Response
+) -> None:
+    Error.errorhandler_wrapper(
+        connection,
+        None,
+        DatabaseError,
+        {
+            "msg": f"Failed to get authentication by OKTA: {response.status_code}: {response.reason}",
+            "errno": ER_FAILED_TO_CONNECT_TO_DB,
+            "sqlstate": SQLSTATE_CONNECTION_REJECTED,
+        },
+    )
+
+
+def raise_failed_request_error(
+    connection: Optional["SnowflakeConnection"],
+    url: str,
+    method: str,
+    response: Response,
+) -> None:
+    TelemetryService.get_instance().log_http_request_error(
+        f"HttpError{response.status_code}",
+        url,
+        method,
+        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+        ER_FAILED_TO_REQUEST,
+        response=response,
+    )
+    Error.errorhandler_wrapper(
+        connection,
+        None,
+        InterfaceError,
+        {
+            "msg": f"{response.status_code} {response.reason}: {method} {url}",
+            "errno": ER_FAILED_TO_REQUEST,
+            "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+        },
     )
 
 
@@ -571,12 +613,7 @@ class SnowflakeRestful(object):
         if "Content-Length" in headers:
             del headers["Content-Length"]
 
-        full_url = "{protocol}://{host}:{port}{url}".format(
-            protocol=self._protocol,
-            host=self._host,
-            port=self._port,
-            url=url,
-        )
+        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
         ret = self.fetch(
             "get",
             full_url,
@@ -614,12 +651,7 @@ class SnowflakeRestful(object):
         socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
         _include_retry_params=False,
     ):
-        full_url = "{protocol}://{host}:{port}{url}".format(
-            protocol=self._protocol,
-            host=self._host,
-            port=self._port,
-            url=url,
-        )
+        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
         if self._connection._probe_connection:
             from pprint import pprint
 
@@ -849,7 +881,7 @@ class SnowflakeRestful(object):
             None,
             OperationalError,
             {
-                "msg": "Failed to execute request: {}".format(cause),
+                "msg": f"Failed to execute request: {cause}",
                 "errno": ER_FAILED_TO_REQUEST,
             },
         )
@@ -866,25 +898,16 @@ class SnowflakeRestful(object):
             except Exception:
                 logger.info("data is not JSON")
         logger.error(
-            "Failed to get the response. Hanging? "
-            "method: {method}, url: {url}, headers:{headers}, "
-            "data: {data}".format(
-                method=method,
-                url=full_url,
-                headers=headers,
-                data=data,
-            )
+            f"Failed to get the response. Hanging? "
+            f"method: {method}, url: {full_url}, headers:{headers}, "
+            f"data: {data}"
         )
         Error.errorhandler_wrapper(
             conn,
             None,
             OperationalError,
             {
-                "msg": "Failed to get the response. Hanging? "
-                "method: {method}, url: {url}".format(
-                    method=method,
-                    url=full_url,
-                ),
+                "msg": f"Failed to get the response. Hanging? method: {method}, url: {full_url}",
                 "errno": ER_FAILED_TO_REQUEST,
             },
         )
@@ -949,56 +972,21 @@ class SnowflakeRestful(object):
                     return ret
 
                 if is_retryable_http_code(raw_ret.status_code):
-                    ex = STATUS_TO_EXCEPTION.get(
-                        raw_ret.status_code, OtherHTTPRetryableError
-                    )
-                    exi = ex(code=raw_ret.status_code)
-                    logger.debug("%s. Retrying...", exi)
+                    error = get_http_retryable_error(raw_ret.status_code)
+                    logger.debug(f"{error}. Retrying...")
                     # retryable server exceptions
-                    raise RetryRequest(exi)
+                    raise RetryRequest(error)
 
                 elif (
                     raw_ret.status_code == UNAUTHORIZED
                     and catch_okta_unauthorized_error
                 ):
                     # OKTA Unauthorized errors
-                    Error.errorhandler_wrapper(
-                        self._connection,
-                        None,
-                        DatabaseError,
-                        {
-                            "msg": (
-                                "Failed to get authentication by OKTA: "
-                                "{status}: {reason}"
-                            ).format(status=raw_ret.status_code, reason=raw_ret.reason),
-                            "errno": ER_FAILED_TO_CONNECT_TO_DB,
-                            "sqlstate": SQLSTATE_CONNECTION_REJECTED,
-                        },
-                    )
+                    raise_okta_unauthorized_error(self._connection, raw_ret)
                     return None  # required for tests
                 else:
-                    TelemetryService.get_instance().log_http_request_error(
-                        "HttpError%s" % str(raw_ret.status_code),
-                        full_url,
-                        method,
-                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                        ER_FAILED_TO_REQUEST,
-                        response=raw_ret,
-                    )
-                    Error.errorhandler_wrapper(
-                        self._connection,
-                        None,
-                        InterfaceError,
-                        {
-                            "msg": ("{status} {reason}: " "{method} {url}").format(
-                                status=raw_ret.status_code,
-                                reason=raw_ret.reason,
-                                method=method,
-                                url=full_url,
-                            ),
-                            "errno": ER_FAILED_TO_REQUEST,
-                            "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                        },
+                    raise_failed_request_error(
+                        self._connection, full_url, method, raw_ret
                     )
                     return None  # required for tests
             finally:

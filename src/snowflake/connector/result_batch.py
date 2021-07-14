@@ -23,9 +23,17 @@ from typing import (
 )
 
 from .arrow_context import ArrowConverterContext
+from .compat import OK, UNAUTHORIZED
 from .constants import IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
 from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
+from .network import (
+    RetryRequest,
+    get_http_retryable_error,
+    is_retryable_http_code,
+    raise_failed_request_error,
+    raise_okta_unauthorized_error,
+)
 from .options import installed_pandas, pandas
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
 from .vendored import requests
@@ -271,21 +279,36 @@ class ResultBatch(abc.ABC):
                     logger.debug(
                         f"started downloading result batch of size {self.rowcount}"
                     )
+                    chunk_url = self._remote_chunk_info.url
                     response = requests.get(
-                        self._remote_chunk_info.url,
+                        chunk_url,
                         headers=self._chunk_headers,
                         timeout=DOWNLOAD_TIMEOUT,
                         stream=True,
                     )
-                    if response.ok:
+
+                    if response.status_code == OK:
                         logger.debug(
                             f"successfully downloaded result batch of size {self.rowcount}"
                         )
                         break
-            except Exception as e:
+
+                    # Raise error here to correctly go in to exception clause
+                    if is_retryable_http_code(response.status_code):
+                        # retryable server exceptions
+                        error: Error = get_http_retryable_error(response.status_code)
+                        raise RetryRequest(error)
+                    elif response.status_code == UNAUTHORIZED:
+                        # make a unauthorized error
+                        raise_okta_unauthorized_error(None, response)
+                    else:
+                        raise_failed_request_error(None, chunk_url, "get", response)
+
+            except (RetryRequest, Exception) as e:
                 if retry == MAX_DOWNLOAD_RETRY - 1:
                     # Re-throw if we failed on the last retry
-                    raise
+                    e = e.args[0] if isinstance(e, RetryRequest) else e
+                    raise e
                 sleep_timer = backoff.next_sleep(1, sleep_timer)
                 logger.exception(
                     f"Failed to fetch the large result set batch "
@@ -326,7 +349,7 @@ class ResultBatch(abc.ABC):
             )
             errno = ER_NO_PYARROW
 
-            Error.errorhandler_make_exception(
+            raise Error.errorhandler_make_exception(
                 ProgrammingError,
                 {
                     "msg": msg,
