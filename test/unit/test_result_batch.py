@@ -82,6 +82,7 @@ def test_ok_response_download(mock_get):
     ],
 )
 def test_retryable_response_download(errcode, error_class):
+    """This test checks that responses which are deemed 'retryable' are handled correctly."""
     # retryable exceptions
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(errcode)
@@ -98,7 +99,7 @@ def test_retryable_response_download(errcode, error_class):
 
 
 def test_unauthorized_response_download():
-    # unauthorized = 401
+    """This tests that the Unauthorized response (401 status code) is handled correctly."""
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(UNAUTHORIZED)
 
@@ -112,9 +113,9 @@ def test_unauthorized_response_download():
         assert mock_get.call_count == MAX_DOWNLOAD_RETRY
 
 
-# retry on success codes that are not 200
 @pytest.mark.parametrize("status_code", [201, 302])
 def test_non_200_response_download(status_code):
+    """This test checks that "success" codes which are not 200 still retry."""
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(status_code)
 
@@ -130,6 +131,8 @@ def test_non_200_response_download(status_code):
 def test_retries_until_success():
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         error_codes = [BAD_REQUEST, UNAUTHORIZED, 201]
+        # There is an OK added to the list of responses so that there is a success
+        # and the retry loop ends.
         mock_responses = [create_mock_response(code) for code in error_codes + [OK]]
         mock_get.side_effect = mock_responses
 

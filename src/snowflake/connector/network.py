@@ -210,7 +210,7 @@ def raise_failed_request_error(
     response: Response,
 ) -> None:
     TelemetryService.get_instance().log_http_request_error(
-        "HttpError%s" % str(response.status_code),
+        f"HttpError{response.status_code}",
         url,
         method,
         SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
