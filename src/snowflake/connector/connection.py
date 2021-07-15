@@ -11,6 +11,7 @@ import re
 import sys
 import uuid
 import warnings
+from collections import namedtuple
 from difflib import get_close_matches
 from io import StringIO
 from logging import getLogger
@@ -1065,7 +1066,8 @@ class SnowflakeConnection(object):
             }
             Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
 
-        for idx, v in enumerate(params):
+        def get_snowflake_type_and_binding(v):
+            TypeAndBinding = namedtuple("TypeAndBinding", ["type", "binding"])
             if isinstance(v, tuple):
                 if len(v) != 2:
                     Error.errorhandler_wrapper(
@@ -1079,10 +1081,9 @@ class SnowflakeConnection(object):
                             "errno": ER_FAILED_PROCESSING_QMARK,
                         },
                     )
-                processed_params[str(idx + 1)] = {
-                    "type": v[0],
-                    "value": self.converter.to_snowflake_bindings(v[0], v[1]),
-                }
+                return TypeAndBinding(
+                    v[0], self.converter.to_snowflake_bindings(v[0], v[1])
+                )
             else:
                 snowflake_type = self.converter.snowflake_type(v)
                 if snowflake_type is None:
@@ -1098,16 +1099,29 @@ class SnowflakeConnection(object):
                             "errno": ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
                         },
                     )
-                if isinstance(v, list):
-                    vv = [
-                        self.converter.to_snowflake_bindings(
-                            self.converter.snowflake_type(v0), v0
-                        )
-                        for v0 in v
-                    ]
-                else:
-                    vv = self.converter.to_snowflake_bindings(snowflake_type, v)
-                processed_params[str(idx + 1)] = {"type": snowflake_type, "value": vv}
+                return TypeAndBinding(
+                    snowflake_type,
+                    self.converter.to_snowflake_bindings(snowflake_type, v),
+                )
+
+        for idx, v in enumerate(params):
+            if isinstance(v, list):
+                snowflake_type = self.converter.snowflake_type(v)
+                all_param_data = list(map(get_snowflake_type_and_binding, v))
+                first_type = all_param_data[0].type
+                # if all elements have the same snowflake type, update snowflake_type
+                if all(param_data.type == first_type for param_data in all_param_data):
+                    snowflake_type = first_type
+                processed_params[str(idx + 1)] = {
+                    "type": snowflake_type,
+                    "value": [param_data.binding for param_data in all_param_data],
+                }
+            else:
+                snowflake_type, snowflake_binding = get_snowflake_type_and_binding(v)
+                processed_params[str(idx + 1)] = {
+                    "type": snowflake_type,
+                    "value": snowflake_binding,
+                }
         if logger.getEffectiveLevel() <= logging.DEBUG:
             for k, v in processed_params.items():
                 logger.debug("idx: %s, type: %s", k, v.get("type"))

@@ -344,9 +344,9 @@ class SnowflakeConverter(object):
         The output is bound in a query in the server side.
         """
         type_name = value.__class__.__name__.lower()
-        return getattr(
-            self, "_{type_name}_to_snowflake_bindings".format(type_name=type_name)
-        )(snowflake_type, value)
+        return getattr(self, f"_{type_name}_to_snowflake_bindings")(
+            snowflake_type, value
+        )
 
     def _str_to_snowflake_bindings(self, _, value):
         # NOTE: str type is always taken as a text data and never binary
