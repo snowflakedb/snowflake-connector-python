@@ -153,6 +153,15 @@ class ResultSet(Iterable[List[Any]]):
                 metrics.get(DownloadMetrics.parse.value),
             )
 
+    def _finish_iterating(self):
+        """Used for any cleanup after the result set iterator is done."""
+
+        # ensure batch use_sessions attribute is set to false after iteration
+        for b in self.batches:
+            b.use_sessions = False
+
+        self._report_metrics()
+
     def _can_create_arrow_iter(self) -> None:
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
@@ -239,7 +248,7 @@ class ResultSet(Iterable[List[Any]]):
             first_batch_iter,
             unconsumed_batches,
             unfetched_batches,
-            self._report_metrics,
+            self._finish_iterating,
             **kwargs,
         )
 

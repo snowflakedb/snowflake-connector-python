@@ -1432,9 +1432,6 @@ def test_fetch_batches_with_sessions(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute(
-                "alter session set python_connector_query_result_format='arrow'"
-            )
-            cur.execute(
                 f"select seq4() as foo from table(generator(rowcount=>{rowcount}))"
             )
 
@@ -1444,7 +1441,7 @@ def test_fetch_batches_with_sessions(conn_cnx):
                 "snowflake.connector.network.SnowflakeRestful._use_requests_session",
                 side_effect=con._rest._use_requests_session,
             ) as get_session_mock:
-                df = cur.fetch_pandas_all()
+                result = cur.fetchall()
                 # all but one batch is downloaded using a session
                 assert get_session_mock.call_count == num_batches - 1
-                assert df.shape == (rowcount, 1)
+                assert len(result) == rowcount
