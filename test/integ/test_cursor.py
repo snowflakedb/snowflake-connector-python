@@ -646,6 +646,7 @@ def test_executemany(conn, db_parameters):
         c.close()
 
 
+@pytest.mark.skipolddriver
 def test_executemany_qmark_types(conn, db_parameters):
     table_name = "date_test"
     with conn(paramstyle="qmark") as cnx:
