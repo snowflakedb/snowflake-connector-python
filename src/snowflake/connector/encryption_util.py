@@ -8,6 +8,7 @@ import base64
 import json
 import os
 import tempfile
+import time
 from collections import namedtuple
 from logging import getLogger
 
@@ -81,6 +82,7 @@ class SnowflakeEncryptionUtil(object):
         key_size = len(decoded_key)
         logger.debug('key_size = %s', key_size)
 
+        t1 = time.clock_gettime(time.CLOCK_THREAD_CPUTIME_ID)
         # Generate key for data encryption
         iv_data = SnowflakeEncryptionUtil.get_secure_random(block_size)
         file_key = SnowflakeEncryptionUtil.get_secure_random(key_size)
@@ -138,6 +140,8 @@ class SnowflakeEncryptionUtil(object):
             iv=base64.b64encode(iv_data).decode('utf-8'),
             matdesc=matdesc_to_unicode(mat_desc),
         )
+        t2 = time.clock_gettime(time.CLOCK_THREAD_CPUTIME_ID)
+        logger.debug(f'done encrypting, took {t2 - t1} seconds')
         return metadata, temp_output_file
 
     @staticmethod
