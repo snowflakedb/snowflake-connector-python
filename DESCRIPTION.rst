@@ -10,6 +10,13 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.5.0(July 22,2021)
+
+   - Fixed a bug in write_pandas when quote_identifiers is set to True the function would not actually quote column names.
+   - Bumping idna dependency pin from <3,>=2.5 to >=2.5,<4
+   - Fix describe method when running `insert into ...` commands
+
+
 - v2.4.6(June 25,2021)
 
    - Fixed a potential memory leak.
