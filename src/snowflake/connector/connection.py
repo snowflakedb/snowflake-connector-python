@@ -1066,8 +1066,11 @@ class SnowflakeConnection(object):
             }
             Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
 
-        def get_snowflake_type_and_binding(v):
-            TypeAndBinding = namedtuple("TypeAndBinding", ["type", "binding"])
+        TypeAndBinding = namedtuple("TypeAndBinding", ["type", "binding"])
+
+        def get_snowflake_type_and_binding(
+            v: Union[Tuple[str, Any], Any]
+        ) -> TypeAndBinding:
             if isinstance(v, tuple):
                 if len(v) != 2:
                     Error.errorhandler_wrapper(
