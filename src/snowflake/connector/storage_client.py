@@ -322,7 +322,7 @@ class SnowflakeStorageClient(ABC):
 
     def write_downloaded_chunk(self, chunk_id: int, chunk_data: bytes) -> None:
         # TODO: should we use chunking and write content in smaller chunks?
-        with self.intermediate_dst_path.open("wb") as fd:
+        with self.intermediate_dst_path.open("rb+") as fd:
             fd.seek(self.chunk_size * chunk_id)
             fd.write(chunk_data)
 
