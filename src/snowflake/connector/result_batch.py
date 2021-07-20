@@ -228,7 +228,8 @@ class ResultBatch(abc.ABC):
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
         self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
-        self._use_sessions = False
+        # a flag that indicates if the result batch download should use sessions or not
+        self.use_sessions: bool = False
 
     @property
     def _local(self) -> bool:
@@ -259,14 +260,6 @@ class ResultBatch(abc.ABC):
     def column_names(self) -> List[str]:
         return [col.name for col in self.schema]
 
-    @property
-    def use_sessions(self):
-        return self._use_sessions
-
-    @use_sessions.setter
-    def use_sessions(self, use_sessions: bool):
-        self._use_sessions = use_sessions
-
     def __iter__(
         self,
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
@@ -279,7 +272,7 @@ class ResultBatch(abc.ABC):
         return self.create_iter()
 
     def _download(
-        self, connection: "SnowflakeConnection" = None, **kwargs
+        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
     ) -> "Response":
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
@@ -297,7 +290,7 @@ class ResultBatch(abc.ABC):
                         "timeout": DOWNLOAD_TIMEOUT,
                         "stream": True,
                     }
-                    if self._use_sessions and connection:
+                    if self.use_sessions and connection:
                         with connection._rest._use_requests_session() as session:
                             logger.debug(
                                 f"downloading result batch of size {self.rowcount} with existing session {session}"
@@ -362,6 +355,11 @@ class ResultBatch(abc.ABC):
         ``SnowflakeCursor`` and calling ``fetch_pandas_batches`` on it.
         """
         raise NotImplementedError()
+
+    def _done_load(self, response: "Response") -> None:
+        """Performs cleanup after loading from `response` is done."""
+        if self.use_sessions:
+            response.close()
 
     def _check_can_use_pandas(self) -> None:
         if not installed_pandas:
@@ -438,10 +436,8 @@ class JSONResultBatch(ResultBatch):
         """
         with GzipFile(fileobj=response.raw, mode="r") as gfd:
             read_data: str = gfd.read().decode("utf-8", "replace")
+            self._done_load(response)
             return json.loads("".join(["[", read_data, "]"]))
-
-        if self._use_sessions:
-            response.close()
 
     def _parse(
         self, downloaded_data
@@ -490,7 +486,7 @@ class JSONResultBatch(ResultBatch):
         return f"JSONResultChunk({self.rowcount})"
 
     def create_iter(
-        self, connection=None, **kwargs
+        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         if self._local:
             return iter(self._data)
@@ -547,7 +543,7 @@ class ArrowResultBatch(ResultBatch):
         return f"ArrowResultChunk({self.rowcount})"
 
     def _load(
-        self, response, row_unit: IterUnit
+        self, response: "Response", row_unit: IterUnit
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         """Creates a ``PyArrowIterator`` from a response.
 
@@ -569,9 +565,7 @@ class ArrowResultBatch(ResultBatch):
         if row_unit == IterUnit.TABLE_UNIT:
             iter.init_table_unit()
 
-        if self._use_sessions:
-            response.close()
-
+        self._done_load(response)
         return iter
 
     def _from_data(
@@ -628,7 +622,7 @@ class ArrowResultBatch(ResultBatch):
         return new_chunk
 
     def _create_iter(
-        self, iter_unit: IterUnit, connection: "SnowflakeConnection" = None
+        self, iter_unit: IterUnit, connection: Optional["SnowflakeConnection"] = None
     ) -> Union[
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
@@ -646,17 +640,19 @@ class ArrowResultBatch(ResultBatch):
         return loaded_data
 
     def _get_arrow_iter(
-        self, connection: "SnowflakeConnection" = None
+        self, connection: Optional["SnowflakeConnection"] = None
     ) -> Iterator[Table]:
         """Returns an iterator for this batch which yields a pyarrow Table"""
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
 
-    def to_arrow(self, connection=None) -> Optional[Table]:
+    def to_arrow(
+        self, connection: Optional["SnowflakeConnection"] = None
+    ) -> Optional[Table]:
         """Returns this batch as a pyarrow Table"""
         return next(self._get_arrow_iter(connection=connection), None)
 
     def to_pandas(
-        self, connection: "SnowflakeConnection" = None, **kwargs
+        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
     ) -> "pandas.DataFrame":
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
@@ -666,7 +662,7 @@ class ArrowResultBatch(ResultBatch):
         return pandas.DataFrame(columns=self.column_names)
 
     def _get_pandas_iter(
-        self, connection: "SnowflakeConnection" = None, **kwargs
+        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
     ) -> Iterator["pandas.DataFrame"]:
         """An iterator for this batch which yields a pandas DataFrame"""
         dataframe = self.to_pandas(connection=connection, **kwargs)
@@ -674,7 +670,7 @@ class ArrowResultBatch(ResultBatch):
             yield dataframe
 
     def create_iter(
-        self, connection: "SnowflakeConnection" = None, **kwargs
+        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
     ) -> Union[
         Iterator[Union[Dict, Exception]],
         Iterator[Union[Tuple, Exception]],
