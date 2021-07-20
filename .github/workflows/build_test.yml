@@ -3,7 +3,7 @@ name: Build and Test
 on:
     push:
         branches:
-            - master
+            - tbbharaj/aarch64-wheels
         tags:
             - v*
     pull_request:
@@ -121,6 +121,38 @@ jobs:
         with:
           name: linux_py${{ matrix.python-version }}
           path: dist/
+
+  build-aarch64:
+    needs: lint
+    name: Build aarch64 linux-${{matrix.python_tag}}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python_tag: [ "cp37", "cp38", "cp39"]
+        include:
+          - {name: Linux, python-version: '3.7', os: ubuntu-latest}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup up QEMU
+        uses: docker/setup-qemu-action@v1
+        with:
+          platforms: arm64
+      - name: Install cibuildwheel
+        run: |
+          python -m pip install cibuildwheel
+      - name: Build wheel
+        run: |
+          python -m cibuildwheel --output-dir dist
+        env:
+          CIBUILDWHEEL_BUILD_VERBOSITY: 3
+          CIBW_BUILD: ${{matrix.python_tag}}-*
+          CIBW_ARCHS_LINUX: aarch64
+      - name: Show wheels generated
+        run: ls -lh dist
+      - uses: actions/upload-artifact@v1
+        with:
+          name: aarch64_linux_py${{ matrix.python_tag }}
+          path: dist/  
 
   build-macos:
     needs: lint

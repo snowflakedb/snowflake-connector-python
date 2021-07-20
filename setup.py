@@ -51,8 +51,13 @@ cmd_class = {}
 
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
+<<<<<<< HEAD
     "pyarrow>=5.0.0,<5.1.0",
     "pandas>=1.0.0,<1.4.0",
+=======
+    "pyarrow>=4.0.1",
+    "pandas>=1.0.0,<1.3.0",
+>>>>>>> 763735f... Add and test support to build aarch64 wheels
 ]
 
 try:
