@@ -15,6 +15,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
+from typing import Dict, Optional
 
 import OpenSSL.SSL
 
@@ -246,6 +247,44 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
+class SessionPool(object):
+    def __init__(self, rest: "SnowflakeRestful"):
+        # A stack of the idle sessions
+        # pop and append, no append left!
+        self._idle_sessions = []
+        self._active_sessions = set()  # TODO: use ids?
+        self._rest = rest
+
+    def get_session(self):
+        try:
+            session = self._idle_sessions.pop()
+        except IndexError:
+            session = self._rest.make_requests_session()
+        self._active_sessions.add(session)
+        return session
+
+    def return_session(self, session):
+        try:
+            self._active_sessions.remove(session)
+        except KeyError:
+            logger.debug(
+                "session doesn't exist in the active session pool." "Ignored..."
+            )
+        self._idle_sessions.append(session)
+
+    def __repr__(self):
+        return f"Active request sessions: {len(self._active_sessions)}, Idle: {len(self._idle_sessions)}"
+
+    def close(self):
+        if self._active_sessions:
+            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
+        for s in itertools.chain(self._active_sessions, self._idle_sessions):
+            try:
+                s.close()
+            except Exception as e:
+                logger.info(f"Session cleanup failed: {e}")
+
+
 class SnowflakeRestful(object):
     """Snowflake Restful class."""
 
@@ -263,8 +302,9 @@ class SnowflakeRestful(object):
         self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._lock_token = Lock()
-        self._idle_sessions = collections.deque()
-        self._active_sessions = set()
+        self._sessions_map: Dict[Optional[str], SessionPool] = collections.defaultdict(
+            lambda: SessionPool(self)
+        )
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -326,17 +366,9 @@ class SnowflakeRestful(object):
             del self._id_token
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
-        sessions = list(self._active_sessions)
-        if sessions:
-            logger.debug("Closing %s active sessions", len(sessions))
-        sessions.extend(self._idle_sessions)
-        self._active_sessions.clear()
-        self._idle_sessions.clear()
-        for s in sessions:
-            try:
-                s.close()
-            except Exception as e:
-                logger.info("Session cleanup failed: %s", e)
+        # TODO: double check this
+        for session_pool in self._sessions_map.values():
+            session_pool.close()
 
     def request(
         self,
@@ -1056,12 +1088,13 @@ class SnowflakeRestful(object):
         return s
 
     @contextlib.contextmanager
-    def _use_requests_session(self):
+    def _use_requests_session(self, url: Optional[str] = None):
         """Session caching context manager.
 
         Notes:
             The session is not closed until close() is called so each session may be used multiple times.
         """
+        # short-lived session, not added to the _sessions_map
         if self._connection.disable_request_pooling:
             session = self.make_requests_session()
             try:
@@ -1069,29 +1102,11 @@ class SnowflakeRestful(object):
             finally:
                 session.close()
         else:
-            try:
-                session = self._idle_sessions.pop()
-            except IndexError:
-                session = self.make_requests_session()
-            self._active_sessions.add(session)
-            logger.debug(
-                "Active requests sessions: %s, idle: %s",
-                len(self._active_sessions),
-                len(self._idle_sessions),
-            )
+            session_pool = self._sessions_map[url]
+            session = session_pool.get_session()
+            logger.debug(f"Session status for SessionPool '{url}', {session_pool}")
             try:
                 yield session
             finally:
-                self._idle_sessions.appendleft(session)
-                try:
-                    self._active_sessions.remove(session)
-                except KeyError:
-                    logger.debug(
-                        "session doesn't exist in the active session pool. "
-                        "Ignored..."
-                    )
-                logger.debug(
-                    "Active requests sessions: %s, idle: %s",
-                    len(self._active_sessions),
-                    len(self._idle_sessions),
-                )
+                session_pool.return_session(session)
+            logger.debug(f"Session status for SessionPool '{url}', {session_pool}")
