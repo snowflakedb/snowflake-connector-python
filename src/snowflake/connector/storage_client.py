@@ -257,7 +257,6 @@ class SnowflakeStorageClient(ABC):
     ) -> requests.Response:
         rest_call = METHODS[verb]
         conn = None
-        # TODO: Keep cursor property?
         if self.meta.self and self.meta.self._cursor.connection:
             conn = self.meta.self._cursor.connection
 
