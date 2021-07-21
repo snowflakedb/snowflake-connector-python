@@ -776,7 +776,7 @@ class SnowflakeRestful(object):
 
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self._use_requests_session() as session:
+        with self._use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(timeout, include_retry_params)
             while True:
                 ret = self._request_exec_wrapper(
@@ -1089,11 +1089,13 @@ class SnowflakeRestful(object):
             finally:
                 session.close()
         else:
-            session_pool = self._sessions_map[url]
+            parsed_url = urlparse(url)
+            hostname = parsed_url.netloc
+            session_pool = self._sessions_map[hostname]
             session = session_pool.get_session()
-            logger.debug(f"Session status for SessionPool '{url}', {session_pool}")
+            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
             try:
                 yield session
             finally:
                 session_pool.return_session(session)
-            logger.debug(f"Session status for SessionPool '{url}', {session_pool}")
+            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
