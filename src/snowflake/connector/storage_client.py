@@ -258,8 +258,8 @@ class SnowflakeStorageClient(ABC):
         rest_call = METHODS[verb]
         conn = None
         # TODO: Keep cursor property?
-        if self.meta.self and self.meta.self.cursor.connection:
-            conn = self.meta.self.cursor.connection
+        if self.meta.self and self.meta.self._cursor.connection:
+            conn = self.meta.self._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
@@ -270,6 +270,7 @@ class SnowflakeStorageClient(ABC):
                         logger.debug(f"storage client request with session {session}")
                         response = session.request(verb, url, **rest_kwargs)
                 else:
+                    logger.debug("storage client request with new session")
                     response = rest_call(url, **rest_kwargs)
 
                 if self._has_expired_presigned_url(response):
