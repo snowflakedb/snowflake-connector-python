@@ -1125,7 +1125,3 @@ class SnowflakeFileTransferAgent:
                 else:
                     m.dst_file_name = m.name
                     m.dst_compression_type = None
-
-    @property
-    def cursor(self):
-        return self._cursor

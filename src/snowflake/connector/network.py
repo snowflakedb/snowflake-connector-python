@@ -15,7 +15,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Set
 
 import OpenSSL.SSL
 
@@ -87,6 +87,7 @@ from .time_util import (
 )
 from .tool.probe_connection import probe_connection
 from .vendored import requests
+from .vendored.requests import Session
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
@@ -250,12 +251,11 @@ class SnowflakeAuth(AuthBase):
 class SessionPool(object):
     def __init__(self, rest: "SnowflakeRestful"):
         # A stack of the idle sessions
-        # pop and append, no append left!
-        self._idle_sessions = []
-        self._active_sessions = set()  # TODO: use ids?
-        self._rest = rest
+        self._idle_sessions: List[Session] = []
+        self._active_sessions: Set[Session] = set()
+        self._rest: "SnowflakeRestful" = rest
 
-    def get_session(self):
+    def get_session(self) -> Session:
         try:
             session = self._idle_sessions.pop()
         except IndexError:
@@ -263,19 +263,17 @@ class SessionPool(object):
         self._active_sessions.add(session)
         return session
 
-    def return_session(self, session):
+    def return_session(self, session: Session) -> None:
         try:
             self._active_sessions.remove(session)
         except KeyError:
-            logger.debug(
-                "session doesn't exist in the active session pool." "Ignored..."
-            )
+            logger.debug("session doesn't exist in the active session pool. Ignored...")
         self._idle_sessions.append(session)
 
     def __repr__(self):
         return f"Active request sessions: {len(self._active_sessions)}, Idle: {len(self._idle_sessions)}"
 
-    def close(self):
+    def close(self) -> None:
         if self._active_sessions:
             logger.debug(f"Closing {len(self._active_sessions)} active sessions")
         for s in itertools.chain(self._active_sessions, self._idle_sessions):
@@ -366,7 +364,7 @@ class SnowflakeRestful(object):
             del self._id_token
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
-        # TODO: double check this
+
         for session_pool in self._sessions_map.values():
             session_pool.close()
 
@@ -1102,8 +1100,12 @@ class SnowflakeRestful(object):
             finally:
                 session.close()
         else:
-            parsed_url = urlparse(url)
-            hostname = parsed_url.netloc
+            try:
+                parsed_url = urlparse(url)
+                hostname = parsed_url.netloc
+            except Exception:
+                hostname = None
+
             session_pool = self._sessions_map[hostname]
             session = session_pool.get_session()
             logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
@@ -1111,4 +1113,6 @@ class SnowflakeRestful(object):
                 yield session
             finally:
                 session_pool.return_session(session)
-            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
+                logger.debug(
+                    f"Session status for SessionPool '{hostname}', {session_pool}"
+                )
