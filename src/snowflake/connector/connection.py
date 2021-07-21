@@ -164,7 +164,7 @@ DEFAULT_CONFIGURATION = {
         (type(None), int),
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
-    "s3_connection_pool_size": (DEFAULT_S3_CONNECTION_POOL_SIZE, int), # s3 boto
+    "s3_connection_pool_s": (DEFAULT_S3_CONNECTION_POOL_SIZE, int),  # boto3 pool size
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -384,12 +384,12 @@ class SnowflakeConnection(object):
         self._validate_client_session_keep_alive_heartbeat_frequency()
 
     @property
-    def s3_connection_pool_size(self):
-        return self._s3_connection_pool_size
+    def _s3_connection_pool_size(self) -> int:
+        return self._s3_connection_pool_s
 
-    @s3_connection_pool_size.setter
-    def s3_connection_pool_size(self, value):
-        self._s3_connection_pool_size = value
+    @_s3_connection_pool_size.setter
+    def _s3_connection_pool_size(self, value: int) -> None:
+        self._s3_connection_pool_s = value
         self._validate_s3_connection_pool_size()
 
     @property
@@ -1233,13 +1233,12 @@ class SnowflakeConnection(object):
         )
         return self.client_session_keep_alive_heartbeat_frequency
 
-    def _validate_s3_connection_pool_size(self):
-        if self.s3_connection_pool_size <= 0:
-            self._s3_connection_pool_size = 1
-        elif self.s3_connection_pool_size > MAX_S3_CONNECTION_POOL_SIZE:
-            self._s3_connection_pool_size = MAX_S3_CONNECTION_POOL_SIZE
-        self._s3_connection_pool_size = int(self.s3_connection_pool_size)
-        return self.s3_connection_pool_size
+    def _validate_s3_connection_pool_size(self) -> None:
+        if self._s3_connection_pool_s <= 0:
+            self._s3_connection_pool_s = 1
+        elif self._s3_connection_pool_s > MAX_S3_CONNECTION_POOL_SIZE:
+            self._s3_connection_pool_s = MAX_S3_CONNECTION_POOL_SIZE
+        self._s3_connection_pool_s = int(self._s3_connection_pool_s)
 
     def _validate_client_prefetch_threads(self):
         if self.client_prefetch_threads <= 0:
