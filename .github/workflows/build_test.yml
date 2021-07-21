@@ -3,7 +3,7 @@ name: Build and Test
 on:
     push:
         branches:
-            - tbbharaj/aarch64-wheels
+            - master
         tags:
             - v*
     pull_request:
