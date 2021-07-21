@@ -387,6 +387,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
         # conn.request() calls http.client.*.request, not the method in
         # urllib3.request. It also calls makefile (recv) on the socket.
+        log.debug(f"KUSHAN pre-send {url}")
         try:
             if chunked:
                 conn.request_chunked(method, url, **httplib_request_kw)
