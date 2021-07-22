@@ -23,6 +23,7 @@ from .azure_util import SnowflakeAzureUtil
 from .compat import GET_CWD, IS_WINDOWS
 from .constants import SHA256_DIGEST, ResultStatus
 from .converter_snowsql import SnowflakeConverterSnowSQL
+from .encryption_util import SnowflakeEncryptionUtil
 from .errorcode import (
     ER_COMPRESSION_NOT_SUPPORTED,
     ER_FAILED_TO_DOWNLOAD_FROM_STAGE,
@@ -432,6 +433,10 @@ class SnowflakeFileTransferAgent(object):
             meta[SHA256_DIGEST] = sha256_digest
             meta['upload_size'] = upload_size
             logger.debug('really uploading data')
+            (encryption_metadata,
+             data_file) = SnowflakeEncryptionUtil.encrypt_file(
+                meta['encryption_material'],
+                meta['real_src_file_name'], tmp_dir=meta['tmp_dir'])
             SnowflakeFileTransferAgent.get_storage_client(
                 meta['stage_location_type'])
 #            storage_client.upload_one_file_with_retry(meta)

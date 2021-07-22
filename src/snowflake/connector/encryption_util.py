@@ -141,7 +141,7 @@ class SnowflakeEncryptionUtil(object):
             matdesc=matdesc_to_unicode(mat_desc),
         )
         t2 = time.clock_gettime(time.CLOCK_THREAD_CPUTIME_ID)
-        logger.debug(f'done encrypting, took {t2 - t1} seconds')
+        logger.debug(f'done encryption, took {t2 - t1} seconds')
         return metadata, temp_output_file
 
     @staticmethod
