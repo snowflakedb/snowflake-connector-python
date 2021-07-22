@@ -10,7 +10,7 @@ import os
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Dict
 
-from .constants import ResultStatus
+from .constants import DEFAULT_S3_CONNECTION_POOL_SIZE, ResultStatus
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
@@ -22,6 +22,7 @@ class SnowflakeLocalUtil(object):
         stage_info: Dict[str, Any],
         use_accelerate_endpoint: bool = False,
         use_s3_regional_url: bool = False,
+        s3_connection_pool_size: int = DEFAULT_S3_CONNECTION_POOL_SIZE,
     ):
         return None
 

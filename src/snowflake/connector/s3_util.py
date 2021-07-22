@@ -19,9 +19,11 @@ from boto3.session import Session
 from botocore.client import Config
 
 from .constants import (
+    DEFAULT_S3_CONNECTION_POOL_SIZE,
+    FileHeader,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_VALUE_OCTET_STREAM,
-    FileHeader,
+    MAX_S3_CONNECTION_POOL_SIZE,
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata
@@ -57,6 +59,7 @@ class SnowflakeS3Util:
         stage_info,
         use_accelerate_endpoint=False,
         use_s3_regional_url=False,
+        s3_connection_pool_size: int = DEFAULT_S3_CONNECTION_POOL_SIZE,
     ) -> Session.resource:
         """Creates a client object with a stage credential.
 
@@ -87,6 +90,7 @@ class SnowflakeS3Util:
                 "use_accelerate_endpoint": use_accelerate_endpoint,
                 "addressing_style": ADDRESSING_STYLE,
             },
+            max_pool_connections=s3_connection_pool_size,
         )
         session = boto3.Session(
             region_name=stage_info["region"],

@@ -38,6 +38,7 @@ class SnowflakeAzureUtil(object):
         stage_info: Dict[str, Any],
         use_accelerate_endpoint: bool = False,
         use_s3_regional_url: bool = False,
+        s3_connection_pool_size: int = 1,
     ) -> BlobServiceClient:
         """Creates a client object with a stage credential.
 
