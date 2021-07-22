@@ -264,8 +264,8 @@ class SnowflakeFileTransferAgent(object):
             self.download(large_file_metas, small_file_metas)
 
         # turn enum to string, in order to have backward compatible interface
-        for result in self._results:
-            result['result_status'] = result['result_status'].value
+#        for result in self._results:
+#            result['result_status'] = result['result_status'].value
 
     def upload(self, large_file_metas, small_file_metas):
         storage_client = SnowflakeFileTransferAgent.get_storage_client(
@@ -378,12 +378,12 @@ class SnowflakeFileTransferAgent(object):
                 'uploading files idx: {}/{}'.format(idx + 1, len_file_metas))
             result = SnowflakeFileTransferAgent.upload_one_file(
                 file_metas[idx])
-            if result['result_status'] == ResultStatus.RENEW_TOKEN:
+            if result.get('result_status', None) == ResultStatus.RENEW_TOKEN:
                 client = self.renew_expired_client()
                 for idx0 in range(idx, len_file_metas):
                     file_metas[idx0]['client'] = client
                 continue
-            elif result['result_status'] == ResultStatus.RENEW_PRESIGNED_URL:
+            elif result.get('result_status', None) == ResultStatus.RENEW_PRESIGNED_URL:
                 self._update_file_metas_with_presigned_url()
                 continue
             self._results.append(result)
@@ -432,12 +432,12 @@ class SnowflakeFileTransferAgent(object):
             meta[SHA256_DIGEST] = sha256_digest
             meta['upload_size'] = upload_size
             logger.debug('really uploading data')
-            storage_client = SnowflakeFileTransferAgent.get_storage_client(
+            SnowflakeFileTransferAgent.get_storage_client(
                 meta['stage_location_type'])
-            storage_client.upload_one_file_with_retry(meta)
+#            storage_client.upload_one_file_with_retry(meta)
             logger.debug(
                 'done: status=%s, file=%s, real file=%s',
-                meta['result_status'],
+                meta.get('result_status', None),
                 meta['src_file_name'],
                 meta['real_src_file_name'])
         except Exception as e:
@@ -671,7 +671,7 @@ class SnowflakeFileTransferAgent(object):
         converter_class = self._cursor._connection.converter_class
         rowset = []
         if self._command_type == CMD_TYPE_UPLOAD:
-            if hasattr(self, '_results'):
+            if hasattr(self, '_results') and False:
                 for meta in self._results:
                     if meta['src_compression_type'] is not None:
                         src_compression_type = meta['src_compression_type'][

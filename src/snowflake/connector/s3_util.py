@@ -216,7 +216,7 @@ class SnowflakeS3Util:
                     num_download_attempts=10,
                 )
             )
-
+            meta['upload_size'] = 10
             logger.debug('DONE putting a file')
             meta['dst_file_size'] = meta['upload_size']
             meta['result_status'] = ResultStatus.UPLOADED
