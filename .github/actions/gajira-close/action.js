@@ -27,7 +27,6 @@ module.exports = class {
             },
             fields: {
                 customfield_12860: {id: "11506"},
-                customfield_13132: {id: "12467"},
                 customfield_10800: {id: "-1"},
                 customfield_12500: {id: "11302"},
                 customfield_12400: {id: "-1"},
