@@ -18,6 +18,7 @@ url_1 = f"https://{hostname_1}:443/session/v1/login-request"
 
 hostname_2 = "sfc-ds2-customer-stage.s3.amazonaws.com"
 url_2 = f"https://{hostname_2}/rgm1-s-sfctest0/stages/"
+url_3 = f"https://{hostname_2}/rgm1-s-sfctst0/stages/another-url"
 
 
 def get_mock_connection():
@@ -88,7 +89,7 @@ def test_multiple_urls_multiple_sessions(make_session_mock):
 @mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
 def test_multiple_urls_reuse_sessions(make_session_mock):
     rest = SnowflakeRestful(connection=get_mock_connection())
-    for url in [url_1, url_2, None]:
+    for url in [url_1, url_2, url_3, None]:
         # create 10 sessions, one after another
         for _ in range(10):
             create_session(rest, url=url)
@@ -97,6 +98,7 @@ def test_multiple_urls_reuse_sessions(make_session_mock):
     assert make_session_mock.call_count == 3
 
     hostnames = list(rest._sessions_map.keys())
+    assert len(hostnames) == 3
     for hostname in [hostname_1, hostname_2, None]:
         assert hostname in hostnames
 

@@ -296,6 +296,7 @@ class SessionPool(object):
         self._rest: "SnowflakeRestful" = rest
 
     def get_session(self) -> Session:
+        """Returns a session from the session pool or creates a new one."""
         try:
             session = self._idle_sessions.pop()
         except IndexError:
@@ -304,6 +305,7 @@ class SessionPool(object):
         return session
 
     def return_session(self, session: Session) -> None:
+        """Places an active session back into the idle session stack."""
         try:
             self._active_sessions.remove(session)
         except KeyError:
@@ -314,6 +316,7 @@ class SessionPool(object):
         return f"Active request sessions: {len(self._active_sessions)}, Idle: {len(self._idle_sessions)}"
 
     def close(self) -> None:
+        """Closes all active and idle sessions in this session pool."""
         if self._active_sessions:
             logger.debug(f"Closing {len(self._active_sessions)} active sessions")
         for s in itertools.chain(self._active_sessions, self._idle_sessions):
