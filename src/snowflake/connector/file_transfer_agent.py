@@ -432,6 +432,7 @@ class SnowflakeFileTransferAgent:
                 logger.debug(f"Failed to prepare {done_client.meta.name}.")
                 if is_upload:
                     done_client.finish_upload()
+                    done_client.delete_client_data()
                 else:
                     done_client.finish_download()
                 notify_file_completed()
@@ -510,6 +511,7 @@ class SnowflakeFileTransferAgent:
                 ):
                     if is_upload:
                         done_client.finish_upload()
+                        done_client.delete_client_data()
                         notify_file_completed()
                     else:
                         postprocess_tpe.submit(
