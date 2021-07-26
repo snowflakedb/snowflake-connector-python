@@ -321,6 +321,8 @@ class SessionPool(object):
                 s.close()
             except Exception as e:
                 logger.info(f"Session cleanup failed: {e}")
+        self._active_sessions.clear()
+        self._idle_sessions.clear()
 
 
 class SnowflakeRestful(object):
@@ -1087,12 +1089,11 @@ class SnowflakeRestful(object):
                 session.close()
         else:
             try:
-                parsed_url = urlparse(url)
-                hostname = parsed_url.netloc
+                hostname = urlparse(url).hostname
             except Exception:
                 hostname = None
 
-            session_pool = self._sessions_map[hostname]
+            session_pool: SessionPool = self._sessions_map[hostname]
             session = session_pool.get_session()
             logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
             try:
