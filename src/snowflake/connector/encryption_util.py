@@ -8,6 +8,7 @@ import base64
 import json
 import os
 import tempfile
+import time
 from logging import getLogger
 from typing import IO, TYPE_CHECKING, Tuple
 
@@ -71,7 +72,7 @@ class SnowflakeEncryptionUtil(object):
         )
         key_size = len(decoded_key)
         logger.debug("key_size = %s", key_size)
-
+        t1 = time.clock_gettime(time.CLOCK_THREAD_CPUTIME_ID)
         # Generate key for data encryption
         iv_data = SnowflakeEncryptionUtil.get_secure_random(block_size)
         file_key = SnowflakeEncryptionUtil.get_secure_random(key_size)
@@ -117,6 +118,8 @@ class SnowflakeEncryptionUtil(object):
                 encryptor.update(PKCS5_PAD(file_key, block_size)) + encryptor.finalize()
             )
 
+        t2 = time.clock_gettime(time.CLOCK_THREAD_CPUTIME_ID)
+        logger.debug(f"Done encrypting, took {t2 - t1} seconds")
         mat_desc = MaterialDescriptor(
             smk_id=encryption_material.smk_id,
             query_id=encryption_material.query_id,

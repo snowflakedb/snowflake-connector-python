@@ -408,8 +408,8 @@ class SnowflakeFileTransferAgent:
         #        network_tpe = ThreadPoolExecutor(max_concurrency)
         #        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
         #        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        network_tpe = ThreadPoolExecutor(1)
         preprocess_tpe = ThreadPoolExecutor(1)
+        network_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
         postprocess_tpe = ThreadPoolExecutor(1)
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
