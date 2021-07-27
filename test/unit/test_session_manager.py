@@ -21,14 +21,12 @@ url_2 = f"https://{hostname_2}/rgm1-s-sfctest0/stages/"
 url_3 = f"https://{hostname_2}/rgm1-s-sfctst0/stages/another-url"
 
 
-def get_mock_connection():
-    mock_conn = mock.Mock()
-    mock_conn.disable_request_pooling = False
-    mock_conn._ocsp_mode = lambda: True
-    return mock_conn
+mock_conn = mock.Mock()
+mock_conn.disable_request_pooling = False
+mock_conn._ocsp_mode = lambda: True
 
 
-def close_sessions(rest: SnowflakeRestful, num_session_pools):
+def close_sessions(rest: SnowflakeRestful, num_session_pools: int) -> None:
     """Helper function to call SnowflakeRestful.close(). Asserts close was called on all SessionPools."""
     with mock.patch("snowflake.connector.network.SessionPool.close") as close_mock:
         rest.close()
@@ -37,7 +35,7 @@ def close_sessions(rest: SnowflakeRestful, num_session_pools):
 
 def create_session(
     rest: SnowflakeRestful, num_sessions: int = 1, url: Optional[str] = None
-):
+) -> None:
     """
     Creates 'num_sessions' sessions to 'url'. This is recursive so that idle sessions
     are not reused.
@@ -46,12 +44,11 @@ def create_session(
         return
     with rest._use_requests_session(url):
         create_session(rest, num_sessions - 1, url)
-        pass
 
 
 @mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
 def test_no_url_multiple_sessions(make_session_mock):
-    rest = SnowflakeRestful(connection=get_mock_connection())
+    rest = SnowflakeRestful(connection=mock_conn)
 
     create_session(rest, 2)
 
@@ -68,7 +65,7 @@ def test_no_url_multiple_sessions(make_session_mock):
 
 @mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
 def test_multiple_urls_multiple_sessions(make_session_mock):
-    rest = SnowflakeRestful(connection=get_mock_connection())
+    rest = SnowflakeRestful(connection=mock_conn)
 
     for url in [url_1, url_2, None]:
         create_session(rest, num_sessions=2, url=url)
@@ -88,7 +85,7 @@ def test_multiple_urls_multiple_sessions(make_session_mock):
 
 @mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
 def test_multiple_urls_reuse_sessions(make_session_mock):
-    rest = SnowflakeRestful(connection=get_mock_connection())
+    rest = SnowflakeRestful(connection=mock_conn)
     for url in [url_1, url_2, url_3, None]:
         # create 10 sessions, one after another
         for _ in range(10):
