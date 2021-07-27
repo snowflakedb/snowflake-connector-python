@@ -786,7 +786,8 @@ class SnowflakeCursor(object):
         else:
             self._result = self._json_result_class(data, self)
 
-        if is_dml:
+        # don't update the row count when the result is returned from `describe` method
+        if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
             for idx, desc in enumerate(self._description):
                 if (

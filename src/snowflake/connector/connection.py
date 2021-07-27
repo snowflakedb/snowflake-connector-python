@@ -46,6 +46,8 @@ from .chunk_downloader import (
 )
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
+    DEFAULT_S3_CONNECTION_POOL_SIZE,
+    MAX_S3_CONNECTION_POOL_SIZE,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -162,6 +164,7 @@ DEFAULT_CONFIGURATION = {
         (type(None), int),
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
+    "s3_connection_pool_s": (DEFAULT_S3_CONNECTION_POOL_SIZE, int),  # boto3 pool size
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -230,6 +233,7 @@ class SnowflakeConnection(object):
         network_timeout: Network timeout. Used for general purpose.
         client_session_keepalive: Whether to keep connection alive by issuing a heartbeat.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
+        s3_connection_pool_size: Size of connection pool for S3 boto driver.  Default is 10.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
@@ -378,6 +382,15 @@ class SnowflakeConnection(object):
     def client_session_keep_alive_heartbeat_frequency(self, value):
         self._client_session_keep_alive_heartbeat_frequency = value
         self._validate_client_session_keep_alive_heartbeat_frequency()
+
+    @property
+    def _s3_connection_pool_size(self) -> int:
+        return self._s3_connection_pool_s
+
+    @_s3_connection_pool_size.setter
+    def _s3_connection_pool_size(self, value: int) -> None:
+        self._s3_connection_pool_s = value
+        self._validate_s3_connection_pool_size()
 
     @property
     def client_prefetch_threads(self):
@@ -1219,6 +1232,13 @@ class SnowflakeConnection(object):
             self.client_session_keep_alive_heartbeat_frequency
         )
         return self.client_session_keep_alive_heartbeat_frequency
+
+    def _validate_s3_connection_pool_size(self) -> None:
+        if self._s3_connection_pool_s <= 0:
+            self._s3_connection_pool_s = 1
+        elif self._s3_connection_pool_s > MAX_S3_CONNECTION_POOL_SIZE:
+            self._s3_connection_pool_s = MAX_S3_CONNECTION_POOL_SIZE
+        self._s3_connection_pool_s = int(self._s3_connection_pool_s)
 
     def _validate_client_prefetch_threads(self):
         if self.client_prefetch_threads <= 0:

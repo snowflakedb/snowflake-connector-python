@@ -64,6 +64,7 @@ class SnowflakeRemoteStorageUtil(object):
         stage_info,
         use_accelerate_endpoint: bool = False,
         use_s3_regional_url: bool = False,
+        s3_connection_pool_size: int = 1,
     ) -> Session.resource:
         util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(
             stage_info["locationType"]
@@ -72,6 +73,7 @@ class SnowflakeRemoteStorageUtil(object):
             stage_info,
             use_accelerate_endpoint=use_accelerate_endpoint,
             use_s3_regional_url=use_s3_regional_url,
+            s3_connection_pool_size=s3_connection_pool_size,
         )
 
     @staticmethod
