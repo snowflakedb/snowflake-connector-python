@@ -130,9 +130,14 @@ jobs:
       matrix:
         python_tag: [ "cp37", "cp38", "cp39"]
         include:
-          - {name: Linux, python-version: '3.7', os: ubuntu-latest}
+           - name: Linux
+           - python-version: '3.7'
+           - os: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+           python-version: ${{ matrix.python-version }}
       - name: Setup up QEMU
         uses: docker/setup-qemu-action@v1
         with:
