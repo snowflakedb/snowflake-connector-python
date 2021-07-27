@@ -288,7 +288,7 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
-class SessionPool(object):
+class SessionPool:
     def __init__(self, rest: "SnowflakeRestful"):
         # A stack of the idle sessions
         self._idle_sessions: List[Session] = []
@@ -312,8 +312,11 @@ class SessionPool(object):
             logger.debug("session doesn't exist in the active session pool. Ignored...")
         self._idle_sessions.append(session)
 
-    def __repr__(self):
-        return f"Active request sessions: {len(self._active_sessions)}, Idle: {len(self._idle_sessions)}"
+    def __str__(self):
+        total_sessions = len(self._active_sessions) + len(self._idle_sessions)
+        return (
+            f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
+        )
 
     def close(self) -> None:
         """Closes all active and idle sessions in this session pool."""
