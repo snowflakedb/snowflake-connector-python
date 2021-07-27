@@ -231,3 +231,8 @@ class QueryStatus(Enum):
     RESTARTED = 10
     BLOCKED = 11
     NO_DATA = 12
+
+
+kilobytes = 1024
+megabytes = kilobytes * 1024
+gigabytes = megabytes * 1024

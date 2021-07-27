@@ -346,6 +346,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 digest = response.headers.get(GCS_METADATA_SFC_DIGEST, None)
                 content_length = response.headers.get("content-length", None)
 
+                encryption_metadata = EncryptionMetadata("", "", "")
                 if response.headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None):
                     encryption_data = json.loads(
                         response.headers[GCS_METADATA_ENCRYPTIONDATAPROP]
