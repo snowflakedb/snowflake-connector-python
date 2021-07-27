@@ -368,6 +368,9 @@ class SnowflakeFileTransferAgent:
         if self._command_type == CMD_TYPE_UPLOAD:
             self._process_file_compression_type()
 
+        for m in self._file_metadata:
+            m.self = self
+
         self._transfer_accelerate_config()
 
         if self._command_type == CMD_TYPE_DOWNLOAD:

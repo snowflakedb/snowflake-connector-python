@@ -17,7 +17,7 @@ from Cryptodome.Hash import SHA256
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 
-from .constants import UTF8
+from .constants import UTF8, megabytes
 
 logger = getLogger(__name__)
 
@@ -34,7 +34,7 @@ class SnowflakeFileUtil(object):
             Tuple of src's digest and src's size in bytes.
         """
         use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
-        CHUNK_SIZE = 16 * 4 * 1024
+        CHUNK_SIZE = 1024 * 1024
         if not use_openssl_only:
             m = SHA256.new()
         else:
@@ -89,7 +89,7 @@ class SnowflakeFileUtil(object):
         logger.debug("gzip file: %s, original file: %s", gzip_file_name, file_name)
         with open(file_name, "rb") as fr:
             with gzip.GzipFile(gzip_file_name, "wb") as fw:
-                shutil.copyfileobj(fr, fw)
+                shutil.copyfileobj(fr, fw, length=64 * megabytes)
         SnowflakeFileUtil.normalize_gzip_header(gzip_file_name)
 
         statinfo = os.stat(gzip_file_name)

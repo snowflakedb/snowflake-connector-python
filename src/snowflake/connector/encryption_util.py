@@ -16,7 +16,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
-from .constants import UTF8, EncryptionMetadata, MaterialDescriptor
+from .constants import UTF8, EncryptionMetadata, MaterialDescriptor, megabytes
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
@@ -48,7 +48,7 @@ class SnowflakeEncryptionUtil(object):
         encryption_material: "SnowflakeFileEncryptionMaterial",
         src: IO[bytes],
         out: IO[bytes],
-        chunk_size: int = block_size * 4 * 1024,
+        chunk_size: int = 64 * megabytes,  # block_size * 4 * 1024,
     ) -> "EncryptionMetadata":
         """Reads content from src and write the encrypted content into out.
 
