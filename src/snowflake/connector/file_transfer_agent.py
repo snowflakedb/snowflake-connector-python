@@ -412,10 +412,10 @@ class SnowflakeFileTransferAgent(object):
             self._stage_location_type
         )
         client_meta = SFResourceMeta(
-            storage_util,
-            self._stage_info,
-            self._use_accelerate_endpoint,
-            self._use_s3_regional_url,
+            storage_util=storage_util,
+            stage_info=self._stage_info,
+            use_accelerate_endpoint=self._use_accelerate_endpoint,
+            use_s3_regional_url=self._use_s3_regional_url,
         )
 
         for meta in small_file_metas:
@@ -1200,7 +1200,11 @@ class SnowflakeFileTransferAgent(object):
                             src_file_name=file_name,
                             src_file_size=statinfo.st_size,
                             stage_location_type=self._stage_location_type,
-                            client_meta=SFResourceMeta(stage_info=self._stage_info),
+                            client_meta=SFResourceMeta(
+                                stage_info=self._stage_info,
+                                use_s3_regional_url=self._use_s3_regional_url,
+                                use_accelerate_endpoint=self._use_accelerate_endpoint,
+                            ),
                             encryption_material=self._encryption_material[0]
                             if len(self._encryption_material) > 0
                             else None,
@@ -1215,7 +1219,11 @@ class SnowflakeFileTransferAgent(object):
                         src_stream=self._source_from_stream,
                         src_file_size=self._source_from_stream.seek(0, os.SEEK_END),
                         stage_location_type=self._stage_location_type,
-                        client_meta=SFResourceMeta(stage_info=self._stage_info),
+                        client_meta=SFResourceMeta(
+                            stage_info=self._stage_info,
+                            use_s3_regional_url=self._use_s3_regional_url,
+                            use_accelerate_endpoint=self._use_accelerate_endpoint,
+                        ),
                         encryption_material=self._encryption_material[0]
                         if len(self._encryption_material) > 0
                         else None,
@@ -1238,7 +1246,11 @@ class SnowflakeFileTransferAgent(object):
                             src_file_name=file_name,
                             dst_file_name=dst_file_name,
                             stage_location_type=self._stage_location_type,
-                            client_meta=SFResourceMeta(stage_info=self._stage_info),
+                            client_meta=SFResourceMeta(
+                                stage_info=self._stage_info,
+                                use_s3_regional_url=self._use_s3_regional_url,
+                                use_accelerate_endpoint=self._use_accelerate_endpoint,
+                            ),
                             local_location=self._local_location,
                             encryption_material=self._src_file_to_encryption_material[
                                 file_name
