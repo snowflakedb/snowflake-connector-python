@@ -10,6 +10,11 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.5.1(July 31,2021)
+
+   - Fixes Python Connector bug that prevents the connector from using AWS S3 Regional URL. The driver currently overrides the regional URL information with the default S3 URL causing failure in PUT.
+
+
 - v2.5.0(July 22,2021)
 
    - Fixed a bug in write_pandas when quote_identifiers is set to True the function would not actually quote column names.
