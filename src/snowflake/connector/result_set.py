@@ -156,10 +156,6 @@ class ResultSet(Iterable[List[Any]]):
     def _finish_iterating(self):
         """Used for any cleanup after the result set iterator is done."""
 
-        # ensure batch use_sessions attribute is set to false after iteration
-        for b in self.batches:
-            b.use_sessions = False
-
         self._report_metrics()
 
     def _can_create_arrow_iter(self) -> None:
@@ -229,10 +225,8 @@ class ResultSet(Iterable[List[Any]]):
         This function is a helper function to ``__iter__`` and it was introduced for the
         cases where we need to propagate some values to later ``_download`` calls.
         """
-        # setup result batches to use sessions
+        # add connection so that result batches can use sessions
         kwargs["connection"] = self._cursor.connection
-        for b in self.batches:
-            b.use_sessions = True
 
         first_batch_iter = self.batches[0].create_iter(**kwargs)
 

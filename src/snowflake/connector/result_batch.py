@@ -228,8 +228,6 @@ class ResultBatch(abc.ABC):
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
         self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
-        # a flag that indicates if the result batch download should use sessions or not
-        self.use_sessions: bool = False
 
     @property
     def _local(self) -> bool:
@@ -290,7 +288,7 @@ class ResultBatch(abc.ABC):
                         "timeout": DOWNLOAD_TIMEOUT,
                         "stream": True,
                     }
-                    if self.use_sessions and connection:
+                    if connection:
                         with connection._rest._use_requests_session() as session:
                             logger.debug(
                                 f"downloading result batch of size {self.rowcount} with existing session {session}"
@@ -358,8 +356,7 @@ class ResultBatch(abc.ABC):
 
     def _done_load(self, response: "Response") -> None:
         """Performs cleanup after loading from `response` is done."""
-        if self.use_sessions:
-            response.close()
+        response.close()
 
     def _check_can_use_pandas(self) -> None:
         if not installed_pandas:
