@@ -440,6 +440,7 @@ class JSONResultBatch(ResultBatch):
         self, downloaded_data
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
         """Parses downloaded data into its final form."""
+        logger.debug(f"parsing for result batch of size {self.rowcount}")
         if self._use_dict_result:
             for row in downloaded_data:
                 row_result = {}
@@ -496,7 +497,7 @@ class JSONResultBatch(ResultBatch):
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         with TimerContextManager() as parse_metric:
-            parsed_data = self._parse(downloaded_data)
+            parsed_data = list(self._parse(downloaded_data))
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
         return iter(parsed_data)
 
@@ -662,9 +663,11 @@ class ArrowResultBatch(ResultBatch):
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
     ) -> Iterator["pandas.DataFrame"]:
         """An iterator for this batch which yields a pandas DataFrame"""
+        iterator_data = []
         dataframe = self.to_pandas(connection=connection, **kwargs)
         if not dataframe.empty:
-            yield dataframe
+            iterator_data.append(dataframe)
+        return iter(iterator_data)
 
     def create_iter(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
