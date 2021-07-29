@@ -72,6 +72,7 @@ class SnowflakeEncryptionUtil(object):
         )
         key_size = len(decoded_key)
         logger.debug("key_size = %s", key_size)
+
         t1 = time.clock_gettime(time.CLOCK_THREAD_CPUTIME_ID)
         # Generate key for data encryption
         iv_data = SnowflakeEncryptionUtil.get_secure_random(block_size)

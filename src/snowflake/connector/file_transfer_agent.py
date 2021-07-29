@@ -405,12 +405,13 @@ class SnowflakeFileTransferAgent:
 
     def transfer(self, metas: List["SnowflakeFileMeta"]) -> None:
         max_concurrency = self._parallel
-        #        network_tpe = ThreadPoolExecutor(max_concurrency)
-        #        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        #        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        preprocess_tpe = ThreadPoolExecutor(1)
-        network_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        postprocess_tpe = ThreadPoolExecutor(1)
+        network_tpe = ThreadPoolExecutor(max_concurrency)
+        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        logger.debug(
+            f"max conc: {max_concurrency}, len(metas)={len(metas)}, os.cpu_count()={os.cpu_count()}"
+        )
+
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
@@ -426,7 +427,11 @@ class SnowflakeFileTransferAgent:
             # Increment the number of completed files, then notify the main thread.
             with cv_main_thread:
                 transfer_metadata.num_files_completed += 1
-                cv_main_thread.notify()
+                if (
+                    transfer_metadata.num_files_completed == num_total_files
+                    or exception_caught_in_callback
+                ):
+                    cv_main_thread.notify()
 
         def preprocess_done_cb(
             success: bool,
@@ -497,7 +502,8 @@ class SnowflakeFileTransferAgent:
             )
             with cv_chunk_process:
                 transfer_metadata.chunks_in_queue -= 1
-                cv_chunk_process.notify()
+                if transfer_metadata.chunks_in_queue <= 2 * max_concurrency:
+                    cv_chunk_process.notify()
 
             with done_client.lock:
                 if not success:
