@@ -427,9 +427,14 @@ class SnowflakeFileTransferAgent(object):
                         meta['src_file_name'], tmp_dir)
             logger.debug(
                 'getting digest file=%s', meta['real_src_file_name'])
-            sha256_digest, upload_size = \
-                SnowflakeFileUtil.get_digest_and_size_for_file(
-                    meta['real_src_file_name'])
+            file_name = meta['real_src_file_name']
+            if file_name in SnowflakeFileUtil.predigested:
+                logger.debug("Digest found in cache")
+                sha256_digest, upload_size = SnowflakeFileUtil.predigested[file_name]
+            else:
+                sha256_digest, upload_size = \
+                    SnowflakeFileUtil.get_digest_and_size_for_file(
+                file_name)
             meta[SHA256_DIGEST] = sha256_digest
             meta['upload_size'] = upload_size
             logger.debug('really uploading data')
