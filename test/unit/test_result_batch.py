@@ -45,6 +45,8 @@ from snowflake.connector.sqlstate import (
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
 
+pytestmark = pytest.mark.skipolddriver
+
 REQUEST_MODULE_PATH = (
     "snowflake.connector.vendored.requests"
     if importlib.util.find_spec("snowflake.connector.vendored.requests")

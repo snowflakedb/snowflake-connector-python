@@ -1444,3 +1444,22 @@ def test_describe(conn_cnx):
                 cur.execute(
                     f"drop table if exists {table_name}"
                 )
+
+def test_fetch_batches_with_sessions(conn_cnx):
+    rowcount = 250_000
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                f"select seq4() as foo from table(generator(rowcount=>{rowcount}))"
+            )
+
+            num_batches = len(cur.get_result_batches())
+
+            with mock.patch(
+                "snowflake.connector.network.SnowflakeRestful._use_requests_session",
+                side_effect=con._rest._use_requests_session,
+            ) as get_session_mock:
+                result = cur.fetchall()
+                # all but one batch is downloaded using a session
+                assert get_session_mock.call_count == num_batches - 1
+                assert len(result) == rowcount
