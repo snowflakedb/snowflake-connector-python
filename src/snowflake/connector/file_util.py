@@ -24,6 +24,8 @@ logger = getLogger(__name__)
 
 
 class SnowflakeFileUtil(object):
+    predigested = {}
+
     @staticmethod
     def get_digest_and_size(src: IO[bytes]) -> Tuple[str, int]:
         """Gets stream digest and size.
@@ -160,9 +162,13 @@ class SnowflakeFileUtil(object):
             Tuple of file's digest and file size in bytes.
         """
         digest, size = None, None
+        if file_name in SnowflakeFileUtil.predigested:
+            digest, size = SnowflakeFileUtil.predigested[file_name]
         with open(file_name, "rb") as src:
             digest, size = SnowflakeFileUtil.get_digest_and_size(src)
         logger.debug(
             "getting digest and size: %s, %s, file=%s", digest, size, file_name
         )
+        SnowflakeFileUtil.predigested[file_name] = digest, size
+        logger.debug(f"KUSHAN {SnowflakeFileUtil.predigested}")
         return digest, size
