@@ -420,7 +420,9 @@ class JSONResultBatch(ResultBatch):
             column_converters,
             use_dict_result,
         )
-        new_chunk._data = list(new_chunk._parse(data))
+        new_chunk._data: Union[
+            List[Union[Dict, Exception]], List[Union[Tuple, Exception]]
+        ] = new_chunk._parse(data)
         return new_chunk
 
     def _load(self, response: "Response") -> List:
@@ -438,9 +440,10 @@ class JSONResultBatch(ResultBatch):
 
     def _parse(
         self, downloaded_data
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+    ) -> Union[List[Union[Dict, Exception]], List[Union[Tuple, Exception]]]:
         """Parses downloaded data into its final form."""
         logger.debug(f"parsing for result batch of size {self.rowcount}")
+        result_list = []
         if self._use_dict_result:
             for row in downloaded_data:
                 row_result = {}
@@ -454,11 +457,16 @@ class JSONResultBatch(ResultBatch):
                 except Exception as error:
                     msg = f"Failed to convert: field {col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
-                    yield Error.errorhandler_make_exception(
-                        InterfaceError,
-                        {"msg": msg, "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE},
+                    result_list.append(
+                        Error.errorhandler_make_exception(
+                            InterfaceError,
+                            {
+                                "msg": msg,
+                                "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                            },
+                        )
                     )
-                yield row_result
+                result_list.append(row_result)
         else:
             for row in downloaded_data:
                 row_result = [None] * len(self.schema)
@@ -474,11 +482,17 @@ class JSONResultBatch(ResultBatch):
                 except Exception as error:
                     msg = f"Failed to convert: field {_col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
-                    yield Error.errorhandler_make_exception(
-                        InterfaceError,
-                        {"msg": msg, "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE},
+                    result_list.append(
+                        Error.errorhandler_make_exception(
+                            InterfaceError,
+                            {
+                                "msg": msg,
+                                "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                            },
+                        )
                     )
-                yield tuple(row_result)
+                result_list.append(tuple(row_result))
+        return result_list
 
     def __repr__(self) -> str:
         return f"JSONResultChunk({self.rowcount})"
@@ -497,7 +511,7 @@ class JSONResultBatch(ResultBatch):
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         with TimerContextManager() as parse_metric:
-            parsed_data = list(self._parse(downloaded_data))
+            parsed_data = self._parse(downloaded_data)
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
         return iter(parsed_data)
 
