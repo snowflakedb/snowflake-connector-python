@@ -453,11 +453,11 @@ class SnowflakeFileTransferAgent:
             else:
                 logger.debug(f"Finished preparing file {done_client.meta.name}")
                 with cv_chunk_process:
-                    #                    while transfer_metadata.chunks_in_queue > 2 * max_concurrency:
-                    #                        logger.debug(
-                    #                            "Chunk queue busy, waiting in file done callback..."
-                    #                        )
-                    #                        cv_chunk_process.wait()
+                    while transfer_metadata.chunks_in_queue > 2 * max_concurrency:
+                        logger.debug(
+                            "Chunk queue busy, waiting in file done callback..."
+                        )
+                        cv_chunk_process.wait()
                     for _chunk_id in range(done_client.num_of_chunks):
                         _callback = partial(
                             transfer_done_cb,
@@ -465,17 +465,16 @@ class SnowflakeFileTransferAgent:
                             chunk_id=_chunk_id,
                         )
                         if is_upload:
-                            pass
-                            # network_tpe.submit(
-                            #    function_and_callback_wrapper,
-                            #    # Work fn
-                            #    done_client.upload_chunk,
-                            #    # Callback fn
-                            #    _callback,
-                            #    file_meta,
-                            #    # Arguments for work fn
-                            #    _chunk_id,
-                            # )
+                            network_tpe.submit(
+                                function_and_callback_wrapper,
+                                # Work fn
+                                done_client.upload_chunk,
+                                # Callback fn
+                                _callback,
+                                file_meta,
+                                # Arguments for work fn
+                                _chunk_id,
+                            )
                         else:
                             network_tpe.submit(
                                 function_and_callback_wrapper,

@@ -24,7 +24,48 @@ logger = getLogger(__name__)
 
 
 class SnowflakeFileUtil(object):
-    predigested = {}
+    predigested = {
+        "/tmp/10x1200MB-compressed/1.csv.gz": (
+            "Squss+wOnnSxTcbKLNCpqsLWBiRoukE4PeDvxeSSGBs=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/3.csv.gz": (
+            "7dKHJfQT4J6Ropu9/5fB+EuCthW8Se9nCrTRLbapR9I=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/2.csv.gz": (
+            "GgS8fFEOfzuED6AN29K8EpZIMgdMyo9AJpZpny5RPK8=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/4.csv.gz": (
+            "4Ma0+lqaAGRvcpMzE3jtH8eB5FAGPmaV/xt1pHb5pyk=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/5.csv.gz": (
+            "xSqcYOVtChA6gZTxYSS+S3D/lcYhgZeNvNpgEzwTPwk=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/6.csv.gz": (
+            "YP14Cg0dX4qZiF42PV2YCWj+vMrBg4whsPGSXvFHOHw=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/7.csv.gz": (
+            "+vSMD/ruF1G7D3XlqHToORV6eZaa/DD12iIRfoXhlHg=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/8.csv.gz": (
+            "dnax0NQJ8KaK/ymt+Rk4QIyK+OJ2HIeRCutywKaugaQ=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/9.csv.gz": (
+            "sdRHNTugw401N264+/oSWCku5q6y7Oy30A/OOriMnvw=",
+            1258291200,
+        ),
+        "/tmp/10x1200MB-compressed/10.csv.gz": (
+            "2iRODfpH1BrZhx1ZgYnhuFKNe92hVlG+2lLszHe6a1g=",
+            1258291200,
+        ),
+    }
 
     @staticmethod
     def get_digest_and_size(src: IO[bytes]) -> Tuple[str, int]:
@@ -164,8 +205,9 @@ class SnowflakeFileUtil(object):
         digest, size = None, None
         if file_name in SnowflakeFileUtil.predigested:
             digest, size = SnowflakeFileUtil.predigested[file_name]
-        with open(file_name, "rb") as src:
-            digest, size = SnowflakeFileUtil.get_digest_and_size(src)
+        else:
+            with open(file_name, "rb") as src:
+                digest, size = SnowflakeFileUtil.get_digest_and_size(src)
         logger.debug(
             "getting digest and size: %s, %s, file=%s", digest, size, file_name
         )
