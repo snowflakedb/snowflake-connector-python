@@ -153,6 +153,11 @@ class ResultSet(Iterable[List[Any]]):
                 metrics.get(DownloadMetrics.parse.value),
             )
 
+    def _finish_iterating(self):
+        """Used for any cleanup after the result set iterator is done."""
+
+        self._report_metrics()
+
     def _can_create_arrow_iter(self) -> None:
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
@@ -220,6 +225,9 @@ class ResultSet(Iterable[List[Any]]):
         This function is a helper function to ``__iter__`` and it was introduced for the
         cases where we need to propagate some values to later ``_download`` calls.
         """
+        # add connection so that result batches can use sessions
+        kwargs["connection"] = self._cursor.connection
+
         first_batch_iter = self.batches[0].create_iter(**kwargs)
 
         # Iterator[Tuple] Futures that have not been consumed by the user
@@ -234,7 +242,7 @@ class ResultSet(Iterable[List[Any]]):
             first_batch_iter,
             unconsumed_batches,
             unfetched_batches,
-            self._report_metrics,
+            self._finish_iterating,
             **kwargs,
         )
 
