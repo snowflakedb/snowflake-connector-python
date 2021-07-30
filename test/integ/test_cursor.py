@@ -1429,9 +1429,7 @@ def test_describe(conn_cnx):
             assert len(cur.fetchall()) == 0
 
             # test insert
-            cur.execute(
-                f"create table {table_name} (aa int)"
-            )
+            cur.execute(f"create table {table_name} (aa int)")
             try:
                 description = cur.describe(
                     "insert into {name}(aa) values({value})".format(
@@ -1441,10 +1439,10 @@ def test_describe(conn_cnx):
                 assert description[0][0] == "number of rows inserted"
                 assert cur.rowcount is None
             finally:
-                cur.execute(
-                    f"drop table if exists {table_name}"
-                )
+                cur.execute(f"drop table if exists {table_name}")
 
+
+@pytest.mark.skipolddriver
 def test_fetch_batches_with_sessions(conn_cnx):
     rowcount = 250_000
     with conn_cnx() as con:
