@@ -253,7 +253,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes
+          PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - name: Combine coverages
@@ -339,7 +339,7 @@ jobs:
         env:
           PYTHON_VERSION: 3.6
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes
+          PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v2
