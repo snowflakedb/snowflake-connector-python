@@ -37,6 +37,7 @@ from .constants import (
     LOCAL_FS,
     S3_FS,
     ResultStatus,
+    megabytes,
 )
 from .converter_snowsql import SnowflakeConverterSnowSQL
 from .errorcode import (
@@ -63,13 +64,11 @@ from .s3_storage_client import SnowflakeS3RestClient
 from .storage_client import SnowflakeFileEncryptionMaterial, SnowflakeStorageClient
 
 if TYPE_CHECKING:  # pragma: no cover
-    from snowflake.connector.cursor import SnowflakeCursor
-
+    from .connection import SnowflakeConnection
+    from .cursor import SnowflakeCursor
     from .file_compression_type import CompressionType
 
 VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
-
-MB = 1024.0 * 1024.0
 
 INJECT_WAIT_IN_PUT = 0
 
@@ -158,7 +157,7 @@ def _update_progress(
     show_progress_bar: Optional[bool] = True,
 ) -> float:
     bar_length = 10  # Modify this to change the length of the progress bar
-    total_size /= MB
+    total_size /= megabytes
     status = ""
     elapsed_time = time() - start_time
     throughput = (total_size / elapsed_time) if elapsed_time != 0.0 else 0.0
@@ -290,7 +289,12 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
 
 
 class StorageCredential:
-    def __init__(self, credentials: Dict[str, Any], connection, command: str):
+    def __init__(
+        self,
+        credentials: Dict[str, Any],
+        connection: "SnowflakeConnection",
+        command: str,
+    ):
         self.creds = credentials
         self.timestamp = time()
         self.lock = threading.Lock()

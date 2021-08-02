@@ -5,7 +5,6 @@
 from __future__ import division
 
 import base64
-import os
 import xml.etree.cElementTree as ET
 from collections import namedtuple
 from datetime import datetime
@@ -189,17 +188,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         return err.find("Code").text == EXPIRED_TOKEN
 
     @staticmethod
-    def _extract_bucket_name_and_path(stage_location):
-        stage_location = os.path.expanduser(stage_location)
-        bucket_name = stage_location
-        path = ""
-
+    def _extract_bucket_name_and_path(stage_location) -> "S3Location":
         # split stage location as bucket name and path
-        if "/" in stage_location:
-            bucket_name = stage_location[0 : stage_location.index("/")]
-            path = stage_location[stage_location.index("/") + 1 :]
-            if path and not path.endswith("/"):
-                path += "/"
+        bucket_name, _, path = stage_location.partition("/")
+        if path and not path.endswith("/"):
+            path += "/"
 
         return S3Location(bucket_name=bucket_name, path=path)
 
