@@ -7,6 +7,7 @@
 import errno
 import logging
 import os
+import re
 from collections import defaultdict
 from os import path
 
@@ -28,6 +29,8 @@ from snowflake.connector.remote_storage_util_sdk import DEFAULT_MAX_RETRY
 from snowflake.connector.remote_storage_util_sdk import (
     SnowflakeRemoteStorageUtil as SnowflakeRemoteStorageUtilSDK,
 )
+
+from ..helpers import verify_log_tuple
 
 try:
     from snowflake.connector.constants import megabytes
@@ -696,11 +699,12 @@ def test_download_unknown_error(caplog, sdkless):
             str(agent._file_metadata[0].error_details)
             == "400 Client Error: No, just chuck testing... for url: None"
         )
-        assert (
+        assert verify_log_tuple(
             "snowflake.connector.storage_client",
             logging.ERROR,
-            "Failed to download a file: /tmp/a",
-        ) in caplog.record_tuples
+            re.compile("Failed to download a file: .*a"),
+            caplog.record_tuples,
+        )
     else:
         mock_resource = MagicMock()
         mock_resource.download_file.side_effect = botocore.exceptions.ClientError(

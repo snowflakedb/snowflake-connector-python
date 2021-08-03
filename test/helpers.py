@@ -3,10 +3,9 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
 from mock import Mock
-
 from snowflake.connector.compat import OK
+from typing import Pattern, Sequence, Tuple, Union
 
 
 def create_mock_response(status_code: int) -> Mock:
@@ -20,3 +19,25 @@ def create_mock_response(status_code: int) -> Mock:
     mock_resp.status_code = status_code
     mock_resp.raw = "success" if status_code == OK else "fail"
     return mock_resp
+
+
+def verify_log_tuple(
+    module: str,
+    level: int,
+    message: Union[str, Pattern],
+    log_tuples: Sequence[Tuple[str, int, str]],
+):
+    """Convenience function to be able to search for regex patterns in log messages.
+
+    Designed to search caplog.record_tuples.
+
+    Notes:
+        - module could be extended to take a pattern too
+    """
+    for _module, _level, _message in log_tuples:
+        if _module == module and _level == level:
+            if _message == message or (
+                isinstance(message, Pattern) and message.search(_message)
+            ):
+                return True
+    return False
