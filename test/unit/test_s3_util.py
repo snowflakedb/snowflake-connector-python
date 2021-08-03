@@ -18,7 +18,7 @@ from boto3.exceptions import Boto3Error, RetriesExceededError, S3UploadFailedErr
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector import SnowflakeConnection
-from snowflake.connector.constants import SHA256_DIGEST, ResultStatus, megabytes
+from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from snowflake.connector.cursor import SnowflakeCursor
 from snowflake.connector.file_transfer_agent import (
     SnowflakeFileTransferAgent,
@@ -30,6 +30,7 @@ from snowflake.connector.remote_storage_util_sdk import (
 )
 
 try:
+    from snowflake.connector.constants import megabytes
     from snowflake.connector.errors import RequestExceedMaxRetryError
     from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
     from snowflake.connector.file_transfer_agent_sdk import SFResourceMeta
@@ -55,6 +56,7 @@ except ImportError:  # NOQA
     SnowflakeFileMeta = dict
     SnowflakeS3RestClient = None
     RequestExceedMaxRetryError = None
+    megabytes = 1024 * 1024
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 MINIMAL_METADATA = SnowflakeFileMeta(
