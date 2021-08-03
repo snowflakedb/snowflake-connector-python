@@ -22,10 +22,6 @@ from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from snowflake.connector.cursor import SnowflakeCursor
 from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
-from snowflake.connector.remote_storage_util_sdk import DEFAULT_MAX_RETRY
-from snowflake.connector.remote_storage_util_sdk import (
-    SnowflakeRemoteStorageUtil as SnowflakeRemoteStorageUtilSDK,
-)
 
 from ..helpers import verify_log_tuple
 
@@ -39,6 +35,10 @@ try:
     from snowflake.connector.file_transfer_agent_sdk import SFResourceMeta
     from snowflake.connector.file_transfer_agent_sdk import (
         SnowflakeFileMeta as SnowflakeFileMetaSDK,
+    )
+    from snowflake.connector.remote_storage_util_sdk import DEFAULT_MAX_RETRY
+    from snowflake.connector.remote_storage_util_sdk import (
+        SnowflakeRemoteStorageUtil as SnowflakeRemoteStorageUtilSDK,
     )
     from snowflake.connector.s3_storage_client import (
         ERRORNO_WSAECONNABORTED,
@@ -61,6 +61,10 @@ except ImportError:  # NOQA
     RequestExceedMaxRetryError = None
     StorageCredential = None
     megabytes = 1024 * 1024
+    DEFAULT_MAX_RETRY = 5
+    from snowflake.connector.remote_storage_util import (
+        SnowflakeRemoteStorageUtil as SnowflakeRemoteStorageUtilSDK,
+    )
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 MINIMAL_METADATA = SnowflakeFileMeta(
