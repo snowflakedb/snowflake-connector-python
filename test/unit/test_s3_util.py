@@ -21,10 +21,7 @@ from mock import MagicMock, Mock, PropertyMock
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from snowflake.connector.cursor import SnowflakeCursor
-from snowflake.connector.file_transfer_agent import (
-    SnowflakeFileTransferAgent,
-    StorageCredential,
-)
+from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 from snowflake.connector.remote_storage_util_sdk import DEFAULT_MAX_RETRY
 from snowflake.connector.remote_storage_util_sdk import (
     SnowflakeRemoteStorageUtil as SnowflakeRemoteStorageUtilSDK,
@@ -35,12 +32,15 @@ from ..helpers import verify_log_tuple
 try:
     from snowflake.connector.constants import megabytes
     from snowflake.connector.errors import RequestExceedMaxRetryError
-    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
+    from snowflake.connector.file_transfer_agent import (
+        SnowflakeFileMeta,
+        StorageCredential,
+    )
     from snowflake.connector.file_transfer_agent_sdk import SFResourceMeta
     from snowflake.connector.file_transfer_agent_sdk import (
         SnowflakeFileMeta as SnowflakeFileMetaSDK,
     )
-    from snowflake.connector.s3_storage_client import (  # TODO
+    from snowflake.connector.s3_storage_client import (
         ERRORNO_WSAECONNABORTED,
         EXPIRED_TOKEN,
         SnowflakeS3RestClient,
@@ -59,6 +59,7 @@ except ImportError:  # NOQA
     SnowflakeFileMeta = dict
     SnowflakeS3RestClient = None
     RequestExceedMaxRetryError = None
+    StorageCredential = None
     megabytes = 1024 * 1024
 
 THIS_DIR = path.dirname(path.realpath(__file__))
