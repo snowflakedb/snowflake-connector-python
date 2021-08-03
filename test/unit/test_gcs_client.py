@@ -5,17 +5,19 @@
 #
 
 import logging
+from os import path
 from unittest.mock import Mock
 
 import mock
 import pytest
 
 from snowflake.connector import SnowflakeConnection
-from snowflake.connector.constants import ResultStatus
+from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 
 from ..randomize import random_string
 
 try:
+    from snowflake.connector.constants import megabytes
     from snowflake.connector.errors import RequestExceedMaxRetryError
     from snowflake.connector.file_transfer_agent import (
         SnowflakeFileMeta,
@@ -31,6 +33,7 @@ except ImportError:  # NOQA
     SnowflakeFileMeta = dict
     RequestExceedMaxRetryError = None
     METHODS = {}
+    megabytes = 1024 * 1024
 
 pytestmark = pytest.mark.gcp
 
@@ -49,6 +52,8 @@ except ImportError:  # pragma: no cover
     import requests
 
     vendored_request = False
+
+THIS_DIR = path.dirname(path.realpath(__file__))
 
 
 @pytest.mark.parametrize("errno", [408, 429, 500, 503])
@@ -175,31 +180,74 @@ def test_download_retry_errors(errno, tmp_path, sdkless):
     """Tests whether retryable errors are handled correctly when downloading."""
     resp = requests.Response()
     resp.status_code = errno
-    meta = SnowflakeFileMeta(
-        name=str(tmp_path / "some_file"),
-        src_file_name=str(tmp_path / "some_file"),
-        stage_location_type="GCS",
-        presigned_url="some_url",
-        sha256_digest="asd",
-    )
+    expected_exc = requests.exceptions.HTTPError(response=resp)
     if sdkless:
-        assert False  # TODO
+        if errno == 403:
+            pytest.skip("This behavior has changed in the move from SDKs")
+        meta_info = {
+            "name": "data1.txt.gz",
+            "stage_location_type": "S3",
+            "no_sleeping_time": True,
+            "put_callback": None,
+            "put_callback_output_stream": None,
+            SHA256_DIGEST: "123456789abcdef",
+            "dst_file_name": "data1.txt.gz",
+            "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+            "overwrite": True,
+        }
+        meta = SnowflakeFileMeta(**meta_info)
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        cnx = mock.MagicMock(autospec=SnowflakeConnection)
+        rest_client = SnowflakeGCSRestClient(
+            meta,
+            StorageCredential(
+                creds,
+                cnx,
+                "GET file:/tmp/file.txt @~",
+            ),
+            {
+                "locationType": "AWS",
+                "location": "bucket/path",
+                "creds": creds,
+                "region": "test",
+                "endPoint": None,
+            },
+            cnx,
+            "GET file:///tmp/file.txt @~",
+        )
+        from snowflake.connector.storage_client import METHODS
+
+        rest_client.SLEEP_UNIT = 0
+        with mock.patch.dict(METHODS, GET=mock.MagicMock(return_value=resp)):
+            with pytest.raises(
+                RequestExceedMaxRetryError,
+                match="GET with url .* failed for exceeding maximum retries",
+            ):
+                rest_client.download_chunk(0)
     else:
+        meta = SnowflakeFileMeta(
+            name=str(tmp_path / "some_file"),
+            src_file_name=str(tmp_path / "some_file"),
+            stage_location_type="GCS",
+            presigned_url="some_url",
+            sha256_digest="asd",
+        )
         with mock.patch(
             "snowflake.connector.vendored.requests.get"
             if vendored_request
             else "requests.get",
-            side_effect=requests.exceptions.HTTPError(response=resp),
+            side_effect=expected_exc,
         ):
             SnowflakeGCSUtil._native_download_file(meta, str(tmp_path), 99)
             assert isinstance(meta.last_error, requests.exceptions.HTTPError)
             assert meta.result_status == ResultStatus.NEED_RETRY
 
 
-def test_download_uncaught_exception(tmp_path, sdkless):
+@pytest.mark.parametrize("errno", (501, 403))
+def test_download_uncaught_exception(tmp_path, sdkless, errno):
     """Tests whether non-retryable errors are handled correctly when downloading."""
     resp = requests.Response()
-    resp.status_code = 501
+    resp.status_code = errno
     meta = SnowflakeFileMeta(
         name=str(tmp_path / "some_file"),
         src_file_name=str(tmp_path / "some_file"),
@@ -207,14 +255,57 @@ def test_download_uncaught_exception(tmp_path, sdkless):
         presigned_url="some_url",
         sha256_digest="asd",
     )
-    with mock.patch(
-        "snowflake.connector.vendored.requests.get"
-        if vendored_request
-        else "requests.get",
-        side_effect=requests.exceptions.HTTPError(response=resp),
-    ):
-        with pytest.raises(requests.exceptions.HTTPError):
-            SnowflakeGCSRestClient._native_download_file(meta, str(tmp_path), 99)
+    if not sdkless:
+        if errno == 403:
+            pytest.skip("This behavior has changed in the move from SDKs")
+        with mock.patch(
+            "snowflake.connector.vendored.requests.get"
+            if vendored_request
+            else "requests.get",
+            side_effect=requests.exceptions.HTTPError(response=resp),
+        ):
+            with pytest.raises(requests.exceptions.HTTPError):
+                SnowflakeGCSUtil._native_download_file(meta, str(tmp_path), 99)
+    else:
+        meta_info = {
+            "name": "data1.txt.gz",
+            "stage_location_type": "S3",
+            "no_sleeping_time": True,
+            "put_callback": None,
+            "put_callback_output_stream": None,
+            SHA256_DIGEST: "123456789abcdef",
+            "dst_file_name": "data1.txt.gz",
+            "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+            "overwrite": True,
+        }
+        meta = SnowflakeFileMeta(**meta_info)
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        cnx = mock.MagicMock(autospec=SnowflakeConnection)
+        rest_client = SnowflakeGCSRestClient(
+            meta,
+            StorageCredential(
+                creds,
+                cnx,
+                "GET file:/tmp/file.txt @~",
+            ),
+            {
+                "locationType": "AWS",
+                "location": "bucket/path",
+                "creds": creds,
+                "region": "test",
+                "endPoint": None,
+            },
+            cnx,
+            "GET file:///tmp/file.txt @~",
+        )
+        from snowflake.connector.storage_client import METHODS
+
+        rest_client.SLEEP_UNIT = 0
+        with mock.patch.dict(METHODS, GET=mock.MagicMock(return_value=resp)):
+            with pytest.raises(
+                requests.exceptions.HTTPError,
+            ):
+                rest_client.download_chunk(0)
 
 
 def test_upload_put_timeout(tmp_path, caplog, sdkless):
@@ -294,31 +385,72 @@ def test_upload_put_timeout(tmp_path, caplog, sdkless):
         )
 
 
-def test_upload_get_timeout(tmp_path, caplog, sdkless):
+def test_download_timeout(tmp_path, caplog, sdkless):
     """Tests whether timeout error is handled correctly when downloading."""
-    caplog.set_level(logging.DEBUG, "snowflake.connector")
-    resp = requests.Response()
-    meta = SnowflakeFileMeta(
-        name=str(tmp_path / "some_file"),
-        src_file_name=str(tmp_path / "some_file"),
-        stage_location_type="GCS",
-        presigned_url="some_url",
-        sha256_digest="asd",
-    )
-    with mock.patch(
-        "snowflake.connector.vendored.requests.get"
-        if vendored_request
-        else "requests.get",
-        side_effect=requests.exceptions.Timeout(response=resp),
-    ):
-        SnowflakeGCSRestClient._native_download_file(meta, str(tmp_path), 99)
-    assert isinstance(meta.last_error, requests.exceptions.Timeout)
-    assert meta.result_status == ResultStatus.NEED_RETRY
-    assert (
-        "snowflake.connector.gcs_util",
-        logging.DEBUG,
-        "GCS file download Timeout Error: ",
-    ) in caplog.record_tuples
+    timeout_exc = requests.exceptions.Timeout(response=requests.Response())
+    if not sdkless:
+        caplog.set_level(logging.DEBUG, "snowflake.connector")
+        meta = SnowflakeFileMeta(
+            name=str(tmp_path / "some_file"),
+            src_file_name=str(tmp_path / "some_file"),
+            stage_location_type="GCS",
+            presigned_url="some_url",
+            sha256_digest="asd",
+        )
+        with mock.patch(
+            "snowflake.connector.vendored.requests.get"
+            if vendored_request
+            else "requests.get",
+            side_effect=timeout_exc,
+        ):
+            SnowflakeGCSUtil._native_download_file(meta, str(tmp_path), 99)
+        assert isinstance(meta.last_error, requests.exceptions.Timeout)
+        assert meta.result_status == ResultStatus.NEED_RETRY
+        assert (
+            "snowflake.connector.gcs_util_sdk",
+            logging.DEBUG,
+            "GCS file download Timeout Error: ",
+        ) in caplog.record_tuples
+    else:
+        meta_info = {
+            "name": "data1.txt.gz",
+            "stage_location_type": "S3",
+            "no_sleeping_time": True,
+            "put_callback": None,
+            "put_callback_output_stream": None,
+            SHA256_DIGEST: "123456789abcdef",
+            "dst_file_name": "data1.txt.gz",
+            "src_file_name": path.join(THIS_DIR, "../data", "put_get_1.txt"),
+            "overwrite": True,
+        }
+        meta = SnowflakeFileMeta(**meta_info)
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        cnx = mock.MagicMock(autospec=SnowflakeConnection)
+        rest_client = SnowflakeGCSRestClient(
+            meta,
+            StorageCredential(
+                creds,
+                cnx,
+                "GET file:/tmp/file.txt @~",
+            ),
+            {
+                "locationType": "AWS",
+                "location": "bucket/path",
+                "creds": creds,
+                "region": "test",
+                "endPoint": None,
+            },
+            cnx,
+            "GET file:///tmp/file.txt @~",
+        )
+        from snowflake.connector.storage_client import METHODS
+
+        rest_client.SLEEP_UNIT = 0
+        with mock.patch.dict(METHODS, GET=mock.MagicMock(side_effect=timeout_exc)):
+            exc = Exception("stop execution")
+            with mock.patch.object(rest_client.credentials, "update", side_effect=exc):
+                with pytest.raises(RequestExceedMaxRetryError):
+                    rest_client.download_chunk(0)
 
 
 def test_get_file_header_none_with_presigned_url(tmp_path, sdkless):
@@ -329,12 +461,19 @@ def test_get_file_header_none_with_presigned_url(tmp_path, sdkless):
         stage_location_type="GCS",
         presigned_url="www.example.com",
     )
-    storage_credentials = Mock()
-    storage_credentials.creds = {}
-    stage_info = Mock()
-    connection = Mock()
-    client = SnowflakeGCSRestClient(
-        meta, storage_credentials, stage_info, connection, ""
-    )
-    file_header = client.get_file_header(meta.name)
-    assert file_header is None
+    if not sdkless:
+        client = SnowflakeGCSUtil()
+        file_header = client.get_file_header(meta, meta.name)
+        assert file_header.digest is None
+        assert file_header.content_length is None
+        assert file_header.encryption_metadata is None
+    else:
+        storage_credentials = Mock()
+        storage_credentials.creds = {}
+        stage_info = Mock()
+        connection = Mock()
+        client = SnowflakeGCSRestClient(
+            meta, storage_credentials, stage_info, connection, ""
+        )
+        file_header = client.get_file_header(meta.name)
+        assert file_header is None
