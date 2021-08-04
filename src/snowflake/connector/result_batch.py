@@ -200,8 +200,8 @@ class ResultBatch(abc.ABC):
 
     As you are iterating through a ResultBatch you should check whether the yielded
     value is an ``Exception`` in case there was some error parsing the current row
-    we might yield on of these to allow iteration to continue instead of raising the
-    ``Exception`` when it occures.
+    we might yield one of these to allow iteration to continue instead of raising the
+    ``Exception`` when it occurs.
 
     These objects are pickleable for easy distribution and replication.
 
@@ -454,6 +454,7 @@ class JSONResultBatch(ResultBatch):
                         self.schema,
                     ):
                         row_result[col.name] = v if c is None or v is None else c(v)
+                    result_list.append(row_result)
                 except Exception as error:
                     msg = f"Failed to convert: field {col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
@@ -466,7 +467,6 @@ class JSONResultBatch(ResultBatch):
                             },
                         )
                     )
-                result_list.append(row_result)
         else:
             for row in downloaded_data:
                 row_result = [None] * len(self.schema)
@@ -479,6 +479,7 @@ class JSONResultBatch(ResultBatch):
                     ):
                         row_result[idx] = v if c is None or v is None else c(v)
                         idx += 1
+                    result_list.append(tuple(row_result))
                 except Exception as error:
                     msg = f"Failed to convert: field {_col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
@@ -491,7 +492,6 @@ class JSONResultBatch(ResultBatch):
                             },
                         )
                     )
-                result_list.append(tuple(row_result))
         return result_list
 
     def __repr__(self) -> str:
