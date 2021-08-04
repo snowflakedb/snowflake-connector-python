@@ -1116,6 +1116,7 @@ class SnowflakeCursor(object):
         """Builds an instance of TelemetryData with the given field and logs it."""
         obj = {"type": telemetry_field, "query_id": self._sfqid, "value": int(value)}
         ts = get_time_millis()
+        ts = ts
         try:
             self._connection._log_telemetry(TelemetryData(obj, ts))
         except AttributeError:
