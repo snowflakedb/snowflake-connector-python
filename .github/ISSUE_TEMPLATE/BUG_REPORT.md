@@ -6,11 +6,11 @@ labels: bug, needs triage
 
 Please answer these questions before submitting your issue. Thanks!
 
-1. What version of Python are you using
+1. What version of Python are you using?
 
    Replace with the output of `python --version --version`
 
-2. What operating system and processor architecture are you using
+2. What operating system and processor architecture are you using?
 
    Replace with the output of `python -c 'import platform; print(platform.platform())'`
 
