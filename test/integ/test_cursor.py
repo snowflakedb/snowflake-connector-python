@@ -1391,7 +1391,8 @@ def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
 
 @pytest.mark.parametrize("result_format", ("json", "arrow"))
 @pytest.mark.parametrize("cursor_type", (SnowflakeCursor, DictCursor))
-def test_out_of_range_year(conn_cnx, result_format, cursor_type):
+@pytest.mark.parametrize("fetch_method", ("__next__", "fetchone"))
+def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
     """Tests whether the year 10000 is out of range exception is raised as expected."""
     with conn_cnx(
         session_parameters={
@@ -1399,16 +1400,20 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type):
         }
     ) as con:
         with con.cursor(cursor_type) as cur:
+            cur.execute(
+                "select * from VALUES (1, TO_TIMESTAMP('9999-01-01 00:00:00')), (2, TO_TIMESTAMP('10000-01-01 00:00:00'))"
+            )
+            iterate_obj = cur if fetch_method == "fetchone" else iter(cur)
+            fetch_next_fn = getattr(iterate_obj, fetch_method)
+            # first fetch doesn't raise error
+            fetch_next_fn()
             with pytest.raises(
                 InterfaceError,
                 match="date value out of range"
                 if IS_WINDOWS
                 else "year 10000 is out of range",
             ):
-                cur.execute(
-                    "select * from VALUES(TO_TIMESTAMP('10000-01-01 00:00:00'))"
-                )
-                cur.fetchall()
+                fetch_next_fn()
 
 
 @pytest.mark.skipolddriver
@@ -1429,9 +1434,7 @@ def test_describe(conn_cnx):
             assert len(cur.fetchall()) == 0
 
             # test insert
-            cur.execute(
-                f"create table {table_name} (aa int)"
-            )
+            cur.execute(f"create table {table_name} (aa int)")
             try:
                 description = cur.describe(
                     "insert into {name}(aa) values({value})".format(
@@ -1441,10 +1444,10 @@ def test_describe(conn_cnx):
                 assert description[0][0] == "number of rows inserted"
                 assert cur.rowcount is None
             finally:
-                cur.execute(
-                    f"drop table if exists {table_name}"
-                )
+                cur.execute(f"drop table if exists {table_name}")
 
+
+@pytest.mark.skipolddriver
 def test_fetch_batches_with_sessions(conn_cnx):
     rowcount = 250_000
     with conn_cnx() as con:

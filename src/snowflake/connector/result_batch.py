@@ -23,7 +23,7 @@ from typing import (
 )
 
 from .arrow_context import ArrowConverterContext
-from .compat import OK, UNAUTHORIZED
+from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
 from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
@@ -200,8 +200,8 @@ class ResultBatch(abc.ABC):
 
     As you are iterating through a ResultBatch you should check whether the yielded
     value is an ``Exception`` in case there was some error parsing the current row
-    we might yield on of these to allow iteration to continue instead of raising the
-    ``Exception`` when it occures.
+    we might yield one of these to allow iteration to continue instead of raising the
+    ``Exception`` when it occurs.
 
     These objects are pickleable for easy distribution and replication.
 
@@ -228,6 +228,12 @@ class ResultBatch(abc.ABC):
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
         self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
+        if self._remote_chunk_info:
+            parsed_url = urlparse(self._remote_chunk_info.url)
+            path_parts = parsed_url.path.rsplit("/", 1)
+            self.id = path_parts[-1]
+        else:
+            self.id = str(self.rowcount)
 
     @property
     def _local(self) -> bool:
@@ -278,9 +284,7 @@ class ResultBatch(abc.ABC):
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
-                    logger.debug(
-                        f"started downloading result batch of size {self.rowcount}"
-                    )
+                    logger.debug(f"started downloading result batch id: {self.id}")
                     chunk_url = self._remote_chunk_info.url
                     request_data = {
                         "url": chunk_url,
@@ -291,18 +295,18 @@ class ResultBatch(abc.ABC):
                     if connection:
                         with connection._rest._use_requests_session() as session:
                             logger.debug(
-                                f"downloading result batch of size {self.rowcount} with existing session {session}"
+                                f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
                     else:
                         logger.debug(
-                            f"downloading result batch of size {self.rowcount} with new session"
+                            f"downloading result batch id: {self.id} with new session"
                         )
                         response = requests.get(**request_data)
 
                     if response.status_code == OK:
                         logger.debug(
-                            f"successfully downloaded result batch of size {self.rowcount}"
+                            f"successfully downloaded result batch id: {self.id}"
                         )
                         break
 
@@ -420,7 +424,9 @@ class JSONResultBatch(ResultBatch):
             column_converters,
             use_dict_result,
         )
-        new_chunk._data = list(new_chunk._parse(data))
+        new_chunk._data: Union[
+            List[Union[Dict, Exception]], List[Union[Tuple, Exception]]
+        ] = new_chunk._parse(data)
         return new_chunk
 
     def _load(self, response: "Response") -> List:
@@ -438,8 +444,10 @@ class JSONResultBatch(ResultBatch):
 
     def _parse(
         self, downloaded_data
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+    ) -> Union[List[Union[Dict, Exception]], List[Union[Tuple, Exception]]]:
         """Parses downloaded data into its final form."""
+        logger.debug(f"parsing for result batch id: {self.id}")
+        result_list = []
         if self._use_dict_result:
             for row in downloaded_data:
                 row_result = {}
@@ -450,14 +458,19 @@ class JSONResultBatch(ResultBatch):
                         self.schema,
                     ):
                         row_result[col.name] = v if c is None or v is None else c(v)
+                    result_list.append(row_result)
                 except Exception as error:
                     msg = f"Failed to convert: field {col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
-                    yield Error.errorhandler_make_exception(
-                        InterfaceError,
-                        {"msg": msg, "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE},
+                    result_list.append(
+                        Error.errorhandler_make_exception(
+                            InterfaceError,
+                            {
+                                "msg": msg,
+                                "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                            },
+                        )
                     )
-                yield row_result
         else:
             for row in downloaded_data:
                 row_result = [None] * len(self.schema)
@@ -470,17 +483,23 @@ class JSONResultBatch(ResultBatch):
                     ):
                         row_result[idx] = v if c is None or v is None else c(v)
                         idx += 1
+                    result_list.append(tuple(row_result))
                 except Exception as error:
                     msg = f"Failed to convert: field {_col.name}: {_t}::{v}, Error: {error}"
                     logger.exception(msg)
-                    yield Error.errorhandler_make_exception(
-                        InterfaceError,
-                        {"msg": msg, "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE},
+                    result_list.append(
+                        Error.errorhandler_make_exception(
+                            InterfaceError,
+                            {
+                                "msg": msg,
+                                "errno": ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
+                            },
+                        )
                     )
-                yield tuple(row_result)
+        return result_list
 
     def __repr__(self) -> str:
-        return f"JSONResultChunk({self.rowcount})"
+        return f"JSONResultChunk({self.id})"
 
     def create_iter(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
@@ -489,10 +508,10 @@ class JSONResultBatch(ResultBatch):
             return iter(self._data)
         response = self._download(connection=connection)
         # Load data to a intermediate form
-        logger.debug(f"started loading result batch of size {self.rowcount}")
+        logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
             downloaded_data = self._load(response)
-        logger.debug(f"finished loading result batch of size {self.rowcount}")
+        logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         with TimerContextManager() as parse_metric:
@@ -537,7 +556,7 @@ class ArrowResultBatch(ResultBatch):
         self._number_to_decimal = number_to_decimal
 
     def __repr__(self) -> str:
-        return f"ArrowResultChunk({self.rowcount})"
+        return f"ArrowResultChunk({self.id})"
 
     def _load(
         self, response: "Response", row_unit: IterUnit
@@ -629,10 +648,10 @@ class ArrowResultBatch(ResultBatch):
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download(connection=connection)
-        logger.debug(f"started loading result batch of size {self.rowcount}")
+        logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
             loaded_data = self._load(response, iter_unit)
-        logger.debug(f"finished loading result batch of size {self.rowcount}")
+        logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
 
@@ -662,9 +681,11 @@ class ArrowResultBatch(ResultBatch):
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
     ) -> Iterator["pandas.DataFrame"]:
         """An iterator for this batch which yields a pandas DataFrame"""
+        iterator_data = []
         dataframe = self.to_pandas(connection=connection, **kwargs)
         if not dataframe.empty:
-            yield dataframe
+            iterator_data.append(dataframe)
+        return iter(iterator_data)
 
     def create_iter(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs

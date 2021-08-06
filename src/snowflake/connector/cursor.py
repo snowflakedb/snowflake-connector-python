@@ -17,6 +17,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
+    Generator,
     Iterator,
     List,
     NamedTuple,
@@ -1015,14 +1016,11 @@ class SnowflakeCursor(object):
             self.execute(command, param, _do_reset=False)
         return self
 
-    def fetchone(self):
-        """Fetches one row."""
-        if self._prefetch_hook is not None:
-            self._prefetch_hook()
-        if self._result is None and self._result_set is not None:
-            self._result = iter(self._result_set)
-        try:
-            _next = next(self._result)
+    def _result_iterator(
+        self,
+    ) -> Union[Generator[Dict, None, None], Generator[Tuple, None, None]]:
+        """Yields the elements from _result and raises an exception when appropriate."""
+        for _next in self._result:
             if isinstance(_next, Exception):
                 Error.errorhandler_wrapper_from_ready_exception(
                     self._connection,
@@ -1030,7 +1028,16 @@ class SnowflakeCursor(object):
                     _next,
                 )
             self._rownumber += 1
-            return _next
+            yield _next
+
+    def fetchone(self) -> Optional[Union[Dict, Tuple]]:
+        """Fetches one row."""
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._result is None and self._result_set is not None:
+            self._result = iter(self._result_set)
+        try:
+            return next(self._result_iterator())
         except StopIteration:
             return None
 
@@ -1107,11 +1114,12 @@ class SnowflakeCursor(object):
             self._inner_cursor = None
         self._prefetch_hook = None
 
-    def __iter__(self):
+    def __iter__(self) -> Union[Iterator[Dict], Iterator[Tuple]]:
         """Iteration over the result set."""
+        # set _result if _result_set is not None
         if self._result is None and self._result_set is not None:
             self._result = iter(self._result_set)
-        return iter(self._result)
+        return self._result_iterator()
 
     def __cancel_query(self, query):
         if self._sequence_counter >= 0 and not self.is_closed():

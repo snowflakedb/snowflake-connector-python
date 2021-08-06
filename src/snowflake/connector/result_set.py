@@ -72,7 +72,7 @@ def result_set_iterator(
 
         for _ in range(min(4, len(unfetched_batches))):
             logger.debug(
-                f"queuing download of result batch of size {unfetched_batches[0].rowcount}"
+                f"queuing download of result batch id: {unfetched_batches[0].id}"
             )
             unconsumed_batches.append(
                 pool.submit(unfetched_batches.popleft().create_iter, **kw)
@@ -87,7 +87,7 @@ def result_set_iterator(
             # Submit the next un-fetched batch to the pool
             if unfetched_batches:
                 logger.debug(
-                    f"queuing download of result batch of size {unfetched_batches[0].rowcount}"
+                    f"queuing download of result batch id: {unfetched_batches[0].id}"
                 )
                 future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
                 unconsumed_batches.append(future)
@@ -236,7 +236,7 @@ class ResultSet(Iterable[List[Any]]):
         # batches that have not been fetched
         unfetched_batches = deque(self.batches[1:])
         for num, batch in enumerate(unfetched_batches):
-            logger.debug(f"result batch {num + 1} has size {batch.rowcount}")
+            logger.debug(f"result batch {num + 1} has id: {batch.id}")
 
         return result_set_iterator(
             first_batch_iter,
