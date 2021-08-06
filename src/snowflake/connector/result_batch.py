@@ -228,6 +228,12 @@ class ResultBatch(abc.ABC):
         self._use_dict_result = use_dict_result
         self._metrics: Dict[str, int] = {}
         self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
+        if self._remote_chunk_info:
+            parsed_url = urlparse(self._remote_chunk_info.url)
+            path_parts = parsed_url.path.rsplit("/", 1)
+            self.id = path_parts[-1]
+        else:
+            self.id = str(self.rowcount)
 
     @property
     def _local(self) -> bool:
@@ -257,16 +263,6 @@ class ResultBatch(abc.ABC):
     @property
     def column_names(self) -> List[str]:
         return [col.name for col in self.schema]
-
-    @property
-    def id(self) -> str:
-        """Returns an id for the chunk."""
-        if self._remote_chunk_info:
-            parsed_url = urlparse(self._remote_chunk_info.url)
-            path_parts = parsed_url.path.split("/")
-            return path_parts[-1]
-        else:
-            return str(self.rowcount)
 
     def __iter__(
         self,
