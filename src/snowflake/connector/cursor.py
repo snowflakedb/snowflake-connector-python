@@ -17,6 +17,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
+    Generator,
     Iterator,
     List,
     NamedTuple,
@@ -1015,7 +1016,9 @@ class SnowflakeCursor(object):
             self.execute(command, param, _do_reset=False)
         return self
 
-    def _result_iterator(self):
+    def _result_iterator(
+        self,
+    ) -> Union[Generator[Dict, None, None], Generator[Tuple, None, None]]:
         """Yields the elements from _result and raises an exception when appropriate."""
         for _next in self._result:
             if isinstance(_next, Exception):
@@ -1111,7 +1114,7 @@ class SnowflakeCursor(object):
             self._inner_cursor = None
         self._prefetch_hook = None
 
-    def __iter__(self):
+    def __iter__(self) -> Union[Iterator[Dict], Iterator[Tuple]]:
         """Iteration over the result set."""
         # set _result if _result_set is not None
         if self._result is None and self._result_set is not None:

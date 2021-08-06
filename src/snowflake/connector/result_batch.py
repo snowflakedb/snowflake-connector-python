@@ -23,7 +23,7 @@ from typing import (
 )
 
 from .arrow_context import ArrowConverterContext
-from .compat import OK, UNAUTHORIZED
+from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
 from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
@@ -258,6 +258,16 @@ class ResultBatch(abc.ABC):
     def column_names(self) -> List[str]:
         return [col.name for col in self.schema]
 
+    @property
+    def id(self) -> str:
+        """Returns an id for the chunk."""
+        if self._remote_chunk_info:
+            parsed_url = urlparse(self._remote_chunk_info.url)
+            path_parts = parsed_url.path.split("/")
+            return path_parts[-1]
+        else:
+            return str(self.rowcount)
+
     def __iter__(
         self,
     ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
@@ -278,9 +288,7 @@ class ResultBatch(abc.ABC):
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
-                    logger.debug(
-                        f"started downloading result batch of size {self.rowcount}"
-                    )
+                    logger.debug(f"started downloading result batch id: {self.id}")
                     chunk_url = self._remote_chunk_info.url
                     request_data = {
                         "url": chunk_url,
@@ -291,18 +299,18 @@ class ResultBatch(abc.ABC):
                     if connection:
                         with connection._rest._use_requests_session() as session:
                             logger.debug(
-                                f"downloading result batch of size {self.rowcount} with existing session {session}"
+                                f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
                     else:
                         logger.debug(
-                            f"downloading result batch of size {self.rowcount} with new session"
+                            f"downloading result batch id: {self.id} with new session"
                         )
                         response = requests.get(**request_data)
 
                     if response.status_code == OK:
                         logger.debug(
-                            f"successfully downloaded result batch of size {self.rowcount}"
+                            f"successfully downloaded result batch id: {self.id}"
                         )
                         break
 
@@ -442,7 +450,7 @@ class JSONResultBatch(ResultBatch):
         self, downloaded_data
     ) -> Union[List[Union[Dict, Exception]], List[Union[Tuple, Exception]]]:
         """Parses downloaded data into its final form."""
-        logger.debug(f"parsing for result batch of size {self.rowcount}")
+        logger.debug(f"parsing for result batch id: {self.id}")
         result_list = []
         if self._use_dict_result:
             for row in downloaded_data:
@@ -495,7 +503,7 @@ class JSONResultBatch(ResultBatch):
         return result_list
 
     def __repr__(self) -> str:
-        return f"JSONResultChunk({self.rowcount})"
+        return f"JSONResultChunk({self.id})"
 
     def create_iter(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
@@ -504,10 +512,10 @@ class JSONResultBatch(ResultBatch):
             return iter(self._data)
         response = self._download(connection=connection)
         # Load data to a intermediate form
-        logger.debug(f"started loading result batch of size {self.rowcount}")
+        logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
             downloaded_data = self._load(response)
-        logger.debug(f"finished loading result batch of size {self.rowcount}")
+        logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         with TimerContextManager() as parse_metric:
@@ -552,7 +560,7 @@ class ArrowResultBatch(ResultBatch):
         self._number_to_decimal = number_to_decimal
 
     def __repr__(self) -> str:
-        return f"ArrowResultChunk({self.rowcount})"
+        return f"ArrowResultChunk({self.id})"
 
     def _load(
         self, response: "Response", row_unit: IterUnit
@@ -644,10 +652,10 @@ class ArrowResultBatch(ResultBatch):
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download(connection=connection)
-        logger.debug(f"started loading result batch of size {self.rowcount}")
+        logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
             loaded_data = self._load(response, iter_unit)
-        logger.debug(f"finished loading result batch of size {self.rowcount}")
+        logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
 
