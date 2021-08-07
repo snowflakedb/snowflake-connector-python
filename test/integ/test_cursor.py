@@ -938,15 +938,29 @@ def test_fetch_out_of_range_timestamp_value(conn, result_format):
             cur.fetchone()
 
 
-def test_empty_execution(conn):
-    """Checks whether executing an empty string behaves as expected."""
+@pytest.mark.parametrize("sql", (None, ""), ids=["None", "empty"])
+def test_empty_execution(conn, sql):
+    """Checks whether executing an empty string, or nothing behaves as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("")
+            if sql is not None:
+                cur.execute(sql)
             assert cur._result is None
-            with pytest.raises(Exception):
+            with pytest.raises(TypeError, match="'NoneType' object is not( an)? itera(tor|ble)"):
                 cur.fetchall()
 
+
+@pytest.mark.parametrize("reuse_results", (False, True))
+def test_reset_fetch(conn, reuse_results):
+    """Tests behavior after resetting the cursor."""
+    with conn(reuse_results=reuse_results) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select 1")
+            cur.reset()
+            if reuse_results:
+                assert cur.fetchone() == (1,)
+            else:
+                assert cur.fetchone() is None
 
 def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""

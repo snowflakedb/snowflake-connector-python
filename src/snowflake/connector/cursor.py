@@ -214,7 +214,7 @@ class SnowflakeCursor(object):
         self._time_output_format = None
         self._timezone = None
         self._binary_output_format = None
-        self._result: Optional[Iterator[Tuple]] = None
+        self._result: Optional[Union[Iterator[Tuple], Iterator[Dict]]] = None
         self._result_set: Optional["ResultSet"] = None
         self._use_dict_result = use_dict_result
         # TODO: self._query_result_format could be defined as an enum
@@ -1020,15 +1020,18 @@ class SnowflakeCursor(object):
         self,
     ) -> Union[Generator[Dict, None, None], Generator[Tuple, None, None]]:
         """Yields the elements from _result and raises an exception when appropriate."""
-        for _next in self._result:
-            if isinstance(_next, Exception):
-                Error.errorhandler_wrapper_from_ready_exception(
-                    self._connection,
-                    self,
-                    _next,
-                )
-            self._rownumber += 1
-            yield _next
+        try:
+            for _next in self._result:
+                if isinstance(_next, Exception):
+                    Error.errorhandler_wrapper_from_ready_exception(
+                        self._connection,
+                        self,
+                        _next,
+                    )
+                self._rownumber += 1
+                yield _next
+        except TypeError:
+            yield None
 
     def fetchone(self) -> Optional[Union[Dict, Tuple]]:
         """Fetches one row."""
@@ -1113,6 +1116,8 @@ class SnowflakeCursor(object):
             self._result = None
             self._inner_cursor = None
         self._prefetch_hook = None
+        if not self.connection._reuse_results:
+            self._result_set = None
 
     def __iter__(self) -> Union[Iterator[Dict], Iterator[Tuple]]:
         """Iteration over the result set."""
