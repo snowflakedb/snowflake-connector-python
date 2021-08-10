@@ -17,7 +17,6 @@ from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
 from ..randomize import random_string
 
 try:
-    from snowflake.connector.constants import megabytes
     from snowflake.connector.errors import RequestExceedMaxRetryError
     from snowflake.connector.file_transfer_agent import (
         SnowflakeFileMeta,

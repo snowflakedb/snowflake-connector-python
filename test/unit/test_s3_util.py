@@ -26,7 +26,7 @@ from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 from ..helpers import verify_log_tuple
 
 try:
-    from snowflake.connector.constants import megabytes
+    from snowflake.connector.constants import megabyte
     from snowflake.connector.errors import RequestExceedMaxRetryError
     from snowflake.connector.file_transfer_agent import (
         SnowflakeFileMeta,
@@ -316,7 +316,7 @@ def test_get_header_expiry_error(caplog, sdkless):
                 "region": "test",
                 "endPoint": None,
             },
-            8 * megabytes,
+            8 * megabyte,
         )
         resp = MagicMock(
             autospec=Response,
@@ -384,7 +384,7 @@ def test_get_header_unknown_error(caplog, sdkless):
                 "region": "test",
                 "endPoint": None,
             },
-            8 * megabytes,
+            8 * megabyte,
         )
         resp = Response()
         # dont' use transient error codes
@@ -457,7 +457,7 @@ def test_upload_expiry_error(caplog, sdkless):
                 "region": "test",
                 "endPoint": None,
             },
-            8 * megabytes,
+            8 * megabyte,
         )
         resp = MagicMock(
             autospec=Response,
@@ -539,7 +539,7 @@ def test_upload_unknown_error(caplog, sdkless):
                 "region": "test",
                 "endPoint": None,
             },
-            8 * megabytes,
+            8 * megabyte,
         )
         resp = Response()
         resp.status_code = 555
@@ -650,7 +650,7 @@ def test_download_expiry_error(caplog, sdkless):
                 "region": "test",
                 "endPoint": None,
             },
-            8 * megabytes,
+            8 * megabyte,
         )
         resp = MagicMock(
             autospec=Response,
@@ -805,7 +805,7 @@ def test_download_retry_exceeded_error(caplog, sdkless):
                 "region": "test",
                 "endPoint": None,
             },
-            8 * megabytes,
+            8 * megabyte,
         )
         rest_client.SLEEP_UNIT = 0
         resp = Response()

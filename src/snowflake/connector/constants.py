@@ -232,9 +232,9 @@ class QueryStatus(Enum):
     BLOCKED = 11
     NO_DATA = 12
 
-kilobytes = 1024
-megabytes = kilobytes * 1024
-gigabytes = megabytes * 1024
+kilobyte = 1024
+megabyte = kilobyte * 1024
+gigabyte = megabyte * 1024
 
 # ArrowResultChunk constants the unit in this iterator
 # EMPTY_UNIT: default

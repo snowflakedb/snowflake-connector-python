@@ -37,7 +37,7 @@ from .constants import (
     LOCAL_FS,
     S3_FS,
     ResultStatus,
-    megabytes,
+    megabyte,
 )
 from .converter_snowsql import SnowflakeConverterSnowSQL
 from .errorcode import (
@@ -157,7 +157,7 @@ def _update_progress(
     show_progress_bar: Optional[bool] = True,
 ) -> float:
     bar_length = 10  # Modify this to change the length of the progress bar
-    total_size /= megabytes
+    total_size /= megabyte
     status = ""
     elapsed_time = time() - start_time
     throughput = (total_size / elapsed_time) if elapsed_time != 0.0 else 0.0
