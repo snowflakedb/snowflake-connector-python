@@ -126,7 +126,6 @@ class ResultSet(Iterable[List[Any]]):
     ):
         self.batches = result_chunks
         self._cursor = cursor
-        self._iter: Optional[Iterator[Tuple]] = None
 
     def _report_metrics(self) -> None:
         """Report all metrics totalled up.
