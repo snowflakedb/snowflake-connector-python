@@ -946,7 +946,13 @@ def test_empty_execution(conn, sql):
             if sql is not None:
                 cur.execute(sql)
             assert cur._result is None
-            with pytest.raises(TypeError, match="'NoneType' object is not( an)? itera(tor|ble)"):
+            with pytest.raises(
+                TypeError, match="'NoneType' object is not( an)? itera(tor|ble)"
+            ):
+                cur.fetchone()
+            with pytest.raises(
+                TypeError, match="'NoneType' object is not( an)? itera(tor|ble)"
+            ):
                 cur.fetchall()
 
 
@@ -961,6 +967,8 @@ def test_reset_fetch(conn, reuse_results):
                 assert cur.fetchone() == (1,)
             else:
                 assert cur.fetchone() is None
+                assert len(cur.fetchall()) == 0
+
 
 def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""
