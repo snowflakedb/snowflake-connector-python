@@ -10,6 +10,7 @@ import signal
 import sys
 import time
 import uuid
+from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
 from typing import (
@@ -141,6 +142,12 @@ def exit_handler(*_):  # pragma: no cover
     sys.exit(1)
 
 
+class ResultState(Enum):
+    DEFAULT = 1
+    VALID = 2
+    RESET = 3
+
+
 class SnowflakeCursor(object):
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
@@ -216,6 +223,7 @@ class SnowflakeCursor(object):
         self._binary_output_format = None
         self._result: Optional[Union[Iterator[Tuple], Iterator[Dict]]] = None
         self._result_set: Optional["ResultSet"] = None
+        self._result_state: ResultState = ResultState.DEFAULT
         self._use_dict_result = use_dict_result
         # TODO: self._query_result_format could be defined as an enum
         self._query_result_format: Optional[str] = None
@@ -791,6 +799,7 @@ class SnowflakeCursor(object):
             result_chunks,
         )
         self._rownumber = -1
+        self._result_state = ResultState.VALID
 
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
@@ -1030,8 +1039,11 @@ class SnowflakeCursor(object):
                     )
                 self._rownumber += 1
                 yield _next
-        except TypeError:
-            yield None
+        except TypeError as err:
+            if self._result_state == ResultState.DEFAULT:
+                raise err
+            else:
+                yield None
 
     def fetchone(self) -> Optional[Union[Dict, Tuple]]:
         """Fetches one row."""
@@ -1039,6 +1051,7 @@ class SnowflakeCursor(object):
             self._prefetch_hook()
         if self._result is None and self._result_set is not None:
             self._result = iter(self._result_set)
+            self._result_state = ResultState.VALID
         try:
             return next(self._result_iterator())
         except StopIteration:
@@ -1109,6 +1122,8 @@ class SnowflakeCursor(object):
     def reset(self):
         """Resets the result set."""
         self._total_rowcount = -1  # reset the rowcount
+        if self._result_state != ResultState.DEFAULT:
+            self._result_state = ResultState.RESET
         if self._result is not None:
             self._result = None
         if self._inner_cursor is not None:
@@ -1124,6 +1139,7 @@ class SnowflakeCursor(object):
         # set _result if _result_set is not None
         if self._result is None and self._result_set is not None:
             self._result = iter(self._result_set)
+            self._result_state = ResultState.VALID
         return self._result_iterator()
 
     def __cancel_query(self, query):
@@ -1194,6 +1210,7 @@ class SnowflakeCursor(object):
             self._total_rowcount = self._inner_cursor._total_rowcount
             self._description = self._inner_cursor._description
             self._result_set = self._inner_cursor._result_set
+            self._result_state = ResultState.VALID
             self._rownumber = 0
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
