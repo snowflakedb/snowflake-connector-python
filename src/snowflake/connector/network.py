@@ -4,7 +4,6 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-import collections
 import contextlib
 import gzip
 import itertools
@@ -15,7 +14,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
-from typing import Dict, List, Optional, Set, Type
+from typing import Dict, Optional, Type
 
 import OpenSSL.SSL
 
@@ -87,7 +86,7 @@ from .time_util import (
 )
 from .tool.probe_connection import probe_connection
 from .vendored import requests
-from .vendored.requests import Response, Session
+from .vendored.requests import Response
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
@@ -288,47 +287,24 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
-class SessionPool:
-    def __init__(self, rest: "SnowflakeRestful"):
-        # A stack of the idle sessions
-        self._idle_sessions: List[Session] = []
-        self._active_sessions: Set[Session] = set()
-        self._rest: "SnowflakeRestful" = rest
+class SnowflakeHTTPSession:
+    # TODO: make the pool size/stuff customizable
+    def __init__(self):
+        # The underlying HTTP session
+        self.session = requests.Session()
+        self._initialize_session()
 
-    def get_session(self) -> Session:
-        """Returns a session from the session pool or creates a new one."""
-        try:
-            session = self._idle_sessions.pop()
-        except IndexError:
-            session = self._rest.make_requests_session()
-        self._active_sessions.add(session)
-        return session
+    def _initialize_session(self):
+        self.session.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        self.session.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        # TODO: check if this is actually counting anything
+        self.session._reuse_count = itertools.count()
 
-    def return_session(self, session: Session) -> None:
-        """Places an active session back into the idle session stack."""
-        try:
-            self._active_sessions.remove(session)
-        except KeyError:
-            logger.debug("session doesn't exist in the active session pool. Ignored...")
-        self._idle_sessions.append(session)
+    def close(self):
+        self.session.close()
 
     def __str__(self):
-        total_sessions = len(self._active_sessions) + len(self._idle_sessions)
-        return (
-            f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
-        )
-
-    def close(self) -> None:
-        """Closes all active and idle sessions in this session pool."""
-        if self._active_sessions:
-            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
-        for s in itertools.chain(self._active_sessions, self._idle_sessions):
-            try:
-                s.close()
-            except Exception as e:
-                logger.info(f"Session cleanup failed: {e}")
-        self._active_sessions.clear()
-        self._idle_sessions.clear()
+        return f"SnowflakeHTTPSession {self.session}"
 
 
 class SnowflakeRestful(object):
@@ -348,9 +324,7 @@ class SnowflakeRestful(object):
         self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._lock_token = Lock()
-        self._sessions_map: Dict[Optional[str], SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
+        self.session = SnowflakeHTTPSession()
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -413,8 +387,7 @@ class SnowflakeRestful(object):
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        for session_pool in self._sessions_map.values():
-            session_pool.close()
+        self.session.close()
 
     def request(
         self,
@@ -781,7 +754,7 @@ class SnowflakeRestful(object):
 
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self._use_requests_session(full_url) as session:
+        with self.get_session() as session:
             retry_ctx = RetryCtx(timeout, include_retry_params)
             while True:
                 ret = self._request_exec_wrapper(
@@ -1072,40 +1045,15 @@ class SnowflakeRestful(object):
             )
             raise err
 
-    def make_requests_session(self):
-        s = requests.Session()
-        s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s._reuse_count = itertools.count()
-        return s
-
     @contextlib.contextmanager
-    def _use_requests_session(self, url: Optional[str] = None):
-        """Session caching context manager.
-
-        Notes:
-            The session is not closed until close() is called so each session may be used multiple times.
-        """
-        # short-lived session, not added to the _sessions_map
+    def get_session(self):
         if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
+            session = SnowflakeHTTPSession()
+            logger.debug(f"Using a new session {session}")
             try:
-                yield session
+                yield session.session
             finally:
                 session.close()
         else:
-            try:
-                hostname = urlparse(url).hostname
-            except Exception:
-                hostname = None
-
-            session_pool: SessionPool = self._sessions_map[hostname]
-            session = session_pool.get_session()
-            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
-            try:
-                yield session
-            finally:
-                session_pool.return_session(session)
-                logger.debug(
-                    f"Session status for SessionPool '{hostname}', {session_pool}"
-                )
+            logger.debug(f"Using the global session {self.session}")
+            yield self.session.session

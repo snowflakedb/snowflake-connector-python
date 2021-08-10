@@ -265,7 +265,7 @@ class SnowflakeStorageClient(ABC):
             url, rest_kwargs = get_request_args()
             try:
                 if conn:
-                    with conn._rest._use_requests_session(url) as session:
+                    with conn._rest.get_session() as session:
                         logger.debug(f"storage client request with session {session}")
                         response = session.request(verb, url, **rest_kwargs)
                 else:
