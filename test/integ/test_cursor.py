@@ -956,7 +956,9 @@ def test_empty_execution(conn, sql):
                 cur.fetchall()
 
 
-@pytest.mark.parametrize("reuse_results", (False, True))
+@pytest.mark.parametrize(
+    "reuse_results", (False, pytest.param(True, marks=pytest.mark.skipolddriver))
+)
 def test_reset_fetch(conn, reuse_results):
     """Tests behavior after resetting the cursor."""
     with conn(reuse_results=reuse_results) as cnx:
