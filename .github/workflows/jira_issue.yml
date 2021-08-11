@@ -11,20 +11,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: create
-        id: create
-        uses: ./.github/actions/gajira-create
+
+      - name: Login
+        uses: atlassian/gajira-login@master
         env:
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+      - name: Create
+        id: create
+        uses: atlassian/gajira-create@master
         with:
-          PROJECT: SNOW
-          TYPE: Bug
-          AREA: "Data Platform: Ecosystem"
-          ASSIGNEE: "5d56d115ba0a060da220202b"
-          SUMMARY: "{{ event.issue.title }}"
-          DESCRIPTION: "{{ event.issue.body }}\n\n_Created from GitHub Action_ for {{ event.issue.html_url }}"
+          project: SNOW
+          issuetype: Bug
+          summary: "{{ event.issue.title }}"
+          description: |
+            "{{ event.issue.body }}\n\n_Created from GitHub Action_ for {{ event.issue.html_url }}"
+          fields: |
+            '{ "customfield_11401": "Data Platform: Ecosystem", "assignee": "5d56d115ba0a060da220202b" }'
+
       - name: update issue
         uses: ./.github/actions/gajira-issue-update
         env:
