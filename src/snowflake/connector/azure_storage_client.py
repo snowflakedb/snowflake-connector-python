@@ -7,12 +7,11 @@ from __future__ import division
 import json
 import os
 import xml.etree.cElementTree as ET
-from collections import namedtuple
 from datetime import datetime
 from logging import getLogger
 from random import choice
 from string import hexdigits
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional, Union
 
 from .compat import quote
 from .constants import FileHeader, ResultStatus
@@ -25,13 +24,11 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = getLogger(__name__)
 
-"""
-Azure Location: Azure container name + path
-"""
-AzureLocation = namedtuple(
-    "AzureLocation",
-    ["container_name", "path"],  # Azure container name  # Azure path name
-)
+
+class AzureLocation(NamedTuple):
+    container_name: str
+    path: str
+
 
 TOKEN_EXPIRATION_ERR_MESSAGE = (
     "Signature not valid in the specified time frame",

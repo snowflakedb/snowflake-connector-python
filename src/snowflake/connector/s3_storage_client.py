@@ -6,11 +6,10 @@ from __future__ import division
 
 import base64
 import xml.etree.cElementTree as ET
-from collections import namedtuple
 from datetime import datetime
 from io import IOBase
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 from cryptography.hazmat.primitives import hashes, hmac
 
@@ -42,12 +41,10 @@ ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 EXPIRED_TOKEN = "ExpiredToken"
 ADDRESSING_STYLE = "virtual"  # explicit force to use virtual addressing style
 
-"""
-S3 Location: S3 bucket name + path
-"""
-S3Location = namedtuple(
-    "S3Location", ["bucket_name", "path"]  # S3 bucket name  # S3 path name
-)
+
+class S3Location(NamedTuple):
+    bucket_name: str
+    path: str
 
 
 class SnowflakeS3RestClient(SnowflakeStorageClient):

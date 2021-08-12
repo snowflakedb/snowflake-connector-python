@@ -6,9 +6,8 @@
 
 import json
 import os
-from collections import namedtuple
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 from .compat import quote
 from .constants import (
@@ -36,12 +35,10 @@ GCS_FILE_HEADER_ENCRYPTION_METADATA = "gcs-file-header-encryption-metadata"
 CONTENT_CHUNK_SIZE = 10 * 1024
 ACCESS_TOKEN = "GCS_ACCESS_TOKEN"
 
-"""
-Gcs Location: Gcs bucket name + path
-"""
-GcsLocation = namedtuple(
-    "GcsLocation", ["bucket_name", "path"]  # Gcs bucket name  # Gcs path name
-)
+
+class GcsLocation(NamedTuple):
+    bucket_name: str
+    path: str
 
 
 class SnowflakeGCSRestClient(SnowflakeStorageClient):
