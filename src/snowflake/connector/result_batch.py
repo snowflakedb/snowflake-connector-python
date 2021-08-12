@@ -329,7 +329,7 @@ class ResultBatch(abc.ABC):
                 sleep_timer = backoff.next_sleep(1, sleep_timer)
                 logger.exception(
                     f"Failed to fetch the large result set batch "
-                    f"{self._remote_chunk_info.url} for the {retry + 1} th time, "
+                    f"{self.id} for the {retry + 1} th time, "
                     f"backing off for {sleep_timer}s for the reason: '{e}'"
                 )
                 time.sleep(sleep_timer)
