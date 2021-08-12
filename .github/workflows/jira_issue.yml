@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Login
-        uses: atlassian/gajira-login@master
+        uses: atlassian/gajira-login@v2.0.0
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
@@ -21,14 +21,14 @@ jobs:
 
       - name: Create
         id: create
-        uses: atlassian/gajira-create@master
+        uses: atlassian/gajira-create@v2.0.1
         with:
           project: SNOW
           issuetype: Bug
           summary: '${{ github.event.issue.title }}'
           description: |
-            '${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}'
-          fields: '{ "customfield_11401": {"id": "12360"}, "assignee": "5d56d115ba0a060da220202b" }'
+            ${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}
+          fields: '{ "customfield_11401": {"id": "12360"}, "assignee": {"id": "61027a219798100070592b20"} }'
 
       - name: update issue
         uses: ./.github/actions/gajira-issue-update
