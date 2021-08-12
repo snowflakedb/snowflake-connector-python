@@ -27,7 +27,7 @@ jobs:
           issuetype: Bug
           summary: '${{ github.event.issue.title }}'
           description: |
-            "${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}"
+            ${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}
           fields: '{ "customfield_11401": {"id": "12360"}, "assignee": {"id": "61027a219798100070592b20"} }'
 
       - name: update issue
