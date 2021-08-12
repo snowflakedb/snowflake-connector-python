@@ -25,11 +25,10 @@ jobs:
         with:
           project: SNOW
           issuetype: Bug
-          summary: "{{ event.issue.title }}"
+          summary: '${{ github.event.issue.title }}'
           description: |
-            "{{ event.issue.body }}\n\n_Created from GitHub Action_ for {{ event.issue.html_url }}"
-          fields: |
-            '{ "customfield_11401": "Data Platform: Ecosystem", "assignee": "5d56d115ba0a060da220202b" }'
+            '${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}'
+          fields: '{ "customfield_11401": {"id": "12360"}, "assignee": "5d56d115ba0a060da220202b" }'
 
       - name: update issue
         uses: ./.github/actions/gajira-issue-update
