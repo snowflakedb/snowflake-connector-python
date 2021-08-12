@@ -8,8 +8,10 @@ import decimal
 import json
 import logging
 import os
+import pickle
 import time
 from datetime import datetime
+from typing import TYPE_CHECKING, List, NamedTuple
 
 import mock
 import pytest
@@ -27,12 +29,28 @@ from snowflake.connector import (
 )
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
 from snowflake.connector.cursor import SnowflakeCursor
+
+try:
+    from snowflake.connector.cursor import ResultMetadata
+except ImportError:
+
+    class ResultMetadata(NamedTuple):
+        name: str
+        type_code: int
+        display_size: int
+        internal_size: int
+        precision: int
+        scale: int
+        is_nullable: bool
+
+
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
     ER_NOT_POSITIVE_SIZE,
 )
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
+from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
 
@@ -45,11 +63,16 @@ try:
         ER_NO_PYARROW,
         ER_NO_PYARROW_SNOWSQL,
     )
+    from snowflake.connector.result_batch import ArrowResultBatch, JSONResultBatch
 except ImportError:
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
     ER_NO_ARROW_RESULT = None
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
+    ArrowResultBatch = JSONResultBatch = None
+
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector.result_batch import ResultBatch
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -903,35 +926,59 @@ def test_close_twice(conn_testaccount):
     conn_testaccount.close()
 
 
-def test_fetch_out_of_range_timestamp_value(conn):
-    for result_format in ["arrow", "json"]:
-        with conn() as cnx:
-            cur = cnx.cursor()
-            cur.execute(
-                "alter session set python_connector_query_result_format='{}'".format(
-                    result_format
-                )
-            )
-            cur.execute("select '12345-01-02'::timestamp_ntz")
-            with pytest.raises(errors.InterfaceError):
-                cur.fetchone()
+@pytest.mark.parametrize("result_format", ("arrow", "json"))
+def test_fetch_out_of_range_timestamp_value(conn, result_format):
+    with conn() as cnx:
+        cur = cnx.cursor()
+        cur.execute(
+            f"alter session set python_connector_query_result_format='{result_format}'"
+        )
+        cur.execute("select '12345-01-02'::timestamp_ntz")
+        with pytest.raises(errors.InterfaceError):
+            cur.fetchone()
 
 
-def test_empty_execution(conn):
-    """Checks whether executing an empty string behaves as expected."""
+@pytest.mark.parametrize("sql", (None, ""), ids=["None", "empty"])
+def test_empty_execution(conn, sql):
+    """Checks whether executing an empty string, or nothing behaves as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("")
+            if sql is not None:
+                cur.execute(sql)
             assert cur._result is None
-            with pytest.raises(Exception):
+            with pytest.raises(
+                TypeError, match="'NoneType' object is not( an)? itera(tor|ble)"
+            ):
+                cur.fetchone()
+            with pytest.raises(
+                TypeError, match="'NoneType' object is not( an)? itera(tor|ble)"
+            ):
                 cur.fetchall()
+
+
+@pytest.mark.parametrize(
+    "reuse_results", (False, pytest.param(True, marks=pytest.mark.skipolddriver))
+)
+def test_reset_fetch(conn, reuse_results):
+    """Tests behavior after resetting the cursor."""
+    with conn(reuse_results=reuse_results) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select 1")
+            cur.reset()
+            if reuse_results:
+                assert cur.fetchone() == (1,)
+            else:
+                assert cur.fetchone() is None
+                assert len(cur.fetchall()) == 0
 
 
 def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
-            assert cur.execute("select * from values (1), (2)").fetchone() == (1,)
+            assert cur.execute("select * from values (1), (2)")
+            assert cur.rownumber is None
+            assert cur.fetchone() == (1,)
             assert cur.rownumber == 0
             assert cur.fetchone() == (2,)
             assert cur.rownumber == 1
@@ -995,7 +1042,9 @@ def test_execute_helper_cannot_use_arrow(conn_cnx, caplog, result_format):
     """Tests whether cannot use arrow is handled correctly inside of _execute_helper."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
+            ):
                 if result_format is False:
                     result_format = None
                 else:
@@ -1017,7 +1066,9 @@ def test_execute_helper_cannot_use_arrow_exception(conn_cnx):
     """Like test_execute_helper_cannot_use_arrow but when we are trying to force arrow an Exception should be raised."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
+            ):
                 with pytest.raises(
                     ProgrammingError,
                     match="The result set in Apache Arrow format is not supported for the platform.",
@@ -1035,7 +1086,9 @@ def test_check_can_use_arrow_resultset(conn_cnx, caplog):
     """Tests check_can_use_arrow_resultset has no effect when we can use arrow."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", True):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", True
+            ):
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
                 cur.check_can_use_arrow_resultset()
     assert "Arrow" not in caplog.text
@@ -1050,7 +1103,9 @@ def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
         config["application"] = "SnowSQL"
     with conn_cnx(**config) as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.CAN_USE_ARROW_RESULT", False):
+            with mock.patch(
+                "snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT", False
+            ):
                 with pytest.raises(
                     ProgrammingError,
                     match="Currently SnowSQL doesn't support the result set in Apache Arrow format."
@@ -1068,9 +1123,7 @@ def test_check_can_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has no effect when we can import pandas."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch(
-                "snowflake.connector.cursor.pyarrow", "Something other than None"
-            ):
+            with mock.patch("snowflake.connector.cursor.installed_pandas", True):
                 cur.check_can_use_pandas()
 
 
@@ -1079,7 +1132,7 @@ def test_check_cannot_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has expected outcomes."""
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            with mock.patch("snowflake.connector.cursor.pyarrow", None):
+            with mock.patch("snowflake.connector.cursor.installed_pandas", False):
                 with pytest.raises(
                     ProgrammingError,
                     match=r"Optional dependency: 'pyarrow' is not installed, please see the "
@@ -1096,9 +1149,7 @@ def test_not_supported_pandas(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute("select 1", _statement_params=result_format)
-            with mock.patch(
-                "snowflake.connector.cursor.pyarrow", "Something other than None"
-            ):
+            with mock.patch("snowflake.connector.cursor.installed_pandas", True):
                 with pytest.raises(NotSupportedError):
                     cur.fetch_pandas_all()
                 with pytest.raises(NotSupportedError):
@@ -1199,9 +1250,173 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
     ) in caplog.record_tuples
 
 
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize(
+    "result_format,expected_chunk_type",
+    (
+        ("json", JSONResultBatch),
+        ("arrow", ArrowResultBatch),
+    ),
+)
+def test_resultbatch(
+    conn_cnx,
+    result_format,
+    expected_chunk_type,
+    capture_sf_telemetry,
+):
+    """This test checks the following things:
+    1. After executing a query can we pickle the result batches
+    2. When we get the batches, do we emit a telemetry log
+    3. Whether we can iterate through ResultBatches multiple times
+    4. Whether the results make sense
+    5. See whether getter functions are working
+    """
+    rowcount = 100000
+    with conn_cnx(
+        session_parameters={
+            "python_connector_query_result_format": result_format,
+        }
+    ) as con:
+        with capture_sf_telemetry.patch_connection(con) as telemetry_data:
+            with con.cursor() as cur:
+                cur.execute(
+                    f"select seq4() from table(generator(rowcount => {rowcount}));"
+                )
+                assert cur._result_set.total_row_index() == rowcount
+                pre_pickle_partitions = cur.get_result_batches()
+                assert len(pre_pickle_partitions) > 1
+                assert pre_pickle_partitions is not None
+                assert all(
+                    isinstance(p, expected_chunk_type) for p in pre_pickle_partitions
+                )
+                pickle_str = pickle.dumps(pre_pickle_partitions)
+                assert any(
+                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED
+                    for t in telemetry_data.records
+                )
+    post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
+    total_rows = 0
+    # Make sure the batches can be iterated over individually
+    for i, partition in enumerate(post_pickle_partitions):
+        # Tests whether the getter functions are working
+        if i == 0:
+            assert partition.compressed_size is None
+            assert partition.uncompressed_size is None
+        else:
+            assert partition.compressed_size is not None
+            assert partition.uncompressed_size is not None
+        for row in partition:
+            col1 = row[0]
+            assert col1 == total_rows
+            total_rows += 1
+    assert total_rows == rowcount
+    total_rows = 0
+    # Make sure the batches can be iterated over again
+    for partition in post_pickle_partitions:
+        for row in partition:
+            col1 = row[0]
+            assert col1 == total_rows
+            total_rows += 1
+    assert total_rows == rowcount
+
+
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize(
+    "result_format,patch_path",
+    (
+        ("json", "snowflake.connector.result_batch.JSONResultBatch.create_iter"),
+        ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
+    ),
+)
+def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_path):
+    """Tests whether pre-fetching results chunks fetches the right amount of them."""
+    rowcount = 1000000  # We need at least 5 chunks for this test
+    with conn_cnx(
+        session_parameters={
+            "python_connector_query_result_format": result_format,
+        }
+    ) as con:
+        with con.cursor() as cur:
+            # Dummy return value necessary to not iterate through every batch with
+            #  first fetchone call
+
+            downloads = [iter([(i,)]) for i in range(10)]
+
+            with mock.patch(
+                patch_path,
+                side_effect=downloads,
+            ) as patched_download:
+                cur.execute(
+                    f"select seq4() as c1, randstr(1,random()) as c2 "
+                    f"from table(generator(rowcount => {rowcount}));"
+                )
+                result_batches = cur.get_result_batches()
+                batch_schemas = [batch.schema for batch in result_batches]
+                for schema in batch_schemas:
+                    # all batches should have the same schema
+                    assert schema == [
+                        ResultMetadata("C1", 0, None, None, 10, 0, False),
+                        ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                    ]
+                assert patched_download.call_count == 0
+                assert len(result_batches) > 5
+                assert result_batches[0]._local  # Sanity check first chunk being local
+                cur.fetchone()  # Trigger pre-fetching
+
+                # While the first chunk is local we still call _download on it, which
+                # short circuits and just parses (for JSON batches) and then returns
+                # an iterator through that data, so we expect the call count to be 5.
+                # (0 local and 1, 2, 3, 4 pre-fetched) = 5 total
+                start_time = time.time()
+                while time.time() < start_time + 1:
+                    if patched_download.call_count == 5:
+                        break
+                else:
+                    assert patched_download.call_count == 5
+
+
+@pytest.mark.skipolddriver(reason="new feature in v2.5.0")
+@pytest.mark.parametrize("result_format", ["json", "arrow"])
+def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": result_format}
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute(
+                "select seq4() as c1, randstr(1,random()) as c2 from table(generator(rowcount => 1)) where 1=0"
+            )
+            result_batches = cur.get_result_batches()
+            # verify there is 1 batch and 0 rows in that batch
+            assert len(result_batches) == 1
+            assert result_batches[0].rowcount == 0
+            # verify that the schema is correct
+            schema = result_batches[0].schema
+            assert schema == [
+                ResultMetadata("C1", 0, None, None, 10, 0, False),
+                ResultMetadata("C2", 2, None, 16777216, None, None, False),
+            ]
+
+
+def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
+    """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            with capture_sf_telemetry.patch_connection(con, False) as telemetry:
+                cur.execute("select 1;")
+                cur._first_chunk_time = None
+                assert cur.fetchall() == [
+                    (1,),
+                ]
+            assert not any(
+                r.message.get("type", "") == TelemetryField.TIME_CONSUME_LAST_RESULT
+                for r in telemetry.records
+            )
+
+
 @pytest.mark.parametrize("result_format", ("json", "arrow"))
 @pytest.mark.parametrize("cursor_type", (SnowflakeCursor, DictCursor))
-def test_out_of_range_year(conn_cnx, result_format, cursor_type):
+@pytest.mark.parametrize("fetch_method", ("__next__", "fetchone"))
+def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
     """Tests whether the year 10000 is out of range exception is raised as expected."""
     with conn_cnx(
         session_parameters={
@@ -1209,16 +1424,20 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type):
         }
     ) as con:
         with con.cursor(cursor_type) as cur:
+            cur.execute(
+                "select * from VALUES (1, TO_TIMESTAMP('9999-01-01 00:00:00')), (2, TO_TIMESTAMP('10000-01-01 00:00:00'))"
+            )
+            iterate_obj = cur if fetch_method == "fetchone" else iter(cur)
+            fetch_next_fn = getattr(iterate_obj, fetch_method)
+            # first fetch doesn't raise error
+            fetch_next_fn()
             with pytest.raises(
                 InterfaceError,
                 match="date value out of range"
                 if IS_WINDOWS
                 else "year 10000 is out of range",
             ):
-                cur.execute(
-                    "select * from VALUES(TO_TIMESTAMP('10000-01-01 00:00:00'))"
-                )
-                cur.fetchall()
+                fetch_next_fn()
 
 
 @pytest.mark.skipolddriver
@@ -1239,9 +1458,7 @@ def test_describe(conn_cnx):
             assert len(cur.fetchall()) == 0
 
             # test insert
-            cur.execute(
-                f"create table {table_name} (aa int)"
-            )
+            cur.execute(f"create table {table_name} (aa int)")
             try:
                 description = cur.describe(
                     "insert into {name}(aa) values({value})".format(
@@ -1251,6 +1468,25 @@ def test_describe(conn_cnx):
                 assert description[0][0] == "number of rows inserted"
                 assert cur.rowcount is None
             finally:
-                cur.execute(
-                    f"drop table if exists {table_name}"
-                )
+                cur.execute(f"drop table if exists {table_name}")
+
+
+@pytest.mark.skipolddriver
+def test_fetch_batches_with_sessions(conn_cnx):
+    rowcount = 250_000
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                f"select seq4() as foo from table(generator(rowcount=>{rowcount}))"
+            )
+
+            num_batches = len(cur.get_result_batches())
+
+            with mock.patch(
+                "snowflake.connector.network.SnowflakeRestful._use_requests_session",
+                side_effect=con._rest._use_requests_session,
+            ) as get_session_mock:
+                result = cur.fetchall()
+                # all but one batch is downloaded using a session
+                assert get_session_mock.call_count == num_batches - 1
+                assert len(result) == rowcount

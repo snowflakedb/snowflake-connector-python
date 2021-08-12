@@ -36,7 +36,7 @@ except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import ROW_UNIT  # NOQA
+    from snowflake.connector.arrow_iterator import IterUnit  # NOQA
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
@@ -663,8 +663,8 @@ def iterate_over_test_chunk(
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     context = ArrowConverterContext()
-    it = PyArrowIterator(None, stream, context, False, False)
-    it.init(ROW_UNIT, False)
+    it = PyArrowIterator(None, stream, context, False, False, False)
+    it.init(IterUnit.ROW_UNIT.value)
 
     count = 0
     while True:

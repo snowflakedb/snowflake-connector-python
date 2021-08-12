@@ -10,19 +10,25 @@ import signal
 import sys
 import time
 import uuid
+from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
 from typing import (
     IO,
     TYPE_CHECKING,
+    Any,
     Dict,
+    Generator,
+    Iterator,
     List,
     NamedTuple,
     Optional,
     Tuple,
-    Type,
     Union,
 )
+
+from snowflake.connector.result_batch import create_batches_from_response
+from snowflake.connector.result_set import ResultSet
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
@@ -49,7 +55,7 @@ from .errors import (
     ProgrammingError,
 )
 from .file_transfer_agent import SnowflakeFileTransferAgent
-from .json_result import DictJsonResult, JsonResult
+from .options import installed_pandas, pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
@@ -57,25 +63,27 @@ from .time_util import get_time_millis
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
+    from .result_batch import ResultBatch
+
 
 logger = getLogger(__name__)
 
-try:
-    import pyarrow
-except ImportError:
+if installed_pandas:
+    from pyarrow import Table
+else:
     logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
-    pyarrow = None
+    Table = None
 
 try:
-    from .arrow_result import ArrowResult
+    from .arrow_iterator import PyArrowIterator  # NOQA
 
-    CAN_USE_ARROW_RESULT = True
+    CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
     logger.debug(
         "Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s",
         e,
     )
-    CAN_USE_ARROW_RESULT = False
+    CAN_USE_ARROW_RESULT_FORMAT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
 STATEMENT_TYPE_ID_INSERT = STATEMENT_TYPE_ID_DML + 0x100
@@ -113,12 +121,31 @@ class ResultMetadata(NamedTuple):
     scale: int
     is_nullable: bool
 
+    @classmethod
+    def from_column(cls, col: Dict[str, Any]):
+        """Initializes a ResultMetadata object from the column description in the query response."""
+        return cls(
+            col["name"],
+            FIELD_NAME_TO_ID[col["type"].upper()],
+            None,
+            col["length"],
+            col["precision"],
+            col["scale"],
+            col["nullable"],
+        )
+
 
 def exit_handler(*_):  # pragma: no cover
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
     print("\nForce exit")
     logger.info("Force exit")
     sys.exit(1)
+
+
+class ResultState(Enum):
+    DEFAULT = 1
+    VALID = 2
+    RESET = 3
 
 
 class SnowflakeCursor(object):
@@ -165,15 +192,12 @@ class SnowflakeCursor(object):
         self,
         connection: "SnowflakeConnection",
         use_dict_result: bool = False,
-        json_result_class: Type["JsonResult"] = JsonResult,
     ):
         """Inits a SnowflakeCursor with a connection.
 
         Args:
             connection: The connection that created this cursor.
-            use_dict_result: Decides whether to use dict result or not. This variable only applied to
-                arrow result. When result in json, json_result_class will be honored.
-            json_result_class: The class that used in json result.
+            use_dict_result: Decides whether to use dict result or not.
         """
         self._connection = connection
 
@@ -197,9 +221,10 @@ class SnowflakeCursor(object):
         self._time_output_format = None
         self._timezone = None
         self._binary_output_format = None
-        self._result = None
+        self._result: Optional[Union[Iterator[Tuple], Iterator[Dict]]] = None
+        self._result_set: Optional["ResultSet"] = None
+        self._result_state: ResultState = ResultState.DEFAULT
         self._use_dict_result = use_dict_result
-        self._json_result_class = json_result_class
         # TODO: self._query_result_format could be defined as an enum
         self._query_result_format: Optional[str] = None
 
@@ -210,8 +235,9 @@ class SnowflakeCursor(object):
         self._first_chunk_time = None
 
         self._log_max_query_length = connection.log_max_query_length
-        self._inner_cursor = None
+        self._inner_cursor: Optional["SnowflakeCursor"] = None
         self._prefetch_hook = None
+        self._rownumber: Optional[int] = None
 
         self.reset()
 
@@ -223,7 +249,7 @@ class SnowflakeCursor(object):
                 logger.info(e)
 
     @property
-    def description(self):
+    def description(self) -> List[ResultMetadata]:
         return self._description
 
     @property
@@ -232,9 +258,7 @@ class SnowflakeCursor(object):
 
     @property
     def rownumber(self):
-        return (
-            self._result.total_row_index if self._result.total_row_index >= 0 else None
-        )
+        return self._rownumber if self._rownumber >= 0 else None
 
     @property
     def sfqid(self):
@@ -376,7 +400,7 @@ class SnowflakeCursor(object):
 
         # check if current installation include arrow extension or not,
         # if not, we set statement level query result format to be JSON
-        if not CAN_USE_ARROW_RESULT:
+        if not CAN_USE_ARROW_RESULT_FORMAT:
             logger.debug("Cannot use arrow result format, fallback to json format")
             if statement_params is None:
                 statement_params = {
@@ -762,29 +786,20 @@ class SnowflakeCursor(object):
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description = [
-            ResultMetadata(
-                column["name"],
-                FIELD_NAME_TO_ID[column["type"].upper()],
-                None,
-                column["length"],
-                column["precision"],
-                column["scale"],
-                column["nullable"],
-            )
-            for column in data["rowtype"]
+        self._description: List[ResultMetadata] = [
+            ResultMetadata.from_column(col) for col in data["rowtype"]
         ]
 
-        if self._query_result_format == "arrow":
-            self.check_can_use_arrow_resultset()
-            self._result = ArrowResult(
-                data,
-                self,
-                use_dict_result=self._use_dict_result,
-                number_to_decimal=self._connection.arrow_number_to_decimal,
-            )
-        else:
-            self._result = self._json_result_class(data, self)
+        result_chunks = create_batches_from_response(
+            self, self._query_result_format, data, self._description
+        )
+
+        self._result_set = ResultSet(
+            self,
+            result_chunks,
+        )
+        self._rownumber = -1
+        self._result_state = ResultState.VALID
 
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
@@ -806,9 +821,9 @@ class SnowflakeCursor(object):
                 self._total_rowcount += updated_rows
 
     def check_can_use_arrow_resultset(self):
-        global CAN_USE_ARROW_RESULT
+        global CAN_USE_ARROW_RESULT_FORMAT
 
-        if not CAN_USE_ARROW_RESULT:
+        if not CAN_USE_ARROW_RESULT_FORMAT:
             if self._connection.application == "SnowSQL":
                 msg = "Currently SnowSQL doesn't support the result set in Apache Arrow format."
                 errno = ER_NO_PYARROW_SNOWSQL
@@ -827,9 +842,7 @@ class SnowflakeCursor(object):
             )
 
     def check_can_use_pandas(self):
-        global pyarrow
-
-        if pyarrow is None:
+        if not installed_pandas:
             msg = (
                 "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
                 "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
@@ -882,24 +895,44 @@ class SnowflakeCursor(object):
             )
         return self
 
-    def fetch_pandas_batches(self, **kwargs):
+    def fetch_arrow_batches(self) -> Iterator[Table]:
+        self.check_can_use_arrow_resultset()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        self._log_telemetry_job_data(
+            TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
+        )
+        return self._result_set._fetch_arrow_batches()
+
+    def fetch_arrow_all(self) -> Optional[Table]:
+        self.check_can_use_arrow_resultset()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
+        return self._result_set._fetch_arrow_all()
+
+    def fetch_pandas_batches(self, **kwargs) -> Iterator["pandas.DataFrame"]:
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
-        if self._query_result_format != "arrow":  # TODO: or pandas isn't imported
             raise NotSupportedError
-        for df in self._result._fetch_pandas_batches(**kwargs):
-            yield df
+        self._log_telemetry_job_data(
+            TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
+        )
+        return self._result_set._fetch_pandas_batches(**kwargs)
 
-    def fetch_pandas_all(self, **kwargs):
+    def fetch_pandas_all(self, **kwargs) -> "pandas.DataFrame":
         """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
-        return self._result._fetch_pandas_all(**kwargs)
+        self._log_telemetry_job_data(
+            TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
+        )
+        return self._result_set._fetch_pandas_all(**kwargs)
 
     def abort_query(self, qid):
         url = "/queries/{qid}/abort-request".format(qid=qid)
@@ -992,12 +1025,35 @@ class SnowflakeCursor(object):
             self.execute(command, param, _do_reset=False)
         return self
 
-    def fetchone(self):
+    def _result_iterator(
+        self,
+    ) -> Union[Generator[Dict, None, None], Generator[Tuple, None, None]]:
+        """Yields the elements from _result and raises an exception when appropriate."""
+        try:
+            for _next in self._result:
+                if isinstance(_next, Exception):
+                    Error.errorhandler_wrapper_from_ready_exception(
+                        self._connection,
+                        self,
+                        _next,
+                    )
+                self._rownumber += 1
+                yield _next
+        except TypeError as err:
+            if self._result_state == ResultState.DEFAULT:
+                raise err
+            else:
+                yield None
+
+    def fetchone(self) -> Optional[Union[Dict, Tuple]]:
         """Fetches one row."""
         if self._prefetch_hook is not None:
             self._prefetch_hook()
+        if self._result is None and self._result_set is not None:
+            self._result = iter(self._result_set)
+            self._result_state = ResultState.VALID
         try:
-            return next(self._result)
+            return next(self._result_iterator())
         except StopIteration:
             return None
 
@@ -1066,17 +1122,25 @@ class SnowflakeCursor(object):
     def reset(self):
         """Resets the result set."""
         self._total_rowcount = -1  # reset the rowcount
+        if self._result_state != ResultState.DEFAULT:
+            self._result_state = ResultState.RESET
         if self._result is not None:
-            self._result._reset()
+            self._result = None
         if self._inner_cursor is not None:
             self._inner_cursor.reset()
             self._result = None
             self._inner_cursor = None
         self._prefetch_hook = None
+        if not self.connection._reuse_results:
+            self._result_set = None
 
-    def __iter__(self):
+    def __iter__(self) -> Union[Iterator[Dict], Iterator[Tuple]]:
         """Iteration over the result set."""
-        return iter(self._result)
+        # set _result if _result_set is not None
+        if self._result is None and self._result_set is not None:
+            self._result = iter(self._result_set)
+            self._result_state = ResultState.VALID
+        return self._result_iterator()
 
     def __cancel_query(self, query):
         if self._sequence_counter >= 0 and not self.is_closed():
@@ -1086,7 +1150,11 @@ class SnowflakeCursor(object):
 
     def _log_telemetry_job_data(self, telemetry_field, value):
         """Builds an instance of TelemetryData with the given field and logs it."""
-        obj = {"type": telemetry_field, "query_id": self._sfqid, "value": int(value)}
+        obj = {
+            "type": telemetry_field,
+            "query_id": self._sfqid,
+            "value": int(value),
+        }
         ts = get_time_millis()
         try:
             self._connection._log_telemetry(TelemetryData(obj, ts))
@@ -1141,6 +1209,9 @@ class SnowflakeCursor(object):
             self._query_result_format = self._inner_cursor._query_result_format
             self._total_rowcount = self._inner_cursor._total_rowcount
             self._description = self._inner_cursor._description
+            self._result_set = self._inner_cursor._result_set
+            self._result_state = ResultState.VALID
+            self._rownumber = 0
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
@@ -1152,11 +1223,28 @@ class SnowflakeCursor(object):
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
+    def get_result_batches(self) -> Optional[List["ResultBatch"]]:
+        """Get the previously executed query's ``ResultBatch`` s if available.
+
+        If they are unavailable, in case nothing has been executed yet None will
+        be returned.
+
+        For a detailed description of ``ResultBatch`` s please see the docstring of:
+        ``snowflake.connector.result_batches.ResultBatch``
+        """
+        if self._result_set is None:
+            return None
+        self._log_telemetry_job_data(
+            TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
+        )
+        return self._result_set.batches
+
 
 class DictCursor(SnowflakeCursor):
     """Cursor returning results in a dictionary."""
 
     def __init__(self, connection):
-        SnowflakeCursor.__init__(
-            self, connection, use_dict_result=True, json_result_class=DictJsonResult
+        super().__init__(
+            connection,
+            use_dict_result=True,
         )
