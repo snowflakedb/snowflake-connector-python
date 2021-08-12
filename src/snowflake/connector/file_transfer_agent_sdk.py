@@ -21,7 +21,7 @@ from typing import IO, TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 from boto3.session import Session
 
 from .compat import GET_CWD, IS_WINDOWS, dataclass, field
-from .constants import ResultStatus
+from .constants import ResultStatus, megabyte
 from .converter_snowsql import SnowflakeConverterSnowSQL
 from .errorcode import (
     ER_COMPRESSION_NOT_SUPPORTED,
@@ -63,8 +63,6 @@ LOCAL_FS = "LOCAL_FS"
 CMD_TYPE_UPLOAD = "UPLOAD"
 CMD_TYPE_DOWNLOAD = "DOWNLOAD"
 FILE_PROTOCOL = "file://"
-
-MB = 1024.0 * 1024.0
 
 INJECT_WAIT_IN_PUT = 0
 
@@ -164,7 +162,7 @@ def _update_progress(
     show_progress_bar: Optional[bool] = True,
 ) -> float:
     bar_length = 10  # Modify this to change the length of the progress bar
-    total_size /= MB
+    total_size /= megabyte
     status = ""
     elapsed_time = time() - start_time
     throughput = (total_size / elapsed_time) if elapsed_time != 0.0 else 0.0
