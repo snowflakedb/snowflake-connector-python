@@ -176,27 +176,21 @@ def _update_progress(
         status = "Halt...\r\n"
     if progress >= 1:
         progress = 1
-        status = "Done ({elapsed_time:.3f}s, {throughput:.2f}MB/s).\r\n".format(
-            elapsed_time=elapsed_time, throughput=throughput
-        )
+        status = f"Done ({elapsed_time:.3f}s, {throughput:.2f}MB/s).\r\n"
     if not status and show_progress_bar:
-        status = "({elapsed_time:.3f}s, {throughput:.2f}MB/s)".format(
-            elapsed_time=elapsed_time, throughput=throughput
-        )
+        status = f"({elapsed_time:.3f}s, {throughput:.2f}MB/s)"
     if status:
         block = int(round(bar_length * progress))
-        text = "\r{file_name}({size:.2f}MB): [{bar}] {percentage:.2f}% {status}".format(
-            file_name=file_name,
-            size=total_size,
-            bar="#" * block + "-" * (bar_length - block),
-            percentage=progress * 100.0,
-            status=status,
+        text = (
+            f"\r{file_name}({total_size:.2f}MB): "
+            f"[{'#' * block + '-' * (bar_length - block)}] "
+            f"{progress * 100.0:.2f}% {status}"
         )
         output_stream.write(text)
         output_stream.flush()
     logger.debug(
-        f"filename: {file_name}, start_time: {start_time}, total_size: {total_size}, progress: {progress}, "
-        f"show_progress_bar: {show_progress_bar}"
+        f"filename: {file_name}, start_time: {start_time}, total_size: {total_size}, "
+        f"progress: {progress}, show_progress_bar: {show_progress_bar}"
     )
     return progress == 1.0
 
@@ -697,7 +691,7 @@ class SnowflakeFileTransferAgent(object):
                 else len_file_metas
             )
 
-            logger.debug("downloading files idx: {} to {}".format(idx, end_of_idx))
+            logger.debug(f"downloading files idx: {idx} to {end_of_idx}")
 
             target_meta = file_metas[idx:end_of_idx]
             while True:
@@ -1126,9 +1120,8 @@ class SnowflakeFileTransferAgent(object):
                     self._cursor,
                     ProgrammingError,
                     {
-                        "msg": "The local path is not a directory: {}".format(
-                            self._local_location
-                        ),
+                        "msg": "The local path is not a directory: "
+                        f"{self._local_location}",
                         "errno": ER_LOCAL_PATH_NOT_DIRECTORY,
                     },
                 )

@@ -103,9 +103,7 @@ def test_put_get_with_gcp(
                 if enable_gcs_downscoped:
                     # not raise error when the parameter is not available yet, using old behavior
                     raise e
-            csr.execute(
-                "create or replace table {} (a int, b string)".format(table_name)
-            )
+            csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
                 file_stream = None if from_path else open(fname, "rb")
                 put(
@@ -117,20 +115,14 @@ def test_put_get_with_gcp(
                     file_stream=file_stream,
                 )
                 assert csr.fetchone()[6] == "UPLOADED"
-                csr.execute("copy into {}".format(table_name))
-                csr.execute("rm @%{}".format(table_name))
-                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute(f"copy into {table_name}")
+                csr.execute(f"rm @%{table_name}")
+                assert csr.execute(f"ls @%{table_name}").fetchall() == []
                 csr.execute(
-                    "copy into @%{table_name} from {table_name} "
-                    "file_format=(type=csv compression='gzip')".format(
-                        table_name=table_name
-                    )
+                    f"copy into @%{table_name} from {table_name} "
+                    "file_format=(type=csv compression='gzip')"
                 )
-                csr.execute(
-                    "get @%{table_name} file://{}".format(
-                        tmp_dir, table_name=table_name
-                    )
-                )
+                csr.execute(f"get @%{table_name} file://{tmp_dir}")
                 rec = csr.fetchone()
                 assert rec[0].startswith("data_"), "A file downloaded by GET"
                 assert rec[1] == 36, "Return right file size"
@@ -139,7 +131,7 @@ def test_put_get_with_gcp(
             finally:
                 if file_stream:
                     file_stream.close()
-                csr.execute("drop table {}".format(table_name))
+                csr.execute(f"drop table {table_name}")
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
@@ -375,7 +367,7 @@ def test_put_get_large_files_gcp(
             else:
                 pytest.fail(
                     "cannot list all files. Potentially "
-                    "PUT command missed uploading Files: {}".format(all_recs)
+                    f"PUT command missed uploading Files: {all_recs}"
                 )
             all_recs = run(cnx, "GET @~/{dir} file://{output_dir}")
             assert len(all_recs) == number_of_files
@@ -396,9 +388,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdk
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute(
-                "create or replace table {} (a int, b string)".format(table_name)
-            )
+            csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
                 from snowflake.connector.vendored.requests import get, put
 
@@ -444,9 +434,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdk
                         side_effect=mocked_put,
                     ):
                         csr.execute(
-                            "put file://{} @%{} auto_compress=true parallel=30".format(
-                                fname, table_name
-                            )
+                            f"put file://{fname} @%{table_name} auto_compress=true parallel=30"
                         )
                     if sdkless:
                         pass
@@ -456,13 +444,11 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdk
                             == 2
                         )
                 assert csr.fetchone()[6] == "UPLOADED"
-                csr.execute("copy into {} purge = true".format(table_name))
-                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute(f"copy into {table_name} purge = true")
+                assert csr.execute(f"ls @%{table_name}").fetchall() == []
                 csr.execute(
-                    "copy into @%{table_name} from {table_name} "
-                    "file_format=(type=csv compression='gzip')".format(
-                        table_name=table_name
-                    )
+                    f"copy into @%{table_name} from {table_name} "
+                    "file_format=(type=csv compression='gzip')"
                 )
 
                 def mocked_get(*args, **kwargs):
@@ -488,7 +474,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdk
                         else "request.get",
                         side_effect=mocked_get,
                     ):
-                        csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
+                        csr.execute(f"get @%{table_name} file://{tmp_dir}")
                     assert (
                         mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count
                         == 2
@@ -499,7 +485,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdk
                 assert rec[2] == "DOWNLOADED", "Return DOWNLOADED status"
                 assert rec[3] == "", "Return no error message"
             finally:
-                csr.execute("drop table {}".format(table_name))
+                csr.execute(f"drop table {table_name}")
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
@@ -533,15 +519,13 @@ def test_auto_compress_off_gcp(
                     # not raise error when the parameter is not available yet, using old behavior
                     raise e
             try:
-                cursor.execute("create or replace stage {}".format(stage_name))
-                cursor.execute(
-                    "put file://{} @{} auto_compress=false".format(fname, stage_name)
-                )
-                cursor.execute("get @{} file://{}".format(stage_name, str(tmpdir)))
+                cursor.execute(f"create or replace stage {stage_name}")
+                cursor.execute(f"put file://{fname} @{stage_name} auto_compress=false")
+                cursor.execute(f"get @{stage_name} file://{tmpdir}")
                 downloaded_file = os.path.join(str(tmpdir), "example.json")
                 assert cmp(fname, downloaded_file)
             finally:
-                cursor.execute("drop stage {}".format(stage_name))
+                cursor.execute(f"drop stage {stage_name}")
 
 
 # TODO
@@ -563,9 +547,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             csr.execute("ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE")
-            csr.execute(
-                "create or replace table {} (a int, b string)".format(table_name)
-            )
+            csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
                 from snowflake.connector.vendored.requests import get, head, put
 
@@ -620,23 +602,19 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                             side_effect=mocked_head,
                         ):
                             csr.execute(
-                                "put file://{} @%{} auto_compress=true parallel=30".format(
-                                    fname, table_name
-                                )
+                                f"put file://{fname} @%{table_name} auto_compress=true parallel=30"
                             )
                     if error_code == 401:
                         assert (
                             mocked_file_agent.agent.renew_expired_client.call_count == 2
                         )
                 assert csr.fetchone()[6] == "UPLOADED"
-                csr.execute("copy into {}".format(table_name))
-                csr.execute("rm @%{}".format(table_name))
-                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute(f"copy into {table_name}")
+                csr.execute(f"rm @%{table_name}")
+                assert csr.execute(f"ls @%{table_name}").fetchall() == []
                 csr.execute(
-                    "copy into @%{table_name} from {table_name} "
-                    "file_format=(type=csv compression='gzip')".format(
-                        table_name=table_name
-                    )
+                    f"copy into @%{table_name} from {table_name} "
+                    "file_format=(type=csv compression='gzip')"
                 )
 
                 def mocked_get(*args, **kwargs):
@@ -662,7 +640,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                         else "requests.get",
                         ide_effect=mocked_get,
                     ):
-                        csr.execute("get @%{} file://{}".format(table_name, tmp_dir))
+                        csr.execute(f"get @%{table_name} file://{tmp_dir}")
                     if error_code == 401:
                         assert (
                             mocked_file_agent.agent.renew_expired_client.call_count == 1
@@ -673,7 +651,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                 assert rec[2] == "DOWNLOADED", "Return DOWNLOADED status"
                 assert rec[3] == "", "Return no error message"
             finally:
-                csr.execute("drop table {}".format(table_name))
+                csr.execute(f"drop table {table_name}")
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:

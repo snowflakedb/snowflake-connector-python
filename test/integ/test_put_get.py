@@ -68,15 +68,15 @@ def create_test_data(request, db_parameters, connection):
     assert "AWS_ACCESS_KEY_ID" in os.environ
     assert "AWS_SECRET_ACCESS_KEY" in os.environ
 
-    unique_name = db_parameters["name"]
-    database_name = "{}_db".format(unique_name)
-    warehouse_name = "{}_wh".format(unique_name)
+    unique_name = random_string()
+    database_name = f"{unique_name}_db"
+    warehouse_name = f"{unique_name}_wh"
 
     def fin():
         with connection() as cnx:
             with cnx.cursor() as cur:
-                cur.execute("drop database {}".format(database_name))
-                cur.execute("drop warehouse {}".format(warehouse_name))
+                cur.execute(f"drop database {database_name}")
+                cur.execute(f"drop warehouse {warehouse_name}")
 
     request.addfinalizer(fin)
 
@@ -85,16 +85,14 @@ def create_test_data(request, db_parameters, connection):
             self.test_data_dir = (
                 pathlib.Path(__file__).parent.parent / "data"
             ).absolute()
-            self.AWS_ACCESS_KEY_ID = "'{}'".format(os.environ["AWS_ACCESS_KEY_ID"])
-            self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
-                os.environ["AWS_SECRET_ACCESS_KEY"]
-            )
-            self.stage_name = "{}_stage".format(unique_name)
+            self.AWS_ACCESS_KEY_ID = f"'{os.environ['AWS_ACCESS_KEY_ID']}'"
+            self.AWS_SECRET_ACCESS_KEY = f"'{os.environ['AWS_SECRET_ACCESS_KEY']}'"
+            self.stage_name = f"{unique_name}_stage"
             self.warehouse_name = warehouse_name
             self.database_name = database_name
             self.connection = connection
             self.user_bucket = os.getenv(
-                "SF_AWS_USER_BUCKET", "sfc-dev1-regression/{}/reg".format(getuser())
+                "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
             )
 
     ret = TestData()
@@ -103,21 +101,17 @@ def create_test_data(request, db_parameters, connection):
         with cnx.cursor() as cur:
             cur.execute("use role sysadmin")
             cur.execute(
-                """
-create or replace warehouse {}
+                f"""
+create or replace warehouse {warehouse_name}
 warehouse_size = 'small'
 warehouse_type='standard'
 auto_suspend=1800
-""".format(
-                    warehouse_name
-                )
+"""
             )
             cur.execute(
-                """
-create or replace database {}
-""".format(
-                    database_name
-                )
+                f"""
+create or replace database {database_name}
+"""
             )
             cur.execute(
                 """
@@ -140,10 +134,8 @@ field_delimiter='|' error_on_column_count_mismatch=false
 def test_load_s3(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("""use warehouse {}""".format(test_data.warehouse_name))
-            cur.execute(
-                """use schema {}.pytesting_schema""".format(test_data.database_name)
-            )
+            cur.execute(f"use warehouse {test_data.warehouse_name}")
+            cur.execute(f"use schema {test_data.database_name}.pytesting_schema")
             cur.execute(
                 """
 create or replace table tweets(created_at timestamp,
@@ -181,19 +173,16 @@ retweeted string, lang string)"""
                 "table newly created should not have any " "files in its staging area"
             )
             cur.execute(
-                """
+                f"""
 copy into tweets from s3://sfc-dev1-data/twitter/O1k/tweets/
 credentials=(
-AWS_KEY_ID={aws_access_key_id}
-AWS_SECRET_KEY={aws_secret_access_key})
+AWS_KEY_ID={test_data.AWS_ACCESS_KEY_ID}
+AWS_SECRET_KEY={test_data.AWS_SECRET_ACCESS_KEY})
 file_format=(
     skip_header=1 null_if=('')
     field_optionally_enclosed_by='"'
 )
-""".format(
-                    aws_access_key_id=test_data.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=test_data.AWS_SECRET_ACCESS_KEY,
-                )
+"""
             )
             assert cur.rowcount == 1, "copy into tweets did not set rowcount to 1"
             results = cur.fetchall()
@@ -208,13 +197,11 @@ file_format=(
 def test_put_local_file(s3_test_data, conn_cnx):
     with s3_test_data.connection() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("""use warehouse {}""".format(s3_test_data.warehouse_name))
+            cur.execute(f"use warehouse {s3_test_data.warehouse_name}")
             cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
+            cur.execute(f"use schema {s3_test_data.database_name}.pytesting_schema")
             cur.execute(
-                """use schema {}.pytesting_schema""".format(s3_test_data.database_name)
-            )
-            cur.execute(
-                """
+                f"""
 create or replace table pytest_putget_t1 (
 c1 STRING, c2 STRING, c3 STRING,
 c4 STRING, c5 STRING, c6 STRING, c7 STRING, c8 STRING, c9 STRING)
@@ -223,24 +210,17 @@ stage_file_format = (
     error_on_column_count_mismatch=false)
     stage_copy_options = (purge=false)
     stage_location = (
-        url = 's3://{user_bucket}/{stage_name}'
+        url = 's3://{s3_test_data.user_bucket}/{s3_test_data.stage_name}'
     credentials = (
-        AWS_KEY_ID={aws_access_key_id}
-        AWS_SECRET_KEY={aws_secret_access_key})
+        AWS_KEY_ID={s3_test_data.AWS_ACCESS_KEY_ID}
+        AWS_SECRET_KEY={s3_test_data.AWS_SECRET_ACCESS_KEY})
 )
-""".format(
-                    aws_access_key_id=s3_test_data.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=s3_test_data.AWS_SECRET_ACCESS_KEY,
-                    user_bucket=s3_test_data.user_bucket,
-                    stage_name=s3_test_data.stage_name,
-                )
+"""
             )
             cur.execute(
-                """
-put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
-""".format(
-                    s3_test_data.test_data_dir
-                )
+                f"""
+put file://{s3_test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
+"""
             )
             assert cur.is_file_transfer
             cur.execute("ls @%pytest_putget_t1").fetchall()
@@ -274,23 +254,16 @@ def test_put_load_from_user_stage(test_data, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
-            cur.execute("""use warehouse {}""".format(test_data.warehouse_name))
+            cur.execute(f"use warehouse {test_data.warehouse_name}")
+            cur.execute(f"use schema {test_data.database_name}.pytesting_schema")
             cur.execute(
-                """use schema {}.pytesting_schema""".format(test_data.database_name)
-            )
-            cur.execute(
-                """
-create or replace stage {stage_name}
-url='s3://{user_bucket}/{stage_name}'
+                f"""
+create or replace stage {test_data.stage_name}
+url='s3://{test_data.user_bucket}/{test_data.stage_name}'
 credentials = (
-AWS_KEY_ID={aws_access_key_id}
-AWS_SECRET_KEY={aws_secret_access_key})
-""".format(
-                    aws_access_key_id=test_data.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=test_data.AWS_SECRET_ACCESS_KEY,
-                    user_bucket=test_data.user_bucket,
-                    stage_name=test_data.stage_name,
-                )
+AWS_KEY_ID={test_data.AWS_ACCESS_KEY_ID}
+AWS_SECRET_KEY={test_data.AWS_SECRET_ACCESS_KEY})
+"""
             )
             cur.execute(
                 """
@@ -299,13 +272,10 @@ create or replace table pytest_putget_t2 (c1 STRING, c2 STRING, c3 STRING,
 """
             )
             cur.execute(
-                """
-put file://{project_root}/ExecPlatform/Database/data/orders_10*.csv
-@{stage_name}
-""".format(
-                    project_root=test_data.test_data_dir,
-                    stage_name=test_data.stage_name,
-                )
+                f"""
+put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv
+@{test_data.stage_name}
+"""
             )
             # two files should have been put in the staging are
             results = cur.fetchall()
@@ -317,38 +287,28 @@ put file://{project_root}/ExecPlatform/Database/data/orders_10*.csv
 
             # copy
             cur.execute(
-                """
-copy into pytest_putget_t2 from @{stage_name}
+                f"""
+copy into pytest_putget_t2 from @{test_data.stage_name}
 file_format = (field_delimiter = '|' error_on_column_count_mismatch=false)
 purge=true
-""".format(
-                    stage_name=test_data.stage_name
-                )
+"""
             )
             results = sorted(cur.fetchall())
             assert len(results) == 2, "copy failed to load two files from the stage"
             assert results[0][0] == (
-                "s3://{user_bucket}/{stage_name}/orders_100.csv.gz".format(
-                    user_bucket=test_data.user_bucket,
-                    stage_name=test_data.stage_name,
-                )
+                f"s3://{test_data.user_bucket}/{test_data.stage_name}/orders_100.csv.gz"
             ), "copy did not load file orders_100"
 
             assert results[1][0] == (
-                "s3://{user_bucket}/{stage_name}/orders_101.csv.gz".format(
-                    user_bucket=test_data.user_bucket,
-                    stage_name=test_data.stage_name,
-                )
+                f"s3://{test_data.user_bucket}/{test_data.stage_name}/orders_101.csv.gz"
             ), "copy did not load file orders_101"
 
             # should be empty (purged)
-            cur.execute("ls @{stage_name}".format(stage_name=test_data.stage_name))
+            cur.execute(f"ls @{test_data.stage_name}")
             results = cur.fetchall()
             assert len(results) == 0, "copied files not purged"
             cur.execute("drop table pytest_putget_t2")
-            cur.execute(
-                "drop stage {stage_name}".format(stage_name=test_data.stage_name)
-            )
+            cur.execute(f"drop stage {test_data.stage_name}")
 
 
 @pytest.mark.aws
@@ -358,23 +318,16 @@ purge=true
 def test_unload(s3_test_data):
     with s3_test_data.connection() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("""use warehouse {}""".format(s3_test_data.warehouse_name))
+            cur.execute(f"use warehouse {s3_test_data.warehouse_name}")
+            cur.execute(f"use schema {s3_test_data.database_name}.pytesting_schema")
             cur.execute(
-                """use schema {}.pytesting_schema""".format(s3_test_data.database_name)
-            )
-            cur.execute(
-                """
-create or replace stage {stage_name}
-url='s3://{user_bucket}/{stage_name}/pytest_put_unload/unload/'
+                f"""
+create or replace stage {s3_test_data.stage_name}
+url='s3://{s3_test_data.user_bucket}/{s3_test_data.stage_name}/pytest_put_unload/unload/'
 credentials = (
-AWS_KEY_ID={aws_access_key_id}
-AWS_SECRET_KEY={aws_secret_access_key})
-""".format(
-                    aws_access_key_id=s3_test_data.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=s3_test_data.AWS_SECRET_ACCESS_KEY,
-                    user_bucket=s3_test_data.user_bucket,
-                    stage_name=s3_test_data.stage_name,
-                )
+AWS_KEY_ID={s3_test_data.AWS_ACCESS_KEY_ID}
+AWS_SECRET_KEY={s3_test_data.AWS_SECRET_ACCESS_KEY})
+"""
             )
 
             cur.execute(
@@ -386,23 +339,15 @@ stage_file_format = (format_name = 'vsv' field_delimiter = '|'
  error_on_column_count_mismatch=false)"""
             )
             cur.execute(
-                """
-alter stage {stage_name} set file_format = ( format_name = 'VSV' )
-""".format(
-                    stage_name=s3_test_data.stage_name
-                )
+                f"alter stage {s3_test_data.stage_name} set file_format = ( format_name = 'VSV' )"
             )
 
             # make sure its clean
-            cur.execute("rm @{stage_name}".format(stage_name=s3_test_data.stage_name))
+            cur.execute(f"rm @{s3_test_data.stage_name}")
 
             # put local file
             cur.execute(
-                """
-put file://{}/ExecPlatform/Database/data/orders_10*.csv
-@%pytest_t3""".format(
-                    s3_test_data.test_data_dir
-                )
+                f"put file://{s3_test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_t3"
             )
 
             # copy into table
@@ -414,12 +359,10 @@ purge=true"""
             )
             # unload from table
             cur.execute(
-                """
-copy into @{stage_name}/data_
+                f"""
+copy into @{s3_test_data.stage_name}/data_
 from pytest_t3 file_format=(format_name='VSV' compression='gzip')
-max_file_size=10000000""".format(
-                    stage_name=s3_test_data.stage_name
-                )
+max_file_size=10000000"""
             )
 
             # load the data back to another table
@@ -431,12 +374,10 @@ c6 STRING, c7 STRING, c8 STRING, c9 STRING)
 stage_file_format = (format_name = 'VSV' )"""
             )
             cur.execute(
-                """
+                f"""
 copy into pytest_t3_copy
-from @{stage_name}/data_ return_failed_only=true
-""".format(
-                    stage_name=s3_test_data.stage_name
-                )
+from @{s3_test_data.stage_name}/data_ return_failed_only=true
+"""
             )
 
             # check to make sure they are equal
@@ -449,20 +390,16 @@ union
             )
             assert cur.rowcount == 0, "unloaded/reloaded data were not the same"
             # clean stage
-            cur.execute(
-                "rm @{stage_name}/data_".format(stage_name=s3_test_data.stage_name)
-            )
+            cur.execute(f"rm @{s3_test_data.stage_name}/data_")
             assert cur.rowcount == 1, "only one file was expected to be removed"
 
             # unload with deflate
             cur.execute(
-                """
-copy into @{stage_name}/data_
+                f"""
+copy into @{s3_test_data.stage_name}/data_
 from pytest_t3 file_format=(format_name='VSV' compression='deflate')
 max_file_size=10000000
-""".format(
-                    stage_name=s3_test_data.stage_name
-                )
+"""
             )
             results = cur.fetchall()
             assert results[0][0] == 73, "73 rows were expected to be loaded"
@@ -484,22 +421,18 @@ compression='deflate')"""
             )
 
             cur.execute(
-                """
-alter stage {stage_name} set file_format = (
+                f"""
+alter stage {s3_test_data.stage_name} set file_format = (
 format_name = 'VSV'
 compression='deflate')
-""".format(
-                    stage_name=s3_test_data.stage_name
-                )
+"""
             )
 
             cur.execute(
-                """
-copy into pytest_t3_copy from @{stage_name}/data_
+                f"""
+copy into pytest_t3_copy from @{s3_test_data.stage_name}/data_
 return_failed_only=true
-""".format(
-                    stage_name=s3_test_data.stage_name
-                )
+"""
             )
             results = cur.fetchall()
             assert results[0][2] == "LOADED", "rows were not loaded successfully"
@@ -513,20 +446,14 @@ union
 """
             )
             assert cur.rowcount == 0, "unloaded/reloaded data were not the same"
-            cur.execute(
-                "rm @{stage_name}/data_".format(stage_name=s3_test_data.stage_name)
-            )
+            cur.execute(f"rm @{s3_test_data.stage_name}/data_")
             assert cur.rowcount == 1, "only one file was expected to be removed"
 
             # clean stage
-            cur.execute(
-                "rm @{stage_name}/data_".format(stage_name=s3_test_data.stage_name)
-            )
+            cur.execute(f"rm @{s3_test_data.stage_name}/data_")
 
             cur.execute("drop table pytest_t3_copy")
-            cur.execute(
-                "drop stage {stage_name}".format(stage_name=s3_test_data.stage_name)
-            )
+            cur.execute(f"drop stage {s3_test_data.stage_name}")
             cur.close()
 
 
@@ -568,15 +495,7 @@ def test_put_with_auto_compress_false(tmpdir, db_parameters, from_path):
                 file_stream=file_stream,
             )
 
-        ret = (
-            cnx.cursor()
-            .execute(
-                """
-LS @~/test_put_uncompress_file
-"""
-            )
-            .fetchone()
-        )
+        ret = cnx.cursor().execute("LS @~/test_put_uncompress_file").fetchone()
         assert "test_put_uncompress_file/data.txt" in ret[0]
         assert "data.txt.gz" not in ret[0]
     finally:

@@ -15,6 +15,7 @@ from .constants import (
     HTTP_HEADER_CONTENT_ENCODING,
     FileHeader,
     ResultStatus,
+    kilobyte,
 )
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
@@ -32,7 +33,7 @@ GCS_METADATA_ENCRYPTIONDATAPROP = GCS_METADATA_PREFIX + "encryptiondata"
 GCS_FILE_HEADER_DIGEST = "gcs-file-header-digest"
 GCS_FILE_HEADER_CONTENT_LENGTH = "gcs-file-header-content-length"
 GCS_FILE_HEADER_ENCRYPTION_METADATA = "gcs-file-header-encryption-metadata"
-CONTENT_CHUNK_SIZE = 10 * 1024
+CONTENT_CHUNK_SIZE = 10 * kilobyte
 ACCESS_TOKEN = "GCS_ACCESS_TOKEN"
 
 

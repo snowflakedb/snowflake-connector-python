@@ -59,9 +59,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters, from_path):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
-            csr.execute(
-                "create or replace table {} (a int, b string)".format(table_name)
-            )
+            csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
                 file_stream = None if from_path else open(fname, "rb")
                 put(
@@ -75,19 +73,15 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters, from_path):
                     file_stream=file_stream,
                 )
                 assert csr.fetchone()[6] == "UPLOADED"
-                csr.execute("copy into {}".format(table_name))
-                csr.execute("rm @%{}".format(table_name))
-                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute(f"copy into {table_name}")
+                csr.execute(f"rm @%{table_name}")
+                assert csr.execute(f"ls @%{table_name}").fetchall() == []
                 csr.execute(
-                    "copy into @%{table_name} from {table_name} "
-                    "file_format=(type=csv compression='gzip')".format(
-                        table_name=table_name
-                    )
+                    f"copy into @%{table_name} from {table_name} "
+                    "file_format=(type=csv compression='gzip')"
                 )
                 csr.execute(
-                    "get @%{table_name} file://{}".format(
-                        tmp_dir, table_name=table_name
-                    ),
+                    f"get @%{table_name} file://{tmp_dir}",
                     _put_callback=SnowflakeAzureProgressPercentage,
                     _get_callback=SnowflakeAzureProgressPercentage,
                 )
@@ -99,7 +93,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, db_parameters, from_path):
             finally:
                 if file_stream:
                     file_stream.close()
-                csr.execute("drop table {}".format(table_name))
+                csr.execute(f"drop table {table_name}")
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:

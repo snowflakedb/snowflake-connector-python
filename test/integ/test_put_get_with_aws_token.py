@@ -66,9 +66,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             try:
-                csr.execute(
-                    "create or replace table {} (a int, b string)".format(table_name)
-                )
+                csr.execute(f"create or replace table {table_name} (a int, b string)")
                 file_stream = None if from_path else open(fname, "rb")
                 put(
                     csr,
@@ -80,27 +78,21 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
                 )
                 rec = csr.fetchone()
                 assert rec[6] == "UPLOADED"
-                csr.execute("copy into {}".format(table_name))
-                csr.execute("rm @%{}".format(table_name))
-                assert csr.execute("ls @%{}".format(table_name)).fetchall() == []
+                csr.execute(f"copy into {table_name}")
+                csr.execute(f"rm @%{table_name}")
+                assert csr.execute(f"ls @%{table_name}").fetchall() == []
                 csr.execute(
-                    "copy into @%{table_name} from {table_name} "
-                    "file_format=(type=csv compression='gzip')".format(
-                        table_name=table_name
-                    )
+                    f"copy into @%{table_name} from {table_name} "
+                    "file_format=(type=csv compression='gzip')"
                 )
-                csr.execute(
-                    "get @%{table_name} file://{}".format(
-                        tmp_dir, table_name=table_name
-                    ),
-                )
+                csr.execute(f"get @%{table_name} file://{tmp_dir}")
                 rec = csr.fetchone()
                 assert rec[0].startswith("data_"), "A file downloaded by GET"
                 assert rec[1] == 36, "Return right file size"
                 assert rec[2] == "DOWNLOADED", "Return DOWNLOADED status"
                 assert rec[3] == "", "Return no error message"
             finally:
-                csr.execute("drop table {}".format(table_name))
+                csr.execute(f"drop table {table_name}")
                 if file_stream:
                     file_stream.close()
 
@@ -122,11 +114,9 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, sdkless):
         with conn_cnx() as cnx:
             try:
                 cnx.cursor().execute(
-                    "create or replace table {} (a int, b string)".format(table_name)
+                    f"create or replace table {table_name} (a int, b string)"
                 )
-                ret = cnx.cursor()._execute_helper(
-                    "put file://{} @%{}".format(fname, table_name)
-                )
+                ret = cnx.cursor()._execute_helper(f"put file://{fname} @%{table_name}")
                 stage_info = ret["data"]["stageInfo"]
                 stage_info["location"]
                 stage_credentials = stage_info["creds"]
@@ -166,7 +156,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, sdkless):
                 with pytest.raises(requests.HTTPError, match=".*Forbidden for url.*"):
                     client.upload_chunk(0)
             finally:
-                cnx.cursor().execute("drop table if exists {}".format(table_name))
+                cnx.cursor().execute(f"drop table if exists {table_name}")
     else:
         fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
         with gzip.open(fname, "wb") as f:
@@ -176,11 +166,9 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, sdkless):
         with conn_cnx() as cnx:
             try:
                 cnx.cursor().execute(
-                    "create or replace table {} (a int, b string)".format(table_name)
+                    f"create or replace table {table_name} (a int, b string)"
                 )
-                ret = cnx.cursor()._execute_helper(
-                    "put file://{} @%{}".format(fname, table_name)
-                )
+                ret = cnx.cursor()._execute_helper(f"put file://{fname} @%{table_name}")
                 stage_location = ret["data"]["stageInfo"]["location"]
                 stage_credentials = ret["data"]["stageInfo"]["creds"]
 
@@ -225,4 +213,4 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, sdkless):
                         fname, s3location.bucket_name, s3path
                     )
             finally:
-                cnx.cursor().execute("drop table if exists {}".format(table_name))
+                cnx.cursor().execute(f"drop table if exists {table_name}")
