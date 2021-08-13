@@ -399,7 +399,9 @@ class SnowflakeConverter(object):
                 errno=ER_NOT_SUPPORT_DATA_TYPE,
             )
 
-    def _derive_offset_timestamp(self, value, is_utc: bool = False):
+    def _derive_offset_timestamp(
+        self, value: datetime, is_utc: bool = False
+    ) -> Tuple[float, datetime]:
         """Derives TZ offset and timestamp from the datetime objects."""
         tzinfo = value.tzinfo
         if tzinfo is None:
