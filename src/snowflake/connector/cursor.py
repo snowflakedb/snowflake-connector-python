@@ -56,10 +56,11 @@ from .errors import (
     ProgrammingError,
 )
 from .feature import feature_sdkless_get, feature_sdkless_put
-from .options import installed_pandas, pandas
+from .file_transfer_agent import SnowflakeFileTransferAgent
 from .file_transfer_agent_sdk import (
     SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSdk,
 )
+from .options import installed_pandas, pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
