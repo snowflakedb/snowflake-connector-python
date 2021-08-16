@@ -1076,9 +1076,7 @@ class SnowflakeConnection(object):
                         "errno": ER_FAILED_PROCESSING_QMARK,
                     },
                 )
-            return TypeAndBinding(
-                v[0], self.converter.to_snowflake_bindings(v[0], v[1])
-            )
+            snowflake_type, v = v
         else:
             snowflake_type = self.converter.snowflake_type(v)
             if snowflake_type is None:
@@ -1094,10 +1092,10 @@ class SnowflakeConnection(object):
                         "errno": ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
                     },
                 )
-            return TypeAndBinding(
-                snowflake_type,
-                self.converter.to_snowflake_bindings(snowflake_type, v),
-            )
+        return TypeAndBinding(
+            snowflake_type,
+            self.converter.to_snowflake_bindings(snowflake_type, v),
+        )
 
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(

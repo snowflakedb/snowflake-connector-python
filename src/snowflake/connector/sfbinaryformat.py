@@ -5,6 +5,7 @@
 #
 
 from base64 import b16decode, b16encode, standard_b64encode
+from typing import Union
 
 from .errors import InternalError
 
