@@ -68,7 +68,7 @@ def create_test_data(request, db_parameters, connection):
     assert "AWS_ACCESS_KEY_ID" in os.environ
     assert "AWS_SECRET_ACCESS_KEY" in os.environ
 
-    unique_name = random_string()
+    unique_name = random_string(5, "create_test_data_")
     database_name = f"{unique_name}_db"
     warehouse_name = f"{unique_name}_wh"
 
