@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
+import filecmp
 import os
 import pathlib
 from getpass import getuser
@@ -10,10 +11,11 @@ from logging import getLogger
 from os import path
 
 import pytest
-from mock import patch
+from mock import mock, patch
 
 import snowflake.connector
 
+from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
 from ..randomize import random_string
 
@@ -615,3 +617,41 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test, sdkless):
         ) as mock_agent:
             cur.execute(f"put file://{file} @{stage_name} threshold=156")
         assert mock_agent.call_args.kwargs.get("multipart_threshold", -1) == 156
+
+
+# Snowflake on GCP does not support multipart uploads
+@pytest.mark.aws
+@pytest.mark.azure
+def test_multipart_put(sdkless, conn_cnx, tmp_path):
+    """This test does a multipart upload of a smaller file and then downloads it."""
+    if not sdkless:
+        pytest.skip("New test, doesn't test non-SDKless mode")
+    stage_name = random_string(5, "test_multipart_put_")
+    chunk_size = 6967790
+    # Generate about 12 MB
+    generate_k_lines_of_n_files(100_000, 1, tmp_dir=str(tmp_path))
+    get_dir = tmp_path / "get_dir"
+    get_dir.mkdir()
+    upload_file = tmp_path / "file0"
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            real_cmd_query = con.cmd_query
+
+            def fake_cmd_query(*a, **kw):
+                """Create a mock function to inject some value into the returned JSON"""
+                ret = real_cmd_query(*a, **kw)
+                ret["data"]["threshold"] = chunk_size
+                return ret
+
+            with mock.patch.object(con, "cmd_query", side_effect=fake_cmd_query):
+                with mock.patch(
+                    "snowflake.connector.constants.S3_CHUNK_SIZE", chunk_size
+                ):
+                    cur.execute(
+                        f"put file://{upload_file} @{stage_name} AUTO_COMPRESS=FALSE"
+                    )
+            cur.execute(f"get @{stage_name} file://{get_dir}")
+    downloaded_file = get_dir / "file0"
+    assert downloaded_file.exists()
+    assert filecmp.cmp(upload_file, downloaded_file)
