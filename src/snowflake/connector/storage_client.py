@@ -350,9 +350,8 @@ class SnowflakeStorageClient(ABC):
                     str(self.intermediate_dst_path),
                     tmp_dir=self.tmp_dir,
                 )
-                shutil.copyfile(tmp_dst_file_name, self.full_dst_file_name)
+                shutil.move(tmp_dst_file_name, self.full_dst_file_name)
                 self.intermediate_dst_path.unlink()
-                os.unlink(tmp_dst_file_name)
             else:
                 logger.debug(f"not encrypted data file={self.full_dst_file_name}")
                 shutil.move(str(self.intermediate_dst_path), self.full_dst_file_name)
