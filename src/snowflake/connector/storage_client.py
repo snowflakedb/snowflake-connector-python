@@ -355,6 +355,7 @@ class SnowflakeStorageClient(ABC):
                 os.unlink(tmp_dst_file_name)
             else:
                 logger.debug(f"not encrypted data file={self.full_dst_file_name}")
+                shutil.move(str(self.intermediate_dst_path), self.full_dst_file_name)
             stat_info = os.stat(self.full_dst_file_name)
             meta.dst_file_size = stat_info.st_size
         else:
