@@ -6,7 +6,6 @@
 
 import contextlib
 import gzip
-import itertools
 import json
 import logging
 import time
@@ -288,7 +287,7 @@ class SnowflakeAuth(AuthBase):
 
 
 class SnowflakeHTTPSession:
-    # TODO: make the pool size/stuff customizable
+    # TODO: parameterize the pool size
     def __init__(self):
         # The underlying HTTP session
         self.session = requests.Session()
@@ -297,8 +296,6 @@ class SnowflakeHTTPSession:
     def _initialize_session(self):
         self.session.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         self.session.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        # TODO: check if this is actually counting anything
-        self.session._reuse_count = itertools.count()
 
     def close(self):
         self.session.close()
