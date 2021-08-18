@@ -356,10 +356,6 @@ class ResultBatch(abc.ABC):
         """
         raise NotImplementedError()
 
-    def _done_load(self, response: "Response") -> None:
-        """Performs cleanup after loading from `response` is done."""
-        response.close()
-
     def _check_can_use_pandas(self) -> None:
         if not installed_pandas:
             msg = (
@@ -575,7 +571,6 @@ class ArrowResultBatch(ResultBatch):
         if row_unit == IterUnit.TABLE_UNIT:
             iter.init_table_unit()
 
-        self._done_load(response)
         return iter
 
     def _from_data(
