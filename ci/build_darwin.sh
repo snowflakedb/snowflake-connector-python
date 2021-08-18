@@ -18,7 +18,7 @@ mkdir -p ${DIST_DIR}
 
 # Make sure we build for our lowest target
 # Should be kept in sync with .github/worklfows/build_test.yml
-export MACOSX_DEPLOYMENT_TARGET="10.13"
+export MACOSX_DEPLOYMENT_TARGET="10.14"
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="python${PYTHON_VERSION}"
