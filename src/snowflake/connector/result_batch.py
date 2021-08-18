@@ -7,7 +7,6 @@ import json
 import time
 from base64 import b64decode
 from enum import Enum, unique
-from gzip import GzipFile
 from logging import getLogger
 from typing import (
     TYPE_CHECKING,
@@ -290,7 +289,6 @@ class ResultBatch(abc.ABC):
                         "url": chunk_url,
                         "headers": self._chunk_headers,
                         "timeout": DOWNLOAD_TIMEOUT,
-                        "stream": True,
                     }
                     if connection:
                         with connection._rest._use_requests_session() as session:
@@ -357,10 +355,6 @@ class ResultBatch(abc.ABC):
         ``SnowflakeCursor`` and calling ``fetch_pandas_batches`` on it.
         """
         raise NotImplementedError()
-
-    def _done_load(self, response: "Response") -> None:
-        """Performs cleanup after loading from `response` is done."""
-        response.close()
 
     def _check_can_use_pandas(self) -> None:
         if not installed_pandas:
@@ -437,10 +431,8 @@ class JSONResultBatch(ResultBatch):
             Unfortunately there's not type hint for this.
             For context: https://github.com/python/typing/issues/182
         """
-        with GzipFile(fileobj=response.raw, mode="r") as gfd:
-            read_data: str = gfd.read().decode("utf-8", "replace")
-            self._done_load(response)
-            return json.loads("".join(["[", read_data, "]"]))
+        read_data = response.text
+        return json.loads("".join(["[", read_data, "]"]))
 
     def _parse(
         self, downloaded_data
@@ -568,11 +560,9 @@ class ArrowResultBatch(ResultBatch):
         """
         from .arrow_iterator import PyArrowIterator
 
-        gfd = GzipFile(fileobj=response.raw, mode="r")
-
         iter = PyArrowIterator(
             None,
-            gfd,
+            io.BytesIO(response.content),
             self._context,
             self._use_dict_result,
             self._numpy,
@@ -581,7 +571,6 @@ class ArrowResultBatch(ResultBatch):
         if row_unit == IterUnit.TABLE_UNIT:
             iter.init_table_unit()
 
-        self._done_load(response)
         return iter
 
     def _from_data(
