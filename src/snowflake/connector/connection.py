@@ -12,6 +12,7 @@ import sys
 import uuid
 import warnings
 from difflib import get_close_matches
+from functools import partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
@@ -23,6 +24,7 @@ from typing import (
     Generator,
     Iterable,
     List,
+    NamedTuple,
     Optional,
     Tuple,
     Type,
@@ -202,6 +204,13 @@ for m in [method for method in dir(errors) if callable(getattr(errors, method))]
 strptime("20150102030405", "%Y%m%d%H%M%S")
 
 logger = getLogger(__name__)
+
+
+class TypeAndBinding(NamedTuple):
+    """Stores the type name and the Snowflake binding."""
+
+    type: str
+    binding: Optional[str]
 
 
 class SnowflakeConnection(object):
@@ -1049,6 +1058,45 @@ class SnowflakeConnection(object):
             raise BindUploadError from exc
         return res
 
+    def _get_snowflake_type_and_binding(
+        self,
+        cursor: Optional["SnowflakeCursor"],
+        v: Union[Tuple[str, Any], Any],
+    ) -> TypeAndBinding:
+        if isinstance(v, tuple):
+            if len(v) != 2:
+                Error.errorhandler_wrapper(
+                    self,
+                    cursor,
+                    ProgrammingError,
+                    {
+                        "msg": "Binding parameters must be a list "
+                        "where one element is a single value or "
+                        "a pair of Snowflake datatype and a value",
+                        "errno": ER_FAILED_PROCESSING_QMARK,
+                    },
+                )
+            snowflake_type, v = v
+        else:
+            snowflake_type = self.converter.snowflake_type(v)
+            if snowflake_type is None:
+                Error.errorhandler_wrapper(
+                    self,
+                    cursor,
+                    ProgrammingError,
+                    {
+                        "msg": "Python data type [{}] cannot be "
+                        "automatically mapped to Snowflake data "
+                        "type. Specify the snowflake data type "
+                        "explicitly.".format(v.__class__.__name__.lower()),
+                        "errno": ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
+                    },
+                )
+        return TypeAndBinding(
+            snowflake_type,
+            self.converter.to_snowflake_bindings(snowflake_type, v),
+        )
+
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(
         self,
@@ -1058,6 +1106,7 @@ class SnowflakeConnection(object):
         if not params:
             return None
         processed_params = {}
+
         if not isinstance(params, (list, tuple)):
             errorvalue = {
                 "msg": "Binding parameters must be a list: {}".format(params),
@@ -1065,49 +1114,26 @@ class SnowflakeConnection(object):
             }
             Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
 
+        get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
+
         for idx, v in enumerate(params):
-            if isinstance(v, tuple):
-                if len(v) != 2:
-                    Error.errorhandler_wrapper(
-                        self,
-                        cursor,
-                        ProgrammingError,
-                        {
-                            "msg": "Binding parameters must be a list "
-                            "where one element is a single value or "
-                            "a pair of Snowflake datatype and a value",
-                            "errno": ER_FAILED_PROCESSING_QMARK,
-                        },
-                    )
+            if isinstance(v, list):
+                snowflake_type = self.converter.snowflake_type(v)
+                all_param_data = list(map(get_type_and_binding, v))
+                first_type = all_param_data[0].type
+                # if all elements have the same snowflake type, update snowflake_type
+                if all(param_data.type == first_type for param_data in all_param_data):
+                    snowflake_type = first_type
                 processed_params[str(idx + 1)] = {
-                    "type": v[0],
-                    "value": self.converter.to_snowflake_bindings(v[0], v[1]),
+                    "type": snowflake_type,
+                    "value": [param_data.binding for param_data in all_param_data],
                 }
             else:
-                snowflake_type = self.converter.snowflake_type(v)
-                if snowflake_type is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        cursor,
-                        ProgrammingError,
-                        {
-                            "msg": "Python data type [{}] cannot be "
-                            "automatically mapped to Snowflake data "
-                            "type. Specify the snowflake data type "
-                            "explicitly.".format(v.__class__.__name__.lower()),
-                            "errno": ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
-                        },
-                    )
-                if isinstance(v, list):
-                    vv = [
-                        self.converter.to_snowflake_bindings(
-                            self.converter.snowflake_type(v0), v0
-                        )
-                        for v0 in v
-                    ]
-                else:
-                    vv = self.converter.to_snowflake_bindings(snowflake_type, v)
-                processed_params[str(idx + 1)] = {"type": snowflake_type, "value": vv}
+                snowflake_type, snowflake_binding = get_type_and_binding(v)
+                processed_params[str(idx + 1)] = {
+                    "type": snowflake_type,
+                    "value": snowflake_binding,
+                }
         if logger.getEffectiveLevel() <= logging.DEBUG:
             for k, v in processed_params.items():
                 logger.debug("idx: %s, type: %s", k, v.get("type"))

@@ -5,6 +5,7 @@
 #
 
 from base64 import b16decode, b16encode, standard_b64encode
+from typing import Union
 
 from .errors import InternalError
 
@@ -12,7 +13,7 @@ from .errors import InternalError
 binary_to_python = b16decode
 
 
-def binary_to_snowflake(binary_value):
+def binary_to_snowflake(binary_value) -> Union[bytes, bytearray]:
     """Encodes a "bytes" object for passing to Snowflake."""
     result = b16encode(binary_value)
 
