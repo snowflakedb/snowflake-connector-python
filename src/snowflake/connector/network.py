@@ -15,7 +15,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Type
 
 import OpenSSL.SSL
 
