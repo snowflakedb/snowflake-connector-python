@@ -6,6 +6,7 @@
 
 from collections import defaultdict, namedtuple
 from enum import Enum, unique
+from typing import Dict, List, Union
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -29,8 +30,62 @@ FIELD_TYPES = [
     {"name": "BOOLEAN", "dbapi_type": []},
 ]
 
-FIELD_NAME_TO_ID = defaultdict(int)
-FIELD_ID_TO_NAME = defaultdict(str)
+
+@unique
+class SnowflakeType(Enum):
+    FIXED = 0
+    REAL = 1
+    TEXT = 2
+    DATE = 3
+    TIMESTAMP = 4
+    VARIANT = 5
+    TIMESTAMP_LTZ = 6
+    TIMESTAMP_TZ = 7
+    TIMESTAMP_NTZ = 8
+    OBJECT = 9
+    ARRAY = 10
+    BINARY = 11
+    TIME = 12
+    BOOLEAN = 13
+
+    def __init__(self, type_code):
+        self.type_code = type_code
+
+
+@unique
+class DBAPIType(Enum):
+    STRING = 0
+    BINARY = 1
+    NUMBER = 2
+    TIMESTAMP = 3
+
+
+FIELD_TYPES: Dict[str, Union[SnowflakeType, List[DBAPIType]]] = [
+    {"snowflake_type": SnowflakeType.FIXED, "dbapi_type": [DBAPIType.NUMBER]},
+    {"snowflake_type": SnowflakeType.REAL, "dbapi_type": [DBAPIType.NUMBER]},
+    {"snowflake_type": SnowflakeType.TEXT, "dbapi_type": [DBAPIType.STRING]},
+    {"snowflake_type": SnowflakeType.DATE, "dbapi_type": [DBAPIType.TIMESTAMP]},
+    {"snowflake_type": SnowflakeType.TIMESTAMP, "dbapi_type": [DBAPIType.TIMESTAMP]},
+    {"snowflake_type": SnowflakeType.VARIANT, "dbapi_type": [DBAPIType.BINARY]},
+    {
+        "snowflake_type": SnowflakeType.TIMESTAMP_LTZ,
+        "dbapi_type": [DBAPIType.TIMESTAMP],
+    },
+    {"snowflake_type": SnowflakeType.TIMESTAMP_TZ, "dbapi_type": [DBAPIType.TIMESTAMP]},
+    {
+        "snowflake_type": SnowflakeType.TIMESTAMP_NTZ,
+        "dbapi_type": [DBAPIType.TIMESTAMP],
+    },
+    {"snowflake_type": SnowflakeType.OBJECT, "dbapi_type": [DBAPIType.BINARY]},
+    {"snowflake_type": SnowflakeType.ARRAY, "dbapi_type": [DBAPIType.BINARY]},
+    {"snowflake_type": SnowflakeType.BINARY, "dbapi_type": [DBAPIType.BINARY]},
+    {"snowflake_type": SnowflakeType.TIME, "dbapi_type": [DBAPIType.TIMESTAMP]},
+    {"snowflake_type": SnowflakeType.BOOLEAN, "dbapi_type": []},
+]
+
+NAME_TO_TYPE_CODE = defaultdict(int)
+TYPE_CODE_TO_NAME = defaultdict(str)
+
 
 __binary_types = []
 __binary_type_names = []
@@ -41,24 +96,28 @@ __number_type_names = []
 __timestamp_types = []
 __timestamp_type_names = []
 
-for idx, type in enumerate(FIELD_TYPES):
-    FIELD_ID_TO_NAME[idx] = type["name"]
-    FIELD_NAME_TO_ID[type["name"]] = idx
+for type_data in FIELD_TYPES:
+    type_data: Dict[str, Union[SnowflakeType, List[DBAPIType]]]
+    snowflake_type = type_data["snowflake_type"]
 
-    dbapi_types = type["dbapi_type"]
+    TYPE_CODE_TO_NAME[snowflake_type.type_code] = snowflake_type.name
+    NAME_TO_TYPE_CODE[snowflake_type.name] = snowflake_type.type_code
+
+    # TODO: pull this out, using a reduce
+    dbapi_types = type_data["dbapi_type"]
     for dbapi_type in dbapi_types:
-        if dbapi_type == DBAPI_TYPE_BINARY:
-            __binary_types.append(idx)
-            __binary_type_names.append(type["name"])
-        elif dbapi_type == DBAPI_TYPE_TIMESTAMP:
-            __timestamp_types.append(idx)
-            __timestamp_type_names.append(type["name"])
-        elif dbapi_type == DBAPI_TYPE_NUMBER:
-            __number_types.append(idx)
-            __number_type_names.append(type["name"])
-        elif dbapi_type == DBAPI_TYPE_STRING:
-            __string_types.append(idx)
-            __string_type_names.append(type["name"])
+        if dbapi_type == DBAPIType.BINARY:
+            __binary_types.append(snowflake_type)
+            __binary_type_names.append(snowflake_type.name)
+        elif dbapi_type == DBAPIType.TIMESTAMP:
+            __timestamp_types.append(snowflake_type)
+            __timestamp_type_names.append(snowflake_type.name)
+        elif dbapi_type == DBAPIType.NUMBER:
+            __number_types.append(snowflake_type)
+            __number_type_names.append(snowflake_type.name)
+        elif dbapi_type == DBAPIType.STRING:
+            __string_types.append(snowflake_type)
+            __string_type_names.append(snowflake_type.name)
 
 
 def get_binary_types():

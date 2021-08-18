@@ -33,7 +33,7 @@ from snowflake.connector.result_set import ResultSet
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import (
-    FIELD_NAME_TO_ID,
+    NAME_TO_TYPE_CODE,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     QueryStatus,
 )
@@ -126,7 +126,7 @@ class ResultMetadata(NamedTuple):
         """Initializes a ResultMetadata object from the column description in the query response."""
         return cls(
             col["name"],
-            FIELD_NAME_TO_ID[col["type"].upper()],
+            NAME_TO_TYPE_CODE[col["type"].upper()],
             None,
             col["length"],
             col["precision"],

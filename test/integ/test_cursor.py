@@ -318,19 +318,19 @@ def test_insert_timestamp_select(conn, db_parameters):
         assert desc[4][0].upper() == "DT", "invalid column name"
         assert desc[5][0].upper() == "TM", "invalid column name"
         assert (
-            constants.FIELD_ID_TO_NAME[desc[0][1]] == "FIXED"
-        ), "invalid column name: {}".format(constants.FIELD_ID_TO_NAME[desc[0][1]])
+            constants.TYPE_CODE_TO_NAME[desc[0][1]] == "FIXED"
+        ), "invalid column name: {}".format(constants.TYPE_CODE_TO_NAME[desc[0][1]])
         assert (
-            constants.FIELD_ID_TO_NAME[desc[1][1]] == "TIMESTAMP_LTZ"
+            constants.TYPE_CODE_TO_NAME[desc[1][1]] == "TIMESTAMP_LTZ"
         ), "invalid column name"
         assert (
-            constants.FIELD_ID_TO_NAME[desc[2][1]] == "TIMESTAMP_TZ"
+            constants.TYPE_CODE_TO_NAME[desc[2][1]] == "TIMESTAMP_TZ"
         ), "invalid column name"
         assert (
-            constants.FIELD_ID_TO_NAME[desc[3][1]] == "TIMESTAMP_NTZ"
+            constants.TYPE_CODE_TO_NAME[desc[3][1]] == "TIMESTAMP_NTZ"
         ), "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[4][1]] == "DATE", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[5][1]] == "TIME", "invalid column name"
+        assert constants.TYPE_CODE_TO_NAME[desc[4][1]] == "DATE", "invalid column name"
+        assert constants.TYPE_CODE_TO_NAME[desc[5][1]] == "TIME", "invalid column name"
     finally:
         cnx2.close()
 
@@ -465,7 +465,9 @@ def test_insert_binary_select(conn, db_parameters):
         desc = c.description
         assert len(desc) == 1, "invalid number of column meta data"
         assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        assert (
+            constants.TYPE_CODE_TO_NAME[desc[0][1]] == "BINARY"
+        ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -505,7 +507,9 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         desc = c.description
         assert len(desc) == 1, "invalid number of column meta data"
         assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        assert (
+            constants.TYPE_CODE_TO_NAME[desc[0][1]] == "BINARY"
+        ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -1479,10 +1483,10 @@ def test_describe(conn_cnx):
             )
             assert description is not None
             column_types = [column[1] for column in description]
-            assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
-            assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
+            assert constants.TYPE_CODE_TO_NAME[column_types[0]] == "FIXED"
+            assert constants.TYPE_CODE_TO_NAME[column_types[1]] == "FIXED"
+            assert constants.TYPE_CODE_TO_NAME[column_types[2]] == "TEXT"
+            assert "TIMESTAMP" in constants.TYPE_CODE_TO_NAME[column_types[3]]
             assert len(cur.fetchall()) == 0
 
             # test insert
