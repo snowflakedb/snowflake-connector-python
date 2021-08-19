@@ -13,6 +13,7 @@ from mock import patch
 from pytest import fail
 
 from snowflake.connector import ProgrammingError, converter
+from snowflake.connector.constants import SnowflakeType
 from snowflake.connector.incident import Incident
 
 # NOTE the incident throttling feature is working and will stop returning new
@@ -134,7 +135,7 @@ def test_reporting_values(app_name, db_parameters):
     except ProgrammingError:
         pass  # ignore, should be thrown
     finally:
-        converter.PYTHON_TO_SNOWFLAKE_TYPE["nonetype"] = "ANY"
+        converter.PYTHON_TO_SNOWFLAKE_TYPE["nonetype"] = SnowflakeType.ANY
         snowflake.connector.paramstyle = original_paramstyle
         snowflake.connector.incident.CLS_BLACKLIST = original_blacklist
         for tag in incident_report.call_args[0][1]["Tags"]:

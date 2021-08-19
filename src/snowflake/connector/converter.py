@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 import pytz
 
 from .compat import IS_BINARY, IS_NUMERIC
+from .constants import SnowflakeType
 from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
@@ -39,38 +40,38 @@ ZERO_FILL = "000000000"
 logger = getLogger(__name__)
 
 PYTHON_TO_SNOWFLAKE_TYPE = {
-    "int": "FIXED",
-    "long": "FIXED",
-    "decimal": "FIXED",
-    "float": "REAL",
-    "str": "TEXT",
-    "unicode": "TEXT",
-    "bytes": "BINARY",
-    "bytearray": "BINARY",
-    "bool": "BOOLEAN",
-    "bool_": "BOOLEAN",
-    "nonetype": "ANY",
-    "datetime": "TIMESTAMP_NTZ",
-    "sfdatetime": "TIMESTAMP_NTZ",
-    "date": "DATE",
-    "time": "TIME",
-    "struct_time": "TIMESTAMP_NTZ",
-    "timedelta": "TIME",
-    "list": "TEXT",
-    "tuple": "TEXT",
-    "int8": "FIXED",
-    "int16": "FIXED",
-    "int32": "FIXED",
-    "int64": "FIXED",
-    "uint8": "FIXED",
-    "uint16": "FIXED",
-    "uint32": "FIXED",
-    "uint64": "FIXED",
-    "float16": "REAL",
-    "float32": "REAL",
-    "float64": "REAL",
-    "datetime64": "TIMESTAMP_NTZ",
-    "quoted_name": "TEXT",
+    "int": SnowflakeType.FIXED,
+    "long": SnowflakeType.FIXED,
+    "decimal": SnowflakeType.FIXED,
+    "float": SnowflakeType.REAL,
+    "str": SnowflakeType.TEXT,
+    "unicode": SnowflakeType.TEXT,
+    "bytes": SnowflakeType.BINARY,
+    "bytearray": SnowflakeType.BINARY,
+    "bool": SnowflakeType.BOOLEAN,
+    "bool_": SnowflakeType.BOOLEAN,
+    "nonetype": SnowflakeType.ANY,
+    "datetime": SnowflakeType.TIMESTAMP_NTZ,
+    "sfdatetime": SnowflakeType.TIMESTAMP_NTZ,
+    "date": SnowflakeType.DATE,
+    "time": SnowflakeType.TIME,
+    "struct_time": SnowflakeType.TIMESTAMP_NTZ,
+    "timedelta": SnowflakeType.TIME,
+    "list": SnowflakeType.TEXT,
+    "tuple": SnowflakeType.TEXT,
+    "int8": SnowflakeType.FIXED,
+    "int16": SnowflakeType.FIXED,
+    "int32": SnowflakeType.FIXED,
+    "int64": SnowflakeType.FIXED,
+    "uint8": SnowflakeType.FIXED,
+    "uint16": SnowflakeType.FIXED,
+    "uint32": SnowflakeType.FIXED,
+    "uint64": SnowflakeType.FIXED,
+    "float16": SnowflakeType.REAL,
+    "float32": SnowflakeType.REAL,
+    "float64": SnowflakeType.REAL,
+    "datetime64": SnowflakeType.TIMESTAMP_NTZ,
+    "quoted_name": SnowflakeType.TEXT,
 }
 
 # Type alias
@@ -333,12 +334,12 @@ class SnowflakeConverter(object):
     def _BOOLEAN_to_python(self, ctx):
         return lambda value: value in ("1", "TRUE")
 
-    def snowflake_type(self, value):
+    def snowflake_type(self, value) -> SnowflakeType:
         """Returns Snowflake data type for the value. This is used for qmark parameter style."""
         type_name = value.__class__.__name__.lower()
         return PYTHON_TO_SNOWFLAKE_TYPE.get(type_name)
 
-    def to_snowflake_bindings(self, snowflake_type, value):
+    def to_snowflake_bindings(self, snowflake_type: SnowflakeType, value):
         """Converts Python data to snowflake data for qmark and numeric parameter style.
 
         The output is bound in a query in the server side.
@@ -378,16 +379,16 @@ class SnowflakeConverter(object):
         return _convert_time_to_epoch_nanoseconds(value)
 
     def _datetime_to_snowflake_bindings(
-        self, snowflake_type: str, value: datetime
+        self, snowflake_type: SnowflakeType, value: datetime
     ) -> str:
         snowflake_type = snowflake_type.upper()
-        if snowflake_type == "TIMESTAMP_LTZ":
+        if snowflake_type == SnowflakeType.TIMESTAMP_LTZ:
             _, t = self._derive_offset_timestamp(value)
             return _convert_datetime_to_epoch_nanoseconds(t)
-        elif snowflake_type == "TIMESTAMP_NTZ":
+        elif snowflake_type == SnowflakeType.TIMESTAMP_NTZ:
             # nanoseconds
             return _convert_datetime_to_epoch_nanoseconds(value)
-        elif snowflake_type == "TIMESTAMP_TZ":
+        elif snowflake_type == SnowflakeType.TIMESTAMP_TZ:
             offset, t = self._derive_offset_timestamp(value, is_utc=True)
             return _convert_datetime_to_epoch_nanoseconds(t) + " {:04d}".format(
                 int(offset)
@@ -416,7 +417,7 @@ class SnowflakeConverter(object):
         return offset, t
 
     def _struct_time_to_snowflake_bindings(
-        self, snowflake_type: str, value: time.struct_time
+        self, snowflake_type: SnowflakeType, value: time.struct_time
     ) -> str:
         return self._datetime_to_snowflake_bindings(
             snowflake_type, datetime.fromtimestamp(time.mktime(value))
@@ -650,7 +651,7 @@ class SnowflakeConverter(object):
             if isinstance(value, (dt_t, timedelta)):
                 val = self.to_snowflake(value)
             else:
-                _type = self.snowflake_type(value)
+                _type: SnowflakeType = self.snowflake_type(value)
                 val = self.to_snowflake_bindings(_type, value)
         return self.escape_for_csv(val)
 
