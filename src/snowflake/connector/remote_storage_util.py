@@ -282,8 +282,10 @@ class SnowflakeRemoteStorageUtil(object):
         util_class = SnowflakeRemoteStorageUtil.get_for_storage_type(
             meta.client_meta.stage_info["locationType"]
         )
-        for _ in range(10):
-            # retry
+        for retry_count in range(10):
+            # log retry
+            if retry_count >= 1:
+                logger.debug(f"retry {meta.name} the {retry_count} time")
             SnowflakeRemoteStorageUtil.upload_one_file(meta)
             if meta.result_status == ResultStatus.UPLOADED:
                 for _ in range(10):
