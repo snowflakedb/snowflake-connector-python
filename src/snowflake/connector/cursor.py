@@ -33,9 +33,9 @@ from snowflake.connector.result_set import ResultSet
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .compat import BASE_EXCEPTION_CLASS
 from .constants import (
-    NAME_TO_TYPE_CODE,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     QueryStatus,
+    SnowflakeType,
 )
 from .errorcode import (
     ER_CURSOR_IS_CLOSED,
@@ -126,7 +126,7 @@ class ResultMetadata(NamedTuple):
         """Initializes a ResultMetadata object from the column description in the query response."""
         return cls(
             col["name"],
-            NAME_TO_TYPE_CODE[col["type"].upper()],
+            SnowflakeType[col["type"].upper()].type_code,
             None,
             col["length"],
             col["precision"],

@@ -4,31 +4,10 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-from collections import defaultdict, namedtuple
+from collections import namedtuple
 from enum import Enum, unique
+from operator import itemgetter
 from typing import Dict, List, Union
-
-DBAPI_TYPE_STRING = 0
-DBAPI_TYPE_BINARY = 1
-DBAPI_TYPE_NUMBER = 2
-DBAPI_TYPE_TIMESTAMP = 3
-
-FIELD_TYPES = [
-    {"name": "FIXED", "dbapi_type": [DBAPI_TYPE_NUMBER]},
-    {"name": "REAL", "dbapi_type": [DBAPI_TYPE_NUMBER]},
-    {"name": "TEXT", "dbapi_type": [DBAPI_TYPE_STRING]},
-    {"name": "DATE", "dbapi_type": [DBAPI_TYPE_TIMESTAMP]},
-    {"name": "TIMESTAMP", "dbapi_type": [DBAPI_TYPE_TIMESTAMP]},
-    {"name": "VARIANT", "dbapi_type": [DBAPI_TYPE_BINARY]},
-    {"name": "TIMESTAMP_LTZ", "dbapi_type": [DBAPI_TYPE_TIMESTAMP]},
-    {"name": "TIMESTAMP_TZ", "dbapi_type": [DBAPI_TYPE_TIMESTAMP]},
-    {"name": "TIMESTAMP_NTZ", "dbapi_type": [DBAPI_TYPE_TIMESTAMP]},
-    {"name": "OBJECT", "dbapi_type": [DBAPI_TYPE_BINARY]},
-    {"name": "ARRAY", "dbapi_type": [DBAPI_TYPE_BINARY]},
-    {"name": "BINARY", "dbapi_type": [DBAPI_TYPE_BINARY]},
-    {"name": "TIME", "dbapi_type": [DBAPI_TYPE_TIMESTAMP]},
-    {"name": "BOOLEAN", "dbapi_type": []},
-]
 
 
 @unique
@@ -50,6 +29,12 @@ class SnowflakeType(Enum):
 
     def __init__(self, type_code):
         self.type_code = type_code
+
+
+# SnowflakeType._value2member_map_ : Dict[int, SnowflakeType]
+TYPE_CODE_TO_NAME: Dict[int, str] = {
+    k: v.name for k, v in SnowflakeType._value2member_map_.items()
+}
 
 
 @unique
@@ -83,57 +68,45 @@ FIELD_TYPES: Dict[str, Union[SnowflakeType, List[DBAPIType]]] = [
     {"snowflake_type": SnowflakeType.BOOLEAN, "dbapi_type": []},
 ]
 
-NAME_TO_TYPE_CODE = defaultdict(int)
-TYPE_CODE_TO_NAME = defaultdict(str)
+
+def filter_by_dbapi_type(dbapi_type: DBAPIType) -> List[SnowflakeType]:
+    return list(
+        map(
+            itemgetter("snowflake_type"),
+            filter(
+                lambda field_type: dbapi_type in field_type["dbapi_type"], FIELD_TYPES
+            ),
+        )
+    )
 
 
-__binary_types = []
-__binary_type_names = []
-__string_types = []
-__string_type_names = []
-__number_types = []
-__number_type_names = []
-__timestamp_types = []
-__timestamp_type_names = []
+__binary_types: List[SnowflakeType] = filter_by_dbapi_type(DBAPIType.BINARY)
+__string_types: List[SnowflakeType] = filter_by_dbapi_type(DBAPIType.STRING)
+__number_types: List[SnowflakeType] = filter_by_dbapi_type(DBAPIType.NUMBER)
+__timestamp_types: List[SnowflakeType] = filter_by_dbapi_type(DBAPIType.TIMESTAMP)
 
-for type_data in FIELD_TYPES:
-    type_data: Dict[str, Union[SnowflakeType, List[DBAPIType]]]
-    snowflake_type = type_data["snowflake_type"]
 
-    TYPE_CODE_TO_NAME[snowflake_type.type_code] = snowflake_type.name
-    NAME_TO_TYPE_CODE[snowflake_type.name] = snowflake_type.type_code
-
-    # TODO: pull this out, using a reduce
-    dbapi_types = type_data["dbapi_type"]
-    for dbapi_type in dbapi_types:
-        if dbapi_type == DBAPIType.BINARY:
-            __binary_types.append(snowflake_type)
-            __binary_type_names.append(snowflake_type.name)
-        elif dbapi_type == DBAPIType.TIMESTAMP:
-            __timestamp_types.append(snowflake_type)
-            __timestamp_type_names.append(snowflake_type.name)
-        elif dbapi_type == DBAPIType.NUMBER:
-            __number_types.append(snowflake_type)
-            __number_type_names.append(snowflake_type.name)
-        elif dbapi_type == DBAPIType.STRING:
-            __string_types.append(snowflake_type)
-            __string_type_names.append(snowflake_type.name)
+def is_name_in_type_list(type_name: str, type_list: List[SnowflakeType]):
+    return (
+        type_name in SnowflakeType._member_map_
+        and SnowflakeType[type_name] in type_list
+    )
 
 
 def get_binary_types():
     return __binary_types
 
 
-def is_binary_type_name(type_name):
-    return type_name in __binary_type_names
+def is_binary_type_name(type_name: str):
+    return is_name_in_type_list(type_name, __binary_types)
 
 
 def get_string_types():
     return __string_types
 
 
-def is_string_type_name(type_name):
-    return type_name in __string_type_names
+def is_string_type_name(type_name: str):
+    return is_name_in_type_list(type_name, __string_types)
 
 
 def get_number_types():
@@ -141,7 +114,7 @@ def get_number_types():
 
 
 def is_number_type_name(type_name):
-    return type_name in __number_type_names
+    return is_name_in_type_list(type_name, __number_types)
 
 
 def get_timestamp_types():
@@ -149,7 +122,7 @@ def get_timestamp_types():
 
 
 def is_timestamp_type_name(type_name):
-    return type_name in __timestamp_type_names
+    return is_name_in_type_list(type_name, __timestamp_types)
 
 
 def is_date_type_name(type_name):
