@@ -6,11 +6,14 @@
 
 import datetime
 import gzip
+import logging
 import os
+import re
 import sys
 import time
+from functools import reduce
 from logging import getLogger
-from typing import IO, TYPE_CHECKING, Dict, List, Tuple, Union
+from typing import IO, TYPE_CHECKING, Dict, List, Set, Tuple, Union
 
 import pytest
 import pytz
@@ -39,6 +42,19 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
 
 
+def verify_num_sessions(caplog: "LogCaptureFixture", num_sessions_created: int):
+    session_regex = "Using the global session .* object at (.*)>"
+
+    def add_if_matches(acc: List[str], log_record: logging.LogRecord) -> List[str]:
+        match_result = re.search(session_regex, log_record.message)
+        if match_result:
+            acc.append(match_result.group(1))
+        return acc
+
+    session_ids: Set[str] = set(reduce(add_if_matches, caplog.records, []))
+    assert len(session_ids) == num_sessions_created
+
+
 @pytest.fixture()
 def file_src(request) -> Tuple[str, int, IO[bytes]]:
     file_name = request.param
@@ -53,8 +69,9 @@ def file_src(request) -> Tuple[str, int, IO[bytes]]:
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
-def test_put_copy0(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy0(conn_cnx, db_parameters, from_path, file_src, sdkless, caplog):
     """Puts and Copies a file."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     file_path, _, file_stream = file_src
     kwargs = {
         "_put_callback": SnowflakeS3ProgressPercentage,
@@ -106,14 +123,18 @@ ratio number(5,2))
         assert ret[0]["rows_loaded"] == 3, "Failed to load 3 rows of data"
 
         run(cnx, "drop table if exists {name}")
+        verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["gzip_sample.txt.gz"], indirect=["file_src"])
-def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy_compressed(
+    conn_cnx, db_parameters, from_path, file_src, sdkless, caplog
+):
     """Puts and Copies compressed files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     file_name, file_size, file_stream = file_src
 
     def run(cnx: "SnowflakeConnection", sql: str) -> List[Dict]:
@@ -139,14 +160,19 @@ def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src, sdkle
 
         run(cnx, "drop table if exists {name}")
 
+    verify_num_sessions(caplog, 1)
+
 
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["bzip2_sample.txt.bz2"], indirect=["file_src"])
 @pytest.mark.skip(reason="BZ2 is not detected in this test case. Need investigation")
-def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy_bz2_compressed(
+    conn_cnx, db_parameters, from_path, file_src, sdkless, caplog
+):
     """Put and Copy bz2 compressed files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     file_name, _, file_stream = file_src
 
     def run(cnx, sql):
@@ -170,6 +196,7 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src, s
             assert rec[1] == "LOADED"
 
         run(cnx, "drop table if exists {name}")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.parametrize(
@@ -177,9 +204,10 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src, s
 )
 @pytest.mark.parametrize("file_src", ["brotli_sample.txt.br"], indirect=["file_src"])
 def test_put_copy_brotli_compressed(
-    conn_cnx, db_parameters, from_path, file_src, sdkless
+    conn_cnx, db_parameters, from_path, file_src, sdkless, caplog
 ):
     """Puts and Copies brotli compressed files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     file_name, _, file_stream = file_src
 
     def run(cnx, sql):
@@ -204,6 +232,7 @@ def test_put_copy_brotli_compressed(
             assert rec[1] == "LOADED"
 
         run(cnx, "drop table if exists {name}")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.parametrize(
@@ -211,9 +240,10 @@ def test_put_copy_brotli_compressed(
 )
 @pytest.mark.parametrize("file_src", ["zstd_sample.txt.zst"], indirect=["file_src"])
 def test_put_copy_zstd_compressed(
-    conn_cnx, db_parameters, from_path, file_src, sdkless
+    conn_cnx, db_parameters, from_path, file_src, sdkless, caplog
 ):
     """Puts and Copies zstd compressed files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     file_name, _, file_stream = file_src
 
     def run(cnx, sql):
@@ -236,6 +266,7 @@ def test_put_copy_zstd_compressed(
             assert rec[1] == "LOADED"
 
         run(cnx, "drop table if exists {name}")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.skipif(
@@ -246,9 +277,10 @@ def test_put_copy_zstd_compressed(
 )
 @pytest.mark.parametrize("file_src", ["nation.impala.parquet"], indirect=["file_src"])
 def test_put_copy_parquet_compressed(
-    conn_cnx, db_parameters, from_path, file_src, sdkless
+    conn_cnx, db_parameters, from_path, file_src, sdkless, caplog
 ):
     """Puts and Copies parquet compressed files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     file_name, _, file_stream = file_src
 
     def run(cnx, sql):
@@ -283,14 +315,18 @@ stage_file_format=(type='parquet')
 
         run(cnx, "drop table if exists {name}")
         run(cnx, "alter session unset enable_parquet_filetype")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["TestOrcFile.test1.orc"], indirect=["file_src"])
-def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy_orc_compressed(
+    conn_cnx, db_parameters, from_path, file_src, sdkless, caplog
+):
     """Puts and Copies ORC compressed files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     file_name, _, file_stream = file_src
 
     def run(cnx, sql):
@@ -320,13 +356,15 @@ create or replace table {name} (value variant) stage_file_format=(type='orc')
             assert rec[1] == "LOADED"
 
         run(cnx, "drop table if exists {name}")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_copy_get(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_copy_get(tmpdir, conn_cnx, db_parameters, sdkless, caplog):
     """Copies and Gets a file."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     name_unload = db_parameters["name"] + "_unload"
     tmp_dir = str(tmpdir.mkdir("copy_get_stage"))
     tmp_dir_user = str(tmpdir.mkdir("user_get"))
@@ -406,11 +444,13 @@ max_file_size=10000000
 
         run(cnx, "drop stage {name_unload}")
         run(cnx, "drop table if exists {name}")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.flaky(reruns=3)
-def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters, sdkless, caplog):
     """Puts and Copies many_files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     # generates N files
     number_of_files = 100
     number_of_lines = 1000
@@ -447,11 +487,13 @@ ratio number(6,2))
         assert rows == number_of_files * number_of_lines, "Number of rows"
 
         run(cnx, "drop table if exists {name}")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.aws
-def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters, sdkless, caplog):
     """[s3] Puts and Copies many files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
@@ -497,12 +539,15 @@ ratio number(6,2))
         ) as cnx:
             run(cnx, "drop table if exists {name}")
 
+        verify_num_sessions(caplog, 3)
+
 
 @pytest.mark.aws
 @pytest.mark.azure
 @pytest.mark.flaky(reruns=3)
-def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters, sdkless, caplog):
     """[s3] Puts and Copies duplicated files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     # generates N files
     number_of_files = 5
     number_of_lines = 100
@@ -574,13 +619,15 @@ ratio number(6,2))
     finally:
         with conn_cnx(use_new_put_get=sdkless) as cnx:
             run(cnx, "drop table if exists {name}")
+        verify_num_sessions(caplog, 3)
 
 
 @pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
-def test_put_collision(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_collision(tmpdir, conn_cnx, db_parameters, sdkless, caplog):
     """File name collision test. The data set have the same file names but contents are different."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     number_of_files = 5
     number_of_lines = 10
     # data set 1
@@ -656,6 +703,7 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters, sdkless):
         finally:
             with conn_cnx(use_new_put_get=sdkless) as cnx:
                 cnx.cursor().execute("RM @~/{}".format(stage_name))
+    verify_num_sessions(caplog, 2)
 
 
 def _generate_huge_value_json(tmpdir, n=1, value_size=1):
@@ -669,8 +717,9 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
 
 
 @pytest.mark.aws
-def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless, caplog):
     """[s3] Puts and Gets Large files."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     number_of_files = 3
     number_of_lines = 200000
     tmp_dir = generate_k_lines_of_n_files(
@@ -725,6 +774,7 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
             assert all([rec[2] == "DOWNLOADED" for rec in all_recs])
         finally:
             run(cnx, "RM @~/{dir}")
+    verify_num_sessions(caplog, 1)
 
 
 @pytest.mark.aws
@@ -734,9 +784,10 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
 )
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
 def test_put_get_with_hint(
-    tmpdir, conn_cnx, db_parameters, from_path, file_src, sdkless
+    tmpdir, conn_cnx, db_parameters, from_path, file_src, sdkless, caplog
 ):
     """SNOW-15153: PUTs and GETs with hint."""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
     tmp_dir = str(tmpdir.mkdir("put_get_with_hint"))
     file_name, file_size, file_stream = file_src
 
@@ -793,3 +844,4 @@ GET @~/{name} file://{local_dir}"""
         # GET with hint
         ret = run(cnx, commented_get_sql, _is_put_get=True)
         assert ret[0] == os.path.basename(file_name) + ".gz", "GET filename"
+    verify_num_sessions(caplog, 1)
