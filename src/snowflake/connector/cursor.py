@@ -35,6 +35,7 @@ from .compat import BASE_EXCEPTION_CLASS
 from .constants import (
     FIELD_NAME_TO_ID,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+    FileTransferType,
     QueryStatus,
 )
 from .errorcode import (
@@ -55,6 +56,9 @@ from .errors import (
     ProgrammingError,
 )
 from .file_transfer_agent import SnowflakeFileTransferAgent
+from .file_transfer_agent_sdk import (
+    SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSdk,
+)
 from .options import installed_pandas, pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
@@ -187,6 +191,19 @@ class SnowflakeCursor(object):
         r"alter\s+session\s+set\s+(.*)=\'?([^\']+)\'?\s*;",
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
     )
+
+    @staticmethod
+    def get_file_transfer_type(sql: str) -> Optional[FileTransferType]:
+        """Decide whether a SQL is a file transfer and return its type.
+
+        None is returned if the SQL isn't a file transfer so that this function can be
+        used in an if-statement.
+        """
+        if SnowflakeCursor.PUT_SQL_RE.match(sql):
+            return FileTransferType.PUT
+        elif SnowflakeCursor.GET_SQL_RE.match(sql):
+            return FileTransferType.GET
+        return None
 
     def __init__(
         self,
@@ -689,7 +706,13 @@ class SnowflakeCursor(object):
 
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                sf_file_transfer_agent = SnowflakeFileTransferAgent(
+                # Decide whether to use the old, or new code path
+                if self._connection._use_new_put_get:
+                    sf_file_transfer_agent_class = SnowflakeFileTransferAgent
+                else:
+                    sf_file_transfer_agent_class = SnowflakeFileTransferAgentSdk
+
+                sf_file_transfer_agent = sf_file_transfer_agent_class(
                     self,
                     query,
                     ret,
@@ -1083,7 +1106,7 @@ class SnowflakeCursor(object):
 
         return ret
 
-    def fetchall(self):
+    def fetchall(self) -> Union[List[Tuple], List[Dict]]:
         """Fetches all of the results."""
         ret = []
         while True:

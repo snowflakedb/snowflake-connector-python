@@ -9,14 +9,17 @@ import os
 import pytest
 from mock import patch
 
-from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+try:  # pragma: no cover
+    from snowflake.connector.file_transfer_agent_sdk import SnowflakeFileTransferAgent
+except ImportError:  # keep olddrivertest from breaking
+    from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 from ..generate_test_files import generate_k_lines_of_n_files
 
 
 @pytest.mark.skipolddriver
 @pytest.mark.aws
-def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters):
+def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters, sdkless):
     """[s3] Puts and Copies into large files."""
     # generates N files
     number_of_files = 2
@@ -26,14 +29,10 @@ def test_put_copy_large_files(tmpdir, conn_cnx, db_parameters):
     )
 
     files = os.path.join(tmp_dir, "file*")
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         cnx.cursor().execute(
-            """
-create table {name} (
+            f"""
+create table {db_parameters['name']} (
 aa int,
 dt date,
 ts timestamp,
@@ -42,16 +41,10 @@ tsntz timestamp_ntz,
 tstz timestamp_tz,
 pct float,
 ratio number(6,2))
-""".format(
-                name=db_parameters["name"]
-            )
+"""
         )
     try:
-        with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
-        ) as cnx:
+        with conn_cnx(use_new_put_get=sdkless) as cnx:
             files = files.replace("\\", "\\\\")
 
             def mocked_file_agent(*args, **kwargs):
@@ -62,14 +55,13 @@ ratio number(6,2))
                 return agent
 
             with patch(
-                "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                "snowflake.connector.cursor.SnowflakeFileTransferAgent"
+                if sdkless
+                else "snowflake.connector.cursor.SnowflakeFileTransferAgentSdk",
                 side_effect=mocked_file_agent,
             ):
                 cnx.cursor().execute(
-                    "put 'file://{file}' @%{name}".format(
-                        file=files,
-                        name=db_parameters["name"],
-                    ),
+                    f"put 'file://{files}' @%{db_parameters['name']}",
                 )
                 assert mocked_file_agent.agent._multipart_threshold == 10000
 

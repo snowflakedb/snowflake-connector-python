@@ -3,7 +3,6 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
 from os import chmod, path
 
 import pytest
@@ -17,18 +16,24 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeS3ProgressPercentage,
 )
 
+try:
+    from snowflake.connector.file_transfer_agent_sdk import (
+        SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
+    )
+except ImportError:
+    from snowflake.connector.file_transfer_agent import (
+        SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
+    )
+
 
 @pytest.mark.skipif(IS_WINDOWS, reason="permission model is different")
-def test_put_error(tmpdir):
+def test_put_error(tmpdir, sdkless):
     """Tests for raise_put_get_error flag (now turned on by default) in SnowflakeFileTransferAgent."""
     tmp_dir = str(tmpdir.mkdir("putfiledir"))
     file1 = path.join(tmp_dir, "file1")
     remote_location = path.join(tmp_dir, "remote_loc")
     with open(file1, "w") as f:
         f.write("test1")
-
-    # nobody can read now.
-    chmod(file1, 0o000)
 
     con = MagicMock()
     cursor = con.cursor()
@@ -41,6 +46,7 @@ def test_put_error(tmpdir):
             "src_locations": [file1],
             "sourceCompression": "none",
             "stageInfo": {
+                "creds": {},
                 "location": remote_location,
                 "locationType": "LOCAL_FS",
                 "path": "remote_loc",
@@ -49,23 +55,25 @@ def test_put_error(tmpdir):
         "success": True,
     }
 
-    # no error is raised
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(
-        cursor, query, ret, raise_put_get_error=False
+    agent_class = (
+        SnowflakeFileTransferAgent if sdkless else SnowflakeFileTransferAgentSDK
     )
+
+    # no error is raised
+    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=False)
     sf_file_transfer_agent.execute()
     sf_file_transfer_agent.result()
 
+    # nobody can read now.
+    chmod(file1, 0o000)
     # Permission error should be raised
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(
-        cursor, query, ret, raise_put_get_error=True
-    )
+    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=True)
     sf_file_transfer_agent.execute()
     with pytest.raises(Exception):
         sf_file_transfer_agent.result()
 
     # unspecified, should fail because flag is on by default now
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(cursor, query, ret)
+    sf_file_transfer_agent = agent_class(cursor, query, ret)
     sf_file_transfer_agent.execute()
     with pytest.raises(Exception):
         sf_file_transfer_agent.result()
@@ -74,7 +82,7 @@ def test_put_error(tmpdir):
 
 
 @pytest.mark.skipolddriver
-def test_percentage(tmp_path):
+def test_percentage(tmp_path, sdkless):
     """Tests for ProgressPercentage classes."""
     from snowflake.connector.file_transfer_agent import percent
 
