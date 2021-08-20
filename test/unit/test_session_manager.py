@@ -7,11 +7,7 @@
 from typing import Optional
 from unittest import mock
 
-import pytest
-
 from snowflake.connector.network import SnowflakeRestful
-
-pytestmark = pytest.mark.skipolddriver
 
 hostname_1 = "sfctest0.snowflakecomputing.com"
 url_1 = f"https://{hostname_1}:443/session/v1/login-request"
