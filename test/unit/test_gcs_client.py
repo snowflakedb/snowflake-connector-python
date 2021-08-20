@@ -34,8 +34,6 @@ except ImportError:  # NOQA
     METHODS = {}
     megabytes = 1024 * 1024
 
-pytestmark = pytest.mark.gcp
-
 try:
     from snowflake.connector.gcs_storage_client import SnowflakeGCSRestClient  # NOQA
     from snowflake.connector.gcs_util_sdk import SnowflakeGCSUtil  # NOQA
@@ -323,7 +321,7 @@ def test_upload_put_timeout(tmp_path, caplog, sdkless):
         f.write(random_string(15))
     if sdkless:
         agent = SnowflakeFileTransferAgent(
-            mock.MagicMock(),
+            mock.Mock(autospec=SnowflakeConnection, connection=None),
             f"put {f_name} @~",
             {
                 "data": {

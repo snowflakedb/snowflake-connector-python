@@ -15,9 +15,6 @@ except ImportError:
         PUT = "put"
 
 
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
-
 @pytest.mark.parametrize(
     "sql,_type",
     (
