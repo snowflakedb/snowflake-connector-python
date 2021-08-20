@@ -34,8 +34,6 @@ except ImportError:  # NOQA
     METHODS = {}
     megabytes = 1024 * 1024
 
-pytestmark = pytest.mark.gcp
-
 try:
     from snowflake.connector.gcs_storage_client import SnowflakeGCSRestClient  # NOQA
     from snowflake.connector.gcs_util_sdk import SnowflakeGCSUtil  # NOQA
