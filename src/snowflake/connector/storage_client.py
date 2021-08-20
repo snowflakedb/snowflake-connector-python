@@ -256,11 +256,22 @@ class SnowflakeStorageClient(ABC):
         retry_id: int,
     ) -> requests.Response:
         rest_call = METHODS[verb]
+        conn = None
+        if self.meta.self and self.meta.self._cursor.connection:
+            conn = self.meta.self._cursor.connection
+
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             try:
-                response = rest_call(url, **rest_kwargs)
+                if conn:
+                    with conn._rest._use_requests_session(url) as session:
+                        logger.debug(f"storage client request with session {session}")
+                        response = session.request(verb, url, **rest_kwargs)
+                else:
+                    logger.debug("storage client request with new session")
+                    response = rest_call(url, **rest_kwargs)
+
                 if self._has_expired_presigned_url(response):
                     self._update_presigned_url()
                 else:
