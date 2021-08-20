@@ -323,7 +323,7 @@ def test_upload_put_timeout(tmp_path, caplog, sdkless):
         f.write(random_string(15))
     if sdkless:
         agent = SnowflakeFileTransferAgent(
-            mock.MagicMock(),
+            mock.Mock(autospec=SnowflakeConnection, connection=None),
             f"put {f_name} @~",
             {
                 "data": {
