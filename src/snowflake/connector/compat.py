@@ -122,6 +122,11 @@ def INPUT(prompt):
     return input(prompt)
 
 
+def quote_url_piece(piece: str) -> str:
+    """Helper function to urlencode a string and turn it into bytes."""
+    return quote(piece)
+
+
 try:
     # builtin dataclass
     from dataclass import dataclass  # NOQA

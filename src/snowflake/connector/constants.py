@@ -4,8 +4,9 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
-from collections import defaultdict, namedtuple
-from enum import Enum, unique
+from collections import defaultdict
+from enum import Enum, auto, unique
+from typing import NamedTuple, Optional
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -107,9 +108,19 @@ LOG_FORMAT = (
 UTF8 = "utf-8"
 SHA256_DIGEST = "sha256_digest"
 
+# PUT/GET related
+S3_FS = "S3"
+AZURE_FS = "AZURE"
+GCS_FS = "GCS"
+LOCAL_FS = "LOCAL_FS"
+CMD_TYPE_UPLOAD = "UPLOAD"
+CMD_TYPE_DOWNLOAD = "DOWNLOAD"
+FILE_PROTOCOL = "file://"
+
 
 class ResultStatus(Enum):
     ERROR = "ERROR"
+    SUCCEEDED = "SUCCEEDED"
     UPLOADED = "UPLOADED"
     DOWNLOADED = "DOWNLOADED"
     COLLISION = "COLLISION"
@@ -121,9 +132,29 @@ class ResultStatus(Enum):
     NEED_RETRY_WITH_LOWER_CONCURRENCY = "NEED_RETRY_WITH_LOWER_CONCURRENCY"
 
 
-FileHeader = namedtuple(
-    "FileReader", ["digest", "content_length", "encryption_metadata"]
-)
+class SnowflakeS3FileEncryptionMaterial(NamedTuple):
+    query_id: str
+    query_stage_master_key: str
+    smk_id: int
+
+
+class MaterialDescriptor(NamedTuple):
+    smk_id: str
+    query_id: str
+    key_size: int
+
+
+class EncryptionMetadata(NamedTuple):
+    key: str
+    iv: str
+    matdesc: str
+
+
+class FileHeader(NamedTuple):
+    digest: str
+    content_length: int
+    encryption_metadata: Optional[EncryptionMetadata]
+
 
 PARAMETER_AUTOCOMMIT = "AUTOCOMMIT"
 PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY = (
@@ -177,6 +208,13 @@ class OCSPMode(Enum):
     INSECURE = "INSECURE"
 
 
+class FileTransferType(Enum):
+    """This enum keeps track of the possible file transfer types."""
+
+    PUT = auto()
+    GET = auto()
+
+
 @unique
 class QueryStatus(Enum):
     RUNNING = 0
@@ -195,6 +233,11 @@ class QueryStatus(Enum):
     NO_DATA = 12
 
 
+kilobyte = 1024
+megabyte = kilobyte * 1024
+gigabyte = megabyte * 1024
+
+
 # ArrowResultChunk constants the unit in this iterator
 # EMPTY_UNIT: default
 # ROW_UNIT: fetch row by row if the user call `fetchone()`
@@ -203,3 +246,7 @@ class QueryStatus(Enum):
 class IterUnit(Enum):
     ROW_UNIT = "row"
     TABLE_UNIT = "table"
+
+
+S3_CHUNK_SIZE = 8388608  # boto3 default
+AZURE_CHUNK_SIZE = 4 * megabyte

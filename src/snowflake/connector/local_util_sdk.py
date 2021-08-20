@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict
 from .constants import DEFAULT_S3_CONNECTION_POOL_SIZE, ResultStatus
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .file_transfer_agent import SnowflakeFileMeta
+    from .file_transfer_agent_sdk import SnowflakeFileMeta
 
 
 class SnowflakeLocalUtil(object):
