@@ -6,18 +6,21 @@
 import filecmp
 import os
 import pathlib
+from functools import partial
 from getpass import getuser
 from logging import getLogger
 from os import path
+from typing import TYPE_CHECKING, Callable, NamedTuple
 
+import mock
 import pytest
-from mock import mock, patch
-
-import snowflake.connector
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
 from ..randomize import random_string
+
+if TYPE_CHECKING:
+    from snowflake.connector import SnowflakeConnection
 
 try:
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
@@ -29,50 +32,33 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 logger = getLogger(__name__)
 
 
-@pytest.fixture(
-    autouse=True,
-    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
-    ids=["sdkless", "sdkfull"],
-)
-def sdkless(request):
-    if request.param:
-        os.environ["SF_SDKLESS_PUT"] = "true"
-        os.environ["SF_SDKLESS_GET"] = "true"
-    else:
-        os.environ["SF_SDKLESS_PUT"] = "false"
-        os.environ["SF_SDKLESS_GET"] = "false"
-    return request.param
+class TestData(NamedTuple):
+    test_data_dir: pathlib.Path
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+    stage_name: str
+    warehouse_name: str
+    database_name: str
+    user_bucket: str
+    connection: Callable[..., "SnowflakeConnection"]
 
 
 @pytest.fixture()
-def test_data(request, conn_cnx, db_parameters):
-    def connection():
-        """Abstracting away connection creation."""
-        return conn_cnx()
-
-    return create_test_data(request, db_parameters, connection)
+def test_data(
+    request, conn_cnx: Callable[..., "SnowflakeConnection"], sdkless: bool
+) -> TestData:
+    return create_test_data(request, partial(conn_cnx, use_new_put_get=sdkless))
 
 
-@pytest.fixture()
-def s3_test_data(request, conn_cnx, db_parameters):
-    def connection():
-        """Abstracting away connection creation."""
-        return conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
-        )
-
-    return create_test_data(request, db_parameters, connection)
-
-
-def create_test_data(request, db_parameters, connection):
+def create_test_data(
+    request, connection: Callable[..., "SnowflakeConnection"]
+) -> TestData:
     assert "AWS_ACCESS_KEY_ID" in os.environ
     assert "AWS_SECRET_ACCESS_KEY" in os.environ
 
     unique_name = random_string(5, "create_test_data_")
-    database_name = f"{unique_name}_db"
     warehouse_name = f"{unique_name}_wh"
+    database_name = f"{unique_name}_db"
 
     def fin():
         with connection() as cnx:
@@ -82,22 +68,18 @@ def create_test_data(request, db_parameters, connection):
 
     request.addfinalizer(fin)
 
-    class TestData(object):
-        def __init__(self):
-            self.test_data_dir = (
-                pathlib.Path(__file__).parent.parent / "data"
-            ).absolute()
-            self.AWS_ACCESS_KEY_ID = f"'{os.environ['AWS_ACCESS_KEY_ID']}'"
-            self.AWS_SECRET_ACCESS_KEY = f"'{os.environ['AWS_SECRET_ACCESS_KEY']}'"
-            self.stage_name = f"{unique_name}_stage"
-            self.warehouse_name = warehouse_name
-            self.database_name = database_name
-            self.connection = connection
-            self.user_bucket = os.getenv(
-                "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
-            )
-
-    ret = TestData()
+    ret = TestData(
+        test_data_dir=pathlib.Path(__file__).absolute().parent.parent / "data",
+        AWS_ACCESS_KEY_ID=f"'{os.environ['AWS_ACCESS_KEY_ID']}'",
+        AWS_SECRET_ACCESS_KEY=f"'{os.environ['AWS_SECRET_ACCESS_KEY']}'",
+        stage_name=f"{unique_name}_stage",
+        warehouse_name=warehouse_name,
+        database_name=database_name,
+        user_bucket=os.getenv(
+            "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
+        ),
+        connection=connection,
+    )
 
     with connection() as cnx:
         with cnx.cursor() as cur:
@@ -133,8 +115,8 @@ field_delimiter='|' error_on_column_count_mismatch=false
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_load_s3(test_data, conn_cnx):
-    with conn_cnx() as cnx:
+def test_load_s3(test_data):
+    with test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute(f"use warehouse {test_data.warehouse_name}")
             cur.execute(f"use schema {test_data.database_name}.pytesting_schema")
@@ -196,12 +178,12 @@ file_format=(
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_put_local_file(s3_test_data, conn_cnx):
-    with s3_test_data.connection() as cnx:
+def test_put_local_file(test_data):
+    with test_data.connection() as cnx:
         with cnx.cursor() as cur:
-            cur.execute(f"use warehouse {s3_test_data.warehouse_name}")
+            cur.execute(f"use warehouse {test_data.warehouse_name}")
             cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
-            cur.execute(f"use schema {s3_test_data.database_name}.pytesting_schema")
+            cur.execute(f"use schema {test_data.database_name}.pytesting_schema")
             cur.execute(
                 f"""
 create or replace table pytest_putget_t1 (
@@ -212,16 +194,16 @@ stage_file_format = (
     error_on_column_count_mismatch=false)
     stage_copy_options = (purge=false)
     stage_location = (
-        url = 's3://{s3_test_data.user_bucket}/{s3_test_data.stage_name}'
+        url = 's3://{test_data.user_bucket}/{test_data.stage_name}'
     credentials = (
-        AWS_KEY_ID={s3_test_data.AWS_ACCESS_KEY_ID}
-        AWS_SECRET_KEY={s3_test_data.AWS_SECRET_ACCESS_KEY})
+        AWS_KEY_ID={test_data.AWS_ACCESS_KEY_ID}
+        AWS_SECRET_KEY={test_data.AWS_SECRET_ACCESS_KEY})
 )
 """
             )
             cur.execute(
                 f"""
-put file://{s3_test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
+put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
 """
             )
             assert cur.is_file_transfer
@@ -252,8 +234,8 @@ put file://{s3_test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.cs
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_put_load_from_user_stage(test_data, conn_cnx):
-    with conn_cnx() as cnx:
+def test_put_load_from_user_stage(test_data):
+    with test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
             cur.execute(f"use warehouse {test_data.warehouse_name}")
@@ -317,18 +299,18 @@ purge=true
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_unload(s3_test_data):
-    with s3_test_data.connection() as cnx:
+def test_unload(test_data):
+    with test_data.connection() as cnx:
         with cnx.cursor() as cur:
-            cur.execute(f"use warehouse {s3_test_data.warehouse_name}")
-            cur.execute(f"use schema {s3_test_data.database_name}.pytesting_schema")
+            cur.execute(f"use warehouse {test_data.warehouse_name}")
+            cur.execute(f"use schema {test_data.database_name}.pytesting_schema")
             cur.execute(
                 f"""
-create or replace stage {s3_test_data.stage_name}
-url='s3://{s3_test_data.user_bucket}/{s3_test_data.stage_name}/pytest_put_unload/unload/'
+create or replace stage {test_data.stage_name}
+url='s3://{test_data.user_bucket}/{test_data.stage_name}/pytest_put_unload/unload/'
 credentials = (
-AWS_KEY_ID={s3_test_data.AWS_ACCESS_KEY_ID}
-AWS_SECRET_KEY={s3_test_data.AWS_SECRET_ACCESS_KEY})
+AWS_KEY_ID={test_data.AWS_ACCESS_KEY_ID}
+AWS_SECRET_KEY={test_data.AWS_SECRET_ACCESS_KEY})
 """
             )
 
@@ -341,15 +323,15 @@ stage_file_format = (format_name = 'vsv' field_delimiter = '|'
  error_on_column_count_mismatch=false)"""
             )
             cur.execute(
-                f"alter stage {s3_test_data.stage_name} set file_format = ( format_name = 'VSV' )"
+                f"alter stage {test_data.stage_name} set file_format = ( format_name = 'VSV' )"
             )
 
             # make sure its clean
-            cur.execute(f"rm @{s3_test_data.stage_name}")
+            cur.execute(f"rm @{test_data.stage_name}")
 
             # put local file
             cur.execute(
-                f"put file://{s3_test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_t3"
+                f"put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_t3"
             )
 
             # copy into table
@@ -362,7 +344,7 @@ purge=true"""
             # unload from table
             cur.execute(
                 f"""
-copy into @{s3_test_data.stage_name}/data_
+copy into @{test_data.stage_name}/data_
 from pytest_t3 file_format=(format_name='VSV' compression='gzip')
 max_file_size=10000000"""
             )
@@ -378,7 +360,7 @@ stage_file_format = (format_name = 'VSV' )"""
             cur.execute(
                 f"""
 copy into pytest_t3_copy
-from @{s3_test_data.stage_name}/data_ return_failed_only=true
+from @{test_data.stage_name}/data_ return_failed_only=true
 """
             )
 
@@ -392,13 +374,13 @@ union
             )
             assert cur.rowcount == 0, "unloaded/reloaded data were not the same"
             # clean stage
-            cur.execute(f"rm @{s3_test_data.stage_name}/data_")
+            cur.execute(f"rm @{test_data.stage_name}/data_")
             assert cur.rowcount == 1, "only one file was expected to be removed"
 
             # unload with deflate
             cur.execute(
                 f"""
-copy into @{s3_test_data.stage_name}/data_
+copy into @{test_data.stage_name}/data_
 from pytest_t3 file_format=(format_name='VSV' compression='deflate')
 max_file_size=10000000
 """
@@ -424,7 +406,7 @@ compression='deflate')"""
 
             cur.execute(
                 f"""
-alter stage {s3_test_data.stage_name} set file_format = (
+alter stage {test_data.stage_name} set file_format = (
 format_name = 'VSV'
 compression='deflate')
 """
@@ -432,7 +414,7 @@ compression='deflate')
 
             cur.execute(
                 f"""
-copy into pytest_t3_copy from @{s3_test_data.stage_name}/data_
+copy into pytest_t3_copy from @{test_data.stage_name}/data_
 return_failed_only=true
 """
             )
@@ -448,14 +430,14 @@ union
 """
             )
             assert cur.rowcount == 0, "unloaded/reloaded data were not the same"
-            cur.execute(f"rm @{s3_test_data.stage_name}/data_")
+            cur.execute(f"rm @{test_data.stage_name}/data_")
             assert cur.rowcount == 1, "only one file was expected to be removed"
 
             # clean stage
-            cur.execute(f"rm @{s3_test_data.stage_name}/data_")
+            cur.execute(f"rm @{test_data.stage_name}/data_")
 
             cur.execute("drop table pytest_t3_copy")
-            cur.execute(f"drop stage {s3_test_data.stage_name}")
+            cur.execute(f"drop stage {test_data.stage_name}")
             cur.close()
 
 
@@ -466,44 +448,38 @@ union
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_with_auto_compress_false(tmpdir, db_parameters, from_path):
+def test_put_with_auto_compress_false(
+    tmp_path: pathlib.Path, conn_cnx, from_path, sdkless
+):
     """Tests PUT command with auto_compress=False."""
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        database=db_parameters["database"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-    )
-
-    tmp_dir = str(tmpdir.mkdir("data"))
-    test_data = os.path.join(tmp_dir, "data.txt")
-    with open(test_data, "w") as f:
+    tmp_dir = tmp_path / "data"
+    tmp_dir.mkdir()
+    test_data = tmp_dir / "data.txt"
+    with test_data.open("w") as f:
         f.write("test1,test2")
         f.write("test3,test4")
 
-    cnx.cursor().execute("RM @~/test_put_uncompress_file")
-    try:
-        file_stream = None if from_path else open(test_data, "rb")
-        with cnx.cursor() as cur:
-            put(
-                cur,
-                test_data,
-                "~/test_put_uncompress_file",
-                from_path,
-                sql_options="auto_compress=FALSE",
-                file_stream=file_stream,
-            )
-
-        ret = cnx.cursor().execute("LS @~/test_put_uncompress_file").fetchone()
-        assert "test_put_uncompress_file/data.txt" in ret[0]
-        assert "data.txt.gz" not in ret[0]
-    finally:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         cnx.cursor().execute("RM @~/test_put_uncompress_file")
-        if file_stream:
-            file_stream.close()
+        try:
+            file_stream = None if from_path else test_data.open("rb")
+            with cnx.cursor() as cur:
+                put(
+                    cur,
+                    str(test_data),
+                    "~/test_put_uncompress_file",
+                    from_path,
+                    sql_options="auto_compress=FALSE",
+                    file_stream=file_stream,
+                )
+
+            ret = cnx.cursor().execute("LS @~/test_put_uncompress_file").fetchone()
+            assert "test_put_uncompress_file/data.txt" in ret[0]
+            assert "data.txt.gz" not in ret[0]
+        finally:
+            cnx.cursor().execute("RM @~/test_put_uncompress_file")
+            if file_stream:
+                file_stream.close()
 
 
 @pytest.mark.skipif(
@@ -512,78 +488,70 @@ def test_put_with_auto_compress_false(tmpdir, db_parameters, from_path):
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_overwrite(tmpdir, db_parameters, from_path):
+def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx, sdkless):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        database=db_parameters["database"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-    )
-
-    tmp_dir = str(tmpdir.mkdir("data"))
-    test_data = os.path.join(tmp_dir, "data.txt")
-    with open(test_data, "w") as f:
+    tmp_dir = tmp_path / "data"
+    tmp_dir.mkdir()
+    test_data = tmp_dir / "data.txt"
+    with test_data.open("w") as f:
         f.write("test1,test2")
         f.write("test3,test4")
 
-    cnx.cursor().execute("RM @~/test_put_overwrite")
-    try:
-        file_stream = None if from_path else open(test_data, "rb")
-        with cnx.cursor() as cur:
-            with patch.object(
-                cur, "_init_result_and_meta", wraps=cur._init_result_and_meta
-            ) as mock_result:
-                put(
-                    cur,
-                    test_data,
-                    "~/test_put_overwrite",
-                    from_path,
-                    file_stream=file_stream,
-                )
-                assert mock_result.call_args[0][0]["rowset"][0][-2] == "UPLOADED"
-            with patch.object(
-                cur, "_init_result_and_meta", wraps=cur._init_result_and_meta
-            ) as mock_result:
-                put(
-                    cur,
-                    test_data,
-                    "~/test_put_overwrite",
-                    from_path,
-                    file_stream=file_stream,
-                )
-                assert mock_result.call_args[0][0]["rowset"][0][-2] == "SKIPPED"
-            with patch.object(
-                cur, "_init_result_and_meta", wraps=cur._init_result_and_meta
-            ) as mock_result:
-                put(
-                    cur,
-                    test_data,
-                    "~/test_put_overwrite",
-                    from_path,
-                    file_stream=file_stream,
-                    sql_options="OVERWRITE = TRUE",
-                )
-                assert mock_result.call_args[0][0]["rowset"][0][-2] == "UPLOADED"
-
-        ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
-        assert "test_put_overwrite/" + os.path.basename(test_data) in ret[0]
-        assert os.path.basename(test_data) + ".gz" in ret[0]
-    finally:
-        if file_stream:
-            file_stream.close()
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         cnx.cursor().execute("RM @~/test_put_overwrite")
+        try:
+            file_stream = None if from_path else open(test_data, "rb")
+            with cnx.cursor() as cur:
+                with mock.patch.object(
+                    cur, "_init_result_and_meta", wraps=cur._init_result_and_meta
+                ) as mock_result:
+                    put(
+                        cur,
+                        str(test_data),
+                        "~/test_put_overwrite",
+                        from_path,
+                        file_stream=file_stream,
+                    )
+                    assert mock_result.call_args[0][0]["rowset"][0][-2] == "UPLOADED"
+                with mock.patch.object(
+                    cur, "_init_result_and_meta", wraps=cur._init_result_and_meta
+                ) as mock_result:
+                    put(
+                        cur,
+                        str(test_data),
+                        "~/test_put_overwrite",
+                        from_path,
+                        file_stream=file_stream,
+                    )
+                    assert mock_result.call_args[0][0]["rowset"][0][-2] == "SKIPPED"
+                with mock.patch.object(
+                    cur, "_init_result_and_meta", wraps=cur._init_result_and_meta
+                ) as mock_result:
+                    put(
+                        cur,
+                        str(test_data),
+                        "~/test_put_overwrite",
+                        from_path,
+                        file_stream=file_stream,
+                        sql_options="OVERWRITE = TRUE",
+                    )
+                    assert mock_result.call_args[0][0]["rowset"][0][-2] == "UPLOADED"
+
+            ret = cnx.cursor().execute("LS @~/test_put_overwrite").fetchone()
+            assert "test_put_overwrite/" + os.path.basename(test_data) in ret[0]
+            assert test_data.name + ".gz" in ret[0]
+        finally:
+            if file_stream:
+                file_stream.close()
+            cnx.cursor().execute("RM @~/test_put_overwrite")
 
 
 @pytest.mark.skipolddriver
-def test_utf8_filename(tmp_path, conn_cnx):
+def test_utf8_filename(tmp_path, conn_cnx, sdkless):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_utf8_filename_")
-    with conn_cnx() as con:
+    with conn_cnx(use_new_put_get=sdkless) as con:
         with con.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             cur.execute(
@@ -605,11 +573,11 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test, sdkless):
     stage_name = random_string(5, "test_put_get_threshold_")
     file = tmp_path / file_name
     file.touch()
-    with conn_cnx() as cnx, cnx.cursor() as cur:
+    with conn_cnx(use_new_put_get=sdkless) as cnx, cnx.cursor() as cur:
         cur.execute(f"create temporary stage {stage_name}")
         from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
-        with patch(
+        with mock.patch(
             "snowflake.connector.cursor.SnowflakeFileTransferAgent"
             if sdkless
             else "snowflake.connector.cursor.SnowflakeFileTransferAgentSdk",
@@ -633,7 +601,9 @@ def test_multipart_put(sdkless, conn_cnx, tmp_path):
     get_dir = tmp_path / "get_dir"
     get_dir.mkdir()
     upload_file = tmp_path / "file0"
-    with conn_cnx() as con:
+    with conn_cnx(
+        use_new_put_get=sdkless,
+    ) as con:
         with con.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             real_cmd_query = con.cmd_query

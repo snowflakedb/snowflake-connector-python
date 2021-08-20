@@ -10,7 +10,7 @@ import os
 import sys
 import time
 from logging import getLogger
-from typing import IO, Tuple
+from typing import IO, TYPE_CHECKING, Dict, List, Tuple, Union
 
 import pytest
 import pytz
@@ -27,6 +27,9 @@ from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
 from ..randomize import random_string
 
+if TYPE_CHECKING:
+    from snowflake.connector import SnowflakeConnection
+
 try:
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
@@ -34,21 +37,6 @@ except ImportError:
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 logger = getLogger(__name__)
-
-
-@pytest.fixture(
-    autouse=True,
-    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
-    ids=["sdkless", "sdkfull"],
-)
-def sdkless(request):
-    if request.param:
-        os.environ["SF_SDKLESS_PUT"] = "true"
-        os.environ["SF_SDKLESS_GET"] = "true"
-    else:
-        os.environ["SF_SDKLESS_PUT"] = "false"
-        os.environ["SF_SDKLESS_GET"] = "false"
-    return request.param
 
 
 @pytest.fixture()
@@ -65,7 +53,7 @@ def file_src(request) -> Tuple[str, int, IO[bytes]]:
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
-def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
+def test_put_copy0(conn_cnx, db_parameters, from_path, file_src, sdkless):
     """Puts and Copies a file."""
     file_path, _, file_stream = file_src
     kwargs = {
@@ -76,20 +64,18 @@ def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
         "file_stream": file_stream,
     }
 
-    def run(cnx, sql):
+    def run(cnx: "SnowflakeConnection", sql: str) -> List[Tuple]:
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    def run_with_cursor(cnx, sql):
+    def run_with_cursor(
+        cnx: "SnowflakeConnection", sql: str
+    ) -> Tuple["SnowflakeCursor", Union[List[Tuple], List[Dict]]]:
         sql = sql.format(name=db_parameters["name"])
         c = cnx.cursor(DictCursor)
         return c, c.execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(
             cnx,
             """
@@ -126,19 +112,15 @@ ratio number(5,2))
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["gzip_sample.txt.gz"], indirect=["file_src"])
-def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src):
+def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
     """Puts and Copies compressed files."""
     file_name, file_size, file_stream = file_src
 
-    def run(cnx, sql):
+    def run(cnx: "SnowflakeConnection", sql: str) -> List[Dict]:
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor(DictCursor).execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         with cnx.cursor(DictCursor) as csr:
             ret = put(
@@ -163,7 +145,7 @@ def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src):
 )
 @pytest.mark.parametrize("file_src", ["bzip2_sample.txt.bz2"], indirect=["file_src"])
 @pytest.mark.skip(reason="BZ2 is not detected in this test case. Need investigation")
-def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src):
+def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
     """Put and Copy bz2 compressed files."""
     file_name, _, file_stream = file_src
 
@@ -171,11 +153,7 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src):
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in put(
             cnx.cursor(),
@@ -198,7 +176,9 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src):
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["brotli_sample.txt.br"], indirect=["file_src"])
-def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src):
+def test_put_copy_brotli_compressed(
+    conn_cnx, db_parameters, from_path, file_src, sdkless
+):
     """Puts and Copies brotli compressed files."""
     file_name, _, file_stream = file_src
 
@@ -206,11 +186,7 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
 
         run(cnx, "create or replace table {name} (value string)")
         for rec in put(
@@ -234,7 +210,9 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["zstd_sample.txt.zst"], indirect=["file_src"])
-def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
+def test_put_copy_zstd_compressed(
+    conn_cnx, db_parameters, from_path, file_src, sdkless
+):
     """Puts and Copies zstd compressed files."""
     file_name, _, file_stream = file_src
 
@@ -242,11 +220,7 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in put(
             cnx.cursor(),
@@ -271,7 +245,9 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["nation.impala.parquet"], indirect=["file_src"])
-def test_put_copy_parquet_compressed(conn_cnx, db_parameters, from_path, file_src):
+def test_put_copy_parquet_compressed(
+    conn_cnx, db_parameters, from_path, file_src, sdkless
+):
     """Puts and Copies parquet compressed files."""
     file_name, _, file_stream = file_src
 
@@ -279,11 +255,7 @@ def test_put_copy_parquet_compressed(conn_cnx, db_parameters, from_path, file_sr
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(cnx, "alter session set enable_parquet_filetype=true")
         run(
             cnx,
@@ -317,7 +289,7 @@ stage_file_format=(type='parquet')
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["TestOrcFile.test1.orc"], indirect=["file_src"])
-def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src):
+def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
     """Puts and Copies ORC compressed files."""
     file_name, _, file_stream = file_src
 
@@ -325,11 +297,7 @@ def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src):
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(
             cnx,
             """
@@ -357,7 +325,7 @@ create or replace table {name} (value variant) stage_file_format=(type='orc')
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_copy_get(tmpdir, conn_cnx, db_parameters):
+def test_copy_get(tmpdir, conn_cnx, db_parameters, sdkless):
     """Copies and Gets a file."""
     name_unload = db_parameters["name"] + "_unload"
     tmp_dir = str(tmpdir.mkdir("copy_get_stage"))
@@ -372,11 +340,7 @@ def test_copy_get(tmpdir, conn_cnx, db_parameters):
         )
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(cnx, "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
         run(
             cnx,
@@ -445,7 +409,7 @@ max_file_size=10000000
 
 
 @pytest.mark.flaky(reruns=3)
-def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters):
+def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters, sdkless):
     """Puts and Copies many_files."""
     # generates N files
     number_of_files = 100
@@ -460,11 +424,7 @@ def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters):
         sql = sql.format(files=files.replace("\\", "\\\\"), name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(
             cnx,
             """
@@ -490,7 +450,7 @@ ratio number(6,2))
 
 
 @pytest.mark.aws
-def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters):
+def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
     """[s3] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
@@ -505,11 +465,7 @@ def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters):
         sql = sql.format(files=files.replace("\\", "\\\\"), name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(
             cnx,
             """
@@ -525,11 +481,7 @@ ratio number(6,2))
 """,
         )
     try:
-        with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
-        ) as cnx:
+        with conn_cnx(use_new_put_get=sdkless) as cnx:
             run(cnx, "put 'file://{files}' @%{name}")
             run(cnx, "copy into {name}")
 
@@ -549,7 +501,7 @@ ratio number(6,2))
 @pytest.mark.aws
 @pytest.mark.azure
 @pytest.mark.flaky(reruns=3)
-def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters):
+def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
     """[s3] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
@@ -564,11 +516,7 @@ def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters):
         sql = sql.format(files=files.replace("\\", "\\\\"), name=db_parameters["name"])
         return cnx.cursor().execute(sql, _raise_put_get_error=False).fetchall()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         run(
             cnx,
             """
@@ -585,11 +533,7 @@ ratio number(6,2))
         )
 
     try:
-        with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
-        ) as cnx:
+        with conn_cnx(use_new_put_get=sdkless) as cnx:
             success_cnt = 0
             skipped_cnt = 0
             for rec in run(cnx, "put 'file://{files}' @%{name}"):
@@ -628,18 +572,14 @@ ratio number(6,2))
                 rows += rec[0]
             assert rows == number_of_files * number_of_lines, "Number of rows"
     finally:
-        with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
-        ) as cnx:
+        with conn_cnx(use_new_put_get=sdkless) as cnx:
             run(cnx, "drop table if exists {name}")
 
 
 @pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
-def test_put_collision(tmpdir, conn_cnx, db_parameters):
+def test_put_collision(tmpdir, conn_cnx, db_parameters, sdkless):
     """File name collision test. The data set have the same file names but contents are different."""
     number_of_files = 5
     number_of_lines = 10
@@ -662,7 +602,7 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters):
     files2 = os.path.join(tmp_dir, "file*")
 
     stage_name = random_string(5, "test_put_collision_")
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         cnx.cursor().execute("RM @~/{}".format(stage_name))
         try:
             # upload all files
@@ -714,11 +654,7 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters):
             assert skipped_cnt == 0
 
         finally:
-            with conn_cnx(
-                user=db_parameters["user"],
-                account=db_parameters["account"],
-                password=db_parameters["password"],
-            ) as cnx:
+            with conn_cnx(use_new_put_get=sdkless) as cnx:
                 cnx.cursor().execute("RM @~/{}".format(stage_name))
 
 
@@ -732,70 +668,8 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     return fname
 
 
-def _huge_value_json_upload(tmpdir, conn_cnx, db_parameters):
-    """(WIP) Huge json value data."""
-    with conn_cnx() as cnx:
-        json_table = db_parameters["name"] + "_json"
-        cnx.cursor().execute(
-            "create or replace table {table} (v variant)".format(table=json_table)
-        )
-
-        rows = 2
-        size = 2000
-        tmp_file = _generate_huge_value_json(tmpdir, n=rows, value_size=size)
-        try:
-            c = cnx.cursor()
-            try:
-                c.execute(
-                    "put 'file://{tmp_file}' @%{name}".format(
-                        tmp_file=tmp_file.replace("\\", "\\\\"), name=json_table
-                    )
-                )
-                colmap = {}
-                for index, item in enumerate(c.description):
-                    colmap[item[0]] = index
-                for rec in c:
-                    source = rec[colmap["source"]]
-                    logger.debug(source)
-            finally:
-                c.close()
-
-            c = cnx.cursor()
-            try:
-                c.execute(
-                    "copy into {name} on_error='skip_file' file_format=(type='json')".format(
-                        name=json_table
-                    )
-                )
-                cnt = 0
-                rec = []
-                for rec in c:
-                    logger.debug(rec)
-                    cnt += 1
-                assert rec[1] == "LOAD_FAILED", "Loading huge value json should fail"
-                assert cnt == 1, "Number of PUT files"
-            finally:
-                c.close()
-
-            c = cnx.cursor()
-            try:
-                c.execute("select count(*) from {name}".format(name=json_table))
-                cnt = -1
-                for rec in c:
-                    cnt = rec[0]
-                assert cnt == 0, "Number of copied rows"
-            finally:
-                c.close()
-
-            cnx.cursor().execute(
-                "drop table if exists {table}".format(table=json_table)
-            )
-        finally:
-            os.unlink(tmp_file)
-
-
 @pytest.mark.aws
-def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
+def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
     """[s3] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
@@ -831,11 +705,7 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
             .fetchall()
         )
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         try:
             run(cnx, "PUT 'file://{files}' @~/{dir}")
             # run(cnx, "PUT 'file://{files}' @~/{dir}")  # retry
@@ -863,7 +733,9 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
-def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src):
+def test_put_get_with_hint(
+    tmpdir, conn_cnx, db_parameters, from_path, file_src, sdkless
+):
     """SNOW-15153: PUTs and GETs with hint."""
     tmp_dir = str(tmpdir.mkdir("put_get_with_hint"))
     file_name, file_size, file_stream = file_src
@@ -874,11 +746,7 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src)
         )
         return cnx.cursor().execute(sql, _is_put_get=_is_put_get).fetchone()
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         # regular PUT case
         ret = put(
             cnx.cursor(),

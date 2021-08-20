@@ -52,33 +52,17 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.gcp
 
 
-@pytest.fixture(
-    autouse=True,
-    params=[
-        pytest.param(True, marks=pytest.mark.skipolddriver),
-        False,
-    ],
-    ids=[
-        "sdkless",
-        "sdkfull",
-    ],
-)
-def sdkless(request):
-    if request.param:
-        os.environ["SF_SDKLESS_PUT"] = "true"
-        os.environ["SF_SDKLESS_GET"] = "true"
-    else:
-        os.environ["SF_SDKLESS_PUT"] = "false"
-        os.environ["SF_SDKLESS_GET"] = "false"
-    return request.param
-
-
 @pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 def test_put_get_with_gcp(
-    tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped, from_path
+    tmpdir,
+    conn_cnx,
+    is_public_test,
+    enable_gcs_downscoped,
+    from_path,
+    sdkless,
 ):
     """[gcp] Puts and Gets a small text using gcp."""
     if enable_gcs_downscoped and is_public_test:
@@ -93,7 +77,7 @@ def test_put_get_with_gcp(
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_gcp_token"))
     table_name = random_string(5, "snow32806_")
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         with cnx.cursor() as csr:
             try:
                 csr.execute(
@@ -141,7 +125,11 @@ def test_put_get_with_gcp(
 
 @pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
 def test_put_copy_many_files_gcp(
-    tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped
+    tmpdir,
+    conn_cnx,
+    is_public_test,
+    enable_gcs_downscoped,
+    sdkless,
 ):
     """[gcp] Puts and Copies many files."""
     if enable_gcs_downscoped and is_public_test:
@@ -162,7 +150,7 @@ def test_put_copy_many_files_gcp(
         sql = sql.format(files=files, name=table_name)
         return csr.execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         with cnx.cursor() as csr:
             try:
                 csr.execute(
@@ -203,7 +191,11 @@ def test_put_copy_many_files_gcp(
 
 @pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
 def test_put_copy_duplicated_files_gcp(
-    tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped
+    tmpdir,
+    conn_cnx,
+    is_public_test,
+    enable_gcs_downscoped,
+    sdkless,
 ):
     """[gcp] Puts and Copies duplicated files."""
     if enable_gcs_downscoped and is_public_test:
@@ -224,7 +216,7 @@ def test_put_copy_duplicated_files_gcp(
         sql = sql.format(files=files, name=table_name)
         return csr.execute(sql).fetchall()
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         with cnx.cursor() as csr:
             try:
                 csr.execute(
@@ -296,7 +288,11 @@ def test_put_copy_duplicated_files_gcp(
 
 @pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
 def test_put_get_large_files_gcp(
-    tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped
+    tmpdir,
+    conn_cnx,
+    is_public_test,
+    enable_gcs_downscoped,
+    sdkless,
 ):
     """[gcp] Puts and Gets Large files."""
     if enable_gcs_downscoped and is_public_test:
@@ -334,7 +330,7 @@ def test_put_get_large_files_gcp(
             .fetchall()
         )
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         try:
             try:
                 run(
@@ -376,7 +372,7 @@ def test_put_get_large_files_gcp(
             run(cnx, "RM @~/{dir}")
 
 
-def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, sdkless):
     if sdkless:
         pytest.skip("This test needs to be totally rewritten for sdkless mode")
     fname = str(tmpdir.join("test_put_get_with_gcp_token.txt.gz"))
@@ -386,7 +382,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdk
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_gcp_token"))
     table_name = random_string(5, "snow32807_")
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         with cnx.cursor() as csr:
             csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
@@ -495,7 +491,11 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, db_parameters, sdk
 
 @pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
 def test_auto_compress_off_gcp(
-    tmpdir, conn_cnx, db_parameters, is_public_test, enable_gcs_downscoped
+    tmpdir,
+    conn_cnx,
+    is_public_test,
+    enable_gcs_downscoped,
+    sdkless,
 ):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     if enable_gcs_downscoped and is_public_test:
@@ -508,7 +508,7 @@ def test_auto_compress_off_gcp(
         )
     )
     stage_name = random_string(5, "teststage_")
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         with cnx.cursor() as cursor:
             try:
                 cursor.execute(
@@ -531,7 +531,11 @@ def test_auto_compress_off_gcp(
 # TODO
 @pytest.mark.parametrize("error_code", [401, 403, 408, 429, 500, 503])
 def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
-    tmpdir, conn_cnx, db_parameters, error_code, is_public_test
+    tmpdir,
+    conn_cnx,
+    error_code,
+    is_public_test,
+    sdkless,
 ):
     if is_public_test:
         pytest.xfail(
@@ -544,7 +548,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_gcp_token"))
     table_name = random_string(5, "snow32807_")
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         with cnx.cursor() as csr:
             csr.execute("ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE")
             csr.execute(f"create or replace table {table_name} (a int, b string)")
@@ -663,7 +667,11 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 def test_put_overwrite_with_downscope(
-    tmpdir, conn_cnx, db_parameters, is_public_test, from_path
+    tmpdir,
+    conn_cnx,
+    is_public_test,
+    from_path,
+    sdkless,
 ):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     if is_public_test:
@@ -671,7 +679,7 @@ def test_put_overwrite_with_downscope(
             "Server need to update with merged change. Expected release version: 4.41.0"
         )
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
 
         tmp_dir = str(tmpdir.mkdir("data"))
         test_data = os.path.join(tmp_dir, "data.txt")

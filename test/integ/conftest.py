@@ -88,18 +88,12 @@ def db_parameters() -> Dict[str, str]:
 
 def get_db_parameters() -> Dict[str, str]:
     """Sets the db connection parameters."""
-    ret = {}
     os.environ["TZ"] = "UTC"
     if not IS_WINDOWS:
         time.tzset()
 
     # testaccount connection info
-    for k, v in CONNECTION_PARAMETERS.items():
-        ret[k] = v
-
-    for k, v in DEFAULT_PARAMETERS.items():
-        if k not in ret:
-            ret[k] = v
+    ret = {**DEFAULT_PARAMETERS, **CONNECTION_PARAMETERS}
 
     # snowflake admin account. Not available in GH actions
     for k, v in CONNECTION_PARAMETERS_ADMIN.items():

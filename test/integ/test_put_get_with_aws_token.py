@@ -35,25 +35,10 @@ from ..randomize import random_string
 pytestmark = pytest.mark.aws
 
 
-@pytest.fixture(
-    autouse=True,
-    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
-    ids=["sdkless", "sdkfull"],
-)
-def sdkless(request):
-    if request.param:
-        os.environ["SF_SDKLESS_PUT"] = "true"
-        os.environ["SF_SDKLESS_GET"] = "true"
-    else:
-        os.environ["SF_SDKLESS_PUT"] = "false"
-        os.environ["SF_SDKLESS_GET"] = "false"
-    return request.param
-
-
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
+def test_put_get_with_aws(tmpdir, conn_cnx, from_path, sdkless):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
     fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
@@ -63,7 +48,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_aws_token"))
     table_name = random_string(5, "snow9144_")
 
-    with conn_cnx() as cnx:
+    with conn_cnx(use_new_put_get=sdkless) as cnx:
         with cnx.cursor() as csr:
             try:
                 csr.execute(f"create or replace table {table_name} (a int, b string)")
@@ -102,7 +87,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, db_parameters, from_path):
     assert original_contents == contents, "Output is different from the original file"
 
 
-def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_with_invalid_token(tmpdir, conn_cnx, sdkless):
     """[s3] SNOW-6154: Uses invalid combination of AWS credential."""
     # create a data file
     if sdkless:
@@ -111,7 +96,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, sdkless):
             f.write("123,test1\n456,test2".encode(UTF8))
         table_name = random_string(5, "snow6154_")
 
-        with conn_cnx() as cnx:
+        with conn_cnx(use_new_put_get=sdkless) as cnx:
             try:
                 cnx.cursor().execute(
                     f"create or replace table {table_name} (a int, b string)"
@@ -163,7 +148,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx, db_parameters, sdkless):
             f.write("123,test1\n456,test2".encode(UTF8))
         table_name = random_string(5, "snow6154_")
 
-        with conn_cnx() as cnx:
+        with conn_cnx(use_new_put_get=sdkless) as cnx:
             try:
                 cnx.cursor().execute(
                     f"create or replace table {table_name} (a int, b string)"

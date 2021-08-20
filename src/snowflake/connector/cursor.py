@@ -55,7 +55,6 @@ from .errors import (
     NotSupportedError,
     ProgrammingError,
 )
-from .feature import feature_sdkless_get, feature_sdkless_put
 from .file_transfer_agent import SnowflakeFileTransferAgent
 from .file_transfer_agent_sdk import (
     SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSdk,
@@ -707,12 +706,8 @@ class SnowflakeCursor(object):
 
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                transfer_type = self.get_file_transfer_type(command)
-
                 # Decide whether to use the old, or new code path
-                if (
-                    transfer_type == FileTransferType.PUT and feature_sdkless_put()
-                ) or (transfer_type == FileTransferType.GET and feature_sdkless_get()):
+                if self._connection._use_new_put_get:
                     sf_file_transfer_agent_class = SnowflakeFileTransferAgent
                 else:
                     sf_file_transfer_agent_class = SnowflakeFileTransferAgentSdk
@@ -1111,7 +1106,7 @@ class SnowflakeCursor(object):
 
         return ret
 
-    def fetchall(self):
+    def fetchall(self) -> Union[List[Tuple], List[Dict]]:
         """Fetches all of the results."""
         ret = []
         while True:
