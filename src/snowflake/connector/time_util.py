@@ -25,6 +25,8 @@ class HeartBeatTimer(Timer):
     def __init__(self, client_session_keep_alive_heartbeat_frequency, f):
         interval = client_session_keep_alive_heartbeat_frequency
         super(HeartBeatTimer, self).__init__(interval, f)
+        # Mark this as a daemon thread, so that it won't prevent Python from exiting.
+        self.daemon = True
 
     def run(self):
         while not self.finished.is_set():
