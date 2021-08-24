@@ -20,27 +20,26 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools and pip
+        run: python -m pip install -U setuptools pip wheel
       - name: Install Python Connector
         shell: bash
-        run: |
-          python -m pip install .
+        run: python -m pip install .
       - name: Create reqs file
         shell: bash
         run: |
           mkdir temp_requirement
-          reqs_file="temp_requirement/requirements_$(python -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').reqs"
-          echo "# Generated on: $(python --version)" >${reqs_file}
-          echo "# With snowflake-connector-python version: $(python -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${reqs_file}
-          python -m pip freeze | grep -v snowflake-connector-python 1>>${reqs_file} 2>/dev/null
-          echo '::set-output name=requirements_file::${reqs_file}'
+          echo "requirements_file=temp_requirement/requirements_$(python -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').reqs" >> $GITHUB_ENV
+          echo "# Generated on: $(python --version)" >${{ env.requirements_file }}
+          echo "# With snowflake-connector-python version: $(python -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${{ env.requirements_file }}
+          python -m pip freeze | grep -v snowflake-connector-python 1>>${{ env.requirements_file }} 2>/dev/null
         id: create-reqs-file
       - name: Show created req file
         shell: bash
-        run: cat ${{ steps.create-reqs-file.outputs.requirements_file}}
+        run: cat ${{ env.requirements_file }}
       - uses: actions/upload-artifact@v2
         with:
           path: temp_requirement
-          name: reqs_py${{ matrix.python-version }}
 
   push-files:
     needs: create-req-files
@@ -57,20 +56,8 @@ jobs:
       - name: Download requirement files
         uses: actions/download-artifact@v2
         with:
-          path: artifacts/
-      - name: Collect all requirements files to one dir
-        run: |
-          python -c '
-          from pathlib import Path
-          import shutil
-
-          src_dir = Path("artifacts")
-          dst_dir = Path(".") / "tested_requirements"
-          dst_dir.mkdir()
-          for src_file in src_dir.glob("*/*.reqs"):
-              dst_file = dst_dir / src_file.name
-              print("{} copy to {}".format(src_file, dst_file))
-              shutil.copy(str(src_file), str(dst_file))'
+          name: artifact
+          path: tested_requirements
       - name: Commit and push new requirements files
         run: |
           git config user.name github-actions
