@@ -66,4 +66,4 @@ jobs:
           git config user.email github-actions@github.com
           git add tested_requirements
           git commit -m "Update requirements files" -a
-#          git push
+          git push
