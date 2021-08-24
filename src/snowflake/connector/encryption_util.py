@@ -38,9 +38,9 @@ def matdesc_to_unicode(matdesc):
     )
 
 
-class SnowflakeEncryptionUtil(object):
+class SnowflakeEncryptionUtil:
     @staticmethod
-    def get_secure_random(byte_length):
+    def get_secure_random(byte_length: int) -> bytes:
         return os.urandom(byte_length)
 
     @staticmethod
@@ -157,7 +157,6 @@ class SnowflakeEncryptionUtil(object):
             temp_output_file,
             tmp_dir,
         )
-        metadata = None
         with open(in_filename, "rb") as infile:
             with os.fdopen(temp_output_fd, "wb") as outfile:
                 metadata = SnowflakeEncryptionUtil.encrypt_stream(
@@ -167,12 +166,12 @@ class SnowflakeEncryptionUtil(object):
 
     @staticmethod
     def decrypt_file(
-        metadata,
-        encryption_material,
+        metadata: "EncryptionMetadata",
+        encryption_material: "SnowflakeFileEncryptionMaterial",
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
         tmp_dir=None,
-    ):
+    ) -> str:
         """Decrypts a file and stores the output in the temporary directory.
 
         Args:

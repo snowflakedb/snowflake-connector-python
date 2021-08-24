@@ -11,7 +11,7 @@ from datetime import datetime
 from logging import getLogger
 from random import choice
 from string import hexdigits
-from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 from .compat import quote
 from .constants import FileHeader, ResultStatus
@@ -20,7 +20,7 @@ from .storage_client import SnowflakeStorageClient
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .file_transfer_agent import SnowflakeFileMeta
+    from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
 
@@ -43,11 +43,11 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
     def __init__(
         self,
         meta: "SnowflakeFileMeta",
-        credentials,
+        credentials: Optional["StorageCredential"],
         chunk_size: int,
         stage_info: Dict[str, Any],
-        use_s3_regional_url=False,
-    ):
+        use_s3_regional_url: bool = False,
+    ) -> None:
         super().__init__(meta, stage_info, chunk_size, credentials=credentials)
         end_point: str = stage_info["endPoint"]
         if end_point.startswith("blob."):
@@ -57,18 +57,17 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         self.azure_location = self.extract_container_name_and_path(
             stage_info["location"]
         )
-        self.block_ids: list[str] = []
+        self.block_ids: List[str] = []
 
     @staticmethod
-    def extract_container_name_and_path(stage_location) -> AzureLocation:
+    def extract_container_name_and_path(stage_location: str) -> "AzureLocation":
         stage_location = os.path.expanduser(stage_location)
         container_name = stage_location
         path = ""
 
         # split stage location as bucket name and path
         if "/" in stage_location:
-            container_name = stage_location[0 : stage_location.index("/")]
-            path = stage_location[stage_location.index("/") + 1 :]
+            container_name, _, path = stage_location.partition("/")
             if path and not path.endswith("/"):
                 path += "/"
 
@@ -86,11 +85,11 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         retry_id: Union[int, str],
         headers: Dict[str, Any] = None,
         data: bytes = None,
-    ):
+    ) -> requests.Response:
         if not headers:
             headers = {}
 
-        def generate_authenticated_url_and_rest_args():
+        def generate_authenticated_url_and_rest_args() -> Tuple[bytes, Dict[str, Any]]:
             curtime = datetime.utcnow()
             timestamp = curtime.strftime("YYYY-MM-DD")
             sas_token = self.credentials.creds["AZURE_SAS_TOKEN"]
@@ -122,13 +121,13 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         r = self._send_request_with_authentication_and_retry("HEAD", url, retry_id)
         if r.status_code == 200:
             meta.result_status = ResultStatus.UPLOADED
-            encryptiondata = json.loads(r.headers.get(ENCRYPTION_DATA))
+            encryption_data = json.loads(r.headers.get(ENCRYPTION_DATA))
             encryption_metadata = (
                 None
-                if not encryptiondata
+                if not encryption_data
                 else EncryptionMetadata(
-                    key=encryptiondata["WrappedContentKey"]["EncryptedKey"],
-                    iv=encryptiondata["ContentEncryptionIV"],
+                    key=encryption_data["WrappedContentKey"]["EncryptedKey"],
+                    iv=encryption_data["ContentEncryptionIV"],
                     matdesc=r.headers.get(MATDESC),
                 )
             )
@@ -145,7 +144,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         else:
             r.raise_for_status()
 
-    def _prepare_file_metadata(self) -> None:
+    def _prepare_file_metadata(self) -> Dict[str, Optional[str]]:
         azure_metadata = {
             SFCDIGEST: self.meta.sha256_digest,
         }

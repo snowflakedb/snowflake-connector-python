@@ -13,6 +13,7 @@ import platform
 import queue
 import urllib.parse
 import urllib.request
+from typing import Any
 
 from snowflake.connector.constants import UTF8
 
@@ -20,11 +21,10 @@ IS_LINUX = platform.system() == "Linux"
 IS_WINDOWS = platform.system() == "Windows"
 IS_MACOS = platform.system() == "Darwin"
 
-NUM_DATA_TYPES = []
 try:
     import numpy
 
-    NUM_DATA_TYPES = [
+    NUM_DATA_TYPES = (
         numpy.int8,
         numpy.int16,
         numpy.int32,
@@ -37,9 +37,10 @@ try:
         numpy.uint32,
         numpy.uint64,
         numpy.bool_,
-    ]
-except Exception:
+    )
+except (ImportError, AttributeError):
     numpy = None
+    NUM_DATA_TYPES = tuple()
 
 GET_CWD = os.getcwd
 BASE_EXCEPTION_CLASS = Exception
@@ -89,22 +90,22 @@ EmptyQueue = queue.Empty
 Queue = queue.Queue
 
 
-def IS_BYTES(v):
+def IS_BYTES(v: Any) -> bool:
     return isinstance(v, bytes)
 
 
-def IS_UNICODE(v):
+def IS_UNICODE(v: Any) -> bool:
     return isinstance(v, str)
 
 
-def IS_NUMERIC(v):
-    return isinstance(v, tuple(NUM_DATA_TYPES))
+def IS_NUMERIC(v: Any) -> bool:
+    return isinstance(v, NUM_DATA_TYPES)
 
 
 IS_STR = IS_UNICODE
 
 
-def PKCS5_PAD(value, block_size):
+def PKCS5_PAD(value: bytes, block_size: int) -> bytes:
     return b"".join(
         [
             value,
@@ -114,11 +115,11 @@ def PKCS5_PAD(value, block_size):
     )
 
 
-def PRINT(msg):
+def PRINT(msg: str) -> None:
     print(msg)
 
 
-def INPUT(prompt):
+def INPUT(prompt: str) -> str:
     return input(prompt)
 
 

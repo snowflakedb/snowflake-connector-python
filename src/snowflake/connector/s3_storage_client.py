@@ -56,7 +56,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         chunk_size: int,
         use_accelerate_endpoint: bool = False,
         use_s3_regional_url=False,
-    ):
+    ) -> None:
         """Rest client for S3 storage.
 
         Args:
@@ -94,16 +94,16 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 )
 
     @staticmethod
-    def sign(secret_key, msg):
+    def sign(secret_key: bytes, msg: bytes) -> bytes:
         h = hmac.HMAC(secret_key, hashes.SHA1())
         h.update(msg)
         return base64.encodebytes(h.finalize()).strip()
 
     @staticmethod
     def _construct_canonicalized_element(
-        bucket_name: str = None,
+        bucket_name: Optional[str] = None,
         request_uri: str = "",
-        subresource: Dict[str, Union[str, int, None]] = None,
+        subresource: Optional[Dict[str, Union[str, int, None]]] = None,
     ) -> str:
         if not subresource:
             subresource = {}
@@ -241,7 +241,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             verb, generate_authenticated_url_and_args, retry_id
         )
 
-    def get_file_header(self, filename: str) -> Union[FileHeader, None]:
+    def get_file_header(self, filename: str) -> Optional[FileHeader]:
         """Gets the metadata of file in specified location.
 
         Args:
@@ -333,7 +333,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         else:
             response.raise_for_status()
 
-    def _upload_chunk(self, chunk_id: int, chunk: bytes):
+    def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
         url = self.endpoint + f"/{path}"
 
