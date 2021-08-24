@@ -1,44 +1,12 @@
 name: Create Requirements Files
 
 on:
-  push:
-      branches:
-        - master
+  workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
-  build:
-    name: Build linux-py${{ matrix.python-version }}
-    runs-on: ubuntu-latest
-    container: quay.io/pypa/manylinux2010_x86_64
-    strategy:
-      matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9]
-    steps:
-      - uses: actions/checkout@v1
-      - name: Updating path
-        run: |
-          echo "/opt/python/cp35-cp35m/bin/" >> $GITHUB_PATH
-          echo "/opt/python/cp36-cp36m/bin/" >> $GITHUB_PATH
-          echo "/opt/python/cp37-cp37m/bin/" >> $GITHUB_PATH
-          echo "/opt/python/cp38-cp38/bin/" >> $GITHUB_PATH
-          echo "/opt/python/cp39-cp39/bin/" >> $GITHUB_PATH
-      - name: Display Python version
-        run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools and pip
-        run: python${{ matrix.python-version }} -m pip install -U setuptools pip
-      - name: Generate wheel
-        run: python${{ matrix.python-version }} -m pip wheel -v -w dist_tmp --no-deps .
-      - name: Run auditwheel
-        run: auditwheel repair --plat manylinux2014_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
-      - name: Show wheels generated
-        run: ls -lh dist
-      - uses: actions/upload-artifact@v1
-        with:
-          name: linux_py${{ matrix.python-version }}
-          path: dist/
-
   create-req-files:
-    needs: build
     name: Create requirements files
     runs-on: ubuntu-latest
     strategy:
@@ -52,28 +20,27 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-      - name: Download wheel
-        uses: actions/download-artifact@v2
-        with:
-          name: linux_py${{ matrix.python-version }}
-          path: dist
-      - name: Build Wheel
+      - name: Install Python Connector
         shell: bash
         run: |
-          python -m pip install dist/*whl
+          python -m pip install .
       - name: Create reqs file
         shell: bash
         run: |
-          mkdir temp_requirements
-          reqs_file="temp_requirements/requirements_$(python -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').reqs"
+          mkdir temp_requirement
+          reqs_file="temp_requirement/requirements_$(python -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').reqs"
           echo "# Generated on: $(python --version)" >${reqs_file}
           echo "# With snowflake-connector-python version: $(python -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${reqs_file}
           python -m pip freeze | grep -v snowflake-connector-python 1>>${reqs_file} 2>/dev/null
-          cat ${reqs_file}
+          echo '::set-output name=requirements_file::${reqs_file}'
+        id: create-reqs-file
+      - name: Show created req file
+        shell: bash
+        run: cat ${{ steps.create-reqs-file.outputs.requirements_file}}
       - uses: actions/upload-artifact@v2
         with:
-          name: requirements
-          path: temp_requirements
+          path: temp_requirement
+          name: reqs_py${{ matrix.python-version }}
 
   push-files:
     needs: create-req-files
@@ -81,19 +48,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
       - name: Download requirement files
         uses: actions/download-artifact@v2
         with:
-          name: requirements
-          path: tested_requirements/
-      - name: Commit files
+          path: artifacts/
+      - name: Collect all requirements files to one dir
         run: |
-          git status
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git commit -m "Update requirements file" -a
-      - name: Push changes
-        uses: ad-m/github-push-action/@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref }}
+          python -c '
+          from pathlib import Path
+          import shutil
+
+          src_dir = Path("artifacts")
+          dst_dir = Path(".") / "tested_requirements"
+          dst_dir.mkdir()
+          for src_file in src_dir.glob("*/*.reqs"):
+              dst_file = dst_dir / src_file.name
+              print("{} copy to {}".format(src_file, dst_file))
+              shutil.copy(str(src_file), str(dst_file))'
+      - name: Commit and push new requirements files
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add tested_requirements
+          git commit -m "Update requirements files" -a
+#          git push
