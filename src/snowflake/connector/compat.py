@@ -13,7 +13,7 @@ import platform
 import queue
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, Tuple, Type
 
 from snowflake.connector.constants import UTF8
 
@@ -21,6 +21,7 @@ IS_LINUX = platform.system() == "Linux"
 IS_WINDOWS = platform.system() == "Windows"
 IS_MACOS = platform.system() == "Darwin"
 
+NUM_DATA_TYPES: Tuple[Type, ...] = ()
 try:
     import numpy
 
@@ -40,7 +41,6 @@ try:
     )
 except (ImportError, AttributeError):
     numpy = None
-    NUM_DATA_TYPES = tuple()
 
 GET_CWD = os.getcwd
 BASE_EXCEPTION_CLASS = Exception
@@ -53,7 +53,7 @@ urlunsplit = urllib.parse.urlunsplit
 parse_qs = urllib.parse.parse_qs
 urlparse = urllib.parse.urlparse
 
-NUM_DATA_TYPES += [int, float, decimal.Decimal]
+NUM_DATA_TYPES += (int, float, decimal.Decimal)
 
 
 def PKCS5_UNPAD(v):
