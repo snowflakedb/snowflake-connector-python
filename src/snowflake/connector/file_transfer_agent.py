@@ -128,7 +128,7 @@ class SnowflakeFileMeta:
     sha256_digest: Optional[str] = None
     upload_size: Optional[int] = None
     real_src_file_name: Optional[str] = None
-    error_details: Optional[str] = None
+    error_details: Optional[Exception] = None
     last_error: Optional[Exception] = None
     no_sleeping_time: bool = False
     gcs_file_header_digest: Optional[str] = None
@@ -575,7 +575,7 @@ class SnowflakeFileTransferAgent:
                 )
             except Exception as e:
                 logger.error(f"An exception was raised in {repr(work)}", exc_info=True)
-                file_meta.error_details = str(e)
+                file_meta.error_details = e
                 result = (False, e)
             try:
                 _callback(*result, file_meta)
@@ -686,7 +686,11 @@ class SnowflakeFileTransferAgent:
                     else:
                         dst_compression_type = "NONE"
 
-                    error_details = meta.error_details or ""
+                    error_details: str = (
+                        repr(meta.error_details)
+                        if meta.error_details is not None
+                        else ""
+                    )
 
                     src_file_size = (
                         meta.src_file_size
@@ -752,7 +756,11 @@ class SnowflakeFileTransferAgent:
                         else str(meta.dst_file_size)
                     )
 
-                    error_details = meta.error_details or ""
+                    error_details: str = (
+                        repr(meta.error_details)
+                        if meta.error_details is not None
+                        else ""
+                    )
 
                     if self._raise_put_get_error and error_details:
                         Error.errorhandler_wrapper(
