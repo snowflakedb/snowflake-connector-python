@@ -183,7 +183,7 @@ def test_put_copy_many_files_gcp(
                 assert all([rec[6] == "UPLOADED" for rec in all_recs])
                 run(csr, "copy into {name}")
 
-                rows = sum([rec[0] for rec in run(csr, "select count(*) from {name}")])
+                rows = sum(rec[0] for rec in run(csr, "select count(*) from {name}"))
                 assert rows == number_of_files * number_of_lines, "Number of rows"
             finally:
                 run(csr, "drop table if exists {name}")
