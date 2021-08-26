@@ -3,9 +3,11 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-from mock import Mock
-from snowflake.connector.compat import OK
 from typing import Pattern, Sequence, Tuple, Union
+
+from mock import Mock
+
+from snowflake.connector.compat import OK
 
 
 def create_mock_response(status_code: int) -> Mock:

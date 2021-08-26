@@ -634,6 +634,6 @@ def test_sql_splitting_various(sql, delimiter, split_stmnts):
     """This tests various smaller sql splitting pitfalls."""
     with StringIO(sql) as sqlio:
         statements = list(
-            [s[0] for s in split_statements(sqlio, delimiter=SQLDelimiter(delimiter))]
+            s[0] for s in split_statements(sqlio, delimiter=SQLDelimiter(delimiter))
         )
     assert statements == split_stmnts

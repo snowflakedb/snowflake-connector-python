@@ -132,7 +132,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def construct_canonicalized_headers(
         headers: Dict[str, Union[str, List[str]]]
     ) -> str:
-        _res = sorted([[k.lower(), v] for k, v in headers.items()])
+        _res = sorted([k.lower(), v] for k, v in headers.items())
         res = []
 
         for i in range(len(_res)):
