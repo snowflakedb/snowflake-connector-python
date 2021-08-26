@@ -10,6 +10,15 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.6.0(August 29,2021)
+
+   - Internal change to the implementation of result fetching.
+   - Upgraded Pyarrow version from 3.0 to 5.0.
+   - Internal change to the implementation for PUT and GET. A new connection parameter use_new_put_get was added to toggle between implementations.
+   - Fixed a bug where executemany did not detect the type of data it was inserting.
+   - Updated the minimum Mac OSX build target from 10.13 to 10.14.
+
+
 - v2.5.1(July 31,2021)
 
    - Fixes Python Connector bug that prevents the connector from using AWS S3 Regional URL. The driver currently overrides the regional URL information with the default S3 URL causing failure in PUT.
