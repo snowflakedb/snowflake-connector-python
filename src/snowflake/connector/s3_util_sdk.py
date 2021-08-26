@@ -20,10 +20,9 @@ from botocore.client import Config
 
 from .constants import (
     DEFAULT_S3_CONNECTION_POOL_SIZE,
-    FileHeader,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_VALUE_OCTET_STREAM,
-    MAX_S3_CONNECTION_POOL_SIZE,
+    FileHeader,
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata
