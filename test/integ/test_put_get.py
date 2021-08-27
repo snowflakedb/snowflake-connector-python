@@ -587,6 +587,7 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
 # Snowflake on GCP does not support multipart uploads
 @pytest.mark.aws
 @pytest.mark.azure
+@pytest.mark.skipolddriver
 def test_multipart_put(conn_cnx, tmp_path):
     """This test does a multipart upload of a smaller file and then downloads it."""
     stage_name = random_string(5, "test_multipart_put_")

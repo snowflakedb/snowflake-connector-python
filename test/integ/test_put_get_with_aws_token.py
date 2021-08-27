@@ -17,8 +17,15 @@ try:  # pragma: no cover
 except ImportError:
     requests = None
 
-from snowflake.connector.file_transfer_agent import SnowflakeFileMeta, StorageCredential
-from snowflake.connector.s3_storage_client import S3Location, SnowflakeS3RestClient
+
+try:  # pragma: no cover
+    from snowflake.connector.file_transfer_agent import (
+        SnowflakeFileMeta,
+        StorageCredential,
+    )
+    from snowflake.connector.s3_storage_client import S3Location, SnowflakeS3RestClient
+except ImportError:
+    pass
 
 from ..integ_helpers import put
 from ..randomize import random_string
@@ -79,6 +86,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
     assert original_contents == contents, "Output is different from the original file"
 
 
+@pytest.mark.skipolddriver
 def test_put_with_invalid_token(tmpdir, conn_cnx):
     """[s3] SNOW-6154: Uses invalid combination of AWS credential."""
     # create a data file
