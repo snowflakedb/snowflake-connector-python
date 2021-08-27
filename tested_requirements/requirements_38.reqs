@@ -1,11 +1,11 @@
 # Generated on: Python 3.8.11
-# With snowflake-connector-python version: 2.5.1
+# With snowflake-connector-python version: 2.6.0
 asn1crypto==1.4.0
 azure-common==1.1.27
 azure-core==1.17.0
 azure-storage-blob==12.8.1
-boto3==1.18.27
-botocore==1.21.27
+boto3==1.18.30
+botocore==1.21.30
 certifi==2021.5.30
 cffi==1.14.6
 chardet==4.0.0
