@@ -19,7 +19,7 @@ from snowflake.connector.constants import UTF8
 from snowflake.connector.errors import ProgrammingError
 
 try:  # pragma: no cover
-    from snowflake.connector.file_transfer_agent_sdk import (
+    from snowflake.connector.file_transfer_agent import (
         SnowflakeFileTransferAgent,
         SnowflakeProgressPercentage,
     )

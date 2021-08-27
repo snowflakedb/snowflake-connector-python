@@ -34,11 +34,7 @@ except ImportError:  # NOQA
     METHODS = {}
     megabytes = 1024 * 1024
 
-try:
-    from snowflake.connector.gcs_storage_client import SnowflakeGCSRestClient  # NOQA
-    from snowflake.connector.gcs_util_sdk import SnowflakeGCSUtil  # NOQA
-except ImportError:
-    SnowflakeGCSUtil = None
+from snowflake.connector.gcs_storage_client import SnowflakeGCSRestClient
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:

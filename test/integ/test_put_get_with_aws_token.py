@@ -17,15 +17,8 @@ try:  # pragma: no cover
 except ImportError:
     requests = None
 
-try:  # pragma: no cover
-    from snowflake.connector.file_transfer_agent import (
-        SnowflakeFileMeta,
-        StorageCredential,
-    )
-    from snowflake.connector.s3_storage_client import S3Location, SnowflakeS3RestClient
-    from snowflake.connector.s3_util_sdk import SnowflakeS3Util
-except ImportError:  # keep olddrivertest from breaking
-    from snowflake.connector.s3_util import SnowflakeS3Util  # NOQA
+from snowflake.connector.file_transfer_agent import SnowflakeFileMeta, StorageCredential
+from snowflake.connector.s3_storage_client import S3Location, SnowflakeS3RestClient
 
 from ..integ_helpers import put
 from ..randomize import random_string

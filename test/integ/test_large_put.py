@@ -9,10 +9,7 @@ import os
 import pytest
 from mock import patch
 
-try:  # pragma: no cover
-    from snowflake.connector.file_transfer_agent_sdk import SnowflakeFileTransferAgent
-except ImportError:  # keep olddrivertest from breaking
-    from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
 from ..generate_test_files import generate_k_lines_of_n_files
 
