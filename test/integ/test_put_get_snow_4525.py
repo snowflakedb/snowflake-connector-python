@@ -8,9 +8,9 @@ import os
 import pathlib
 
 
-def test_load_bogus_file(tmp_path: pathlib.Path, conn_cnx, db_parameters, sdkless):
+def test_load_bogus_file(tmp_path: pathlib.Path, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus file and should fail."""
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute(
             f"""
 create or replace table {db_parameters["name"]} (
@@ -38,9 +38,9 @@ ratio number(5,2))
         cnx.cursor().execute(f"drop table if exists {db_parameters['name']}")
 
 
-def test_load_bogus_json_file(tmp_path: pathlib.Path, conn_cnx, db_parameters, sdkless):
+def test_load_bogus_json_file(tmp_path: pathlib.Path, conn_cnx, db_parameters):
     """SNOW-4525: Loads Bogus JSON file and should fail."""
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         json_table = db_parameters["name"] + "_json"
         cnx.cursor().execute(f"create or replace table {json_table} (v variant)")
 

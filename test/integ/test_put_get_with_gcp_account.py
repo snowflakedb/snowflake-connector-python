@@ -62,7 +62,6 @@ def test_put_get_with_gcp(
     is_public_test,
     enable_gcs_downscoped,
     from_path,
-    sdkless,
 ):
     """[gcp] Puts and Gets a small text using gcp."""
     if enable_gcs_downscoped and is_public_test:
@@ -77,7 +76,7 @@ def test_put_get_with_gcp(
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_gcp_token"))
     table_name = random_string(5, "snow32806_")
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             try:
                 csr.execute(
@@ -129,7 +128,6 @@ def test_put_copy_many_files_gcp(
     conn_cnx,
     is_public_test,
     enable_gcs_downscoped,
-    sdkless,
 ):
     """[gcp] Puts and Copies many files."""
     if enable_gcs_downscoped and is_public_test:
@@ -150,7 +148,7 @@ def test_put_copy_many_files_gcp(
         sql = sql.format(files=files, name=table_name)
         return csr.execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             try:
                 csr.execute(
@@ -195,7 +193,6 @@ def test_put_copy_duplicated_files_gcp(
     conn_cnx,
     is_public_test,
     enable_gcs_downscoped,
-    sdkless,
 ):
     """[gcp] Puts and Copies duplicated files."""
     if enable_gcs_downscoped and is_public_test:
@@ -216,7 +213,7 @@ def test_put_copy_duplicated_files_gcp(
         sql = sql.format(files=files, name=table_name)
         return csr.execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             try:
                 csr.execute(
@@ -292,7 +289,6 @@ def test_put_get_large_files_gcp(
     conn_cnx,
     is_public_test,
     enable_gcs_downscoped,
-    sdkless,
 ):
     """[gcp] Puts and Gets Large files."""
     if enable_gcs_downscoped and is_public_test:
@@ -330,7 +326,7 @@ def test_put_get_large_files_gcp(
             .fetchall()
         )
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         try:
             try:
                 run(
@@ -372,9 +368,8 @@ def test_put_get_large_files_gcp(
             run(cnx, "RM @~/{dir}")
 
 
-def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, sdkless):
-    if sdkless:
-        pytest.skip("This test needs to be totally rewritten for sdkless mode")
+def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
+    pytest.skip("This test needs to be totally rewritten for sdkless mode")
     fname = str(tmpdir.join("test_put_get_with_gcp_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:
@@ -382,7 +377,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, sdkless):
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_gcp_token"))
     table_name = random_string(5, "snow32807_")
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
@@ -402,25 +397,15 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, sdkless):
                 mocked_put.counter = 0
 
                 def mocked_file_agent(*args, **kwargs):
-                    if sdkless:
-                        agent = SnowflakeGCSRestClient(*args, **kwargs)
-                        agent._update_presigned_url = mock.MagicMock(
-                            wraps=agent._update_presigned_url
-                        )
-                        mocked_file_agent.agent = agent
-                        return agent
-                    else:
-                        agent = SnowflakeFileTransferAgent(*args, **kwargs)
-                        agent._update_file_metas_with_presigned_url = mock.MagicMock(
-                            wraps=agent._update_file_metas_with_presigned_url
-                        )
-                        mocked_file_agent.agent = agent
-                        return agent
+                    agent = SnowflakeGCSRestClient(*args, **kwargs)
+                    agent._update_presigned_url = mock.MagicMock(
+                        wraps=agent._update_presigned_url
+                    )
+                    mocked_file_agent.agent = agent
+                    return agent
 
                 with mock.patch(
-                    "snowflake.connector.file_transfer_agent.SnowflakeGCSRestClient"
-                    if sdkless
-                    else "snowflake.connector.cursor.SnowflakeFileTransferAgentSdk",
+                    "snowflake.connector.file_transfer_agent.SnowflakeGCSRestClient",
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
@@ -431,13 +416,6 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx, sdkless):
                     ):
                         csr.execute(
                             f"put file://{fname} @%{table_name} auto_compress=true parallel=30"
-                        )
-                    if sdkless:
-                        pass
-                    else:
-                        assert (
-                            mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count
-                            == 2
                         )
                 assert csr.fetchone()[6] == "UPLOADED"
                 csr.execute(f"copy into {table_name} purge = true")
@@ -495,7 +473,6 @@ def test_auto_compress_off_gcp(
     conn_cnx,
     is_public_test,
     enable_gcs_downscoped,
-    sdkless,
 ):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     if enable_gcs_downscoped and is_public_test:
@@ -508,7 +485,7 @@ def test_auto_compress_off_gcp(
         )
     )
     stage_name = random_string(5, "teststage_")
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
             try:
                 cursor.execute(
@@ -535,7 +512,6 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     conn_cnx,
     error_code,
     is_public_test,
-    sdkless,
 ):
     if is_public_test:
         pytest.xfail(
@@ -548,7 +524,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_gcp_token"))
     table_name = random_string(5, "snow32807_")
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             csr.execute("ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE")
             csr.execute(f"create or replace table {table_name} (a int, b string)")
@@ -671,7 +647,6 @@ def test_put_overwrite_with_downscope(
     conn_cnx,
     is_public_test,
     from_path,
-    sdkless,
 ):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     if is_public_test:
@@ -679,7 +654,7 @@ def test_put_overwrite_with_downscope(
             "Server need to update with merged change. Expected release version: 4.41.0"
         )
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
 
         tmp_dir = str(tmpdir.mkdir("data"))
         test_data = os.path.join(tmp_dir, "data.txt")

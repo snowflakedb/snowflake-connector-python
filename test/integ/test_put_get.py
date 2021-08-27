@@ -6,7 +6,6 @@
 import filecmp
 import os
 import pathlib
-from functools import partial
 from getpass import getuser
 from logging import getLogger
 from os import path
@@ -44,10 +43,8 @@ class _TestData(NamedTuple):
 
 
 @pytest.fixture()
-def test_data(
-    request, conn_cnx: Callable[..., "SnowflakeConnection"], sdkless: bool
-) -> _TestData:
-    return create_test_data(request, partial(conn_cnx, use_new_put_get=sdkless))
+def test_data(request, conn_cnx: Callable[..., "SnowflakeConnection"]) -> _TestData:
+    return create_test_data(request, conn_cnx)
 
 
 def create_test_data(
@@ -449,7 +446,9 @@ union
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 def test_put_with_auto_compress_false(
-    tmp_path: pathlib.Path, conn_cnx, from_path, sdkless
+    tmp_path: pathlib.Path,
+    conn_cnx,
+    from_path,
 ):
     """Tests PUT command with auto_compress=False."""
     tmp_dir = tmp_path / "data"
@@ -459,7 +458,7 @@ def test_put_with_auto_compress_false(
         f.write("test1,test2")
         f.write("test3,test4")
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute("RM @~/test_put_uncompress_file")
         try:
             file_stream = None if from_path else test_data.open("rb")
@@ -488,7 +487,7 @@ def test_put_with_auto_compress_false(
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx, sdkless):
+def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
     tmp_dir = tmp_path / "data"
     tmp_dir.mkdir()
@@ -497,7 +496,7 @@ def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx, sdkless):
         f.write("test1,test2")
         f.write("test3,test4")
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute("RM @~/test_put_overwrite")
         try:
             file_stream = None if from_path else open(test_data, "rb")
@@ -547,11 +546,11 @@ def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx, sdkless):
 
 
 @pytest.mark.skipolddriver
-def test_utf8_filename(tmp_path, conn_cnx, sdkless):
+def test_utf8_filename(tmp_path, conn_cnx):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_utf8_filename_")
-    with conn_cnx(use_new_put_get=sdkless) as con:
+    with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             cur.execute(
@@ -564,7 +563,7 @@ def test_utf8_filename(tmp_path, conn_cnx, sdkless):
 
 
 @pytest.mark.skipolddriver
-def test_put_threshold(tmp_path, conn_cnx, is_public_test, sdkless):
+def test_put_threshold(tmp_path, conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
             reason="This feature hasn't been rolled out for public Snowflake deployments yet."
@@ -573,14 +572,12 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test, sdkless):
     stage_name = random_string(5, "test_put_get_threshold_")
     file = tmp_path / file_name
     file.touch()
-    with conn_cnx(use_new_put_get=sdkless) as cnx, cnx.cursor() as cur:
+    with conn_cnx() as cnx, cnx.cursor() as cur:
         cur.execute(f"create temporary stage {stage_name}")
         from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
         with mock.patch(
-            "snowflake.connector.cursor.SnowflakeFileTransferAgent"
-            if sdkless
-            else "snowflake.connector.cursor.SnowflakeFileTransferAgentSdk",
+            "snowflake.connector.cursor.SnowflakeFileTransferAgent",
             autospec=SnowflakeFileTransferAgent,
         ) as mock_agent:
             cur.execute(f"put file://{file} @{stage_name} threshold=156")
@@ -590,10 +587,8 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test, sdkless):
 # Snowflake on GCP does not support multipart uploads
 @pytest.mark.aws
 @pytest.mark.azure
-def test_multipart_put(sdkless, conn_cnx, tmp_path):
+def test_multipart_put(conn_cnx, tmp_path):
     """This test does a multipart upload of a smaller file and then downloads it."""
-    if not sdkless:
-        pytest.skip("New test, doesn't test non-SDKless mode")
     stage_name = random_string(5, "test_multipart_put_")
     chunk_size = 6967790
     # Generate about 12 MB
@@ -601,9 +596,7 @@ def test_multipart_put(sdkless, conn_cnx, tmp_path):
     get_dir = tmp_path / "get_dir"
     get_dir.mkdir()
     upload_file = tmp_path / "file0"
-    with conn_cnx(
-        use_new_put_get=sdkless,
-    ) as con:
+    with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             real_cmd_query = con.cmd_query
