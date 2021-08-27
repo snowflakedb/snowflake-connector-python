@@ -233,7 +233,7 @@ class Error(BASE_EXCEPTION_CLASS):
         connection: Optional["SnowflakeConnection"],
         cursor: Optional["SnowflakeCursor"],
         error_class: Union[Type["Error"], Type[Exception]],
-        error_value: Dict[str, Union[str, bool]],
+        error_value: Dict[str, Union[str, bool, int]],
     ) -> None:
         """Error handler wrapper that calls the errorhandler method.
 

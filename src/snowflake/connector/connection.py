@@ -26,6 +26,7 @@ from typing import (
     List,
     NamedTuple,
     Optional,
+    Sequence,
     Tuple,
     Type,
     Union,
@@ -120,7 +121,7 @@ SUPPORTED_PARAMSTYLES = {
     "pyformat",
 }
 # Default configs, tuple of default variable and accepted types
-DEFAULT_CONFIGURATION = {
+DEFAULT_CONFIGURATION: Dict[str, Tuple[Any, Union[Type, Tuple[Type, ...]]]] = {
     "dsn": (None, (type(None), str)),  # standard
     "user": ("", str),  # standard
     "password": ("", str),  # standard
@@ -131,7 +132,7 @@ DEFAULT_CONFIGURATION = {
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
-    "protocol": (u"http", str),  # snowflake
+    "protocol": ("http", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
     "account": (None, (type(None), str)),  # snowflake
@@ -493,7 +494,7 @@ class SnowflakeConnection(object):
         self._enable_stage_s3_privatelink_for_us_east_1 = True if value else False
 
     @arrow_number_to_decimal.setter
-    def arrow_number_to_decimal(self, value: bool):
+    def arrow_number_to_decimal_setter(self, value: bool):
         self._arrow_number_to_decimal = value
 
     def connect(self, **kwargs):
@@ -605,7 +606,7 @@ class SnowflakeConnection(object):
         remove_comments: bool = False,
         return_cursors: bool = True,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
-        **kwargs
+        **kwargs,
     ) -> Iterable[SnowflakeCursor]:
         """Executes a SQL text including multiple statements. This is a non-standard convenience method."""
         stream = StringIO(sql_text)
@@ -620,7 +621,7 @@ class SnowflakeConnection(object):
         stream: StringIO,
         remove_comments: bool = False,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
-        **kwargs
+        **kwargs,
     ) -> Generator["SnowflakeCursor", None, None]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
         split_statements_list = split_statements(
@@ -1101,9 +1102,9 @@ class SnowflakeConnection(object):
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(
         self,
-        params: Union[List, Tuple, None],
+        params: Optional[Sequence],
         cursor: Optional["SnowflakeCursor"] = None,
-    ) -> Dict[str, Dict[str, str]]:
+    ) -> Optional[Dict[str, Dict[str, str]]]:
         if not params:
             return None
         processed_params = {}
@@ -1140,57 +1141,78 @@ class SnowflakeConnection(object):
                 logger.debug("idx: %s, type: %s", k, v.get("type"))
         return processed_params
 
-    def _process_params(
-        self, params: Union[Dict, List, Tuple, None], cursor: "SnowflakeCursor" = None
-    ) -> Union[Tuple, Dict]:
+    def _process_params_pyformat(
+        self,
+        params: Optional[Union[Any, Sequence[Any], Dict[Any, Any]]],
+        cursor: Optional["SnowflakeCursor"] = None,
+    ) -> Union[Tuple[Any], Dict[str, Any]]:
+        """Process parameters for client-side parameter binding.
+
+        Args:
+            params: Either a sequence, or a dictionary of parameters, if anything else
+                is given then it will be put into a list and processed that way.
+            cursor: The SnowflakeCursor used to report errors if necessary.
+        """
         if params is None:
             return {}
         if isinstance(params, dict):
-            return self.__process_params_dict(params)
+            return self._process_params_dict(params)
 
+        # TODO: remove this, callers should send in what's in the signature
         if not isinstance(params, (tuple, list)):
             params = [
                 params,
             ]
 
         try:
-            res = params
-            res = map(self.converter.to_snowflake, res)
-            res = map(self.converter.escape, res)
-            res = map(self.converter.quote, res)
+            res = map(self._process_single_param, params)
             ret = tuple(res)
-            logger.debug("parameters: %s", ret)
+            logger.debug(f"parameters: {ret}")
             return ret
         except Exception as e:
-            errorvalue = {
-                "msg": "Failed processing pyformat-parameters; {}".format(e),
-                "errno": ER_FAILED_PROCESSING_PYFORMAT,
-            }
-            Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
+            Error.errorhandler_wrapper(
+                self,
+                cursor,
+                ProgrammingError,
+                {
+                    "msg": f"Failed processing pyformat-parameters; {e}",
+                    "errno": ER_FAILED_PROCESSING_PYFORMAT,
+                },
+            )
 
-    def __process_params_dict(
-        self, params: Union[Dict, List, Tuple, None], cursor: "SnowflakeCursor" = None
+    def _process_params_dict(
+        self, params: Dict[Any, Any], cursor: Optional["SnowflakeCursor"] = None
     ) -> Dict:
-        # TODO this function could be reworked
         try:
-            to_snowflake = self.converter.to_snowflake
-            escape = self.converter.escape
-            quote = self.converter.quote
-            res = {}
-            for k, v in params.items():
-                c = v
-                c = to_snowflake(c)
-                c = escape(c)
-                c = quote(c)
-                res[k] = c
-            logger.debug("parameters: %s", res)
+            res = {k: self._process_single_param(v) for k, v in params.items()}
+            logger.debug(f"parameters: {res}")
             return res
         except Exception as e:
-            errorvalue = {
-                "msg": "Failed processing pyformat-parameters: {}".format(e),
-                "errno": ER_FAILED_PROCESSING_PYFORMAT,
-            }
-            Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
+            Error.errorhandler_wrapper(
+                self,
+                cursor,
+                ProgrammingError,
+                {
+                    "msg": f"Failed processing pyformat-parameters: {e}",
+                    "errno": ER_FAILED_PROCESSING_PYFORMAT,
+                },
+            )
+
+    def _process_single_param(self, param: Any) -> Any:
+        """Process a single parameter to Snowflake understandable form.
+
+        This is a convenience function to replace repeated multiple calls with a single
+        function call.
+
+        It calls the following underlying functions in this order:
+            1. self.converter.to_snowflake
+            2. self.converter.escape
+            3. self.converter.quote
+        """
+        to_snowflake = self.converter.to_snowflake
+        escape = self.converter.escape
+        _quote = self.converter.quote
+        return _quote(escape(to_snowflake(param)))
 
     def _cancel_query(self, sql, request_id):
         """Cancels the query with the exact SQL query and requestId."""

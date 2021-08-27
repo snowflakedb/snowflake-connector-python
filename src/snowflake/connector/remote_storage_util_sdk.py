@@ -9,10 +9,9 @@ from __future__ import division
 import os
 import shutil
 import time
-from collections import namedtuple
 from io import BytesIO
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from boto3 import Session
 
@@ -23,24 +22,18 @@ from .gcs_util_sdk import SnowflakeGCSUtil
 from .s3_util_sdk import SnowflakeS3Util
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .file_transfer_agent import SnowflakeFileMeta
+    from .file_transfer_agent_sdk import SnowflakeFileMeta
 
 DEFAULT_CONCURRENCY = 1
 DEFAULT_MAX_RETRY = 5
 
 logger = getLogger(__name__)
 
-"""
-Encryption Material
-"""
-SnowflakeFileEncryptionMaterial = namedtuple(
-    "SnowflakeS3FileEncryptionMaterial",
-    [
-        "query_stage_master_key",  # query stage master key
-        "query_id",  # query id
-        "smk_id",  # SMK id
-    ],
-)
+
+class SnowflakeFileEncryptionMaterial(NamedTuple):
+    query_stage_master_key: str  # query stage master key
+    query_id: str  # query id
+    smk_id: int  # SMK id
 
 
 class NeedRenewTokenError(Exception):

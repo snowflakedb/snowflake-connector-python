@@ -7,7 +7,7 @@
 import random
 import time
 from logging import getLogger
-from typing import Optional
+from typing import Any, Callable, Optional
 
 logger = getLogger(__name__)
 
@@ -22,11 +22,13 @@ DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 class HeartBeatTimer(Timer):
     """A thread which executes a function every client_session_keep_alive_heartbeat_frequency seconds."""
 
-    def __init__(self, client_session_keep_alive_heartbeat_frequency, f):
+    def __init__(
+        self, client_session_keep_alive_heartbeat_frequency: int, f: Callable
+    ) -> None:
         interval = client_session_keep_alive_heartbeat_frequency
         super(HeartBeatTimer, self).__init__(interval, f)
 
-    def run(self):
+    def run(self) -> None:
         while not self.finished.is_set():
             self.finished.wait(self.interval)
             if not self.finished.is_set():
@@ -41,14 +43,14 @@ def get_time_millis() -> int:
     return int(time.time() * 1000)
 
 
-class DecorrelateJitterBackoff(object):
+class DecorrelateJitterBackoff:
     # Decorrelate Jitter backoff
     # https://www.awsarchitectureblog.com/2015/03/backoff.html
-    def __init__(self, base, cap):
+    def __init__(self, base: int, cap: int) -> None:
         self._base = base
         self._cap = cap
 
-    def next_sleep(self, _, sleep):
+    def next_sleep(self, _: Any, sleep: int) -> int:
         return min(self._cap, random.randint(self._base, sleep * 3))
 
 
@@ -65,7 +67,7 @@ class TimerContextManager:
         download_metric = measured_time.get_timing_millis()
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._start: Optional[int] = None
         self._end: Optional[int] = None
 

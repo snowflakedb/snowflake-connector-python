@@ -10,12 +10,21 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from io import BytesIO
 from logging import getLogger
 from math import ceil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import OpenSSL
 
@@ -31,17 +40,12 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = getLogger(__name__)
 
-"""
-Encryption Material
-"""
-SnowflakeFileEncryptionMaterial = namedtuple(
-    "SnowflakeS3FileEncryptionMaterial",
-    [
-        "query_stage_master_key",  # query stage master key
-        "query_id",  # query id
-        "smk_id",  # SMK id
-    ],
-)
+
+class SnowflakeFileEncryptionMaterial(NamedTuple):
+    query_stage_master_key: str  # query stage master key
+    query_id: str  # query id
+    smk_id: int  # SMK id
+
 
 METHODS = {
     "GET": requests.get,
@@ -67,7 +71,7 @@ class SnowflakeStorageClient(ABC):
         chunked_transfer: Optional[bool] = True,
         credentials: Optional["StorageCredential"] = None,
         max_retry: int = 5,
-    ):
+    ) -> None:
         self.meta = meta
         self.stage_info = stage_info
         self.retry_count: Dict[Union[int, str], int] = defaultdict(lambda: 0)
@@ -108,7 +112,7 @@ class SnowflakeStorageClient(ABC):
         # only used when PRESIGNED_URL expires
         self.last_err_is_presigned_url = False
 
-    def compress(self):
+    def compress(self) -> None:
         if self.meta.require_compress:
             meta = self.meta
             logger.debug(f"compressing file={meta.src_file_name}")
@@ -125,7 +129,7 @@ class SnowflakeStorageClient(ABC):
                     meta.src_file_name, self.tmp_dir
                 )
 
-    def get_digest(self):
+    def get_digest(self) -> None:
         meta = self.meta
         logger.debug(f"getting digest file={meta.real_src_file_name}")
         if meta.src_stream is None:
@@ -141,7 +145,7 @@ class SnowflakeStorageClient(ABC):
                 meta.real_src_stream or meta.src_stream
             )
 
-    def encrypt(self):
+    def encrypt(self) -> None:
         meta = self.meta
         logger.debug(f"encrypting file={meta.real_src_file_name}")
         if meta.src_stream is None:
@@ -256,6 +260,7 @@ class SnowflakeStorageClient(ABC):
         retry_id: int,
     ) -> requests.Response:
         rest_call = METHODS[verb]
+        url = b""
         conn = None
         if self.meta.self and self.meta.self._cursor.connection:
             conn = self.meta.self._cursor.connection
@@ -331,11 +336,12 @@ class SnowflakeStorageClient(ABC):
         with self.intermediate_dst_path.open("wb+") as fd:
             fd.truncate(self.meta.src_file_size)
 
-    def write_downloaded_chunk(self, chunk_id: int, chunk_data: bytes) -> None:
+    def write_downloaded_chunk(self, chunk_id: int, data: bytes) -> None:
+        """Writes given data to the temp location starting at chunk_id * chunk_size."""
         # TODO: should we use chunking and write content in smaller chunks?
         with self.intermediate_dst_path.open("rb+") as fd:
             fd.seek(self.chunk_size * chunk_id)
-            fd.write(chunk_data)
+            fd.write(data)
 
     def finish_download(self) -> None:
         meta = self.meta
@@ -420,7 +426,7 @@ class SnowflakeStorageClient(ABC):
     def _abort_multipart_upload(self) -> None:
         pass
 
-    def delete_client_data(self):
+    def delete_client_data(self) -> None:
         """Deletes the tmp_dir and closes the source stream belonging to this client.
         This function is idempotent."""
         if os.path.exists(self.tmp_dir):
@@ -429,5 +435,5 @@ class SnowflakeStorageClient(ABC):
         if self.meta.real_src_stream and not self.meta.real_src_stream.closed:
             self.meta.real_src_stream.close()
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.delete_client_data()

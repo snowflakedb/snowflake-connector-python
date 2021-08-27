@@ -7,7 +7,7 @@
 import json
 import os
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional, Tuple, Union
 
 from .compat import quote
 from .constants import (
@@ -51,7 +51,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         cnx: "SnowflakeConnection",
         command: str,
         use_s3_regional_url=False,
-    ):
+    ) -> None:
         """Creates a client object with given stage credentials.
 
         Args:
@@ -77,7 +77,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             logger.debug("No access token received from GS, requesting presigned url")
             self._update_presigned_url()
 
-    def _has_expired_token(self, response: requests.Response):
+    def _has_expired_token(self, response: requests.Response) -> bool:
         return self.security_token and response.status_code == 401
 
     def _has_expired_presigned_url(self, response: requests.Response) -> bool:
@@ -95,7 +95,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.last_err_is_presigned_url = presigned_url_expired
         return presigned_url_expired
 
-    def _upload_chunk(self, chunk_id: int, chunk: bytes):
+    def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
         meta = self.meta
 
         content_encoding = ""
@@ -138,7 +138,9 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 }
             )
 
-        def generate_url_and_rest_args():
+        def generate_url_and_rest_args() -> Tuple[
+            str, Dict[str, Union[Dict[Union[str, Any], Optional[str]], bytes]]
+        ]:
             if not self.presigned_url:
                 upload_url = self.generate_file_url(
                     self.stage_info["location"], meta.dst_file_name.lstrip("/")
@@ -165,7 +167,9 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
     def download_chunk(self, chunk_id: int) -> None:
         meta = self.meta
 
-        def generate_url_and_rest_args():
+        def generate_url_and_rest_args() -> Tuple[
+            str, Dict[str, Union[Dict[str, str], bool]]
+        ]:
             gcs_headers = {}
             if not self.presigned_url:
                 download_url = self.generate_file_url(
@@ -205,14 +209,14 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         meta.gcs_file_header_content_length = len(response.content)
         meta.gcs_file_header_encryption_metadata = encryption_metadata
 
-    def finish_download(self):
+    def finish_download(self) -> None:
         super().finish_download()
         # Sadly, we can only determine the src file size after we've
         # downloaded it, unlike the other cloud providers where the
         # metadata can be read beforehand.
         self.meta.src_file_size = os.path.getsize(self.intermediate_dst_path)
 
-    def _update_presigned_url(self):
+    def _update_presigned_url(self) -> None:
         """Updates the file metas with presigned urls if any.
 
         Currently only the file metas generated for PUT/GET on a GCP account need the presigned urls.

@@ -140,6 +140,7 @@ class SnowflakeFileMeta:
     gcs_file_header_encryption_metadata: Optional[Dict[str, Any]] = None
 
     encryption_material: Optional["SnowflakeFileEncryptionMaterial"] = None
+    tmp_dir: Optional[str] = None
     # Specific to Uploads only
     src_file_size: int = 0
     src_compression_type: Optional["CompressionType"] = None
@@ -160,7 +161,7 @@ def _update_progress(
     progress: Union[float, int],
     output_stream: Optional[IO] = sys.stdout,
     show_progress_bar: Optional[bool] = True,
-) -> float:
+) -> bool:
     bar_length = 10  # Modify this to change the length of the progress bar
     total_size /= megabyte
     status = ""
@@ -1285,7 +1286,7 @@ class SnowflakeFileTransferAgent(object):
         for m in self._file_metadata:
             file_name = m.src_file_name
 
-            current_file_compression_type = None
+            current_file_compression_type: Optional["CompressionType"] = None
             if auto_detect:
                 mimetypes.init()
                 _, encoding = mimetypes.guess_type(file_name)
