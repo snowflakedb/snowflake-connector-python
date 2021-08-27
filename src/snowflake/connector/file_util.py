@@ -74,7 +74,7 @@ class SnowflakeFileUtil(object):
         return BytesIO(compressed_data), len(compressed_data)
 
     @staticmethod
-    def compress_file_with_gzip(file_name, tmp_dir):
+    def compress_file_with_gzip(file_name: str, tmp_dir: str) -> Tuple[str, int]:
         """Compresses a file with GZIP.
 
         Args:
@@ -96,7 +96,7 @@ class SnowflakeFileUtil(object):
         return gzip_file_name, statinfo.st_size
 
     @staticmethod
-    def normalize_gzip_header(gzip_file_name):
+    def normalize_gzip_header(gzip_file_name: str) -> None:
         """Normalizes GZIP file header.
 
         For consistent file digest, this removes creation timestamp and file name from the header.

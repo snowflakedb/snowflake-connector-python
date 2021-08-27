@@ -22,6 +22,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -127,7 +128,7 @@ class SnowflakeFileMeta:
     sha256_digest: Optional[str] = None
     upload_size: Optional[int] = None
     real_src_file_name: Optional[str] = None
-    error_details: Optional[str] = None
+    error_details: Optional[Exception] = None
     last_error: Optional[Exception] = None
     no_sleeping_time: bool = False
     gcs_file_header_digest: Optional[str] = None
@@ -155,7 +156,7 @@ def _update_progress(
     progress: Union[float, int],
     output_stream: Optional[IO] = sys.stdout,
     show_progress_bar: Optional[bool] = True,
-) -> float:
+) -> bool:
     bar_length = 10  # Modify this to change the length of the progress bar
     total_size /= megabyte
     status = ""
@@ -568,7 +569,10 @@ class SnowflakeFileTransferAgent:
             lead to unexpected slowdowns and behavior.
             """
             try:
-                result = (True, work(*args, **kwargs))
+                result: Tuple[bool, Union[_T, Exception]] = (
+                    True,
+                    work(*args, **kwargs),
+                )
             except Exception as e:
                 logger.error(f"An exception was raised in {repr(work)}", exc_info=True)
                 file_meta.error_details = e
@@ -659,6 +663,7 @@ class SnowflakeFileTransferAgent:
                 self._command,
                 self._use_s3_regional_url,
             )
+        raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
     def _transfer_accelerate_config(self) -> None:
         if self._stage_location_type == S3_FS:
@@ -681,7 +686,11 @@ class SnowflakeFileTransferAgent:
                     else:
                         dst_compression_type = "NONE"
 
-                    error_details = meta.error_details or ""
+                    error_details: str = (
+                        repr(meta.error_details)
+                        if meta.error_details is not None
+                        else ""
+                    )
 
                     src_file_size = (
                         meta.src_file_size
@@ -747,7 +756,11 @@ class SnowflakeFileTransferAgent:
                         else str(meta.dst_file_size)
                     )
 
-                    error_details = meta.error_details or ""
+                    error_details: str = (
+                        repr(meta.error_details)
+                        if meta.error_details is not None
+                        else ""
+                    )
 
                     if self._raise_put_get_error and error_details:
                         Error.errorhandler_wrapper(
@@ -1036,8 +1049,8 @@ class SnowflakeFileTransferAgent:
         elif self._source_compression == "none":
             auto_detect = False
         else:
-            user_specified_source_compression: "CompressionType" = (
-                lookup_by_mime_sub_type(self._source_compression)
+            user_specified_source_compression = lookup_by_mime_sub_type(
+                self._source_compression
             )
             if (
                 user_specified_source_compression is None
@@ -1058,7 +1071,7 @@ class SnowflakeFileTransferAgent:
         for m in self._file_metadata:
             file_name = m.src_file_name
 
-            current_file_compression_type = None
+            current_file_compression_type: Optional["CompressionType"] = None
             if auto_detect:
                 mimetypes.init()
                 _, encoding = mimetypes.guess_type(file_name)

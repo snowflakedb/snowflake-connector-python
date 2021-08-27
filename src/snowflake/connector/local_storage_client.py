@@ -27,11 +27,11 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         meta: "SnowflakeFileMeta",
         stage_info: Dict[str, Any],
         chunk_size: int,
-        use_s3_regional_url=False,
-    ):
+        use_s3_regional_url: bool = False,
+    ) -> None:
         super().__init__(meta, stage_info, chunk_size)
         self.data_file = meta.src_file_name
-        self.full_dst_file_name = os.path.join(
+        self.full_dst_file_name: str = os.path.join(
             stage_info["location"], os.path.basename(meta.dst_file_name)
         )
 
@@ -49,8 +49,6 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
             self.meta.result_status = ResultStatus.UPLOADED
         else:
             self.meta.result_status = ResultStatus.NOT_FOUND_FILE
-
-        return None
 
     def download_chunk(self, chunk_id: int) -> None:
         with open(self.full_dst_file_name, "rb") as sfd:

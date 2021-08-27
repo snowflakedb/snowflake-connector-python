@@ -994,7 +994,7 @@ def test_process_param_dict_error(conn_cnx):
                 "snowflake.connector.converter.SnowflakeConverter.to_snowflake",
                 side_effect=Exception("test"),
             ):
-                conn._process_params({"asd": "something"})
+                conn._process_params_pyformat({"asd": "something"})
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 
@@ -1009,7 +1009,7 @@ def test_process_param_error(conn_cnx):
                 "snowflake.connector.converter.SnowflakeConverter.to_snowflake",
                 side_effect=Exception("test"),
             ):
-                conn._process_params(mock.Mock())
+                conn._process_params_pyformat(mock.Mock())
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 

@@ -15,7 +15,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
-from typing import Dict, List, Optional, Set, Type
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Type
 
 import OpenSSL.SSL
 
@@ -101,6 +101,8 @@ from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError, ReadTimeoutError
 from .vendored.urllib3.util.url import parse_url
 
+if TYPE_CHECKING:
+    from .connection import SnowflakeConnection
 logger = logging.getLogger(__name__)
 
 """
@@ -185,7 +187,7 @@ def get_http_retryable_error(status_code: int) -> Error:
     error_class: Type[Error] = STATUS_TO_EXCEPTION.get(
         status_code, OtherHTTPRetryableError
     )
-    return error_class(code=status_code)
+    return error_class(errno=status_code)
 
 
 def raise_okta_unauthorized_error(

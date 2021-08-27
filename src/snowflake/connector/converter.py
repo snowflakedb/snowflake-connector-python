@@ -441,7 +441,7 @@ class SnowflakeConverter(object):
             + "000"
         )
 
-    def to_snowflake(self, value):
+    def to_snowflake(self, value: Any) -> Any:
         """Converts Python data to Snowflake data for pyformat/format style.
 
         The output is bound in a query in the client side.

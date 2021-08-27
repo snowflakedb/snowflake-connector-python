@@ -17,12 +17,14 @@ from typing import (
     IO,
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Generator,
     Iterator,
     List,
     NamedTuple,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
@@ -84,8 +86,7 @@ try:
     CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
     logger.debug(
-        "Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: %s",
-        e,
+        f"Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: {e}",
     )
     CAN_USE_ARROW_RESULT_FORMAT = False
 
@@ -139,7 +140,8 @@ class ResultMetadata(NamedTuple):
         )
 
 
-def exit_handler(*_):  # pragma: no cover
+# TODO: once we drop 3.6 support the return type becomes NoReturn
+def exit_handler(*_) -> None:  # pragma: no cover
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
     print("\nForce exit")
     logger.info("Force exit")
@@ -152,7 +154,7 @@ class ResultState(Enum):
     RESET = 3
 
 
-class SnowflakeCursor(object):
+class SnowflakeCursor:
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
     Attributes:
@@ -209,19 +211,24 @@ class SnowflakeCursor(object):
         self,
         connection: "SnowflakeConnection",
         use_dict_result: bool = False,
-    ):
+    ) -> None:
         """Inits a SnowflakeCursor with a connection.
 
         Args:
             connection: The connection that created this cursor.
             use_dict_result: Decides whether to use dict result or not.
         """
-        self._connection = connection
+        self._connection: "SnowflakeConnection" = connection
 
-        self._errorhandler = Error.default_errorhandler
-        self.messages = []
-        self._timebomb = None  # must be here for abort_exit method
-        self._description = None
+        self._errorhandler: Callable[
+            ["SnowflakeConnection", "SnowflakeCursor", Type["Error"], Dict[str, str]],
+            None,
+        ] = Error.default_errorhandler
+        self.messages: List[
+            Tuple[Union[Type["Error"], Type[Exception]], Dict[str, Union[str, bool]]]
+        ] = []
+        self._timebomb: Optional[Timer] = None  # must be here for abort_exit method
+        self._description: Optional[List[ResultMetadata]] = None
         self._column_idx_to_name = None
         self._sfqid = None
         self._sqlstate = None
@@ -258,7 +265,7 @@ class SnowflakeCursor(object):
 
         self.reset()
 
-    def __del__(self):  # pragma: no cover
+    def __del__(self) -> None:  # pragma: no cover
         try:
             self.close()
         except BASE_EXCEPTION_CLASS as e:
@@ -552,7 +559,7 @@ class SnowflakeCursor(object):
     def execute(
         self,
         command: str,
-        params: Optional[Union[List, Tuple]] = None,
+        params: Optional[Sequence] = None,
         _bind_stage: Optional[str] = None,
         timeout: Optional[int] = None,
         _exec_async: bool = False,
@@ -573,7 +580,7 @@ class SnowflakeCursor(object):
         _raise_put_get_error: bool = True,
         _force_put_overwrite: bool = False,
         file_stream: Optional[IO[bytes]] = None,
-    ):
+    ) -> Optional[Union["SnowflakeCursor", None]]:
         """Executes a command/query.
 
         Args:
@@ -594,7 +601,7 @@ class SnowflakeCursor(object):
             _is_internal: This flag indicates whether the query is issued internally by the connector.
             _describe_only: If true, the query will not be executed but return the schema/description of this query.
             _no_results: This flag tells the back-end to not return the result, just fire the query and return the
-                query id of the running query.
+                response returned by Snowflake's server.
             _use_ijson: This flag doesn't do anything as ijson support has ended.
             _is_put_get: Force decision of this SQL query being a PUT, or GET command. This is detected otherwise.
             _raise_put_get_error: Whether to raise PUT and GET errors.
@@ -603,7 +610,8 @@ class SnowflakeCursor(object):
             file_stream: File-like object to be uploaded with PUT
 
         Returns:
-            A result class with the results in it. This can either be json, or an arrow result class.
+            The cursor itself, or None if some error happened, or the response returned
+            by Snowflake if the _no_results flag is on.
         """
         if _exec_async:
             _no_results = True
@@ -636,13 +644,14 @@ class SnowflakeCursor(object):
             if self._connection.is_pyformat:
                 # pyformat/format paramstyle
                 # client side binding
-                processed_params = self._connection._process_params(params, self)
+                processed_params = self._connection._process_params_pyformat(
+                    params, self
+                )
                 if logger.getEffectiveLevel() <= logging.DEBUG:
                     logger.debug(
-                        "binding: [%s] with input=[%s], processed=[%s]",
-                        self._format_query_for_log(command),
-                        params,
-                        processed_params,
+                        f"binding: [{self._format_query_for_log(command)}] "
+                        f"with input=[{params}], "
+                        f"processed=[{processed_params}]",
                     )
                 if len(processed_params) > 0:
                     query = command % processed_params
@@ -962,18 +971,24 @@ class SnowflakeCursor(object):
         ret = self._connection.rest.request(url=url, method="post")
         return ret.get("success")
 
-    def executemany(self, command, seqparams):
+    def executemany(
+        self,
+        command: str,
+        seqparams: Union[Sequence[Any], Dict[str, Any]],
+    ) -> "SnowflakeCursor":
         """Executes a command/query with the given set of parameters sequentially."""
         logger.debug("executing many SQLs/commands")
         command = command.strip(" \t\n\r") if command else None
 
         if len(seqparams) == 0:
-            errorvalue = {
-                "msg": f"No parameters are specified for the command: {command}",
-                "errno": ER_INVALID_VALUE,
-            }
             Error.errorhandler_wrapper(
-                self.connection, self, InterfaceError, errorvalue
+                self.connection,
+                self,
+                InterfaceError,
+                {
+                    "msg": f"No parameters are specified for the command: {command}",
+                    "errno": ER_INVALID_VALUE,
+                },
             )
             return self
 
@@ -983,19 +998,23 @@ class SnowflakeCursor(object):
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
                 m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
                 if not m:
-                    errorvalue = {
-                        "msg": "Failed to rewrite multi-row insert",
-                        "errno": ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
-                    }
                     Error.errorhandler_wrapper(
-                        self.connection, self, InterfaceError, errorvalue
+                        self.connection,
+                        self,
+                        InterfaceError,
+                        {
+                            "msg": "Failed to rewrite multi-row insert",
+                            "errno": ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
+                        },
                     )
 
                 fmt = m.group(1)
                 values = []
                 for param in seqparams:
-                    logger.debug("parameter: %s", param)
-                    values.append(fmt % self._connection._process_params(param, self))
+                    logger.debug(f"parameter: {param}")
+                    values.append(
+                        fmt % self._connection._process_params_pyformat(param, self)
+                    )
                 command = command.replace(fmt, ",".join(values), 1)
                 self.execute(command)
                 return self
@@ -1005,13 +1024,13 @@ class SnowflakeCursor(object):
                 row_size = len(seqparams[0])
                 for row in seqparams:
                     if len(row) != row_size:
-                        errorvalue = {
+                        error_value = {
                             "msg": f"Bulk data size don't match. expected: {row_size}, "
                             f"got: {len(row)}, command: {command}",
                             "errno": ER_INVALID_VALUE,
                         }
                         Error.errorhandler_wrapper(
-                            self.connection, self, InterfaceError, errorvalue
+                            self.connection, self, InterfaceError, error_value
                         )
                         return self
                 bind_size = len(seqparams) * row_size
@@ -1031,7 +1050,8 @@ class SnowflakeCursor(object):
                         bind_stage = bind_uploader.stage_path
                     except BindUploadError:
                         logger.debug(
-                            "Failed to upload binds to stage, sending binds to Snowflake instead."
+                            "Failed to upload binds to stage, sending binds to "
+                            "Snowflake instead."
                         )
                     except Exception as exc:
                         if not isinstance(exc, INCIDENT_BLACKLIST):
