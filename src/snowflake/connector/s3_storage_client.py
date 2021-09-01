@@ -4,16 +4,18 @@
 
 from __future__ import division
 
-import base64
+import binascii
+import re
 import xml.etree.cElementTree as ET
 from datetime import datetime
 from io import IOBase
 from logging import getLogger
+from operator import itemgetter
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 from cryptography.hazmat.primitives import hashes, hmac
 
-from .compat import quote
+from .compat import quote, urlparse
 from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_VALUE_OCTET_STREAM,
@@ -40,6 +42,8 @@ ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = "ExpiredToken"
 ADDRESSING_STYLE = "virtual"  # explicit force to use virtual addressing style
+
+RE_MULTIPLE_SPACES = re.compile(r" +")
 
 
 class S3Location(NamedTuple):
@@ -94,77 +98,118 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 )
 
     @staticmethod
-    def sign(secret_key: bytes, msg: bytes) -> bytes:
-        h = hmac.HMAC(secret_key, hashes.SHA1())
-        h.update(msg)
-        return base64.encodebytes(h.finalize()).strip()
+    def _sign_bytes(secret_key: bytes, _input: str) -> bytes:
+        """Applies HMAC-SHA-256 to given string with secret_key."""
+        h = hmac.HMAC(secret_key, hashes.SHA256())
+        h.update(_input.encode("utf-8"))
+        return h.finalize()
 
     @staticmethod
-    def _construct_canonicalized_element(
-        bucket_name: Optional[str] = None,
-        request_uri: str = "",
-        subresource: Optional[Dict[str, Union[str, int, None]]] = None,
-    ) -> str:
-        if not subresource:
-            subresource = {}
-        res = ""
-        if bucket_name:
-            res += f"/{bucket_name}"
-            if request_uri:
-                res += "/" + request_uri
-        else:
-            # for GET operations without a bucket name
-            res += "/"
-        if subresource:
-            res += "?"
-            keys = sorted(subresource.keys())
-            res += (
-                keys[0]
-                if subresource[keys[0]] is None
-                else f"{keys[0]}={subresource[keys[0]]}"
-            )
-            for k in keys[1:]:
-                query_str = k if subresource[k] is None else f"{k}={subresource[k]}"
-                res += f"&{query_str}"
-        return res
+    def _sign_bytes_hex(secret_key: bytes, _input: str) -> bytes:
+        """Convenience function, same as _sign_bytes, but returns result in hex form."""
+        return binascii.hexlify(SnowflakeS3RestClient._sign_bytes(secret_key, _input))
 
     @staticmethod
-    def construct_canonicalized_headers(
+    def _hash_bytes(_input: bytes) -> bytes:
+        """Applies SHA-256 hash to given bytes."""
+        digest = hashes.Hash(hashes.SHA256())
+        digest.update(_input)
+        return digest.finalize()
+
+    @staticmethod
+    def _hash_bytes_hex(_input: bytes) -> bytes:
+        """Convenience function, same as _hash_bytes, but returns result in hex form."""
+        return binascii.hexlify(SnowflakeS3RestClient._hash_bytes(_input))
+
+    @staticmethod
+    def _construct_canonicalized_and_signed_headers(
         headers: Dict[str, Union[str, List[str]]]
-    ) -> str:
-        _res = sorted([k.lower(), v] for k, v in headers.items())
+    ) -> Tuple[str, str]:
+        """Construct canonical headers for AWS specs.
+
+        Does not support sorting by values in case the keys are the same, don't send
+        in duplicate keys!
+        """
+        low_key_dict = {k.lower(): v for k, v in headers.items()}
+        sorted_headers = sorted(headers.keys())
+        _res = [(k, low_key_dict[k]) for k in sorted_headers]
         res = []
 
-        for i in range(len(_res)):
-            k, v = _res[i]
+        for k, v in _res:
             # if value is a list, convert to string delimited by comma
             if isinstance(v, list):
                 v = ",".join(v)
             # if multiline header, replace withs space
             k = k.replace("\n", " ")
-            res.append(k.rstrip() + ":" + v.lstrip())
+            res.append(k.strip() + ":" + RE_MULTIPLE_SPACES.sub(" ", v.strip()))
 
         ans = "\n".join(res)
         if ans:
-            ans = ans + "\n"
+            ans += "\n"
 
-        return ans
+        return ans, ";".join(sorted_headers)
+
+    @staticmethod
+    def _construct_canonical_request_and_signed_headers(
+        verb: str,
+        canonical_uri_parameter: str,
+        url_query: str,
+        canonical_headers: Optional[Dict[str, Union[str, List[str]]]] = None,
+        payload: bytes = "",
+    ) -> Tuple[str, str]:
+        # Build canonical query string
+        # Note: this doesn't support sorting by values in case the same key is given
+        #  more than once, so don't do that!
+        kv = []
+        if url_query:
+            for e in url_query.split("&"):
+                k, _, v = e.partition("=")
+                kv.append((k, v))
+            kv.sort(key=itemgetter(0))
+        canonical_query_string = "&".join("=".join([(k), (v)]) for k, v in kv)
+        (
+            canonical_headers,
+            signed_headers,
+        ) = SnowflakeS3RestClient._construct_canonicalized_and_signed_headers(
+            canonical_headers
+        )
+
+        return (
+            "\n".join(
+                [
+                    verb,
+                    canonical_uri_parameter or "/",
+                    canonical_query_string,
+                    canonical_headers,
+                    signed_headers,
+                    SnowflakeS3RestClient._hash_bytes_hex(payload).lower().decode(),
+                ]
+            ),
+            signed_headers,
+        )
 
     @staticmethod
     def _construct_string_to_sign(
-        verb: str,
-        canonicalized_element: str,
-        canonicalized_headers: str,
+        region_name: str,
+        service_name: str,
         amzdate: str,
-        content_md5: str = "",
-        content_type: str = "",
-    ) -> bytes:
-        res = verb + "\n" + content_md5 + "\n" + content_type + "\n"
-        res += amzdate + "\n" + canonicalized_headers + canonicalized_element
-        return res.encode("UTF-8")
+        canonical_request_hash: bytes,
+    ) -> Tuple[str, str]:
+        short_amzdate = amzdate[:8]
+        scope = f"{short_amzdate}/{region_name}/{service_name}/aws4_request"
+        return (
+            "\n".join(
+                [
+                    "AWS4-HMAC-SHA256",
+                    amzdate,
+                    scope,
+                    canonical_request_hash.decode("utf-8"),
+                ]
+            ),
+            scope,
+        )
 
-    @staticmethod
-    def _has_expired_token(response: requests.Response) -> bool:
+    def _has_expired_token(self, response: requests.Response) -> bool:
         """Extract error code and error message from the S3's error response.
 
         Expected format:
@@ -197,48 +242,74 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         self,
         url: str,
         verb: str,
-        resources: str,
         retry_id: Union[int, str],
         x_amz_headers: Optional[Dict[str, str]] = None,
         headers: Optional[Dict[str, str]] = None,
-        content_type: str = "",
         data: Union[bytes, bytearray, IOBase, None] = None,
     ) -> requests.Response:
-        if not x_amz_headers:
+        if x_amz_headers is None:
             x_amz_headers = {}
-        if not headers:
+        if headers is None:
             headers = {}
+        if data is None:
+            data = b""
+        x_amz_headers["x-amz-content-sha256"] = self._hash_bytes_hex(data).decode(
+            "utf-8"
+        )
+        parsed_url = urlparse(url)
 
-        def generate_authenticated_url_and_args() -> Tuple[bytes, Dict[str, bytes]]:
+        def generate_authenticated_url_and_args_v4() -> Tuple[bytes, Dict[str, bytes]]:
             t = datetime.utcnow()
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
+            short_amzdate = amzdate[:8]
 
-            if "AWS_TOKEN" in self.credentials.creds:
-                x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
-                    "AWS_TOKEN"
-                )
-            _x_amz_headers = self.construct_canonicalized_headers(x_amz_headers)
-            string_to_sign = self._construct_string_to_sign(
-                verb, resources, _x_amz_headers, amzdate, content_type=content_type
+            x_amz_headers["x-amz-date"] = amzdate
+            x_amz_headers["x-amz-security-token"] = self.credentials.creds.get("AWS_TOKEN", "")
+            x_amz_headers["host"] = urlparse(url).hostname
+
+            (
+                canonical_request,
+                signed_headers,
+            ) = self._construct_canonical_request_and_signed_headers(
+                verb=verb,
+                canonical_uri_parameter=parsed_url.path
+                + (f";{parsed_url.params}" if parsed_url.params else ""),
+                url_query=parsed_url.query,
+                canonical_headers=x_amz_headers,
+                payload=data,
             )
-            signature = self.sign(
-                self.credentials.creds["AWS_SECRET_KEY"].encode("UTF-8"), string_to_sign
+            string_to_sign, scope = self._construct_string_to_sign(
+                self.region_name,
+                "s3",
+                amzdate,
+                self._hash_bytes_hex(canonical_request.encode("utf-8")).lower(),
             )
-            authorization_header = (  # TODO
-                "AWS " + self.credentials.creds["AWS_KEY_ID"] + ":" + signature.decode()
+            kDate = self._sign_bytes(
+                ("AWS4" + self.credentials.creds["AWS_SECRET_KEY"]).encode("utf-8"),
+                short_amzdate,
+            )
+            kRegion = self._sign_bytes(kDate, self.region_name)
+            kService = self._sign_bytes(kRegion, "s3")
+            signing_key = self._sign_bytes(kService, "aws4_request")
+
+            signature = self._sign_bytes_hex(signing_key, string_to_sign).lower()
+            authorization_header = (
+                "AWS4-HMAC-SHA256 "
+                + f"Credential={self.credentials.creds['AWS_KEY_ID']}/{scope}, "
+                + f"SignedHeaders={signed_headers}, "
+                + f"Signature={signature.decode('utf-8')}"
             )
             headers.update(x_amz_headers)
-            headers["Date"] = amzdate
             headers["Authorization"] = authorization_header
             rest_args = {"headers": headers}
 
             if data:
                 rest_args["data"] = data
 
-            return url, rest_args
+            return url.encode("utf-8"), rest_args
 
         return self._send_request_with_retry(
-            verb, generate_authenticated_url_and_args, retry_id
+            verb, generate_authenticated_url_and_args_v4, retry_id
         )
 
     def get_file_header(self, filename: str) -> Optional[FileHeader]:
@@ -253,13 +324,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         path = quote(self.s3location.path + filename.lstrip("/"))
         url = self.endpoint + f"/{path}"
 
-        _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name, request_uri=path
-        )
         retry_id = "HEAD"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
-            url, "HEAD", _resource, retry_id
+            url=url, verb="HEAD", retry_id=retry_id
         )
         if response.status_code == 200:
             self.meta.result_status = ResultStatus.UPLOADED
@@ -311,20 +379,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         url = self.endpoint + f"/{path}?uploads"
         s3_metadata = self._prepare_file_metadata()
         # initiate multipart upload
-        _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name,
-            request_uri=path,
-            subresource={"uploads": None},
-        )
         retry_id = "Initiate"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
-            url,
-            "POST",
-            _resource,
-            retry_id,
+            url=url,
+            verb="POST",
+            retry_id=retry_id,
             x_amz_headers=s3_metadata,
-            content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
             headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
         )
         if response.status_code == 200:
@@ -339,31 +400,20 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
         if self.num_of_chunks == 1:  # single request
             s3_metadata = self._prepare_file_metadata()
-            _resource = self._construct_canonicalized_element(
-                bucket_name=self.s3location.bucket_name, request_uri=path
-            )
             response = self._send_request_with_authentication_and_retry(
-                url,
-                "PUT",
-                _resource,
-                chunk_id,
+                url=url,
+                verb="PUT",
+                retry_id=chunk_id,
                 data=chunk,
                 x_amz_headers=s3_metadata,
                 headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
-                content_type=HTTP_HEADER_VALUE_OCTET_STREAM,
             )
             response.raise_for_status()
         else:
             # multipart PUT
             chunk_url = url + f"?partNumber={chunk_id+1}&uploadId={self.upload_id}"
-            query_params = {"partNumber": chunk_id + 1, "uploadId": self.upload_id}
-            chunk_resource = self._construct_canonicalized_element(
-                bucket_name=self.s3location.bucket_name,
-                request_uri=path,
-                subresource=query_params,
-            )
             response = self._send_request_with_authentication_and_retry(
-                chunk_url, "PUT", chunk_resource, chunk_id, data=chunk
+                url=chunk_url, verb="PUT", retry_id=chunk_id, data=chunk
             )
             if response.status_code == 200:
                 self.etags[chunk_id] = response.headers["ETag"]
@@ -374,11 +424,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         url = self.endpoint + f"/{path}?uploadId={self.upload_id}"
         logger.debug("Initiating multipart upload complete")
         # Complete multipart upload
-        _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name,
-            request_uri=path,
-            subresource={"uploadId": self.upload_id},
-        )
         root = ET.Element("CompleteMultipartUpload")
         for idx, etag_str in enumerate(self.etags):
             part = ET.Element("Part")
@@ -392,10 +437,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         retry_id = "Complete"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
-            url,
-            "POST",
-            _resource,
-            retry_id,
+            url=url,
+            verb="POST",
+            retry_id=retry_id,
             data=ET.tostring(root),
         )
         response.raise_for_status()
@@ -408,13 +452,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
         retry_id = "Abort"
         self.retry_count[retry_id] = 0
-        _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name,
-            request_uri=path,
-            subresource={"uploadId": self.upload_id},
-        )
         response = self._send_request_with_authentication_and_retry(
-            url, "DELETE", _resource, retry_id
+            url=url, verb="DELETE", retry_id=retry_id
         )
         response.raise_for_status()
 
@@ -422,12 +461,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         logger.debug(f"Downloading chunk {chunk_id}")
         path = quote(self.s3location.path + self.meta.src_file_name.lstrip("/"))
         url = self.endpoint + f"/{path}"
-        _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name, request_uri=path
-        )
         if self.num_of_chunks == 1:
             response = self._send_request_with_authentication_and_retry(
-                url, "GET", _resource, chunk_id
+                url=url, verb="GET", retry_id=chunk_id
             )
             if response.status_code == 200:
                 self.write_downloaded_chunk(0, response.content)
@@ -441,10 +477,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 _range = f"{chunk_id * chunk_size}-"
 
             response = self._send_request_with_authentication_and_retry(
-                url,
-                "GET",
-                _resource,
-                chunk_id,
+                url=url,
+                verb="GET",
+                retry_id=chunk_id,
                 headers={"Range": f"bytes={_range}"},
             )
             if response.status_code in (200, 206):
@@ -453,13 +488,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def transfer_accelerate_config(self) -> bool:
         url = self.endpoint + "/?accelerate"
-        _resource = self._construct_canonicalized_element(
-            bucket_name=self.s3location.bucket_name, subresource={"accelerate": None}
-        )
         retry_id = "accelerate"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
-            url, "GET", _resource, retry_id
+            url=url, verb="GET", retry_id=retry_id
         )
         if response.status_code == 200:
             config = ET.fromstring(response.text)
