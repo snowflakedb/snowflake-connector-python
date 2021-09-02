@@ -92,7 +92,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
         else:
             if self.use_s3_regional_url:
-                self.endpoint = f"https://{self.s3location.bucket_name}.s3.{self.region_name}.amazonaws.com"
+                self.endpoint = (
+                    f"https://{self.s3location.bucket_name}."
+                    f"s3.{self.region_name}.amazonaws.com"
+                )
             else:
                 self.endpoint = (
                     f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
@@ -123,6 +126,16 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         return binascii.hexlify(SnowflakeS3RestClient._hash_bytes(_input))
 
     @staticmethod
+    def _construct_query_string(
+        query_parts: Tuple[Tuple[str, str], ...],
+    ) -> str:
+        """Convenience function to build the query part of a URL from key-value pairs.
+
+        It filters out empty strings from the key, value pairs.
+        """
+        return "&".join(["=".join(filter(bool, e)) for e in query_parts])
+
+    @staticmethod
     def _construct_canonicalized_and_signed_headers(
         headers: Dict[str, Union[str, List[str]]]
     ) -> Tuple[str, str]:
@@ -131,10 +144,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         Does not support sorting by values in case the keys are the same, don't send
         in duplicate keys!
         """
-        low_key_dict = {k.lower(): v for k, v in headers.items()}
-        sorted_headers = sorted(headers.keys())
-        _res = [(k, low_key_dict[k]) for k in sorted_headers]
         res = []
+        low_key_dict = {k.lower(): v for k, v in headers.items()}
+        sorted_headers = sorted(low_key_dict.keys())
+        _res = [(k, low_key_dict[k]) for k in sorted_headers]
 
         for k, v in _res:
             # if value is a list, convert to string delimited by comma
@@ -154,20 +167,16 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def _construct_canonical_request_and_signed_headers(
         verb: str,
         canonical_uri_parameter: str,
-        url_query: str,
+        query_parts: Dict[str, str],
         canonical_headers: Optional[Dict[str, Union[str, List[str]]]] = None,
         payload_hash: str = "",
     ) -> Tuple[str, str]:
         # Build canonical query string
         # Note: this doesn't support sorting by values in case the same key is given
         #  more than once, so don't do that!
-        kv = []
-        if url_query:
-            for e in url_query.split("&"):
-                k, _, v = e.partition("=")
-                kv.append((k, v))
-            kv.sort(key=itemgetter(0))
-        canonical_query_string = "&".join("=".join([(k), (v)]) for k, v in kv)
+        canonical_query_string = "&".join(
+            "=".join([k, v]) for k, v in sorted(query_parts.items(), key=itemgetter(0))
+        )
         (
             canonical_headers,
             signed_headers,
@@ -244,6 +253,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         url: str,
         verb: str,
         retry_id: Union[int, str],
+        query_parts: Optional[Dict[str, str]] = None,
         x_amz_headers: Optional[Dict[str, str]] = None,
         headers: Optional[Dict[str, str]] = None,
         payload: Union[bytes, bytearray, IOBase, None] = None,
@@ -255,11 +265,12 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             headers = {}
         if payload is None:
             payload = b""
+        if query_parts is None:
+            query_parts = {}
         parsed_url = urlparse(url)
         x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
-            "AWS_TOKEN",
-            ""
-            )
+            "AWS_TOKEN", ""
+        )
         x_amz_headers["host"] = parsed_url.hostname
         if unsigned_payload:
             x_amz_headers["x-amz-content-sha256"] = UNSIGNED_PAYLOAD
@@ -281,7 +292,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 verb=verb,
                 canonical_uri_parameter=parsed_url.path
                 + (f";{parsed_url.params}" if parsed_url.params else ""),
-                url_query=parsed_url.query,
+                query_parts=query_parts,
                 canonical_headers=x_amz_headers,
                 payload_hash=x_amz_headers["x-amz-content-sha256"],
             )
@@ -326,7 +337,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             filename: Name of remote file.
 
         Returns:
-            None if HEAD returns 404, otherwise a FileHeader instance populated with metadata
+            None if HEAD returns 404, otherwise a FileHeader instance populated
+            with metadata
         """
         path = quote(self.s3location.path + filename.lstrip("/"))
         url = self.endpoint + f"/{path}"
@@ -382,8 +394,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         return s3_metadata
 
     def _initiate_multipart_upload(self) -> None:
+        query_parts = (("uploads", ""),)
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
-        url = self.endpoint + f"/{path}?uploads"
+        query_string = self._construct_query_string(query_parts)
+        url = self.endpoint + f"/{path}?{query_string}"
         s3_metadata = self._prepare_file_metadata()
         # initiate multipart upload
         retry_id = "Initiate"
@@ -394,6 +408,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             retry_id=retry_id,
             x_amz_headers=s3_metadata,
             headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
+            query_parts=dict(query_parts),
         )
         if response.status_code == 200:
             self.upload_id = ET.fromstring(response.content)[2].text
@@ -419,21 +434,29 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             response.raise_for_status()
         else:
             # multipart PUT
-            chunk_url = url + f"?partNumber={chunk_id+1}&uploadId={self.upload_id}"
+            query_parts = (
+                ("partNumber", str(chunk_id + 1)),
+                ("uploadId", self.upload_id),
+            )
+            query_string = self._construct_query_string(query_parts)
+            chunk_url = f"{url}?{query_string}"
             response = self._send_request_with_authentication_and_retry(
                 url=chunk_url,
                 verb="PUT",
                 retry_id=chunk_id,
                 payload=chunk,
                 unsigned_payload=True,
+                query_parts=dict(query_parts),
             )
             if response.status_code == 200:
                 self.etags[chunk_id] = response.headers["ETag"]
             response.raise_for_status()
 
     def _complete_multipart_upload(self) -> None:
+        query_parts = (("uploadId", self.upload_id),)
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
-        url = self.endpoint + f"/{path}?uploadId={self.upload_id}"
+        query_string = self._construct_query_string(query_parts)
+        url = self.endpoint + f"/{path}?{query_string}"
         logger.debug("Initiating multipart upload complete")
         # Complete multipart upload
         root = ET.Element("CompleteMultipartUpload")
@@ -453,19 +476,25 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             verb="POST",
             retry_id=retry_id,
             payload=ET.tostring(root),
+            query_parts=dict(query_parts),
         )
         response.raise_for_status()
 
     def _abort_multipart_upload(self) -> None:
         if self.upload_id is None:
             return
+        query_parts = (("uploadId", self.upload_id),)
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
-        url = self.endpoint + f"/{path}?uploadId={self.upload_id}"
+        query_string = self._construct_query_string(query_parts)
+        url = self.endpoint + f"/{path}?{query_string}"
 
         retry_id = "Abort"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
-            url=url, verb="DELETE", retry_id=retry_id
+            url=url,
+            verb="DELETE",
+            retry_id=retry_id,
+            query_parts=dict(query_parts),
         )
         response.raise_for_status()
 
@@ -499,11 +528,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             response.raise_for_status()
 
     def transfer_accelerate_config(self) -> bool:
-        url = self.endpoint + "/?accelerate"
+        query_parts = (("accelerate", ""),)
+        query_string = self._construct_query_string(query_parts)
+        url = self.endpoint + f"/{self.endpoint}/?{query_string}"
         retry_id = "accelerate"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
-            url=url, verb="GET", retry_id=retry_id
+            url=url, verb="GET", retry_id=retry_id, query_parts=dict(query_parts)
         )
         if response.status_code == 200:
             config = ET.fromstring(response.text)
