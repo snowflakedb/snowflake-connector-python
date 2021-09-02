@@ -1,0 +1,71 @@
+name: Create Requirements Files
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  create-req-files:
+    name: Create requirements files
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools, pip and wheel
+        run: python -m pip install -U setuptools pip wheel
+      - name: Install Python Connector
+        shell: bash
+        run: python -m pip install .
+      - name: Generate reqs file name
+        shell: bash
+        run: echo "requirements_file=temp_requirement/requirements_$(python -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').reqs" >> $GITHUB_ENV
+      - name: Create reqs file
+        shell: bash
+        run: |
+          mkdir temp_requirement
+          echo "# Generated on: $(python --version)" >${{ env.requirements_file }}
+          echo "# With snowflake-connector-python version: $(python -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${{ env.requirements_file }}
+          python -m pip freeze | grep -v snowflake-connector-python 1>>${{ env.requirements_file }} 2>/dev/null
+        id: create-reqs-file
+      - name: Show created req file
+        shell: bash
+        run: cat ${{ env.requirements_file }}
+      - uses: actions/upload-artifact@v2
+        with:
+          path: temp_requirement
+
+  push-files:
+    needs: create-req-files
+    name: Commit and push files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.PAT }}
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Download requirement files
+        uses: actions/download-artifact@v2
+        with:
+          name: artifact
+          path: tested_requirements
+      - name: Commit and push new requirements files
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add tested_requirements
+          git commit -m "Update requirements files" -a
+          git push

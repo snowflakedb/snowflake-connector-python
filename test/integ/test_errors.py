@@ -29,7 +29,7 @@ def test_error_code(conn_cnx):
     with conn_cnx() as ctx:
         try:
             ctx.cursor().execute("SELECT * FROOOM TEST")
-            raise Exception('Failed to detect Syntax error')
+            raise Exception("Failed to detect Syntax error")
         except errors.ProgrammingError as e:
             assert e.errno == 1003, "Syntax error code"
 
@@ -39,11 +39,14 @@ def test_error_telemetry(conn_cnx):
     with conn_cnx() as ctx:
         try:
             ctx.cursor().execute("SELECT * FROOOM TEST")
-            raise Exception('Failed to detect Syntax error')
+            raise Exception("Failed to detect Syntax error")
         except errors.ProgrammingError as e:
             telemetry_stacktrace = e.telemetry_traceback
             assert "SELECT * FROOOM TEST" not in telemetry_stacktrace
             for frame in traceback.extract_tb(e.__traceback__):
                 assert frame.line not in telemetry_stacktrace
             telemetry_data = e.generate_telemetry_exception_data()
-            assert 'Failed to detect Syntax error' not in telemetry_data[TelemetryField.KEY_REASON]
+            assert (
+                "Failed to detect Syntax error"
+                not in telemetry_data[TelemetryField.KEY_REASON]
+            )

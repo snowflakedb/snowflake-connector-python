@@ -12,7 +12,7 @@ def test_auth_oauth():
     token = "oAuthToken"
     auth = AuthByOAuth(token)
     auth.authenticate(None, None, None, None, None)
-    body = {'data': {}}
+    body = {"data": {}}
     auth.update_body(body)
-    assert body['data']['TOKEN'] == token, body
-    assert body['data']['AUTHENTICATOR'] == 'OAUTH', body
+    assert body["data"]["TOKEN"] == token, body
+    assert body["data"]["AUTHENTICATOR"] == "OAUTH", body

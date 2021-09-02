@@ -5,6 +5,7 @@
 #
 
 from base64 import b16decode, b16encode, standard_b64encode
+from typing import Union
 
 from .errors import InternalError
 
@@ -12,7 +13,7 @@ from .errors import InternalError
 binary_to_python = b16decode
 
 
-def binary_to_snowflake(binary_value):
+def binary_to_snowflake(binary_value) -> Union[bytes, bytearray]:
     """Encodes a "bytes" object for passing to Snowflake."""
     result = b16encode(binary_value)
 
@@ -26,14 +27,13 @@ class SnowflakeBinaryFormat(object):
 
     def __init__(self, name):
         name = name.upper()
-        if name == 'HEX':
+        if name == "HEX":
             self._encode = b16encode
-        elif name == 'BASE64':
+        elif name == "BASE64":
             self._encode = standard_b64encode
         else:
-            raise InternalError(
-                'Unrecognized binary format {}'.format(name))
+            raise InternalError("Unrecognized binary format {}".format(name))
 
     def format(self, binary_value):
         """Formats a "bytes" object, returning a string."""
-        return self._encode(binary_value).decode('ascii')
+        return self._encode(binary_value).decode("ascii")

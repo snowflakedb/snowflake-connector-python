@@ -3,153 +3,197 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
-
-from collections import defaultdict, namedtuple
-from enum import Enum, unique
+from collections import defaultdict
+from enum import Enum, auto, unique
+from typing import Any, DefaultDict, List, NamedTuple, Optional
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
 DBAPI_TYPE_NUMBER = 2
 DBAPI_TYPE_TIMESTAMP = 3
 
-FIELD_TYPES = [
-    {'name': 'FIXED', 'dbapi_type': [DBAPI_TYPE_NUMBER]},
-    {'name': 'REAL', 'dbapi_type': [DBAPI_TYPE_NUMBER]},
-    {'name': 'TEXT', 'dbapi_type': [DBAPI_TYPE_STRING]},
-    {'name': 'DATE', 'dbapi_type': [DBAPI_TYPE_TIMESTAMP]},
-    {'name': 'TIMESTAMP', 'dbapi_type': [DBAPI_TYPE_TIMESTAMP]},
-    {'name': 'VARIANT', 'dbapi_type': [DBAPI_TYPE_BINARY]},
-    {'name': 'TIMESTAMP_LTZ', 'dbapi_type': [DBAPI_TYPE_TIMESTAMP]},
-    {'name': 'TIMESTAMP_TZ', 'dbapi_type': [DBAPI_TYPE_TIMESTAMP]},
-    {'name': 'TIMESTAMP_NTZ', 'dbapi_type': [DBAPI_TYPE_TIMESTAMP]},
-    {'name': 'OBJECT', 'dbapi_type': [DBAPI_TYPE_BINARY]},
-    {'name': 'ARRAY', 'dbapi_type': [DBAPI_TYPE_BINARY]},
-    {'name': 'BINARY', 'dbapi_type': [DBAPI_TYPE_BINARY]},
-    {'name': 'TIME', 'dbapi_type': [DBAPI_TYPE_TIMESTAMP]},
-    {'name': 'BOOLEAN', 'dbapi_type': []},
+
+class FieldType(NamedTuple):
+    name: str
+    dbapi_type: List[int]
+
+
+FIELD_TYPES: List[FieldType] = [
+    FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER]),
+    FieldType(name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER]),
+    FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING]),
+    FieldType(name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
+    FieldType(name="TIMESTAMP", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
+    FieldType(name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY]),
+    FieldType(name="TIMESTAMP_LTZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
+    FieldType(name="TIMESTAMP_TZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
+    FieldType(name="TIMESTAMP_NTZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
+    FieldType(name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY]),
+    FieldType(name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY]),
+    FieldType(name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY]),
+    FieldType(name="TIME", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
+    FieldType(name="BOOLEAN", dbapi_type=[]),
 ]
 
-FIELD_NAME_TO_ID = defaultdict(int)
-FIELD_ID_TO_NAME = defaultdict(str)
+FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
+FIELD_ID_TO_NAME: DefaultDict[int, str] = defaultdict(str)
 
-__binary_types = []
-__binary_type_names = []
-__string_types = []
-__string_type_names = []
-__number_types = []
-__number_type_names = []
-__timestamp_types = []
-__timestamp_type_names = []
+__binary_types: List[int] = []
+__binary_type_names: List[str] = []
+__string_types: List[int] = []
+__string_type_names: List[str] = []
+__number_types: List[int] = []
+__number_type_names: List[str] = []
+__timestamp_types: List[int] = []
+__timestamp_type_names: List[str] = []
 
-for idx, type in enumerate(FIELD_TYPES):
-    FIELD_ID_TO_NAME[idx] = type['name']
-    FIELD_NAME_TO_ID[type['name']] = idx
+for idx, field_type in enumerate(FIELD_TYPES):
+    FIELD_ID_TO_NAME[idx] = field_type.name
+    FIELD_NAME_TO_ID[field_type.name] = idx
 
-    dbapi_types = type['dbapi_type']
+    dbapi_types = field_type.dbapi_type
     for dbapi_type in dbapi_types:
         if dbapi_type == DBAPI_TYPE_BINARY:
             __binary_types.append(idx)
-            __binary_type_names.append(type['name'])
+            __binary_type_names.append(field_type.name)
         elif dbapi_type == DBAPI_TYPE_TIMESTAMP:
             __timestamp_types.append(idx)
-            __timestamp_type_names.append(type['name'])
+            __timestamp_type_names.append(field_type.name)
         elif dbapi_type == DBAPI_TYPE_NUMBER:
             __number_types.append(idx)
-            __number_type_names.append(type['name'])
+            __number_type_names.append(field_type.name)
         elif dbapi_type == DBAPI_TYPE_STRING:
             __string_types.append(idx)
-            __string_type_names.append(type['name'])
+            __string_type_names.append(field_type.name)
 
 
-def get_binary_types():
+def get_binary_types() -> List[int]:
     return __binary_types
 
 
-def is_binary_type_name(type_name):
+def is_binary_type_name(type_name: str) -> bool:
     return type_name in __binary_type_names
 
 
-def get_string_types():
+def get_string_types() -> List[int]:
     return __string_types
 
 
-def is_string_type_name(type_name):
+def is_string_type_name(type_name) -> bool:
     return type_name in __string_type_names
 
 
-def get_number_types():
+def get_number_types() -> List[int]:
     return __number_types
 
 
-def is_number_type_name(type_name):
+def is_number_type_name(type_name) -> bool:
     return type_name in __number_type_names
 
 
-def get_timestamp_types():
+def get_timestamp_types() -> List[int]:
     return __timestamp_types
 
 
-def is_timestamp_type_name(type_name):
+def is_timestamp_type_name(type_name) -> bool:
     return type_name in __timestamp_type_names
 
 
-def is_date_type_name(type_name):
-    return type_name == 'DATE'
+def is_date_type_name(type_name) -> bool:
+    return type_name == "DATE"
 
 
 # Log format
-LOG_FORMAT = ('%(asctime)s - %(filename)s:%(lineno)d - '
-              '%(funcName)s() - %(levelname)s - %(message)s')
-
-# String literals
-UTF8 = 'utf-8'
-SHA256_DIGEST = 'sha256_digest'
-
-
-class ResultStatus(Enum):
-    ERROR = 'ERROR'
-    UPLOADED = 'UPLOADED'
-    DOWNLOADED = 'DOWNLOADED'
-    COLLISION = 'COLLISION'
-    SKIPPED = 'SKIPPED'
-    RENEW_TOKEN = 'RENEW_TOKEN'
-    RENEW_PRESIGNED_URL = 'RENEW_PRESIGNED_URL'
-    NOT_FOUND_FILE = 'NOT_FOUND_FILE'
-    NEED_RETRY = 'NEED_RETRY'
-    NEED_RETRY_WITH_LOWER_CONCURRENCY = 'NEED_RETRY_WITH_LOWER_CONCURRENCY'
-
-
-FileHeader = namedtuple(
-    "FileReader", [
-        "digest",
-        "content_length",
-        "encryption_metadata"
-    ]
+LOG_FORMAT = (
+    "%(asctime)s - %(filename)s:%(lineno)d - "
+    "%(funcName)s() - %(levelname)s - %(message)s"
 )
 
-PARAMETER_AUTOCOMMIT = 'AUTOCOMMIT'
-PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY = 'CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY'
-PARAMETER_CLIENT_SESSION_KEEP_ALIVE = 'CLIENT_SESSION_KEEP_ALIVE'
-PARAMETER_CLIENT_PREFETCH_THREADS = 'CLIENT_PREFETCH_THREADS'
-PARAMETER_CLIENT_TELEMETRY_ENABLED = 'CLIENT_TELEMETRY_ENABLED'
-PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED = 'CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED'
-PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL = 'CLIENT_STORE_TEMPORARY_CREDENTIAL'
-PARAMETER_CLIENT_REQUEST_MFA_TOKEN = 'CLIENT_REQUEST_MFA_TOKEN'
-PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL = \
-    'CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL'
-PARAMETER_TIMEZONE = 'TIMEZONE'
-PARAMETER_SERVICE_NAME = 'SERVICE_NAME'
-PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS = 'CLIENT_VALIDATE_DEFAULT_PARAMETERS'
-PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = 'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT'
+# String literals
+UTF8 = "utf-8"
+SHA256_DIGEST = "sha256_digest"
 
-HTTP_HEADER_CONTENT_TYPE = 'Content-Type'
-HTTP_HEADER_CONTENT_ENCODING = 'Content-Encoding'
-HTTP_HEADER_ACCEPT_ENCODING = 'Accept-Encoding'
+# PUT/GET related
+S3_FS = "S3"
+AZURE_FS = "AZURE"
+GCS_FS = "GCS"
+LOCAL_FS = "LOCAL_FS"
+CMD_TYPE_UPLOAD = "UPLOAD"
+CMD_TYPE_DOWNLOAD = "DOWNLOAD"
+FILE_PROTOCOL = "file://"
+
+
+@unique
+class ResultStatus(Enum):
+    ERROR = "ERROR"
+    SUCCEEDED = "SUCCEEDED"
+    UPLOADED = "UPLOADED"
+    DOWNLOADED = "DOWNLOADED"
+    COLLISION = "COLLISION"
+    SKIPPED = "SKIPPED"
+    RENEW_TOKEN = "RENEW_TOKEN"
+    RENEW_PRESIGNED_URL = "RENEW_PRESIGNED_URL"
+    NOT_FOUND_FILE = "NOT_FOUND_FILE"
+    NEED_RETRY = "NEED_RETRY"
+    NEED_RETRY_WITH_LOWER_CONCURRENCY = "NEED_RETRY_WITH_LOWER_CONCURRENCY"
+
+
+class SnowflakeS3FileEncryptionMaterial(NamedTuple):
+    query_id: str
+    query_stage_master_key: str
+    smk_id: int
+
+
+class MaterialDescriptor(NamedTuple):
+    smk_id: int
+    query_id: str
+    key_size: int
+
+
+class EncryptionMetadata(NamedTuple):
+    key: str
+    iv: str
+    matdesc: str
+
+
+class FileHeader(NamedTuple):
+    digest: Optional[str]
+    content_length: Optional[int]
+    encryption_metadata: Optional[EncryptionMetadata]
+
+
+PARAMETER_AUTOCOMMIT = "AUTOCOMMIT"
+PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY = (
+    "CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY"
+)
+PARAMETER_CLIENT_SESSION_KEEP_ALIVE = "CLIENT_SESSION_KEEP_ALIVE"
+PARAMETER_CLIENT_PREFETCH_THREADS = "CLIENT_PREFETCH_THREADS"
+PARAMETER_CLIENT_TELEMETRY_ENABLED = "CLIENT_TELEMETRY_ENABLED"
+PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED = "CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED"
+PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL = "CLIENT_STORE_TEMPORARY_CREDENTIAL"
+PARAMETER_CLIENT_REQUEST_MFA_TOKEN = "CLIENT_REQUEST_MFA_TOKEN"
+PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL = (
+    "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL"
+)
+PARAMETER_TIMEZONE = "TIMEZONE"
+PARAMETER_SERVICE_NAME = "SERVICE_NAME"
+PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS = "CLIENT_VALIDATE_DEFAULT_PARAMETERS"
+PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = "PYTHON_CONNECTOR_QUERY_RESULT_FORMAT"
+PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = (
+    "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1"
+)
+
+HTTP_HEADER_CONTENT_TYPE = "Content-Type"
+HTTP_HEADER_CONTENT_ENCODING = "Content-Encoding"
+HTTP_HEADER_ACCEPT_ENCODING = "Accept-Encoding"
 HTTP_HEADER_ACCEPT = "accept"
 HTTP_HEADER_USER_AGENT = "User-Agent"
-HTTP_HEADER_SERVICE_NAME = 'X-Snowflake-Service'
+HTTP_HEADER_SERVICE_NAME = "X-Snowflake-Service"
 
-HTTP_HEADER_VALUE_OCTET_STREAM = 'application/octet-stream'
+HTTP_HEADER_VALUE_OCTET_STREAM = "application/octet-stream"
+
+DEFAULT_S3_CONNECTION_POOL_SIZE = 10
+MAX_S3_CONNECTION_POOL_SIZE = 20
 
 
 @unique
@@ -164,9 +208,18 @@ class OCSPMode(Enum):
             at the WARNING level with the relevant details in JSON format.
         INSECURE: The connection will occur anyway.
     """
-    FAIL_CLOSED = 'FAIL_CLOSED'
-    FAIL_OPEN = 'FAIL_OPEN'
-    INSECURE = 'INSECURE'
+
+    FAIL_CLOSED = "FAIL_CLOSED"
+    FAIL_OPEN = "FAIL_OPEN"
+    INSECURE = "INSECURE"
+
+
+@unique
+class FileTransferType(Enum):
+    """This enum keeps track of the possible file transfer types."""
+
+    PUT = auto()
+    GET = auto()
 
 
 @unique
@@ -181,7 +234,27 @@ class QueryStatus(Enum):
     DISCONNECTED = 7
     RESUMING_WAREHOUSE = 8
     # purposeful typo. Is present in QueryDTO.java
-    QUEUED_REPAIRING_WAREHOUSE = 9
+    QUEUED_REPARING_WAREHOUSE = 9
     RESTARTED = 10
     BLOCKED = 11
     NO_DATA = 12
+
+
+# Size constants
+kilobyte = 1024
+megabyte = kilobyte * 1024
+gigabyte = megabyte * 1024
+
+
+# ArrowResultChunk constants the unit in this iterator
+# EMPTY_UNIT: default
+# ROW_UNIT: fetch row by row if the user call `fetchone()`
+# TABLE_UNIT: fetch one arrow table if the user call `fetch_pandas()`
+@unique
+class IterUnit(Enum):
+    ROW_UNIT = "row"
+    TABLE_UNIT = "table"
+
+
+S3_CHUNK_SIZE = 8388608  # boto3 default
+AZURE_CHUNK_SIZE = 4 * megabyte

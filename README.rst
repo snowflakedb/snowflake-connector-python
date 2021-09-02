@@ -13,6 +13,9 @@ Snowflake Connector for Python
 .. image:: http://img.shields.io/:license-Apache%202-brightgreen.svg
     :target: http://www.apache.org/licenses/LICENSE-2.0.txt
 
+.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
+    :target: https://github.com/psf/black
+
 This package includes the Snowflake Connector for Python, which conforms to the Python DB API 2.0 specification:
 https://www.python.org/dev/peps/pep-0249/
 
@@ -21,8 +24,8 @@ applications that can connect to Snowflake and perform all standard operations. 
 provides a programming alternative to developing applications in Java or C/C++
 using the Snowflake JDBC or ODBC drivers.
 
-The connector is a native, pure Python package that has no dependencies on JDBC or
-ODBC. It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
+The connector has no dependencies on JDBC or ODBC.
+It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
 where Python 3.6.0 (or higher) is installed.
 
 Snowflake Documentation is available at:

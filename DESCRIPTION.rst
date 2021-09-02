@@ -10,6 +10,75 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.6.0(August 29,2021)
+
+   - Internal change to the implementation of result fetching.
+   - Upgraded Pyarrow version from 3.0 to 5.0.
+   - Internal change to the implementation for PUT and GET. A new connection parameter use_new_put_get was added to toggle between implementations.
+   - Fixed a bug where executemany did not detect the type of data it was inserting.
+   - Updated the minimum Mac OSX build target from 10.13 to 10.14.
+
+
+- v2.5.1(July 31,2021)
+
+   - Fixes Python Connector bug that prevents the connector from using AWS S3 Regional URL. The driver currently overrides the regional URL information with the default S3 URL causing failure in PUT.
+
+
+- v2.5.0(July 22,2021)
+
+   - Fixed a bug in write_pandas when quote_identifiers is set to True the function would not actually quote column names.
+   - Bumping idna dependency pin from <3,>=2.5 to >=2.5,<4
+   - Fix describe method when running `insert into ...` commands
+
+
+- v2.4.6(June 25,2021)
+
+   - Fixed a potential memory leak.
+   - Removed upper certifi version pin.
+   - Updated vendored libraries , urllib(1.26.5) and requests(2.25.1).
+   - Replace pointers with UniqueRefs.
+   - Changed default value of client_session_keep_alive to None.
+   - Added the ability to retrieve metadata/schema without executing the query (describe method).
+
+- v2.4.5(June 15,2021)
+
+   - Fix for incorrect JWT token invalidity when an account alias with a dash in it is used for regionless account URL.
+
+- v2.4.4(May 30,2021)
+
+   - Fixed a segfault issue when using DictCursor and arrow result format with out of range dates.
+   - Adds new make_pd_writer helper function
+
+
+- v2.4.3(April 29,2021)
+
+   - Uses s3 regional URL in private links when a param is set.
+   - New Arrow NUMBER to Decimal converter option.
+   - Update pyopenssl requirement from <20.0.0,>=16.2.0 to >=16.2.0,<21.0.0.
+   - Update pandas requirement from <1.2.0,>=1.0.0 to >=1.0.0,<1.3.0.
+   - Update numpy requirement from <1.20.0 to <1.21.0.
+
+
+- v2.4.2(April 03,2021)
+
+   - PUT statements are now thread-safe.
+
+
+- v2.4.1(March 04,2021)
+
+   - Make connection object exit() aware of status of parameter `autocommit`
+
+
+- v2.4.0(March 04,2021)
+
+   - Added support for Python 3.9 and PyArrow 3.0.x.
+   - Added support for the upcoming multipart PUT threshold keyword.
+   - Added support for using the PUT command with a file-like object.
+   - Added some compilation flags to ease building conda community package.
+   - Removed the pytz pin because it doesn't follow semantic versioning release format.
+   - Added support for optimizing batch inserts through bulk array binding.
+
+
 - v2.3.10(February 01,2021)
 
    - Improved query ID logging and added request GUID logging.

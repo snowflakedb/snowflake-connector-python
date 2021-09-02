@@ -20,7 +20,13 @@ class TelemetryField(object):
     TIME_DOWNLOADING_CHUNKS = "client_time_downloading_chunks"
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
     SQL_EXCEPTION = "client_sql_exception"
-
+    GET_PARTITIONS_USED = "client_get_partitions_used"
+    # fetch_pandas_* usage
+    PANDAS_FETCH_ALL = "client_fetch_pandas_all"
+    PANDAS_FETCH_BATCHES = "client_fetch_pandas_batches"
+    # fetch_arrow_* usage
+    ARROW_FETCH_ALL = "client_fetch_arrow_all"
+    ARROW_FETCH_BATCHES = "client_fetch_arrow_batches"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SFQID = "QueryID"
@@ -36,15 +42,16 @@ class TelemetryField(object):
 
 class TelemetryData(object):
     """An instance of telemetry data which can be sent to the server."""
+
+    TRUE = 1
+    FALSE = 0
+
     def __init__(self, message, timestamp):
         self.message = message
         self.timestamp = timestamp
 
     def to_dict(self):
-        return {
-            'message': self.message,
-            'timestamp': str(self.timestamp)
-        }
+        return {"message": self.message, "timestamp": str(self.timestamp)}
 
     def __repr__(self):
         return str(self.to_dict())
@@ -52,6 +59,7 @@ class TelemetryData(object):
 
 class TelemetryClient(object):
     """Client to enqueue and send metrics to the telemetry endpoint in batch."""
+
     SF_PATH_TELEMETRY = "/telemetry/send"
     DEFAULT_FORCE_FLUSH_SIZE = 100
 
@@ -59,15 +67,13 @@ class TelemetryClient(object):
         self._rest = rest
         self._log_batch = []
         self._is_closed = False
-        self._flush_size = \
-            flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
+        self._flush_size = flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
         self._lock = Lock()
         self._enabled = True
 
-    def add_log_to_batch(self, telemetry_data):
+    def add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
         if self._is_closed:
-            raise Exception(
-                "Attempted to add log when TelemetryClient is closed")
+            raise Exception("Attempted to add log when TelemetryClient is closed")
         elif not self._enabled:
             logger.debug("TelemetryClient disabled. Ignoring log.")
             return
@@ -78,7 +84,7 @@ class TelemetryClient(object):
         if len(self._log_batch) >= self._flush_size:
             self.send_batch()
 
-    def try_add_log_to_batch(self, telemetry_data):
+    def try_add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
         try:
             self.add_log_to_batch(telemetry_data)
         except Exception:
@@ -86,8 +92,7 @@ class TelemetryClient(object):
 
     def send_batch(self):
         if self._is_closed:
-            raise Exception(
-                "Attempted to send batch when TelemetryClient is closed")
+            raise Exception("Attempted to send batch when TelemetryClient is closed")
         elif not self._enabled:
             logger.debug("TelemetryClient disabled. Not sending logs.")
             return
@@ -100,18 +105,29 @@ class TelemetryClient(object):
             logger.debug("Nothing to send to telemetry.")
             return
 
-        body = {'logs': [x.to_dict() for x in to_send]}
-        logger.debug("Sending %d logs to telemetry. Data is %s.", len(body), SecretDetector.mask_secrets(str(body))[1])
+        body = {"logs": [x.to_dict() for x in to_send]}
+        logger.debug(
+            "Sending %d logs to telemetry. Data is %s.",
+            len(body),
+            SecretDetector.mask_secrets(str(body))[1],
+        )
         if ENABLE_TELEMETRY_LOG:
             # This logger guarantees the payload won't be masked. Testing purpose.
             rt_plain_logger.debug("Inband telemetry data being sent is {}".format(body))
         try:
-            ret = self._rest.request(TelemetryClient.SF_PATH_TELEMETRY, body=body,
-                                     method='post', client=None, timeout=5)
-            if not ret['success']:
+            ret = self._rest.request(
+                TelemetryClient.SF_PATH_TELEMETRY,
+                body=body,
+                method="post",
+                client=None,
+                timeout=5,
+            )
+            if not ret["success"]:
                 logger.info(
                     "Non-success response from telemetry server: %s. "
-                    "Disabling telemetry.", str(ret))
+                    "Disabling telemetry.",
+                    str(ret),
+                )
                 self._enabled = False
             else:
                 logger.debug("Successfully uploading metrics to telemetry.")
