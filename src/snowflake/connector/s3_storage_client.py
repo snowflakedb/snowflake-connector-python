@@ -42,6 +42,7 @@ ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
 EXPIRED_TOKEN = "ExpiredToken"
 ADDRESSING_STYLE = "virtual"  # explicit force to use virtual addressing style
+UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD"
 
 RE_MULTIPLE_SPACES = re.compile(r" +")
 
@@ -155,7 +156,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         canonical_uri_parameter: str,
         url_query: str,
         canonical_headers: Optional[Dict[str, Union[str, List[str]]]] = None,
-        payload: bytes = "",
+        payload_hash: str = "",
     ) -> Tuple[str, str]:
         # Build canonical query string
         # Note: this doesn't support sorting by values in case the same key is given
@@ -182,7 +183,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                     canonical_query_string,
                     canonical_headers,
                     signed_headers,
-                    SnowflakeS3RestClient._hash_bytes_hex(payload).lower().decode(),
+                    payload_hash,
                 ]
             ),
             signed_headers,
@@ -245,27 +246,33 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         retry_id: Union[int, str],
         x_amz_headers: Optional[Dict[str, str]] = None,
         headers: Optional[Dict[str, str]] = None,
-        data: Union[bytes, bytearray, IOBase, None] = None,
+        payload: Union[bytes, bytearray, IOBase, None] = None,
+        unsigned_payload: bool = False,
     ) -> requests.Response:
         if x_amz_headers is None:
             x_amz_headers = {}
         if headers is None:
             headers = {}
-        if data is None:
-            data = b""
-        x_amz_headers["x-amz-content-sha256"] = self._hash_bytes_hex(data).decode(
-            "utf-8"
-        )
+        if payload is None:
+            payload = b""
         parsed_url = urlparse(url)
+        x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
+            "AWS_TOKEN",
+            ""
+            )
+        x_amz_headers["host"] = parsed_url.hostname
+        if unsigned_payload:
+            x_amz_headers["x-amz-content-sha256"] = UNSIGNED_PAYLOAD
+        else:
+            x_amz_headers["x-amz-content-sha256"] = (
+                SnowflakeS3RestClient._hash_bytes_hex(payload).lower().decode()
+            )
 
         def generate_authenticated_url_and_args_v4() -> Tuple[bytes, Dict[str, bytes]]:
             t = datetime.utcnow()
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
-
             x_amz_headers["x-amz-date"] = amzdate
-            x_amz_headers["x-amz-security-token"] = self.credentials.creds.get("AWS_TOKEN", "")
-            x_amz_headers["host"] = urlparse(url).hostname
 
             (
                 canonical_request,
@@ -276,7 +283,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 + (f";{parsed_url.params}" if parsed_url.params else ""),
                 url_query=parsed_url.query,
                 canonical_headers=x_amz_headers,
-                payload=data,
+                payload_hash=x_amz_headers["x-amz-content-sha256"],
             )
             string_to_sign, scope = self._construct_string_to_sign(
                 self.region_name,
@@ -303,8 +310,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             headers["Authorization"] = authorization_header
             rest_args = {"headers": headers}
 
-            if data:
-                rest_args["data"] = data
+            if payload:
+                rest_args["data"] = payload
 
             return url.encode("utf-8"), rest_args
 
@@ -404,16 +411,21 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 url=url,
                 verb="PUT",
                 retry_id=chunk_id,
-                data=chunk,
+                payload=chunk,
                 x_amz_headers=s3_metadata,
                 headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
+                unsigned_payload=True,
             )
             response.raise_for_status()
         else:
             # multipart PUT
             chunk_url = url + f"?partNumber={chunk_id+1}&uploadId={self.upload_id}"
             response = self._send_request_with_authentication_and_retry(
-                url=chunk_url, verb="PUT", retry_id=chunk_id, data=chunk
+                url=chunk_url,
+                verb="PUT",
+                retry_id=chunk_id,
+                payload=chunk,
+                unsigned_payload=True,
             )
             if response.status_code == 200:
                 self.etags[chunk_id] = response.headers["ETag"]
@@ -440,7 +452,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             url=url,
             verb="POST",
             retry_id=retry_id,
-            data=ET.tostring(root),
+            payload=ET.tostring(root),
         )
         response.raise_for_status()
 
