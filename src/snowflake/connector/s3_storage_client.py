@@ -139,10 +139,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def _construct_canonicalized_and_signed_headers(
         headers: Dict[str, Union[str, List[str]]]
     ) -> Tuple[str, str]:
-        """Construct canonical headers for AWS specs.
+        """Construct canonical headers as per AWS specs, returns the signed headers too.
 
         Does not support sorting by values in case the keys are the same, don't send
-        in duplicate keys!
+        in duplicate keys, but this is not possible with a dictionary anyways.
         """
         res = []
         low_key_dict = {k.lower(): v for k, v in headers.items()}
@@ -171,9 +171,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         canonical_headers: Optional[Dict[str, Union[str, List[str]]]] = None,
         payload_hash: str = "",
     ) -> Tuple[str, str]:
-        # Build canonical query string
-        # Note: this doesn't support sorting by values in case the same key is given
-        #  more than once, so don't do that!
+        """Build canonical request and also return signed headers.
+
+        Note: this doesn't support sorting by values in case the same key is given
+         more than once, but doing this is also not possible with a dictionary.
+        """
         canonical_query_string = "&".join(
             "=".join([k, v]) for k, v in sorted(query_parts.items(), key=itemgetter(0))
         )
@@ -205,6 +207,15 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         amzdate: str,
         canonical_request_hash: bytes,
     ) -> Tuple[str, str]:
+        """Given all the necessary information construct a V4 string to sign.
+
+        As per AWS specs it requires the scope, the hash of the canonical request and
+        the current date in the following format: YYYYMMDDTHHMMSSZ where T and Z are
+        constant characters.
+        This function generates the scope from the amzdate (which is just the date
+        portion of amzdate), region name and service we want to use (this is only s3
+        in our case).
+        """
         short_amzdate = amzdate[:8]
         scope = f"{short_amzdate}/{region_name}/{service_name}/aws4_request"
         return (
