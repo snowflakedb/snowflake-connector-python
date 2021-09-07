@@ -166,7 +166,7 @@ def create_batches_from_response(
             column_converters,
             cursor._use_dict_result,
         )
-    elif rowset_b64:
+    elif rowset_b64 is not None:
         first_chunk = ArrowResultBatch.from_data(
             rowset_b64,
             first_chunk_len,
