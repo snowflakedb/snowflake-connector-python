@@ -205,6 +205,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         region_name: str,
         service_name: str,
         amzdate: str,
+        short_amzdate: str,
         canonical_request_hash: bytes,
     ) -> Tuple[str, str]:
         """Given all the necessary information construct a V4 string to sign.
@@ -216,7 +217,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         portion of amzdate), region name and service we want to use (this is only s3
         in our case).
         """
-        short_amzdate = amzdate[:8]
         scope = f"{short_amzdate}/{region_name}/{service_name}/aws4_request"
         return (
             "\n".join(
@@ -311,6 +311,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.region_name,
                 "s3",
                 amzdate,
+                short_amzdate,
                 self._hash_bytes_hex(canonical_request.encode("utf-8")).lower(),
             )
             kDate = self._sign_bytes(
