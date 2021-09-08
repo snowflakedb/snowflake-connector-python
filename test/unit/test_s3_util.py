@@ -239,6 +239,7 @@ def test_upload_file_with_s3_upload_failed_error(tmp_path, sdkless):
                         "creds": {
                             "AWS_SECRET_KEY": "secret key",
                             "AWS_KEY_ID": "secret id",
+                            "AWS_TOKEN": "",
                         },
                         "location": "some_bucket",
                         "region": "no_region",
@@ -301,7 +302,7 @@ def test_get_header_expiry_error(caplog, sdkless):
             "overwrite": True,
         }
         meta = SnowflakeFileMeta(**meta_info)
-        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
         rest_client = SnowflakeS3RestClient(
             meta,
             StorageCredential(
@@ -369,7 +370,8 @@ def test_get_header_unknown_error(caplog, sdkless):
             "overwrite": True,
         }
         meta = SnowflakeFileMeta(**meta_info)
-        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
+
         rest_client = SnowflakeS3RestClient(
             meta,
             StorageCredential(
@@ -442,7 +444,7 @@ def test_upload_expiry_error(caplog, sdkless):
             "overwrite": True,
         }
         meta = SnowflakeFileMeta(**meta_info)
-        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
         rest_client = SnowflakeS3RestClient(
             meta,
             StorageCredential(
@@ -524,7 +526,7 @@ def test_upload_unknown_error(caplog, sdkless):
             "overwrite": True,
         }
         meta = SnowflakeFileMeta(**meta_info)
-        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
         rest_client = SnowflakeS3RestClient(
             meta,
             StorageCredential(
@@ -594,7 +596,7 @@ def test_upload_failed_error(caplog):
 
 def test_download_expiry_error(caplog, sdkless):
     """Tests whether token expiry error is handled as expected when downloading."""
-    if sdkless:
+    if not sdkless:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         mock_resource = MagicMock()
         mock_resource.download_file.side_effect = botocore.exceptions.ClientError(
@@ -635,7 +637,7 @@ def test_download_expiry_error(caplog, sdkless):
             "overwrite": True,
         }
         meta = SnowflakeFileMeta(**meta_info)
-        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
         rest_client = SnowflakeS3RestClient(
             meta,
             StorageCredential(
@@ -790,7 +792,7 @@ def test_download_retry_exceeded_error(caplog, sdkless):
             "overwrite": True,
         }
         meta = SnowflakeFileMeta(**meta_info)
-        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
+        creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
         rest_client = SnowflakeS3RestClient(
             meta,
             StorageCredential(

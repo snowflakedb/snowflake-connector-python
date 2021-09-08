@@ -186,21 +186,22 @@ class SnowflakeStorageClient(ABC):
         meta = self.meta
         logger.debug(f"Preprocessing {meta.src_file_name}")
 
-        self.get_file_header(meta.dst_file_name)  # Check if file exists on remote
-
-        if meta.result_status == ResultStatus.UPLOADED and not meta.overwrite:
-            # Skipped
-            logger.debug(
-                f'file already exists location="{self.stage_info["location"]}", '
-                f'file_name="{meta.dst_file_name}"'
-            )
-            meta.dst_file_size = 0
-            meta.result_status = ResultStatus.SKIPPED
-        else:
-            # Uploading
-            if meta.require_compress:
-                self.compress()
-            self.get_digest()
+        if not meta.overwrite:
+            self.get_file_header(meta.dst_file_name)  # Check if file exists on remote
+            if meta.result_status == ResultStatus.UPLOADED:
+                # Skipped
+                logger.debug(
+                    f'file already exists location="{self.stage_info["location"]}", '
+                    f'file_name="{meta.dst_file_name}"'
+                )
+                meta.dst_file_size = 0
+                meta.result_status = ResultStatus.SKIPPED
+                self.preprocessed = True
+                return
+        # Uploading
+        if meta.require_compress:
+            self.compress()
+        self.get_digest()
 
         self.preprocessed = True
 
