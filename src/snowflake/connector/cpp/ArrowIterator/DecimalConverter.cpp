@@ -2,8 +2,8 @@
 // Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 //
 
-#include <Python.h>
 #include <string>
+#include "Python/Common.hpp"
 #include "DecimalConverter.hpp"
 #include "Python/Helpers.hpp"
 
@@ -50,7 +50,7 @@ PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const
      * meet some encoding problem with std::string */
     return PyObject_CallFunction(m_pyDecimalConstructor.get(), "s#",
                                  formatDecimalString.c_str(),
-                                 formatDecimalString.size());
+                                 static_cast<Py_ssize_t>(formatDecimalString.size()));
   }
   else
   {
