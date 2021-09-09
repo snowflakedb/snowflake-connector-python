@@ -706,7 +706,7 @@ def test_empty(conn_cnx, result_format):
 
 
 def get_random_seed():
-    random.seed(datetime.now())
+    random.seed(datetime.now().timestamp())
     return random.randint(0, 10000)
 
 

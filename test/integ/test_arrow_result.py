@@ -603,7 +603,7 @@ select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4),
 
 
 def get_random_seed():
-    random.seed(datetime.now())
+    random.seed(datetime.now().timestamp())
     return random.randint(0, 10000)
 
 
