@@ -589,10 +589,10 @@ class SnowflakeConverter(object):
         return None
 
     def _list_to_snowflake(self, value: list) -> list:
-        return [
-            SnowflakeConverter.quote(v0)
-            for v0 in [SnowflakeConverter.escape(v) for v in value]
-        ]
+        _to_snowflake = self.to_snowflake
+        _escape = SnowflakeConverter.escape
+        _quote = SnowflakeConverter.quote
+        return [_quote(_escape(_to_snowflake(v))) for v in value]
 
     _tuple_to_snowflake = _list_to_snowflake
 
