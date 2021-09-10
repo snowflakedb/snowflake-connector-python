@@ -5,8 +5,8 @@
 #ifndef PC_UTIL_TIME_HPP
 #define PC_UTIL_TIME_HPP
 
-#include <Python.h>
 #include <string>
+#include "Python/Common.hpp"
 
 #ifdef _WIN32
 #include <algorithm>
