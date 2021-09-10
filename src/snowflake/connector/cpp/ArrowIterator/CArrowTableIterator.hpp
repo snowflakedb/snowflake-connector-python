@@ -5,7 +5,6 @@
 #ifndef PC_ARROWTABLEITERATOR_HPP
 #define PC_ARROWTABLEITERATOR_HPP
 
-#include <arrow/table.h>
 #include "CArrowIterator.hpp"
 
 namespace sf

@@ -32,7 +32,7 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 logger = getLogger(__name__)
 
 
-class TestData(NamedTuple):
+class _TestData(NamedTuple):
     test_data_dir: pathlib.Path
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
@@ -46,13 +46,13 @@ class TestData(NamedTuple):
 @pytest.fixture()
 def test_data(
     request, conn_cnx: Callable[..., "SnowflakeConnection"], sdkless: bool
-) -> TestData:
+) -> _TestData:
     return create_test_data(request, partial(conn_cnx, use_new_put_get=sdkless))
 
 
 def create_test_data(
     request, connection: Callable[..., "SnowflakeConnection"]
-) -> TestData:
+) -> _TestData:
     assert "AWS_ACCESS_KEY_ID" in os.environ
     assert "AWS_SECRET_ACCESS_KEY" in os.environ
 
@@ -68,7 +68,7 @@ def create_test_data(
 
     request.addfinalizer(fin)
 
-    ret = TestData(
+    ret = _TestData(
         test_data_dir=pathlib.Path(__file__).absolute().parent.parent / "data",
         AWS_ACCESS_KEY_ID=f"'{os.environ['AWS_ACCESS_KEY_ID']}'",
         AWS_SECRET_ACCESS_KEY=f"'{os.environ['AWS_SECRET_ACCESS_KEY']}'",

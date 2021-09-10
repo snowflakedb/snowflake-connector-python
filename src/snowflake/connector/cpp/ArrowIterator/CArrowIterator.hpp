@@ -5,11 +5,8 @@
 #ifndef PC_ARROWITERATOR_HPP
 #define PC_ARROWITERATOR_HPP
 
-#include <Python.h>
 #include <vector>
-#include <arrow/python/platform.h>
-#include <arrow/api.h>
-#include <arrow/python/pyarrow.h>
+#include "Python/Common.hpp"
 #include "logging.hpp"
 
 #define SF_CHECK_ARROW_RC(arrow_status, format_string, ...) \
