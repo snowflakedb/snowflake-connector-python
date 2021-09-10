@@ -1109,13 +1109,6 @@ class SnowflakeConnection(object):
             return None
         processed_params = {}
 
-        if not isinstance(params, (list, tuple)):
-            errorvalue = {
-                "msg": "Binding parameters must be a list: {}".format(params),
-                "errno": ER_FAILED_PROCESSING_PYFORMAT,
-            }
-            Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
-
         get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
 
         for idx, v in enumerate(params):
