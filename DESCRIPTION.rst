@@ -20,6 +20,7 @@ Release Notes
    - Implement AWS signature V4 to new SDKless PUT and GET.
    - Removed a deprecated setuptools option from setup.py.
    - Fixed a bug where error logs would be printed for query executions that produce no results.
+   - Fixed a bug where the temporary stage for bulk array inserts exists.
 
 
 - v2.6.0(August 29,2021)
