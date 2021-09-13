@@ -18,7 +18,10 @@ logger = getLogger(__name__)
 
 class BindUploadAgent:
     _STAGE_NAME = "SYSTEMBIND"
-    _CREATE_STAGE_STMT = f"create temporary stage {_STAGE_NAME} file_format=(type=csv field_optionally_enclosed_by='\"')"
+    _CREATE_STAGE_STMT = (
+        f"create or replace temporary stage {_STAGE_NAME} "
+        "file_format=(type=csv field_optionally_enclosed_by='\"')"
+    )
 
     def __init__(
         self,
