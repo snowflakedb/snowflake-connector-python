@@ -10,6 +10,19 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.6.1(September 16,2021)
+
+   - Bump pandas version from <1.3 to <1.4
+   - Fixing Python deprecation warnings.
+   - Added more type-hints.
+   - Marked HeartBeatTimer threads as daemon threads.
+   - Force cast a column into integer in write_pandas to avoid a rare behavior that would lead to crashing.
+   - Implement AWS signature V4 to new SDKless PUT and GET.
+   - Removed a deprecated setuptools option from setup.py.
+   - Fixed a bug where error logs would be printed for query executions that produce no results.
+   - Fixed a bug where the temporary stage for bulk array inserts exists.
+
+
 - v2.6.0(August 29,2021)
 
    - Internal change to the implementation of result fetching.
