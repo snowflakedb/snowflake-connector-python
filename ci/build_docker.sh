@@ -11,7 +11,11 @@ source $THIS_DIR/set_base_image.sh
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
 mkdir -p $CONNECTOR_DIR/dist
-cd $THIS_DIR/docker/connector_build/$arch
+if [[ "$arch" == "aarch64" ]]; then
+  cd $THIS_DIR/docker/connector_build/$arch
+else
+  cd $THIS_DIR/docker/connector_build
+fi
 
 CONTAINER_NAME=build_pyconnector
 
