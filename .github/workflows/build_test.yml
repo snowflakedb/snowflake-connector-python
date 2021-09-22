@@ -128,7 +128,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python_tag: [ "cp37", "cp38", "cp39"]
+        python_tag: ["cp37", "cp38", "cp39"]
         include:
            - name: Linux
            - python-version: '3.7'
