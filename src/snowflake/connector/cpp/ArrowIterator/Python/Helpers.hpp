@@ -6,6 +6,7 @@
 #define PC_PYTHON_HELPERS_HPP
 
 #include "logging.hpp"
+#include <string>
 
 namespace sf
 {

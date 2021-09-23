@@ -6,6 +6,7 @@
 #define PC_BOOLEANCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include <memory>
 
 namespace sf
 {

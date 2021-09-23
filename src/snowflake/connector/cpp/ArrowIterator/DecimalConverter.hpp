@@ -7,6 +7,7 @@
 
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
+#include <memory>
 
 namespace sf
 {

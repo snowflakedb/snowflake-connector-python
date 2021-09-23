@@ -5,9 +5,11 @@
 #ifndef PC_ARROWITERATOR_HPP
 #define PC_ARROWITERATOR_HPP
 
-#include <vector>
 #include "Python/Common.hpp"
 #include "logging.hpp"
+#include <memory>
+#include <string>
+#include <vector>
 
 #define SF_CHECK_ARROW_RC(arrow_status, format_string, ...) \
   if (!arrow_status.ok()) \

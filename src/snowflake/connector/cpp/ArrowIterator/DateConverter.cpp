@@ -4,6 +4,7 @@
 
 #include "DateConverter.hpp"
 #include "Python/Helpers.hpp"
+#include <memory>
 
 namespace sf
 {

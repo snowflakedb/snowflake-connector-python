@@ -3,6 +3,7 @@
 //
 
 #include "StringConverter.hpp"
+#include <memory>
 
 namespace sf
 {

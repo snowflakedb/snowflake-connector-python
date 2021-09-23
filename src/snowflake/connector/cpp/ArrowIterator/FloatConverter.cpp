@@ -3,6 +3,7 @@
 //
 
 #include "FloatConverter.hpp"
+#include <memory>
 
 namespace sf
 {

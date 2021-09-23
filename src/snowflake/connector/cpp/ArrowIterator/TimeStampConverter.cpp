@@ -5,6 +5,7 @@
 #include "TimeStampConverter.hpp"
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
+#include <memory>
 
 namespace sf
 {

@@ -2,10 +2,11 @@
 // Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 //
 
-#include <string>
 #include "Python/Common.hpp"
 #include "DecimalConverter.hpp"
 #include "Python/Helpers.hpp"
+#include <memory>
+#include <string>
 
 namespace sf
 {
