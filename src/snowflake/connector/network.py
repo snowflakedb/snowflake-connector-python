@@ -431,6 +431,7 @@ class SnowflakeRestful:
         _no_results=False,
         timeout=None,
         _include_retry_params=False,
+        _no_retry=False,
     ):
         if body is None:
             body = {}
@@ -470,6 +471,7 @@ class SnowflakeRestful:
                 _no_results=_no_results,
                 timeout=timeout,
                 _include_retry_params=_include_retry_params,
+                no_retry=_no_retry,
             )
         else:
             return self._get_request(url, headers, token=self.token, timeout=timeout)
