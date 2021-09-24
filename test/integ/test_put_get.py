@@ -619,9 +619,11 @@ def test_multipart_put(sdkless, conn_cnx, tmp_path):
                     "snowflake.connector.constants.S3_CHUNK_SIZE", chunk_size
                 ):
                     cur.execute(
-                        f"put file://{upload_file} @{stage_name} AUTO_COMPRESS=FALSE"
+                        f"put file://{upload_file} @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE"
                     )
-            cur.execute(f"get @{stage_name} file://{get_dir}")
-    downloaded_file = get_dir / "file0"
+            cur.execute(
+                f"get @{stage_name}/sub/folders/{upload_file.name} file://{get_dir}"
+            )
+    downloaded_file = get_dir / upload_file.name
     assert downloaded_file.exists()
     assert filecmp.cmp(upload_file, downloaded_file)
