@@ -220,7 +220,7 @@ setup(
         # in early 2017, so we pick this version as a reasonably modern base.
         "setuptools>34.0.0",
         # requests requirements
-        "chardet>=3.0.2,<5",
+        "charset_normalizer~=2.0.0",
         "idna>=2.5,<4",
         "certifi>=2017.4.17",
     ],
