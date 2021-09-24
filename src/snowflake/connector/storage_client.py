@@ -319,7 +319,7 @@ class SnowflakeStorageClient(ABC):
             os.makedirs(base_dir)
 
         # HEAD
-        file_header = self.get_file_header(self.meta.dst_file_name)
+        file_header = self.get_file_header(self.meta.real_src_file_name)
 
         if file_header and file_header.encryption_metadata:
             self.encryption_metadata = file_header.encryption_metadata
