@@ -873,9 +873,25 @@ class SnowflakeRestful:
                     exception=str(e),
                     stack_trace=traceback.format_exc(),
                 )
-            if no_retry:
-                return {}
             cause = e.args[0]
+            if no_retry:
+                logger.error(cause)
+                TelemetryService.get_instance().log_http_request_error(
+                    "HttpRequestError: %s" % str(cause),
+                    full_url,
+                    method,
+                    SQLSTATE_IO_ERROR,
+                    ER_FAILED_TO_REQUEST,
+                    retry_timeout=retry_ctx.total_timeout,
+                    retry_count=retry_ctx.cnt,
+                    exception=str(e),
+                    stack_trace=traceback.format_exc(),
+                )
+                if isinstance(cause, Error):
+                    Error.errorhandler_wrapper_from_cause(conn, cause)
+                else:
+                    self.handle_invalid_certificate_error(conn, full_url, cause)
+                return {}  # required for tests
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= int(time.time() - start_request_thread)
                 if retry_ctx.timeout <= 0:
