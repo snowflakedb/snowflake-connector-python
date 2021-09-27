@@ -10,6 +10,13 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.6.2(September 27,2021)
+
+   - Updated vendored urllib3 and requests versions.
+   - Fixed a bug where GET commands would fail to download files from sub directories from stages.
+   - Added a feature where where the connector will print the url it tried to open when it is unable to open it for external browser authentication.
+
+
 - v2.6.1(September 16,2021)
 
    - Bump pandas version from <1.3 to <1.4
