@@ -176,7 +176,7 @@ USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 def is_retryable_http_code(code: int) -> bool:
     """Decides whether code is a retryable HTTP issue."""
     return 500 <= code < 600 or code in (
-        BAD_REQUEST,  # 400
+        BAD_REQfUEST,  # 400
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
         REQUEST_TIMEOUT,  # 408

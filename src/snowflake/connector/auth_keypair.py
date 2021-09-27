@@ -6,6 +6,7 @@
 
 import base64
 import hashlib
+import os
 from datetime import datetime, timedelta
 from logging import getLogger
 from typing import Optional
@@ -35,7 +36,8 @@ class AuthByKeyPair(AuthByPlugin):
     SUBJECT = "sub"
     EXPIRE_TIME = "exp"
     ISSUE_TIME = "iat"
-    LIFETIME = 120
+    LIFETIME = 60
+    DEFAULT_JWT_RETRY_ATTEMPTS = 3
 
     def __init__(self, private_key, lifetime_in_seconds: int = LIFETIME):
         """Inits AuthByKeyPair class with private key.
@@ -48,6 +50,9 @@ class AuthByKeyPair(AuthByPlugin):
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(seconds=lifetime_in_seconds)
+        self._jwt_retry_attempts = os.getenv(
+            "JWT_RETRY_ATTEMPTS", self.DEFAULT_JWT_RETRY_ATTEMPTS
+        )
 
     def authenticate(
         self,
@@ -131,3 +136,9 @@ class AuthByKeyPair(AuthByPlugin):
 
     def assertion_content(self):
         return self._jwt_token
+
+    def should_retry(self, count: int) -> bool:
+        return count < self._jwt_retry_attempts
+
+    def get_timeout(self) -> int:
+        return datetime.utcnow() - self._jwt_token_exp
