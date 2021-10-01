@@ -1,9 +1,9 @@
 # We use manylinux1 base image because pyarrow_manylinux2010 has a bug and wheel failed to be audited
-ARG BASE_IMAGE
+ARG BASE_IMAGE=quay.io/pypa/manylinux2010_x86_64
 FROM $BASE_IMAGE
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
-ARG GOSU_URL
+ARG GOSU_URL=https://github.com/tianon/gosu/releases/download/1.11/gosu-amd64
 ENV GOSU_PATH $GOSU_URL
 RUN curl -o /usr/local/bin/gosu -SL $GOSU_PATH
 RUN chmod +x /usr/local/bin/gosu
