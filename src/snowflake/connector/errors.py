@@ -319,7 +319,7 @@ class Error(BASE_EXCEPTION_CLASS):
         error_value: Dict[str, Union[str, bool]],
     ) -> Union["Error", Exception]:
         """Helper function to errorhandler_wrapper that creates the exception."""
-        error_value.setdefault("done_format_msg", False)
+        error_value.setdefault("done_format_msg", True)
 
         if issubclass(error_class, Error):
             return error_class(
