@@ -301,7 +301,7 @@ class Error(BASE_EXCEPTION_CLASS):
         Returns:
             Whether it error was successfully given to a handler.
         """
-        error_value.setdefault("done_format_msg", True)
+        error_value.setdefault("done_format_msg", False)
         if connection is not None:
             connection.messages.append((error_class, error_value))
         if cursor is not None:
@@ -319,7 +319,7 @@ class Error(BASE_EXCEPTION_CLASS):
         error_value: Dict[str, Union[str, bool]],
     ) -> Union["Error", Exception]:
         """Helper function to errorhandler_wrapper that creates the exception."""
-        error_value.setdefault("done_format_msg", True)
+        error_value.setdefault("done_format_msg", False)
 
         if issubclass(error_class, Error):
             return error_class(
