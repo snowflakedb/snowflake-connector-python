@@ -6,6 +6,7 @@
 
 import logging
 import os
+import re
 import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Dict, Optional, Type, Union
@@ -23,6 +24,9 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = getLogger(__name__)
 connector_base_path = os.path.join("snowflake", "connector")
+
+
+RE_FORMATTED_ERROR = re.compile(r"^(\d{6,})(?: \((\S+)\))?:")
 
 
 class Error(BASE_EXCEPTION_CLASS):
@@ -44,22 +48,25 @@ class Error(BASE_EXCEPTION_CLASS):
         self.sqlstate = sqlstate or "n/a"
         self.sfqid = sfqid
 
-        if not self.msg:
+        if self.msg:
+            already_formatted_msg = RE_FORMATTED_ERROR.match(msg)
+        else:
             self.msg = "Unknown error"
+            already_formatted_msg = None
 
         if self.errno != -1 and not done_format_msg:
             if self.sqlstate != "n/a":
-                if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
-                    self.msg = (
-                        f"{self.errno:06d} ({self.sqlstate}): {self.sfqid}: {self.msg}"
-                    )
-                else:
-                    self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.msg}"
+                if not already_formatted_msg:
+                    if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
+                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.sfqid}: {self.msg}"
+                    else:
+                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.msg}"
             else:
-                if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
-                    self.msg = f"{self.errno:06d}: {self.errno}: {self.msg}"
-                else:
-                    self.msg = f"{self.errno:06d}: {self.msg}"
+                if not already_formatted_msg:
+                    if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
+                        self.msg = f"{self.errno:06d}: {self.errno}: {self.msg}"
+                    else:
+                        self.msg = f"{self.errno:06d}: {self.msg}"
 
         # We want to skip the last frame/line in the traceback since it is the current frame
         self.telemetry_traceback = self.generate_telemetry_stacktrace()
