@@ -2,10 +2,10 @@
 // Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
+#include <memory>
 #include "TimeStampConverter.hpp"
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
-#include <memory>
 
 namespace sf
 {

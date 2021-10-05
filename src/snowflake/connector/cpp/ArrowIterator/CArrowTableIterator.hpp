@@ -5,10 +5,10 @@
 #ifndef PC_ARROWTABLEITERATOR_HPP
 #define PC_ARROWTABLEITERATOR_HPP
 
-#include "CArrowIterator.hpp"
 #include <string>
 #include <memory>
 #include <vector>
+#include "CArrowIterator.hpp"
 
 namespace sf
 {

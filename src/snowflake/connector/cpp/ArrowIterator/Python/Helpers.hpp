@@ -5,8 +5,8 @@
 #ifndef PC_PYTHON_HELPERS_HPP
 #define PC_PYTHON_HELPERS_HPP
 
-#include "logging.hpp"
 #include <string>
+#include "logging.hpp"
 
 namespace sf
 {

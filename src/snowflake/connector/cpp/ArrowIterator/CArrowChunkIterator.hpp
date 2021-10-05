@@ -5,11 +5,11 @@
 #ifndef PC_ARROWCHUNKITERATOR_HPP
 #define PC_ARROWCHUNKITERATOR_HPP
 
+#include <memory>
+#include <vector>
 #include "CArrowIterator.hpp"
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
-#include <memory>
-#include <vector>
 
 namespace sf
 {
