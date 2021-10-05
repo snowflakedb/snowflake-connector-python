@@ -3,6 +3,7 @@
 //
 
 #include "CArrowIterator.hpp"
+#include <memory>
 
 namespace sf
 {

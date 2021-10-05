@@ -4,6 +4,7 @@
 
 #include "Helpers.hpp"
 #include "Common.hpp"
+#include <string>
 
 namespace sf
 {

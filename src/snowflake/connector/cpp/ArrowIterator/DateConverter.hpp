@@ -8,6 +8,7 @@
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
 #include "logging.hpp"
+#include <memory>
 
 namespace sf
 {

@@ -8,6 +8,8 @@
 #include "CArrowIterator.hpp"
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
+#include <memory>
+#include <vector>
 
 namespace sf
 {

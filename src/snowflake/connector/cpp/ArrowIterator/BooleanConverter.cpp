@@ -3,6 +3,7 @@
 //
 
 #include "BooleanConverter.hpp"
+#include <memory>
 
 namespace sf
 {

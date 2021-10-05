@@ -6,6 +6,9 @@
 #define PC_ARROWTABLEITERATOR_HPP
 
 #include "CArrowIterator.hpp"
+#include <string>
+#include <memory>
+#include <vector>
 
 namespace sf
 {
