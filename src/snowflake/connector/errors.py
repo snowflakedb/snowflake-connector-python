@@ -49,6 +49,13 @@ class Error(BASE_EXCEPTION_CLASS):
         self.sfqid = sfqid
 
         if self.msg:
+            # TODO: If there's a message then check to see if errno (and maybe sqlstate)
+            #  and if so then don't insert them again, this should eventually be removed
+            #  and we should be explicitly set this at every call to create these
+            #  Exceptions.
+            #  However we shouldn't be creating them during normal execution so
+            #  this should not affect performance to users and will make our error
+            #  messages consistent.
             already_formatted_msg = RE_FORMATTED_ERROR.match(msg)
         else:
             self.msg = "Unknown error"
