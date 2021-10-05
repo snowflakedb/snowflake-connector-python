@@ -3,6 +3,7 @@
 //
 
 #include "BinaryConverter.hpp"
+#include <memory>
 
 namespace sf
 {

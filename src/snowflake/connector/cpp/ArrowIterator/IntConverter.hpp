@@ -6,6 +6,7 @@
 #define PC_INTCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include <memory>
 
 namespace sf
 {

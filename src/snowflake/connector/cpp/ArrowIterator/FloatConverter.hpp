@@ -6,6 +6,7 @@
 #define PC_FLOATCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include <memory>
 
 namespace sf
 {
