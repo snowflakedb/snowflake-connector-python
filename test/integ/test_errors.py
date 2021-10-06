@@ -32,7 +32,7 @@ def test_error_code(conn_cnx):
             ctx.cursor().execute("SELECT * FROOOM TEST")
         assert e.value.errno == syntax_errno, "Syntax error code"
         assert e.value.sqlstate == syntax_sqlstate, "Syntax SQL state"
-        assert e.match(f"^{syntax_errno} ({syntax_sqlstate}): ")
+        e.match(fr"^{syntax_errno:06d} \({syntax_sqlstate}\): ")
 
 
 @pytest.mark.skipolddriver

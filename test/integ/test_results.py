@@ -27,11 +27,11 @@ def test_results_with_error(conn_cnx):
         cur = cnx.cursor()
         with pytest.raises(ProgrammingError) as e:
             cur.execute("select blah")
-        sfqid = e.sfqid
+        sfqid = e.value.sfqid
 
         with pytest.raises(ProgrammingError) as e:
             cur.query_result(sfqid)
-        got_sfqid = e.sfqid
+        got_sfqid = e.value.sfqid
 
         assert sfqid is not None
         assert got_sfqid is not None
