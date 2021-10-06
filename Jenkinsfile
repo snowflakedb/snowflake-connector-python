@@ -50,7 +50,7 @@ timestamps {
 
 
 pipeline {
-  agent { label 'test-dynamic-slave' }
+  agent { label 'regular-memory-node' }
   options { timestamps() }
   environment {
     COMMIT_SHA_LONG = sh(returnStdout: true, script: "echo \$(git rev-parse " + "HEAD)").trim()
