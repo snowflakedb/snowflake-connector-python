@@ -201,9 +201,6 @@ setup(
     },
     python_requires=">=3.6",
     install_requires=[
-        "azure-common<2.0.0",
-        "azure-storage-blob>=12.0.0,<13.0.0",
-        "boto3>=1.4.4,<2.0.0",
         # While requests is vendored, we use regular requests to perform OCSP checks
         "requests<3.0.0",
         "pytz",

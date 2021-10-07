@@ -134,11 +134,3 @@ def pytest_runtest_setup(item) -> None:
             )
     if PUBLIC_SKIP_TAGS.intersection(test_tags) and running_on_public_ci():
         pytest.skip("cannot run unit test on public CI")
-
-
-@pytest.fixture(
-    params=[pytest.param(True, marks=pytest.mark.skipolddriver), False],
-    ids=["sdkless", "sdkfull"],
-)
-def sdkless(request):
-    return request.param
