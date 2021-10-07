@@ -208,7 +208,7 @@ setup(
         "requests<3.0.0",
         "pytz",
         "pycryptodomex>=3.2,!=3.5.0,<4.0.0",
-        "pyOpenSSL>=16.2.0,<21.0.0",
+        "pyOpenSSL>=16.2.0,<22.0.0",
         "cffi>=1.9,<2.0.0",
         "cryptography>=3.1.0,<4.0.0",
         "pyjwt<3.0.0",
