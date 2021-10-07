@@ -58,9 +58,6 @@ from .errors import (
     ProgrammingError,
 )
 from .file_transfer_agent import SnowflakeFileTransferAgent
-from .file_transfer_agent_sdk import (
-    SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSdk,
-)
 from .options import installed_pandas, pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
@@ -716,12 +713,7 @@ class SnowflakeCursor:
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
                 # Decide whether to use the old, or new code path
-                if self._connection._use_new_put_get:
-                    sf_file_transfer_agent_class = SnowflakeFileTransferAgent
-                else:
-                    sf_file_transfer_agent_class = SnowflakeFileTransferAgentSdk
-
-                sf_file_transfer_agent = sf_file_transfer_agent_class(
+                sf_file_transfer_agent = SnowflakeFileTransferAgent(
                     self,
                     query,
                     ret,

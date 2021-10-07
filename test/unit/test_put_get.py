@@ -16,18 +16,9 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeS3ProgressPercentage,
 )
 
-try:
-    from snowflake.connector.file_transfer_agent_sdk import (
-        SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
-    )
-except ImportError:
-    from snowflake.connector.file_transfer_agent import (
-        SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSDK,
-    )
-
 
 @pytest.mark.skipif(IS_WINDOWS, reason="permission model is different")
-def test_put_error(tmpdir, sdkless):
+def test_put_error(tmpdir):
     """Tests for raise_put_get_error flag (now turned on by default) in SnowflakeFileTransferAgent."""
     tmp_dir = str(tmpdir.mkdir("putfiledir"))
     file1 = path.join(tmp_dir, "file1")
@@ -55,9 +46,7 @@ def test_put_error(tmpdir, sdkless):
         "success": True,
     }
 
-    agent_class = (
-        SnowflakeFileTransferAgent if sdkless else SnowflakeFileTransferAgentSDK
-    )
+    agent_class = SnowflakeFileTransferAgent
 
     # no error is raised
     sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=False)
@@ -82,7 +71,7 @@ def test_put_error(tmpdir, sdkless):
 
 
 @pytest.mark.skipolddriver
-def test_percentage(tmp_path, sdkless):
+def test_percentage(tmp_path):
     """Tests for ProgressPercentage classes."""
     from snowflake.connector.file_transfer_agent import percent
 

@@ -24,9 +24,7 @@ from ..randomize import random_string
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_get_small_data_via_user_stage(
-    is_public_test, tmpdir, conn_cnx, from_path, sdkless
-):
+def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, from_path):
     """[s3] Puts and Gets Small Data via User Stage."""
     if is_public_test or "AWS_ACCESS_KEY_ID" not in os.environ:
         pytest.skip("This test requires to change the internal parameter")
@@ -38,7 +36,6 @@ def test_put_get_small_data_via_user_stage(
         number_of_files=number_of_files,
         number_of_lines=number_of_lines,
         from_path=from_path,
-        sdkless=sdkless,
     )
 
 
@@ -51,7 +48,6 @@ def test_put_get_large_data_via_user_stage(
     tmpdir,
     conn_cnx,
     from_path,
-    sdkless,
 ):
     """[s3] Puts and Gets Large Data via User Stage."""
     if is_public_test or "AWS_ACCESS_KEY_ID" not in os.environ:
@@ -64,7 +60,6 @@ def test_put_get_large_data_via_user_stage(
         number_of_files=number_of_files,
         number_of_lines=number_of_lines,
         from_path=from_path,
-        sdkless=sdkless,
     )
 
 
@@ -79,7 +74,6 @@ def test_put_small_data_use_s3_regional_url(
     conn_cnx,
     db_parameters,
     from_path,
-    sdkless,
 ):
     """[s3] Puts Small Data via User Stage using regional url."""
     if is_public_test or "AWS_ACCESS_KEY_ID" not in os.environ:
@@ -93,7 +87,6 @@ def test_put_small_data_use_s3_regional_url(
         number_of_files=number_of_files,
         number_of_lines=number_of_lines,
         from_path=from_path,
-        sdkless=sdkless,
     )
     assert put_cursor._connection._session_parameters.get(
         "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1"
@@ -107,11 +100,9 @@ def _put_get_user_stage_s3_regional_url(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-    sdkless: bool = True,
 ) -> Optional[SnowflakeCursor]:
     with conn_cnx(
         role="accountadmin",
-        use_new_put_get=sdkless,
     ) as cnx:
         cnx.cursor().execute(
             "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = true;"
@@ -123,12 +114,10 @@ def _put_get_user_stage_s3_regional_url(
             number_of_files,
             number_of_lines,
             from_path,
-            sdkless,
         )
     finally:
         with conn_cnx(
             role="accountadmin",
-            use_new_put_get=sdkless,
         ) as cnx:
             cnx.cursor().execute(
                 "alter account set ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = false;"
@@ -142,7 +131,6 @@ def _put_get_user_stage(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-    sdkless: bool = True,
 ) -> Optional[SnowflakeCursor]:
     put_cursor: Optional[SnowflakeCursor] = None
     # sanity check
@@ -159,7 +147,7 @@ def _put_get_user_stage(
     file_stream = None if from_path else open(files, "rb")
 
     stage_name = f"{random_str}_stage_{number_of_files}_{number_of_lines}"
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute(
             f"""
 create or replace table {random_str} (
@@ -187,7 +175,7 @@ credentials=(
 """
         )
     try:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             cnx.cursor().execute(
                 "alter session set disable_put_and_get_on_external_stage = false"
             )
@@ -217,7 +205,7 @@ credentials=(
     finally:
         if file_stream:
             file_stream.close()
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             cnx.cursor().execute(f"rm @{stage_name}")
             cnx.cursor().execute(f"drop stage if exists {stage_name}")
             cnx.cursor().execute(f"drop table if exists {random_str}")
@@ -230,7 +218,6 @@ def test_put_get_duplicated_data_user_stage(
     is_public_test,
     tmpdir,
     conn_cnx,
-    sdkless,
     number_of_files=5,
     number_of_lines=100,
 ):
@@ -250,7 +237,7 @@ def test_put_get_duplicated_data_user_stage(
     files = os.path.join(tmp_dir, "file*")
 
     stage_name = f"{random_str}_stage"
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute(
             f"""
 create or replace table {random_str} (
@@ -278,7 +265,7 @@ credentials=(
 """
         )
     try:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             c = cnx.cursor()
             try:
                 for rec in c.execute(f"rm @{stage_name}"):
@@ -347,7 +334,7 @@ credentials=(
                     assert encoding == "gzip", "exported file type"
 
     finally:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             cnx.cursor().execute(f"drop stage if exists {stage_name}")
             cnx.cursor().execute(f"drop table if exists {random_str}")
 
@@ -357,10 +344,9 @@ def test_get_data_user_stage(
     is_public_test,
     tmpdir,
     conn_cnx,
-    db_parameters,
-    sdkless,
 ):
     """SNOW-20927: Tests Get failure with 404 error."""
+    stage_name = random_string(5, "test_get_data_user_stage_")
     if is_public_test or "AWS_ACCESS_KEY_ID" not in os.environ:
         pytest.skip("This test requires to change the internal parameter")
 
@@ -369,18 +355,16 @@ def test_get_data_user_stage(
     )
     test_data = [
         {
-            "s3location": "{}/{}".format(
-                default_s3bucket, db_parameters["name"] + "_stage"
-            ),
-            "stage_name": db_parameters["name"] + "_stage1",
+            "s3location": "{}/{}".format(default_s3bucket, f"{stage_name}_stage"),
+            "stage_name": f"{stage_name}_stage1",
             "data_file_name": "data.txt",
         },
     ]
     for elem in test_data:
-        _put_list_rm_files_in_stage(tmpdir, conn_cnx, db_parameters, elem, sdkless)
+        _put_list_rm_files_in_stage(tmpdir, conn_cnx, elem)
 
 
-def _put_list_rm_files_in_stage(tmpdir, conn_cnx, db_parameters, elem, sdkless: bool):
+def _put_list_rm_files_in_stage(tmpdir, conn_cnx, elem):
     s3location = elem["s3location"]
     stage_name = elem["stage_name"]
     data_file_name = elem["data_file_name"]
@@ -396,7 +380,7 @@ def _put_list_rm_files_in_stage(tmpdir, conn_cnx, db_parameters, elem, sdkless: 
         f.write(str("789,012,string2\n"))
 
     output_dir = str(tmpdir.mkdir("output"))
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute(
             """
 create or replace stage {stage_name}
@@ -413,7 +397,7 @@ create or replace stage {stage_name}
             )
         )
     try:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             cnx.cursor().execute(f"RM @{stage_name}")
             cnx.cursor().execute(
                 "alter session set disable_put_and_get_on_external_stage = false"
@@ -458,7 +442,7 @@ GET @{stage_name} file://{output_dir}
             assert rec[0] == data_file_name + ".gz"
             assert rec[2] == "DOWNLOADED"
     finally:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             cnx.cursor().execute(
                 """
 RM @{stage_name}
