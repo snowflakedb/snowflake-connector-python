@@ -13,6 +13,7 @@ import logging
 from logging import NullHandler
 
 from .connection import SnowflakeConnection
+from .connection_sp import StoredProcConnection
 from .cursor import DictCursor
 from .dbapi import (
     BINARY,
@@ -48,6 +49,10 @@ logging.getLogger(__name__).addHandler(NullHandler())
 
 def Connect(**kwargs):
     return SnowflakeConnection(**kwargs)
+
+
+def TestConnect(**kwargs):
+    return StoredProcConnection(**kwargs)
 
 
 connect = Connect

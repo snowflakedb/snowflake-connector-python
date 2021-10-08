@@ -522,7 +522,7 @@ class SnowflakeCursor:
                     "Failed to reset SIGINT handler. Not in main " "thread. Ignored..."
                 )
             except Exception:
-                self.connection.incident.report_incident()
+                self.connection.incident.report_incident()  # TODO
                 raise
             if self._timebomb is not None:
                 self._timebomb.cancel()
