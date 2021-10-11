@@ -218,7 +218,7 @@ double CArrowTableIterator::convertScaledFixedNumberToDouble(
   if (scale < 9)
   {
     // simply use divide to convert decimal value in double
-    return (double) originalValue / sf::internal::powTenSB4[scale];
+    return static_cast<double>(originalValue / sf::internal::powTenSB4[scale]);
   }
   else
   {

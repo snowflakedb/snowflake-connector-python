@@ -16,4 +16,4 @@ CArrowIterator::CArrowIterator(std::vector<std::shared_ptr<arrow::RecordBatch>>*
   logger->debug(__FILE__, __func__, __LINE__, "Arrow BatchSize: %d", batches->size());
 }
 
-}
+} // namespace sf

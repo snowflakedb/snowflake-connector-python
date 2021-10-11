@@ -184,5 +184,5 @@ private:
     T originalValue
   );
 };
-}
+} // namespace sf
 #endif  // PC_ARROWTABLEITERATOR_HPP

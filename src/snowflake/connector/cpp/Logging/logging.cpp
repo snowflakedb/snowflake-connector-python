@@ -102,4 +102,4 @@ void Logger::error(const char *path_name, const char *func_name, int line_num, c
   Logger::log(ERROR, path_name, func_name, line_num, msg);
 }
 
-}
+} // namespace sf

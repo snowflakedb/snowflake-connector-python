@@ -94,6 +94,6 @@ private:
 };
 
 
-}
+} // namespace sf
 
 #endif  // PC_ARROWCHUNKITERATOR_HPP

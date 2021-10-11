@@ -40,13 +40,12 @@ PyObject* TimeConverter<T>::toPyObject(int64_t rowIndex) const
   if (m_array->IsValid(rowIndex))
   {
     int64_t seconds = m_array->Value(rowIndex);
-    using namespace internal;
     py::PyUniqueLock lock;
     return PyObject_CallFunction(m_pyDatetimeTime().get(), "iiii",
-                                 getHourFromSeconds(seconds, m_scale),
-                                 getMinuteFromSeconds(seconds, m_scale),
-                                 getSecondFromSeconds(seconds, m_scale),
-                                 getMicrosecondFromSeconds(seconds, m_scale));
+                                 internal::getHourFromSeconds(seconds, m_scale),
+                                 internal::getMinuteFromSeconds(seconds, m_scale),
+                                 internal::getSecondFromSeconds(seconds, m_scale),
+                                 internal::getMicrosecondFromSeconds(seconds, m_scale));
   }
   else
   {

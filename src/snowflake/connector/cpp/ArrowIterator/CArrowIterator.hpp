@@ -12,8 +12,7 @@
 #include "logging.hpp"
 
 #define SF_CHECK_ARROW_RC(arrow_status, format_string, ...) \
-  if (!arrow_status.ok()) \
-  { \
+  if (!arrow_status.ok()) { \
     std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
     PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
@@ -21,8 +20,7 @@
   }
 
 #define SF_CHECK_ARROW_RC_AND_RETURN(arrow_status, ret_val, format_string, ...) \
-  if (!arrow_status.ok()) \
-  { \
+  if (!arrow_status.ok()) { \
     std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
     PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
@@ -56,7 +54,7 @@ public:
 class CArrowIterator
 {
 public:
-  CArrowIterator(std::vector<std::shared_ptr<arrow::RecordBatch>> * batches);
+  explicit CArrowIterator(std::vector<std::shared_ptr<arrow::RecordBatch>> * batches);
 
   virtual ~CArrowIterator() = default;
 
@@ -71,6 +69,6 @@ protected:
 
   static Logger* logger;
 };
-}
+} // namespace sf
 
 #endif  // PC_ARROWITERATOR_HPP
