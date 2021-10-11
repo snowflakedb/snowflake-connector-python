@@ -34,6 +34,7 @@ from .network import (
     raise_okta_unauthorized_error,
 )
 from .options import installed_pandas, pandas
+from .secret_detector import SecretDetector
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
 from .vendored import requests
 
@@ -119,7 +120,7 @@ def create_batches_from_response(
                         f"added chunk header: key={header_key}, value={header_value}"
                     )
         elif qrmk is not None:
-            logger.debug(f"qrmk={qrmk}")
+            logger.debug(f"qrmk={SecretDetector.mask_secrets(qrmk)}")
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 
