@@ -8,7 +8,10 @@ from io import StringIO
 
 import pytest
 
-from snowflake.connector.util_text import split_statements
+try:
+    from snowflake.connector.util_text import split_statements
+except ImportError:
+    split_statements = None
 
 try:
     from snowflake.connector.util_text import SQLDelimiter
@@ -47,6 +50,11 @@ def test_simple_sql():
     s = "select 1; -- test"
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("select 1; -- test", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 1;", False)
         with pytest.raises(StopIteration):
             next(itr)
@@ -54,7 +62,12 @@ def test_simple_sql():
     s = "select /* test */ 1; -- test comment select 1;"
     with StringIO(s) as f:
         itr = split_statements(f)
-        assert next(itr) == ("select /* test */ 1;", False)
+        assert next(itr) == ("select /* test */ 1; -- test comment select 1;", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("select  1;", False)
         with pytest.raises(StopIteration):
             next(itr)
 
@@ -65,7 +78,13 @@ def test_multiple_line_sql():
 
     with StringIO(s) as f:
         itr = split_statements(f)
-        assert next(itr) == (("select /* test */ 1;", False))
+        assert next(itr) == (("select /* test */ 1; -- test comment", False))
+        assert next(itr) == ("select 23;", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("select  1;", False)
         assert next(itr) == ("select 23;", False)
         with pytest.raises(StopIteration):
             next(itr)
@@ -75,7 +94,13 @@ select 23; -- test comment 2"""
 
     with StringIO(s) as f:
         itr = split_statements(f)
-        assert next(itr) == ("select /* test */ 1;", False)
+        assert next(itr) == ("select /* test */ 1; -- test comment", False)
+        assert next(itr) == ("select 23; -- test comment 2", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("select  1;", False)
         assert next(itr) == ("select 23;", False)
         with pytest.raises(StopIteration):
             next(itr)
@@ -85,7 +110,14 @@ select 23; /* test comment 2 */ select 3"""
 
     with StringIO(s) as f:
         itr = split_statements(f)
-        assert next(itr) == ("select /* test */ 1;", False)
+        assert next(itr) == ("select /* test */ 1; -- test comment", False)
+        assert next(itr) == ("select 23;", False)
+        assert next(itr) == ("/* test comment 2 */ select 3", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("select  1;", False)
         assert next(itr) == ("select 23;", False)
         assert next(itr) == ("select 3", False)
         with pytest.raises(StopIteration):
@@ -97,7 +129,14 @@ select 23; /* test comment 2
 
     with StringIO(s) as f:
         itr = split_statements(f)
-        assert next(itr) == ("select /* test */ 1;", False)
+        assert next(itr) == ("select /* test */ 1; -- test comment", False)
+        assert next(itr) == ("select 23;", False)
+        assert next(itr) == ("/* test comment 2\n*/ select 3;", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("select  1;", False)
         assert next(itr) == ("select 23;", False)
         assert next(itr) == ("select 3;", False)
         with pytest.raises(StopIteration):
@@ -116,9 +155,16 @@ select 23; /* test comment 2
             "select /* test\n"
             "    continued comments 1\n"
             "    continued comments 2\n"
-            "    */ 1;",
+            "    */ 1; -- test comment",
             False,
         )
+        assert next(itr) == ("select 23;", False)
+        assert next(itr) == ("/* test comment 2\n*/ select 3;", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("select  1;", False)
         assert next(itr) == ("select 23;", False)
         assert next(itr) == ("select 3;", False)
         with pytest.raises(StopIteration):
@@ -131,6 +177,12 @@ def test_quotes():
 
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("select 'hello', 1; -- test comment", False)
+        assert next(itr) == ("select 23,'hello", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello', 1;", False)
         assert next(itr) == ("select 23,'hello", False)
         with pytest.raises(StopIteration):
@@ -141,6 +193,12 @@ select "23,'hello" """
 
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("select 'he\"llo', 1; -- test comment", False)
+        assert next(itr) == ('select "23,\'hello"', False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'he\"llo', 1;", False)
         assert next(itr) == ('select "23,\'hello"', False)
         with pytest.raises(StopIteration):
@@ -152,6 +210,12 @@ select "23,'hello" """
 
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("select 'hello\n', 1; -- test comment", False)
+        assert next(itr) == ('select "23,\'hello"', False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello\n', 1;", False)
         assert next(itr) == ('select "23,\'hello"', False)
         with pytest.raises(StopIteration):
@@ -163,6 +227,12 @@ select "23,'','hello" """
 
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("select 'hello''\n', 1; -- test comment", False)
+        assert next(itr) == ("select \"23,'','hello\"", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello''\n', 1;", False)
         assert next(itr) == ("select \"23,'','hello\"", False)
         with pytest.raises(StopIteration):
@@ -175,10 +245,10 @@ def test_quotes_in_comments():
     with StringIO(s) as f:
         itr = split_statements(f)
         assert next(itr) == (
-            "select 'hello';",
+            "select 'hello'; -- test comment 'hello2' in comment",
             False,
         )
-        assert next(itr) == ("select true", False)
+        assert next(itr) == ("/* comment 'quote'*/ select true", False)
         with pytest.raises(StopIteration):
             next(itr)
 
@@ -195,6 +265,12 @@ def test_backslash():
 
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("select 'hello\\\\', 1; -- test comment", False)
+        assert next(itr) == ("select 23,'\nhello", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("select 'hello\\\\', 1;", False)
         assert next(itr) == ("select 23,'\nhello", False)
         with pytest.raises(StopIteration):
@@ -207,6 +283,12 @@ def test_file_with_slash_star():
 
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("put file:///tmp/* @%tmp;", True)
+        assert next(itr) == ("ls @%tmp;", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("put file:///tmp/* @%tmp;", True)
         assert next(itr) == ("ls @%tmp;", False)
         with pytest.raises(StopIteration):
@@ -228,6 +310,39 @@ list @~;
 
     with StringIO(s) as f:
         itr = split_statements(f)
+        assert next(itr) == ("list @~;", False)
+        # no comment line is returned
+        assert next(itr) == (
+            "-- first half\n" "put file://$SELF_DIR/staging-test-data/*.csv.gz @~;",
+            True,
+        )
+        assert next(itr) == (
+            "put file://$SELF_DIR/staging-test-data/foo.csv.gz @~;",
+            True,
+        )
+        assert next(itr) == (
+            "put file://$SELF_DIR/staging-test-data/foo.csv.gz @~ " "overwrite=true;",
+            True,
+        )
+        # no comment line is returned
+        assert next(itr) == (
+            "-- second half\n"
+            "put file://$SELF_DIR/staging-test-data/foo.csv.gz @~/foo;",
+            True,
+        )
+        assert next(itr) == (
+            "put file://$SELF_DIR/staging-test-data/bar.csv.gz @~/bar;",
+            True,
+        )
+        # no empty line is returned
+        assert next(itr) == ("list @~;", False)
+        assert next(itr) == ("remove @~ pattern='.*.csv.gz';", False)
+        assert next(itr) == ("list @~;", False)
+        # last raises StopIteration
+        with pytest.raises(StopIteration):
+            next(itr)
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
         assert next(itr) == ("list @~;", False)
         # no comment line is returned
         assert next(itr) == (
@@ -324,11 +439,12 @@ GET @%bcd file:///tmp/aaa.txt;
     ) as f:
         itr = split_statements(f)
         assert next(itr) == (
-            """PUT file:///tmp/data.txt @%ab;""",
+            """-- sample data uploads
+    PUT file:///tmp/data.txt @%ab;""",
             True,
         )
         assert next(itr) == ("""SELECT 1;""", False)
-        assert next(itr) == ("""select /* 567*/ 345;""", False)
+        assert next(itr) == ("""/* 134 */ select /* 567*/ 345;""", False)
         assert next(itr) == ("""GET @%bcd file:///tmp/aaa.txt;""", True)
         with pytest.raises(StopIteration):
             next(itr)
@@ -343,7 +459,12 @@ def test_empty_statement():
 """
     ) as f:
         itr = split_statements(f)
-        assert next(itr) == ("""select 1;""", False)
+        assert next(itr) == (
+            """select 1;
+-- tail comment1
+-- tail comment2""",
+            False,
+        )
         with pytest.raises(StopIteration):
             next(itr)
 
@@ -356,12 +477,13 @@ select /*another test comments*/ 1; -- test comment 2
 select 2;
 """
     with StringIO(s) as f:
-        itr = split_statements(f)
+        itr = split_statements(f, remove_comments=False)
         assert next(itr) == (
-            "select /*another test comments*/ 1;",
+            "--- test comment 1\n"
+            "select /*another test comments*/ 1; -- test comment 2",
             False,
         )
-        assert next(itr) == ("select 2;", False)
+        assert next(itr) == ("-- test comment 3\nselect 2;", False)
 
 
 @pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
@@ -370,10 +492,54 @@ def test_comments_with_semicolon():
 select 1;
 """
     with StringIO(s) as f:
-        itr = split_statements(f)
-        assert next(itr) == ("select 1;", False)
+        itr = split_statements(f, remove_comments=False)
+        assert next(itr) == ("--test ;\n" "select 1;", False)
         with pytest.raises(StopIteration):
             next(itr)
+
+
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
+def test_comment_in_values():
+    """SNOW-51297: SnowSQL -o remove_comments=True breaks the query."""
+
+    # no space before and after a comment
+    s = """INSERT INTO foo
+VALUES (/*TIMEOUT*/10);"""
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("INSERT INTO foo\nVALUES (10);", False)
+
+    # workaround
+    s = """INSERT INTO foo
+VALUES ( /*TIMEOUT*/ 10);"""
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("INSERT INTO foo\nVALUES (  10);", False)
+
+    # a comment start from the beginning of the line
+    s = """INSERT INTO foo VALUES (
+/*TIMEOUT*/
+10);"""
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == ("INSERT INTO foo VALUES (\n\n10);", False)
+
+
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
+def test_multiline_double_dollar_experssion_with_removed_comments():
+    s = """CREATE FUNCTION mean(a FLOAT, b FLOAT)
+  RETURNS FLOAT LANGUAGE JAVASCRIPT AS $$
+  var c = a + b;
+  return(c / 2);
+  $$;"""
+    with StringIO(s) as f:
+        itr = split_statements(f, remove_comments=True)
+        assert next(itr) == (
+            "CREATE FUNCTION mean(a FLOAT, b FLOAT)\n"
+            "  RETURNS FLOAT LANGUAGE JAVASCRIPT AS $$\n"
+            "  var c = a + b;\n  return(c / 2);\n  $$;",
+            False,
+        )
 
 
 @pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
@@ -399,7 +565,7 @@ def test_sql_delimiter():
     during execution, so the SnowSQL's cli class is passed in by SnowSQL. This function makes sure that this
     behaviour is not broken by mistake.
     """
-    delimiter = ";"
+    delimiter = SQLDelimiter("imi")
     with StringIO(
         (
             "create or replace view aaa\n"
@@ -410,9 +576,9 @@ def test_sql_delimiter():
             "!spool off\n"
             "drop view if exists aaa {delimiter}\n"
             "show tables"
-        ).format(delimiter=delimiter)
+        ).format(delimiter=delimiter.sql_delimiter)
     ) as f:
-        itr = split_statements(f)
+        itr = split_statements(f, delimiter=delimiter)
         assert next(itr) == (
             """create or replace view aaa
         as select * from
@@ -429,7 +595,18 @@ def test_sql_delimiter():
         next(itr)
 
 
-# In new approach, we are not using SQLDelimiter so this test is always skipped
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
+def test_sql_splitting_tokenization():
+    """This tests that sql_delimiter is token sensitive."""
+    raw_sql = "select 123 as asd"
+    for c in set(raw_sql.replace(" ", "")):
+        sql = raw_sql + " " + c + " " + raw_sql
+        with StringIO(sql) as sqlio:
+            s = split_statements(sqlio, delimiter=SQLDelimiter(c))
+            assert next(s)[0] == raw_sql + " ;"
+            assert next(s)[0] == raw_sql
+
+
 @pytest.mark.skipif(
     split_statements is None or SQLDelimiter is None,
     reason="No split_statements or SQLDelimiter is available",
@@ -558,8 +735,7 @@ def test_sql_createproc_sql():
 
 
 def test_sql_nested_anonymous_block():
-    with StringIO(
-        """            select a from b where c=3;
+    sqltxt = """            select a from b where c=3;
             DECLARE
               X NUMBER DEFAULT 0;
               Y NUMBER DEFAULT X;
@@ -586,10 +762,10 @@ insert into table2 ...;
 commit;
 
 """
-    ) as f:
-        itr = split_statements(f)
-        assert next(itr) == ("""select a from b where c=3;""", False)
-        assert next(itr) == (
+    expect_outputs = list()
+    expect_outputs.append(("""select a from b where c=3;""", False))
+    expect_outputs.append(
+        (
             """DECLARE
               X NUMBER DEFAULT 0;
               Y NUMBER DEFAULT X;
@@ -603,46 +779,71 @@ commit;
             END;""",
             False,
         )
-        assert next(itr) == ("""put a to @b;""", True)
-        assert next(itr) == ("""begin transaction;""", False)
-        assert next(itr) == ("""insert into table1 (i) values (1);""", False)
-        assert next(itr) == (
+    )
+    expect_outputs.append(("""put a to @b;""", True))
+    expect_outputs.append(("""begin transaction;""", False))
+
+    expect_outputs.append(("""insert into table1 (i) values (1);""", False))
+    expect_outputs.append(
+        (
             """insert into table1 (i) values ('This is not a valid integer.');""",
             False,
         )
-        assert next(itr) == ("""insert into table1 (i) values (2);""", False)
-        assert next(itr) == ("""commit;""", False)
-        assert next(itr) == (
+    )
+    expect_outputs.append(("""insert into table1 (i) values (2);""", False))
+    expect_outputs.append(("""commit;""", False))
+    expect_outputs.append(
+        (
             """select case collate('m', 'upper')
     when 'M' then true
     else false
 end;""",
             False,
         )
-        assert next(itr) == ("""begin;""", False)
-        assert next(itr) == ("""insert into table2 ...;""", False)
-        assert next(itr) == ("""commit;""", False)
+    )
+    expect_outputs.append(("""begin;""", False))
+    expect_outputs.append(("""insert into table2 ...;""", False))
+    expect_outputs.append(("""commit;""", False))
+
+    with StringIO(sqltxt) as f:
+        itr = split_statements(f, True)
+
+        for tup in expect_outputs:
+            assert next(itr) == tup
+        with pytest.raises(StopIteration):
+            next(itr)
+
+    with StringIO(sqltxt) as f:
+
+        itr = split_statements(f, False)
+        expect_outputs[5] = (
+            """insert into table1 (i) values ('This is not a valid integer.');    -- FAILS!""",
+            False,
+        )
+
+        for tup in expect_outputs:
+            assert next(itr) == tup
         with pytest.raises(StopIteration):
             next(itr)
 
 
 def test_sql_creatproc_declare_stmt():
-    with StringIO(
-        """    select a from b;
+    sqltxt = """    select a from b;
     create or replace procedure create_tables() as             DECLARE
               X NUMBER DEFAULT 0;
               Y NUMBER DEFAULT X;
-            BEGIN
+            BEGIN/*block1*/
               DECLARE
                 Z NUMBER DEFAULT X+Y;
-              BEGIN
+              BEGIN /*block 2*/
                 SET X := 5;
                 RETURN Z;
               END;
             END;
             GET file:///a.txt @stage1;"""
-    ) as f:
-        itr = split_statements(f)
+
+    with StringIO(sqltxt) as f:
+        itr = split_statements(f, True)
         assert next(itr) == ("select a from b;", False)
         assert next(itr) == (
             """create or replace procedure create_tables() as             DECLARE

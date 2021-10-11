@@ -1,7 +1,20 @@
 grammar querySeparator;
 
-// Method for hacky look ahead for createFuncProc pattern detection
+@lexer::members {
+def any_prefix(self, strlist):
+        for to_match in strlist:
+            matched = True
+            for i in range(len(to_match)):
+                if self._input.LA(i + 1) != ord(to_match[i]):
+                    matched = False
+                    break
+            if matched:
+                return matched
+        return False
 
+
+}
+// Method for hacky look ahead for createFuncProc pattern detection
 @parser::members {
     import re
     self.createFuncProcMatch = re.compile(
@@ -184,14 +197,6 @@ allSymbols : // no semicolon
     | DOLLAR | UNDERSCORE | TILDE | QUESTION | '!' | '\\' | '@'
     ;
 
-GeneralWord :
-    NonWhiteSpace+
-    ;
-
-NonWhiteSpace //non ';' and white space chars (that form a keyword, identifier, name, etc)
-    : ~(';' | ' '|'\r'|'\t'|'\n'|'\u000C')
-    ;
-
 //----------------------------------------------------------------------------
 // Support 3 variations on comments
 // double slash or double dash comment until the end of line
@@ -203,15 +208,34 @@ COMMENT:
    ( '--' ~('\n'|'\r')* '\r'? '\n'?
    | '//' ~('\n'|'\r')* '\r'? '\n'?
    | '/*' ( . )*? '*/'
-   ) -> channel(HIDDEN)
+   ) -> channel(9)
    ;
+
+// Define URLPath To distinct from comment, since there could be // and /* in URLPath
+URLPath:
+    {self.any_prefix(["sfc://", "file://", "s3://", "S3://"])}? NonWhiteSpace+
+    ;
+
+// Use NonSeparator so comment is not part of a "GeneralWord"
+GeneralWord :
+    {not self.any_prefix(["/*"])}? NonSeparator+
+    ;
+
+NonSeparator :
+    ~(';' | ' '|'\r'|'\t'|'\n'|'\u000C' | '{' | '}' | '[' | ']' | '(' | ')' | '/' )
+    ;
+
+NonWhiteSpace //non ';' and white space chars (that form a keyword, identifier, name, etc)
+    : ~(';' | ' '|'\r'|'\t'|'\n'|'\u000C' )
+    ;
+
 SpecialCommand :
     '!' Letter+ ~('\n'|'\r')* '\r'? '\n'?
     ;
 
 // chars not separated by whitespace or ';'
 word :
-    (UNDERSCORE | allOperators | allSymbols | GeneralWord)+
+    (UNDERSCORE | allOperators | allSymbols | GeneralWord | URLPath)+
     ;
 
 // entry point of sql statement splitting
