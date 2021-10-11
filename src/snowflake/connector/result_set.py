@@ -47,6 +47,7 @@ def result_set_iterator(
     unconsumed_batches: "Deque[Future[Iterator[Tuple]]]",
     unfetched_batches: Deque["ResultBatch"],
     final: Callable[[], None],
+    prefetch_thread_num: int,
     **kw: Any,
 ) -> Union[
     Iterator[Union[Dict, Exception]],
@@ -65,12 +66,12 @@ def result_set_iterator(
     to continue iterating through the rest of the ``ResultBatch``.
     """
 
-    with ThreadPoolExecutor(4) as pool:
+    with ThreadPoolExecutor(prefetch_thread_num) as pool:
         # Fill up window
 
         logger.debug("beginning to schedule result batch downloads")
 
-        for _ in range(min(4, len(unfetched_batches))):
+        for _ in range(min(prefetch_thread_num, len(unfetched_batches))):
             logger.debug(
                 f"queuing download of result batch id: {unfetched_batches[0].id}"
             )
@@ -123,9 +124,11 @@ class ResultSet(Iterable[List[Any]]):
         self,
         cursor: "SnowflakeCursor",
         result_chunks: Union[List["JSONResultBatch"], List["ArrowResultBatch"]],
+        prefetch_thread_num: int,
     ):
         self.batches = result_chunks
         self._cursor = cursor
+        self.prefetch_thread_num = prefetch_thread_num
 
     def _report_metrics(self) -> None:
         """Report all metrics totalled up.
@@ -242,6 +245,7 @@ class ResultSet(Iterable[List[Any]]):
             unconsumed_batches,
             unfetched_batches,
             self._finish_iterating,
+            self.prefetch_thread_num,
             **kwargs,
         )
 

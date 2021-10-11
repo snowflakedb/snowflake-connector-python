@@ -53,7 +53,7 @@ def file_src(request) -> Tuple[str, int, IO[bytes]]:
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
-def test_put_copy0(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies a file."""
     file_path, _, file_stream = file_src
     kwargs = {
@@ -75,7 +75,7 @@ def test_put_copy0(conn_cnx, db_parameters, from_path, file_src, sdkless):
         c = cnx.cursor(DictCursor)
         return c, c.execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(
             cnx,
             """
@@ -112,7 +112,7 @@ ratio number(5,2))
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["gzip_sample.txt.gz"], indirect=["file_src"])
-def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies compressed files."""
     file_name, file_size, file_stream = file_src
 
@@ -120,7 +120,7 @@ def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src, sdkle
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor(DictCursor).execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(cnx, "create or replace table {name} (value string)")
         with cnx.cursor(DictCursor) as csr:
             ret = put(
@@ -145,7 +145,7 @@ def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src, sdkle
 )
 @pytest.mark.parametrize("file_src", ["bzip2_sample.txt.bz2"], indirect=["file_src"])
 @pytest.mark.skip(reason="BZ2 is not detected in this test case. Need investigation")
-def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Put and Copy bz2 compressed files."""
     file_name, _, file_stream = file_src
 
@@ -153,7 +153,7 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src, s
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in put(
             cnx.cursor(),
@@ -176,9 +176,7 @@ def test_put_copy_bz2_compressed(conn_cnx, db_parameters, from_path, file_src, s
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["brotli_sample.txt.br"], indirect=["file_src"])
-def test_put_copy_brotli_compressed(
-    conn_cnx, db_parameters, from_path, file_src, sdkless
-):
+def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies brotli compressed files."""
     file_name, _, file_stream = file_src
 
@@ -186,7 +184,7 @@ def test_put_copy_brotli_compressed(
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
 
         run(cnx, "create or replace table {name} (value string)")
         for rec in put(
@@ -210,9 +208,7 @@ def test_put_copy_brotli_compressed(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["zstd_sample.txt.zst"], indirect=["file_src"])
-def test_put_copy_zstd_compressed(
-    conn_cnx, db_parameters, from_path, file_src, sdkless
-):
+def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies zstd compressed files."""
     file_name, _, file_stream = file_src
 
@@ -220,7 +216,7 @@ def test_put_copy_zstd_compressed(
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(cnx, "create or replace table {name} (value string)")
         for rec in put(
             cnx.cursor(),
@@ -245,9 +241,7 @@ def test_put_copy_zstd_compressed(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["nation.impala.parquet"], indirect=["file_src"])
-def test_put_copy_parquet_compressed(
-    conn_cnx, db_parameters, from_path, file_src, sdkless
-):
+def test_put_copy_parquet_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies parquet compressed files."""
     file_name, _, file_stream = file_src
 
@@ -255,7 +249,7 @@ def test_put_copy_parquet_compressed(
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(cnx, "alter session set enable_parquet_filetype=true")
         run(
             cnx,
@@ -289,7 +283,7 @@ stage_file_format=(type='parquet')
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["TestOrcFile.test1.orc"], indirect=["file_src"])
-def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src, sdkless):
+def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies ORC compressed files."""
     file_name, _, file_stream = file_src
 
@@ -297,7 +291,7 @@ def test_put_copy_orc_compressed(conn_cnx, db_parameters, from_path, file_src, s
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(
             cnx,
             """
@@ -325,7 +319,7 @@ create or replace table {name} (value variant) stage_file_format=(type='orc')
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_copy_get(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_copy_get(tmpdir, conn_cnx, db_parameters):
     """Copies and Gets a file."""
     name_unload = db_parameters["name"] + "_unload"
     tmp_dir = str(tmpdir.mkdir("copy_get_stage"))
@@ -340,7 +334,7 @@ def test_copy_get(tmpdir, conn_cnx, db_parameters, sdkless):
         )
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(cnx, "alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
         run(
             cnx,
@@ -409,7 +403,7 @@ max_file_size=10000000
 
 
 @pytest.mark.flaky(reruns=3)
-def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters):
     """Puts and Copies many_files."""
     # generates N files
     number_of_files = 100
@@ -424,7 +418,7 @@ def test_put_copy_many_files(tmpdir, conn_cnx, db_parameters, sdkless):
         sql = sql.format(files=files.replace("\\", "\\\\"), name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(
             cnx,
             """
@@ -450,7 +444,7 @@ ratio number(6,2))
 
 
 @pytest.mark.aws
-def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
@@ -465,7 +459,7 @@ def test_put_copy_many_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
         sql = sql.format(files=files.replace("\\", "\\\\"), name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(
             cnx,
             """
@@ -481,7 +475,7 @@ ratio number(6,2))
 """,
         )
     try:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             run(cnx, "put 'file://{files}' @%{name}")
             run(cnx, "copy into {name}")
 
@@ -501,7 +495,7 @@ ratio number(6,2))
 @pytest.mark.aws
 @pytest.mark.azure
 @pytest.mark.flaky(reruns=3)
-def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
@@ -516,7 +510,7 @@ def test_put_copy_duplicated_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
         sql = sql.format(files=files.replace("\\", "\\\\"), name=db_parameters["name"])
         return cnx.cursor().execute(sql, _raise_put_get_error=False).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         run(
             cnx,
             """
@@ -533,7 +527,7 @@ ratio number(6,2))
         )
 
     try:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             success_cnt = 0
             skipped_cnt = 0
             for rec in run(cnx, "put 'file://{files}' @%{name}"):
@@ -572,14 +566,14 @@ ratio number(6,2))
                 rows += rec[0]
             assert rows == number_of_files * number_of_lines, "Number of rows"
     finally:
-        with conn_cnx(use_new_put_get=sdkless) as cnx:
+        with conn_cnx() as cnx:
             run(cnx, "drop table if exists {name}")
 
 
 @pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
-def test_put_collision(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_collision(tmpdir, conn_cnx):
     """File name collision test. The data set have the same file names but contents are different."""
     number_of_files = 5
     number_of_lines = 10
@@ -602,7 +596,7 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters, sdkless):
     files2 = os.path.join(tmp_dir, "file*")
 
     stage_name = random_string(5, "test_put_collision_")
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute("RM @~/{}".format(stage_name))
         try:
             # upload all files
@@ -654,7 +648,7 @@ def test_put_collision(tmpdir, conn_cnx, db_parameters, sdkless):
             assert skipped_cnt == 0
 
         finally:
-            with conn_cnx(use_new_put_get=sdkless) as cnx:
+            with conn_cnx() as cnx:
                 cnx.cursor().execute("RM @~/{}".format(stage_name))
 
 
@@ -669,7 +663,7 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
 
 
 @pytest.mark.aws
-def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
+def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
     """[s3] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
@@ -705,7 +699,7 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
             .fetchall()
         )
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         try:
             run(cnx, "PUT 'file://{files}' @~/{dir}")
             # run(cnx, "PUT 'file://{files}' @~/{dir}")  # retry
@@ -733,9 +727,7 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters, sdkless):
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
 @pytest.mark.parametrize("file_src", ["put_get_1.txt"], indirect=["file_src"])
-def test_put_get_with_hint(
-    tmpdir, conn_cnx, db_parameters, from_path, file_src, sdkless
-):
+def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src):
     """SNOW-15153: PUTs and GETs with hint."""
     tmp_dir = str(tmpdir.mkdir("put_get_with_hint"))
     file_name, file_size, file_stream = file_src
@@ -746,7 +738,7 @@ def test_put_get_with_hint(
         )
         return cnx.cursor().execute(sql, _is_put_get=_is_put_get).fetchone()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         # regular PUT case
         ret = put(
             cnx.cursor(),

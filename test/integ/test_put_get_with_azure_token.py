@@ -32,7 +32,7 @@ pytestmark = pytest.mark.azure
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_get_with_azure(tmpdir, conn_cnx, from_path, sdkless):
+def test_put_get_with_azure(tmpdir, conn_cnx, from_path):
     """[azure] Puts and Gets a small text using Azure."""
     # create a data file
     fname = str(tmpdir.join("test_put_get_with_azure_token.txt.gz"))
@@ -42,7 +42,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, sdkless):
     tmp_dir = str(tmpdir.mkdir("test_put_get_with_azure_token"))
     table_name = random_string(5, "snow32806_")
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
@@ -86,7 +86,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, sdkless):
     assert original_contents == contents, "Output is different from the original file"
 
 
-def test_put_copy_many_files_azure(tmpdir, conn_cnx, sdkless):
+def test_put_copy_many_files_azure(tmpdir, conn_cnx):
     """[azure] Puts and Copies many files."""
     # generates N files
     number_of_files = 10
@@ -102,7 +102,7 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, sdkless):
         sql = sql.format(files=files, name=folder_name)
         return csr.execute(sql).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             run(
                 csr,
@@ -129,7 +129,7 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx, sdkless):
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, sdkless):
+def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx):
     """[azure] Puts and Copies duplicated files."""
     # generates N files
     number_of_files = 5
@@ -145,7 +145,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, sdkless):
         sql = sql.format(files=files, name=table_name)
         return csr.execute(sql, _raise_put_get_error=False).fetchall()
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as csr:
             run(
                 csr,
@@ -204,7 +204,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx, sdkless):
                 run(csr, "drop table if exists {name}")
 
 
-def test_put_get_large_files_azure(tmpdir, conn_cnx, sdkless):
+def test_put_get_large_files_azure(tmpdir, conn_cnx):
     """[azure] Puts and Gets Large files."""
     number_of_files = 3
     number_of_lines = 200000
@@ -237,7 +237,7 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx, sdkless):
             .fetchall()
         )
 
-    with conn_cnx(use_new_put_get=sdkless) as cnx:
+    with conn_cnx() as cnx:
         try:
             all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == "UPLOADED" for rec in all_recs])
