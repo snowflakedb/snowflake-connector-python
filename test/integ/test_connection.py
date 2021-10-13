@@ -25,7 +25,6 @@ from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
-    ER_FAILED_PROCESSING_QMARK,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
@@ -38,6 +37,11 @@ try:  # pragma: no cover
     from parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
+
+try:
+    from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
+except ImportError:  # Keep olddrivertest from breaking
+    ER_FAILED_PROCESSING_QMARK = 252012
 
 
 def test_basic(conn_testaccount):
@@ -964,6 +968,7 @@ def test_authenticate_error(conn_cnx, caplog):
         ) in caplog.record_tuples
 
 
+@pytest.mark.skipolddriver
 def test_process_qmark_params_error(conn_cnx):
     """Tests errors thrown in _process_params_qmarks."""
     sql = "select 1;"
@@ -1045,6 +1050,7 @@ def test_autocommit(conn_cnx, db_parameters, auto_commit):
         assert mocked_commit.called
 
 
+@pytest.mark.skipolddriver
 def test_client_prefetch_threads_setting(conn_cnx):
     """Tests whether client_prefetch_threads updated and is propagated to result set."""
     with conn_cnx() as conn:
