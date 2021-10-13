@@ -557,7 +557,7 @@ class SnowflakeCursor:
     def execute(
         self,
         command: str,
-        params: Optional[Union[Sequence, Dict[Any, Any]]] = None,
+        params: Optional[Union[Sequence[Any], Dict[Any, Any]]] = None,
         _bind_stage: Optional[str] = None,
         timeout: Optional[int] = None,
         _exec_async: bool = False,
