@@ -661,7 +661,7 @@ class SnowflakeCursor:
                 if _bind_stage:
                     kwargs["binding_stage"] = _bind_stage
                 else:
-                    if not isinstance(params, (list, tuple)):
+                    if params is not None and not isinstance(params, (list, tuple)):
                         errorvalue = {
                             "msg": "Binding parameters must be a list: {}".format(
                                 params
