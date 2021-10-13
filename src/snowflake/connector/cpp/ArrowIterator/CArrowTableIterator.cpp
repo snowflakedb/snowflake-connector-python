@@ -1,13 +1,14 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
-#include <Python.h>
-#include <arrow/python/api.h>
 #include "CArrowTableIterator.hpp"
 #include "SnowflakeType.hpp"
+#include "Python/Common.hpp"
 #include "Util/time.hpp"
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace sf
 {

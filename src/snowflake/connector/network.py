@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import collections
@@ -15,6 +15,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Type
 
 import OpenSSL.SSL
 
@@ -86,6 +87,7 @@ from .time_util import (
 )
 from .tool.probe_connection import probe_connection
 from .vendored import requests
+from .vendored.requests import Response, Session
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
@@ -99,6 +101,8 @@ from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError, ReadTimeoutError
 from .vendored.urllib3.util.url import parse_url
 
+if TYPE_CHECKING:
+    from .connection import SnowflakeConnection
 logger = logging.getLogger(__name__)
 
 """
@@ -147,19 +151,11 @@ COMPILER = COMPILER
 
 CLIENT_NAME = CLIENT_NAME  # don't change!
 CLIENT_VERSION = CLIENT_VERSION
-PYTHON_CONNECTOR_USER_AGENT = (
-    "{name}/{version} ({platform}) {python_implementation}/{python_version}".format(
-        name=CLIENT_NAME,
-        version=SNOWFLAKE_CONNECTOR_VERSION,
-        python_implementation=IMPLEMENTATION,
-        python_version=PYTHON_VERSION,
-        platform=PLATFORM,
-    )
-)
+PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 NO_TOKEN = "no-token"
 
-STATUS_TO_EXCEPTION = {
+STATUS_TO_EXCEPTION: Dict[int, Type[Error]] = {
     INTERNAL_SERVER_ERROR: InternalServerError,
     FORBIDDEN: ForbiddenError,
     SERVICE_UNAVAILABLE: ServiceUnavailableError,
@@ -184,6 +180,54 @@ def is_retryable_http_code(code: int) -> bool:
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
         REQUEST_TIMEOUT,  # 408
+    )
+
+
+def get_http_retryable_error(status_code: int) -> Error:
+    error_class: Type[Error] = STATUS_TO_EXCEPTION.get(
+        status_code, OtherHTTPRetryableError
+    )
+    return error_class(errno=status_code)
+
+
+def raise_okta_unauthorized_error(
+    connection: Optional["SnowflakeConnection"], response: Response
+) -> None:
+    Error.errorhandler_wrapper(
+        connection,
+        None,
+        DatabaseError,
+        {
+            "msg": f"Failed to get authentication by OKTA: {response.status_code}: {response.reason}",
+            "errno": ER_FAILED_TO_CONNECT_TO_DB,
+            "sqlstate": SQLSTATE_CONNECTION_REJECTED,
+        },
+    )
+
+
+def raise_failed_request_error(
+    connection: Optional["SnowflakeConnection"],
+    url: str,
+    method: str,
+    response: Response,
+) -> None:
+    TelemetryService.get_instance().log_http_request_error(
+        f"HttpError{response.status_code}",
+        url,
+        method,
+        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+        ER_FAILED_TO_REQUEST,
+        response=response,
+    )
+    Error.errorhandler_wrapper(
+        connection,
+        None,
+        InterfaceError,
+        {
+            "msg": f"{response.status_code} {response.reason}: {method} {url}",
+            "errno": ER_FAILED_TO_REQUEST,
+            "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+        },
     )
 
 
@@ -246,6 +290,49 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
+class SessionPool:
+    def __init__(self, rest: "SnowflakeRestful"):
+        # A stack of the idle sessions
+        self._idle_sessions: List[Session] = []
+        self._active_sessions: Set[Session] = set()
+        self._rest: "SnowflakeRestful" = rest
+
+    def get_session(self) -> Session:
+        """Returns a session from the session pool or creates a new one."""
+        try:
+            session = self._idle_sessions.pop()
+        except IndexError:
+            session = self._rest.make_requests_session()
+        self._active_sessions.add(session)
+        return session
+
+    def return_session(self, session: Session) -> None:
+        """Places an active session back into the idle session stack."""
+        try:
+            self._active_sessions.remove(session)
+        except KeyError:
+            logger.debug("session doesn't exist in the active session pool. Ignored...")
+        self._idle_sessions.append(session)
+
+    def __str__(self):
+        total_sessions = len(self._active_sessions) + len(self._idle_sessions)
+        return (
+            f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
+        )
+
+    def close(self) -> None:
+        """Closes all active and idle sessions in this session pool."""
+        if self._active_sessions:
+            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
+        for s in itertools.chain(self._active_sessions, self._idle_sessions):
+            try:
+                s.close()
+            except Exception as e:
+                logger.info(f"Session cleanup failed: {e}")
+        self._active_sessions.clear()
+        self._idle_sessions.clear()
+
+
 class SnowflakeRestful(object):
     """Snowflake Restful class."""
 
@@ -263,8 +350,9 @@ class SnowflakeRestful(object):
         self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._lock_token = Lock()
-        self._idle_sessions = collections.deque()
-        self._active_sessions = set()
+        self._sessions_map: Dict[Optional[str], SessionPool] = collections.defaultdict(
+            lambda: SessionPool(self)
+        )
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -326,17 +414,9 @@ class SnowflakeRestful(object):
             del self._id_token
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
-        sessions = list(self._active_sessions)
-        if sessions:
-            logger.debug("Closing %s active sessions", len(sessions))
-        sessions.extend(self._idle_sessions)
-        self._active_sessions.clear()
-        self._idle_sessions.clear()
-        for s in sessions:
-            try:
-                s.close()
-            except Exception as e:
-                logger.info("Session cleanup failed: %s", e)
+
+        for session_pool in self._sessions_map.values():
+            session_pool.close()
 
     def request(
         self,
@@ -571,12 +651,7 @@ class SnowflakeRestful(object):
         if "Content-Length" in headers:
             del headers["Content-Length"]
 
-        full_url = "{protocol}://{host}:{port}{url}".format(
-            protocol=self._protocol,
-            host=self._host,
-            port=self._port,
-            url=url,
-        )
+        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
         ret = self.fetch(
             "get",
             full_url,
@@ -614,12 +689,7 @@ class SnowflakeRestful(object):
         socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
         _include_retry_params=False,
     ):
-        full_url = "{protocol}://{host}:{port}{url}".format(
-            protocol=self._protocol,
-            host=self._host,
-            port=self._port,
-            url=url,
-        )
+        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
         if self._connection._probe_connection:
             from pprint import pprint
 
@@ -713,7 +783,7 @@ class SnowflakeRestful(object):
 
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self._use_requests_session() as session:
+        with self._use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(timeout, include_retry_params)
             while True:
                 ret = self._request_exec_wrapper(
@@ -849,7 +919,7 @@ class SnowflakeRestful(object):
             None,
             OperationalError,
             {
-                "msg": "Failed to execute request: {}".format(cause),
+                "msg": f"Failed to execute request: {cause}",
                 "errno": ER_FAILED_TO_REQUEST,
             },
         )
@@ -866,25 +936,16 @@ class SnowflakeRestful(object):
             except Exception:
                 logger.info("data is not JSON")
         logger.error(
-            "Failed to get the response. Hanging? "
-            "method: {method}, url: {url}, headers:{headers}, "
-            "data: {data}".format(
-                method=method,
-                url=full_url,
-                headers=headers,
-                data=data,
-            )
+            f"Failed to get the response. Hanging? "
+            f"method: {method}, url: {full_url}, headers:{headers}, "
+            f"data: {data}"
         )
         Error.errorhandler_wrapper(
             conn,
             None,
             OperationalError,
             {
-                "msg": "Failed to get the response. Hanging? "
-                "method: {method}, url: {url}".format(
-                    method=method,
-                    url=full_url,
-                ),
+                "msg": f"Failed to get the response. Hanging? method: {method}, url: {full_url}",
                 "errno": ER_FAILED_TO_REQUEST,
             },
         )
@@ -949,56 +1010,21 @@ class SnowflakeRestful(object):
                     return ret
 
                 if is_retryable_http_code(raw_ret.status_code):
-                    ex = STATUS_TO_EXCEPTION.get(
-                        raw_ret.status_code, OtherHTTPRetryableError
-                    )
-                    exi = ex(code=raw_ret.status_code)
-                    logger.debug("%s. Retrying...", exi)
+                    error = get_http_retryable_error(raw_ret.status_code)
+                    logger.debug(f"{error}. Retrying...")
                     # retryable server exceptions
-                    raise RetryRequest(exi)
+                    raise RetryRequest(error)
 
                 elif (
                     raw_ret.status_code == UNAUTHORIZED
                     and catch_okta_unauthorized_error
                 ):
                     # OKTA Unauthorized errors
-                    Error.errorhandler_wrapper(
-                        self._connection,
-                        None,
-                        DatabaseError,
-                        {
-                            "msg": (
-                                "Failed to get authentication by OKTA: "
-                                "{status}: {reason}"
-                            ).format(status=raw_ret.status_code, reason=raw_ret.reason),
-                            "errno": ER_FAILED_TO_CONNECT_TO_DB,
-                            "sqlstate": SQLSTATE_CONNECTION_REJECTED,
-                        },
-                    )
+                    raise_okta_unauthorized_error(self._connection, raw_ret)
                     return None  # required for tests
                 else:
-                    TelemetryService.get_instance().log_http_request_error(
-                        "HttpError%s" % str(raw_ret.status_code),
-                        full_url,
-                        method,
-                        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                        ER_FAILED_TO_REQUEST,
-                        response=raw_ret,
-                    )
-                    Error.errorhandler_wrapper(
-                        self._connection,
-                        None,
-                        InterfaceError,
-                        {
-                            "msg": ("{status} {reason}: " "{method} {url}").format(
-                                status=raw_ret.status_code,
-                                reason=raw_ret.reason,
-                                method=method,
-                                url=full_url,
-                            ),
-                            "errno": ER_FAILED_TO_REQUEST,
-                            "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                        },
+                    raise_failed_request_error(
+                        self._connection, full_url, method, raw_ret
                     )
                     return None  # required for tests
             finally:
@@ -1056,12 +1082,13 @@ class SnowflakeRestful(object):
         return s
 
     @contextlib.contextmanager
-    def _use_requests_session(self):
+    def _use_requests_session(self, url: Optional[str] = None):
         """Session caching context manager.
 
         Notes:
             The session is not closed until close() is called so each session may be used multiple times.
         """
+        # short-lived session, not added to the _sessions_map
         if self._connection.disable_request_pooling:
             session = self.make_requests_session()
             try:
@@ -1070,28 +1097,17 @@ class SnowflakeRestful(object):
                 session.close()
         else:
             try:
-                session = self._idle_sessions.pop()
-            except IndexError:
-                session = self.make_requests_session()
-            self._active_sessions.add(session)
-            logger.debug(
-                "Active requests sessions: %s, idle: %s",
-                len(self._active_sessions),
-                len(self._idle_sessions),
-            )
+                hostname = urlparse(url).hostname
+            except Exception:
+                hostname = None
+
+            session_pool: SessionPool = self._sessions_map[hostname]
+            session = session_pool.get_session()
+            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
             try:
                 yield session
             finally:
-                self._idle_sessions.appendleft(session)
-                try:
-                    self._active_sessions.remove(session)
-                except KeyError:
-                    logger.debug(
-                        "session doesn't exist in the active session pool. "
-                        "Ignored..."
-                    )
+                session_pool.return_session(session)
                 logger.debug(
-                    "Active requests sessions: %s, idle: %s",
-                    len(self._active_sessions),
-                    len(self._idle_sessions),
+                    f"Session status for SessionPool '{hostname}', {session_pool}"
                 )

@@ -10,6 +10,47 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.6.2(September 27,2021)
+
+   - Updated vendored urllib3 and requests versions.
+   - Fixed a bug where GET commands would fail to download files from sub directories from stages.
+   - Added a feature where where the connector will print the url it tried to open when it is unable to open it for external browser authentication.
+
+
+- v2.6.1(September 16,2021)
+
+   - Bump pandas version from <1.3 to <1.4
+   - Fixing Python deprecation warnings.
+   - Added more type-hints.
+   - Marked HeartBeatTimer threads as daemon threads.
+   - Force cast a column into integer in write_pandas to avoid a rare behavior that would lead to crashing.
+   - Implement AWS signature V4 to new SDKless PUT and GET.
+   - Removed a deprecated setuptools option from setup.py.
+   - Fixed a bug where error logs would be printed for query executions that produce no results.
+   - Fixed a bug where the temporary stage for bulk array inserts exists.
+
+
+- v2.6.0(August 29,2021)
+
+   - Internal change to the implementation of result fetching.
+   - Upgraded Pyarrow version from 3.0 to 5.0.
+   - Internal change to the implementation for PUT and GET. A new connection parameter use_new_put_get was added to toggle between implementations.
+   - Fixed a bug where executemany did not detect the type of data it was inserting.
+   - Updated the minimum Mac OSX build target from 10.13 to 10.14.
+
+
+- v2.5.1(July 31,2021)
+
+   - Fixes Python Connector bug that prevents the connector from using AWS S3 Regional URL. The driver currently overrides the regional URL information with the default S3 URL causing failure in PUT.
+
+
+- v2.5.0(July 22,2021)
+
+   - Fixed a bug in write_pandas when quote_identifiers is set to True the function would not actually quote column names.
+   - Bumping idna dependency pin from <3,>=2.5 to >=2.5,<4
+   - Fix describe method when running `insert into ...` commands
+
+
 - v2.4.6(June 25,2021)
 
    - Fixed a potential memory leak.

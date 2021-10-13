@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import logging
@@ -17,7 +17,7 @@ logger = getLogger(__name__)
 logging.basicConfig(level=logging.CRITICAL)
 
 try:
-    from parameters import CONNECTION_PARAMETERS_ADMIN
+    from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 

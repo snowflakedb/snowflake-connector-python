@@ -1,11 +1,12 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #ifndef PC_PYTHON_HELPERS_HPP
 #define PC_PYTHON_HELPERS_HPP
 
 #include "logging.hpp"
+#include <string>
 
 namespace sf
 {

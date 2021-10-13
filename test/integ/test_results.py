@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import pytest
@@ -25,19 +25,14 @@ def test_results_with_error(conn_cnx):
     """Gets results with error."""
     with conn_cnx() as cnx:
         cur = cnx.cursor()
-        sfqid = None
-        try:
+        with pytest.raises(ProgrammingError) as e:
             cur.execute("select blah")
-            pytest.fail("Should fail here!")
-        except ProgrammingError as e:
-            sfqid = e.sfqid
+        sfqid = e.value.sfqid
 
-        got_sfqid = None
-        try:
+        with pytest.raises(ProgrammingError) as e:
             cur.query_result(sfqid)
-            pytest.fail("Should fail here again!")
-        except ProgrammingError as e:
-            got_sfqid = e.sfqid
+        got_sfqid = e.value.sfqid
 
+        assert sfqid is not None
         assert got_sfqid is not None
         assert got_sfqid == sfqid

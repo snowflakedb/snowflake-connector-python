@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import io
@@ -44,7 +44,7 @@ def decompress_raw_data(raw_data_fd: IO, add_bracket: bool = True) -> bytes:
     return writer.getvalue()
 
 
-def decompress_raw_data_by_zcat(raw_data_fd: IO, add_bracket: bool = True):
+def decompress_raw_data_by_zcat(raw_data_fd: IO, add_bracket: bool = True) -> bytes:
     """Experimental: Decompresses raw data from file like object with zcat. Otherwise same as decompress_raw_data.
 
     Args:
@@ -64,42 +64,7 @@ def decompress_raw_data_by_zcat(raw_data_fd: IO, add_bracket: bool = True):
     return writer.getvalue()
 
 
-class IterStreamer(object):
-    """File-like streaming iterator."""
-
-    def __init__(self, generator):
-        self.generator = generator
-        self.iterator = iter(generator)
-        self.leftover = ""
-
-    def __len__(self):
-        return self.generator.__len__()
-
-    def __iter__(self):
-        return self.iterator
-
-    def next(self):
-        return next(self.iterator)
-
-    def read(self, size):
-        data = self.leftover
-        count = len(self.leftover)
-        try:
-            while count < size:
-                chunk = next(self)
-                data += chunk
-                count += len(chunk)
-        except StopIteration:
-            self.leftover = ""
-            return data
-
-        if count > size:
-            self.leftover = data[size:]
-
-        return data[:size]
-
-
-def decompress_raw_data_to_unicode_stream(raw_data_fd: IO):
+def decompress_raw_data_to_unicode_stream(raw_data_fd: IO) -> str:
     """Decompresses a raw data in file like object and yields a Unicode string.
 
     Args:

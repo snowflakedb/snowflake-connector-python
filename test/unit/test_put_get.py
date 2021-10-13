@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
 from os import chmod, path
 
 import pytest
@@ -27,9 +26,6 @@ def test_put_error(tmpdir):
     with open(file1, "w") as f:
         f.write("test1")
 
-    # nobody can read now.
-    chmod(file1, 0o000)
-
     con = MagicMock()
     cursor = con.cursor()
     cursor.errorhandler = Error.default_errorhandler
@@ -41,6 +37,7 @@ def test_put_error(tmpdir):
             "src_locations": [file1],
             "sourceCompression": "none",
             "stageInfo": {
+                "creds": {},
                 "location": remote_location,
                 "locationType": "LOCAL_FS",
                 "path": "remote_loc",
@@ -49,23 +46,23 @@ def test_put_error(tmpdir):
         "success": True,
     }
 
+    agent_class = SnowflakeFileTransferAgent
+
     # no error is raised
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(
-        cursor, query, ret, raise_put_get_error=False
-    )
+    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=False)
     sf_file_transfer_agent.execute()
     sf_file_transfer_agent.result()
 
+    # nobody can read now.
+    chmod(file1, 0o000)
     # Permission error should be raised
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(
-        cursor, query, ret, raise_put_get_error=True
-    )
+    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=True)
     sf_file_transfer_agent.execute()
     with pytest.raises(Exception):
         sf_file_transfer_agent.result()
 
     # unspecified, should fail because flag is on by default now
-    sf_file_transfer_agent = SnowflakeFileTransferAgent(cursor, query, ret)
+    sf_file_transfer_agent = agent_class(cursor, query, ret)
     sf_file_transfer_agent.execute()
     with pytest.raises(Exception):
         sf_file_transfer_agent.result()

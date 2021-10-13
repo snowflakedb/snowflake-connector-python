@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 """This module contains Snowflake error codes."""
@@ -44,8 +44,6 @@ ER_CHUNK_DOWNLOAD_FAILED = 252010
 ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE = 252011
 ER_FAILED_PROCESSING_QMARK = 252012
 
-# sfdatetime
-
 # file_transfer
 ER_INVALID_STAGE_FS = 253001
 ER_FAILED_TO_DOWNLOAD_FROM_STAGE = 253002
@@ -56,8 +54,6 @@ ER_FILE_NOT_EXISTS = 253006
 ER_COMPRESSION_NOT_SUPPORTED = 253007
 ER_INTERNAL_NOT_MATCH_ENCRYPT_MATERIAL = 253008
 ER_FAILED_TO_CHECK_EXISTING_FILES = 253009
-
-# chunk_downloader
 
 # ocsp
 ER_OCSP_URL_INFO_MISSING = 254001

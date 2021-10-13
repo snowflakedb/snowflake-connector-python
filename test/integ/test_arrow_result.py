@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import itertools
@@ -603,7 +603,7 @@ select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4),
 
 
 def get_random_seed():
-    random.seed(datetime.now())
+    random.seed(datetime.now().timestamp())
     return random.randint(0, 10000)
 
 

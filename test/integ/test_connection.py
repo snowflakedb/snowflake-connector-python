@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import logging
@@ -17,7 +17,10 @@ import pytest
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.auth_okta import AuthByOkta
-from snowflake.connector.connection import SnowflakeConnection
+from snowflake.connector.connection import (
+    DEFAULT_CLIENT_PREFETCH_THREADS,
+    SnowflakeConnection,
+)
 from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
@@ -994,7 +997,7 @@ def test_process_param_dict_error(conn_cnx):
                 "snowflake.connector.converter.SnowflakeConverter.to_snowflake",
                 side_effect=Exception("test"),
             ):
-                conn._process_params({"asd": "something"})
+                conn._process_params_pyformat({"asd": "something"})
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 
@@ -1009,7 +1012,7 @@ def test_process_param_error(conn_cnx):
                 "snowflake.connector.converter.SnowflakeConverter.to_snowflake",
                 side_effect=Exception("test"),
             ):
-                conn._process_params(mock.Mock())
+                conn._process_params_pyformat(mock.Mock())
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 
@@ -1026,3 +1029,14 @@ def test_autocommit(conn_cnx, db_parameters, auto_commit):
         assert not mocked_commit.called
     else:
         assert mocked_commit.called
+
+
+def test_client_prefetch_threads_setting(conn_cnx):
+    """Tests whether client_prefetch_threads updated and is propagated to result set."""
+    with conn_cnx() as conn:
+        assert conn.client_prefetch_threads == DEFAULT_CLIENT_PREFETCH_THREADS
+        new_thread_count = conn.client_prefetch_threads + 1
+        with conn.cursor() as cur:
+            cur.execute(f"alter session set client_prefetch_threads={new_thread_count}")
+            assert cur._result_set.prefetch_thread_num == new_thread_count
+        assert conn.client_prefetch_threads == new_thread_count

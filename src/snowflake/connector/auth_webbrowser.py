@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import json
@@ -124,6 +124,10 @@ class AuthByWebBrowser(AuthByPlugin):
             if not self._webbrowser.open_new(sso_url):
                 logger.error(
                     "Unable to open a browser in this environment.", exc_info=True
+                )
+                print(
+                    "We were unable to open a browser window for you, "
+                    f"please open the following url manually: {sso_url}"
                 )
                 self.handle_failure(
                     {

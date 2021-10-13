@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #ifndef PC_TIMESTAMPCONVERTER_HPP
@@ -9,6 +9,7 @@
 #include "Python/Common.hpp"
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
+#include <memory>
 
 namespace sf
 {

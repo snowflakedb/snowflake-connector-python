@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-import pytest
 from mock import MagicMock
-
-pytestmark = pytest.mark.skipolddriver
 
 
 def test_bind_upload_agent_uploading_multiple_files():

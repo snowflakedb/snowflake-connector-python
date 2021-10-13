@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import pytest
@@ -115,11 +115,7 @@ def test_query_large_result_set_n_threads(
 def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
     """[s3] Gets Large Result set."""
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx() as cnx:
         telemetry_data = []
         add_log_mock = Mock()
         add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
@@ -151,13 +147,14 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
         expected = [
             TelemetryField.TIME_CONSUME_FIRST_RESULT,
             TelemetryField.TIME_CONSUME_LAST_RESULT,
-            TelemetryField.TIME_PARSING_CHUNKS,
+            # NOTE: Arrow doesn't do parsing like how JSON does, so depending on what
+            #  way this is executed only look for JSON result sets
+            # TelemetryField.TIME_PARSING_CHUNKS,
             TelemetryField.TIME_DOWNLOADING_CHUNKS,
         ]
         for field in expected:
             assert (
-                sum([1 if x.message["type"] == field else 0 for x in telemetry_data])
-                == 2
+                sum(1 if x.message["type"] == field else 0 for x in telemetry_data) == 2
             ), (
                 "Expected three telemetry logs (one per query) "
                 "for log type {}".format(field)

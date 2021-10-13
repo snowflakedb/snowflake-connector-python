@@ -1,16 +1,15 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #ifndef PC_ARROWITERATOR_HPP
 #define PC_ARROWITERATOR_HPP
 
-#include <Python.h>
-#include <vector>
-#include <arrow/python/platform.h>
-#include <arrow/api.h>
-#include <arrow/python/pyarrow.h>
+#include "Python/Common.hpp"
 #include "logging.hpp"
+#include <memory>
+#include <string>
+#include <vector>
 
 #define SF_CHECK_ARROW_RC(arrow_status, format_string, ...) \
   if (!arrow_status.ok()) \

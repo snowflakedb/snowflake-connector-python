@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import decimal
 import time
 from datetime import datetime, timedelta
 from logging import getLogger
+from typing import Dict, Optional, Union
 
 import pytz
 
@@ -31,7 +32,10 @@ logger = getLogger(__name__)
 
 
 class ArrowConverterContext(object):
-    def __init__(self, session_parameters=None):
+    def __init__(
+        self,
+        session_parameters: Optional[Dict[str, Union[str, int, bool]]] = None,
+    ):
         if session_parameters is None:
             session_parameters = {}
         self._timezone = (

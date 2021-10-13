@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import base64
 import json
 import os
 import tempfile
-from collections import namedtuple
 from logging import getLogger
 from typing import IO, TYPE_CHECKING, Tuple
 
@@ -17,12 +16,12 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
-from .constants import UTF8
+from .constants import UTF8, EncryptionMetadata, MaterialDescriptor, kilobyte
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .remote_storage_util import SnowflakeFileEncryptionMaterial
+    from .storage_client import SnowflakeFileEncryptionMaterial
 
 
 def matdesc_to_unicode(matdesc):
@@ -39,23 +38,9 @@ def matdesc_to_unicode(matdesc):
     )
 
 
-"""
-Material Description
-"""
-MaterialDescriptor = namedtuple(
-    "MaterialDescriptor",
-    ["smk_id", "query_id", "key_size"],  # SMK id  # query id  # key size, 128 or 256
-)
-
-"""
-Metadata for encryption
-"""
-EncryptionMetadata = namedtuple("EncryptionMetadata", ["key", "iv", "matdesc"])
-
-
-class SnowflakeEncryptionUtil(object):
+class SnowflakeEncryptionUtil:
     @staticmethod
-    def get_secure_random(byte_length):
+    def get_secure_random(byte_length: int) -> bytes:
         return os.urandom(byte_length)
 
     @staticmethod
@@ -63,7 +48,7 @@ class SnowflakeEncryptionUtil(object):
         encryption_material: "SnowflakeFileEncryptionMaterial",
         src: IO[bytes],
         out: IO[bytes],
-        chunk_size: int = block_size * 4 * 1024,
+        chunk_size: int = 64 * kilobyte,  # block_size * 4 * 1024,
     ) -> "EncryptionMetadata":
         """Reads content from src and write the encrypted content into out.
 
@@ -148,7 +133,7 @@ class SnowflakeEncryptionUtil(object):
     def encrypt_file(
         encryption_material: "SnowflakeFileEncryptionMaterial",
         in_filename: str,
-        chunk_size: int = block_size * 4 * 1024,
+        chunk_size: int = 64 * kilobyte,
         tmp_dir: str = None,
     ) -> Tuple["EncryptionMetadata", str]:
         """Encrypts a file in a temporary directory.
@@ -172,7 +157,6 @@ class SnowflakeEncryptionUtil(object):
             temp_output_file,
             tmp_dir,
         )
-        metadata = None
         with open(in_filename, "rb") as infile:
             with os.fdopen(temp_output_fd, "wb") as outfile:
                 metadata = SnowflakeEncryptionUtil.encrypt_stream(
@@ -182,12 +166,12 @@ class SnowflakeEncryptionUtil(object):
 
     @staticmethod
     def decrypt_file(
-        metadata,
-        encryption_material,
-        in_filename,
-        chunk_size=block_size * 4 * 1024,
+        metadata: "EncryptionMetadata",
+        encryption_material: "SnowflakeFileEncryptionMaterial",
+        in_filename: str,
+        chunk_size: int = 64 * kilobyte,
         tmp_dir=None,
-    ):
+    ) -> str:
         """Decrypts a file and stores the output in the temporary directory.
 
         Args:

@@ -1,12 +1,14 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #ifndef PC_ARROWTABLEITERATOR_HPP
 #define PC_ARROWTABLEITERATOR_HPP
 
-#include <arrow/table.h>
 #include "CArrowIterator.hpp"
+#include <string>
+#include <memory>
+#include <vector>
 
 namespace sf
 {

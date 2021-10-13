@@ -1,11 +1,22 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #ifndef PC_PYTHON_COMMON_HPP
 #define PC_PYTHON_COMMON_HPP
 
+// Support for not having PY_SSIZE_T_CLEAN defined will end in Python 3.10. It causes
+//  argument parsing to not accept integers, leaving only Py_ssize_t as an option
+#define PY_SSIZE_T_CLEAN
+
+// We have to make sure that we import Python.h once for special flags that need to be
+//  set before importing it
 #include <Python.h>
+#include <arrow/python/platform.h>
+#include <arrow/api.h>
+#include <arrow/python/pyarrow.h>
+#include <arrow/python/api.h>
+#include <arrow/table.h>
 #include "Util/macros.hpp"
 
 namespace sf

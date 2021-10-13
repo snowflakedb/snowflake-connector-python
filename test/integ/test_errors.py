@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
 import traceback
 
 import pytest
@@ -26,27 +25,27 @@ def test_error_classes(conn_cnx):
 
 def test_error_code(conn_cnx):
     """Error code is included in the exception."""
+    syntax_errno = 1003
+    syntax_sqlstate = "42000"
     with conn_cnx() as ctx:
-        try:
+        with pytest.raises(errors.ProgrammingError) as e:
             ctx.cursor().execute("SELECT * FROOOM TEST")
-            raise Exception("Failed to detect Syntax error")
-        except errors.ProgrammingError as e:
-            assert e.errno == 1003, "Syntax error code"
+        assert e.value.errno == syntax_errno, "Syntax error code"
+        assert e.value.sqlstate == syntax_sqlstate, "Syntax SQL state"
+        e.match(fr"^{syntax_errno:06d} \({syntax_sqlstate}\): ")
 
 
 @pytest.mark.skipolddriver
 def test_error_telemetry(conn_cnx):
     with conn_cnx() as ctx:
-        try:
+        with pytest.raises(errors.ProgrammingError) as e:
             ctx.cursor().execute("SELECT * FROOOM TEST")
-            raise Exception("Failed to detect Syntax error")
-        except errors.ProgrammingError as e:
-            telemetry_stacktrace = e.telemetry_traceback
-            assert "SELECT * FROOOM TEST" not in telemetry_stacktrace
-            for frame in traceback.extract_tb(e.__traceback__):
-                assert frame.line not in telemetry_stacktrace
-            telemetry_data = e.generate_telemetry_exception_data()
-            assert (
-                "Failed to detect Syntax error"
-                not in telemetry_data[TelemetryField.KEY_REASON]
-            )
+        telemetry_stacktrace = e.value.telemetry_traceback
+        assert "SELECT * FROOOM TEST" not in telemetry_stacktrace
+        for frame in traceback.extract_tb(e.value.__traceback__):
+            assert frame.line not in telemetry_stacktrace
+        telemetry_data = e.value.generate_telemetry_exception_data()
+        assert (
+            "Failed to detect Syntax error"
+            not in telemetry_data[TelemetryField.KEY_REASON]
+        )

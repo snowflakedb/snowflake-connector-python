@@ -1,11 +1,12 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #ifndef PC_FLOATCONVERTER_HPP
 #define PC_FLOATCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include <memory>
 
 namespace sf
 {

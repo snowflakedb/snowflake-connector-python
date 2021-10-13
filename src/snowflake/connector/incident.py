@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import logging
@@ -9,7 +9,7 @@ import platform
 from datetime import datetime
 from sys import exc_info
 from traceback import format_exc
-from typing import Optional
+from typing import Dict, Optional
 from uuid import uuid4
 
 from .compat import urlencode
@@ -46,7 +46,7 @@ class Incident(object):
         error_stack_trace: Optional[str],
         os: str = current_os_release,
         os_version: str = current_os_version,
-    ):
+    ) -> None:
         self.uuid = str(uuid4())
         self.createdOn = str(datetime.utcnow())[
             :-3
@@ -63,7 +63,7 @@ class Incident(object):
         self.driver = str(driver)
         self.driverVersion = str(driver_version)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, str]:
         ret = {
             "Tags": [
                 {"Name": "driver", "Value": self.driver},

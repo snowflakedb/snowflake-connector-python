@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import logging
 import os
+import re
 import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Dict, Optional, Type, Union
@@ -23,6 +24,9 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = getLogger(__name__)
 connector_base_path = os.path.join("snowflake", "connector")
+
+
+RE_FORMATTED_ERROR = re.compile(r"^(\d{6,})(?: \((\S+)\))?:")
 
 
 class Error(BASE_EXCEPTION_CLASS):
@@ -44,22 +48,32 @@ class Error(BASE_EXCEPTION_CLASS):
         self.sqlstate = sqlstate or "n/a"
         self.sfqid = sfqid
 
-        if not self.msg:
+        if self.msg:
+            # TODO: If there's a message then check to see if errno (and maybe sqlstate)
+            #  and if so then don't insert them again, this should eventually be removed
+            #  and we should be explicitly set this at every call to create these
+            #  Exceptions.
+            #  However we shouldn't be creating them during normal execution so
+            #  this should not affect performance to users and will make our error
+            #  messages consistent.
+            already_formatted_msg = RE_FORMATTED_ERROR.match(msg)
+        else:
             self.msg = "Unknown error"
+            already_formatted_msg = None
 
         if self.errno != -1 and not done_format_msg:
             if self.sqlstate != "n/a":
-                if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
-                    self.msg = (
-                        f"{self.errno:06d} ({self.sqlstate}): {self.sfqid}: {self.msg}"
-                    )
-                else:
-                    self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.msg}"
+                if not already_formatted_msg:
+                    if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
+                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.sfqid}: {self.msg}"
+                    else:
+                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.msg}"
             else:
-                if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
-                    self.msg = f"{self.errno:06d}: {self.errno}: {self.msg}"
-                else:
-                    self.msg = f"{self.errno:06d}: {self.msg}"
+                if not already_formatted_msg:
+                    if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
+                        self.msg = f"{self.errno:06d}: {self.errno}: {self.msg}"
+                    else:
+                        self.msg = f"{self.errno:06d}: {self.msg}"
 
         # We want to skip the last frame/line in the traceback since it is the current frame
         self.telemetry_traceback = self.generate_telemetry_stacktrace()
@@ -230,10 +244,10 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_wrapper(
-        connection: "SnowflakeConnection",
+        connection: Optional["SnowflakeConnection"],
         cursor: Optional["SnowflakeCursor"],
         error_class: Union[Type["Error"], Type[Exception]],
-        error_value: Dict[str, Union[str, bool]],
+        error_value: Dict[str, Union[str, bool, int]],
     ) -> None:
         """Error handler wrapper that calls the errorhandler method.
 
@@ -247,29 +261,88 @@ class Error(BASE_EXCEPTION_CLASS):
             None if no exceptions are raised by the connection's and cursor's error handlers.
 
         Raises:
-            A Snowflake error if connection and cursor are None.
+            A Snowflake error if connection, or cursor are None. Otherwise it gives the
+            exception to the first handler in that order.
+        """
+
+        handed_over = Error.hand_to_other_handler(
+            connection,
+            cursor,
+            error_class,
+            error_value,
+        )
+        if not handed_over:
+            raise Error.errorhandler_make_exception(
+                error_class,
+                error_value,
+            )
+
+    @staticmethod
+    def errorhandler_wrapper_from_ready_exception(
+        connection: Optional["SnowflakeConnection"],
+        cursor: Optional["SnowflakeCursor"],
+        error_exc: Union["Error", Exception],
+    ) -> None:
+        """Like errorhandler_wrapper, but it takes a ready to go Exception."""
+        if isinstance(error_exc, Error):
+            error_value = {
+                "msg": error_exc.msg,
+                "errno": error_exc.errno,
+                "sqlstate": error_exc.sqlstate,
+                "sfqid": error_exc.sfqid,
+            }
+        else:
+            error_value = error_exc.args
+
+        handed_over = Error.hand_to_other_handler(
+            connection,
+            cursor,
+            type(error_exc),
+            error_value,
+        )
+        if not handed_over:
+            raise error_exc
+
+    @staticmethod
+    def hand_to_other_handler(
+        connection: Optional["SnowflakeConnection"],
+        cursor: Optional["SnowflakeCursor"],
+        error_class: Union[Type["Error"], Type[Exception]],
+        error_value: Dict[str, Union[str, bool]],
+    ) -> bool:
+        """If possible give error to a higher error handler in connection, or cursor.
+
+        Returns:
+            Whether it error was successfully given to a handler.
         """
         error_value.setdefault("done_format_msg", False)
-
         if connection is not None:
             connection.messages.append((error_class, error_value))
         if cursor is not None:
             cursor.messages.append((error_class, error_value))
             cursor.errorhandler(connection, cursor, error_class, error_value)
-            return
+            return True
         elif connection is not None:
             connection.errorhandler(connection, cursor, error_class, error_value)
-            return
+            return True
+        return False
+
+    @staticmethod
+    def errorhandler_make_exception(
+        error_class: Union[Type["Error"], Type[Exception]],
+        error_value: Dict[str, Union[str, bool]],
+    ) -> Union["Error", Exception]:
+        """Helper function to errorhandler_wrapper that creates the exception."""
+        error_value.setdefault("done_format_msg", False)
 
         if issubclass(error_class, Error):
-            raise error_class(
+            return error_class(
                 msg=error_value["msg"],
                 errno=error_value.get("errno"),
                 sqlstate=error_value.get("sqlstate"),
                 sfqid=error_value.get("sfqid"),
             )
-        else:
-            raise error_class(error_value)
+        return error_class(error_value)
 
 
 class _Warning(BASE_EXCEPTION_CLASS):
@@ -466,5 +539,23 @@ class MissingDependencyError(Error):
 
 class BindUploadError(Error):
     """Exception for bulk array binding stage optimization fails."""
+
+    pass
+
+
+class RequestExceedMaxRetryError(Error):
+    """Exception for REST call to remote storage API exceeding maximum retries with transient errors."""
+
+    pass
+
+
+class TokenExpiredError(Error):
+    """Exception for REST call to remote storage API failed because of expired authentication token."""
+
+    pass
+
+
+class PresignedUrlExpiredError(Error):
+    """Exception for REST call to remote storage API failed because of expired presigned URL."""
 
     pass

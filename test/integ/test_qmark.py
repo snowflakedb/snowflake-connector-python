@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import pytest
@@ -132,7 +132,7 @@ def test_binding_datetime_qmark(conn_cnx, db_parameters):
                 "(aa TIMESTAMP_NTZ)".format(name=db_parameters["name"])
             )
             days = 2
-            inserts = tuple([(datetime.datetime(2018, 1, i + 1),) for i in range(days)])
+            inserts = tuple((datetime.datetime(2018, 1, i + 1),) for i in range(days))
             cnx.cursor().executemany(
                 "INSERT INTO {name} VALUES(?)".format(name=db_parameters["name"]),
                 inserts,

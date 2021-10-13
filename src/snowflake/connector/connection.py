@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import copy
@@ -12,6 +12,7 @@ import sys
 import uuid
 import warnings
 from difflib import get_close_matches
+from functools import partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
@@ -23,7 +24,9 @@ from typing import (
     Generator,
     Iterable,
     List,
+    NamedTuple,
     Optional,
+    Sequence,
     Tuple,
     Type,
     Union,
@@ -39,13 +42,10 @@ from .auth_okta import AuthByOkta
 from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
 from .bind_upload_agent import BindUploadError
-from .chunk_downloader import (
-    DEFAULT_CLIENT_PREFETCH_THREADS,
-    MAX_CLIENT_PREFETCH_THREADS,
-    SnowflakeChunkDownloader,
-)
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
+    DEFAULT_S3_CONNECTION_POOL_SIZE,
+    MAX_S3_CONNECTION_POOL_SIZE,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -99,6 +99,9 @@ from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
 
+DEFAULT_CLIENT_PREFETCH_THREADS = 4
+MAX_CLIENT_PREFETCH_THREADS = 10
+
 
 def DefaultConverterClass():
     if IS_WINDOWS:
@@ -118,7 +121,7 @@ SUPPORTED_PARAMSTYLES = {
     "pyformat",
 }
 # Default configs, tuple of default variable and accepted types
-DEFAULT_CONFIGURATION = {
+DEFAULT_CONFIGURATION: Dict[str, Tuple[Any, Union[Type, Tuple[Type, ...]]]] = {
     "dsn": (None, (type(None), str)),  # standard
     "user": ("", str),  # standard
     "password": ("", str),  # standard
@@ -129,7 +132,7 @@ DEFAULT_CONFIGURATION = {
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
-    "protocol": (u"http", str),  # snowflake
+    "protocol": ("http", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
     "account": (None, (type(None), str)),  # snowflake
@@ -162,10 +165,10 @@ DEFAULT_CONFIGURATION = {
         (type(None), int),
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
+    "s3_connection_pool_s": (DEFAULT_S3_CONNECTION_POOL_SIZE, int),  # boto3 pool size
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
-    "chunk_downloader_class": (SnowflakeChunkDownloader, object),  # snowflake internal
     "validate_default_parameters": (False, bool),  # snowflake
     "probe_connection": (False, bool),  # snowflake
     "paramstyle": (None, (type(None), str)),  # standard/snowflake
@@ -188,6 +191,9 @@ DEFAULT_CONFIGURATION = {
         False,
         bool,
     ),  # only use regional url when the param is set
+    # Allows cursors to be re-iterable
+    "reuse_results": (False, bool),
+    "use_new_put_get": (True, bool),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -200,6 +206,13 @@ for m in [method for method in dir(errors) if callable(getattr(errors, method))]
 strptime("20150102030405", "%Y%m%d%H%M%S")
 
 logger = getLogger(__name__)
+
+
+class TypeAndBinding(NamedTuple):
+    """Stores the type name and the Snowflake binding."""
+
+    type: str
+    binding: Optional[str]
 
 
 class SnowflakeConnection(object):
@@ -230,6 +243,7 @@ class SnowflakeConnection(object):
         network_timeout: Network timeout. Used for general purpose.
         client_session_keepalive: Whether to keep connection alive by issuing a heartbeat.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
+        s3_connection_pool_size: Size of connection pool for S3 boto driver.  Default is 10.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
@@ -380,6 +394,15 @@ class SnowflakeConnection(object):
         self._validate_client_session_keep_alive_heartbeat_frequency()
 
     @property
+    def _s3_connection_pool_size(self) -> int:
+        return self._s3_connection_pool_s
+
+    @_s3_connection_pool_size.setter
+    def _s3_connection_pool_size(self, value: int) -> None:
+        self._s3_connection_pool_s = value
+        self._validate_s3_connection_pool_size()
+
+    @property
     def client_prefetch_threads(self):
         return (
             self._client_prefetch_threads
@@ -471,7 +494,7 @@ class SnowflakeConnection(object):
         self._enable_stage_s3_privatelink_for_us_east_1 = True if value else False
 
     @arrow_number_to_decimal.setter
-    def arrow_number_to_decimal(self, value: bool):
+    def arrow_number_to_decimal_setter(self, value: bool):
         self._arrow_number_to_decimal = value
 
     def connect(self, **kwargs):
@@ -583,7 +606,7 @@ class SnowflakeConnection(object):
         remove_comments: bool = False,
         return_cursors: bool = True,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
-        **kwargs
+        **kwargs,
     ) -> Iterable[SnowflakeCursor]:
         """Executes a SQL text including multiple statements. This is a non-standard convenience method."""
         stream = StringIO(sql_text)
@@ -598,7 +621,7 @@ class SnowflakeConnection(object):
         stream: StringIO,
         remove_comments: bool = False,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
-        **kwargs
+        **kwargs,
     ) -> Generator["SnowflakeCursor", None, None]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
         split_statements_list = split_statements(
@@ -1037,15 +1060,55 @@ class SnowflakeConnection(object):
             raise BindUploadError from exc
         return res
 
+    def _get_snowflake_type_and_binding(
+        self,
+        cursor: Optional["SnowflakeCursor"],
+        v: Union[Tuple[str, Any], Any],
+    ) -> TypeAndBinding:
+        if isinstance(v, tuple):
+            if len(v) != 2:
+                Error.errorhandler_wrapper(
+                    self,
+                    cursor,
+                    ProgrammingError,
+                    {
+                        "msg": "Binding parameters must be a list "
+                        "where one element is a single value or "
+                        "a pair of Snowflake datatype and a value",
+                        "errno": ER_FAILED_PROCESSING_QMARK,
+                    },
+                )
+            snowflake_type, v = v
+        else:
+            snowflake_type = self.converter.snowflake_type(v)
+            if snowflake_type is None:
+                Error.errorhandler_wrapper(
+                    self,
+                    cursor,
+                    ProgrammingError,
+                    {
+                        "msg": "Python data type [{}] cannot be "
+                        "automatically mapped to Snowflake data "
+                        "type. Specify the snowflake data type "
+                        "explicitly.".format(v.__class__.__name__.lower()),
+                        "errno": ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
+                    },
+                )
+        return TypeAndBinding(
+            snowflake_type,
+            self.converter.to_snowflake_bindings(snowflake_type, v),
+        )
+
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(
         self,
-        params: Union[List, Tuple, None],
+        params: Optional[Sequence],
         cursor: Optional["SnowflakeCursor"] = None,
-    ) -> Dict[str, Dict[str, str]]:
+    ) -> Optional[Dict[str, Dict[str, str]]]:
         if not params:
             return None
         processed_params = {}
+
         if not isinstance(params, (list, tuple)):
             errorvalue = {
                 "msg": "Binding parameters must be a list: {}".format(params),
@@ -1053,105 +1116,103 @@ class SnowflakeConnection(object):
             }
             Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
 
+        get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
+
         for idx, v in enumerate(params):
-            if isinstance(v, tuple):
-                if len(v) != 2:
-                    Error.errorhandler_wrapper(
-                        self,
-                        cursor,
-                        ProgrammingError,
-                        {
-                            "msg": "Binding parameters must be a list "
-                            "where one element is a single value or "
-                            "a pair of Snowflake datatype and a value",
-                            "errno": ER_FAILED_PROCESSING_QMARK,
-                        },
-                    )
+            if isinstance(v, list):
+                snowflake_type = self.converter.snowflake_type(v)
+                all_param_data = list(map(get_type_and_binding, v))
+                first_type = all_param_data[0].type
+                # if all elements have the same snowflake type, update snowflake_type
+                if all(param_data.type == first_type for param_data in all_param_data):
+                    snowflake_type = first_type
                 processed_params[str(idx + 1)] = {
-                    "type": v[0],
-                    "value": self.converter.to_snowflake_bindings(v[0], v[1]),
+                    "type": snowflake_type,
+                    "value": [param_data.binding for param_data in all_param_data],
                 }
             else:
-                snowflake_type = self.converter.snowflake_type(v)
-                if snowflake_type is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        cursor,
-                        ProgrammingError,
-                        {
-                            "msg": "Python data type [{}] cannot be "
-                            "automatically mapped to Snowflake data "
-                            "type. Specify the snowflake data type "
-                            "explicitly.".format(v.__class__.__name__.lower()),
-                            "errno": ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
-                        },
-                    )
-                if isinstance(v, list):
-                    vv = [
-                        self.converter.to_snowflake_bindings(
-                            self.converter.snowflake_type(v0), v0
-                        )
-                        for v0 in v
-                    ]
-                else:
-                    vv = self.converter.to_snowflake_bindings(snowflake_type, v)
-                processed_params[str(idx + 1)] = {"type": snowflake_type, "value": vv}
+                snowflake_type, snowflake_binding = get_type_and_binding(v)
+                processed_params[str(idx + 1)] = {
+                    "type": snowflake_type,
+                    "value": snowflake_binding,
+                }
         if logger.getEffectiveLevel() <= logging.DEBUG:
             for k, v in processed_params.items():
                 logger.debug("idx: %s, type: %s", k, v.get("type"))
         return processed_params
 
-    def _process_params(
-        self, params: Union[Dict, List, Tuple, None], cursor: "SnowflakeCursor" = None
-    ) -> Union[Tuple, Dict]:
+    def _process_params_pyformat(
+        self,
+        params: Optional[Union[Any, Sequence[Any], Dict[Any, Any]]],
+        cursor: Optional["SnowflakeCursor"] = None,
+    ) -> Union[Tuple[Any], Dict[str, Any]]:
+        """Process parameters for client-side parameter binding.
+
+        Args:
+            params: Either a sequence, or a dictionary of parameters, if anything else
+                is given then it will be put into a list and processed that way.
+            cursor: The SnowflakeCursor used to report errors if necessary.
+        """
         if params is None:
             return {}
         if isinstance(params, dict):
-            return self.__process_params_dict(params)
+            return self._process_params_dict(params)
 
+        # TODO: remove this, callers should send in what's in the signature
         if not isinstance(params, (tuple, list)):
             params = [
                 params,
             ]
 
         try:
-            res = params
-            res = map(self.converter.to_snowflake, res)
-            res = map(self.converter.escape, res)
-            res = map(self.converter.quote, res)
+            res = map(self._process_single_param, params)
             ret = tuple(res)
-            logger.debug("parameters: %s", ret)
+            logger.debug(f"parameters: {ret}")
             return ret
         except Exception as e:
-            errorvalue = {
-                "msg": "Failed processing pyformat-parameters; {}".format(e),
-                "errno": ER_FAILED_PROCESSING_PYFORMAT,
-            }
-            Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
+            Error.errorhandler_wrapper(
+                self,
+                cursor,
+                ProgrammingError,
+                {
+                    "msg": f"Failed processing pyformat-parameters; {e}",
+                    "errno": ER_FAILED_PROCESSING_PYFORMAT,
+                },
+            )
 
-    def __process_params_dict(
-        self, params: Union[Dict, List, Tuple, None], cursor: "SnowflakeCursor" = None
+    def _process_params_dict(
+        self, params: Dict[Any, Any], cursor: Optional["SnowflakeCursor"] = None
     ) -> Dict:
-        # TODO this function could be reworked
         try:
-            to_snowflake = self.converter.to_snowflake
-            escape = self.converter.escape
-            quote = self.converter.quote
-            res = {}
-            for k, v in params.items():
-                c = v
-                c = to_snowflake(c)
-                c = escape(c)
-                c = quote(c)
-                res[k] = c
-            logger.debug("parameters: %s", res)
+            res = {k: self._process_single_param(v) for k, v in params.items()}
+            logger.debug(f"parameters: {res}")
             return res
         except Exception as e:
-            errorvalue = {
-                "msg": "Failed processing pyformat-parameters: {}".format(e),
-                "errno": ER_FAILED_PROCESSING_PYFORMAT,
-            }
-            Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
+            Error.errorhandler_wrapper(
+                self,
+                cursor,
+                ProgrammingError,
+                {
+                    "msg": f"Failed processing pyformat-parameters: {e}",
+                    "errno": ER_FAILED_PROCESSING_PYFORMAT,
+                },
+            )
+
+    def _process_single_param(self, param: Any) -> Any:
+        """Process a single parameter to Snowflake understandable form.
+
+        This is a convenience function to replace repeated multiple calls with a single
+        function call.
+
+        It calls the following underlying functions in this order:
+            1. self.converter.to_snowflake
+            2. self.converter.escape
+            3. self.converter.quote
+        """
+        to_snowflake = self.converter.to_snowflake
+        escape = self.converter.escape
+        _quote = self.converter.quote
+        return _quote(escape(to_snowflake(param)))
 
     def _cancel_query(self, sql, request_id):
         """Cancels the query with the exact SQL query and requestId."""
@@ -1219,6 +1280,13 @@ class SnowflakeConnection(object):
             self.client_session_keep_alive_heartbeat_frequency
         )
         return self.client_session_keep_alive_heartbeat_frequency
+
+    def _validate_s3_connection_pool_size(self) -> None:
+        if self._s3_connection_pool_s <= 0:
+            self._s3_connection_pool_s = 1
+        elif self._s3_connection_pool_s > MAX_S3_CONNECTION_POOL_SIZE:
+            self._s3_connection_pool_s = MAX_S3_CONNECTION_POOL_SIZE
+        self._s3_connection_pool_s = int(self._s3_connection_pool_s)
 
     def _validate_client_prefetch_threads(self):
         if self.client_prefetch_threads <= 0:

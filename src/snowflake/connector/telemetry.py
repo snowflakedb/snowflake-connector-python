@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import logging
@@ -20,7 +20,13 @@ class TelemetryField(object):
     TIME_DOWNLOADING_CHUNKS = "client_time_downloading_chunks"
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
     SQL_EXCEPTION = "client_sql_exception"
-
+    GET_PARTITIONS_USED = "client_get_partitions_used"
+    # fetch_pandas_* usage
+    PANDAS_FETCH_ALL = "client_fetch_pandas_all"
+    PANDAS_FETCH_BATCHES = "client_fetch_pandas_batches"
+    # fetch_arrow_* usage
+    ARROW_FETCH_ALL = "client_fetch_arrow_all"
+    ARROW_FETCH_BATCHES = "client_fetch_arrow_batches"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SFQID = "QueryID"
@@ -36,6 +42,9 @@ class TelemetryField(object):
 
 class TelemetryData(object):
     """An instance of telemetry data which can be sent to the server."""
+
+    TRUE = 1
+    FALSE = 0
 
     def __init__(self, message, timestamp):
         self.message = message
@@ -62,7 +71,7 @@ class TelemetryClient(object):
         self._lock = Lock()
         self._enabled = True
 
-    def add_log_to_batch(self, telemetry_data):
+    def add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
         if self._is_closed:
             raise Exception("Attempted to add log when TelemetryClient is closed")
         elif not self._enabled:
@@ -75,7 +84,7 @@ class TelemetryClient(object):
         if len(self._log_batch) >= self._flush_size:
             self.send_batch()
 
-    def try_add_log_to_batch(self, telemetry_data):
+    def try_add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
         try:
             self.add_log_to_batch(telemetry_data)
         except Exception:

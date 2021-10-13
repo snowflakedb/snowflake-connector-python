@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #include "CArrowChunkIterator.hpp"
@@ -13,7 +13,9 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
+#include <memory>
 #include <string>
+#include <vector>
 
 #define SF_CHECK_PYTHON_ERR() \
   if (py::checkPyError())\

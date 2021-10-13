@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 //
 
 #ifndef PC_ARROWCHUNKITERATOR_HPP
@@ -8,6 +8,8 @@
 #include "CArrowIterator.hpp"
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
+#include <memory>
+#include <vector>
 
 namespace sf
 {

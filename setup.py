@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2019 Snowflake Computing Inc. All rights reserved.
 #
 import os
 import sys
@@ -51,8 +51,8 @@ cmd_class = {}
 
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
-    "pyarrow>=3.0.0,<3.1.0",
-    "pandas>=1.0.0,<1.3.0",
+    "pyarrow>=5.0.0,<5.1.0",
+    "pandas>=1.0.0,<1.4.0",
 ]
 
 try:
@@ -74,10 +74,6 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 name="snowflake.connector.arrow_iterator",
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
             ),
-            Extension(
-                name="snowflake.connector.arrow_result",
-                sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_result.pyx")],
-            ),
         ],
     )
 
@@ -87,14 +83,14 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
-            "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
+            "linux": ["libarrow.so.500", "libarrow_python.so.500"],
+            "darwin": ["libarrow.500.dylib", "libarrow_python.500.dylib"],
             "win32": ["arrow.dll", "arrow_python.dll"],
         }
 
         arrow_libs_to_link = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
-            "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
+            "linux": ["libarrow.so.500", "libarrow_python.so.500"],
+            "darwin": ["libarrow.500.dylib", "libarrow_python.500.dylib"],
             "win32": ["arrow.lib", "arrow_python.lib"],
         }
 
@@ -198,7 +194,6 @@ setup(
     license="Apache License, Version 2.0",
     keywords="Snowflake db database cloud analytics warehouse",
     url="https://www.snowflake.com/",
-    use_2to3=False,
     project_urls={
         "Documentation": "https://docs.snowflake.com/",
         "Code": "https://github.com/snowflakedb/snowflake-connector-python",
@@ -206,16 +201,13 @@ setup(
     },
     python_requires=">=3.6",
     install_requires=[
-        "azure-common<2.0.0",
-        "azure-storage-blob>=12.0.0,<13.0.0",
-        "boto3>=1.4.4,<2.0.0",
         # While requests is vendored, we use regular requests to perform OCSP checks
         "requests<3.0.0",
         "pytz",
         "pycryptodomex>=3.2,!=3.5.0,<4.0.0",
         "pyOpenSSL>=16.2.0,<21.0.0",
         "cffi>=1.9,<2.0.0",
-        "cryptography>=2.5.0,<4.0.0",
+        "cryptography>=3.1.0,<4.0.0",
         "pyjwt<3.0.0",
         "oscrypto<2.0.0",
         "asn1crypto>0.24.0,<2.0.0",
@@ -225,7 +217,7 @@ setup(
         # in early 2017, so we pick this version as a reasonably modern base.
         "setuptools>34.0.0",
         # requests requirements
-        "chardet>=3.0.2,<5",
+        "charset_normalizer~=2.0.0",
         "idna>=2.5,<4",
         "certifi>=2017.4.17",
     ],

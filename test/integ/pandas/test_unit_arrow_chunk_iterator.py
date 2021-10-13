@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import datetime
@@ -36,7 +36,7 @@ except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import ROW_UNIT  # NOQA
+    from snowflake.connector.arrow_iterator import IterUnit  # NOQA
     from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
@@ -49,7 +49,7 @@ except ImportError:
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_string_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = [{"logicalType": "TEXT"}, {"logicalType": "TEXT"}]
     field_foo = pyarrow.field("column_foo", pyarrow.string(), True, column_meta[0])
     field_bar = pyarrow.field("column_bar", pyarrow.string(), True, column_meta[1])
@@ -68,7 +68,7 @@ def test_iterate_over_string_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_int64_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "38", "scale": "0"},
         {"logicalType": "FIXED", "precision": "38", "scale": "0"},
@@ -87,7 +87,7 @@ def test_iterate_over_int64_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_int32_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "10", "scale": "0"},
         {"logicalType": "FIXED", "precision": "10", "scale": "0"},
@@ -106,7 +106,7 @@ def test_iterate_over_int32_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_int16_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "5", "scale": "0"},
         {"logicalType": "FIXED", "precision": "5", "scale": "0"},
@@ -125,7 +125,7 @@ def test_iterate_over_int16_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_int8_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "3", "scale": "0"},
         {"logicalType": "FIXED", "precision": "3", "scale": "0"},
@@ -144,7 +144,7 @@ def test_iterate_over_int8_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_bool_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = {"logicalType": "BOOLEAN"}
 
     def bool_generator():
@@ -160,7 +160,7 @@ def test_iterate_over_bool_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_float_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = [{"logicalType": "REAL"}, {"logicalType": "FLOAT"}]
 
     def float_generator():
@@ -176,7 +176,7 @@ def test_iterate_over_float_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_decimal_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     precision = random.randint(1, 38)
     scale = random.randint(0, precision)
     datatype = None
@@ -257,7 +257,7 @@ def test_iterate_over_decimal_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_date_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = {
         "byteLength": "4",
         "logicalType": "DATE",
@@ -279,7 +279,7 @@ def test_iterate_over_date_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_binary_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta = {
         "byteLength": "100",
         "logicalType": "BINARY",
@@ -303,7 +303,7 @@ def test_iterate_over_binary_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_time_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     column_meta_int64 = [
         {"logicalType": "TIME", "scale": "9"},
         {"logicalType": "TIME", "scale": "9"},
@@ -360,7 +360,7 @@ def test_iterate_over_time_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_timestamp_ntz_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     scale = random.randint(0, 9)
     column_meta = [
         {"logicalType": "TIMESTAMP_NTZ", "scale": str(scale)},
@@ -436,7 +436,7 @@ def test_iterate_over_timestamp_ntz_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_timestamp_ltz_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     scale = random.randint(0, 9)
     column_meta = [
         {"logicalType": "TIMESTAMP_LTZ", "scale": str(scale)},
@@ -514,7 +514,7 @@ def test_iterate_over_timestamp_ltz_chunk():
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
 def test_iterate_over_timestamp_tz_chunk():
-    random.seed(datetime.datetime.now())
+    random.seed(datetime.datetime.now().timestamp())
     scale = random.randint(0, 9)
     column_meta = [
         {
@@ -663,8 +663,8 @@ def iterate_over_test_chunk(
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     context = ArrowConverterContext()
-    it = PyArrowIterator(None, stream, context, False, False)
-    it.init(ROW_UNIT, False)
+    it = PyArrowIterator(None, stream, context, False, False, False)
+    it.init(IterUnit.ROW_UNIT.value)
 
     count = 0
     while True:
