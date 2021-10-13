@@ -52,7 +52,7 @@ def write_pandas(
     compression: str = "gzip",
     on_error: str = "abort_statement",
     parallel: int = 4,
-    quote_identifiers: bool = True
+    quote_identifiers: bool = True,
 ) -> Tuple[
     bool,
     int,
@@ -184,7 +184,6 @@ def write_pandas(
 
     logger.debug("creating parquet file format with '{}'".format(ff_sql))
     cursor.execute(ff_sql, _is_internal=True)
-
 
     table_sql = f'''
     CREATE TABLE IF NOT EXISTS {location} USING TEMPLATE /* Python:snowflake.connector.pandas_tools.write_pandas() */
