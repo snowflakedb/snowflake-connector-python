@@ -25,6 +25,7 @@ from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
+    ER_FAILED_PROCESSING_QMARK,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
@@ -965,25 +966,38 @@ def test_authenticate_error(conn_cnx, caplog):
 
 def test_process_qmark_params_error(conn_cnx):
     """Tests errors thrown in _process_params_qmarks."""
-    with conn_cnx() as conn:
-        with pytest.raises(
-            ProgrammingError, match="Binding parameters must be a list: invalid input"
-        ) as pe:
-            conn._process_params_qmarks("invalid input")
-            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
-        with pytest.raises(
-            ProgrammingError,
-            match="Binding parameters must be a list where one element is a single value or "
-            "a pair of Snowflake datatype and a value",
-        ) as pe:
-            conn._process_params_qmarks(((1, 2, 3),))
-            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
-    with pytest.raises(
-        ProgrammingError,
-        match=r"Python data type \[magicmock\] cannot be automatically mapped to Snowflake",
-    ) as pe:
-        conn._process_params_qmarks([mock.MagicMock()])
-        assert pe.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
+    sql = "select 1;"
+    with conn_cnx(paramstyle="qmark") as conn:
+        with conn.cursor() as cur:
+            with pytest.raises(
+                ProgrammingError,
+                match="Binding parameters must be a list: invalid input",
+            ) as pe:
+                cur.execute(sql, params="invalid input")
+            assert pe.value.errno == ER_FAILED_PROCESSING_PYFORMAT
+            with pytest.raises(
+                ProgrammingError,
+                match="Binding parameters must be a list where one element is a single "
+                "value or a pair of Snowflake datatype and a value",
+            ) as pe:
+                cur.execute(
+                    sql,
+                    params=(
+                        (
+                            1,
+                            2,
+                            3,
+                        ),
+                    ),
+                )
+            assert pe.value.errno == ER_FAILED_PROCESSING_QMARK
+            with pytest.raises(
+                ProgrammingError,
+                match=r"Python data type \[magicmock\] cannot be automatically mapped "
+                r"to Snowflake",
+            ) as pe:
+                cur.execute(sql, params=[mock.MagicMock()])
+            assert pe.value.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
 
 
 @pytest.mark.skipolddriver
