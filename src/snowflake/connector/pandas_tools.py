@@ -53,7 +53,7 @@ def write_pandas(
     on_error: str = "abort_statement",
     parallel: int = 4,
     quote_identifiers: bool = True,
-    table_type: str = 'permanent'
+    table_type: str = 'permanent',
 ) -> Tuple[
     bool,
     int,
