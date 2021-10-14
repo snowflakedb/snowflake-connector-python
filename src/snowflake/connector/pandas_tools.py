@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
 #
 
 import os
@@ -52,7 +52,7 @@ def write_pandas(
     compression: str = "gzip",
     on_error: str = "abort_statement",
     parallel: int = 4,
-    quote_identifiers: bool = True,
+    quote_identifiers: bool = True
 ) -> Tuple[
     bool,
     int,
@@ -178,12 +178,13 @@ def write_pandas(
     file_format_name = "".join(random.choice(string.ascii_lowercase) for _ in range(5))
 
     ff_sql = f'''
-    CREATE TEMPORARY FILE FORMAT {file_format_name} /* Python:snowflake.connector.pandas_tools.write_pandas() */
+    CREATE TEMPORARY FILE FORMAT "{file_format_name}" /* Python:snowflake.connector.pandas_tools.write_pandas() */
         TYPE = PARQUET;
     '''
 
     logger.debug("creating parquet file format with '{}'".format(ff_sql))
     cursor.execute(ff_sql, _is_internal=True)
+
 
     table_sql = f'''
     CREATE TABLE IF NOT EXISTS {location} USING TEMPLATE /* Python:snowflake.connector.pandas_tools.write_pandas() */
@@ -193,13 +194,13 @@ def write_pandas(
         FROM
             TABLE(
                 INFER_SCHEMA(
-                  LOCATION => '@"{stage_name}"',
-                  FILE_FORMAT => "{file_format_name}"
+                  LOCATION=>'@"{stage_name}"',
+                  FILE_FORMAT=>'"{file_format_name}"'
                 )
             )
         );
     '''
-
+    print(table_sql)
     logger.debug("creating new table if one doesnt exist with '{}'".format(table_sql))
     cursor.execute(table_sql, _is_internal=True)
 
