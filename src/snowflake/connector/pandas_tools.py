@@ -53,6 +53,7 @@ def write_pandas(
     on_error: str = "abort_statement",
     parallel: int = 4,
     quote_identifiers: bool = True,
+    table_type: str = 'permanent'
 ) -> Tuple[
     bool,
     int,
@@ -174,6 +175,13 @@ def write_pandas(
             # Remove chunk file
             os.remove(chunk_path)
 
+    if table_type == 'transient':
+        table_type_name = 'TRANSIENT '
+    elif table_type == 'temporary':
+        table_type_name = 'TEMPORARY '
+    else:
+        table_type_name = ''
+
     #If the table doesnt exists, we need to create it
     file_format_name = "".join(random.choice(string.ascii_lowercase) for _ in range(5))
 
@@ -185,9 +193,8 @@ def write_pandas(
     logger.debug("creating parquet file format with '{}'".format(ff_sql))
     cursor.execute(ff_sql, _is_internal=True)
 
-
     table_sql = f'''
-    CREATE TABLE IF NOT EXISTS {location} USING TEMPLATE /* Python:snowflake.connector.pandas_tools.write_pandas() */
+    CREATE {table_type_name}TABLE IF NOT EXISTS {location} USING TEMPLATE /* Python:snowflake.connector.pandas_tools.write_pandas() */
         (
         SELECT
             ARRAY_AGG(OBJECT_CONSTRUCT(*))
@@ -200,7 +207,7 @@ def write_pandas(
             )
         );
     '''
-    print(table_sql)
+
     logger.debug("creating new table if one doesnt exist with '{}'".format(table_sql))
     cursor.execute(table_sql, _is_internal=True)
 
