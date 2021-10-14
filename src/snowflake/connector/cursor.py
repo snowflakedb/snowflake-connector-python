@@ -42,6 +42,7 @@ from .constants import (
 )
 from .errorcode import (
     ER_CURSOR_IS_CLOSED,
+    ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
     ER_NO_ARROW_RESULT,
@@ -556,7 +557,7 @@ class SnowflakeCursor:
     def execute(
         self,
         command: str,
-        params: Optional[Sequence] = None,
+        params: Optional[Union[Sequence[Any], Dict[Any, Any]]] = None,
         _bind_stage: Optional[str] = None,
         timeout: Optional[int] = None,
         _exec_async: bool = False,
@@ -660,6 +661,17 @@ class SnowflakeCursor:
                 if _bind_stage:
                     kwargs["binding_stage"] = _bind_stage
                 else:
+                    if params is not None and not isinstance(params, (list, tuple)):
+                        errorvalue = {
+                            "msg": "Binding parameters must be a list: {}".format(
+                                params
+                            ),
+                            "errno": ER_FAILED_PROCESSING_PYFORMAT,
+                        }
+                        Error.errorhandler_wrapper(
+                            self.connection, self, ProgrammingError, errorvalue
+                        )
+
                     kwargs["binding_params"] = self._connection._process_params_qmarks(
                         params, self
                     )
