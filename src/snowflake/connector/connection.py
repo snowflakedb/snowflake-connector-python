@@ -193,7 +193,6 @@ DEFAULT_CONFIGURATION: Dict[str, Tuple[Any, Union[Type, Tuple[Type, ...]]]] = {
     ),  # only use regional url when the param is set
     # Allows cursors to be re-iterable
     "reuse_results": (False, bool),
-    "use_new_put_get": (True, bool),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
