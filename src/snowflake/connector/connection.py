@@ -193,7 +193,6 @@ DEFAULT_CONFIGURATION: Dict[str, Tuple[Any, Union[Type, Tuple[Type, ...]]]] = {
     ),  # only use regional url when the param is set
     # Allows cursors to be re-iterable
     "reuse_results": (False, bool),
-    "use_new_put_get": (True, bool),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1108,13 +1107,6 @@ class SnowflakeConnection(object):
         if not params:
             return None
         processed_params = {}
-
-        if not isinstance(params, (list, tuple)):
-            errorvalue = {
-                "msg": "Binding parameters must be a list: {}".format(params),
-                "errno": ER_FAILED_PROCESSING_PYFORMAT,
-            }
-            Error.errorhandler_wrapper(self, cursor, ProgrammingError, errorvalue)
 
         get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
 
