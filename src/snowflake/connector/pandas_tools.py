@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
 import os
@@ -52,7 +52,7 @@ def write_pandas(
     compression: str = "gzip",
     on_error: str = "abort_statement",
     parallel: int = 4,
-    quote_identifiers: bool = True
+    quote_identifiers: bool = True,
 ) -> Tuple[
     bool,
     int,
