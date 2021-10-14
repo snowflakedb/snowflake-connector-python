@@ -10,6 +10,16 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
+- v2.7.0(October 17,2021)
+
+   - Removing cloud sdks.
+   - Include Standard C++ headers.
+   - Update minimum dependency version pin of cryptography.
+   - Fixed a bug where error number would not be added to Exception messages.
+   - Fixed a bug where client_prefetch_threads parameter was not respected when pre-fetching results.
+   - Update signature of SnowflakeCursor.execute's params argument.
+
+
 - v2.6.2(September 27,2021)
 
    - Updated vendored urllib3 and requests versions.
