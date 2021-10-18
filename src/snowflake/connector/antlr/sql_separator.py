@@ -8,9 +8,9 @@
 
 from antlr4 import CommonTokenStream, InputStream, ParseTreeWalker
 
-from snowflake.connector.antlr.querySeparatorLexer import querySeparatorLexer
-from snowflake.connector.antlr.querySeparatorListener import querySeparatorListener
-from snowflake.connector.antlr.querySeparatorParser import querySeparatorParser
+from .querySeparatorLexer import querySeparatorLexer
+from .querySeparatorListener import querySeparatorListener
+from .querySeparatorParser import querySeparatorParser
 
 COMMENT_CHANNEL: int = 9
 
@@ -144,6 +144,8 @@ def sep_sqls(
                 # hit one comment inside statement, add the statement string before this comment.
                 trimed_stmt += sqltext[cur : comment_toks[cur_idx].start]
                 cur = comment_toks[cur_idx].stop + 1
+                if cur < len(sqltext) and sqltext[cur - 1] == "\n":
+                    cur -= 1
                 cur_idx += 1
 
             if cur < stmt_stop:

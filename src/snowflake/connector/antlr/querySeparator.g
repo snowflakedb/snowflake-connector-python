@@ -18,7 +18,7 @@ def any_prefix(self, strlist):
 @parser::members {
     import re
     self.createFuncProcMatch = re.compile(
-        r'CREATE(OR|REPLACE|TEMP|TEMPORARY|VOLATILE|SECURE|EXTERNAL|\s)*(PROCEDURE|FUNCTION)')
+        r'CREATE(\w|\s)*(PROCEDURE|FUNCTION)')
 
 def isCreateFuncProc(self):
         tok_list = self.ahead("CREATE")
@@ -218,11 +218,11 @@ URLPath:
 
 // Use NonSeparator so comment is not part of a "GeneralWord"
 GeneralWord :
-    {not self.any_prefix(["/*"])}? NonSeparator+
+    NonSeparator+
     ;
 
 NonSeparator :
-    ~(';' | ' '|'\r'|'\t'|'\n'|'\u000C' | '{' | '}' | '[' | ']' | '(' | ')' | '/' )
+    ~(';' | ' '|'\r'|'\t'|'\n'|'\u000C' | '{' | '}' | '[' | ']' | '(' | ')' | '/' | '-')
     ;
 
 NonWhiteSpace //non ';' and white space chars (that form a keyword, identifier, name, etc)
@@ -278,7 +278,7 @@ noKeywordStatement :
     ;
 
 createFunctionStatement :
-    KW_CREATE orReplace? temporary? KW_SECURE? KW_EXTERNAL? funcOrProc
+    KW_CREATE orReplace? (temporary | KW_SECURE | KW_EXTERNAL | word)* funcOrProc
     word* KW_AS
     funcOrProcBody
     SEMICOLON*

@@ -36,6 +36,7 @@ def split_statements(
     remove_comments: bool = False,
     delimiter: Optional[SQLDelimiter] = None,
 ):
+    """Entry function to split statements."""
     if delimiter is None or str(delimiter) == ";":
         return split_statements_new(buf, remove_comments)
     else:
