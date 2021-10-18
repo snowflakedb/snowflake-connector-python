@@ -237,15 +237,18 @@ class Auth(object):
             {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
         )
 
-        # accomodate any authenticator specific timeout requirements here.
-        # login_timeout is user configuration - whichever value
-        # is smaller should be considered
+        # accommodate any authenticator specific timeout requirements here.
+        # login_timeout comes from user configuration.
+        # Between login timeout and auth specific
+        # timeout use whichever value is smaller
         if getattr(auth_instance, "get_timeout", None) is not None:
+            logger.debug("Authenticator implements get_timeout")
             auth_timeout = (
                 self._rest._connection.login_timeout
                 if self._rest._connection.login_timeout < auth_instance.get_timeout()
                 else auth_instance.get_timeout()
             )
+            logger.debug("Timeout set to {}".format(auth_timeout))
         else:
             auth_timeout = self._rest._connection.login_timeout
 
@@ -255,7 +258,7 @@ class Auth(object):
                 headers,
                 json.dumps(body),
                 timeout=auth_timeout,
-                socket_timeout=self._rest._connection.login_timeout,
+                socket_timeout=auth_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403

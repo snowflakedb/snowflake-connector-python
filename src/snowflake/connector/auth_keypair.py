@@ -21,8 +21,8 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from .auth_by_plugin import AuthByPlugin
-from .errorcode import ER_INVALID_PRIVATE_KEY
-from .errors import ProgrammingError
+from .errorcode import ER_INVALID_PRIVATE_KEY, ER_JWT_RETRY_EXPIRED
+from .errors import OperationalError, ProgrammingError
 from .network import KEY_PAIR_AUTHENTICATOR
 
 logger = getLogger(__name__)
@@ -38,6 +38,7 @@ class AuthByKeyPair(AuthByPlugin):
     ISSUE_TIME = "iat"
     LIFETIME = 60
     DEFAULT_JWT_RETRY_ATTEMPTS = 3
+    DEFAULT_CNXN_DELTA = 10
 
     def __init__(self, private_key, lifetime_in_seconds: int = LIFETIME):
         """Inits AuthByKeyPair class with private key.
@@ -49,10 +50,16 @@ class AuthByKeyPair(AuthByPlugin):
         self._private_key = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
-        self._lifetime = timedelta(seconds=lifetime_in_seconds)
+        self._lifetime = timedelta(
+            seconds=os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds)
+        )
         self._jwt_retry_attempts = os.getenv(
             "JWT_RETRY_ATTEMPTS", self.DEFAULT_JWT_RETRY_ATTEMPTS
         )
+        self._cnxn_delta = timedelta(
+            seconds=os.getenv("JWT_CONNECTION_DELTA", self.DEFAULT_CNXN_DELTA)
+        )
+        self._current_retry_count = 0
 
     def authenticate(
         self,
@@ -141,4 +148,31 @@ class AuthByKeyPair(AuthByPlugin):
         return count < self._jwt_retry_attempts
 
     def get_timeout(self) -> int:
-        return datetime.utcnow() - self._jwt_token_exp
+        return (
+            10  # (self._jwt_token_exp - datetime.utcnow() - self._cnxn_delta).seconds
+        )
+
+    def handle_timeout(
+        self,
+        authenticator: str,
+        service_name: Optional[str],
+        account: str,
+        user: str,
+        password: Optional[str],
+    ) -> str:
+        if self._current_retry_count > self._jwt_retry_attempts:
+            logger.debug("Exhausted max retry attempts. Aborting connection")
+            raise OperationalError(
+                msg="Could not connect to backend after multiple "
+                "retry attempts {}. Aborting".format(self._current_retry_count),
+                errno=ER_JWT_RETRY_EXPIRED,
+            )
+        else:
+            self._current_retry_count += 1
+
+        self.authenticate(authenticator, service_name, account, user, password)
+
+    def can_handle_exception(self, op: OperationalError) -> bool:
+        if "ReadTimeout" in op.msg or "ConnectionTimeout" in op.msg:
+            return True
+        return False

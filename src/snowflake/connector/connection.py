@@ -75,13 +75,14 @@ from .errorcode import (
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_INVALID_VALUE,
+    ER_JWT_RETRY_EXPIRED,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errors import DatabaseError, Error, ProgrammingError
+from .errors import DatabaseError, Error, OperationalError, ProgrammingError
 from .incident import IncidentAPI
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -1023,20 +1024,59 @@ class SnowflakeConnection(object):
         )
 
         auth = Auth(self.rest)
-        auth.authenticate(
-            auth_instance=auth_instance,
-            account=self.account,
-            user=self.user,
-            database=self.database,
-            schema=self.schema,
-            warehouse=self.warehouse,
-            role=self.role,
-            passcode=self._passcode,
-            passcode_in_password=self._passcode_in_password,
-            mfa_callback=self._mfa_callback,
-            password_callback=self._password_callback,
-            session_parameters=self._session_parameters,
-        )
+        try:
+            auth.authenticate(
+                auth_instance=auth_instance,
+                account=self.account,
+                user=self.user,
+                database=self.database,
+                schema=self.schema,
+                warehouse=self.warehouse,
+                role=self.role,
+                passcode=self._passcode,
+                passcode_in_password=self._passcode_in_password,
+                mfa_callback=self._mfa_callback,
+                password_callback=self._password_callback,
+                session_parameters=self._session_parameters,
+            )
+        except OperationalError as op:
+            logger.debug("Operational Error raised at authentication")
+            if hasattr(auth_instance, "handle_timeout") and (
+                auth_instance.can_handle_exception(op)
+            ):
+                logger.debug(
+                    "Operational error due to connection timeout. "
+                    "Authenticator can handle timeout"
+                )
+                while True:
+                    try:
+                        auth_instance.handle_timeout(
+                            authenticator=self._authenticator,
+                            service_name=self.service_name,
+                            account=self.account,
+                            user=self.user,
+                            password=self._password,
+                        )
+                        auth.authenticate(
+                            auth_instance=auth_instance,
+                            account=self.account,
+                            user=self.user,
+                            database=self.database,
+                            schema=self.schema,
+                            warehouse=self.warehouse,
+                            role=self.role,
+                            passcode=self._passcode,
+                            passcode_in_password=self._passcode_in_password,
+                            mfa_callback=self._mfa_callback,
+                            password_callback=self._password_callback,
+                            session_parameters=self._session_parameters,
+                        )
+                    except OperationalError as auth_op:
+                        if auth_op.errno == ER_JWT_RETRY_EXPIRED:
+                            raise op
+                    logger.debug("Continuing authenticator specific timeout handling")
+            else:
+                raise op
 
     def _write_params_to_byte_rows(
         self, params: List[Tuple[Union[Any, Tuple]]]

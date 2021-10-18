@@ -90,15 +90,9 @@ from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
-from .vendored.requests.exceptions import (
-    ConnectionError,
-    ConnectTimeout,
-    InvalidProxyURL,
-    ReadTimeout,
-    SSLError,
-)
+from .vendored.requests.exceptions import InvalidProxyURL, SSLError
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
-from .vendored.urllib3.exceptions import ProtocolError, ReadTimeoutError
+from .vendored.urllib3.exceptions import ProtocolError
 from .vendored.urllib3.util.url import parse_url
 
 if TYPE_CHECKING:
@@ -176,7 +170,7 @@ USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 def is_retryable_http_code(code: int) -> bool:
     """Decides whether code is a retryable HTTP issue."""
     return 500 <= code < 600 or code in (
-        BAD_REQfUEST,  # 400
+        BAD_REQUEST,  # 400
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
         REQUEST_TIMEOUT,  # 408
@@ -1042,13 +1036,9 @@ class SnowflakeRestful(object):
             )
 
         except (
-            ConnectTimeout,
-            ReadTimeout,
             BadStatusLine,
-            ConnectionError,
             IncompleteRead,
-            ProtocolError,  # from urllib3
-            ReadTimeoutError,  # from urllib3
+            ProtocolError,  # from urllib3  # from urllib3
             OpenSSL.SSL.SysCallError,
             KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
             ValueError,
