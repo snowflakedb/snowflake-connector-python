@@ -652,7 +652,7 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 self._stage_info,
                 S3_CHUNK_SIZE,
-                self._use_s3_regional_url,
+                use_s3_regional_url = self._use_s3_regional_url,
             )
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
