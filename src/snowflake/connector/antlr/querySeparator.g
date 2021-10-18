@@ -218,7 +218,7 @@ URLPath:
 
 // Use NonSeparator so comment is not part of a "GeneralWord"
 GeneralWord :
-    {not self.any_prefix(["/*"])}? NonSeparator+
+    NonSeparator+
     ;
 
 NonSeparator :

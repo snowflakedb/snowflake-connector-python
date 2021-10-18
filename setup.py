@@ -55,7 +55,6 @@ pandas_requirements = [
     "pandas>=1.0.0,<1.4.0",
 ]
 
-cmd_class = {}
 try:
     import distutils.command.build as dist_build
     import distutils.command.sdist as dist_sdist
@@ -70,20 +69,24 @@ except ImportError as ie:
 
 if _ABLE_TO_ANTLR_CODEGEN:
 
-    class Codegen(object):
+    class Codegen:
+        """This class provide 1, download ANTLR4 jar file,
+        2, run org.antlr.v4.Tool to generate python stub files from querySeparator.g.
+        """
+
         ANTLR_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "antlr")
         ANTLR_VER = "4.9.2"
         ANTLR_JAR = f"antlr-{ANTLR_VER}-complete.jar"
 
         def init_options(self):
-            """set default values for options"""
+            """Codegen is used in Codegen{Build|Sdist}. init_options and finalize_options are provided accordingly."""
             self.grammar_file = os.path.join(Codegen.ANTLR_SRC_DIR, "querySeparator.g")
             self.target_language = "Python3"
             self.antlr_url = "https://www.antlr.org/download/antlr-4.9.2-complete.jar"
 
         def finalize_options(self):
             if self.grammar_file:
-                assert os.path.exists(self.grammar_file), (
+                assert os.path.isfile(self.grammar_file), (
                     "grammar file %s does not exist." % self.grammar_file
                 )
 
@@ -96,7 +99,7 @@ if _ABLE_TO_ANTLR_CODEGEN:
                 warnings.warn(f"No certifi package installed {ie}")
                 has_certifi = False
 
-            if not os.path.exists(dstpath):
+            if not os.path.isfile(dstpath):
                 if has_certifi:
                     resp = urllib.request.urlopen(url, cafile=certifi.where())
                 else:
@@ -137,16 +140,15 @@ if _ABLE_TO_ANTLR_CODEGEN:
         def initialize_options(self):
             self.codegen = Codegen()
             self.codegen.init_options()
-            dist_build.build.initialize_options(self)
+            super().initialize_options()
 
         def finalize_options(self):
             self.codegen.finalize_options()
-            dist_build.build.finalize_options(self)
+            super().finalize_options()
 
         def run(self):
-            print("build codegen run")
             self.codegen.run()
-            dist_build.build.run(self)
+            super().run()
 
     cmd_class["build"] = CodegenBuild
 
@@ -154,16 +156,15 @@ if _ABLE_TO_ANTLR_CODEGEN:
         def initialize_options(self):
             self.codegen = Codegen()
             self.codegen.init_options()
-            dist_sdist.sdist.initialize_options(self)
+            super().initialize_options()
 
         def finalize_options(self):
             self.codegen.finalize_options()
-            dist_sdist.sdist.finalize_options(self)
+            super().finalize_options()
 
         def run(self):
-            print("sdist codegen run")
             self.codegen.run()
-            dist_sdist.sdist.run(self)
+            super().run()
 
     cmd_class["sdist"] = CodegenSdist
 

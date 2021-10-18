@@ -1,4 +1,4 @@
-!/usr/bin/bash
+#!/usr/bin/bash
 CURRENT_PATH=$(pwd)
 wget https://www.antlr.org/download/antlr-4.9.2-complete.jar
 MYCLASSPATH=$CURRENT_PATH/antlr-4.9.2-complete.jar:$CLASSPATH

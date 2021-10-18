@@ -835,7 +835,7 @@ def test_sql_creatproc_declare_stmt():
             BEGIN/*block1*/
               DECLARE
                 Z NUMBER DEFAULT X+Y;
-              BEGIN /*block 2*/
+              BEGIN/* block 2 */
                 SET X := 5;
                 RETURN Z;
               END;
@@ -853,6 +853,27 @@ def test_sql_creatproc_declare_stmt():
               DECLARE
                 Z NUMBER DEFAULT X+Y;
               BEGIN
+                SET X := 5;
+                RETURN Z;
+              END;
+            END;""",
+            False,
+        )
+        assert next(itr) == ("""GET file:///a.txt @stage1;""", True)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+    with StringIO(sqltxt) as f:
+        itr = split_statements(f, False)
+        assert next(itr) == ("select a from b;", False)
+        assert next(itr) == (
+            """create or replace procedure create_tables() as             DECLARE
+              X NUMBER DEFAULT 0;
+              Y NUMBER DEFAULT X;
+            BEGIN/*block1*/
+              DECLARE
+                Z NUMBER DEFAULT X+Y;
+              BEGIN/* block 2 */
                 SET X := 5;
                 RETURN Z;
               END;

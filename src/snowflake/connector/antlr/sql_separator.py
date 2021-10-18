@@ -8,9 +8,9 @@
 
 from antlr4 import CommonTokenStream, InputStream, ParseTreeWalker
 
-from snowflake.connector.antlr.querySeparatorLexer import querySeparatorLexer
-from snowflake.connector.antlr.querySeparatorListener import querySeparatorListener
-from snowflake.connector.antlr.querySeparatorParser import querySeparatorParser
+from .querySeparatorLexer import querySeparatorLexer
+from .querySeparatorListener import querySeparatorListener
+from .querySeparatorParser import querySeparatorParser
 
 COMMENT_CHANNEL: int = 9
 
