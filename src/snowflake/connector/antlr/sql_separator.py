@@ -144,6 +144,8 @@ def sep_sqls(
                 # hit one comment inside statement, add the statement string before this comment.
                 trimed_stmt += sqltext[cur : comment_toks[cur_idx].start]
                 cur = comment_toks[cur_idx].stop + 1
+                if cur < len(sqltext) and sqltext[cur - 1] == "\n":
+                    cur -= 1
                 cur_idx += 1
 
             if cur < stmt_stop:

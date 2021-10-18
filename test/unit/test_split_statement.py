@@ -734,6 +734,95 @@ def test_sql_createproc_sql():
             next(itr)
 
 
+def test_sql_createproc_with_comments():
+    sqltxt = """
+    CREATE TABLE T(a INTERVAL DAY(5));
+    select a from b;
+    create or replace procedure/*no mix with open_table()!*/ create_tables() as-- code below
+    begin
+    create table emp_us (deptno number, name variant);
+    create table emp_uk (deptno number, name variant);
+    end;
+    call create_tables();
+    put file:///a.txt @stage1;
+    """
+    with StringIO(sqltxt) as f:
+        itr = split_statements(f)
+        assert next(itr) == ("CREATE TABLE T(a INTERVAL DAY(5));", False)
+        assert next(itr) == ("select a from b;", False)
+        assert next(itr) == (
+            """create or replace procedure/*no mix with open_table()!*/ create_tables() as-- code below
+    begin
+    create table emp_us (deptno number, name variant);
+    create table emp_uk (deptno number, name variant);
+    end;""",
+            False,
+        )
+        assert next(itr) == ("call create_tables();", False)
+        assert next(itr) == ("put file:///a.txt @stage1;", True)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+    with StringIO(sqltxt) as f:
+        itr = split_statements(f, True)
+        assert next(itr) == ("CREATE TABLE T(a INTERVAL DAY(5));", False)
+        assert next(itr) == ("select a from b;", False)
+        assert next(itr) == (
+            """create or replace procedure create_tables() as
+    begin
+    create table emp_us (deptno number, name variant);
+    create table emp_uk (deptno number, name variant);
+    end;""",
+            False,
+        )
+        assert next(itr) == ("call create_tables();", False)
+        assert next(itr) == ("put file:///a.txt @stage1;", True)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+
+def test_sql_createproc_with_ext():
+    ext_in_create_proc = [
+        "temp",
+        "temporary",
+        "volatile",
+        "external",
+        "newkeyword1 kw2",
+    ]
+
+    sqltxt_ext_template = """
+    CREATE TABLE T(a INTERVAL DAY(5));
+    select a from b;
+    create or replace {0} procedure/*new keyword*/ create_tables() as-- code below
+    begin
+    select replace_procedure from table emp_us;
+    create table emp_uk (deptno number, name variant);
+    end;
+    call create_tables();
+    put file:///a.txt @stage1;
+    """
+    for ext in ext_in_create_proc:
+        sqltxt_ext = sqltxt_ext_template.format(ext)
+        with StringIO(sqltxt_ext) as f:
+            itr = split_statements(f, True)
+            assert next(itr) == ("CREATE TABLE T(a INTERVAL DAY(5));", False)
+            assert next(itr) == ("select a from b;", False)
+            expected_template = """create or replace {0} procedure create_tables() as
+    begin
+    select replace_procedure from table emp_us;
+    create table emp_uk (deptno number, name variant);
+    end;"""
+            expected_createproc = expected_template.format(ext)
+            assert next(itr) == (
+                expected_createproc,
+                False,
+            )
+        assert next(itr) == ("call create_tables();", False)
+        assert next(itr) == ("put file:///a.txt @stage1;", True)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+
 def test_sql_nested_anonymous_block():
     sqltxt = """            select a from b where c=3;
             DECLARE
@@ -814,7 +903,6 @@ end;""",
             next(itr)
 
     with StringIO(sqltxt) as f:
-
         itr = split_statements(f, False)
         expect_outputs[5] = (
             """insert into table1 (i) values ('This is not a valid integer.');    -- FAILS!""",
