@@ -88,7 +88,7 @@ DOUBLE_LT       : '<<' ;
 DOUBLE_GT       : '>>' ;
 COLON           : ':'  ;
 COMMA           : ','  ;
-SEMICOLON       : ';'  ;
+CLI_DELIMITER   : ';'  '>'?; // ';>' is special delimiter for Snowsql to recognize the statement requires Async run.
 
 // Bracketing of arrays, list, expressions
 LPAREN    : '(' ;
@@ -245,17 +245,17 @@ queriesText
     ;
 
 statement :
-    SEMICOLON*
+    CLI_DELIMITER*
     ({self.isCreateFuncProc()}? createFunctionStatement // create function/proc as begin...end
     | transactionStatement // not seeking begin trans.. commit/end
     | anonymousBlock  // (declare..)? begin...end
     | SpecialCommand
     | normalStatements //other than create func / begin / end
-    ) SEMICOLON*
+    ) CLI_DELIMITER*
     ;
 
 anonymousBlock :
-    (KW_DECLARE (noKeywordStatement SEMICOLON*)+)? beginEndBlock
+    (KW_DECLARE (noKeywordStatement CLI_DELIMITER*)+)? beginEndBlock
     ;
 
 transactionStatement :
@@ -263,7 +263,7 @@ transactionStatement :
     ;
 
 normalStatements :
-    SEMICOLON* statementBody SEMICOLON*
+    CLI_DELIMITER* statementBody CLI_DELIMITER*
     ;
 
 caseExpr : KW_CASE statementBody KW_END
@@ -281,7 +281,7 @@ createFunctionStatement :
     KW_CREATE orReplace? (temporary | KW_SECURE | KW_EXTERNAL | word)* funcOrProc
     word* KW_AS
     funcOrProcBody
-    SEMICOLON*
+    CLI_DELIMITER*
     ;
 
 orReplace :

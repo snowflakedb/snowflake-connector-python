@@ -433,7 +433,7 @@ def test_space_before_put():
         """
 -- sample data uploads
     PUT file:///tmp/data.txt @%ab;
-SELECT 1; /* 134 */ select /* 567*/ 345;
+SELECT 1; /* 134 */ select /* 567*/ 345;>
 GET @%bcd file:///tmp/aaa.txt;
 """
     ) as f:
@@ -444,7 +444,7 @@ GET @%bcd file:///tmp/aaa.txt;
             True,
         )
         assert next(itr) == ("""SELECT 1;""", False)
-        assert next(itr) == ("""/* 134 */ select /* 567*/ 345;""", False)
+        assert next(itr) == ("""/* 134 */ select /* 567*/ 345;>""", False)
         assert next(itr) == ("""GET @%bcd file:///tmp/aaa.txt;""", True)
         with pytest.raises(StopIteration):
             next(itr)
