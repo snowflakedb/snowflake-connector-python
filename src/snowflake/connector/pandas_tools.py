@@ -184,7 +184,10 @@ def write_pandas(
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
     if quote_identifiers:
-        parquet_columns = ", ".join([f'$1:"{c}"' for c in df.columns])
+        if quote_identifiers=='smart':
+            parquet_columns = ", ".join([f'$1:"{c}"' if '-' in c else c for c in df.columns])
+        else:
+            parquet_columns = ", ".join([f'$1:"{c}"' for c in df.columns])
     else:
         parquet_columns = ", ".join([f'$1:{c}' for c in df.columns])
     copy_into_sql = (
