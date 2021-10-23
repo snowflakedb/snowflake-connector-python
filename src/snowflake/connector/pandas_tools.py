@@ -174,16 +174,19 @@ def write_pandas(
             # Remove chunk file
             os.remove(chunk_path)
     if quote_identifiers:
-        columns = '"' + '","'.join(list(df.columns)) + '"'
+        if quote_identifiers=='smart':
+            columns = ", ".join([f'"{f}"' if '-' in f else f for f in df.columns])
+        else:
+            columns = ", ".join([f'"{f}"' for f in df.columns])
     else:
-        columns = ",".join(list(df.columns))
+        columns = ", ".join(list(df.columns))
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
     if quote_identifiers:
-        parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in df.columns)
+        parquet_columns = ", ".join([f'$1:"{c}"' for c in df.columns])
     else:
-        parquet_columns = "$1:" + ",$1:".join(df.columns)
+        parquet_columns = ", ".join([f'$1:{c}' for c in df.columns])
     copy_into_sql = (
         "COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         "({columns}) "
