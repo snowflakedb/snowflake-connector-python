@@ -10,9 +10,9 @@ Release Notes
 -------------------------------------------------------------------------------
 
 
-- v2.7.0(October 17,2021)
+- v2.7.0(October 25,2021)
 
-   - Removing cloud sdks.
+   - Removing cloud sdks.snowflake-connector-python will not install them anymore. Recreate your virtualenv to get rid of unnecessary dependencies.
    - Include Standard C++ headers.
    - Update minimum dependency version pin of cryptography.
    - Fixed a bug where error number would not be added to Exception messages.
