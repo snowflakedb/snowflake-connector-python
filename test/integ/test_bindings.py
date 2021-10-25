@@ -589,11 +589,69 @@ def test_tuple(conn_cnx, db_parameters):
                     cnx.cursor()
                     .execute(
                         f"select p.c1, p.c2 from {db_parameters['name']} p where (p.c1, p.c2) in (%(things)s)",
-                        params={"things": [(True, 1)]},
+                        params={"things": [(True, 1), (False, 2)]},
                     )
                     .fetchall()
                 )
-                assert len(result) == 1
+                assert len(result) == 2
+            finally:
+                with conn_cnx() as cnx:
+                    cnx.cursor().execute(
+                        f"drop table if exists {db_parameters['name']}"
+                    )
+    finally:
+        pass
+
+
+# [pytest.param(True, marks=pytest.mark.skipolddriver), False],
+@pytest.mark.parametrize(
+    "bulk_array_optimization",
+    [True],
+)
+def test_timestamp_tuple_doc(conn_cnx, db_parameters, bulk_array_optimization):
+    """this test is to confirm test cases described in public doc:
+    https://docs.snowflake.com/en/user-guide/python-connector-example.html
+    #using-qmark-or-numeric-binding-with-datetime-objects"""
+    try:
+        CREATE_TABLE = """create or replace table {name} (
+            c1 int,
+            c2 string,
+            c3 timestamp_ltz
+                )
+            """
+        INSERT = """
+        insert into {name} values(
+        ?,?,?)
+        """
+        ts1 = datetime.now()
+        data1 = (121, "test str1", ("TIMESTAMP_LTZ", ts1))
+        data2 = (122, "test str2", ("TIMESTAMP_LTZ", ts1))
+        data3 = (123, "test str3", ("TIMESTAMP_LTZ", ts1))
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(CREATE_TABLE.format(name=db_parameters["name"]))
+        with conn_cnx(paramstyle="qmark", timezone=PST_TZ) as cnx:
+            csr = cnx.cursor()
+            if bulk_array_optimization:
+                csr.executemany(
+                    INSERT.format(name=db_parameters["name"]), [data1, data2, data3]
+                )
+            else:
+                csr.execute(INSERT.format(name=db_parameters["name"]), data1)
+                csr.execute(INSERT.format(name=db_parameters["name"]), data2)
+                csr.execute(INSERT.format(name=db_parameters["name"]), data3)
+
+        with conn_cnx() as cnx:
+            try:
+                result0 = (
+                    cnx.cursor()
+                    .execute(
+                        f"select p.c1, p.c2, p.c3 from {db_parameters['name']} p where (p.c1, p.c2) in (%(things)s)",
+                        params={"things": [(121, "test str1"), (123, "test str3")]},
+                    )
+                    .fetchall()
+                )
+                assert len(result0) == 2
+
             finally:
                 with conn_cnx() as cnx:
                     cnx.cursor().execute(

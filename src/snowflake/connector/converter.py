@@ -672,8 +672,7 @@ class SnowflakeConverter(object):
         if isinstance(value, list):
             return ",".join(value)
         elif isinstance(value, tuple):
-            str_list = [str(v) for v in value]
-            return "({})".format(",".join(str_list))
+            return str(value)
         if value is None:
             return "NULL"
         elif isinstance(value, bool):
