@@ -13,10 +13,15 @@ from enum import Enum
 from unittest import mock
 
 import numpy
+import numpy as np
 import pytest
+from numpy.testing import assert_equal
 
 try:
-    from snowflake.connector.constants import IterUnit
+    from snowflake.connector.constants import (
+        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+        IterUnit,
+    )
 except ImportError:
     # This is because of olddriver tests
     class IterUnit(Enum):
@@ -1094,3 +1099,34 @@ def test_sessions_used(conn_cnx, fetch_fn_name, pass_connection):
             ) as get_session_mock:
                 fetch_fn(connection=connection)
                 assert get_session_mock.call_count == (1 if pass_connection else 0)
+
+
+def assert_dtype_equal(a, b):
+    assert_equal(a, b)
+    assert_equal(
+        hash(a), hash(b), "two equivalent types do not hash to the same value !"
+    )
+
+
+def test_pandas_dtypes(conn_cnx):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        }
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(
+                "select 1::integer, 2.3::double, 'foo'::string, current_timestamp()::timestamp where 1=0"
+            )
+            batches = cur.get_result_batches()
+            batch = batches[0].to_pandas()
+
+            assert batch.dtypes is not None
+            # assert batch.empty is not True TODO
+
+            pandas_dtypes = batch.dtypes
+            expected_types = [np.int64, float, np.object, np.datetime64]
+            # pd.string is represented as an np.object
+            # np.dtype string is not the same as pd.string (python)
+            for i, typ in enumerate(expected_types):
+                assert_dtype_equal(pandas_dtypes[i].type, np.dtype(typ).type)
