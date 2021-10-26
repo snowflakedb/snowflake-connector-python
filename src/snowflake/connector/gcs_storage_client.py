@@ -22,6 +22,7 @@ from .storage_client import SnowflakeStorageClient
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
