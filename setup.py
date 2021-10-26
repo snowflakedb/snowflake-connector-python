@@ -51,7 +51,7 @@ cmd_class = {}
 
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
-    "pyarrow>=5.0.0,<5.1.0",
+    "pyarrow>=5.0.0,<6.1.0",
     "pandas>=1.0.0,<1.4.0",
 ]
 
