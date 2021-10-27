@@ -42,6 +42,7 @@ class Error(BASE_EXCEPTION_CLASS):
         connection: Optional["SnowflakeConnection"] = None,
         cursor: Optional["SnowflakeCursor"] = None,
     ):
+        super().__init__(msg)
         self.msg = msg
         self.raw_msg = msg
         self.errno = errno or -1

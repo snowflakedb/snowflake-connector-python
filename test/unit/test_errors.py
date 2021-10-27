@@ -31,3 +31,7 @@ def test_detecting_duplicate_detail_insertion():
     assert errors.ProgrammingError(
         msg=original_ex.msg,
     )
+
+
+def test_args():
+    assert errors.Error('msg').args == ('msg',)
