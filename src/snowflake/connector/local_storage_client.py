@@ -27,7 +27,7 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         meta: "SnowflakeFileMeta",
         stage_info: Dict[str, Any],
         chunk_size: int,
-        use_s3_regional_url: bool = False,
+        use_s3_regional_url: bool = False,  # NOQA
     ) -> None:
         super().__init__(meta, stage_info, chunk_size)
         self.data_file = meta.src_file_name

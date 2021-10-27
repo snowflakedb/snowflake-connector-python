@@ -22,6 +22,7 @@ from .storage_client import SnowflakeStorageClient
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
@@ -50,7 +51,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         stage_info: Dict[str, Any],
         cnx: "SnowflakeConnection",
         command: str,
-        use_s3_regional_url=False,
+        use_s3_regional_url=False,  # NOQA
     ) -> None:
         """Creates a client object with given stage credentials.
 
