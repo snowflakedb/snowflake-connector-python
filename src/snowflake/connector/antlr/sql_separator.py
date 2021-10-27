@@ -15,7 +15,7 @@ from .querySeparatorParser import querySeparatorParser
 COMMENT_CHANNEL: int = 9
 
 
-def is_put_or_get(stmt):
+def is_put_or_get(stmt: str):
     return stmt.strip()[:3].upper() in ("PUT", "GET")
 
 
@@ -26,7 +26,9 @@ def is_comment_rest_line(comment: str):
     return False
 
 
-class sfcliSeparatorParser(querySeparatorParser):
+class SFCliParser(querySeparatorParser):
+    """Use this class as wrapper to actual parser for debug purpose."""
+
     def anonymousBlock(self):
         querySeparatorParser.anonymousBlock(self)
 
@@ -37,8 +39,11 @@ class sfcliSeparatorParser(querySeparatorParser):
         querySeparatorParser.normalStatements(self)
 
 
-class sfSqlSeparatorListener(querySeparatorListener):
-    """use client side mini parser querySeparatorParser to split statements."""
+class SFCliListener(querySeparatorListener):
+    """SFCliListener uses client side mini parser SFCliParser(querySeparatorParser)
+    to split statements by recording the level 1 statement boundaries when parser
+    enter and exit Statement and AnonymousBlock.
+    """
 
     def __init__(self):
         self.result = []
@@ -82,7 +87,7 @@ def sep_sqls(
     sqltext: str,
     remove_comments: bool = False,
 ):
-    """separate sql scripts
+    """Separate sql scripts
     input:
       sqltext - the sql script string
       remove_comments - whether to remove comments in sql script
@@ -96,10 +101,10 @@ def sep_sqls(
     lexer = querySeparatorLexer(sqlstream)
     token_stream = CommonTokenStream(lexer)
 
-    parser = sfcliSeparatorParser(token_stream)
+    parser = SFCliParser(token_stream)
     tree = parser.queriesText()
 
-    listener = sfSqlSeparatorListener()
+    listener = SFCliListener()
     ParseTreeWalker.DEFAULT.walk(listener, tree)
 
     stmt_list = []
@@ -156,7 +161,7 @@ def sep_sqls(
     else:
         # when we don't need to remove comments.
         # here is to simulate how the old way of splitting
-        # attach comments with last or next statement:
+        # attaches comments with last or next statement:
         #   we already have begin and end positions of a statement,
         #    -- only the comment begins with '--' and '//' on the same line
         #      that immediately follows the statement will go with this (prev) statement,

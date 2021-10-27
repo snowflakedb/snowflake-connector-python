@@ -14,7 +14,15 @@ from .antlr.sql_separator import is_put_or_get, sep_sqls
 _logger = logging.getLogger(__name__)
 
 # the pattern match a full line of comment
-sf_comment_cmd_pattern = re.compile(r"(\n|\r)+\s*--sf:.+(\n|\r)+")
+SF_COMMENT_CMD_PATTERN = re.compile(r"(\n|\r)+\s*--sf:.+(\n|\r)+")
+
+RE_SPLIT_OFF = re.compile(r"(\n|\r)+\s*--sf:\s*auto_split\s+off")
+
+RE_BEGIN_BLOCK = re.compile(r"(\n|\r)+\s*--sf:\s*<<\s*(\n|\r)+")
+
+RE_END_BLOCK = re.compile(r"(\n|\r)+\s*--sf:\s*>>\s*(\n|\r)+")
+
+RE_SEPARATOR = re.compile(r"(\n|\r)+\s*--sf:\s*<<>>\s*(\n|\r)+")
 
 
 class SQLDelimiter(object):
@@ -62,7 +70,7 @@ def split_statements_new(
     """
     sqltext = buf.read()
     sfcmds = []
-    for m in sf_comment_cmd_pattern.finditer(sqltext.lower()):
+    for m in SF_COMMENT_CMD_PATTERN.finditer(sqltext.lower()):
         sfcmds.append([m.start(), m.end()])
 
     # stmts to store the split result to return
@@ -70,10 +78,9 @@ def split_statements_new(
     is_put_get = []
     is_auto_split = True
 
+    sqltext_lower = sqltext.lower()
     for cmd in sfcmds:
-        if is_auto_split and re.match(
-            r"(\n|\r)+\s*--sf:\s*auto_split\s+off", sqltext[cmd[0] : cmd[1]].lower()
-        ):
+        if is_auto_split and RE_SPLIT_OFF.match(sqltext_lower, cmd[0], cmd[1]):
             _logger.info("auto_split off")
             is_auto_split = False
     starting_pos_of_block = -1  # not in block yet
@@ -84,19 +91,19 @@ def split_statements_new(
     pieces = []
 
     for cmd in sfcmds:
-        if starting_pos_of_block < 0 and re.match(
-            r"(\n|\r)+\s*--sf:\s*<<\s*(\n|\r)+", sqltext[cmd[0] : cmd[1]].lower()
+        if starting_pos_of_block < 0 and RE_BEGIN_BLOCK.match(
+            sqltext_lower, cmd[0], cmd[1]
         ):
             starting_pos_of_block = cmd[1]
             pieces.append([0, sqltext[last_pos : (cmd[0])]])
-        elif starting_pos_of_block > 0 and re.match(
-            r"(\n|\r)+\s*--sf:\s*>>\s*(\n|\r)+", sqltext[cmd[0] : cmd[1]].lower()
+        elif starting_pos_of_block > 0 and RE_END_BLOCK.match(
+            sqltext_lower, cmd[0], cmd[1]
         ):
             pieces.append([1, sqltext[starting_pos_of_block : (cmd[0])]])
             last_pos = cmd[1]
             starting_pos_of_block = -1
-        elif starting_pos_of_block < 0 and re.match(
-            r"(\n|\r)+\s*--sf:\s*<<>>\s*(\n|\r)+", sqltext[cmd[0] : cmd[1]].lower()
+        elif starting_pos_of_block < 0 and RE_SEPARATOR.match(
+            sqltext_lower, cmd[0], cmd[1]
         ):
             pieces.append([0, sqltext[last_pos : (cmd[0])]])
             last_pos = cmd[1]

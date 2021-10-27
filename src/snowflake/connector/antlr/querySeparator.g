@@ -1,55 +1,106 @@
 grammar querySeparator;
 
+//to detect URL prefixes so we could differentiate URLPath and comments in lexer
+// prefixes set in lexer.prefixes to allow pre-processing.
 @lexer::members {
-def any_prefix(self, strlist):
-        for to_match in strlist:
-            matched = True
-            for i in range(len(to_match)):
-                if self._input.LA(i + 1) != ord(to_match[i]):
-                    matched = False
-                    break
-            if matched:
-                return matched
-        return False
+    self.prefixes = {"URL": set(["sfc://", "file://", "s3://", "S3://"])}
+    self.strpattern_idxs = {}
+
+def any_prefix(self, prefix_type):
+            if self.strpattern_idxs.get(prefix_type) is None:
+                self.strpattern_idxs[prefix_type] = set()
+
+                for prefix in self.prefixes.get(prefix_type):
+                    pos = self._input.strdata.find(prefix)
+                    while pos >= 0:
+                        self.strpattern_idxs[prefix_type].add(pos)
+                        pos = self._input.strdata.find(prefix, pos+1)
+
+            if self._input._index in self.strpattern_idxs.get(prefix_type):
+                return True
+            return False
 
 
 }
 // Method for hacky look ahead for createFuncProc pattern detection
+// There are several considerations:
+// 1, is_create_func_proc() will be called many times since 'statement' here is more generic.
+// 2, when is_create_func_proc is called, not all the tokens are ready. so a cached solution
+//    has to be incremental
 @parser::members {
-    import re
-    self.createFuncProcMatch = re.compile(
-        r'CREATE(\w|\s)*(PROCEDURE|FUNCTION)')
+    self.patterns = {}
+    self.token_groups = {}
+    self.last_tok_idx = 0
 
-def isCreateFuncProc(self):
-        tok_list = self.ahead("CREATE")
-        if len(tok_list) < 2:
-            return False
+def token_group_by_type(self):
+        lexered_tok_num = len(self._input.tokens)
+        if len(self.token_groups) > 0 and self.last_tok_idx >= lexered_tok_num:
+            return
+        for self.last_tok_idx in range(self.last_tok_idx, lexered_tok_num):
+            tok = self._input.tokens[self.last_tok_idx]
+            if self.token_groups.get(tok.type) is None:
+                self.token_groups[tok.type] = set()
+            self.token_groups[tok.type].add(tok.tokenIndex)
 
-        input_str = ' '.join(tok_list)
-        result = self.createFuncProcMatch.match(input_str)
-        if result is None:
-            #print("not match CREATEFUNC:" + input_str)
-            return False
+def is_create_func_proc(self):
+        """ looking for "create [^;] (function|procedure)" pattern
+        """
+        from snowflake.connector.antlr.querySeparatorLexer import querySeparatorLexer
+        found: set = self.patterns.get("CREATEPROC")
+        if found is None or self.last_tok_idx < (len(self._input.tokens)-1):
+            self.token_group_by_type()
+            self.patterns["CREATEPROC"] = set()
+            found = self.search_token_seq("CREATEPROC",
+                                          self._input.index,
+                                          [[querySeparatorLexer.KW_CREATE],
+                                           [querySeparatorLexer.KW_PROCEDURE, querySeparatorLexer.KW_FUNCTION]],
+                                          [querySeparatorLexer.CLI_DELIMITER]
+                                          )
 
-        #print("got CREATEFUNC:" + input_str)
-        return True
+        cur = self._input.index
+        if cur in found:
+            return True
 
-def ahead(self, begin_tok):
-        MAX_SQL_LEN = 1024 * 1024 * 1024
-        look_ahead = []
+        return False
 
-        next = self._input.LT(1)
-        if next.text.upper() != begin_tok:
-           return []
-        i = 0
-        while i < MAX_SQL_LEN:
-            i += 1
-            next = self._input.LT(i)
-            if (not next is None) and (next.type == Token.EOF):
-                break
-            look_ahead.append(next.text.upper())
+def search_token_seq(self, search_name,
+                         search_start,
+                         search_seq,
+                         terminators):
+        """
+        search a token pattern by using search_seq and terminators list.
+        -- search_seq is an list of list for token type. the search is to
+         find all tokens matching these types in order,
+         [[KW_CREATE], [KW_PROC,kW_FUNC]] means any token sequence that are
+         "KW_CREATE... KW_PROC" _OR_  "KW_CREATE... KW_FUNC" will be a match
+        -- terminators: the search will stop any time when hit a token type
+         in terminators
+        we expect no nested pattern e.g. KW_CREATE..KW_CREATE..KW_PROC..KW_PROC
+        """
+        search_result = set()
+        self.patterns[search_name] = search_result
+        search_tok_sets = [set(itr) for itr in search_seq]
+        search_terminator_set = set(terminators)
+        search_idx = 0
+        tok_idx = search_start
 
-        return look_ahead
+        while search_idx < len(search_tok_sets) and tok_idx < len(self._input.tokens)-1:
+            if self._input.tokens[tok_idx] in search_terminator_set:
+                search_idx = 0
+                tok_idx += 1
+                continue
+
+            if self._input.tokens[tok_idx].type in search_tok_sets[search_idx]:
+
+                if search_idx == 0:  # mark the start position of matching pattern
+                    start_pos = tok_idx
+                search_idx += 1
+            tok_idx += 1
+
+            if search_idx == len(search_seq):
+                search_result.add(start_pos)
+
+        return search_result
 }
 
 // To support case insensitive keywords
@@ -213,7 +264,7 @@ COMMENT:
 
 // Define URLPath To distinct from comment, since there could be // and /* in URLPath
 URLPath:
-    {self.any_prefix(["sfc://", "file://", "s3://", "S3://"])}? NonWhiteSpace+
+    {self.any_prefix("URL")}? NonWhiteSpace+
     ;
 
 // Use NonSeparator so comment is not part of a "GeneralWord"
@@ -233,8 +284,9 @@ SpecialCommand :
     '!' Letter+ ~('\n'|'\r')* '\r'? '\n'?
     ;
 
-// chars not separated by whitespace or ';'
-word :
+// boringWord are chars not separated by whitespace or ';' in which we are not interested
+// for our limited purpose(top level statement split).
+boringWord :
     (UNDERSCORE | allOperators | allSymbols | GeneralWord | URLPath)+
     ;
 
@@ -246,7 +298,7 @@ queriesText
 
 statement :
     CLI_DELIMITER*
-    ({self.isCreateFuncProc()}? createFunctionStatement // create function/proc as begin...end
+    ({self.is_create_func_proc()}? createFunctionStatement // create function/proc as begin...end
     | transactionStatement // not seeking begin trans.. commit/end
     | anonymousBlock  // (declare..)? begin...end
     | SpecialCommand
@@ -259,7 +311,7 @@ anonymousBlock :
     ;
 
 transactionStatement :
-    KW_BEGIN (KW_WORK | KW_TRANSACTION)? (KW_NAME word)?
+    KW_BEGIN (KW_WORK | KW_TRANSACTION)? (KW_NAME boringWord)?
     ;
 
 normalStatements :
@@ -270,16 +322,16 @@ caseExpr : KW_CASE statementBody KW_END
     ;
 
 statementBody :
-    (allKeywordsExceptEnd | word | StringLiteral | caseExpr)+
+    (allKeywordsExceptEnd | boringWord | StringLiteral | caseExpr)+
     ;
 
 noKeywordStatement :
-    (word | StringLiteral)+
+    (boringWord | StringLiteral)+
     ;
 
 createFunctionStatement :
-    KW_CREATE orReplace? (temporary | KW_SECURE | KW_EXTERNAL | word)* funcOrProc
-    word* KW_AS
+    KW_CREATE orReplace? (temporary | KW_SECURE | KW_EXTERNAL | boringWord)* funcOrProc
+    boringWord* KW_AS
     funcOrProcBody
     CLI_DELIMITER*
     ;
@@ -301,7 +353,7 @@ funcOrProcBody :
     | anonymousBlock
     ;
 
-beginEndBlock : KW_BEGIN statementInBlock* KW_END word? ;
+beginEndBlock : KW_BEGIN statementInBlock* KW_END boringWord? ;
 
 //do not consider createFuncProc in block
 statementInBlock :

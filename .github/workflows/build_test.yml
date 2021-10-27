@@ -65,8 +65,6 @@ jobs:
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
-      - name: Install certifi for antlr downloading
-        run: python -m pip install certifi
       - name: Creating source distribution
         run: python setup.py sdist
       - name: Show sdist generated
