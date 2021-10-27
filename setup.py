@@ -51,8 +51,8 @@ cmd_class = {}
 
 pandas_requirements = [
     # Must be kept in sync with pyproject.toml
-    "pyarrow>=4.0.0",
-    "pandas>=1.0.0,<1.3.0",
+    "pyarrow>=6.0.0",
+    "pandas>=1.0.0",
 ]
 
 try:
@@ -87,14 +87,14 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
-            "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
+            "linux": ["libarrow.so.600", "libarrow_python.so.600"],
+            "darwin": ["libarrow.600.dylib", "libarrow_python.600.dylib"],
             "win32": ["arrow.dll", "arrow_python.dll"],
         }
 
         arrow_libs_to_link = {
-            "linux": ["libarrow.so.300", "libarrow_python.so.300"],
-            "darwin": ["libarrow.300.dylib", "libarrow_python.300.dylib"],
+            "linux": ["libarrow.so.600", "libarrow_python.so.600"],
+            "darwin": ["libarrow.600.dylib", "libarrow_python.600.dylib"],
             "win32": ["arrow.lib", "arrow_python.lib"],
         }
 
@@ -213,9 +213,9 @@ setup(
         "requests<3.0.0",
         "pytz",
         "pycryptodomex>=3.2,!=3.5.0,<4.0.0",
-        "pyOpenSSL>=16.2.0,<21.0.0",
+        "pyOpenSSL>=16.2.0",
         "cffi>=1.9,<2.0.0",
-        "cryptography>=2.5.0,<4.0.0",
+        "cryptography>=2.5.0",
         "pyjwt<3.0.0",
         "oscrypto<2.0.0",
         "asn1crypto>0.24.0,<2.0.0",
