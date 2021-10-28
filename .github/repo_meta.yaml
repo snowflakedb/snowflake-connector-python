@@ -1,0 +1,4 @@
+point_of_contact: @snowflakedb/client
+production: true
+code_owners_file_present: true
+jira_area: Snowpark: Application Development Ecosystem
