@@ -9,12 +9,15 @@ import warnings
 from codecs import open
 from shutil import copy
 from sys import platform
+from typing import AnyStr
 
 from setuptools import Extension, setup
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 SRC_DIR = os.path.join(THIS_DIR, "src")
 CONNECTOR_SRC_DIR = os.path.join(SRC_DIR, "snowflake", "connector")
+
+GRAMMAR_FILE = "querySeparator.g"
 
 VERSION = (1, 1, 1, None)  # Default
 try:
@@ -70,27 +73,22 @@ except ImportError as ie:
 if _ABLE_TO_ANTLR_CODEGEN:
 
     class Codegen:
-        """This class provide 1, download ANTLR4 jar file,
-        2, run org.antlr.v4.Tool to generate python stub files from querySeparator.g.
-        """
+        """Codegen class to generate python stub from ANTLR grammar file."""
 
         ANTLR_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "antlr")
         ANTLR_VER = "4.9.2"
         ANTLR_JAR = f"antlr-{ANTLR_VER}-complete.jar"
 
-        def init_options(self):
-            """Codegen is used in Codegen{Build|Sdist}. init_options and finalize_options are provided accordingly."""
-            self.grammar_file = os.path.join(Codegen.ANTLR_SRC_DIR, "querySeparator.g")
-            self.target_language = "Python3"
+        def __init__(self):
+            self.grammar_file = os.path.join(Codegen.ANTLR_SRC_DIR, GRAMMAR_FILE)
             self.antlr_url = "https://www.antlr.org/download/antlr-4.9.2-complete.jar"
 
-        def finalize_options(self):
-            if self.grammar_file:
-                assert os.path.isfile(self.grammar_file), (
-                    "grammar file %s does not exist." % self.grammar_file
-                )
+        def set_config(self, grammar, antlr_url):
+            self.grammar_file = grammar
+            self.antlr_url = antlr_url
 
-        def download_with_certifi(self, url, dstpath):
+        @staticmethod
+        def download_with_certifi(url, dstpath):
             try:
                 import certifi
 
@@ -103,23 +101,27 @@ if _ABLE_TO_ANTLR_CODEGEN:
                 if has_certifi:
                     resp = urllib.request.urlopen(url, cafile=certifi.where())
                 else:
+                    # without certifi, this urlopen could fail
                     resp = urllib.request.urlopen(url)
                 file_data = resp.read()
                 with open(dstpath, "wb") as f:
                     f.write(file_data)
 
-        def run(self):
+        @staticmethod
+        def myrun(antlr_jar: AnyStr, antlr_url: str, grammar_file: str):
+            target_language = "Python3"
             # download antlr-4.9.2-complete.jar
-            jar_path = os.path.join(THIS_DIR, self.ANTLR_JAR)
-            self.download_with_certifi(self.antlr_url, jar_path)
+            jar_path = os.path.join(THIS_DIR, antlr_jar)
+
+            Codegen.download_with_certifi(antlr_url, jar_path)
             # run command to generate python stub
             command = [
                 "java",
                 "-cp",
                 jar_path,
                 "org.antlr.v4.Tool",
-                "-Dlanguage=%s" % self.target_language,
-                self.grammar_file,
+                "-Dlanguage=%s" % target_language,
+                grammar_file,
             ]
 
             subprocess.check_call(command)
@@ -127,43 +129,59 @@ if _ABLE_TO_ANTLR_CODEGEN:
             # if remove_jar_flag:
             #    os.remove(jar_path)
 
-    class CodegenBuild(dist_build.build):
-        """Codegen command to generate python code from ANTLR4 definition"""
+        def run(self):
+            try:
+                Codegen.myrun(self.ANTLR_JAR, self.antlr_url, self.grammar_file)
+            except Exception as e:
+                # retry logic if needed (e.g. failed due to download).
+                warnings.warn(f"failure thrown in codegen {e}")
+                raise
 
+    class CodegenStep(dist_build.build):
         description = "download then run antlr4 to generate ANTLR4 python stub"
         user_options = [
             ("grammar-file=", None, "path to grammar file"),
-            ("target-language=", None, "target language(default=Python3)"),
             ("antlr-url=", None, "url to download antlr-X.Y.Z-complete.jar"),
         ]
 
         def initialize_options(self):
+            self.grammar_file = os.path.join(Codegen.ANTLR_SRC_DIR, "querySeparator.g")
+            self.antlr_url = "https://www.antlr.org/download/antlr-4.9.2-complete.jar"
             self.codegen = Codegen()
-            self.codegen.init_options()
             super().initialize_options()
 
         def finalize_options(self):
-            self.codegen.finalize_options()
             super().finalize_options()
 
         def run(self):
+            self.codegen.set_config(self.grammar_file, self.antlr_url)
             self.codegen.run()
+            super().run()
+
+    cmd_class["codegen"] = CodegenStep
+
+    class CodegenBuild(dist_build.build):
+        """This customized build command will trigger Codegen.run()"""
+
+        description = "custom build command that will generate ANTLR4 python stub"
+
+        def initialize_options(self):
+            super().initialize_options()
+
+        def finalize_options(self):
+            super().finalize_options()
+
+        def run(self):
+            Codegen().run()
             super().run()
 
     cmd_class["build"] = CodegenBuild
 
     class CodegenSdist(dist_sdist.sdist):
-        def initialize_options(self):
-            self.codegen = Codegen()
-            self.codegen.init_options()
-            super().initialize_options()
-
-        def finalize_options(self):
-            self.codegen.finalize_options()
-            super().finalize_options()
+        """This customized sdist command will trigger Codegen.run()"""
 
         def run(self):
-            self.codegen.run()
+            Codegen().run()
             super().run()
 
     cmd_class["sdist"] = CodegenSdist
