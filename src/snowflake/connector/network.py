@@ -54,6 +54,7 @@ from .description import (
 )
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
+    ER_CONNECTION_TIMEOUT,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REQUEST,
@@ -90,7 +91,13 @@ from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
-from .vendored.requests.exceptions import InvalidProxyURL, SSLError
+from .vendored.requests.exceptions import (
+    ConnectionError,
+    ConnectTimeout,
+    InvalidProxyURL,
+    ReadTimeout,
+    SSLError,
+)
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError
 from .vendored.urllib3.util.url import parse_url
@@ -1035,6 +1042,18 @@ class SnowflakeRestful(object):
                 stack_trace=traceback.format_exc(),
             )
 
+        except (ConnectionError, ReadTimeout, ConnectTimeout) as err:
+            logger.debug(
+                "Hit a timeout error. Will be handled by authenticator. "
+                "Ignore the following. "
+                "Error stack: %s ",
+                err,
+                exc_info=True,
+            )
+            raise OperationalError(
+                msg="ConnectionTimeout occurred. Will be handled by authenticator",
+                errno=ER_CONNECTION_TIMEOUT,
+            )
         except (
             BadStatusLine,
             IncompleteRead,
