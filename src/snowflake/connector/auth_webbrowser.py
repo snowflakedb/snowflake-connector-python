@@ -6,6 +6,7 @@
 
 import json
 import logging
+import os
 import socket
 import time
 import webbrowser
@@ -95,7 +96,9 @@ class AuthByWebBrowser(AuthByPlugin):
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             try:
-                socket_connection.bind(("localhost", 0))
+                socket_addr = os.getenv("SF_AUTH_SOCKET_ADDR", "localhost")
+                socket_port = int(os.getenv("SF_AUTH_SOCKET_PORT", 0))
+                socket_connection.bind((socket_addr, socket_port))
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
