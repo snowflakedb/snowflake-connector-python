@@ -1042,35 +1042,39 @@ class SnowflakeRestful(object):
                 stack_trace=traceback.format_exc(),
             )
 
-        except (ConnectionError, ReadTimeout, ConnectTimeout) as err:
-            logger.debug(
-                "Hit a timeout error. Will be handled by authenticator. "
-                "Ignore the following. "
-                "Error stack: %s ",
-                err,
-                exc_info=True,
-            )
-            raise OperationalError(
-                msg="ConnectionTimeout occurred. Will be handled by authenticator",
-                errno=ER_CONNECTION_TIMEOUT,
-            )
         except (
             BadStatusLine,
+            ConnectionError,
+            ConnectTimeout,
             IncompleteRead,
             ProtocolError,  # from urllib3  # from urllib3
             OpenSSL.SSL.SysCallError,
             KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
             ValueError,
+            ReadTimeout,
             RuntimeError,
             AttributeError,  # json decoding error
         ) as err:
-            logger.debug(
-                "Hit retryable client error. Retrying... Ignore the following "
-                "error stack: %s",
-                err,
-                exc_info=True,
-            )
-            raise RetryRequest(err)
+            parsed_url = parse_url(full_url)
+            if "login-request" in parsed_url.path:
+                logger.debug(
+                    "Hit a timeout error while logging in. Will be handled by "
+                    "authenticator. Ignore the following. Error stack: %s ",
+                    err,
+                    exc_info=True,
+                )
+                raise OperationalError(
+                    msg="ConnectionTimeout occurred. Will be handled by authenticator",
+                    errno=ER_CONNECTION_TIMEOUT,
+                )
+            else:
+                logger.debug(
+                    "Hit retryable client error. Retrying... Ignore the following "
+                    "error stack: %s",
+                    err,
+                    exc_info=True,
+                )
+                raise RetryRequest(err)
         except Exception as err:
             TelemetryService.get_instance().log_http_request_error(
                 "HttpException%s" % str(err),
