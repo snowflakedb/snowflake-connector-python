@@ -122,7 +122,7 @@ def test_is_still_running():
         (QueryStatus.RESUMING_WAREHOUSE, True),
         (QueryStatus.QUEUED_REPARING_WAREHOUSE, True),
         (QueryStatus.RESTARTED, False),
-        (QueryStatus.BLOCKED, False),
+        (QueryStatus.BLOCKED, True),
         (QueryStatus.NO_DATA, True),
     ]
     for status, expected_result in statuses:
