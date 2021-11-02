@@ -54,6 +54,7 @@ from .errorcode import (
 from .errors import (
     DatabaseError,
     Error,
+    IntegrityError,
     InterfaceError,
     NotSupportedError,
     ProgrammingError,
@@ -780,8 +781,10 @@ class SnowflakeCursor:
                 "sqlstate": self._sqlstate,
                 "sfqid": self._sfqid,
             }
+            is_integrity_error = code == "100072"  # NULL result in a non-nullable column
+            error_class = IntegrityError if is_integrity_error else ProgrammingError
             Error.errorhandler_wrapper(
-                self.connection, self, ProgrammingError, errvalue
+                self.connection, self, error_class, errvalue
             )
         return self
 

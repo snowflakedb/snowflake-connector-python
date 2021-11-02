@@ -975,6 +975,15 @@ def test_fetch_out_of_range_timestamp_value(conn, result_format):
             cur.fetchone()
 
 
+@pytest.mark.skipolddriver
+def test_null_in_non_null(conn):
+    with conn() as cnx:
+        cur = cnx.cursor()
+        cur.execute("create table null_in_non_null(bar char not null)")
+        with pytest.raises(errors.IntegrityError):
+            cur.execute('insert into null_in_non_null values (null)')
+
+
 @pytest.mark.parametrize("sql", (None, ""), ids=["None", "empty"])
 def test_empty_execution(conn, sql):
     """Checks whether executing an empty string, or nothing behaves as expected."""
