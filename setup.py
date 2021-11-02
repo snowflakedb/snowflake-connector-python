@@ -199,7 +199,7 @@ setup(
         "Code": "https://github.com/snowflakedb/snowflake-connector-python",
         "Issue tracker": "https://github.com/snowflakedb/snowflake-connector-python/issues",
     },
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     install_requires=[
         # While requests is vendored, we use regular requests to perform OCSP checks
         "requests<3.0.0",
@@ -274,7 +274,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: SQL",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

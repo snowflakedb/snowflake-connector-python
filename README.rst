@@ -26,7 +26,7 @@ using the Snowflake JDBC or ODBC drivers.
 
 The connector has no dependencies on JDBC or ODBC.
 It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
-where Python 3.6.0 (or higher) is installed.
+where Python 3.7.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
 https://docs.snowflake.com/

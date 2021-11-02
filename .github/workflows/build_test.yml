@@ -28,7 +28,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.6'
+          python-version: '3.7'
       - name: Display Python version
         run: python -c "import sys; import os; print(\"\n\".join(os.environ[\"PATH\"].split(os.pathsep))); print(sys.version); print(sys.executable);"
       - name: Upgrade setuptools, pip and wheel
@@ -53,7 +53,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.6'
+          python-version: '3.7'
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools, pip, wheel and build
@@ -68,7 +68,7 @@ jobs:
           path: dist/
 
   whitesource:
-    name: Whitesource linux-3.6
+    name: Whitesource linux-3.7
     needs: lint
     runs-on: ubuntu-latest
     steps:
@@ -76,7 +76,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.6
+          python-version: 3.7
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools, pip, wheel and build
@@ -97,7 +97,7 @@ jobs:
     container: quay.io/pypa/manylinux2010_x86_64
     strategy:
       matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: [3.7, 3.8, 3.9]
     steps:
       - uses: actions/checkout@v1
       - name: Updating path
@@ -129,8 +129,6 @@ jobs:
     strategy:
       matrix:
         python:
-          - version: 3.6
-            link: https://www.python.org/ftp/python/3.6.8/python-3.6.8-macosx10.9.pkg
           - version: 3.7
             link: https://www.python.org/ftp/python/3.7.0/python-3.7.0-macosx10.9.pkg
           - version: 3.8
@@ -166,7 +164,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: [3.7, 3.8, 3.9]
     steps:
       - uses: actions/checkout@v2
       - name: Setup python
@@ -203,7 +201,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.6'
+          python-version: '3.7'
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools, pip and wheel
@@ -225,7 +223,7 @@ jobs:
            download_name: macos
          - image_name: windows-latest
            download_name: windows
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: [3.7, 3.8, 3.9]
         cloud-provider: [aws, azure, gcp]
     steps:
       - uses: actions/checkout@v2
@@ -312,7 +310,7 @@ jobs:
         shell: bash
 
   test-fips:
-    name: Test FIPS linux-3.6-${{ matrix.cloud-provider }}
+    name: Test FIPS linux-3.7-${{ matrix.cloud-provider }}
     needs: build-manylinux
     runs-on: ubuntu-latest
     strategy:
@@ -331,7 +329,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v2
         with:
-          name: linux_py3.6
+          name: linux_py3.7
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -343,14 +341,14 @@ jobs:
       - name: Run tests
         run: ./ci/test_fips_docker.sh
         env:
-          PYTHON_VERSION: 3.6
+          PYTHON_VERSION: 3.7
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v2
         with:
-          name: coverage_linux-fips-3.6-${{ matrix.cloud-provider }}
+          name: coverage_linux-fips-3.7-${{ matrix.cloud-provider }}
           path: |
             .coverage
             coverage.xml
@@ -368,7 +366,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.6'
+          python-version: '3.7'
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
