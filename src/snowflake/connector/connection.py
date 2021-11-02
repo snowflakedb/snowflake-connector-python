@@ -1435,9 +1435,10 @@ class SnowflakeConnection(object):
         """Checks whether given status is currently running."""
         return status in (
             QueryStatus.RUNNING,
-            QueryStatus.RESUMING_WAREHOUSE,
             QueryStatus.QUEUED,
+            QueryStatus.RESUMING_WAREHOUSE,
             QueryStatus.QUEUED_REPARING_WAREHOUSE,
+            QueryStatus.BLOCKED,
             QueryStatus.NO_DATA,
         )
 
