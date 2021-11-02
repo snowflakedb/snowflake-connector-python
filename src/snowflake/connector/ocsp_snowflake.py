@@ -223,7 +223,7 @@ class SSDPubKey(object):
 class OCSPServer(object):
     MAX_RETRY = int(os.getenv("OCSP_MAX_RETRY", "3"))
 
-    def __init__(self):
+    def __init__(self, is_cache_enabled: bool):
         self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
         """
         The following will change to something like
@@ -244,9 +244,8 @@ class OCSPServer(object):
         else:
             self.CACHE_SERVER_URL = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
 
-        self.CACHE_SERVER_ENABLED = (
-            os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
-        ) or (os.getenv("DISABLE_OCSP_CACHE", "True") != "False")
+        self.CACHE_ENABLED = is_cache_enabled
+
         # OCSP dynamic cache server URL pattern
         self.OCSP_RETRY_URL = None
 
@@ -276,20 +275,11 @@ class OCSPServer(object):
         self.CACHE_SERVER_URL = "".join([temp_ocsp_endpoint, "fetch"])
         self.OCSP_RETRY_URL = "".join([temp_ocsp_endpoint, "retry"])
 
-    def reset_ocsp_dynamic_cache_server_url(self, use_ocsp_cache_server):
+    def reset_ocsp_dynamic_cache_server_url(self):
         """Resets OCSP dynamic cache server url pattern.
 
         This is used only when OCSP cache server is updated.
         """
-        if use_ocsp_cache_server is not None:
-            self.CACHE_SERVER_ENABLED = use_ocsp_cache_server
-
-        if self.CACHE_SERVER_ENABLED:
-            logger.debug(
-                "OCSP response cache server is enabled: %s", self.CACHE_SERVER_URL
-            )
-        else:
-            logger.debug("OCSP response cache server is disabled")
 
         if self.OCSP_RETRY_URL is None:
             if self.CACHE_SERVER_URL is not None and (
@@ -323,8 +313,8 @@ class OCSPServer(object):
                         )
         logger.debug("OCSP dynamic cache server RETRY URL: %s", self.OCSP_RETRY_URL)
 
-    def download_cache_from_server(self, ocsp, is_cache_enabled):
-        if self.CACHE_SERVER_ENABLED and is_cache_enabled:
+    def download_cache_from_server(self, ocsp):
+        if ocsp.get_cache_status():
             # if any of them is not cache, download the cache file from
             # OCSP response cache server.
             try:
@@ -351,6 +341,11 @@ class OCSPServer(object):
     @staticmethod
     def _download_ocsp_response_cache(ocsp, url, do_retry=True):
         """Downloads OCSP response cache from the cache server."""
+
+        if not ocsp.get_cache_status():
+            logger.debug(" Skip downloading cache since the cache has been disabled")
+            return
+
         headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
         sf_timeout = SnowflakeOCSP.OCSP_CACHE_SERVER_CONNECTION_TIMEOUT
 
@@ -431,6 +426,8 @@ class OCSPCache(object):
     # OCSP cache update flag
     CACHE_UPDATED = False
 
+    CACHE_DISABLED = False
+
     # Cache Expiration in seconds (120 hours). OCSP validation cache is
     # invalidated every 120 hours (5 days)
     CACHE_EXPIRATION = 432000
@@ -489,6 +486,7 @@ class OCSPCache(object):
 
     @staticmethod
     def reset_ocsp_response_cache_uri(ocsp_response_cache_uri, is_ocsp_cache_enabled):
+
         if not is_ocsp_cache_enabled:
             logger.debug("Skipping reset ocsp response cache since cache is disabled")
             return
@@ -510,9 +508,9 @@ class OCSPCache(object):
         logger.debug("OCSP_VALIDATION_CACHE size: %s", len(OCSPCache.CACHE))
 
     @staticmethod
-    def read_file(ocsp, is_ocsp_cache_enabled):
+    def read_file(ocsp):
         """Reads OCSP Response cache data from the URI, which is very likely a file."""
-        if not is_ocsp_cache_enabled:
+        if not ocsp.get_cache_status():
             logger.debug("Not reading OCSP Cache since cache is disabled")
             return
         try:
@@ -539,6 +537,10 @@ class OCSPCache(object):
     @staticmethod
     def read_ocsp_response_cache_file(ocsp, filename):
         """Reads OCSP Response cache."""
+        if not ocsp.get_cache_status():
+            logger.debug("Skip reading cache file since cache is disabled")
+            return
+
         try:
             if OCSPCache.check_ocsp_response_cache_lock_dir(filename) and path.exists(
                 filename
@@ -561,11 +563,10 @@ class OCSPCache(object):
             raise ex
 
     @staticmethod
-    def update_file(ocsp, is_cache_enabled):
+    def update_file(ocsp):
         """Updates OCSP Respone Cache file."""
-        if not is_cache_enabled:
-            logger.debug("Skipping updating cache file since cache is disabled")
-            return
+        if not ocsp.get_cache_status():
+            logger.debug("Skip updating cache file since cache has been disabled")
 
         with OCSPCache.CACHE_LOCK:
             if OCSPCache.CACHE_UPDATED:
@@ -577,6 +578,12 @@ class OCSPCache(object):
     @staticmethod
     def update_ocsp_response_cache_file(ocsp, ocsp_response_cache_uri):
         """Updates OCSP Response Cache."""
+        if not ocsp.get_cache_status():
+            logger.debug(
+                "Skipping updating ocsp response cache file since cache has been disabled"
+            )
+            return
+
         if ocsp_response_cache_uri is not None:
             try:
                 parsed_url = urlsplit(ocsp_response_cache_uri)
@@ -611,6 +618,12 @@ class OCSPCache(object):
     @staticmethod
     def write_ocsp_response_cache_file(ocsp, filename):
         """Writes OCSP Response Cache."""
+        if not ocsp.get_cache_status():
+            logger.debug(
+                "Skipping writing ocsp response cache file since cache has been disabled"
+            )
+            return
+
         logger.debug("writing OCSP response cache file to {}".format(filename))
         file_cache_data = {}
         ocsp.encode_ocsp_response_cache(file_cache_data)
@@ -676,8 +689,8 @@ class OCSPCache(object):
         return current_time - OCSPCache.CACHE_EXPIRATION <= ts
 
     @staticmethod
-    def find_cache(ocsp, cert_id, subject, is_cache_enabled):
-        if not is_cache_enabled:
+    def find_cache(ocsp, cert_id, subject):
+        if not ocsp.get_cache_status():
             logger.debug("Not looking up cache since cache is disabled")
             return False, None
 
@@ -724,6 +737,10 @@ class OCSPCache(object):
 
     @staticmethod
     def update_or_delete_cache(ocsp, cert_id, ocsp_response, ts):
+        if not ocsp.get_cache_status():
+            logger.debug("Skipping altering cache file since cache has been disabled")
+            return
+
         try:
             current_time = int(time.time())
             found, _ = OCSPCache.find_cache(ocsp, cert_id, None)
@@ -744,6 +761,9 @@ class OCSPCache(object):
 
     @staticmethod
     def update_cache(ocsp, cert_id, ocsp_response):
+        if not ocsp.get_cache_status():
+            logger.debug("Skipping cache update since cache is disabled")
+            return
         # Every time this is called the in memory cache will
         # be updated and written to disk.
         current_time = int(time.time())
@@ -754,6 +774,8 @@ class OCSPCache(object):
 
     @staticmethod
     def delete_cache(ocsp, cert_id):
+        if not ocsp.get_cache_status():
+            logger.debug("Skipping cache delete since cache is disabled")
         try:
             with OCSPCache.CACHE_LOCK:
                 hkey = ocsp.decode_cert_id_key(cert_id)
@@ -771,6 +793,10 @@ class OCSPCache(object):
 
         current_cache takes precedence over previous_cache.
         """
+        if not ocsp.get_cache_status():
+            logger.debug("Skipping cache merge since ocsp cache is disabled")
+            return
+
         try:
             OCSPCache.clear_cache()
             if previous_cache_filename:
@@ -968,7 +994,7 @@ class SnowflakeOCSP(object):
     # cache object
     OCSP_CACHE = OCSPCache()
 
-    OCSP_WHITELIST = re.compile(
+    OCSP_ALLOWLIST = re.compile(
         r"^"
         r"(.*\.snowflakecomputing\.com$"
         r"|(?:|.*\.)s3.*\.amazonaws\.com$"  # start with s3 or .s3 in the middle
@@ -1028,7 +1054,12 @@ class SnowflakeOCSP(object):
 
         self._use_post_method = use_post_method
         SnowflakeOCSP.SSD.check_ssd_support()
-        self.OCSP_CACHE_SERVER = OCSPServer()
+
+        self._is_cache_enabled = (
+            True if not os.getenv("DISABLE_OCSP_CACHE", False) else False
+        )
+
+        self.OCSP_CACHE_SERVER = OCSPServer(self._is_cache_enabled)
 
         self.debug_ocsp_failure_url = None
 
@@ -1044,25 +1075,20 @@ class SnowflakeOCSP(object):
             SnowflakeOCSP.SSD.clear_ssd_cache()
             SnowflakeOCSP.read_directives()
 
-        self._is_cache_enabled = (
-            True if not os.getenv("DISABLE_OCSP_CACHE", False) else False
-        )
         SnowflakeOCSP.OCSP_CACHE.reset_ocsp_response_cache_uri(
             ocsp_response_cache_uri, self._is_cache_enabled
         )
 
         if not OCSPServer.is_enabled_new_ocsp_endpoint():
-            self.OCSP_CACHE_SERVER.reset_ocsp_dynamic_cache_server_url(
-                use_ocsp_cache_server=self._is_cache_enabled
-            )
+            self.OCSP_CACHE_SERVER.reset_ocsp_dynamic_cache_server_url()
 
-        SnowflakeOCSP.OCSP_CACHE.read_file(self, self._is_cache_enabled)
+        SnowflakeOCSP.OCSP_CACHE.read_file(self)
 
     def validate_certfile(self, cert_filename, no_exception=False):
         """Validates that the certificate is NOT revoked."""
         cert_map = {}
         telemetry_data = OCSPTelemetryData()
-        telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
+        telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_ENABLED)
         telemetry_data.set_insecure_mode(False)
         telemetry_data.set_sfc_peer_host(cert_filename)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
@@ -1083,7 +1109,7 @@ class SnowflakeOCSP(object):
 
         do_retry = SnowflakeOCSP.get_ocsp_retry_choice()
 
-        m = not SnowflakeOCSP.OCSP_WHITELIST.match(hostname)
+        m = not SnowflakeOCSP.OCSP_ALLOWLIST.match(hostname)
         if m or hostname.startswith("ocspssd"):
             logger.debug("skipping OCSP check: %s", hostname)
             return [None, None, None, None, None]
@@ -1092,7 +1118,7 @@ class SnowflakeOCSP(object):
             self.OCSP_CACHE_SERVER.reset_ocsp_endpoint(hostname)
 
         telemetry_data = OCSPTelemetryData()
-        telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
+        telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_ENABLED)
         telemetry_data.set_insecure_mode(False)
         telemetry_data.set_sfc_peer_host(hostname)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
@@ -1120,7 +1146,7 @@ class SnowflakeOCSP(object):
             cert_data, telemetry_data, hostname, do_retry=do_retry
         )
 
-        SnowflakeOCSP.OCSP_CACHE.update_file(self, self._is_cache_enabled)
+        SnowflakeOCSP.OCSP_CACHE.update_file(self)
 
         any_err = False
         for err, _issuer, _subject, _cert_id, _ocsp_response in results:
@@ -1148,9 +1174,7 @@ class SnowflakeOCSP(object):
         Returns:
             True if in cache otherwise False, followed by the cached OCSP Response.
         """
-        found, cache = SnowflakeOCSP.OCSP_CACHE.find_cache(
-            self, cert_id, subject, self._is_cache_enabled
-        )
+        found, cache = SnowflakeOCSP.OCSP_CACHE.find_cache(self, cert_id, subject)
         return found, cache
 
     def get_account_from_hostname(self, hostname: str) -> str:
@@ -1359,17 +1383,13 @@ class SnowflakeOCSP(object):
         for issuer, subject in cert_data:
             # check if any OCSP response is NOT in cache
             cert_id, _ = self.create_ocsp_request(issuer, subject)
-            in_cache, _ = SnowflakeOCSP.OCSP_CACHE.find_cache(
-                self, cert_id, subject, self._is_cache_enabled
-            )
+            in_cache, _ = SnowflakeOCSP.OCSP_CACHE.find_cache(self, cert_id, subject)
             if not in_cache:
                 # not found any
                 break
 
         if not in_cache:
-            self.OCSP_CACHE_SERVER.download_cache_from_server(
-                self, self._is_cache_enabled
-            )
+            self.OCSP_CACHE_SERVER.download_cache_from_server(self)
 
     def _lazy_read_ca_bundle(self):
         """Reads the local cabundle file and cache it in memory."""
@@ -1738,6 +1758,8 @@ class SnowflakeOCSP(object):
     def encode_ocsp_response_cache(self, ocsp_response_cache_json):
         """Encodes OCSP response cache to JSON."""
         logger.debug("encoding OCSP response cache to JSON")
+        if not self._is_cache_enabled:
+            logger.debug("Skipping encoding ocsp cache since it is disabled")
         for hkey, (
             current_time,
             ocsp_response,
@@ -1882,6 +1904,9 @@ class SnowflakeOCSP(object):
             SnowflakeOCSP.SSD.update_pub_key(
                 ssd_issuer, ssd_pub_key_ver, ssd_pub_key_new
             )
+
+    def get_cache_status(self):
+        return self._is_cache_enabled
 
     def read_cert_bundle(self, ca_bundle_file, storage=None):
         """Reads a certificate file including certificates in PEM format."""
