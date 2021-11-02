@@ -56,10 +56,10 @@ jobs:
           python-version: '3.6'
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools, pip and wheel
-        run: python -m pip install -U setuptools pip wheel
+      - name: Upgrade setuptools, pip, wheel and build
+        run: python -m pip install -U setuptools pip wheel build
       - name: Creating source distribution
-        run: python setup.py sdist
+        run: python -m build --sdist .
       - name: Show sdist generated
         run: ls -lh dist
       - uses: actions/upload-artifact@v2
@@ -79,10 +79,10 @@ jobs:
           python-version: 3.6
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools, pip, wheel and virtualenv
-        run: python -m pip install -U setuptools pip wheel virtualenv
+      - name: Upgrade setuptools, pip, wheel and build
+        run: python -m pip install -U setuptools pip wheel build
       - name: Build Python connector
-        run: python -m pip wheel -v -w dist .
+        run: python -m build --wheel .
       - name: Show wheels generated
         run: ls -lh dist/
       - name: Run WhiteSource script
@@ -109,10 +109,10 @@ jobs:
           echo "/opt/python/cp39-cp39/bin/" >> $GITHUB_PATH
       - name: Display Python version
         run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools, pip and wheel
-        run: python${{ matrix.python-version }} -m pip install -U setuptools pip wheel
+      - name: Upgrade setuptools, pip, wheel and build
+        run: python${{ matrix.python-version }} -m pip install -U setuptools pip wheel build
       - name: Generate wheel
-        run: python${{ matrix.python-version }} -m pip wheel -v -w dist_tmp --no-deps .
+        run: python${{ matrix.python-version }} -m build --wheel --outdir dist_tmp .
       - name: Run auditwheel
         run: auditwheel repair --plat manylinux2014_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
       - name: Show wheels generated
@@ -147,10 +147,10 @@ jobs:
           python3 get-pip.py
       - name: Display Python version
         run: python3 -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools, pip and wheel
-        run: python3 -m pip install -U setuptools pip wheel
+      - name: Upgrade setuptools, pip, wheel and build
+        run: python3 -m pip install -U setuptools pip wheel build
       - name: Generate wheel
-        run: python3 -m pip wheel -v -w dist --no-deps .
+        run: python3 -m build --wheel .
         env:
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
       - name: Show wheels generated
@@ -175,10 +175,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools, pip and wheel
-        run: python -m pip install -U setuptools pip wheel
+      - name: Upgrade setuptools, pip, wheel and build
+        run: python -m pip install -U setuptools pip wheel build
       - name: Generate wheel
-        run: python -m pip wheel -v -w dist --no-deps .
+        run: python -m build --wheel .
       - name: Show wheels generated
         run: ls -lh dist
         shell: bash
