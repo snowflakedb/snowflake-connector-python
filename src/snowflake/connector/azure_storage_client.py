@@ -46,7 +46,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         credentials: Optional["StorageCredential"],
         chunk_size: int,
         stage_info: Dict[str, Any],
-        use_s3_regional_url: bool = False,
+        use_s3_regional_url: bool = False,  # NOQA
     ) -> None:
         super().__init__(meta, stage_info, chunk_size, credentials=credentials)
         end_point: str = stage_info["endPoint"]
