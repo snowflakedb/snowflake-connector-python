@@ -406,7 +406,7 @@ def test_ocsp_cache_merge(tmpdir):
 
 def test_building_retry_url():
     # privatelink retry url
-    OCSP_SERVER = OCSPServer()
+    OCSP_SERVER = OCSPServer(is_cache_enabled=True)
     OCSPCache.ACTIVATE_SSD = False
     OCSP_SERVER.OCSP_RETRY_URL = None
     OCSP_SERVER.CACHE_SERVER_URL = (
@@ -493,7 +493,7 @@ def test_building_retry_url():
 
 
 def test_building_new_retry():
-    OCSP_SERVER = OCSPServer()
+    OCSP_SERVER = OCSPServer(is_cache_enabled=True)
     OCSPCache.ACTIVATE_SSD = False
     OCSP_SERVER.OCSP_RETRY_URL = None
     hname = "a1.us-east-1.snowflakecomputing.com"
