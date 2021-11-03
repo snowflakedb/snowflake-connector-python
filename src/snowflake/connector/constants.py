@@ -192,9 +192,6 @@ HTTP_HEADER_SERVICE_NAME = "X-Snowflake-Service"
 
 HTTP_HEADER_VALUE_OCTET_STREAM = "application/octet-stream"
 
-DEFAULT_S3_CONNECTION_POOL_SIZE = 10
-MAX_S3_CONNECTION_POOL_SIZE = 20
-
 
 @unique
 class OCSPMode(Enum):
