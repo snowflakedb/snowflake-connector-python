@@ -10,7 +10,7 @@ from codecs import open
 from shutil import copy
 from sys import platform
 
-from setuptools import Extension, setup
+from setuptools import Extension, find_namespace_packages, setup
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 SRC_DIR = os.path.join(THIS_DIR, "src")
@@ -221,19 +221,9 @@ setup(
         "certifi>=2017.4.17",
     ],
     namespace_packages=["snowflake"],
-    packages=[
-        "snowflake.connector",
-        "snowflake.connector.tool",
-        "snowflake.connector.vendored",
-        "snowflake.connector.vendored.requests",
-        "snowflake.connector.vendored.urllib3",
-        "snowflake.connector.vendored.urllib3.packages",
-        "snowflake.connector.vendored.urllib3.packages.ssl_match_hostname",
-        "snowflake.connector.vendored.urllib3.packages.backports",
-        "snowflake.connector.vendored.urllib3.contrib",
-        "snowflake.connector.vendored.urllib3.contrib._securetransport",
-        "snowflake.connector.vendored.urllib3.util",
-    ],
+    packages=find_namespace_packages(
+        where="src", include=["snowflake.*"], exclude=["snowflake.connector.cpp*"]
+    ),
     package_dir={
         "": "src",
     },
