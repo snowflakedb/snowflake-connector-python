@@ -1056,7 +1056,12 @@ class SnowflakeOCSP(object):
         SnowflakeOCSP.SSD.check_ssd_support()
 
         self._is_cache_enabled = (
-            True if not os.getenv("DISABLE_OCSP_CACHE", False) else False
+            True
+            if (
+                not os.getenv("DISABLE_OCSP_CACHE", False)
+                and use_ocsp_cache_server is not False
+            )
+            else False
         )
 
         self.OCSP_CACHE_SERVER = OCSPServer(self._is_cache_enabled)
