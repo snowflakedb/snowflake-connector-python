@@ -870,6 +870,14 @@ def test_binding_negative(negative_conn_cnx, db_parameters):
             )
 
 
+def test_execute_stores_query(conn_cnx):
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cursor:
+            assert cursor.query is None
+            cursor.execute("select 1")
+            assert cursor.query == "select 1"
+
+
 def test_execute_after_close(conn_testaccount):
     """SNOW-13588: Raises an error if executing after the connection is closed."""
     cursor = conn_testaccount.cursor()
