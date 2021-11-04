@@ -35,7 +35,6 @@ TARGET_HOSTS = [
     "sfcsupport.us-east-1.snowflakecomputing.com",
     "sfcsupport.eu-central-1.snowflakecomputing.com",
     "sfc-dev1-regression.s3.amazonaws.com",
-    "sfctest0.snowflakecomputing.com",
     "sfc-ds2-customer-stage.s3.amazonaws.com",
     "snowflake.okta.com",
     "sfcdev1.blob.core.windows.net",
@@ -202,7 +201,7 @@ def test_ocsp_with_file_cache(tmpdir):
 
 def test_ocsp_with_bogus_cache_files(tmpdir):
     """Attempts to use bogus OCSP response data."""
-    cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+    cache_file_name, hostname = _store_cache_in_file(tmpdir)
 
     ocsp = SFOCSP()
     OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
@@ -221,16 +220,15 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
     # forces to use the bogus cache file but it should raise errors
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
-    for hostname in target_hosts:
-        connection = _openssl_connect(hostname)
-        assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
-            hostname
-        )
+    connection = _openssl_connect(hostname)
+    assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
+        hostname
+    )
 
 
 def test_ocsp_with_outdated_cache(tmpdir):
     """Attempts to use outdated OCSP response cache file."""
-    cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+    cache_file_name, hostname = _store_cache_in_file(tmpdir)
 
     ocsp = SFOCSP()
 
@@ -265,16 +263,14 @@ def _store_cache_in_file(tmpdir, target_hosts=None):
 
     # cache OCSP response
     SnowflakeOCSP.clear_cache()
-    ocsp = SFOCSP(
-        ocsp_response_cache_uri="file://" + filename, use_ocsp_cache_server=False
+    ocsp = SFOCSP(ocsp_response_cache_uri="file://" + filename)
+    hostname = "snowflake.okta.com"
+    connection = _openssl_connect(hostname)
+    assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
+        hostname
     )
-    for hostname in target_hosts:
-        connection = _openssl_connect(hostname)
-        assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
-            hostname
-        )
     assert path.exists(filename), "OCSP response cache file"
-    return filename, target_hosts
+    return filename, hostname
 
 
 def test_ocsp_with_invalid_cache_file():
