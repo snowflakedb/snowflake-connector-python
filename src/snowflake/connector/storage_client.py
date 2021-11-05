@@ -116,11 +116,13 @@ class SnowflakeStorageClient(ABC):
         if self.meta.require_compress:
             meta = self.meta
             logger.debug(f"compressing file={meta.src_file_name}")
-            if meta.src_stream:
+            if meta.intermediate_stream:
                 (
                     meta.real_src_stream,
                     upload_size,
-                ) = SnowflakeFileUtil.compress_with_gzip_from_stream(meta.src_stream)
+                ) = SnowflakeFileUtil.compress_with_gzip_from_stream(
+                    meta.intermediate_stream
+                )
             else:
                 (
                     meta.real_src_file_name,
@@ -132,7 +134,7 @@ class SnowflakeStorageClient(ABC):
     def get_digest(self) -> None:
         meta = self.meta
         logger.debug(f"getting digest file={meta.real_src_file_name}")
-        if meta.src_stream is None:
+        if meta.intermediate_stream is None:
             (
                 meta.sha256_digest,
                 meta.upload_size,
@@ -142,13 +144,13 @@ class SnowflakeStorageClient(ABC):
                 meta.sha256_digest,
                 meta.upload_size,
             ) = SnowflakeFileUtil.get_digest_and_size_for_stream(
-                meta.real_src_stream or meta.src_stream
+                meta.real_src_stream or meta.intermediate_stream
             )
 
     def encrypt(self) -> None:
         meta = self.meta
         logger.debug(f"encrypting file={meta.real_src_file_name}")
-        if meta.src_stream is None:
+        if meta.intermediate_stream is None:
             (
                 self.encryption_metadata,
                 self.data_file,
@@ -160,7 +162,7 @@ class SnowflakeStorageClient(ABC):
             meta.upload_size = os.path.getsize(self.data_file)
         else:
             encrypted_stream = BytesIO()
-            src_stream = meta.real_src_stream or meta.src_stream
+            src_stream = meta.real_src_stream or meta.intermediate_stream
             src_stream.seek(0)
             self.encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
                 meta.encryption_material, src_stream, encrypted_stream
@@ -384,10 +386,12 @@ class SnowflakeStorageClient(ABC):
             meta.result_status = ResultStatus.ERROR
 
     def upload_chunk(self, chunk_id: int) -> None:
-        new_stream = not bool(self.meta.real_src_stream or self.meta.src_stream)
+        new_stream = not bool(
+            self.meta.real_src_stream or self.meta.intermediate_stream
+        )
         fd = (
             self.meta.real_src_stream
-            or self.meta.src_stream
+            or self.meta.intermediate_stream
             or open(self.data_file, "rb")
         )
         try:
