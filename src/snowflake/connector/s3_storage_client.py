@@ -102,6 +102,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 )
 
     @staticmethod
+    def _url_quote(url: str) -> str:
+        return quote(url, safe="/~")
+
+    @staticmethod
     def _sign_bytes(secret_key: bytes, _input: str) -> bytes:
         """Applies HMAC-SHA-256 to given string with secret_key."""
         h = hmac.HMAC(secret_key, hashes.SHA256())
@@ -352,7 +356,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             None if HEAD returns 404, otherwise a FileHeader instance populated
             with metadata
         """
-        path = quote(self.s3location.path + filename.lstrip("/"))
+        path = self._url_quote(self.s3location.path + filename.lstrip("/"))
         url = self.endpoint + f"/{path}"
 
         retry_id = "HEAD"
@@ -407,7 +411,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def _initiate_multipart_upload(self) -> None:
         query_parts = (("uploads", ""),)
-        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        path = self._url_quote(
+            self.s3location.path + self.meta.dst_file_name.lstrip("/")
+        )
         query_string = self._construct_query_string(query_parts)
         url = self.endpoint + f"/{path}?{query_string}"
         s3_metadata = self._prepare_file_metadata()
@@ -429,7 +435,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             response.raise_for_status()
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
-        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        path = self._url_quote(
+            self.s3location.path + self.meta.dst_file_name.lstrip("/")
+        )
         url = self.endpoint + f"/{path}"
 
         if self.num_of_chunks == 1:  # single request
@@ -466,7 +474,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def _complete_multipart_upload(self) -> None:
         query_parts = (("uploadId", self.upload_id),)
-        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        path = self._url_quote(
+            self.s3location.path + self.meta.dst_file_name.lstrip("/")
+        )
         query_string = self._construct_query_string(query_parts)
         url = self.endpoint + f"/{path}?{query_string}"
         logger.debug("Initiating multipart upload complete")
@@ -496,7 +506,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         if self.upload_id is None:
             return
         query_parts = (("uploadId", self.upload_id),)
-        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        path = self._url_quote(
+            self.s3location.path + self.meta.dst_file_name.lstrip("/")
+        )
         query_string = self._construct_query_string(query_parts)
         url = self.endpoint + f"/{path}?{query_string}"
 
@@ -512,7 +524,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def download_chunk(self, chunk_id: int) -> None:
         logger.debug(f"Downloading chunk {chunk_id}")
-        path = quote(self.s3location.path + self.meta.src_file_name.lstrip("/"))
+        path = self._url_quote(
+            self.s3location.path + self.meta.src_file_name.lstrip("/")
+        )
         url = self.endpoint + f"/{path}"
         if self.num_of_chunks == 1:
             response = self._send_request_with_authentication_and_retry(
