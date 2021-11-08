@@ -719,6 +719,7 @@ def test_executemany_qmark_types(conn, db_parameters):
                 cur.execute(f"drop table if exists {table_name}")
 
 
+@pytest.mark.skipolddriver(reason="old driver raises DatabaseError instead of InterfaceError")
 def test_closed_cursor(conn, db_parameters):
     """Attempts to use the closed cursor. It should raise errors.
 
@@ -744,11 +745,9 @@ def test_closed_cursor(conn, db_parameters):
         c.close()
 
         fmt = "select aa from {name}".format(name=db_parameters["name"])
-        try:
+        with pytest.raises(InterfaceError, match="Cursor is closed in execute") as err:
             c.execute(fmt)
-            raise Exception("should fail as the cursor was closed.")
-        except snowflake.connector.Error as err:
-            assert err.errno == errorcode.ER_CURSOR_IS_CLOSED
+        assert err.errno == errorcode.ER_CURSOR_IS_CLOSED
 
 
 def test_fetchmany(conn, db_parameters):

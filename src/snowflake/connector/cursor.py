@@ -622,7 +622,7 @@ class SnowflakeCursor:
             Error.errorhandler_wrapper(
                 self.connection,
                 self,
-                DatabaseError,
+                InterfaceError,
                 {"msg": "Cursor is closed in execute.", "errno": ER_CURSOR_IS_CLOSED},
             )
 
