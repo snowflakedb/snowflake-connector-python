@@ -360,7 +360,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             None if HEAD returns 404, otherwise a FileHeader instance populated
             with metadata
         """
-        path = self._url_quote(self.s3location.path + filename.lstrip("/"))
+        path = SnowflakeS3RestClient._url_quote(
+            self.s3location.path + filename.lstrip("/")
+        )
         url = self.endpoint + f"/{path}"
 
         retry_id = "HEAD"
@@ -415,7 +417,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def _initiate_multipart_upload(self) -> None:
         query_parts = (("uploads", ""),)
-        path = self._url_quote(
+        path = SnowflakeS3RestClient._url_quote(
             self.s3location.path + self.meta.dst_file_name.lstrip("/")
         )
         query_string = self._construct_query_string(query_parts)
@@ -439,7 +441,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             response.raise_for_status()
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
-        path = self._url_quote(
+        path = SnowflakeS3RestClient._url_quote(
             self.s3location.path + self.meta.dst_file_name.lstrip("/")
         )
         url = self.endpoint + f"/{path}"
@@ -478,7 +480,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def _complete_multipart_upload(self) -> None:
         query_parts = (("uploadId", self.upload_id),)
-        path = self._url_quote(
+        path = SnowflakeS3RestClient._url_quote(
             self.s3location.path + self.meta.dst_file_name.lstrip("/")
         )
         query_string = self._construct_query_string(query_parts)
@@ -510,7 +512,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         if self.upload_id is None:
             return
         query_parts = (("uploadId", self.upload_id),)
-        path = self._url_quote(
+        path = SnowflakeS3RestClient._url_quote(
             self.s3location.path + self.meta.dst_file_name.lstrip("/")
         )
         query_string = self._construct_query_string(query_parts)
@@ -528,7 +530,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     def download_chunk(self, chunk_id: int) -> None:
         logger.debug(f"Downloading chunk {chunk_id}")
-        path = self._url_quote(
+        path = SnowflakeS3RestClient._url_quote(
             self.s3location.path + self.meta.src_file_name.lstrip("/")
         )
         url = self.endpoint + f"/{path}"

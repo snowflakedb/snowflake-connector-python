@@ -628,13 +628,12 @@ def test_put_special_file_name(tmp_path, conn_cnx):
     test_file = tmp_path / "data~%23.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_special_filename_")
-    with conn_cnx() as con:
-        with con.cursor() as cur:
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
             cur.execute(
-                "PUT 'file://{}' @{}".format(
-                    str(test_file).replace("\\", "/"), stage_name
-                )
+                f"PUT 'file://{filename_in_put}' @{stage_name}",
             ).fetchall()
             cur.execute(f"select $1, $2, $3 from  @{stage_name}")
             assert cur.fetchone() == ("1", "2", "3")
