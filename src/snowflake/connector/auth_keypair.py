@@ -55,13 +55,19 @@ class AuthByKeyPair(AuthByPlugin):
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
-            seconds=os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds)
+            seconds=int(os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds))
         )
-        self._jwt_retry_attempts = os.getenv(
-            "JWT_CNXN_RETRY_ATTEMPTS", self.DEFAULT_JWT_RETRY_ATTEMPTS
+        self._jwt_retry_attempts = int(
+            os.getenv(
+                "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
+            )
         )
         self._jwt_cnxn_wait_time = timedelta(
-            seconds=os.getenv("JWT_CNXN_WAIT_TIME", self.DEFAULT_JWT_CNXN_WAIT_TIME)
+            seconds=int(
+                os.getenv(
+                    "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+                )
+            )
         )
         self._current_retry_count = 0
 
@@ -162,20 +168,19 @@ class AuthByKeyPair(AuthByPlugin):
         user: str,
         password: Optional[str],
     ) -> None:
-        if self._current_retry_count > self._jwt_retry_attempts:
+        if self._retry_ctx.get_current_retry_count() > self._jwt_retry_attempts:
             logger.debug("Exhausted max login attempts. Aborting connection")
+            self._retry_ctx.reset()
             raise OperationalError(
-                msg="Could not connect to Snowflake backend after {} attempt(s)."
-                "Aborting".format(self._current_retry_count),
+                msg=f"Could not connect to Snowflake backend after {self._retry_ctx.get_current_retry_count()} attempt(s)."
+                "Aborting",
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
             )
         else:
             logger.debug(
-                "Hit JWT timeout, attempt {}. Retrying...".format(
-                    self._current_retry_count
-                )
+                f"Hit JWT timeout, attempt {self._retry_ctx.get_current_retry_count()}. Retrying..."
             )
-            self._current_retry_count += 1
+            self._retry_ctx.increment_retry()
 
         self.authenticate(authenticator, service_name, account, user, password)
 

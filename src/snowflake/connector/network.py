@@ -1059,8 +1059,7 @@ class SnowflakeRestful(object):
             if "login-request" in parsed_url.path:
                 logger.debug(
                     "Hit a timeout error while logging in. Will be handled by "
-                    "authenticator. Ignore the following. Error stack: %s ",
-                    err,
+                    f"authenticator. Ignore the following. Error stack: {err}",
                     exc_info=True,
                 )
                 raise OperationalError(
@@ -1070,8 +1069,7 @@ class SnowflakeRestful(object):
             else:
                 logger.debug(
                     "Hit retryable client error. Retrying... Ignore the following "
-                    "error stack: %s",
-                    err,
+                    f"error stack: {err}",
                     exc_info=True,
                 )
                 raise RetryRequest(err)

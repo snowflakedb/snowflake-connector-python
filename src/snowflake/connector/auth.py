@@ -50,7 +50,6 @@ from .errors import (
     DatabaseError,
     Error,
     ForbiddenError,
-    OperationalError,
     ProgrammingError,
     ServiceUnavailableError,
 )
@@ -64,10 +63,10 @@ from .network import (
 )
 from .options import installed_keyring, keyring
 from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from .time_util import DecorrelateJitterBackoff
 from .version import VERSION
 
 logger = logging.getLogger(__name__)
+
 
 # Cache directory
 CACHE_ROOT_DIR = (
@@ -111,42 +110,6 @@ KEYRING_DRIVER_NAME = "SNOWFLAKE-PYTHON-DRIVER"
 
 ID_TOKEN = "ID_TOKEN"
 MFA_TOKEN = "MFATOKEN"
-DEFAULT_MAX_CNXN_RETRY_ATTEMPTS = 1
-
-
-class AuthRetryCtx:
-    def __init__(self):
-        self._current_retry_count = 0
-        self._max_retry_attempts = int(
-            getenv("MAX_CNXN_RETRY_ATTEMPTS", DEFAULT_MAX_CNXN_RETRY_ATTEMPTS)
-        )
-        self._backoff = DecorrelateJitterBackoff(1, 16)
-        self._current_sleep_time = 1
-
-    def get_current_retry_count(self) -> int:
-        return self._current_retry_count
-
-    def increment_retry(self) -> None:
-        self._current_retry_count += 1
-
-    def should_retry(self) -> bool:
-        # Default value for max retry is 1 because
-        # Python requests module already tries twice
-        # by default. Unlike JWT where we need to refresh
-        # token every 10 seconds, general authenticators
-        # wait for 60 seconds before connection timeout
-        # per attempt totaling a 240 sec wait time for a non
-        # JWT based authenticator which is more than enough.
-        # This can be changed ofcourse using MAX_CNXN_RETRY_ATTEMPTS
-        # env variable.
-        return self._current_retry_count < self._max_retry_attempts
-
-    def next_sleep_duration(self) -> int:
-        self._current_sleep_time = self._backoff.next_sleep(
-            self._current_retry_count, self._current_sleep_time
-        )
-        logger.debug("Sleeping for {} seconds".format(self._current_sleep_time))
-        return self._current_sleep_time
 
 
 class Auth(object):
@@ -154,7 +117,6 @@ class Auth(object):
 
     def __init__(self, rest):
         self._rest = rest
-        self._retry_ctx = AuthRetryCtx()
 
     @staticmethod
     def base_auth_data(
@@ -280,16 +242,16 @@ class Auth(object):
         # login_timeout comes from user configuration.
         # Between login timeout and auth specific
         # timeout use whichever value is smaller
-        if getattr(auth_instance, "get_timeout", None) is not None:
-            logger.debug("Authenticator implements get_timeout")
-            auth_timeout = (
-                self._rest._connection.login_timeout
-                if self._rest._connection.login_timeout < auth_instance.get_timeout()
-                else auth_instance.get_timeout()
+        if hasattr(auth_instance, "get_timeout"):
+            logger.debug(
+                f"Authenticator, {type(auth_instance).__name__}, implements get_timeout"
             )
-            logger.debug("Timeout set to {}".format(auth_timeout))
+            auth_timeout = min(
+                self._rest._connection.login_timeout, auth_instance.get_timeout()
+            )
         else:
             auth_timeout = self._rest._connection.login_timeout
+        logger.debug(f"Timeout set to {auth_timeout}")
 
         try:
             ret = self._rest._post_request(
@@ -570,34 +532,6 @@ class Auth(object):
                 host, user, MFA_TOKEN, response["data"].get("mfaToken")
             )
         return
-
-    # Default timeout handler. This will trigger if the authenticator
-    # hasn't implemented one. By default we retry on timeouts and use
-    # jitter to deduce the time to sleep before retrying. The sleep
-    # time ranges between 1 and 16 seconds.
-    def handle_timeout(
-        self,
-        authenticator: str,
-        service_name: any,
-        account: str,
-        user: str,
-        password: str,
-    ) -> None:
-        del authenticator, service_name, account, user, password
-        if not self._retry_ctx.should_retry():
-            raise OperationalError(
-                msg="Could not connect to Snowflake backend after {} attempt(s)."
-                "Aborting".format(self._retry_ctx.get_current_retry_count()),
-                errno=ER_FAILED_TO_CONNECT_TO_DB,
-            )
-        else:
-            logger.debug(
-                "Hit connection timeout, attempt number {}. Will retry in a bit...".format(
-                    self._retry_ctx.get_current_retry_count()
-                )
-            )
-            self._retry_ctx.increment_retry()
-            time.sleep(self._retry_ctx.next_sleep_duration())
 
 
 def flush_temporary_credentials():

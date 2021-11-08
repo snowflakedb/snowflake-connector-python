@@ -1039,22 +1039,15 @@ class SnowflakeConnection(object):
                 password_callback=self._password_callback,
                 session_parameters=self._session_parameters,
             )
-        except OperationalError as op:
-            logger.debug("Operational Error raised at authentication")
-            if hasattr(auth_instance, "handle_timeout") and (
-                auth_instance.can_handle_exception(op)
-            ):
-                timeout_handler = auth_instance
-            else:
-                # Default handler
-                timeout_handler = auth
+        except OperationalError:
             logger.debug(
-                "Operational error due to connection timeout. "
-                "Authenticator can handle timeout"
+                "Operational Error raised at authentication"
+                f"for authenticator: {type(auth_instance).__name__}"
             )
+
             while True:
                 try:
-                    timeout_handler.handle_timeout(
+                    auth_instance.handle_timeout(
                         authenticator=self._authenticator,
                         service_name=self.service_name,
                         account=self.account,
