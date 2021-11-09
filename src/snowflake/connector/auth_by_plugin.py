@@ -7,6 +7,7 @@
 import logging
 import time
 from os import getenv
+from typing import Optional
 
 from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from .errors import DatabaseError, Error, OperationalError
@@ -34,8 +35,7 @@ class AuthRetryCtx:
         self._current_retry_count += 1
 
     def should_retry(self) -> bool:
-        """Decides whether retry should be performed
-        on the connection.
+        """Decides whether to retry connection.
 
         Default value for max retry is 1 because
         Python requests module already tries twice
@@ -97,7 +97,7 @@ class AuthByPlugin(object):
     def handle_timeout(
         self,
         authenticator: str,
-        service_name: any,
+        service_name: Optional[str],
         account: str,
         user: str,
         password: str,
