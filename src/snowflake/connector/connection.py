@@ -1383,9 +1383,13 @@ class SnowflakeConnection(object):
         logger.debug("get_query_status sf_qid='{}'".format(sf_qid))
 
         status = "NO_DATA"
+        if self.is_closed():
+            return QueryStatus.DISCONNECTED, {"data": {"queries": []}}
         status_resp = self.rest.request(
             "/monitoring/queries/" + quote(sf_qid), method="get", client="rest"
         )
+        if "queries" not in status_resp["data"]:
+            return QueryStatus.FAILED_WITH_ERROR, status_resp
         queries = status_resp["data"]["queries"]
         if len(queries) > 0:
             status = queries[0]["status"]
@@ -1407,7 +1411,7 @@ class SnowflakeConnection(object):
         Raises:
             ValueError: if sf_qid is not a valid UUID string.
         """
-        status, status_resp = self._get_query_status(sf_qid)
+        status, _ = self._get_query_status(sf_qid)
         return status
 
     def get_query_status_throw_if_error(self, sf_qid: str) -> QueryStatus:
