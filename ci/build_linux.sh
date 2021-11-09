@@ -7,7 +7,7 @@
 set -o pipefail
 
 U_WIDTH=16
-PYTHON_VERSIONS="${1:-3.6 3.7 3.8 3.9}"
+PYTHON_VERSIONS="${1:-3.6 3.7 3.8 3.9 3.10}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 DIST_DIR="${CONNECTOR_DIR}/dist"
