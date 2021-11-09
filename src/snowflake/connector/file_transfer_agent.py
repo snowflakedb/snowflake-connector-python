@@ -143,8 +143,8 @@ class SnowflakeFileMeta:
     require_compress: bool = False
     dst_file_name: Optional[str] = None
     dst_file_size: int = -1
+    intermediate_stream: Optional[IO[bytes]] = None
     src_stream: Optional[IO[bytes]] = None
-    real_src_stream: Optional[IO[bytes]] = None
     # Specific to Downloads only
     local_location: Optional[str] = None
 
@@ -970,7 +970,7 @@ class SnowflakeFileTransferAgent:
                     SnowflakeFileMeta(
                         name=os.path.basename(self._src_files[0]),
                         src_file_name=self._src_files[0],
-                        src_stream=self._source_from_stream,
+                        intermediate_stream=self._source_from_stream,
                         src_file_size=self._source_from_stream.seek(0, os.SEEK_END),
                         stage_location_type=self._stage_location_type,
                         encryption_material=self._encryption_material[0]
