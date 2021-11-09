@@ -7,6 +7,7 @@ import filecmp
 import os
 import pathlib
 from getpass import getuser
+from io import BytesIO
 from logging import getLogger
 from os import path
 from typing import TYPE_CHECKING, Callable, NamedTuple
@@ -588,7 +589,8 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
 @pytest.mark.aws
 @pytest.mark.azure
 @pytest.mark.skipolddriver
-def test_multipart_put(conn_cnx, tmp_path):
+@pytest.mark.parametrize("use_stream", [False, True])
+def test_multipart_put(conn_cnx, tmp_path, use_stream):
     """This test does a multipart upload of a smaller file and then downloads it."""
     stage_name = random_string(5, "test_multipart_put_")
     chunk_size = 6967790
@@ -612,9 +614,16 @@ def test_multipart_put(conn_cnx, tmp_path):
                 with mock.patch(
                     "snowflake.connector.constants.S3_CHUNK_SIZE", chunk_size
                 ):
-                    cur.execute(
-                        f"put file://{upload_file} @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE"
-                    )
+                    if use_stream:
+                        kw = {
+                            "command": f"put file://file0 @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE",
+                            "file_stream": BytesIO(upload_file.read_bytes()),
+                        }
+                    else:
+                        kw = {
+                            "command": f"put file://{upload_file} @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE",
+                        }
+                    cur.execute(**kw)
             cur.execute(
                 f"get @{stage_name}/sub/folders/{upload_file.name} file://{get_dir}"
             )

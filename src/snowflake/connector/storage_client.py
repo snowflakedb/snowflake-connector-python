@@ -116,11 +116,13 @@ class SnowflakeStorageClient(ABC):
         if self.meta.require_compress:
             meta = self.meta
             logger.debug(f"compressing file={meta.src_file_name}")
-            if meta.src_stream:
+            if meta.intermediate_stream:
                 (
-                    meta.real_src_stream,
+                    meta.src_stream,
                     upload_size,
-                ) = SnowflakeFileUtil.compress_with_gzip_from_stream(meta.src_stream)
+                ) = SnowflakeFileUtil.compress_with_gzip_from_stream(
+                    meta.intermediate_stream
+                )
             else:
                 (
                     meta.real_src_file_name,
@@ -132,7 +134,7 @@ class SnowflakeStorageClient(ABC):
     def get_digest(self) -> None:
         meta = self.meta
         logger.debug(f"getting digest file={meta.real_src_file_name}")
-        if meta.src_stream is None:
+        if meta.intermediate_stream is None:
             (
                 meta.sha256_digest,
                 meta.upload_size,
@@ -142,13 +144,13 @@ class SnowflakeStorageClient(ABC):
                 meta.sha256_digest,
                 meta.upload_size,
             ) = SnowflakeFileUtil.get_digest_and_size_for_stream(
-                meta.real_src_stream or meta.src_stream
+                meta.src_stream or meta.intermediate_stream
             )
 
     def encrypt(self) -> None:
         meta = self.meta
         logger.debug(f"encrypting file={meta.real_src_file_name}")
-        if meta.src_stream is None:
+        if meta.intermediate_stream is None:
             (
                 self.encryption_metadata,
                 self.data_file,
@@ -160,7 +162,7 @@ class SnowflakeStorageClient(ABC):
             meta.upload_size = os.path.getsize(self.data_file)
         else:
             encrypted_stream = BytesIO()
-            src_stream = meta.real_src_stream or meta.src_stream
+            src_stream = meta.src_stream or meta.intermediate_stream
             src_stream.seek(0)
             self.encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
                 meta.encryption_material, src_stream, encrypted_stream
@@ -168,9 +170,9 @@ class SnowflakeStorageClient(ABC):
             src_stream.seek(0)
             meta.upload_size = encrypted_stream.seek(0, os.SEEK_END)
             encrypted_stream.seek(0)
-            if meta.real_src_stream is not None:
-                meta.real_src_stream.close()
-            meta.real_src_stream = encrypted_stream
+            if meta.src_stream is not None:
+                meta.src_stream.close()
+            meta.src_stream = encrypted_stream
             self.data_file = meta.real_src_file_name
 
     @abstractmethod
@@ -384,17 +386,21 @@ class SnowflakeStorageClient(ABC):
             meta.result_status = ResultStatus.ERROR
 
     def upload_chunk(self, chunk_id: int) -> None:
+        new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
         fd = (
-            self.meta.real_src_stream
-            or self.meta.src_stream
+            self.meta.src_stream
+            or self.meta.intermediate_stream
             or open(self.data_file, "rb")
         )
-        with fd:
+        try:
             if self.num_of_chunks == 1:
                 _data = fd.read()
             else:
                 fd.seek(chunk_id * self.chunk_size)
                 _data = fd.read(self.chunk_size)
+        finally:
+            if new_stream:
+                fd.close()
         logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
         self._upload_chunk(chunk_id, _data)
         logger.debug(f"Successfully uploaded chunk {chunk_id} of file {self.data_file}")
@@ -433,8 +439,8 @@ class SnowflakeStorageClient(ABC):
         if os.path.exists(self.tmp_dir):
             logger.debug(f"cleaning up tmp dir: {self.tmp_dir}")
             shutil.rmtree(self.tmp_dir)
-        if self.meta.real_src_stream and not self.meta.real_src_stream.closed:
-            self.meta.real_src_stream.close()
+        if self.meta.src_stream and not self.meta.src_stream.closed:
+            self.meta.src_stream.close()
 
     def __del__(self) -> None:
         self.delete_client_data()
