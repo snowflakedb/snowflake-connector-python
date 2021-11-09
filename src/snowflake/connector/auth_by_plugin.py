@@ -15,14 +15,14 @@ from .time_util import DecorrelateJitterBackoff
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_CNXN_RETRY_ATTEMPTS = 1
+DEFAULT_MAX_CON_RETRY_ATTEMPTS = 1
 
 
 class AuthRetryCtx:
     def __init__(self) -> None:
         self._current_retry_count = 0
         self._max_retry_attempts = int(
-            getenv("MAX_CNXN_RETRY_ATTEMPTS", DEFAULT_MAX_CNXN_RETRY_ATTEMPTS)
+            getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
         )
         self._backoff = DecorrelateJitterBackoff(1, 16)
         self._current_sleep_time = 1
