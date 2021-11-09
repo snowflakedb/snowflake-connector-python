@@ -103,10 +103,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     @staticmethod
     def _url_quote(url: str) -> str:
-        """Per Python document at https://docs.python.org/3/library/urllib.parse.html:
-        Changed in version 3.7: Moved from RFC 2396 to RFC 3986 for quoting URL strings.
-        “~” is now included in the set of unreserved characters.
-        This fix for SNOW-480963 is not needed on Python 3.7 and above"""
+        """Wrapper function for actual function urllib.quote.
+
+        As per https://docs.python.org/3/library/urllib.parse.html:
+        'Changed in version 3.7: Moved from RFC 2396 to RFC 3986 for quoting URL strings.
+        “~” is now included in the set of unreserved characters.', the customized 'safe'
+         is for backward compatibility with python 3.6 and before.
+        """
         return quote(url, safe="/~")
 
     @staticmethod
