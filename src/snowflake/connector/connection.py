@@ -72,6 +72,7 @@ from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
+    ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
@@ -79,7 +80,7 @@ from .errorcode import (
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errors import DatabaseError, Error, ProgrammingError
+from .errors import DatabaseError, Error, OperationalError, ProgrammingError
 from .incident import IncidentAPI
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -1009,20 +1010,56 @@ class SnowflakeConnection(object):
         )
 
         auth = Auth(self.rest)
-        auth.authenticate(
-            auth_instance=auth_instance,
-            account=self.account,
-            user=self.user,
-            database=self.database,
-            schema=self.schema,
-            warehouse=self.warehouse,
-            role=self.role,
-            passcode=self._passcode,
-            passcode_in_password=self._passcode_in_password,
-            mfa_callback=self._mfa_callback,
-            password_callback=self._password_callback,
-            session_parameters=self._session_parameters,
-        )
+        try:
+            auth.authenticate(
+                auth_instance=auth_instance,
+                account=self.account,
+                user=self.user,
+                database=self.database,
+                schema=self.schema,
+                warehouse=self.warehouse,
+                role=self.role,
+                passcode=self._passcode,
+                passcode_in_password=self._passcode_in_password,
+                mfa_callback=self._mfa_callback,
+                password_callback=self._password_callback,
+                session_parameters=self._session_parameters,
+            )
+        except OperationalError:
+            logger.debug(
+                "Operational Error raised at authentication"
+                f"for authenticator: {type(auth_instance).__name__}"
+            )
+
+            while True:
+                try:
+                    auth_instance.handle_timeout(
+                        authenticator=self._authenticator,
+                        service_name=self.service_name,
+                        account=self.account,
+                        user=self.user,
+                        password=self._password,
+                    )
+                    auth.authenticate(
+                        auth_instance=auth_instance,
+                        account=self.account,
+                        user=self.user,
+                        database=self.database,
+                        schema=self.schema,
+                        warehouse=self.warehouse,
+                        role=self.role,
+                        passcode=self._passcode,
+                        passcode_in_password=self._passcode_in_password,
+                        mfa_callback=self._mfa_callback,
+                        password_callback=self._password_callback,
+                        session_parameters=self._session_parameters,
+                    )
+                except OperationalError as auth_op:
+                    if auth_op.errno == ER_FAILED_TO_CONNECT_TO_DB:
+                        raise auth_op
+                    logger.debug("Continuing authenticator specific timeout handling")
+                    continue
+                break
 
     def _write_params_to_byte_rows(
         self, params: List[Tuple[Union[Any, Tuple]]]

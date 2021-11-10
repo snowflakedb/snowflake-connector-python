@@ -54,6 +54,7 @@ from .description import (
 )
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
+    ER_CONNECTION_TIMEOUT,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REQUEST,
@@ -98,7 +99,7 @@ from .vendored.requests.exceptions import (
     SSLError,
 )
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
-from .vendored.urllib3.exceptions import ProtocolError, ReadTimeoutError
+from .vendored.urllib3.exceptions import ProtocolError
 from .vendored.urllib3.util.url import parse_url
 
 if TYPE_CHECKING:
@@ -1042,26 +1043,36 @@ class SnowflakeRestful(object):
             )
 
         except (
-            ConnectTimeout,
-            ReadTimeout,
             BadStatusLine,
             ConnectionError,
+            ConnectTimeout,
             IncompleteRead,
-            ProtocolError,  # from urllib3
-            ReadTimeoutError,  # from urllib3
+            ProtocolError,  # from urllib3  # from urllib3
             OpenSSL.SSL.SysCallError,
             KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
             ValueError,
+            ReadTimeout,
             RuntimeError,
             AttributeError,  # json decoding error
         ) as err:
-            logger.debug(
-                "Hit retryable client error. Retrying... Ignore the following "
-                "error stack: %s",
-                err,
-                exc_info=True,
-            )
-            raise RetryRequest(err)
+            parsed_url = parse_url(full_url)
+            if "login-request" in parsed_url.path:
+                logger.debug(
+                    "Hit a timeout error while logging in. Will be handled by "
+                    f"authenticator. Ignore the following. Error stack: {err}",
+                    exc_info=True,
+                )
+                raise OperationalError(
+                    msg="ConnectionTimeout occurred. Will be handled by authenticator",
+                    errno=ER_CONNECTION_TIMEOUT,
+                )
+            else:
+                logger.debug(
+                    "Hit retryable client error. Retrying... Ignore the following "
+                    f"error stack: {err}",
+                    exc_info=True,
+                )
+                raise RetryRequest(err)
         except Exception as err:
             TelemetryService.get_instance().log_http_request_error(
                 "HttpException%s" % str(err),
