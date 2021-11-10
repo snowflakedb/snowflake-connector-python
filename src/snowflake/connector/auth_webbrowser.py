@@ -96,9 +96,10 @@ class AuthByWebBrowser(AuthByPlugin):
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             try:
-                socket_addr = os.getenv("SF_AUTH_SOCKET_ADDR", "localhost")
-                socket_port = int(os.getenv("SF_AUTH_SOCKET_PORT", 0))
-                socket_connection.bind((socket_addr, socket_port))
+                socket_connection.bind((
+                    os.getenv("SF_AUTH_SOCKET_ADDR", "localhost"),
+                    int(os.getenv("SF_AUTH_SOCKET_PORT", 0))
+                ))
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
