@@ -67,6 +67,7 @@ from .version import VERSION
 
 logger = logging.getLogger(__name__)
 
+
 # Cache directory
 CACHE_ROOT_DIR = (
     getenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR")
@@ -237,13 +238,28 @@ class Auth(object):
             {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
         )
 
+        # accommodate any authenticator specific timeout requirements here.
+        # login_timeout comes from user configuration.
+        # Between login timeout and auth specific
+        # timeout use whichever value is smaller
+        if hasattr(auth_instance, "get_timeout"):
+            logger.debug(
+                f"Authenticator, {type(auth_instance).__name__}, implements get_timeout"
+            )
+            auth_timeout = min(
+                self._rest._connection.login_timeout, auth_instance.get_timeout()
+            )
+        else:
+            auth_timeout = self._rest._connection.login_timeout
+        logger.debug(f"Timeout set to {auth_timeout}")
+
         try:
             ret = self._rest._post_request(
                 url,
                 headers,
                 json.dumps(body),
-                timeout=self._rest._connection.login_timeout,
-                socket_timeout=self._rest._connection.login_timeout,
+                timeout=auth_timeout,
+                socket_timeout=auth_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403
