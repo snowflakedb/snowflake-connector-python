@@ -91,7 +91,7 @@ jobs:
       - name: Generate wheel
         run: python${{ matrix.python-version }} -m build --wheel --outdir dist_tmp .
       - name: Run auditwheel
-        run: auditwheel repair --plat manylinux2014_x86_64 -L connector dist_tmp/snowflake_connector_python*.whl -w dist
+        run: auditwheel repair --plat manylinux2014_x86_64 -L connector dist_tmp/*.whl -w dist
       - name: Show wheels generated
         run: ls -lh dist
       - uses: actions/upload-artifact@v1
@@ -125,11 +125,13 @@ jobs:
       - name: Display Python version
         run: python3 -c "import sys; print(sys.version)"
       - name: Upgrade setuptools, pip, wheel and build
-        run: python3 -m pip install -U setuptools pip wheel build
+        run: python3 -m pip install -U setuptools pip wheel build delocate
       - name: Generate wheel
-        run: python3 -m build --wheel .
+        run: python3 -m build --wheel --outdir dist_tmp .
         env:
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
+      - name: Run delocate
+        run: delocate-wheel --wheel-dir dist dist_tmp/*.whl
       - name: Show wheels generated
         run: ls -lh dist/
       - uses: actions/upload-artifact@v2
