@@ -39,7 +39,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Update PEP-517 dependencies
     ${PYTHON} -m pip install --upgrade pip setuptools wheel build
     # Use new PEP-517 build
-    ${PYTHON} -m build .
+    ${PYTHON} -m build --outdir ${BUILD_DIR} .
     # On Linux we should repair wheel(s) generated
 arch=$(uname -p)
 if [[ $arch == x86_64 ]]; then
