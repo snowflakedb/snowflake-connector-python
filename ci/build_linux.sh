@@ -24,36 +24,35 @@ mkdir -p ${REPAIRED_DIR}
 # Necessary for cpython_path
 source /home/user/multibuild/manylinux_utils.sh
 
-# Source distribution
-python3.6 setup.py sdist -d dist/src
-
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
-    BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION/"
+    BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION"
 
     # Build
     echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"
     # Clean up possible build artifacts
     rm -rf build generated_version.py
     # Update PEP-517 dependencies
-    ${PYTHON} -m pip install -U pip setuptools wheel
+    ${PYTHON} -m pip install --upgrade pip setuptools wheel build
     # Use new PEP-517 build
-    ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
+    ${PYTHON} -m build --outdir ${BUILD_DIR} .
     # On Linux we should repair wheel(s) generated
 arch=$(uname -p)
 if [[ $arch == x86_64 ]]; then
-  auditwheel repair --plat manylinux2014_x86_64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat manylinux2014_x86_64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 else
-  auditwheel repair --plat manylinux2014_aarch64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat manylinux2014_aarch64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 fi
 
     # Generate reqs files
-    WHL_FILE="$(ls ${BUILD_DIR})"
     FULL_PYTHON_VERSION="$(${PYTHON} --version | cut -d' ' -f2-)"
     REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
-    ${PYTHON} -m pip install ${BUILD_DIR}/${WHL_FILE}
+    ${PYTHON} -m pip install ${BUILD_DIR}/*.whl
     echo "# Generated on: $(${PYTHON} --version)" >${REQS_FILE}
     echo "# With snowflake-connector-python version: $(${PYTHON} -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}
     ${PYTHON} -m pip freeze | grep -v snowflake-connector-python 1>>${REQS_FILE} 2>/dev/null
 done
+
+# Move lowest Python version generated sdist to right location
+mv "${DIST_DIR}"/3.6/*.tar.gz dist
