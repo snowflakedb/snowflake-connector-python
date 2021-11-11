@@ -37,15 +37,15 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Clean up possible build artifacts
     rm -rf build generated_version.py
     # Update PEP-517 dependencies
-    ${PYTHON} -m pip install -U pip setuptools wheel
+    ${PYTHON} -m pip install --upgrade pip setuptools wheel build
     # Use new PEP-517 build
-    ${PYTHON} -m pip wheel -w ${BUILD_DIR} --no-deps .
+    ${PYTHON} -m build .
     # On Linux we should repair wheel(s) generated
 arch=$(uname -p)
 if [[ $arch == x86_64 ]]; then
-  auditwheel repair --plat manylinux2014_x86_64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat manylinux2014_x86_64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 else
-  auditwheel repair --plat manylinux2014_aarch64 -L connector ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
+  auditwheel repair --plat manylinux2014_aarch64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 fi
 
     # Generate reqs files
