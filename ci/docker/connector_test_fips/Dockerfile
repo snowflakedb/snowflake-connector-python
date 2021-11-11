@@ -13,4 +13,5 @@ RUN chmod 777 /home/user
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 RUN yum install -y python3 redhat-rpm-config gcc libffi-devel python3-devel openssl openssl-devel
+RUN python3.6 -m pip install --upgrade pip setuptools wheel
 RUN python3.6 -m pip install virtualenv
