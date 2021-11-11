@@ -336,10 +336,6 @@ jobs:
       - name: Show wheels downloaded
         run: ls -lh dist
         shell: bash
-      - name: Remove manylinux2010 wheel
-        run: |
-          rm dist/*manylinux2010*.whl
-          ls -lh dist
       - name: Run tests
         run: ./ci/test_fips_docker.sh
         env:
