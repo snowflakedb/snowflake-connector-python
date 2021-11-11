@@ -49,10 +49,9 @@ else
 fi
 
     # Generate reqs files
-    WHL_FILE="$(ls ${BUILD_DIR})"
     FULL_PYTHON_VERSION="$(${PYTHON} --version | cut -d' ' -f2-)"
     REQS_FILE="${BUILD_DIR}/requirements_$(${PYTHON} -c 'from sys import version_info;print(str(version_info.major)+str(version_info.minor))').txt"
-    ${PYTHON} -m pip install ${BUILD_DIR}/${WHL_FILE}
+    ${PYTHON} -m pip install ${BUILD_DIR}/*.whl
     echo "# Generated on: $(${PYTHON} --version)" >${REQS_FILE}
     echo "# With snowflake-connector-python version: $(${PYTHON} -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}
     ${PYTHON} -m pip freeze | grep -v snowflake-connector-python 1>>${REQS_FILE} 2>/dev/null
