@@ -24,9 +24,6 @@ mkdir -p ${REPAIRED_DIR}
 # Necessary for cpython_path
 source /home/user/multibuild/manylinux_utils.sh
 
-# Source distribution
-python3.6 setup.py sdist -d dist/src
-
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
@@ -56,3 +53,6 @@ fi
     echo "# With snowflake-connector-python version: $(${PYTHON} -m pip show snowflake-connector-python | grep ^Version | cut -d' ' -f2-)" >>${REQS_FILE}
     ${PYTHON} -m pip freeze | grep -v snowflake-connector-python 1>>${REQS_FILE} 2>/dev/null
 done
+
+# Move lowest Python version generated sdist to right location
+mv "${DIST_DIR}/3.6/*.tar.gz" dist
