@@ -55,4 +55,4 @@ fi
 done
 
 # Move lowest Python version generated sdist to right location
-mv "${DIST_DIR}/3.6/*.tar.gz" dist
+mv "${DIST_DIR}"/3.6/*.tar.gz dist
