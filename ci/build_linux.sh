@@ -30,7 +30,7 @@ python3.6 setup.py sdist -d dist/src
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Constants and setup
     PYTHON="$(cpython_path ${PYTHON_VERSION} ${U_WIDTH})/bin/python"
-    BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION/"
+    BUILD_DIR="${DIST_DIR}/$PYTHON_VERSION"
 
     # Build
     echo "[Info] Building for ${PYTHON_VERSION} with $PYTHON"
