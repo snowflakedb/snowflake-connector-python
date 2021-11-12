@@ -160,7 +160,7 @@ class TelemetryService(object):
             raise Exception("This class is a singleton!")
         else:
             TelemetryService.__instance = self
-        self._enabled = True
+        self._enabled = False
         self._queue = Queue()
         self.batch_size = DEFAULT_BATCH_SIZE
         self.num_of_retry_to_trigger_telemetry = (
