@@ -56,12 +56,11 @@ from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import (
-        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
-    )
-    from snowflake.connector.errorcode import (
         ER_NO_ARROW_RESULT,
         ER_NO_PYARROW,
         ER_NO_PYARROW_SNOWSQL,
+        FIELD_ID_TO_NAME,
+        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     )
     from snowflake.connector.result_batch import ArrowResultBatch, JSONResultBatch
 except ImportError:
@@ -567,6 +566,42 @@ created_at timestamp, data variant)
     finally:
         with conn() as cnx:
             cnx.cursor().execute("drop table {name}".format(name=name_variant))
+
+
+def test_geography(conn, db_parameters):
+    """Variant including JSON object."""
+    name_geo = db_parameters["name"] + "_geo"
+    with conn() as cnx:
+        cnx.cursor().execute(
+            f"""
+create table {name_geo} (geo geography)
+"""
+        )
+        cnx.cursor().execute(
+            f"""
+insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
+"""
+        )
+
+    try:
+        with conn() as cnx:
+            c = cnx.cursor()
+            c.execute("alter session set GEOGRAPHY_OUTPUT_FORMAT='geoJson'")
+
+            # Test with OBJECT return type
+            c.execute("alter session set ENABLE_UDT_EXTERNAL_TYPE_NAMES=false")
+            result = c.execute(f"select * from {name_geo}")
+            metadata = result.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "OBJECT"
+
+            # Test with GEOGRAPHY return type
+            c.execute("alter session set ENABLE_UDT_EXTERNAL_TYPE_NAMES=true")
+            result = c.execute(f"select * from {name_geo}")
+            metadata = result.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
+    finally:
+        with conn() as cnx:
+            cnx.cursor().execute("drop table {name}".format(name=name_geo))
 
 
 def test_callproc(conn_cnx):
