@@ -66,6 +66,7 @@ class AuthByOkta(AuthByPlugin):
     """Authenticate user by OKTA."""
 
     def __init__(self, rest, application):
+        super().__init__()
         self._rest = rest
         self._saml_response = None
         self._application = application
