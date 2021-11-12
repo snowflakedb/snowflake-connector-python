@@ -69,7 +69,7 @@ class TelemetryClient(object):
         self._is_closed = False
         self._flush_size = flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
         self._lock = Lock()
-        self._enabled = True
+        self._enabled = False
 
     def add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
         if self._is_closed:
