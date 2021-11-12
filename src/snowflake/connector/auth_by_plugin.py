@@ -61,7 +61,7 @@ class AuthRetryCtx:
         self._current_sleep_time = 1
 
 
-class AuthByPlugin(object):
+class AuthByPlugin:
     """External Authenticator interface."""
 
     def __init__(self) -> None:

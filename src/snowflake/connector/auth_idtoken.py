@@ -20,6 +20,7 @@ class AuthByIdToken(AuthByPlugin):
 
     def __init__(self, id_token):
         """Initialized an instance with an IdToken."""
+        super().__init__()
         self._id_token = id_token
 
     def authenticate(self, authenticator, service_name, account, user, password):
