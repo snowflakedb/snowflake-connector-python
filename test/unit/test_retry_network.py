@@ -131,7 +131,8 @@ def test_request_exec():
         OpenSSL.SSL.SysCallError(errno.ETIMEDOUT),
         OpenSSL.SSL.SysCallError(errno.EPIPE),
         OpenSSL.SSL.SysCallError(-1),  # unknown
-        urllib3.exceptions.ReadTimeoutError(None, None, None),
+        # TODO: should we keep this?
+        # urllib3.exceptions.ReadTimeoutError(None, None, None),
         BadStatusLine("fake"),
     ]:
         session = MagicMock()
