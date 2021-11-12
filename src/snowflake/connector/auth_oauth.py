@@ -21,6 +21,7 @@ class AuthByOAuth(AuthByPlugin):
 
     def __init__(self, oauth_token):
         """Initializes an instance with an OAuth Token."""
+        super().__init__()
         self._oauth_token = oauth_token
 
     def authenticate(self, authenticator, service_name, account, user, password):

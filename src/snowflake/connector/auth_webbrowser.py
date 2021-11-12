@@ -54,6 +54,7 @@ class AuthByWebBrowser(AuthByPlugin):
         host=None,
         port=None,
     ):
+        super().__init__()
         self._rest = rest
         self._token = None
         self._consent_cache_id_token = True
@@ -96,10 +97,12 @@ class AuthByWebBrowser(AuthByPlugin):
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             try:
-                socket_connection.bind((
-                    os.getenv("SF_AUTH_SOCKET_ADDR", "localhost"),
-                    int(os.getenv("SF_AUTH_SOCKET_PORT", 0))
-                ))
+                socket_connection.bind(
+                    (
+                        os.getenv("SF_AUTH_SOCKET_ADDR", "localhost"),
+                        int(os.getenv("SF_AUTH_SOCKET_PORT", 0)),
+                    )
+                )
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
