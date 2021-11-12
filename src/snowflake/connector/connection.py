@@ -1161,7 +1161,7 @@ class SnowflakeConnection(object):
         self,
         params: Optional[Union[Any, Sequence[Any], Dict[Any, Any]]],
         cursor: Optional["SnowflakeCursor"] = None,
-    ) -> Union[Tuple[Any], Dict[str, Any]]:
+    ) -> Optional[Union[Tuple[Any], Dict[str, Any]]]:
         """Process parameters for client-side parameter binding.
 
         Args:
@@ -1170,7 +1170,7 @@ class SnowflakeConnection(object):
             cursor: The SnowflakeCursor used to report errors if necessary.
         """
         if params is None:
-            return {}
+            return None
         if isinstance(params, dict):
             return self._process_params_dict(params)
 
