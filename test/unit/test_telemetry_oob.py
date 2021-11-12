@@ -133,7 +133,8 @@ def test_telemetry_oob_error_code_mapping():
                 assert ec_val in OCSPTelemetryData.ERROR_CODE_MAP
 
 
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.skip
+# @pytest.mark.flaky(reruns=3)
 def test_telemetry_oob_http_log_urgent(telemetry_setup):
     """Tests sending an urgent HTTP request telemetry event."""
     telemetry = TelemetryService.get_instance()
