@@ -13,6 +13,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          repository: snowflakedb/gh-actions
+          ref: jira_v1
+          token: ${{ secrets.SNOWFLAKE_GITHUB_TOKEN }} # stored in GitHub secrets
+          path: .
 
       - name: Login
         uses: atlassian/gajira-login@v2.0.0
@@ -33,7 +38,7 @@ jobs:
           fields: '{ "customfield_11401": {"id": "13475"}, "assignee": {"id": "61027a219798100070592b20"} }'
 
       - name: Update GitHub Issue
-        uses: ./.github/actions/gajira-issue-update
+        uses: ./jira/gajira-issue-update
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
