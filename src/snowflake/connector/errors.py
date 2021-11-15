@@ -152,6 +152,7 @@ class Error(BASE_EXCEPTION_CLASS):
         ):
             # Send with in-band telemetry
             telemetry_data[TelemetryField.KEY_TYPE] = TelemetryField.SQL_EXCEPTION
+            telemetry_data[TelemetryField.KEY_SOURCE] = CLIENT_NAME
             telemetry_data[TelemetryField.KEY_EXCEPTION] = self.__class__.__name__
             ts = get_time_millis()
             try:

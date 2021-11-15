@@ -29,6 +29,7 @@ class TelemetryField(object):
     ARROW_FETCH_BATCHES = "client_fetch_arrow_batches"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
+    KEY_SOURCE = "source"
     KEY_SFQID = "QueryID"
     KEY_SQLSTATE = "SQLState"
     KEY_DRIVER_TYPE = "DriverType"
