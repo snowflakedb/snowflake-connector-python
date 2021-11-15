@@ -124,7 +124,9 @@ jobs:
           python3 get-pip.py
       - name: Display Python version
         run: python3 -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools, pip, wheel and build
+      - name: Add bin directory to path
+        run: python3 -c "import sysconfig; print(sysconfig.get_path('scripts'))" >> $GITHUB_PATH
+      - name: Upgrade setuptools, pip, wheel, build and delocate
         run: python3 -m pip install -U setuptools pip wheel build delocate
       - name: Generate wheel
         run: python3 -m build --wheel --outdir dist_tmp .
