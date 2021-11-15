@@ -5,6 +5,7 @@
 #
 
 import logging
+from enum import Enum, unique
 from threading import Lock
 
 from .secret_detector import SecretDetector
@@ -13,7 +14,8 @@ from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 logger = logging.getLogger(__name__)
 
 
-class TelemetryField(object):
+@unique
+class TelemetryField(Enum):
     # Fields which can be logged to telemetry
     TIME_CONSUME_FIRST_RESULT = "client_time_consume_first_result"
     TIME_CONSUME_LAST_RESULT = "client_time_consume_last_result"
@@ -36,7 +38,6 @@ class TelemetryField(object):
     KEY_DRIVER_VERSION = "DriverVersion"
     KEY_REASON = "reason"
     KEY_ERROR_NUMBER = "ErrorNumber"
-    KEY_ERROR_MESSAGE = "ErrorMessage"
     KEY_STACKTRACE = "Stacktrace"
     KEY_EXCEPTION = "Exception"
 

@@ -154,8 +154,11 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
         ]
         for field in expected:
             assert (
-                sum(1 if x.message["type"] == field else 0 for x in telemetry_data) == 2
+                sum(
+                    1 if x.message["type"] == field.value else 0 for x in telemetry_data
+                )
+                == 2
             ), (
                 "Expected three telemetry logs (one per query) "
-                "for log type {}".format(field)
+                "for log type {}".format(field.value)
             )

@@ -1328,7 +1328,7 @@ def test_resultbatch(
                 )
                 pickle_str = pickle.dumps(pre_pickle_partitions)
                 assert any(
-                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED
+                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED.value
                     for t in telemetry_data.records
                 )
     post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
@@ -1445,7 +1445,8 @@ def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
                     (1,),
                 ]
             assert not any(
-                r.message.get("type", "") == TelemetryField.TIME_CONSUME_LAST_RESULT
+                r.message.get("type", "")
+                == TelemetryField.TIME_CONSUME_LAST_RESULT.value
                 for r in telemetry.records
             )
 

@@ -47,5 +47,5 @@ def test_error_telemetry(conn_cnx):
         telemetry_data = e.value.generate_telemetry_exception_data()
         assert (
             "Failed to detect Syntax error"
-            not in telemetry_data[TelemetryField.KEY_REASON]
+            not in telemetry_data[TelemetryField.KEY_REASON.value]
         )
