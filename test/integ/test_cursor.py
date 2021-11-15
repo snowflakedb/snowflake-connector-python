@@ -870,6 +870,7 @@ def test_binding_negative(negative_conn_cnx, db_parameters):
             )
 
 
+@pytest.mark.skipolddriver
 def test_execute_stores_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
