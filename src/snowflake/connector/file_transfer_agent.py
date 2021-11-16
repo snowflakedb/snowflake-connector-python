@@ -710,7 +710,10 @@ class SnowflakeFileTransferAgent:
                             self._cursor,
                             OperationalError,
                             {
-                                "msg": error_details,
+                                "msg": "While putting file(s) there was an error: "
+                                f"'{error_details}', this might be caused by "
+                                f"your access to the blob storage provider, "
+                                f"or by Snowflake.",
                                 "errno": ER_FAILED_TO_UPLOAD_TO_STAGE,
                             },
                         )
@@ -760,7 +763,10 @@ class SnowflakeFileTransferAgent:
                             self._cursor,
                             OperationalError,
                             {
-                                "msg": error_details,
+                                "msg": "While getting file(s) there was an error: "
+                                f"'{error_details}', this might be caused by "
+                                f"your access to the blob storage provider, "
+                                f"or by Snowflake.",
                                 "errno": ER_FAILED_TO_DOWNLOAD_FROM_STAGE,
                             },
                         )
