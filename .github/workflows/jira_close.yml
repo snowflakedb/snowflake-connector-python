@@ -10,21 +10,55 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Jira login
-        uses: atlassian/gajira-login@master
+
+      - name: Jira Login
+        uses: atlassian/gajira-login@v2.0.0
         env:
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
       - name: Extract issue from title
         id: extract
         env:
-          TITLE: "${{ github.event.issue.title }}"
+          TITLE: ${{ github.event.issue.title }}
         run: |
           jira=$(echo -n $TITLE | awk '{print $1}' | sed -e 's/://')
           echo ::set-output name=jira::$jira
+
       - name: Close issue
-        uses: ./.github/actions/gajira-close
+        uses: kushanzaveri/gajira-transition@add-fields-support
         if: startsWith(steps.extract.outputs.jira, 'SNOW-')
         with:
-          issue: "${{ steps.extract.outputs.jira }}"
+          issue: ${{ steps.extract.outputs.jira }}
+          transition: 'MOVE TO DONE'
+          fields: '{
+            "customfield_12860": {"id": "11506"},
+            "customfield_10800": {"id": "-1"},
+            "customfield_12500": {"id": "11302"},
+            "customfield_12400": {"id": "-1"},
+            "resolution": {"id": "6"}
+          }'
+          update: '{
+            "comment": [
+              {
+                "add": {
+                  "body" : {
+                    "version": 1,
+                    "type": "doc",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Closed on GitHub"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+        }'
