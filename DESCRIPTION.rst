@@ -12,13 +12,13 @@ Release Notes
 
 - v2.7.1(November 19,2021)
 
-   - Fixed a bug where uploading a streaming file with multiple parts wasn't working 
-   - JWT tokens will now be regenerated when requests are retired 
-   - Updated url escaping for when uploading to AWS S3 to match how boto3 escapes URLs 
-   - Removed a now unused parameter s3_connection_pool_size 
-   - Blocked queries will now be considered to be still running 
-   - Snowflake specific exceptions will now set Exception args 
-   - Fixed a bug where use_s3_regional_url was not set correctly by the connector internally
+   - Fixed a bug where uploading a streaming file with multiple parts did not work.
+   - JWT tokens are now regenerated when a request is retired.
+   - Updated URL escaping when uploading to AWS S3 to match how S3 escapes URLs.
+   - Removed the unused s3_connection_pool_size connection parameter.
+   - Blocked queries are now be considered to be still running.
+   - Snowflake specific exceptions are now set using Exception arguments.
+   - Fixed an issue where use_s3_regional_url was not set correctly by the connector.
 
 
 - v2.7.0(October 25,2021)
