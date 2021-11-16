@@ -49,7 +49,7 @@ def TimestampFromTicks(ticks):
     return Timestamp(*time.localtime(ticks)[:6])
 
 
-Binary = str
+Binary = bytes
 
 STRING = _DBAPITypeObject(get_string_types())
 BINARY = _DBAPITypeObject(get_binary_types())
