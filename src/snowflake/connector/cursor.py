@@ -247,6 +247,7 @@ class SnowflakeCursor:
         self._result_set: Optional["ResultSet"] = None
         self._result_state: ResultState = ResultState.DEFAULT
         self._use_dict_result = use_dict_result
+        self.query: Optional[str] = None
         # TODO: self._query_result_format could be defined as an enum
         self._query_result_format: Optional[str] = None
 
@@ -551,6 +552,7 @@ class SnowflakeCursor:
                 {p["name"]: p["value"] for p in parameters}
             )
 
+        self.query = query
         self._sequence_counter = -1
         return ret
 
