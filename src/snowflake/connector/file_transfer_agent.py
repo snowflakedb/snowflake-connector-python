@@ -172,27 +172,22 @@ def _update_progress(
         status = "Halt...\r\n"
     if progress >= 1:
         progress = 1
-        status = "Done ({elapsed_time:.3f}s, {throughput:.2f}MB/s).\r\n".format(
-            elapsed_time=elapsed_time, throughput=throughput
-        )
+        status = f"Done ({elapsed_time:.3f}s, {throughput:.2f}MB/s).\r\n"
     if not status and show_progress_bar:
-        status = "({elapsed_time:.3f}s, {throughput:.2f}MB/s)".format(
-            elapsed_time=elapsed_time, throughput=throughput
-        )
+        status = f"({elapsed_time:.3f}s, {throughput:.2f}MB/s)"
     if status:
         block = int(round(bar_length * progress))
-        text = "\r{file_name}({size:.2f}MB): [{bar}] {percentage:.2f}% {status}".format(
-            file_name=file_name,
-            size=total_size,
-            bar="#" * block + "-" * (bar_length - block),
-            percentage=progress * 100.0,
-            status=status,
+
+        text = (
+            f"\r{file_name}({total_size:.2f}MB): "
+            f"[{'#' * block + '-' * (bar_length - block)}] "
+            f"{progress * 100.0:.2f}% {status}"
         )
         output_stream.write(text)
         output_stream.flush()
     logger.debug(
-        f"filename: {file_name}, start_time: {start_time}, total_size: {total_size}, progress: {progress}, "
-        f"show_progress_bar: {show_progress_bar}"
+        f"filename: {file_name}, start_time: {start_time}, total_size: {total_size}, "
+        f"progress: {progress}, show_progress_bar: {show_progress_bar}"
     )
     return progress == 1.0
 
@@ -705,12 +700,9 @@ class SnowflakeFileTransferAgent:
                     )
 
                     logger.debug(
-                        "raise_put_get_error: %s, %s, %s, %s, %s",
-                        self._raise_put_get_error,
-                        meta.result_status,
-                        type(meta.result_status),
-                        ResultStatus.ERROR,
-                        type(ResultStatus.ERROR),
+                        f"raise_put_get_error: {self._raise_put_get_error}, "
+                        f"{meta.result_status}, {type(meta.result_status)}, "
+                        f"{ResultStatus.ERROR}, {type(ResultStatus.ERROR)}",
                     )
                     if self._raise_put_get_error and error_details:
                         Error.errorhandler_wrapper(
@@ -939,9 +931,7 @@ class SnowflakeFileTransferAgent:
                     self._cursor,
                     ProgrammingError,
                     {
-                        "msg": "The local path is not a directory: {}".format(
-                            self._local_location
-                        ),
+                        "msg": f"The local path is not a directory: {self._local_location}",
                         "errno": ER_LOCAL_PATH_NOT_DIRECTORY,
                     },
                 )
@@ -1095,11 +1085,11 @@ class SnowflakeFileTransferAgent:
 
                 if encoding is not None:
                     logger.debug(
-                        "detected the encoding %s: file=%s", encoding, file_name
+                        f"detected the encoding {encoding}: file={file_name}",
                     )
                     current_file_compression_type = lookup_by_mime_sub_type(encoding)
                 else:
-                    logger.debug("no file encoding was detected: file=%s", file_name)
+                    logger.debug(f"no file encoding was detected: file={file_name}")
 
                 if (
                     current_file_compression_type is not None
