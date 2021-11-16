@@ -133,7 +133,7 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
       - name: Run delocate
-        run: delocate-wheel --wheel-dir dist dist_tmp/*.whl
+        run: delocate-wheel --wheel-dir dist -v dist_tmp/*.whl
       - name: Show wheels generated
         run: ls -lh dist/
       - uses: actions/upload-artifact@v2

@@ -37,7 +37,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     python -m pip install -U pip setuptools wheel build delocate
     # Use new PEP-517 build
     python -m build --wheel --outdir "dist_tmp${PYTHON_VERSION}" .
-    delocate-wheel --wheel-dir dist "dist_tmp${PYTHON_VERSION}"/*.whl
+    delocate-wheel --wheel-dir dist -v "dist_tmp${PYTHON_VERSION}"/*.whl
     deactivate
     echo "[Info] Deleting venv at ${VENV_DIR}"
     rm -rf ${VENV_DIR}
