@@ -243,7 +243,7 @@ setup(
     },
     extras_require={
         "secure-local-storage": [
-            "keyring<22.0.0,!=16.1.0",
+            "keyring!=16.1.0,<24.0.0",
         ],
         "pandas": pandas_requirements,
         "development": [
