@@ -6,5 +6,5 @@ requires = [
     "wheel",
     "cython",
     # Must be kept in sync with the `setup_requirements` in `setup.py`
-    "pyarrow>=5.0.0,<5.1.0",
+    "pyarrow>=6.0.0,<6.1.0",
 ]
