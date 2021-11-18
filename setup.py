@@ -8,7 +8,6 @@ import sys
 import warnings
 from codecs import open
 from shutil import copy
-from sys import platform
 
 from setuptools import Extension, find_namespace_packages, setup
 
@@ -129,10 +128,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ext.include_dirs.append(ARROW_ITERATOR_SRC_DIR)
                 ext.include_dirs.append(LOGGING_SRC_DIR)
 
-                if platform == "win32":
+                if sys.platform == "win32":
                     ext.include_dirs.append(pyarrow.get_include())
                     ext.include_dirs.append(numpy.get_include())
-                elif platform == "linux" or platform == "darwin":
+                elif sys.platform == "linux" or sys.platform == "darwin":
                     ext.extra_compile_args.append("-isystem" + pyarrow.get_include())
                     ext.extra_compile_args.append("-isystem" + numpy.get_include())
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
@@ -147,9 +146,9 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 # sys.platform for linux used to return with version suffix, (i.e. linux2, linux3)
                 # After version 3.3, it will always be just 'linux'
                 # https://docs.python.org/3/library/sys.html#sys.platform
-                if platform == "linux":
+                if sys.platform == "linux":
                     ext.extra_link_args += ["-Wl,-rpath,$ORIGIN"]
-                elif platform == "darwin":
+                elif sys.platform == "darwin":
                     # rpath,$ORIGIN only work on linux, did not work on darwin. use @loader_path instead
                     # fyi, https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
                     ext.extra_link_args += ["-rpath", "@loader_path"]
