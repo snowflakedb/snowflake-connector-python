@@ -40,6 +40,7 @@ from .constants import (
     FileTransferType,
     QueryStatus,
 )
+from .description import CLIENT_NAME
 from .errorcode import (
     ER_CURSOR_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -1198,10 +1199,13 @@ class SnowflakeCursor:
             with self._lock_canceling:
                 self._connection._cancel_query(query, self._request_id)
 
-    def _log_telemetry_job_data(self, telemetry_field, value):
+    def _log_telemetry_job_data(
+        self, telemetry_field: TelemetryField, value: Any
+    ) -> None:
         """Builds an instance of TelemetryData with the given field and logs it."""
         obj = {
-            "type": telemetry_field,
+            "type": telemetry_field.value,
+            "source": self._connection.application if self._connection else CLIENT_NAME,
             "query_id": self._sfqid,
             "value": int(value),
         }

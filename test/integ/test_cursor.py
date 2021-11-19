@@ -1279,7 +1279,9 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         with con.cursor() as cur:
             with mock.patch.object(cur, "_connection", None):
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
-                cur._log_telemetry_job_data("test", True)
+                cur._log_telemetry_job_data(
+                    TelemetryField.ARROW_FETCH_ALL, True
+                )  # dummy value
     assert (
         "snowflake.connector.cursor",
         logging.WARNING,
@@ -1328,7 +1330,7 @@ def test_resultbatch(
                 )
                 pickle_str = pickle.dumps(pre_pickle_partitions)
                 assert any(
-                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED
+                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED.value
                     for t in telemetry_data.records
                 )
     post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
@@ -1445,7 +1447,8 @@ def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
                     (1,),
                 ]
             assert not any(
-                r.message.get("type", "") == TelemetryField.TIME_CONSUME_LAST_RESULT
+                r.message.get("type", "")
+                == TelemetryField.TIME_CONSUME_LAST_RESULT.value
                 for r in telemetry.records
             )
 
