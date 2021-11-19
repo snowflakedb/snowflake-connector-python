@@ -74,16 +74,16 @@ jobs:
     container: quay.io/pypa/manylinux2010_x86_64
     strategy:
       matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9, 3.10]
+        python-version: [3.6, 3.7, 3.8, 3.9, "3.10"]
     steps:
       - uses: actions/checkout@v1
       - name: Updating path
         run: |
-          echo "/opt/python/cp35-cp35m/bin/" >> $GITHUB_PATH
           echo "/opt/python/cp36-cp36m/bin/" >> $GITHUB_PATH
           echo "/opt/python/cp37-cp37m/bin/" >> $GITHUB_PATH
           echo "/opt/python/cp38-cp38/bin/" >> $GITHUB_PATH
           echo "/opt/python/cp39-cp39/bin/" >> $GITHUB_PATH
+          echo "/opt/python/cp310-cp310/bin/" >> $GITHUB_PATH
       - name: Display Python version
         run: python${{ matrix.python-version }} -c "import sys; print(sys.version)"
       - name: Upgrade setuptools, pip, wheel and build
@@ -145,7 +145,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9, 3.10]
+        python-version: [3.6, 3.7, 3.8, 3.9, "3.10"]
     steps:
       - uses: actions/checkout@v2
       - name: Setup python
@@ -180,7 +180,7 @@ jobs:
            download_name: macos
          - image_name: windows-latest
            download_name: windows
-        python-version: [3.6, 3.7, 3.8, 3.9, 3.10]
+        python-version: [3.6, 3.7, 3.8, 3.9, "3.10"]
         cloud-provider: [aws, azure, gcp]
     steps:
       - uses: actions/checkout@v2
