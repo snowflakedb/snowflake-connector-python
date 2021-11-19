@@ -120,22 +120,22 @@ class Error(BASE_EXCEPTION_CLASS):
     def generate_telemetry_exception_data(self) -> Dict[str, str]:
         """Generate the data to send through telemetry."""
         telemetry_data = {
-            TelemetryField.KEY_DRIVER_TYPE: CLIENT_NAME,
-            TelemetryField.KEY_DRIVER_VERSION: SNOWFLAKE_CONNECTOR_VERSION,
+            TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+            TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
         }
         telemetry_msg = self.telemetry_msg()
         if self.sfqid:
-            telemetry_data[TelemetryField.KEY_SFQID] = self.sfqid
+            telemetry_data[TelemetryField.KEY_SFQID.value] = self.sfqid
         if self.sqlstate:
-            telemetry_data[TelemetryField.KEY_SQLSTATE] = self.sqlstate
+            telemetry_data[TelemetryField.KEY_SQLSTATE.value] = self.sqlstate
         if telemetry_msg:
-            telemetry_data[TelemetryField.KEY_REASON] = telemetry_msg
+            telemetry_data[TelemetryField.KEY_REASON.value] = telemetry_msg
         if self.errno:
-            telemetry_data[TelemetryField.KEY_ERROR_NUMBER] = str(self.errno)
+            telemetry_data[TelemetryField.KEY_ERROR_NUMBER.value] = str(self.errno)
 
-        telemetry_data[TelemetryField.KEY_STACKTRACE] = SecretDetector.mask_secrets(
-            self.telemetry_traceback
-        )
+        telemetry_data[
+            TelemetryField.KEY_STACKTRACE.value
+        ] = SecretDetector.mask_secrets(self.telemetry_traceback)
 
         return telemetry_data
 
@@ -151,8 +151,11 @@ class Error(BASE_EXCEPTION_CLASS):
             and not connection._telemetry.is_closed()
         ):
             # Send with in-band telemetry
-            telemetry_data[TelemetryField.KEY_TYPE] = TelemetryField.SQL_EXCEPTION
-            telemetry_data[TelemetryField.KEY_EXCEPTION] = self.__class__.__name__
+            telemetry_data[
+                TelemetryField.KEY_TYPE.value
+            ] = TelemetryField.SQL_EXCEPTION.value
+            telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
+            telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             ts = get_time_millis()
             try:
                 connection._log_telemetry(TelemetryData(telemetry_data, ts))
