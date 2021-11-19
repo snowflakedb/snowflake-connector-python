@@ -453,7 +453,7 @@ class SnowflakeConverter(object):
         return int(value)
 
     def _long_to_snowflake(self, value):
-        return long(value)  # noqa: F821
+        return long(value)
 
     def _float_to_snowflake(self, value: float) -> float:
         return float(value)

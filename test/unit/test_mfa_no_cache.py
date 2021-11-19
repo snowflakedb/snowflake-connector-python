@@ -10,7 +10,7 @@ import pytest
 from mock import patch
 
 import snowflake.connector
-from snowflake.connector.compat import IS_LINUX  # NOQA
+from snowflake.connector.compat import IS_LINUX
 
 try:
     from snowflake.connector.options import installed_keyring
@@ -18,7 +18,7 @@ except ImportError:
     # if installed_keyring is unavailable, we set it as True to skip the test
     installed_keyring = True
 try:
-    from snowflake.connector.auth import delete_temporary_credential  # NOQA
+    from snowflake.connector.auth import delete_temporary_credential
 except ImportError:
     delete_temporary_credential = None
 

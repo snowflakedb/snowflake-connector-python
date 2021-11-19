@@ -181,7 +181,7 @@ class Error(BASE_EXCEPTION_CLASS):
                 self.send_exception_telemetry(connection, telemetry_data)
             else:
                 self.send_exception_telemetry(None, telemetry_data)
-        except Exception:  # NOQA
+        except Exception:
             # Do nothing but log if sending telemetry fails
             logger.debug("Sending exception telemetry failed")
 

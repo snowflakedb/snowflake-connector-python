@@ -32,7 +32,7 @@ try:
         SnowflakeS3RestClient,
     )
     from snowflake.connector.vendored.requests import HTTPError, Response
-except ImportError:  # NOQA
+except ImportError:
     # Compatibility for olddriver tests
     from requests import HTTPError, Response
 

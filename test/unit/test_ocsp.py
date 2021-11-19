@@ -23,8 +23,10 @@ from snowflake.connector.ssl_wrap_socket import _openssl_connect
 from ..randomize import random_string
 
 try:
-    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_FETCH_FAILURE  # NOQA
-    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
+    from snowflake.connector.errorcode import (
+        ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+        ER_OCSP_RESPONSE_FETCH_FAILURE,
+    )
 except ImportError:
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED = None
     ER_OCSP_RESPONSE_FETCH_FAILURE = None
