@@ -7,10 +7,7 @@
 
 from cpython.ref cimport PyObject
 from cython.operator cimport dereference
-from libc.stdint cimport *
-from libcpp cimport bool as c_bool
 from libcpp.memory cimport shared_ptr
-from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from pyarrow.includes.common cimport CResult, CStatus, GetResultValue
 from pyarrow.includes.libarrow cimport (
