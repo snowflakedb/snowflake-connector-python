@@ -1279,7 +1279,9 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         with con.cursor() as cur:
             with mock.patch.object(cur, "_connection", None):
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
-                cur._log_telemetry_job_data("test", True)
+                cur._log_telemetry_job_data(
+                    TelemetryField.ARROW_FETCH_ALL, True
+                )  # dummy value
     assert (
         "snowflake.connector.cursor",
         logging.WARNING,
