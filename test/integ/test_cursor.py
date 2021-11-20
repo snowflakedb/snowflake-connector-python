@@ -1273,6 +1273,7 @@ def test_scroll(conn_cnx):
                 assert nse.errno == SQLSTATE_FEATURE_NOT_SUPPORTED
 
 
+@pytest.mark.skipolddriver
 def test__log_telemetry_job_data(conn_cnx, caplog):
     """Tests whether we handle missing connection object correctly while logging a telemetry event."""
     with conn_cnx() as con:
@@ -1434,6 +1435,7 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
             ]
 
 
+@pytest.mark.skipolddriver
 def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
     """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
     with conn_cnx() as con:

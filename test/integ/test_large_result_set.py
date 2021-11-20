@@ -112,6 +112,7 @@ def test_query_large_result_set_n_threads(
 
 
 @pytest.mark.aws
+@pytest.mark.skipolddriver
 def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
     """[s3] Gets Large Result set."""
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
