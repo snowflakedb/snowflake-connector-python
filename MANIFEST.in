@@ -1,6 +1,6 @@
-include *.rst
-recursive-include src/snowflake/connector *.py *.pyx
+include *.md
 include LICENSE.txt
 include NOTICE
+include pyproject.toml
+recursive-include src/snowflake/connector *.py *.pyx
 recursive-include src/snowflake/connector/cpp *.cpp *.hpp
-prune test

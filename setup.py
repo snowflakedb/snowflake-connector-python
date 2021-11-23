@@ -11,9 +11,7 @@ from shutil import copy
 
 from setuptools import Extension, find_namespace_packages, setup
 
-THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-SRC_DIR = os.path.join(THIS_DIR, "src")
-CONNECTOR_SRC_DIR = os.path.join(SRC_DIR, "snowflake", "connector")
+CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
 
 VERSION = (1, 1, 1, None)  # Default
 try:
@@ -26,7 +24,7 @@ except Exception:
         exec(f.read())
 version = ".".join([str(v) for v in VERSION if v is not None])
 
-with open(os.path.join(THIS_DIR, "DESCRIPTION.rst"), encoding="utf-8") as f:
+with open("DESCRIPTION.md", encoding="utf-8") as f:
     long_description = f.read()
 
 
@@ -228,7 +226,7 @@ setup(
         "": "src",
     },
     package_data={
-        "snowflake.connector": ["*.pem", "*.json", "*.rst", "LICENSE.txt"],
+        "snowflake.connector": ["*.md", "LICENSE.txt", "NOTICE"],
     },
     entry_points={
         "console_scripts": [
