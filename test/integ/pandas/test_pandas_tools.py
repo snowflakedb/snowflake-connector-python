@@ -16,8 +16,8 @@ from snowflake.connector import DictCursor
 from ...lazy_var import LazyVar
 
 try:
-    from snowflake.connector.options import pandas  # NOQA
-    from snowflake.connector.pandas_tools import write_pandas  # NOQA
+    from snowflake.connector.options import pandas
+    from snowflake.connector.pandas_tools import write_pandas
 except ImportError:
     pandas = None
     write_pandas = None

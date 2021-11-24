@@ -55,6 +55,10 @@ repos:
     rev: 3f92957478422df87bd730abde66f089cc1ee19b
     hooks:
     -   id: rstcheck
+-   repo: https://github.com/asottile/yesqa
+    rev: v1.3.0
+    hooks:
+    -   id: yesqa
 -   repo: https://gitlab.com/pycqa/flake8
     rev: 3.9.2
     hooks:

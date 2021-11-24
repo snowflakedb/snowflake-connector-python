@@ -15,7 +15,7 @@ from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 try:  # pragma: no cover
     from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
 except ImportError:  # keep olddrivertest from breaking
-    from snowflake.connector.remote_storage_util import (  # NOQA
+    from snowflake.connector.remote_storage_util import (
         SnowflakeFileEncryptionMaterial,
     )
 

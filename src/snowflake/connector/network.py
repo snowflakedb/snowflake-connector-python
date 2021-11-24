@@ -365,7 +365,7 @@ class SnowflakeRestful(object):
         )
 
         # This is to address the issue where requests hangs
-        _ = "dummy".encode("idna").decode("utf-8")  # noqa
+        _ = "dummy".encode("idna").decode("utf-8")
 
     @property
     def token(self):

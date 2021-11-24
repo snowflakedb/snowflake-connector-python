@@ -15,13 +15,13 @@ from snowflake.connector.compat import IS_LINUX
 from snowflake.connector.errors import DatabaseError
 
 try:
-    from snowflake.connector.compat import IS_MACOS  # NOQA
+    from snowflake.connector.compat import IS_MACOS
 except ImportError:
     import platform
 
     IS_MACOS = platform.system() == "Darwin"
 try:
-    from snowflake.connector.auth import delete_temporary_credential  # NOQA
+    from snowflake.connector.auth import delete_temporary_credential
 except ImportError:
     delete_temporary_credential = None
 

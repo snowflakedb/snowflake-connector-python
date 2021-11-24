@@ -12,11 +12,11 @@ from mock import Mock, patch
 import snowflake.connector
 
 try:
-    from snowflake.connector.compat import IS_MACOS  # NOQA
+    from snowflake.connector.compat import IS_MACOS
 except ImportError:
     IS_MACOS = False
 try:
-    from snowflake.connector.auth import delete_temporary_credential  # NOQA
+    from snowflake.connector.auth import delete_temporary_credential
 except ImportError:
     delete_temporary_credential = None
 

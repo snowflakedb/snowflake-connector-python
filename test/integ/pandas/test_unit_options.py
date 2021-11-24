@@ -9,7 +9,7 @@ import pytest
 from pkg_resources import working_set
 
 try:
-    from snowflake.connector.options import (  # NOQA
+    from snowflake.connector.options import (
         MissingPandas,
         _import_or_missing_pandas_option,
     )
