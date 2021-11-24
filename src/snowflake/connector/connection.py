@@ -1468,7 +1468,7 @@ class SnowflakeConnection(object):
             QueryStatus.ABORTED,
             QueryStatus.FAILED_WITH_INCIDENT,
             QueryStatus.DISCONNECTED,
-            QueryStatus.BLOCKED,
+            # QueryStatus.BLOCKED, SNOW-507674: v2.7.1 - Blocked queries are now be considered to be still running- Not working as expected
         )
 
     def _all_async_queries_finished(self) -> bool:
