@@ -6,11 +6,23 @@
 # cython: language_level=3
 
 from cpython.ref cimport PyObject
-from libc.stdint cimport *
-from libcpp cimport bool as c_bool
+from cython.operator cimport dereference
 from libcpp.memory cimport shared_ptr
-from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
+from pyarrow.includes.common cimport CResult, CStatus, GetResultValue
+from pyarrow.includes.libarrow cimport (
+    CBuffer,
+    CInputStream,
+    CIpcReadOptions,
+    CRecordBatch,
+    CRecordBatchReader,
+    CRecordBatchStreamReader,
+    FileInterface,
+    FileMode,
+    PyReadableFile,
+    Readable,
+    Seekable,
+)
 
 from .constants import IterUnit
 from .errorcode import (
@@ -58,94 +70,6 @@ cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
         ) except +
 
 
-cdef extern from "arrow/api.h" namespace "arrow" nogil:
-    cdef cppclass CStatus "arrow::Status":
-        CStatus()
-
-        c_string ToString()
-        c_string message()
-
-        c_bool ok()
-        c_bool IsIOError()
-        c_bool IsOutOfMemory()
-        c_bool IsInvalid()
-        c_bool IsKeyError()
-        c_bool IsNotImplemented()
-        c_bool IsTypeError()
-        c_bool IsCapacityError()
-        c_bool IsIndexError()
-        c_bool IsSerializationError()
-
-    cdef cppclass CResult "arrow::Result"[T]:
-        CResult()
-        CResult(CStatus status)
-        CResult(T)
-
-        c_string ToString()
-        c_string message()
-
-        c_bool ok()
-        const CStatus& status()
-        T& ValueOrDie()
-        T operator*()
-
-    cdef cppclass CBuffer" arrow::Buffer":
-        CBuffer(const uint8_t* data, int64_t size)
-
-    cdef cppclass CRecordBatch" arrow::RecordBatch"
-
-    cdef cppclass CRecordBatchReader" arrow::RecordBatchReader":
-        CStatus ReadNext(shared_ptr[CRecordBatch]* batch)
-
-
-cdef extern from "arrow/ipc/api.h" namespace "arrow::ipc" nogil:
-    cdef cppclass CRecordBatchStreamReader \
-            " arrow::ipc::RecordBatchStreamReader"(CRecordBatchReader):
-        @staticmethod
-        CResult[shared_ptr[CRecordBatchReader]] Open(const InputStream* stream)
-
-
-cdef extern from "arrow/io/api.h" namespace "arrow::io" nogil:
-    enum FileMode" arrow::io::FileMode::type":
-        FileMode_READ" arrow::io::FileMode::READ"
-        FileMode_WRITE" arrow::io::FileMode::WRITE"
-        FileMode_READWRITE" arrow::io::FileMode::READWRITE"
-
-    cdef cppclass FileInterface:
-        CStatus Close()
-        CStatus Tell(int64_t* position)
-        FileMode mode()
-        c_bool closed()
-
-    cdef cppclass Readable:
-        # put overload under a different name to avoid cython bug with multiple
-        # layers of inheritance
-        CStatus ReadBuffer" Read"(int64_t nbytes, shared_ptr[CBuffer]* out)
-        CStatus Read(int64_t nbytes, int64_t* bytes_read, uint8_t* out)
-
-    cdef cppclass InputStream(FileInterface, Readable):
-        pass
-
-    cdef cppclass Seekable:
-        CStatus Seek(int64_t position)
-
-    cdef cppclass RandomAccessFile(InputStream, Seekable):
-        CStatus GetSize(int64_t* size)
-
-        CStatus ReadAt(int64_t position, int64_t nbytes,
-                       int64_t* bytes_read, uint8_t* buffer)
-        CStatus ReadAt(int64_t position, int64_t nbytes,
-                       shared_ptr[CBuffer]* out)
-        c_bool supports_zero_copy()
-
-
-cdef extern from "arrow/python/api.h" namespace "arrow::py" nogil:
-    cdef cppclass PyReadableFile(RandomAccessFile):
-        PyReadableFile(object fo)
-
-    T GetResultValue[T](CResult[T]) except *
-
-
 cdef class EmptyPyArrowIterator:
 
     def __iter__(self):
@@ -184,11 +108,14 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             object numpy,
             object number_to_decimal,
     ):
-        cdef shared_ptr[InputStream] input_stream
+        cdef shared_ptr[CInputStream] input_stream
         cdef shared_ptr[CRecordBatch] record_batch
         cdef CStatus ret
         input_stream.reset(new PyReadableFile(py_inputstream))
-        cdef CResult[shared_ptr[CRecordBatchReader]] readerRet = CRecordBatchStreamReader.Open(input_stream.get())
+        cdef CResult[shared_ptr[CRecordBatchReader]] readerRet = CRecordBatchStreamReader.Open(
+            input_stream,
+            CIpcReadOptions.Defaults()
+            )
         if not readerRet.ok():
             Error.errorhandler_wrapper(
                 cursor.connection if cursor is not None else None,
@@ -199,7 +126,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
 
-        cdef shared_ptr[CRecordBatchReader] reader = readerRet.ValueOrDie()
+        cdef shared_ptr[CRecordBatchReader] reader = dereference(readerRet)
 
         while True:
             ret = reader.get().ReadNext(&record_batch)

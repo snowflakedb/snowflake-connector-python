@@ -18,7 +18,7 @@ from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.converter import _generate_tzinfo_from_tzoffset
 
 try:
-    from snowflake.connector.options import installed_pandas  # NOQA
+    from snowflake.connector.options import installed_pandas
 except ImportError:
     installed_pandas = False
 
@@ -29,15 +29,13 @@ except ImportError:
 
 try:
     import pyarrow
-    from pyarrow import RecordBatch  # NOQA
     from pyarrow import RecordBatchStreamReader  # NOQA
-    from pyarrow import RecordBatchStreamWriter  # NOQA
+    from pyarrow import RecordBatch, RecordBatchStreamWriter
 except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import IterUnit  # NOQA
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_iterator import IterUnit, PyArrowIterator
 
     no_arrow_iterator_ext = False
 except ImportError:

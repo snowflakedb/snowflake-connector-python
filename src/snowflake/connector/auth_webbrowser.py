@@ -92,7 +92,7 @@ class AuthByWebBrowser(AuthByPlugin):
 
         # ignore password. user is still needed by GS to verify
         # the assertion.
-        _ = password  # noqa: F841
+        _ = password
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:

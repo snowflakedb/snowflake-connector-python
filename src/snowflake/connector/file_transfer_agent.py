@@ -574,7 +574,7 @@ class SnowflakeFileTransferAgent:
                 result = (False, e)
             try:
                 _callback(*result, file_meta)
-            except Exception as e:  # NOQA
+            except Exception as e:
                 # TODO: if an exception happens in a callback, the exception will not
                 #  propagate to the main thread. We need to save these Exceptions
                 #  somewhere and then re-raise by the main thread. For now let's log

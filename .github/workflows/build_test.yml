@@ -208,7 +208,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox tox-external-wheels
       - name: Run tests
-        run: python -m tox -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci"
+        run: python -m tox -e "py${PYTHON_VERSION/\./}-{unit,integ,pandas,sso}-ci"
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}

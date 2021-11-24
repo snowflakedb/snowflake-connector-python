@@ -25,7 +25,7 @@ except ImportError:
 
 
 try:
-    from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
+    from snowflake.connector.options import installed_pandas, pandas, pyarrow
 except ImportError:
     installed_pandas = False
     pandas = None

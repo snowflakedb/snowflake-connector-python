@@ -37,8 +37,7 @@ from snowflake.connector.network import (
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
-    from snowflake.connector.vendored import requests  # NOQA
-    from snowflake.connector.vendored import urllib3  # NOQA
+    from snowflake.connector.vendored import requests, urllib3
 except ImportError:  # pragma: no cover
     import requests
     import urllib3

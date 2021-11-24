@@ -130,8 +130,7 @@ def quote_url_piece(piece: str) -> str:
 
 try:
     # builtin dataclass
-    from dataclass import dataclass  # NOQA
-    from dataclass import field  # NOQA
+    from dataclass import dataclass, field
 except ImportError:
     # backported dataclass for Python 3.6
     from dataclasses import dataclass  # NOQA
