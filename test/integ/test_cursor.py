@@ -800,6 +800,17 @@ def test_process_params(conn, db_parameters):
         c.close()
 
 
+@pytest.mark.skipolddriver
+def test_process_params_empty(conn_cnx):
+    """SQL is interpolated if params aren't None."""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cursor:
+            cursor.execute("select '%%s'", None)
+            assert cursor.fetchone() == ('%%s',)
+            cursor.execute("select '%%s'", ())
+            assert cursor.fetchone() == ('%s',)
+
+
 def test_real_decimal(conn, db_parameters):
     with conn() as cnx:
         c = cnx.cursor()

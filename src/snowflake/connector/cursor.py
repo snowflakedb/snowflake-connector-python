@@ -654,7 +654,7 @@ class SnowflakeCursor:
                         f"with input=[{params}], "
                         f"processed=[{processed_params}]",
                     )
-                if len(processed_params) > 0:
+                if processed_params is not None:
                     query = command % processed_params
                 else:
                     query = command
