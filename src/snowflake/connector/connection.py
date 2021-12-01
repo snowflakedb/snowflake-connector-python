@@ -1468,7 +1468,6 @@ class SnowflakeConnection(object):
             QueryStatus.ABORTED,
             QueryStatus.FAILED_WITH_INCIDENT,
             QueryStatus.DISCONNECTED,
-            QueryStatus.BLOCKED,
         )
 
     def _all_async_queries_finished(self) -> bool:
