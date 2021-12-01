@@ -191,6 +191,8 @@ DEFAULT_CONFIGURATION: Dict[str, Tuple[Any, Union[Type, Tuple[Type, ...]]]] = {
     ),  # only use regional url when the param is set
     # Allows cursors to be re-iterable
     "reuse_results": (False, bool),
+    # parameter protecting behavior change of SNOW-501058
+    "interpolate_empty_sequences": (False, bool),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1170,7 +1172,9 @@ class SnowflakeConnection(object):
             cursor: The SnowflakeCursor used to report errors if necessary.
         """
         if params is None:
-            return None
+            if self._interpolate_empty_sequences:
+                return None
+            return {}
         if isinstance(params, dict):
             return self._process_params_dict(params)
 

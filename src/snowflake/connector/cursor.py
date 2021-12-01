@@ -654,7 +654,13 @@ class SnowflakeCursor:
                         f"with input=[{params}], "
                         f"processed=[{processed_params}]",
                     )
-                if processed_params is not None:
+                if (
+                    self.connection._interpolate_empty_sequences
+                    and processed_params is not None
+                ) or (
+                    not self.connection._interpolate_empty_sequences
+                    and len(processed_params) > 0
+                ):
                     query = command % processed_params
                 else:
                     query = command
