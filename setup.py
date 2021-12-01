@@ -226,7 +226,12 @@ setup(
         "": "src",
     },
     package_data={
-        "snowflake.connector": ["*.md", "LICENSE.txt", "NOTICE"],
+        "snowflake.connector": [
+            "*.md",
+            "LICENSE.txt",
+            "NOTICE",
+            "src/snowflake/connector/py.typed",
+        ],
     },
     entry_points={
         "console_scripts": [
