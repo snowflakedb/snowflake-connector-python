@@ -23,16 +23,16 @@ except ImportError:
 
 
 @pytest.fixture()
-def conn_cnx(request, conn_cnx):
+def conn_cnx_query_cancelling(request, conn_cnx):
     def fin():
-        with conn_cnx() as cnx:
+        with conn_cnx_query_cancelling() as cnx:
             cnx.cursor().execute("use role accountadmin")
             cnx.cursor().execute("drop user magicuser1")
             cnx.cursor().execute("drop user magicuser2")
 
     request.addfinalizer(fin)
 
-    with conn_cnx() as cnx:
+    with conn_cnx_query_cancelling() as cnx:
         cnx.cursor().execute("use role securityadmin")
         cnx.cursor().execute(
             "create or replace user magicuser1 password='xxx' " "default_role='PUBLIC'"
@@ -41,7 +41,7 @@ def conn_cnx(request, conn_cnx):
             "create or replace user magicuser2 password='xxx' " "default_role='PUBLIC'"
         )
 
-    return conn_cnx
+    return conn_cnx_query_cancelling
 
 
 def _query_run(conn, shared, expectedCanceled=True):
@@ -147,14 +147,14 @@ def _test_helper(conn, expectedCanceled, cancelUser, cancelPass):
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_same_user_canceling(conn_cnx):
+def test_same_user_canceling(conn_cnx_query_cancelling):
     """Tests that the same user CAN cancel his own query."""
-    _test_helper(conn_cnx, True, "magicuser1", "xxx")
+    _test_helper(conn_cnx_query_cancelling, True, "magicuser1", "xxx")
 
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
-def test_other_user_canceling(conn_cnx):
+def test_other_user_canceling(conn_cnx_query_cancelling):
     """Tests that the other user CAN NOT cancel his own query."""
-    _test_helper(conn_cnx, False, "magicuser2", "xxx")
+    _test_helper(conn_cnx_query_cancelling, False, "magicuser2", "xxx")
