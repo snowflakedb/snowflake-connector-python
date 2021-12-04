@@ -61,25 +61,10 @@ if installed_pandas:
     from pyarrow import time64 as pa_time64
     from pyarrow import timestamp as pa_ts
 else:
-    Table = None
+    DataType, Table = None, None
 
-# initialize pyarrow type array corresponding to FIELD_TYPES
-FIELD_TYPE_TO_PA_TYPE: List[DataType] = [
-    pa_int64(),
-    pa_flt64(),
-    pa_str(),
-    pa_date64(),
-    pa_time64("ns"),
-    pa_str(),
-    pa_ts("ns"),
-    pa_ts("ns"),
-    pa_ts("ns"),
-    pa_str(),
-    pa_str(),
-    pa_bin(),
-    pa_time64("ns"),
-    pa_bool(),
-]
+# emtpy pyarrow type array corresponding to FIELD_TYPES
+FIELD_TYPE_TO_PA_TYPE: List[DataType] = []
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
@@ -680,6 +665,25 @@ class ArrowResultBatch(ResultBatch):
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
 
     def _create_emtpy_table(self) -> Table:
+        """Returns emtpy Arrow table based on schema"""
+        if installed_pandas:
+            # initialize pyarrow type array corresponding to FIELD_TYPES
+            FIELD_TYPE_TO_PA_TYPE = [
+                pa_int64(),
+                pa_flt64(),
+                pa_str(),
+                pa_date64(),
+                pa_time64("ns"),
+                pa_str(),
+                pa_ts("ns"),
+                pa_ts("ns"),
+                pa_ts("ns"),
+                pa_str(),
+                pa_str(),
+                pa_bin(),
+                pa_time64("ns"),
+                pa_bool(),
+            ]
         fields = [
             field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code]) for s in self.schema
         ]
@@ -687,9 +691,10 @@ class ArrowResultBatch(ResultBatch):
 
     def to_arrow(self, connection: Optional["SnowflakeConnection"] = None) -> Table:
         """Returns this batch as a pyarrow Table"""
-        return next(
-            self._get_arrow_iter(connection=connection), self._create_emtpy_table()
-        )
+        val = next(self._get_arrow_iter(connection=connection), None)
+        if val is not None:
+            return val
+        return self._create_emtpy_table()
 
     def to_pandas(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
