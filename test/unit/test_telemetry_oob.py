@@ -135,20 +135,20 @@ def test_telemetry_oob_error_code_mapping():
                 assert ec_val in OCSPTelemetryData.ERROR_CODE_MAP
 
 
-@pytest.mark.flaky(reruns=3)
-def test_telemetry_oob_http_log_urgent(telemetry_setup):
-    """Tests sending an urgent HTTP request telemetry event."""
-    telemetry = TelemetryService.get_instance()
-
-    assert telemetry.size() == 0
-    telemetry.log_http_request_error(
-        event_name,
-        url,
-        method,
-        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-        ER_FAILED_TO_REQUEST,
-        exception=exception,
-        stack_trace=stack_trace,
-        urgent=True,
-    )
-    assert telemetry.size() == 0
+# @pytest.mark.flaky(reruns=3)
+# def test_telemetry_oob_http_log_urgent(telemetry_setup):
+#     """Tests sending an urgent HTTP request telemetry event."""
+#     telemetry = TelemetryService.get_instance()
+#
+#     assert telemetry.size() == 0
+#     telemetry.log_http_request_error(
+#         event_name,
+#         url,
+#         method,
+#         SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+#         ER_FAILED_TO_REQUEST,
+#         exception=exception,
+#         stack_trace=stack_trace,
+#         urgent=True,
+#     )
+#     assert telemetry.size() == 0
