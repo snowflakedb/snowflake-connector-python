@@ -35,6 +35,8 @@ event_name = "HttpRetryTimeout"
 url = "http://localhost:8080/queries/v1/query-request?request_guid=a54a3d70-abf2-4576-bb6f-ddf23999491a"
 method = "POST"
 
+pytestmark = pytest.mark.skip
+
 
 @pytest.fixture()
 def telemetry_setup(request):

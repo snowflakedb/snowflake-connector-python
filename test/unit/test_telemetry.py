@@ -3,10 +3,12 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
+import pytest
 from mock import Mock
 
 import snowflake.connector.telemetry
+
+pytestmark = pytest.mark.skip
 
 
 def test_telemetry_data_to_dict():
