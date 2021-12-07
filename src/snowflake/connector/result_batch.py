@@ -664,7 +664,7 @@ class ArrowResultBatch(ResultBatch):
         """Returns an iterator for this batch which yields a pyarrow Table"""
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
 
-    def _create_emtpy_table(self) -> Table:
+    def _create_empty_table(self) -> Table:
         """Returns emtpy Arrow table based on schema"""
         if installed_pandas:
             # initialize pyarrow type array corresponding to FIELD_TYPES
@@ -694,7 +694,7 @@ class ArrowResultBatch(ResultBatch):
         val = next(self._get_arrow_iter(connection=connection), None)
         if val is not None:
             return val
-        return self._create_emtpy_table()
+        return self._create_empty_table()
 
     def to_pandas(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs

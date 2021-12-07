@@ -1101,7 +1101,7 @@ def test_sessions_used(conn_cnx, fetch_fn_name, pass_connection):
 
 
 def assert_dtype_equal(a, b):
-    """Pandas method of asserting the same numpy dtype of variables by computing hash"""
+    """Pandas method of asserting the same numpy dtype of variables by computing hash."""
     assert_equal(a, b)
     assert_equal(
         hash(a), hash(b), "two equivalent types do not hash to the same value !"
