@@ -74,6 +74,11 @@ except ImportError:
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.result_batch import ResultBatch
 
+try:  # pragma: no cover
+    from snowflake.connector.constants import QueryStatus
+except ImportError:
+    QueryStatus = None
+
 
 def _drop_warehouse(conn, db_parameters):
     conn.cursor().execute(
@@ -1546,3 +1551,15 @@ def test_fetch_batches_with_sessions(conn_cnx):
                 # all but one batch is downloaded using a session
                 assert get_session_mock.call_count == num_batches - 1
                 assert len(result) == rowcount
+
+
+def test_null_connection(conn_cnx):
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute_async(
+                "select seq4() as c from table(generator(rowcount=>50000))"
+            )
+            con.rest.delete_session()
+            status = con.get_query_status(cur.sfqid)
+            assert status == QueryStatus.FAILED_WITH_ERROR
+            assert con.is_an_error(status)
