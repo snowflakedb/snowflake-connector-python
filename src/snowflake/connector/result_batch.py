@@ -49,9 +49,22 @@ if TYPE_CHECKING:  # pragma: no cover
     from .vendored.requests import Response
 
 if installed_pandas:
-    from pyarrow import Table
+    from pyarrow import DataType, Table
+    from pyarrow import binary as pa_bin
+    from pyarrow import bool_ as pa_bool
+    from pyarrow import date64 as pa_date64
+    from pyarrow import field
+    from pyarrow import float64 as pa_flt64
+    from pyarrow import int64 as pa_int64
+    from pyarrow import schema
+    from pyarrow import string as pa_str
+    from pyarrow import time64 as pa_time64
+    from pyarrow import timestamp as pa_ts
 else:
-    Table = None
+    DataType, Table = None, None
+
+# emtpy pyarrow type array corresponding to FIELD_TYPES
+FIELD_TYPE_TO_PA_TYPE: List[DataType] = []
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
@@ -651,11 +664,37 @@ class ArrowResultBatch(ResultBatch):
         """Returns an iterator for this batch which yields a pyarrow Table"""
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
 
-    def to_arrow(
-        self, connection: Optional["SnowflakeConnection"] = None
-    ) -> Optional[Table]:
+    def _create_empty_table(self) -> Table:
+        """Returns emtpy Arrow table based on schema"""
+        if installed_pandas:
+            # initialize pyarrow type array corresponding to FIELD_TYPES
+            FIELD_TYPE_TO_PA_TYPE = [
+                pa_int64(),
+                pa_flt64(),
+                pa_str(),
+                pa_date64(),
+                pa_time64("ns"),
+                pa_str(),
+                pa_ts("ns"),
+                pa_ts("ns"),
+                pa_ts("ns"),
+                pa_str(),
+                pa_str(),
+                pa_bin(),
+                pa_time64("ns"),
+                pa_bool(),
+            ]
+        fields = [
+            field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code]) for s in self.schema
+        ]
+        return schema(fields).empty_table()
+
+    def to_arrow(self, connection: Optional["SnowflakeConnection"] = None) -> Table:
         """Returns this batch as a pyarrow Table"""
-        return next(self._get_arrow_iter(connection=connection), None)
+        val = next(self._get_arrow_iter(connection=connection), None)
+        if val is not None:
+            return val
+        return self._create_empty_table()
 
     def to_pandas(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
@@ -663,9 +702,7 @@ class ArrowResultBatch(ResultBatch):
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
-        if table:
-            return table.to_pandas(**kwargs)
-        return pandas.DataFrame(columns=self.column_names)
+        return table.to_pandas(**kwargs)
 
     def _get_pandas_iter(
         self, connection: Optional["SnowflakeConnection"] = None, **kwargs
