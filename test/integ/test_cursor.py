@@ -1553,6 +1553,7 @@ def test_fetch_batches_with_sessions(conn_cnx):
                 assert len(result) == rowcount
 
 
+@pytest.mark.skipolddriver
 def test_null_connection(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
