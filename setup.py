@@ -187,7 +187,7 @@ setup(
     cmdclass=cmd_class,
     long_description=long_description,
     author="Snowflake, Inc",
-    author_email="support@snowflake.com",
+    author_email="ecosystem-team-dl@snowflake.com",
     license="Apache License, Version 2.0",
     keywords="Snowflake db database cloud analytics warehouse",
     url="https://www.snowflake.com/",
