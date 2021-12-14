@@ -204,12 +204,15 @@ def db(
 
 
 @contextmanager
-def negative_db(**kwargs) -> Generator["SnowflakeConnection", None, None]:
+def negative_db(
+    connection_name: str = "default",
+    **kwargs,
+) -> Generator["SnowflakeConnection", None, None]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
         kwargs["converter_class"] = DefaultConverterClass()
-    cnx = create_connection(**kwargs)
+    cnx = create_connection(connection_name, **kwargs)
     if not is_public_testaccount():
         cnx.cursor().execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
     try:
