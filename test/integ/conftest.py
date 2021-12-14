@@ -10,7 +10,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from logging import getLogger
-from typing import Callable, Dict, Generator
+from typing import Any, Callable, ContextManager, Dict, Generator
 
 import pytest
 
@@ -21,21 +21,25 @@ from snowflake.connector.connection import DefaultConverterClass
 from .. import running_on_public_ci
 from ..parameters import CONNECTION_PARAMETERS
 
+try:
+    from ..parameters import CLIENT_FAILOVER_PARAMETERS  # type: ignore
+except ImportError:
+    CLIENT_FAILOVER_PARAMETERS: Dict[str, Any] = {}  # type: ignore
+
 MYPY = False
 if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from snowflake.connector import SnowflakeConnection
 
-CLOUD_PROVIDERS = {"aws", "azure", "gcp"}
-PUBLIC_SKIP_TAGS = {"internal"}
-
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 
+if not isinstance(CONNECTION_PARAMETERS["host"], str):
+    raise Exception("default host is not a string in parameters.py")
 RUNNING_AGAINST_LOCAL_SNOWFLAKE = CONNECTION_PARAMETERS["host"].endswith("local")
 
 try:
-    from ..parameters import CONNECTION_PARAMETERS_ADMIN
+    from ..parameters import CONNECTION_PARAMETERS_ADMIN  # type: ignore
 except ImportError:
-    CONNECTION_PARAMETERS_ADMIN = {}
+    CONNECTION_PARAMETERS_ADMIN: Dict[str, Any] = {}  # type: ignore
 
 logger = getLogger(__name__)
 
@@ -44,7 +48,7 @@ if RUNNING_ON_GH:
 else:
     TEST_SCHEMA = "python_connector_tests_" + str(uuid.uuid4()).replace("-", "_")
 
-DEFAULT_PARAMETERS = {
+DEFAULT_PARAMETERS: Dict["str", Any] = {
     "account": "<account_name>",
     "user": "<user_name>",
     "password": "<password>",
@@ -78,7 +82,9 @@ def is_public_test() -> bool:
 
 def is_public_testaccount() -> bool:
     db_parameters = get_db_parameters()
-    return running_on_public_ci() or db_parameters.get("account").startswith("sfctest0")
+    if not isinstance(db_parameters.get("account"), str):
+        raise Exception("default account is not a string in parameters.py")
+    return running_on_public_ci() or db_parameters["account"].startswith("sfctest0")
 
 
 @pytest.fixture(scope="session")
@@ -86,14 +92,28 @@ def db_parameters() -> Dict[str, str]:
     return get_db_parameters()
 
 
-def get_db_parameters() -> Dict[str, str]:
-    """Sets the db connection parameters."""
+def get_db_parameters(connection_name: str = "default") -> Dict[str, Any]:
+    """Sets the db connection parameters.
+
+    We do this by reading out values from parameters.py and then inserting some
+    hard-coded values into them. Dummy values are also inserted in case these
+    dictionaries were printed by mistake.
+    """
     os.environ["TZ"] = "UTC"
     if not IS_WINDOWS:
         time.tzset()
 
+    connections = {
+        "default": CONNECTION_PARAMETERS,
+        "client_failover": CLIENT_FAILOVER_PARAMETERS,
+    }
+
+    chosen_connection = connections[connection_name]
+    if "account" not in chosen_connection:
+        pytest.skip(f"{connection_name} connection is unavailable in parameters.py")
+
     # testaccount connection info
-    ret = {**DEFAULT_PARAMETERS, **CONNECTION_PARAMETERS}
+    ret = {**DEFAULT_PARAMETERS, **chosen_connection}
 
     # snowflake admin account. Not available in GH actions
     for k, v in CONNECTION_PARAMETERS_ADMIN.items():
@@ -154,21 +174,29 @@ def init_test_schema(db_parameters) -> Generator[None, None, None]:
         con.cursor().execute("DROP SCHEMA IF EXISTS {}".format(TEST_SCHEMA))
 
 
-def create_connection(**kwargs) -> "SnowflakeConnection":
-    """Creates a connection using the parameters defined in parameters.py."""
-    ret = get_db_parameters()
+def create_connection(connection_name: str, **kwargs) -> "SnowflakeConnection":
+    """Creates a connection using the parameters defined in parameters.py.
+
+    You can select from the different connections by supplying the appropiate
+    connection_name parameter and then anything else supplied will overwrite the values
+    from parameters.py.
+    """
+    ret = get_db_parameters(connection_name)
     ret.update(kwargs)
     connection = snowflake.connector.connect(**ret)
     return connection
 
 
 @contextmanager
-def db(**kwargs) -> Generator["SnowflakeConnection", None, None]:
+def db(
+    connection_name: str = "default",
+    **kwargs,
+) -> Generator["SnowflakeConnection", None, None]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
         kwargs["converter_class"] = DefaultConverterClass()
-    cnx = create_connection(**kwargs)
+    cnx = create_connection(connection_name, **kwargs)
     try:
         yield cnx
     finally:
@@ -176,12 +204,15 @@ def db(**kwargs) -> Generator["SnowflakeConnection", None, None]:
 
 
 @contextmanager
-def negative_db(**kwargs) -> Generator["SnowflakeConnection", None, None]:
+def negative_db(
+    connection_name: str = "default",
+    **kwargs,
+) -> Generator["SnowflakeConnection", None, None]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
         kwargs["converter_class"] = DefaultConverterClass()
-    cnx = create_connection(**kwargs)
+    cnx = create_connection(connection_name, **kwargs)
     if not is_public_testaccount():
         cnx.cursor().execute("alter session set SUPPRESS_INCIDENT_DUMPS=true")
     try:
@@ -192,7 +223,7 @@ def negative_db(**kwargs) -> Generator["SnowflakeConnection", None, None]:
 
 @pytest.fixture()
 def conn_testaccount(request) -> "SnowflakeConnection":
-    connection = create_connection()
+    connection = create_connection("default")
 
     def fin():
         connection.close()  # close when done
@@ -202,11 +233,11 @@ def conn_testaccount(request) -> "SnowflakeConnection":
 
 
 @pytest.fixture()
-def conn_cnx() -> Callable[..., "SnowflakeConnection"]:
+def conn_cnx() -> Callable[..., ContextManager["SnowflakeConnection"]]:
     return db
 
 
 @pytest.fixture()
-def negative_conn_cnx() -> Callable[..., Generator["SnowflakeConnection", None, None]]:
+def negative_conn_cnx() -> Callable[..., ContextManager["SnowflakeConnection"]]:
     """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
     return negative_db

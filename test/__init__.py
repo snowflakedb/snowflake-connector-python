@@ -6,7 +6,8 @@
 import os
 
 CLOUD_PROVIDERS = {"aws", "azure", "gcp"}
-PUBLIC_SKIP_TAGS = {"internal"}
+EXTERNAL_SKIP_TAGS = {"internal"}
+INTERNAL_SKIP_TAGS = {"external"}
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 
 
