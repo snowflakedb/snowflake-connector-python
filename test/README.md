@@ -51,3 +51,7 @@ Special categories:
 still work. However; some behaviors change over time and new features get added. For this reason tests tagged with
 this marker will not run with old driver version. Any tests that verify new behavior, or old tests that are changed
 to use new features should have this marker on them.
+
+## Other test tags
+* **internal**: Tests that should only be run on our internal CI.
+* **external**: Tests that should only be run on our external CI.

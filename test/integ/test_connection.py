@@ -1060,3 +1060,12 @@ def test_client_prefetch_threads_setting(conn_cnx):
             cur.execute(f"alter session set client_prefetch_threads={new_thread_count}")
             assert cur._result_set.prefetch_thread_num == new_thread_count
         assert conn.client_prefetch_threads == new_thread_count
+
+
+@pytest.mark.external
+def test_client_failover_connection_url(conn_cnx):
+    with conn_cnx("client_failover") as conn:
+        with conn.cursor() as cur:
+            assert cur.execute("select 1;").fetchall() == [
+                (1,),
+            ]
