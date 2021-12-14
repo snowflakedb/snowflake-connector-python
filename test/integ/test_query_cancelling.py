@@ -24,15 +24,7 @@ except ImportError:
 
 @pytest.fixture()
 def conn_cnx_query_cancelling(request, conn_cnx):
-    def fin():
-        with conn_cnx_query_cancelling() as cnx:
-            cnx.cursor().execute("use role accountadmin")
-            cnx.cursor().execute("drop user magicuser1")
-            cnx.cursor().execute("drop user magicuser2")
-
-    request.addfinalizer(fin)
-
-    with conn_cnx_query_cancelling() as cnx:
+    with conn_cnx() as cnx:
         cnx.cursor().execute("use role securityadmin")
         cnx.cursor().execute(
             "create or replace user magicuser1 password='xxx' " "default_role='PUBLIC'"
@@ -41,7 +33,12 @@ def conn_cnx_query_cancelling(request, conn_cnx):
             "create or replace user magicuser2 password='xxx' " "default_role='PUBLIC'"
         )
 
-    return conn_cnx_query_cancelling
+    yield conn_cnx
+
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("use role accountadmin")
+        cnx.cursor().execute("drop user magicuser1")
+        cnx.cursor().execute("drop user magicuser2")
 
 
 def _query_run(conn, shared, expectedCanceled=True):
