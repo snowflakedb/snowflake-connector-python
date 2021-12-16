@@ -9,6 +9,25 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+- v2.7.2(December 17,2021)
+
+   - Added support for Python version 3.10.
+   - Fixed an issue bug where _get_query_status failed if there was a network error.
+   - Added the interpolate_empty_sequences connection parameter to control interpolating empty sequences into queries.
+   - Fixed an issue where where BLOCKED was considered to be an error by is_an_error.
+   - Added source field to Telemetry.
+   - Increased the cryptography dependency version.
+   - Increased the pyopenssl dependency version.
+   - Fixed an issue where dbapi.Binary returned a string instead of bytes.
+   - Increased the required version of numpy.
+   - Increased the required version of keyring.
+   - Fixed issue so that fetch functions now return a typed DataFrames and pyarrow Tables for empty results.
+   - Added py.typed
+   - Improved error messages for PUT/GET.
+   - Added Cursor.query attribute for accessing last query.
+   - Increased the required version of pyarrow.
+
+
 - v2.7.1(November 19,2021)
 
    - Fixed a bug where uploading a streaming file with multiple parts did not work.
