@@ -1,4 +1,4 @@
-# Snowflake Connector for Python
+# Snowflake Connector for Python 3
 
 [![Build and Test](https://github.com/snowflakedb/snowflake-connector-python/actions/workflows/build_test.yml/badge.svg)](https://github.com/snowflakedb/snowflake-connector-python/actions/workflows/build_test.yml)
 [![codecov](https://codecov.io/gh/snowflakedb/snowflake-connector-python/branch/master/graph/badge.svg?token=MVKSNtnLr0)](https://codecov.io/gh/snowflakedb/snowflake-connector-python)
