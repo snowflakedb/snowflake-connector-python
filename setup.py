@@ -186,6 +186,7 @@ setup(
     ext_modules=extensions,
     cmdclass=cmd_class,
     long_description=long_description,
+    long_description_content_type="text/markdown",
     author="Snowflake, Inc",
     author_email="ecosystem-team-dl@snowflake.com",
     license="Apache License, Version 2.0",
