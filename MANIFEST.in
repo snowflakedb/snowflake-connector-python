@@ -1,6 +1,21 @@
 include *.md
+include *.rst
 include LICENSE.txt
 include NOTICE
 include pyproject.toml
 recursive-include src/snowflake/connector py.typed *.py *.pyx
+recursive-include src/snowflake/connector/vendored LICENSE*
+
 recursive-include src/snowflake/connector/cpp *.cpp *.hpp
+exclude src/snowflake/connector/arrow_iterator.cpp
+
+exclude .git-blame-ignore-revs
+exclude .pre-commit-config.yaml
+exclude license_header.txt
+exclude tox.ini
+
+prune ci
+prune benchmark
+prune test
+prune tested_requirements
+prune src/snowflake/connector/cpp/scripts
