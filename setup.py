@@ -226,14 +226,7 @@ setup(
     package_dir={
         "": "src",
     },
-    package_data={
-        "snowflake.connector": [
-            "*.md",
-            "LICENSE.txt",
-            "NOTICE",
-            "src/snowflake/connector/py.typed",
-        ],
-    },
+    include_package_data=True,
     entry_points={
         "console_scripts": [
             "snowflake-dump-ocsp-response = "

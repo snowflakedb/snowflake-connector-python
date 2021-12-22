@@ -117,3 +117,6 @@ core.*
 
 # Editor specific
 .vscode
+
+# Compiled Cython
+src/snowflake/connector/arrow_iterator.cpp
