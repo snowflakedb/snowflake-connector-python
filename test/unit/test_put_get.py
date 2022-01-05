@@ -70,6 +70,38 @@ def test_put_error(tmpdir):
     chmod(file1, 0o700)
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="permission model is different")
+def test_get_empty_file(tmpdir):
+    """Tests for error message when retrieving missing file."""
+    tmp_dir = str(tmpdir.mkdir("getfiledir"))
+
+    con = MagicMock()
+    cursor = con.cursor()
+    cursor.errorhandler = Error.default_errorhandler
+    query = "PUT something"
+    ret = {
+        "data": {
+            "localLocation": tmp_dir,
+            "command": "DOWNLOAD",
+            "autoCompress": False,
+            "src_locations": [],
+            "sourceCompression": "none",
+            "stageInfo": {
+                "creds": {},
+                "location": "",
+                "locationType": "S3",
+                "path": "remote_loc",
+            },
+        },
+        "success": True,
+    }
+
+    agent_class = SnowflakeFileTransferAgent
+    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=True)
+    sf_file_transfer_agent.execute()
+    assert not sf_file_transfer_agent.result()["rowset"]
+
+
 @pytest.mark.skipolddriver
 def test_percentage(tmp_path):
     """Tests for ProgressPercentage classes."""

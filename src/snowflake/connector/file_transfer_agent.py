@@ -404,6 +404,8 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: List["SnowflakeFileMeta"]) -> None:
+        if not metas:
+            return
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
@@ -661,7 +663,7 @@ class SnowflakeFileTransferAgent:
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
     def _transfer_accelerate_config(self) -> None:
-        if self._stage_location_type == S3_FS:
+        if self._stage_location_type == S3_FS and self._file_metadata:
             client = self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
 
