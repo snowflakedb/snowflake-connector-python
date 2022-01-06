@@ -47,6 +47,7 @@ sf_connector_version_df = LazyVar(
 # Note: since the file will to small to chunk, this is only testing the put command's syntax
 @pytest.mark.parametrize("parallel", [4, 99])
 @pytest.mark.parametrize("quote_identifiers", [True, False])
+@pytest.mark.parametrize("auto_create_table", [True, False])
 def test_write_pandas(
     conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
     db_parameters: Dict[str, str],
@@ -54,6 +55,7 @@ def test_write_pandas(
     parallel: int,
     chunk_size: int,
     quote_identifiers: bool,
+    auto_create_table: bool,
 ):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
 
@@ -77,7 +79,8 @@ def test_write_pandas(
             select_sql = "SELECT * FROM {}".format(table_name)
             drop_sql = "DROP TABLE IF EXISTS {}".format(table_name)
 
-        cnx.execute_string(create_sql)
+        if not auto_create_table:
+            cnx.execute_string(create_sql)
         try:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
@@ -87,6 +90,7 @@ def test_write_pandas(
                 parallel=parallel,
                 chunk_size=chunk_size,
                 quote_identifiers=quote_identifiers,
+                auto_create_table=auto_create_table,
             )
 
             if num_of_chunks == 1:
@@ -96,7 +100,7 @@ def test_write_pandas(
                     == sf_connector_version_data
                 )
             else:
-                # Note: since we used one chunk order is NOT conserved
+                # Note: since we used more than one chunk order is NOT conserved
                 assert set(cnx.cursor().execute(select_sql).fetchall()) == set(
                     sf_connector_version_data
                 )
@@ -312,8 +316,10 @@ def test_autoincrement_insertion(
             cnx.execute_string(drop_sql)
 
 
+@pytest.mark.parametrize("auto_create_table", [True, False])
 def test_special_name_quoting(
     conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+    auto_create_table: bool,
 ):
     """Tests whether special column names get quoted as expected."""
     table_name = "users"
@@ -327,10 +333,15 @@ def test_special_name_quoting(
     select_sql = f'SELECT * FROM "{table_name}"'
     drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
     with conn_cnx() as cnx:  # type: SnowflakeConnection
-        cnx.execute_string(create_sql)
+        if not auto_create_table:
+            cnx.execute_string(create_sql)
         try:
             success, nchunks, nrows, _ = write_pandas(
-                cnx, df, table_name, quote_identifiers=True
+                cnx,
+                df,
+                table_name,
+                quote_identifiers=True,
+                auto_create_table=auto_create_table,
             )
 
             # Check write_pandas output
@@ -340,10 +351,44 @@ def test_special_name_quoting(
             # Check table's contents
             result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
             for row in result:
-                assert row["id"] in (1, 2)
+                # The auto create table functionality does not auto-create an incrementing ID
+                if not auto_create_table:
+                    assert row["id"] in (1, 2)
                 assert (
                     row["00name"],
                     row["bAlance"],
+                ) in df_data
+        finally:
+            cnx.execute_string(drop_sql)
+
+
+def test_auto_create_table_similar_column_names(
+    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+):
+    """Tests whether similar names cause issues when auto-creating a table as expected."""
+    table_name = "numbas"
+    df_data = [(10, 11), (20, 21)]
+
+    df = pandas.DataFrame(df_data, columns=["number", "Number"])
+    select_sql = f'SELECT * FROM "{table_name}"'
+    drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        try:
+            success, nchunks, nrows, _ = write_pandas(
+                cnx, df, table_name, quote_identifiers=True, auto_create_table=True
+            )
+
+            # Check write_pandas output
+            assert success
+            assert nrows == len(df_data)
+            assert nchunks == 1
+            # Check table's contents
+            result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
+            for row in result:
+                # The auto create table functionality does not auto-create an incrementing ID
+                assert (
+                    row["number"],
+                    row["Number"],
                 ) in df_data
         finally:
             cnx.execute_string(drop_sql)

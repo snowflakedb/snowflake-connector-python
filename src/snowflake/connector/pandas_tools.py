@@ -53,6 +53,8 @@ def write_pandas(
     on_error: str = "abort_statement",
     parallel: int = 4,
     quote_identifiers: bool = True,
+    auto_create_table: bool = False,
+    temp_table: bool = False,
 ) -> Tuple[
     bool,
     int,
@@ -104,6 +106,9 @@ def write_pandas(
         quote_identifiers: By default, identifiers, specifically database, schema, table and column names
             (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
             I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
+        auto_create_table: When true, will automatically create a table with corresponding columns for each column in
+            the passed in DataFrame. The table will not be created if it already exists
+        temp_table: Will make the auto-created table as a temporary table
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
@@ -177,6 +182,54 @@ def write_pandas(
         columns = '"' + '","'.join(list(df.columns)) + '"'
     else:
         columns = ",".join(list(df.columns))
+
+    if auto_create_table:
+        file_format_name = None
+        while True:
+            try:
+                file_format_name = (
+                    '"'
+                    + "".join(random.choice(string.ascii_lowercase) for _ in range(5))
+                    + '"'
+                )
+                file_format_sql = (
+                    f"CREATE FILE FORMAT {file_format_name} "
+                    f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+                    f"TYPE=PARQUET COMPRESSION={compression_map[compression]}"
+                )
+                logger.debug("creating file format with '{}'".format(file_format_sql))
+                cursor.execute(file_format_sql, _is_internal=True).fetchall()
+                break
+            except ProgrammingError as pe:
+                if pe.msg.endswith("already exists."):
+                    continue
+                raise
+        infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@\"{stage_name}\"', file_format=>'{file_format_name}'))"
+        logger.debug(f"inferring schema with {infer_schema_sql}")
+        column_type_mapping = dict(
+            cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
+        )
+        # Infer schema can return the columns out of order depending on the chunking we do when uploading
+        # so we have to iterate through the dataframe columns to make sure we create the table with its
+        # columns in order
+        if quote_identifiers:
+            create_table_columns = ", ".join(
+                [f'"{c}" {column_type_mapping[c]}' for c in df.columns]
+            )
+        else:
+            create_table_columns = ", ".join(
+                [f"{c} {column_type_mapping[c]}" for c in df.columns]
+            )
+        create_table_sql = (
+            f"CREATE {'TEMP ' if temp_table else ''}TABLE IF NOT EXISTS {location} "
+            f"({create_table_columns})"
+            f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+        )
+        logger.debug(f"auto creating table with {create_table_sql}")
+        cursor.execute(create_table_sql, _is_internal=True)
+        drop_file_format_sql = f"DROP FILE FORMAT IF EXISTS {file_format_name}"
+        logger.debug(f"dropping file format with {drop_file_format_sql}")
+        cursor.execute(drop_file_format_sql, _is_internal=True)
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
