@@ -70,7 +70,6 @@ def test_put_error(tmpdir):
     chmod(file1, 0o700)
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="permission model is different")
 def test_get_empty_file(tmpdir):
     """Tests for error message when retrieving missing file."""
     tmp_dir = str(tmpdir.mkdir("getfiledir"))

@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Callable, NamedTuple
 import mock
 import pytest
 
+from snowflake.connector import OperationalError
+
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
 from ..randomize import random_string
@@ -646,3 +648,22 @@ def test_put_special_file_name(tmp_path, conn_cnx):
             ).fetchall()
             cur.execute(f"select $1, $2, $3 from  @{stage_name}")
             assert cur.fetchone() == ("1", "2", "3")
+
+
+@pytest.mark.skipolddriver
+def test_get_empty_file(tmp_path, conn_cnx):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_empty_file_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            print(stage_name, filename_in_put)
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}",
+            ).fetchall()
+            empty_file = tmp_path / "foo.csv"
+            with pytest.raises(OperationalError):
+                cur.execute(f"GET @{stage_name}/{empty_file} file://{tmp_path}")
+            assert not empty_file.exists()

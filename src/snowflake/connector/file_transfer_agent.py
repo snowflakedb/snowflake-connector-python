@@ -397,6 +397,17 @@ class SnowflakeFileTransferAgent:
                 m.multipart_threshold = self._multipart_threshold
 
         logger.debug(f"parallel=[{self._parallel}]")
+        if self._raise_put_get_error and not self._file_metadata:
+            Error.errorhandler_wrapper(
+                self._cursor.connection,
+                self._cursor,
+                OperationalError,
+                {
+                    "msg": "While getting file(s) there was an error: "
+                    "the file does not exist.",
+                    "errno": ER_FILE_NOT_EXISTS,
+                },
+            )
         self.transfer(self._file_metadata)
 
         # turn enum to string, in order to have backward compatible interface
@@ -404,8 +415,6 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: List["SnowflakeFileMeta"]) -> None:
-        if not metas:
-            return
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
