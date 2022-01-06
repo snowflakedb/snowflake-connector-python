@@ -659,7 +659,6 @@ def test_get_empty_file(tmp_path, conn_cnx):
         with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             filename_in_put = str(test_file).replace("\\", "/")
-            print(stage_name, filename_in_put)
             cur.execute(
                 f"PUT 'file://{filename_in_put}' @{stage_name}",
             ).fetchall()
