@@ -8,6 +8,7 @@ from os import chmod, path
 import pytest
 from mock import MagicMock
 
+from snowflake.connector import OperationalError
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.errors import Error
 from snowflake.connector.file_transfer_agent import (
@@ -68,6 +69,39 @@ def test_put_error(tmpdir):
         sf_file_transfer_agent.result()
 
     chmod(file1, 0o700)
+
+
+def test_get_empty_file(tmpdir):
+    """Tests for error message when retrieving missing file."""
+    tmp_dir = str(tmpdir.mkdir("getfiledir"))
+
+    con = MagicMock()
+    cursor = con.cursor()
+    cursor.errorhandler = Error.default_errorhandler
+    query = f"GET something file:\\{tmp_dir}"
+    ret = {
+        "data": {
+            "localLocation": tmp_dir,
+            "command": "DOWNLOAD",
+            "autoCompress": False,
+            "src_locations": [],
+            "sourceCompression": "none",
+            "stageInfo": {
+                "creds": {},
+                "location": "",
+                "locationType": "S3",
+                "path": "remote_loc",
+            },
+        },
+        "success": True,
+    }
+
+    sf_file_transfer_agent = SnowflakeFileTransferAgent(
+        cursor, query, ret, raise_put_get_error=True
+    )
+    with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
+        sf_file_transfer_agent.execute()
+    assert not sf_file_transfer_agent.result()["rowset"]
 
 
 @pytest.mark.skipolddriver
