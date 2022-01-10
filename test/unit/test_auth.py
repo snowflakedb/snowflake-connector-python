@@ -6,6 +6,7 @@
 
 import time
 
+import pytest
 from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.auth import Auth
@@ -34,34 +35,37 @@ def _init_rest(application, post_requset):
     return rest
 
 
-def _mock_auth_mfa_rest_response(url, headers, body, **kwargs):
-    """Tests successful case."""
-    global mock_cnt
-    _ = url
-    _ = headers
-    _ = body
-    _ = kwargs.get("dummy")
-    if mock_cnt == 0:
-        ret = {
-            "success": True,
-            "message": None,
-            "data": {
-                "nextAction": "EXT_AUTHN_DUO_ALL",
-                "inFlightCtx": "inFlightCtx",
-            },
-        }
-    elif mock_cnt == 1:
-        ret = {
-            "success": True,
-            "message": None,
-            "data": {
-                "token": "TOKEN",
-                "masterToken": "MASTER_TOKEN",
-            },
-        }
+def _create_mock_auth_mfs_rest_response(next_action: str):
+    def _mock_auth_mfa_rest_response(url, headers, body, **kwargs):
+        """Tests successful case."""
+        global mock_cnt
+        _ = url
+        _ = headers
+        _ = body
+        _ = kwargs.get("dummy")
+        if mock_cnt == 0:
+            ret = {
+                "success": True,
+                "message": None,
+                "data": {
+                    "nextAction": next_action,
+                    "inFlightCtx": "inFlightCtx",
+                },
+            }
+        elif mock_cnt == 1:
+            ret = {
+                "success": True,
+                "message": None,
+                "data": {
+                    "token": "TOKEN",
+                    "masterToken": "MASTER_TOKEN",
+                },
+            }
 
-    mock_cnt += 1
-    return ret
+        mock_cnt += 1
+        return ret
+
+    return _mock_auth_mfa_rest_response
 
 
 def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
@@ -119,7 +123,10 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
     return ret
 
 
-def test_auth_mfa():
+@pytest.mark.parametrize(
+    "next_action", ("EXT_AUTHN_DUO_ALL", "EXT_AUTHN_DUO_PUSH_N_PASSCODE")
+)
+def test_auth_mfa(next_action: str):
     """Authentication by MFA."""
     global mock_cnt
     application = "testapplication"
@@ -129,7 +136,7 @@ def test_auth_mfa():
 
     # success test case
     mock_cnt = 0
-    rest = _init_rest(application, _mock_auth_mfa_rest_response)
+    rest = _init_rest(application, _create_mock_auth_mfs_rest_response(next_action))
     auth = Auth(rest)
     auth_instance = AuthByDefault(password)
     auth.authenticate(auth_instance, account, user)

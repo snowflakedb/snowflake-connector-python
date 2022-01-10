@@ -289,7 +289,10 @@ class Auth(object):
             )
 
         # waiting for MFA authentication
-        if ret["data"].get("nextAction") == "EXT_AUTHN_DUO_ALL":
+        if ret["data"].get("nextAction") in (
+            "EXT_AUTHN_DUO_ALL",
+            "EXT_AUTHN_DUO_PUSH_N_PASSCODE",
+        ):
             body["inFlightCtx"] = ret["data"]["inFlightCtx"]
             body["data"]["EXT_AUTHN_DUO_METHOD"] = "push"
             self.ret = {"message": "Timeout", "data": {}}
