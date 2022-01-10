@@ -8,6 +8,7 @@ from os import chmod, path
 import pytest
 from mock import MagicMock
 
+from snowflake.connector import OperationalError
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.errors import Error
 from snowflake.connector.file_transfer_agent import (
@@ -98,7 +99,8 @@ def test_get_empty_file(tmpdir):
     sf_file_transfer_agent = SnowflakeFileTransferAgent(
         cursor, query, ret, raise_put_get_error=True
     )
-    sf_file_transfer_agent.execute()
+    with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
+        sf_file_transfer_agent.execute()
     assert not sf_file_transfer_agent.result()["rowset"]
 
 
