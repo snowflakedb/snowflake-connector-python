@@ -77,7 +77,7 @@ def test_get_empty_file(tmpdir):
     con = MagicMock()
     cursor = con.cursor()
     cursor.errorhandler = Error.default_errorhandler
-    query = "PUT something"
+    query = f"GET something file:\\{tmp_dir}"
     ret = {
         "data": {
             "localLocation": tmp_dir,
@@ -95,8 +95,9 @@ def test_get_empty_file(tmpdir):
         "success": True,
     }
 
-    agent_class = SnowflakeFileTransferAgent
-    sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=True)
+    sf_file_transfer_agent = SnowflakeFileTransferAgent(
+        cursor, query, ret, raise_put_get_error=True
+    )
     sf_file_transfer_agent.execute()
     assert not sf_file_transfer_agent.result()["rowset"]
 

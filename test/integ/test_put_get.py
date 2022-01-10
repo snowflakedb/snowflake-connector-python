@@ -661,8 +661,8 @@ def test_get_empty_file(tmp_path, conn_cnx):
             filename_in_put = str(test_file).replace("\\", "/")
             cur.execute(
                 f"PUT 'file://{filename_in_put}' @{stage_name}",
-            ).fetchall()
+            )
             empty_file = tmp_path / "foo.csv"
-            with pytest.raises(OperationalError):
-                cur.execute(f"GET @{stage_name}/{empty_file} file://{tmp_path}")
+            with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
+                cur.execute(f"GET @{stage_name}/foo.csv file://{tmp_path}")
             assert not empty_file.exists()
