@@ -397,6 +397,17 @@ class SnowflakeFileTransferAgent:
                 m.multipart_threshold = self._multipart_threshold
 
         logger.debug(f"parallel=[{self._parallel}]")
+        if self._raise_put_get_error and not self._file_metadata:
+            Error.errorhandler_wrapper(
+                self._cursor.connection,
+                self._cursor,
+                OperationalError,
+                {
+                    "msg": "While getting file(s) there was an error: "
+                    "the file does not exist.",
+                    "errno": ER_FILE_NOT_EXISTS,
+                },
+            )
         self.transfer(self._file_metadata)
 
         # turn enum to string, in order to have backward compatible interface
@@ -661,7 +672,7 @@ class SnowflakeFileTransferAgent:
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
     def _transfer_accelerate_config(self) -> None:
-        if self._stage_location_type == S3_FS:
+        if self._stage_location_type == S3_FS and self._file_metadata:
             client = self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
 
