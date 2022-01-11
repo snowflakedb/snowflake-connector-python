@@ -12,6 +12,17 @@ from setuptools import Extension, setup
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
 
+VERSION = (1, 1, 1, None)  # Default
+try:
+    with open(
+        os.path.join(CONNECTOR_SRC_DIR, "generated_version.py"), encoding="utf-8"
+    ) as f:
+        exec(f.read())
+except Exception:
+    with open(os.path.join(CONNECTOR_SRC_DIR, "version.py"), encoding="utf-8") as f:
+        exec(f.read())
+version = ".".join([str(v) for v in VERSION if v is not None])
+
 # Parse command line flags
 
 # This list defines the options definitions in a set
@@ -158,6 +169,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
     cmd_class = {"build_ext": MyBuildExt}
 
 setup(
+    version=version,
     ext_modules=extensions,
     cmdclass=cmd_class,
 )
