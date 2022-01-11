@@ -76,7 +76,7 @@ def test_get_empty_file(tmpdir):
     """Tests for error message when retrieving missing file."""
     tmp_dir = str(tmpdir.mkdir("getfiledir"))
 
-    con = MagicMock()
+    con = mock.MagicMock()
     cursor = con.cursor()
     cursor.errorhandler = Error.default_errorhandler
     query = f"GET something file:\\{tmp_dir}"

@@ -302,7 +302,6 @@ class StorageCredential:
             if cur_timestamp < self.timestamp:
                 return
             logger.debug("Renewing expired storage token.")
-            print("foo")
             ret = self.connection.cursor()._execute_helper(self._command)
             self.creds = ret["data"]["stageInfo"]["creds"]
             self.timestamp = time()
