@@ -295,7 +295,7 @@ class StorageCredential:
         self.timestamp = time()
         self.lock = threading.Lock()
         self.connection = connection
-        self.command = command
+        self._command = command
 
     def update(self, cur_timestamp):
         with self.lock:
@@ -304,7 +304,7 @@ class StorageCredential:
             logger.debug("Renewing expired storage token.")
             ret = self.connection.cursor()._execute_helper(self._command)
             self.creds = ret["data"]["stageInfo"]["creds"]
-            self.timestamp = time.time()
+            self.timestamp = time()
 
 
 @dataclass
