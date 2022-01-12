@@ -14,6 +14,7 @@ from unittest import mock
 
 import numpy
 import pytest
+import pytz
 from numpy.testing import assert_equal
 
 try:
@@ -633,7 +634,6 @@ def validate_pandas(
                             )
                             if data_type == "timestamptz":
                                 c_case = c_case.tz_convert("UTC")
-                                c_case = c_case.tz_localize(None)
                         else:
                             c_case = pandas.Timestamp(cases[i][:time_str_len])
                         assert c_case == c_new, (
@@ -1130,3 +1130,19 @@ def test_pandas_dtypes(conn_cnx):
             # np.dtype string is not the same as pd.string (python)
             for i, typ in enumerate(expected_types):
                 assert_dtype_equal(pandas_dtypes[i].type, numpy.dtype(typ).type)
+
+
+def test_timestamp_tz(conn_cnx):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        }
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select '1990-01-04 10:00:00 +1100'::timestamp_tz as d")
+            res = cur.fetchall()
+            assert res[0][0].tzinfo is not None
+            res_pd = cur.fetch_pandas_all()
+            assert res_pd.D.dt.tz is pytz.UTC
+            res_pa = cur.fetch_arrow_all()
+            assert res_pa.field("D").type.tz == "UTC"
