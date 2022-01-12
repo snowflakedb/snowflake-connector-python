@@ -7,5 +7,4 @@ requires = [
     "cython",
     # Must be kept in sync with the `setup_requirements` in `setup.cfg`
     "pyarrow>=6.0.0,<6.1.0",
-    "dataclasses<1.0;python_version=='3.6'",
 ]
