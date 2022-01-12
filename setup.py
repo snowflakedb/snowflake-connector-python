@@ -6,10 +6,9 @@
 import os
 import sys
 import warnings
-from codecs import open
 from shutil import copy
 
-from setuptools import Extension, find_namespace_packages, setup
+from setuptools import Extension, setup
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
 
@@ -23,10 +22,6 @@ except Exception:
     with open(os.path.join(CONNECTOR_SRC_DIR, "version.py"), encoding="utf-8") as f:
         exec(f.read())
 version = ".".join([str(v) for v in VERSION if v is not None])
-
-with open("DESCRIPTION.md", encoding="utf-8") as f:
-    long_description = f.read()
-
 
 # Parse command line flags
 
@@ -45,12 +40,6 @@ for flag in options_def:
 
 extensions = None
 cmd_class = {}
-
-pandas_requirements = [
-    # Must be kept in sync with pyproject.toml
-    "pyarrow>=6.0.0,<6.1.0",
-    "pandas>=1.0.0,<1.4.0",
-]
 
 try:
     import numpy
@@ -180,107 +169,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
     cmd_class = {"build_ext": MyBuildExt}
 
 setup(
-    name="snowflake-connector-python",
     version=version,
-    description="Snowflake Connector for Python",
     ext_modules=extensions,
     cmdclass=cmd_class,
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    author="Snowflake, Inc",
-    author_email="ecosystem-team-dl@snowflake.com",
-    license="Apache License, Version 2.0",
-    keywords="Snowflake db database cloud analytics warehouse",
-    url="https://www.snowflake.com/",
-    project_urls={
-        "Documentation": "https://docs.snowflake.com/",
-        "Code": "https://github.com/snowflakedb/snowflake-connector-python",
-        "Issue tracker": "https://github.com/snowflakedb/snowflake-connector-python/issues",
-    },
-    python_requires=">=3.6",
-    install_requires=[
-        # While requests is vendored, we use regular requests to perform OCSP checks
-        "requests<3.0.0",
-        "pytz",
-        "pycryptodomex>=3.2,!=3.5.0,<4.0.0",
-        "pyOpenSSL>=16.2.0,<22.0.0",
-        "cffi>=1.9,<2.0.0",
-        "cryptography>=3.1.0,<36.0.0",
-        "pyjwt<3.0.0",
-        "oscrypto<2.0.0",
-        "asn1crypto>0.24.0,<2.0.0",
-        'dataclasses<1.0;python_version=="3.6"',
-        # A functioning pkg_resources.working_set.by_key and pkg_resources.Requirement is
-        # required. Python 3.6 was released at the end of 2016. setuptools 34.0.0 was released
-        # in early 2017, so we pick this version as a reasonably modern base.
-        "setuptools>34.0.0",
-        # requests requirements
-        "charset_normalizer~=2.0.0",
-        "idna>=2.5,<4",
-        "certifi>=2017.4.17",
-    ],
-    namespace_packages=["snowflake"],
-    packages=find_namespace_packages(
-        where="src", include=["snowflake.*"], exclude=["snowflake.connector.cpp*"]
-    ),
-    package_dir={
-        "": "src",
-    },
-    include_package_data=True,
-    entry_points={
-        "console_scripts": [
-            "snowflake-dump-ocsp-response = "
-            "snowflake.connector.tool.dump_ocsp_response:main",
-            "snowflake-dump-ocsp-response-cache = "
-            "snowflake.connector.tool.dump_ocsp_response_cache:main",
-            "snowflake-dump-certs = " "snowflake.connector.tool.dump_certs:main",
-            "snowflake-export-certs = " "snowflake.connector.tool.export_certs:main",
-        ],
-    },
-    extras_require={
-        "secure-local-storage": [
-            "keyring!=16.1.0,<24.0.0",
-        ],
-        "pandas": pandas_requirements,
-        "development": [
-            "pytest<6.3.0",
-            "pytest-cov",
-            "pytest-rerunfailures",
-            "pytest-timeout",
-            "pytest-xdist",
-            "coverage",
-            "pexpect",
-            "mock",
-            "pytz",
-            "pytzdata",
-            "Cython",
-            "pendulum!=2.1.1",
-            "more-itertools",
-            "numpy<1.22.0",
-        ],
-    },
-    classifiers=[
-        "Development Status :: 5 - Production/Stable",
-        "Environment :: Console",
-        "Environment :: Other Environment",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Education",
-        "Intended Audience :: Information Technology",
-        "Intended Audience :: System Administrators",
-        "License :: OSI Approved :: Apache Software License",
-        "Operating System :: OS Independent",
-        "Programming Language :: SQL",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Topic :: Database",
-        "Topic :: Software Development",
-        "Topic :: Software Development :: Libraries",
-        "Topic :: Software Development :: Libraries :: Application Frameworks",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Scientific/Engineering :: Information Analysis",
-    ],
-    zip_safe=False,
 )
