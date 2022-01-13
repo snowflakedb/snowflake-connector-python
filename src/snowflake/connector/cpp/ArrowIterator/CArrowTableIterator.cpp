@@ -303,25 +303,25 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn(
         case arrow::Type::type::INT8:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         case arrow::Type::type::INT16:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         case arrow::Type::type::INT32:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         case arrow::Type::type::INT64:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         default:
