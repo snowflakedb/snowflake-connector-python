@@ -1160,4 +1160,4 @@ def test_arrow_number_to_decimal(conn_cnx):
             df = cur.fetch_pandas_all()
             val = df.NUM[0]
             assert val == Decimal("-3.20")
-            assert type(val) is decimal.Decimal
+            assert isinstance(val, decimal.Decimal)
