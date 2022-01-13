@@ -1146,3 +1146,18 @@ def test_timestamp_tz(conn_cnx):
             assert res_pd.D.dt.tz is pytz.UTC
             res_pa = cur.fetch_arrow_all()
             assert res_pa.field("D").type.tz == "UTC"
+
+
+def test_arrow_number_to_decimal(conn_cnx):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        },
+        arrow_number_to_decimal=True,
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select -3.20 as num")
+            df = cur.fetch_pandas_all()
+            val = df.NUM[0]
+            assert val == Decimal("-3.20")
+            assert isinstance(val, decimal.Decimal)
