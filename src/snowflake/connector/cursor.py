@@ -648,6 +648,14 @@ class SnowflakeCursor:
                 processed_params = self._connection._process_params_pyformat(
                     params, self
                 )
+                # SNOW-513061 collect telemetry for empty sequence usage before we make the breaking change announcement
+                if params is not None and len(params) == 0:
+                    self._log_telemetry_job_data(
+                        TelemetryField.EMPTY_SEQ_INTERPOLATION,
+                        TelemetryData.TRUE
+                        if self.connection._interpolate_empty_sequences
+                        else TelemetryData.FALSE,
+                    )
                 if logger.getEffectiveLevel() <= logging.DEBUG:
                     logger.debug(
                         f"binding: [{self._format_query_for_log(command)}] "
