@@ -23,6 +23,7 @@ class TelemetryField(Enum):
     TIME_PARSING_CHUNKS = "client_time_parsing_chunks"
     SQL_EXCEPTION = "client_sql_exception"
     GET_PARTITIONS_USED = "client_get_partitions_used"
+    EMPTY_SEQ_INTERPOLATION = "client_pyformat_empty_seq_interpolation"
     # fetch_pandas_* usage
     PANDAS_FETCH_ALL = "client_fetch_pandas_all"
     PANDAS_FETCH_BATCHES = "client_fetch_pandas_batches"
