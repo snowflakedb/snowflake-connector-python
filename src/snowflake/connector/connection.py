@@ -81,7 +81,6 @@ from .errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
-from .incident import IncidentAPI
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -284,7 +283,6 @@ class SnowflakeConnection(object):
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
-        self.incident = IncidentAPI(self._rest)
 
     def __del__(self):  # pragma: no cover
         try:
