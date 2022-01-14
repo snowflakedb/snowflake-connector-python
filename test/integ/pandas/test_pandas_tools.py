@@ -5,7 +5,7 @@
 #
 
 import math
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Generator
 
 import mock
@@ -365,14 +365,14 @@ def test_special_name_quoting(
 def test_auto_create_table_similar_column_names(
     conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
 ):
-    """Tests whether similar names cause issues when auto-creating a table as expected."""
+    """Tests whether similar names do not cause issues when auto-creating a table as expected."""
     table_name = "numbas"
     df_data = [(10, 11), (20, 21)]
 
     df = pandas.DataFrame(df_data, columns=["number", "Number"])
     select_sql = f'SELECT * FROM "{table_name}"'
     drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
-    with conn_cnx() as cnx:  # type: SnowflakeConnection
+    with conn_cnx() as cnx:
         try:
             success, nchunks, nrows, _ = write_pandas(
                 cnx, df, table_name, quote_identifiers=True, auto_create_table=True
@@ -385,10 +385,69 @@ def test_auto_create_table_similar_column_names(
             # Check table's contents
             result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
             for row in result:
-                # The auto create table functionality does not auto-create an incrementing ID
                 assert (
                     row["number"],
                     row["Number"],
                 ) in df_data
+        finally:
+            cnx.execute_string(drop_sql)
+
+
+def test_all_pandas_types(
+    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]]
+):
+    table_name = "all_types"
+    datetime_with_tz = datetime(
+        1997, 6, 3, 14, 21, 32, 00, tzinfo=timezone(timedelta(hours=+10))
+    )
+    datetime_with_ntz = datetime(1997, 6, 3, 14, 21, 32, 00)
+    df_data = [
+        (1, 1.1, "1string1", True, datetime_with_tz, datetime_with_ntz),
+        (2, 2.2, "2string2", False, datetime_with_tz, datetime_with_ntz),
+    ]
+    df_data_no_timestamps = [
+        (
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+        )
+        for row in df_data
+    ]
+
+    df = pandas.DataFrame(
+        df_data,
+        columns=["int", "float", "string", "bool", "timestamp_tz", "timestamp_ntz"],
+    )
+
+    select_sql = f'SELECT * FROM "{table_name}"'
+    drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
+    with conn_cnx() as cnx:
+        try:
+            success, nchunks, nrows, _ = write_pandas(
+                cnx, df, table_name, quote_identifiers=True, auto_create_table=True
+            )
+
+            # Check write_pandas output
+            assert success
+            assert nrows == len(df_data)
+            assert nchunks == 1
+            # Check table's contents
+            result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
+            for row in result:
+                assert (
+                    row["int"],
+                    row["float"],
+                    row["string"],
+                    row["bool"],
+                ) in df_data_no_timestamps
+                # TODO: Schema detection on the server-side has bugs dealing with timestamp_ntz and timestamp_tz.
+                #  After the bugs are fixed, change the assertion to `data[0]["tm_tz"] == datetime_with_tz`
+                #  and `data[0]["tm_ntz"] == datetime_with_ntz`,
+                #  JIRA https://snowflakecomputing.atlassian.net/browse/SNOW-524865
+                #  JIRA https://snowflakecomputing.atlassian.net/browse/SNOW-359205
+                #  JIRA https://snowflakecomputing.atlassian.net/browse/SNOW-507644
+                assert row["timestamp_tz"] is not None
+                assert row["timestamp_ntz"] is not None
         finally:
             cnx.execute_string(drop_sql)

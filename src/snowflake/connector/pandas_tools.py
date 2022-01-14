@@ -54,7 +54,7 @@ def write_pandas(
     parallel: int = 4,
     quote_identifiers: bool = True,
     auto_create_table: bool = False,
-    temp_table: bool = False,
+    create_temp_table: bool = False,
 ) -> Tuple[
     bool,
     int,
@@ -108,7 +108,7 @@ def write_pandas(
             I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
             the passed in DataFrame. The table will not be created if it already exists
-        temp_table: Will make the auto-created table as a temporary table
+        create_temp_table: Will make the auto-created table as a temporary table
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
@@ -152,7 +152,7 @@ def write_pandas(
                 "create temporary stage /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
                 '"{stage_name}"'
             ).format(stage_name=stage_name)
-            logger.debug("creating stage with '{}'".format(create_stage_sql))
+            logger.debug(f"creating stage with '{create_stage_sql}'")
             cursor.execute(create_stage_sql, _is_internal=True).fetchall()
             break
         except ProgrammingError as pe:
@@ -174,7 +174,7 @@ def write_pandas(
                 stage_name=stage_name,
                 parallel=parallel,
             )
-            logger.debug("uploading files with '{}'".format(upload_sql))
+            logger.debug(f"uploading files with '{upload_sql}'")
             cursor.execute(upload_sql, _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
@@ -197,38 +197,34 @@ def write_pandas(
                     f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
                     f"TYPE=PARQUET COMPRESSION={compression_map[compression]}"
                 )
-                logger.debug("creating file format with '{}'".format(file_format_sql))
-                cursor.execute(file_format_sql, _is_internal=True).fetchall()
+                logger.debug(f"creating file format with '{file_format_sql}'")
+                cursor.execute(file_format_sql, _is_internal=True)
                 break
             except ProgrammingError as pe:
                 if pe.msg.endswith("already exists."):
                     continue
                 raise
         infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@\"{stage_name}\"', file_format=>'{file_format_name}'))"
-        logger.debug(f"inferring schema with {infer_schema_sql}")
+        logger.debug(f"inferring schema with '{infer_schema_sql}'")
         column_type_mapping = dict(
             cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
         )
         # Infer schema can return the columns out of order depending on the chunking we do when uploading
         # so we have to iterate through the dataframe columns to make sure we create the table with its
         # columns in order
-        if quote_identifiers:
-            create_table_columns = ", ".join(
-                [f'"{c}" {column_type_mapping[c]}' for c in df.columns]
-            )
-        else:
-            create_table_columns = ", ".join(
-                [f"{c} {column_type_mapping[c]}" for c in df.columns]
-            )
-        create_table_sql = (
-            f"CREATE {'TEMP ' if temp_table else ''}TABLE IF NOT EXISTS {location} "
-            f"({create_table_columns})"
-            f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+        quote = '"' if quote_identifiers else ""
+        create_table_columns = ", ".join(
+            [f"{quote}{c}{quote} {column_type_mapping[c]}" for c in df.columns]
         )
-        logger.debug(f"auto creating table with {create_table_sql}")
+        create_table_sql = (
+            f"CREATE {'TEMP ' if create_temp_table else ''}TABLE IF NOT EXISTS {location} "
+            f"({create_table_columns})"
+            f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+        )
+        logger.debug(f"auto creating table with '{create_table_sql}'")
         cursor.execute(create_table_sql, _is_internal=True)
         drop_file_format_sql = f"DROP FILE FORMAT IF EXISTS {file_format_name}"
-        logger.debug(f"dropping file format with {drop_file_format_sql}")
+        logger.debug(f"dropping file format with '{drop_file_format_sql}'")
         cursor.execute(drop_file_format_sql, _is_internal=True)
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
