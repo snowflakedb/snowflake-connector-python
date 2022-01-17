@@ -2,16 +2,16 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import division
+from __future__ import annotations
 
 import base64
 import gzip
 import os
 import shutil
 import struct
-from io import BytesIO, open
+from io import BytesIO
 from logging import getLogger
-from typing import IO, Tuple
+from typing import IO
 
 from Cryptodome.Hash import SHA256
 from cryptography.hazmat.backends import default_backend
@@ -22,9 +22,9 @@ from .constants import UTF8, kilobyte
 logger = getLogger(__name__)
 
 
-class SnowflakeFileUtil(object):
+class SnowflakeFileUtil:
     @staticmethod
-    def get_digest_and_size(src: IO[bytes]) -> Tuple[str, int]:
+    def get_digest_and_size(src: IO[bytes]) -> tuple[str, int]:
         """Gets stream digest and size.
 
         Args:
@@ -60,7 +60,7 @@ class SnowflakeFileUtil(object):
         return digest, size
 
     @staticmethod
-    def compress_with_gzip_from_stream(src_stream: IO[bytes]) -> Tuple[IO[bytes], int]:
+    def compress_with_gzip_from_stream(src_stream: IO[bytes]) -> tuple[IO[bytes], int]:
         """Compresses a stream of bytes with GZIP.
 
         Args:
@@ -74,7 +74,7 @@ class SnowflakeFileUtil(object):
         return BytesIO(compressed_data), len(compressed_data)
 
     @staticmethod
-    def compress_file_with_gzip(file_name: str, tmp_dir: str) -> Tuple[str, int]:
+    def compress_file_with_gzip(file_name: str, tmp_dir: str) -> tuple[str, int]:
         """Compresses a file with GZIP.
 
         Args:
@@ -132,7 +132,7 @@ class SnowflakeFileUtil(object):
                     byte = f.read(1)
 
     @staticmethod
-    def get_digest_and_size_for_stream(src_stream: IO[bytes]) -> Tuple[str, int]:
+    def get_digest_and_size_for_stream(src_stream: IO[bytes]) -> tuple[str, int]:
         """Gets stream digest and size.
 
         Args:
@@ -146,7 +146,7 @@ class SnowflakeFileUtil(object):
         return digest, size
 
     @staticmethod
-    def get_digest_and_size_for_file(file_name: str) -> Tuple[str, int]:
+    def get_digest_and_size_for_file(file_name: str) -> tuple[str, int]:
         """Gets file digest and size.
 
         Args:

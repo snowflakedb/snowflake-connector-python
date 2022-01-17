@@ -3,10 +3,12 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import uuid
 from io import BytesIO
 from logging import getLogger
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from .errors import BindUploadError, Error
 
@@ -25,8 +27,8 @@ class BindUploadAgent:
 
     def __init__(
         self,
-        cursor: "SnowflakeCursor",
-        rows: List[bytes],
+        cursor: SnowflakeCursor,
+        rows: list[bytes],
         stream_buffer_size: int = 1024 * 1024 * 10,
     ):
         """Construct an agent that uploads binding parameters as CSV files to a temporary stage.

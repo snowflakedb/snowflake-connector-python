@@ -1,15 +1,14 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import division
+from __future__ import annotations
 
 import os
 from logging import getLogger
 from math import ceil
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 from .constants import ResultStatus
 from .storage_client import SnowflakeStorageClient
@@ -24,8 +23,8 @@ logger = getLogger(__name__)
 class SnowflakeLocalStorageClient(SnowflakeStorageClient):
     def __init__(
         self,
-        meta: "SnowflakeFileMeta",
-        stage_info: Dict[str, Any],
+        meta: SnowflakeFileMeta,
+        stage_info: dict[str, Any],
         chunk_size: int,
         use_s3_regional_url: bool = False,
     ) -> None:

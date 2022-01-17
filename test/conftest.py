@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import os
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import Generator, List
+from typing import Generator
 
 import pytest
 
@@ -25,11 +26,11 @@ from . import (
 class TelemetryCaptureHandler(TelemetryClient):
     def __init__(
         self,
-        real_telemetry: "TelemetryClient",
+        real_telemetry: TelemetryClient,
         propagate: bool = True,
     ):
         super().__init__(real_telemetry._rest)
-        self.records: List["TelemetryData"] = []
+        self.records: list[TelemetryData] = []
         self._real_telemetry = real_telemetry
         self._propagate = propagate
 
@@ -50,9 +51,9 @@ class TelemetryCaptureFixture:
     @contextmanager
     def patch_connection(
         self,
-        con: "SnowflakeConnection",
+        con: SnowflakeConnection,
         propagate: bool = True,
-    ) -> Generator["TelemetryCaptureHandler", None, None]:
+    ) -> Generator[TelemetryCaptureHandler, None, None]:
         original_telemetry = con._telemetry
         new_telemetry = TelemetryCaptureHandler(
             original_telemetry,
@@ -66,7 +67,7 @@ class TelemetryCaptureFixture:
 
 
 @pytest.fixture(scope="session")
-def capture_sf_telemetry() -> "TelemetryCaptureFixture":
+def capture_sf_telemetry() -> TelemetryCaptureFixture:
     return TelemetryCaptureFixture()
 
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import time
 
@@ -126,7 +127,7 @@ def test_mix_sync_async(conn_cnx):
                 assert cur.fetchall() == [("row1", 1), ("row2", 2), ("row3", 3)]
             finally:
                 for table in ["smallTable", "uselessTable"]:
-                    cur.execute("drop table if exists {}".format(table))
+                    cur.execute(f"drop table if exists {table}")
 
 
 def test_async_qmark(conn_cnx):

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
+
 from enum import Enum
 from typing import Optional
 from unittest import mock
@@ -39,7 +41,7 @@ def close_sessions(rest: SnowflakeRestful, num_session_pools: int) -> None:
 
 
 def create_session(
-    rest: SnowflakeRestful, num_sessions: int = 1, url: Optional[str] = None
+    rest: SnowflakeRestful, num_sessions: int = 1, url: str | None = None
 ) -> None:
     """
     Creates 'num_sessions' sessions to 'url'. This is recursive so that idle sessions

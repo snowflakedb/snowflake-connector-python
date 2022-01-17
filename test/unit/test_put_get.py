@@ -1,11 +1,12 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-from os import chmod, path
+from __future__ import annotations
 
-import mock
+from os import chmod, path
+from unittest import mock
+
 import pytest
 
 from snowflake.connector import OperationalError

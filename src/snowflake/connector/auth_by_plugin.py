@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import logging
 import time
 from os import getenv
-from typing import Optional
 
 from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from .errors import DatabaseError, Error, OperationalError
@@ -97,7 +97,7 @@ class AuthByPlugin:
     def handle_timeout(
         self,
         authenticator: str,
-        service_name: Optional[str],
+        service_name: str | None,
         account: str,
         user: str,
         password: str,

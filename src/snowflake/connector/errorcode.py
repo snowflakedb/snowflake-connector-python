@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
+#
 """This module contains Snowflake error codes."""
+
+from __future__ import annotations
 
 # network
 ER_FAILED_TO_CONNECT_TO_DB = 250001

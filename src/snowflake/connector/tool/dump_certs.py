@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import os
 import sys
@@ -49,7 +50,7 @@ def extract_certificate_file(input_filename):
     ocsp.read_cert_bundle(input_filename, cert_map)
 
     for cert in cert_map.values():
-        print("serial #: {}, name: {}".format(cert.serial_number, cert.subject.native))
+        print(f"serial #: {cert.serial_number}, name: {cert.subject.native}")
 
 
 if __name__ == "__main__":

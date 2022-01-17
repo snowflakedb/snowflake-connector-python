@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import collections.abc
 import decimal
@@ -13,7 +14,7 @@ import platform
 import queue
 import urllib.parse
 import urllib.request
-from typing import Any, Tuple, Type
+from typing import Any
 
 from snowflake.connector.constants import UTF8
 
@@ -21,7 +22,7 @@ IS_LINUX = platform.system() == "Linux"
 IS_WINDOWS = platform.system() == "Windows"
 IS_MACOS = platform.system() == "Darwin"
 
-NUM_DATA_TYPES: Tuple[Type, ...] = ()
+NUM_DATA_TYPES: tuple[type, ...] = ()
 try:
     import numpy
 

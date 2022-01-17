@@ -3,6 +3,8 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import argparse
 import os
 import platform
@@ -10,13 +12,12 @@ import random
 import subprocess
 import tempfile
 import time
-from typing import Optional
 
 IS_WINDOWS = platform.system() == "Windows"
 
 
 def generate_k_lines_of_n_files(
-    k: int, n: int, compress: bool = False, tmp_dir: Optional[str] = None
+    k: int, n: int, compress: bool = False, tmp_dir: str | None = None
 ) -> str:
     """Creates testing files.
 
@@ -36,9 +37,7 @@ def generate_k_lines_of_n_files(
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp(prefix="data")
     for i in range(n):
-        with open(
-            os.path.join(tmp_dir, "file{}".format(i)), "w", encoding="utf-8"
-        ) as f:
+        with open(os.path.join(tmp_dir, f"file{i}"), "w", encoding="utf-8") as f:
             for _ in range(k):
                 num = int(random.random() * 10000.0)
                 tm = time.gmtime(int(random.random() * 30000.0) - 15000)
@@ -58,7 +57,7 @@ def generate_k_lines_of_n_files(
                     )
                 )
                 pct = random.random() * 1000.0
-                ratio = "{:5.2f}".format(random.random() * 1000.0)
+                ratio = f"{random.random() * 1000.0:5.2f}"
                 rec = "{:d},{:s},{:s},{:s},{:s},{:s},{:f},{:s}".format(
                     num, dt, ts, tsltz, tsntz, tstz, pct, ratio
                 )
@@ -66,7 +65,7 @@ def generate_k_lines_of_n_files(
         if compress:
             if not IS_WINDOWS:
                 subprocess.Popen(
-                    ["gzip", os.path.join(tmp_dir, "file{}".format(i))],
+                    ["gzip", os.path.join(tmp_dir, f"file{i}")],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                 ).communicate()
@@ -74,7 +73,7 @@ def generate_k_lines_of_n_files(
                 import gzip
                 import shutil
 
-                fname = os.path.join(tmp_dir, "file{}".format(i))
+                fname = os.path.join(tmp_dir, f"file{i}")
                 with open(fname, "rb") as f_in, gzip.open(fname + ".gz", "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
                 os.unlink(fname)

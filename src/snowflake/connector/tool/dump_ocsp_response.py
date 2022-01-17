@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import time
 from os import path
@@ -69,7 +70,7 @@ def dump_revoked_status(single_response):
             revocation_time.strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT)
         )
     )
-    print("Revoked Reason: {}".format(revocation_reason))
+    print(f"Revoked Reason: {revocation_reason}")
 
 
 def dump_ocsp_response(urls, output_filename):
@@ -83,7 +84,7 @@ def dump_ocsp_response(urls, output_filename):
         connection = _openssl_connect(hostname, port)
         cert_data = ocsp.extract_certificate_chain(connection)
         current_time = int(time.time())
-        print("Target URL: {}".format(url))
+        print(f"Target URL: {url}")
         print(
             "Current Time: {}".format(strftime("%Y%m%d%H%M%SZ", gmtime(current_time)))
         )
@@ -94,13 +95,13 @@ def dump_ocsp_response(urls, output_filename):
             )
             ocsp_response = asn1crypto_ocsp.OCSPResponse.load(ocsp_response_der)
             print("------------------------------------------------------------")
-            print("Subject Name: {}".format(subject.subject.native))
-            print("Issuer Name: {}".format(issuer.subject.native))
-            print("OCSP URI: {}".format(subject.ocsp_urls))
-            print("CRL URI: {}".format(subject.crl_distribution_points[0].native))
-            print("Issuer Name Hash: {}".format(subject.issuer.sha1))
-            print("Issuer Key Hash: {}".format(issuer.public_key.sha1))
-            print("Serial Number: {}".format(subject.serial_number))
+            print(f"Subject Name: {subject.subject.native}")
+            print(f"Issuer Name: {issuer.subject.native}")
+            print(f"OCSP URI: {subject.ocsp_urls}")
+            print(f"CRL URI: {subject.crl_distribution_points[0].native}")
+            print(f"Issuer Name Hash: {subject.issuer.sha1}")
+            print(f"Issuer Key Hash: {issuer.public_key.sha1}")
+            print(f"Serial Number: {subject.serial_number}")
             print("Response Status: {}".format(ocsp_response["response_status"].native))
             basic_ocsp_response = ocsp_response.basic_ocsp_response
             tbs_response_data = basic_ocsp_response["tbs_response_data"]

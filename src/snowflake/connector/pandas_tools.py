@@ -2,23 +2,15 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import os
 import random
 import string
 from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Iterable,
-    Iterator,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import TYPE_CHECKING, Callable, Iterable, Iterator, Sequence, TypeVar
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
@@ -36,41 +28,41 @@ T = TypeVar("T", bound=Sequence)
 logger = getLogger(__name__)
 
 
-def chunk_helper(lst: T, n: int) -> Iterator[Tuple[int, T]]:
+def chunk_helper(lst: T, n: int) -> Iterator[tuple[int, T]]:
     """Helper generator to chunk a sequence efficiently with current index like if enumerate was called on sequence."""
     for i in range(0, len(lst), n):
         yield int(i / n), lst[i : i + n]
 
 
 def write_pandas(
-    conn: "SnowflakeConnection",
-    df: "pandas.DataFrame",
+    conn: SnowflakeConnection,
+    df: pandas.DataFrame,
     table_name: str,
-    database: Optional[str] = None,
-    schema: Optional[str] = None,
-    chunk_size: Optional[int] = None,
+    database: str | None = None,
+    schema: str | None = None,
+    chunk_size: int | None = None,
     compression: str = "gzip",
     on_error: str = "abort_statement",
     parallel: int = 4,
     quote_identifiers: bool = True,
     auto_create_table: bool = False,
     create_temp_table: bool = False,
-) -> Tuple[
+) -> tuple[
     bool,
     int,
     int,
     Sequence[
-        Tuple[
+        tuple[
             str,
             str,
             int,
             int,
             int,
             int,
-            Optional[str],
-            Optional[int],
-            Optional[int],
-            Optional[str],
+            str | None,
+            int | None,
+            int | None,
+            str | None,
         ]
     ],
 ]:
@@ -162,7 +154,7 @@ def write_pandas(
 
     with TemporaryDirectory() as tmp_folder:
         for i, chunk in chunk_helper(df, chunk_size):
-            chunk_path = os.path.join(tmp_folder, "file{}.txt".format(i))
+            chunk_path = os.path.join(tmp_folder, f"file{i}.txt")
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression)
             # Upload parquet file
@@ -247,7 +239,7 @@ def write_pandas(
         compression=compression_map[compression],
         on_error=on_error,
     )
-    logger.debug("copying into with '{}'".format(copy_into_sql))
+    logger.debug(f"copying into with '{copy_into_sql}'")
     copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
     cursor.close()
     return (
@@ -262,8 +254,8 @@ def make_pd_writer(
     quote_identifiers: bool = True,
 ) -> Callable[
     [
-        "pandas.io.sql.SQLTable",
-        Union["sqlalchemy.engine.Engine", "sqlalchemy.engine.Connection"],
+        pandas.io.sql.SQLTable,
+        sqlalchemy.engine.Engine | sqlalchemy.engine.Connection,
         Iterable,
         Iterable,
     ],
@@ -291,8 +283,8 @@ def make_pd_writer(
 
 
 def pd_writer(
-    table: "pandas.io.sql.SQLTable",
-    conn: Union["sqlalchemy.engine.Engine", "sqlalchemy.engine.Connection"],
+    table: pandas.io.sql.SQLTable,
+    conn: sqlalchemy.engine.Engine | sqlalchemy.engine.Connection,
     keys: Iterable,
     data_iter: Iterable,
     quote_identifiers: bool = True,

@@ -2,7 +2,7 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import division
+from __future__ import annotations
 
 import os
 import shutil
@@ -15,16 +15,7 @@ from io import BytesIO
 from logging import getLogger
 from math import ceil
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    NamedTuple,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 import OpenSSL
 
@@ -65,19 +56,19 @@ class SnowflakeStorageClient(ABC):
 
     def __init__(
         self,
-        meta: "SnowflakeFileMeta",
-        stage_info: Dict[str, Any],
+        meta: SnowflakeFileMeta,
+        stage_info: dict[str, Any],
         chunk_size: int,
-        chunked_transfer: Optional[bool] = True,
-        credentials: Optional["StorageCredential"] = None,
+        chunked_transfer: bool | None = True,
+        credentials: StorageCredential | None = None,
         max_retry: int = 5,
     ) -> None:
         self.meta = meta
         self.stage_info = stage_info
-        self.retry_count: Dict[Union[int, str], int] = defaultdict(lambda: 0)
+        self.retry_count: dict[int | str, int] = defaultdict(lambda: 0)
         self.tmp_dir = tempfile.mkdtemp()
-        self.data_file: Optional[str] = None
-        self.encryption_metadata: Optional["EncryptionMetadata"] = None
+        self.data_file: str | None = None
+        self.encryption_metadata: EncryptionMetadata | None = None
 
         self.max_retry = max_retry  # TODO
         self.credentials = credentials
@@ -88,7 +79,7 @@ class SnowflakeStorageClient(ABC):
             False  # so we don't repeat compression/file digest when re-encrypting
         )
         # DOWNLOAD
-        self.full_dst_file_name: Optional[str] = (
+        self.full_dst_file_name: str | None = (
             os.path.realpath(
                 os.path.join(
                     self.meta.local_location, os.path.basename(self.meta.dst_file_name)
@@ -97,7 +88,7 @@ class SnowflakeStorageClient(ABC):
             if self.meta.local_location
             else None
         )
-        self.intermediate_dst_path: Optional[Path] = (
+        self.intermediate_dst_path: Path | None = (
             Path(self.full_dst_file_name + ".part")
             if self.meta.local_location
             else None
@@ -176,7 +167,7 @@ class SnowflakeStorageClient(ABC):
             self.data_file = meta.real_src_file_name
 
     @abstractmethod
-    def get_file_header(self, filename: str) -> Optional[FileHeader]:
+    def get_file_header(self, filename: str) -> FileHeader | None:
         """Check if file exists in target location and obtain file metadata if exists.
 
         Notes:
@@ -259,7 +250,7 @@ class SnowflakeStorageClient(ABC):
     def _send_request_with_retry(
         self,
         verb: str,
-        get_request_args: Callable[[], Tuple[bytes, Dict[str, Any]]],
+        get_request_args: Callable[[], tuple[bytes, dict[str, Any]]],
         retry_id: int,
     ) -> requests.Response:
         rest_call = METHODS[verb]

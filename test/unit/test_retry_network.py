@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import errno
 import os
 import time
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 import OpenSSL.SSL
 import pytest
-from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.compat import (
     BAD_GATEWAY,
@@ -151,7 +152,7 @@ def test_fetch():
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
 
-    class Cnt(object):
+    class Cnt:
         def __init__(self):
             self.c = 0
 

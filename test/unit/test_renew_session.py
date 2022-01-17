@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from mock import MagicMock, Mock, PropertyMock
+from __future__ import annotations
+
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.network import SnowflakeRestful
 

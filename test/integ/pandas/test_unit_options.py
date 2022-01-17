@@ -1,10 +1,12 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import logging
 from copy import deepcopy
+from unittest import mock
 
-import mock
 import pytest
 from pkg_resources import working_set
 

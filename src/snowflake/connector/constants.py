@@ -1,11 +1,12 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 from collections import defaultdict
 from enum import Enum, auto, unique
-from typing import Any, DefaultDict, List, NamedTuple, Optional
+from typing import Any, DefaultDict, NamedTuple
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -15,10 +16,10 @@ DBAPI_TYPE_TIMESTAMP = 3
 
 class FieldType(NamedTuple):
     name: str
-    dbapi_type: List[int]
+    dbapi_type: list[int]
 
 
-FIELD_TYPES: List[FieldType] = [
+FIELD_TYPES: list[FieldType] = [
     FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER]),
     FieldType(name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER]),
     FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING]),
@@ -39,14 +40,14 @@ FIELD_TYPES: List[FieldType] = [
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
 FIELD_ID_TO_NAME: DefaultDict[int, str] = defaultdict(str)
 
-__binary_types: List[int] = []
-__binary_type_names: List[str] = []
-__string_types: List[int] = []
-__string_type_names: List[str] = []
-__number_types: List[int] = []
-__number_type_names: List[str] = []
-__timestamp_types: List[int] = []
-__timestamp_type_names: List[str] = []
+__binary_types: list[int] = []
+__binary_type_names: list[str] = []
+__string_types: list[int] = []
+__string_type_names: list[str] = []
+__number_types: list[int] = []
+__number_type_names: list[str] = []
+__timestamp_types: list[int] = []
+__timestamp_type_names: list[str] = []
 
 for idx, field_type in enumerate(FIELD_TYPES):
     FIELD_ID_TO_NAME[idx] = field_type.name
@@ -68,7 +69,7 @@ for idx, field_type in enumerate(FIELD_TYPES):
             __string_type_names.append(field_type.name)
 
 
-def get_binary_types() -> List[int]:
+def get_binary_types() -> list[int]:
     return __binary_types
 
 
@@ -76,7 +77,7 @@ def is_binary_type_name(type_name: str) -> bool:
     return type_name in __binary_type_names
 
 
-def get_string_types() -> List[int]:
+def get_string_types() -> list[int]:
     return __string_types
 
 
@@ -84,7 +85,7 @@ def is_string_type_name(type_name) -> bool:
     return type_name in __string_type_names
 
 
-def get_number_types() -> List[int]:
+def get_number_types() -> list[int]:
     return __number_types
 
 
@@ -92,7 +93,7 @@ def is_number_type_name(type_name) -> bool:
     return type_name in __number_type_names
 
 
-def get_timestamp_types() -> List[int]:
+def get_timestamp_types() -> list[int]:
     return __timestamp_types
 
 
@@ -158,9 +159,9 @@ class EncryptionMetadata(NamedTuple):
 
 
 class FileHeader(NamedTuple):
-    digest: Optional[str]
-    content_length: Optional[int]
-    encryption_metadata: Optional[EncryptionMetadata]
+    digest: str | None
+    content_length: int | None
+    encryption_metadata: EncryptionMetadata | None
 
 
 PARAMETER_AUTOCOMMIT = "AUTOCOMMIT"

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import logging
 from enum import Enum, unique
@@ -47,7 +48,7 @@ class TelemetryField(Enum):
     KEY_EXCEPTION = "Exception"
 
 
-class TelemetryData(object):
+class TelemetryData:
     """An instance of telemetry data which can be sent to the server."""
 
     TRUE = 1
@@ -64,7 +65,7 @@ class TelemetryData(object):
         return str(self.to_dict())
 
 
-class TelemetryClient(object):
+class TelemetryClient:
     """Client to enqueue and send metrics to the telemetry endpoint in batch."""
 
     SF_PATH_TELEMETRY = "/telemetry/send"
@@ -77,7 +78,7 @@ class TelemetryClient(object):
         self._lock = Lock()
         self._enabled = True
 
-    def add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
+    def add_log_to_batch(self, telemetry_data: TelemetryData) -> None:
         if self.is_closed:
             raise Exception("Attempted to add log when TelemetryClient is closed")
         elif not self._enabled:
@@ -90,7 +91,7 @@ class TelemetryClient(object):
         if len(self._log_batch) >= self._flush_size:
             self.send_batch()
 
-    def try_add_log_to_batch(self, telemetry_data: "TelemetryData") -> None:
+    def try_add_log_to_batch(self, telemetry_data: TelemetryData) -> None:
         try:
             self.add_log_to_batch(telemetry_data)
         except Exception:
@@ -119,7 +120,7 @@ class TelemetryClient(object):
         )
         if ENABLE_TELEMETRY_LOG:
             # This logger guarantees the payload won't be masked. Testing purpose.
-            rt_plain_logger.debug("Inband telemetry data being sent is {}".format(body))
+            rt_plain_logger.debug(f"Inband telemetry data being sent is {body}")
         try:
             ret = self._rest.request(
                 TelemetryClient.SF_PATH_TELEMETRY,

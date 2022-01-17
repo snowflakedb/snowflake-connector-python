@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import mimetypes
 import os
 import time
 from getpass import getuser
 from logging import getLogger
-from typing import Optional
 
 import pytest
 
@@ -100,7 +100,7 @@ def _put_get_user_stage_s3_regional_url(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-) -> Optional[SnowflakeCursor]:
+) -> SnowflakeCursor | None:
     with conn_cnx(
         role="accountadmin",
     ) as cnx:
@@ -131,8 +131,8 @@ def _put_get_user_stage(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-) -> Optional[SnowflakeCursor]:
-    put_cursor: Optional[SnowflakeCursor] = None
+) -> SnowflakeCursor | None:
+    put_cursor: SnowflakeCursor | None = None
     # sanity check
     assert "AWS_ACCESS_KEY_ID" in os.environ, "AWS_ACCESS_KEY_ID is missing"
     assert "AWS_SECRET_ACCESS_KEY" in os.environ, "AWS_SECRET_ACCESS_KEY is missing"
@@ -193,7 +193,7 @@ credentials=(
                 assert rows == number_of_files * number_of_lines, "Number of rows"
             finally:
                 c.close()
-            cnx.cursor().execute("rm @{stage_name}".format(stage_name=stage_name))
+            cnx.cursor().execute(f"rm @{stage_name}")
             cnx.cursor().execute(f"copy into @{stage_name} from {random_str}")
             tmp_dir_user = str(tmpdir.mkdir("put_get_stage"))
             cnx.cursor().execute(f"get @{stage_name}/ file://{tmp_dir_user}/")
@@ -252,7 +252,7 @@ ratio number(6,2))
 """
         )
         user_bucket = os.getenv(
-            "SF_AWS_USER_BUCKET", "sfc-dev1-regression/{}/reg".format(getuser())
+            "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
         )
         cnx.cursor().execute(
             f"""
@@ -351,7 +351,7 @@ def test_get_data_user_stage(
         pytest.skip("This test requires to change the internal parameter")
 
     default_s3bucket = os.getenv(
-        "SF_AWS_USER_BUCKET", "sfc-dev1-regression/{}/reg".format(getuser())
+        "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
     )
     test_data = [
         {
@@ -376,8 +376,8 @@ def _put_list_rm_files_in_stage(tmpdir, conn_cnx, elem):
     tmp_dir = str(tmpdir.mkdir("data"))
     data_file = os.path.join(tmp_dir, data_file_name)
     with open(data_file, "w", encoding=UTF8) as f:
-        f.write(str("123,456,string1\n"))
-        f.write(str("789,012,string2\n"))
+        f.write("123,456,string1\n")
+        f.write("789,012,string2\n")
 
     output_dir = str(tmpdir.mkdir("output"))
     with conn_cnx() as cnx:
@@ -450,6 +450,4 @@ RM @{stage_name}
                     stage_name=stage_name
                 )
             )
-            cnx.cursor().execute(
-                "drop stage if exists {stage_name}".format(stage_name=stage_name)
-            )
+            cnx.cursor().execute(f"drop stage if exists {stage_name}")

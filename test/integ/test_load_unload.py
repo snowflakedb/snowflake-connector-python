@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import os
 import pathlib
@@ -49,30 +50,30 @@ def create_test_data(request, db_parameters, connection):
     assert "AWS_SECRET_ACCESS_KEY" in os.environ, "AWS_SECRET_ACCESS_KEY is missing"
 
     unique_name = db_parameters["name"]
-    database_name = "{}_db".format(unique_name)
-    warehouse_name = "{}_wh".format(unique_name)
+    database_name = f"{unique_name}_db"
+    warehouse_name = f"{unique_name}_wh"
 
     def fin():
         with connection() as cnx:
             with cnx.cursor() as cur:
-                cur.execute("drop database {}".format(database_name))
-                cur.execute("drop warehouse {}".format(warehouse_name))
+                cur.execute(f"drop database {database_name}")
+                cur.execute(f"drop warehouse {warehouse_name}")
 
     request.addfinalizer(fin)
 
-    class TestData(object):
+    class TestData:
         def __init__(self):
             self.test_data_dir = (pathlib.Path(__file__).parent / "data").absolute()
             self.AWS_ACCESS_KEY_ID = "'{}'".format(os.environ["AWS_ACCESS_KEY_ID"])
             self.AWS_SECRET_ACCESS_KEY = "'{}'".format(
                 os.environ["AWS_SECRET_ACCESS_KEY"]
             )
-            self.stage_name = "{}_stage".format(unique_name)
+            self.stage_name = f"{unique_name}_stage"
             self.warehouse_name = warehouse_name
             self.database_name = database_name
             self.connection = connection
             self.user_bucket = os.getenv(
-                "SF_AWS_USER_BUCKET", "sfc-dev1-regression/{}/reg".format(getuser())
+                "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
             )
 
     ret = TestData()
@@ -116,10 +117,8 @@ field_delimiter='|' error_on_column_count_mismatch=false
 def test_load_s3(test_data):
     with test_data.connection() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("use warehouse {}".format(test_data.warehouse_name))
-            cur.execute(
-                "use schema {}.pytesting_schema".format(test_data.database_name)
-            )
+            cur.execute(f"use warehouse {test_data.warehouse_name}")
+            cur.execute(f"use schema {test_data.database_name}.pytesting_schema")
             cur.execute(
                 """
 create or replace table tweets(created_at timestamp,
@@ -182,10 +181,8 @@ def test_put_local_file(test_data):
     with test_data.connection() as cnx:
         with cnx.cursor() as cur:
             cur.execute("alter session set DISABLE_PUT_AND_GET_ON_EXTERNAL_STAGE=false")
-            cur.execute("use warehouse {}".format(test_data.warehouse_name))
-            cur.execute(
-                """use schema {}.pytesting_schema""".format(test_data.database_name)
-            )
+            cur.execute(f"use warehouse {test_data.warehouse_name}")
+            cur.execute(f"""use schema {test_data.database_name}.pytesting_schema""")
             cur.execute(
                 """
 create or replace table pytest_putget_t1 (c1 STRING, c2 STRING, c3 STRING,
@@ -311,13 +308,11 @@ purge=true
             ), "copy did not load file orders_101"
 
             # should be empty (purged)
-            cur.execute("ls @{stage_name}".format(stage_name=test_data.stage_name))
+            cur.execute(f"ls @{test_data.stage_name}")
             results = cur.fetchall()
             assert len(results) == 0, "copied files not purged"
             cur.execute("drop table pytest_putget_t2")
-            cur.execute(
-                "drop stage {stage_name}".format(stage_name=test_data.stage_name)
-            )
+            cur.execute(f"drop stage {test_data.stage_name}")
 
 
 @pytest.mark.aws
@@ -327,10 +322,8 @@ purge=true
 def test_unload(db_parameters, s3_test_data):
     with s3_test_data.connection() as cnx:
         with cnx.cursor() as cur:
-            cur.execute("""use warehouse {}""".format(s3_test_data.warehouse_name))
-            cur.execute(
-                """use schema {}.pytesting_schema""".format(s3_test_data.database_name)
-            )
+            cur.execute(f"""use warehouse {s3_test_data.warehouse_name}""")
+            cur.execute(f"""use schema {s3_test_data.database_name}.pytesting_schema""")
             cur.execute(
                 """
 create or replace stage {stage_name}
@@ -363,7 +356,7 @@ alter stage {stage_name} set file_format = (format_name = 'VSV' )
             )
 
             # make sure its clean
-            cur.execute("rm @{stage_name}".format(stage_name=s3_test_data.stage_name))
+            cur.execute(f"rm @{s3_test_data.stage_name}")
 
             # put local file
             cur.execute(
@@ -494,6 +487,4 @@ return_failed_only=true
             )
 
             cur.execute("drop table pytest_t3_copy")
-            cur.execute(
-                "drop stage {stage_name}".format(stage_name=s3_test_data.stage_name)
-            )
+            cur.execute(f"drop stage {s3_test_data.stage_name}")

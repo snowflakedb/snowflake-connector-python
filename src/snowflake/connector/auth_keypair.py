@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import base64
 import hashlib
 import os
 from datetime import datetime, timedelta
 from logging import getLogger
-from typing import Optional
 
 import jwt
 from cryptography.hazmat.backends import default_backend
@@ -75,10 +75,10 @@ class AuthByKeyPair(AuthByPlugin):
     def authenticate(
         self,
         authenticator: str,
-        service_name: Optional[str],
+        service_name: str | None,
         account: str,
         user: str,
-        password: Optional[str],
+        password: str | None,
     ) -> str:
         if ".global" in account:
             account = account.partition("-")[0]
@@ -113,8 +113,8 @@ class AuthByKeyPair(AuthByPlugin):
 
         self._jwt_token_exp = now + self._lifetime
         payload = {
-            self.ISSUER: "{}.{}.{}".format(account, user, public_key_fp),
-            self.SUBJECT: "{}.{}".format(account, user),
+            self.ISSUER: f"{account}.{user}.{public_key_fp}",
+            self.SUBJECT: f"{account}.{user}",
             self.ISSUE_TIME: now,
             self.EXPIRE_TIME: self._jwt_token_exp,
         }
@@ -164,10 +164,10 @@ class AuthByKeyPair(AuthByPlugin):
     def handle_timeout(
         self,
         authenticator: str,
-        service_name: Optional[str],
+        service_name: str | None,
         account: str,
         user: str,
-        password: Optional[str],
+        password: str | None,
     ) -> None:
         if self._retry_ctx.get_current_retry_count() > self._jwt_retry_attempts:
             logger.debug("Exhausted max login attempts. Aborting connection")

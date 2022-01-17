@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-from typing import Dict, List, NamedTuple, Optional
+from __future__ import annotations
+
+from typing import NamedTuple
 
 
 class CompressionType(NamedTuple):
     name: str
     file_extension: str
     mime_type: str
-    mime_subtypes: List[str]
+    mime_subtypes: list[str]
     is_supported: bool
 
 
@@ -108,13 +109,13 @@ CompressionTypes = {
     ),
 }
 
-subtype_to_meta: Dict[str, CompressionType] = {
+subtype_to_meta: dict[str, CompressionType] = {
     ms.lower(): meta for meta in CompressionTypes.values() for ms in meta.mime_subtypes
 }
 
 # TODO: Snappy avro doesn't need to be compressed again
 
 
-def lookup_by_mime_sub_type(mime_subtype: str) -> Optional[CompressionType]:
+def lookup_by_mime_sub_type(mime_subtype: str) -> CompressionType | None:
     """Look up a CompressionType for a specific mime subtype."""
     return subtype_to_meta.get(mime_subtype.lower())

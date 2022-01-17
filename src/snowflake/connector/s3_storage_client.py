@@ -2,16 +2,16 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import division
+from __future__ import annotations
 
 import binascii
 import re
-import xml.etree.cElementTree as ET
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from io import IOBase
 from logging import getLogger
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from cryptography.hazmat.primitives import hashes, hmac
 
@@ -55,9 +55,9 @@ class S3Location(NamedTuple):
 class SnowflakeS3RestClient(SnowflakeStorageClient):
     def __init__(
         self,
-        meta: "SnowflakeFileMeta",
-        credentials: "StorageCredential",
-        stage_info: Dict[str, Any],
+        meta: SnowflakeFileMeta,
+        credentials: StorageCredential,
+        stage_info: dict[str, Any],
         chunk_size: int,
         use_accelerate_endpoint: bool = False,
         use_s3_regional_url=False,
@@ -73,9 +73,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]
         # Multipart upload only
-        self.upload_id: Optional[str] = None
-        self.etags: Optional[List[str]] = None
-        self.s3location: "S3Location" = (
+        self.upload_id: str | None = None
+        self.etags: list[str] | None = None
+        self.s3location: S3Location = (
             SnowflakeS3RestClient._extract_bucket_name_and_path(
                 self.stage_info["location"]
             )
@@ -138,7 +138,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     @staticmethod
     def _construct_query_string(
-        query_parts: Tuple[Tuple[str, str], ...],
+        query_parts: tuple[tuple[str, str], ...],
     ) -> str:
         """Convenience function to build the query part of a URL from key-value pairs.
 
@@ -148,8 +148,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     @staticmethod
     def _construct_canonicalized_and_signed_headers(
-        headers: Dict[str, Union[str, List[str]]]
-    ) -> Tuple[str, str]:
+        headers: dict[str, str | list[str]]
+    ) -> tuple[str, str]:
         """Construct canonical headers as per AWS specs, returns the signed headers too.
 
         Does not support sorting by values in case the keys are the same, don't send
@@ -178,10 +178,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def _construct_canonical_request_and_signed_headers(
         verb: str,
         canonical_uri_parameter: str,
-        query_parts: Dict[str, str],
-        canonical_headers: Optional[Dict[str, Union[str, List[str]]]] = None,
+        query_parts: dict[str, str],
+        canonical_headers: dict[str, str | list[str]] | None = None,
         payload_hash: str = "",
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Build canonical request and also return signed headers.
 
         Note: this doesn't support sorting by values in case the same key is given
@@ -218,7 +218,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         amzdate: str,
         short_amzdate: str,
         canonical_request_hash: bytes,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Given all the necessary information construct a V4 string to sign.
 
         As per AWS specs it requires the scope, the hash of the canonical request and
@@ -262,7 +262,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         return err.find("Code").text == EXPIRED_TOKEN
 
     @staticmethod
-    def _extract_bucket_name_and_path(stage_location) -> "S3Location":
+    def _extract_bucket_name_and_path(stage_location) -> S3Location:
         # split stage location as bucket name and path
         bucket_name, _, path = stage_location.partition("/")
         if path and not path.endswith("/"):
@@ -274,11 +274,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         self,
         url: str,
         verb: str,
-        retry_id: Union[int, str],
-        query_parts: Optional[Dict[str, str]] = None,
-        x_amz_headers: Optional[Dict[str, str]] = None,
-        headers: Optional[Dict[str, str]] = None,
-        payload: Union[bytes, bytearray, IOBase, None] = None,
+        retry_id: int | str,
+        query_parts: dict[str, str] | None = None,
+        x_amz_headers: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        payload: bytes | bytearray | IOBase | None = None,
         unsigned_payload: bool = False,
     ) -> requests.Response:
         if x_amz_headers is None:
@@ -301,7 +301,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 SnowflakeS3RestClient._hash_bytes_hex(payload).lower().decode()
             )
 
-        def generate_authenticated_url_and_args_v4() -> Tuple[bytes, Dict[str, bytes]]:
+        def generate_authenticated_url_and_args_v4() -> tuple[bytes, dict[str, bytes]]:
             t = datetime.utcnow()
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
@@ -353,7 +353,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             verb, generate_authenticated_url_and_args_v4, retry_id
         )
 
-    def get_file_header(self, filename: str) -> Optional[FileHeader]:
+    def get_file_header(self, filename: str) -> FileHeader | None:
         """Gets the metadata of file in specified location.
 
         Args:
@@ -399,7 +399,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         else:
             response.raise_for_status()
 
-    def _prepare_file_metadata(self) -> Dict[str, Any]:
+    def _prepare_file_metadata(self) -> dict[str, Any]:
         """Construct metadata for a file to be uploaded.
 
         Returns: File metadata in a dict.

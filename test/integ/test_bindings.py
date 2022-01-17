@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import calendar
 import tempfile
@@ -11,11 +12,11 @@ from datetime import date, datetime
 from datetime import time as datetime_time
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import pendulum
 import pytest
 import pytz
-from mock import patch
 
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ForbiddenError, ProgrammingError
@@ -414,7 +415,7 @@ create or replace table {name} (
             fmt = "insert into {name}(c1,c2) values(?,?)".format(
                 name=db_parameters["name"]
             )
-            c.executemany(fmt, [(idx, "test{}".format(idx)) for idx in range(num_rows)])
+            c.executemany(fmt, [(idx, f"test{idx}") for idx in range(num_rows)])
             assert c.rowcount == num_rows
     finally:
         with conn_cnx() as cnx:
@@ -437,7 +438,7 @@ def test_bulk_insert_binding_fallback(conn_cnx):
             "snowflake.connector.cursor.BindUploadAgent._create_stage"
         ) as mocked_stage_creation:
             mocked_stage_creation.side_effect = ForbiddenError
-            csr.executemany(query, [(idx, "test{}".format(idx)) for idx in range(4)])
+            csr.executemany(query, [(idx, f"test{idx}") for idx in range(4)])
         mocked_stage_creation.assert_called_once()
         mocked_execute_helper.assert_called_once()
         assert (

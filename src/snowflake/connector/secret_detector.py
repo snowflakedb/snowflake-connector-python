@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
@@ -10,10 +9,11 @@ It masks secrets that might be leaked from two potential avenues
     1. Out of Band Telemetry
     2. Logging
 """
+from __future__ import annotations
+
 import logging
 import os
 import re
-from typing import Tuple
 
 MIN_TOKEN_LEN = os.getenv("MIN_TOKEN_LEN", 32)
 MIN_PWD_LEN = os.getenv("MIN_PWD_LEN", 8)
@@ -85,7 +85,7 @@ class SecretDetector(logging.Formatter):
         )
 
     @staticmethod
-    def mask_secrets(text: str) -> Tuple[bool, str, str]:
+    def mask_secrets(text: str) -> tuple[bool, str, str]:
         """Masks any secrets. This is the method that should be used by outside classes.
 
         Args:
