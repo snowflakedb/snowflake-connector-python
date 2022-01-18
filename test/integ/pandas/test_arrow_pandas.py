@@ -59,10 +59,8 @@ def test_num_one(conn_cnx):
     col_count = 2
     random_seed = get_random_seed()
     sql_exec = (
-        "select seq4() as c1, uniform(1, 10, random({})) as c2 from ".format(
-            random_seed
-        )
-        + f"table(generator(rowcount=>{row_count})) order by c1, c2"
+        f"select seq4() as c1, uniform(1, 10, random({random_seed})) as c2 from "
+        f"table(generator(rowcount=>{row_count})) order by c1, c2"
     )
     fetch_pandas(conn_cnx, sql_exec, row_count, col_count, "one")
 

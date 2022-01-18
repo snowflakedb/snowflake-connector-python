@@ -220,11 +220,11 @@ class SnowflakeCursor:
         self._connection: SnowflakeConnection = connection
 
         self._errorhandler: Callable[
-            [SnowflakeConnection, SnowflakeCursor, Type[Error], dict[str, str]],
+            [SnowflakeConnection, SnowflakeCursor, type[Error], dict[str, str]],
             None,
         ] = Error.default_errorhandler
         self.messages: list[
-            tuple[Type[Error] | Type[Exception], dict[str, str | bool]]
+            tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
         self._timebomb: Timer | None = None  # must be here for abort_exit method
         self._description: list[ResultMetadata] | None = None
@@ -578,7 +578,7 @@ class SnowflakeCursor:
         _raise_put_get_error: bool = True,
         _force_put_overwrite: bool = False,
         file_stream: IO[bytes] | None = None,
-    ) -> SnowflakeCursor | None | None:
+    ) -> SnowflakeCursor | None:
         """Executes a command/query.
 
         Args:

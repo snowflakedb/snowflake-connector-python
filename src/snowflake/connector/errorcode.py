@@ -2,8 +2,6 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-#
-"""This module contains Snowflake error codes."""
 
 from __future__ import annotations
 
