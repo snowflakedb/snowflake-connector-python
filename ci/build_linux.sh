@@ -55,4 +55,5 @@ fi
 done
 
 # Move lowest Python version generated sdist to right location
-mv "${DIST_DIR}"/3.6/*.tar.gz dist
+LOWEST_SDIST="$(find dist -iname '*.tar.gz' | sort | head -n 1)"
+mv "${LOWEST_SDIST}" dist
