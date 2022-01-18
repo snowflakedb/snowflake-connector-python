@@ -14,6 +14,7 @@ import pytest
 from snowflake.connector import DictCursor
 
 from ...lazy_var import LazyVar
+from ...randomize import random_string
 
 try:
     from snowflake.connector.options import pandas
@@ -48,6 +49,7 @@ sf_connector_version_df = LazyVar(
 @pytest.mark.parametrize("parallel", [4, 99])
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 @pytest.mark.parametrize("auto_create_table", [True, False])
+@pytest.mark.parametrize("create_temp_table", [True, False])
 def test_write_pandas(
     conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
     db_parameters: Dict[str, str],
@@ -56,6 +58,7 @@ def test_write_pandas(
     chunk_size: int,
     quote_identifiers: bool,
     auto_create_table: bool,
+    create_temp_table: bool,
 ):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
 
@@ -91,6 +94,7 @@ def test_write_pandas(
                 chunk_size=chunk_size,
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
+                create_temp_table=create_temp_table,
             )
 
             if num_of_chunks == 1:
@@ -111,6 +115,16 @@ def test_write_pandas(
             assert nrows == len(sf_connector_version_data)
             # Make sure we uploaded in as many chunk as we wanted to
             assert nchunks == num_of_chunks
+            # Check to see if this is a temporary or regular table if we auto-created this table
+            if auto_create_table:
+                table_info = (
+                    cnx.cursor(DictCursor)
+                    .execute(f"show tables like '{table_name}'")
+                    .fetchall()
+                )
+                assert table_info[0]["kind"] == (
+                    "TEMPORARY" if create_temp_table else "TABLE"
+                )
         finally:
             cnx.execute_string(drop_sql)
 
@@ -366,7 +380,7 @@ def test_auto_create_table_similar_column_names(
     conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
 ):
     """Tests whether similar names do not cause issues when auto-creating a table as expected."""
-    table_name = "numbas"
+    table_name = random_string(5, "numbas_")
     df_data = [(10, 11), (20, 21)]
 
     df = pandas.DataFrame(df_data, columns=["number", "Number"])
@@ -396,7 +410,7 @@ def test_auto_create_table_similar_column_names(
 def test_all_pandas_types(
     conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]]
 ):
-    table_name = "all_types"
+    table_name = random_string(5, "all_types_")
     datetime_with_tz = datetime(
         1997, 6, 3, 14, 21, 32, 00, tzinfo=timezone(timedelta(hours=+10))
     )
