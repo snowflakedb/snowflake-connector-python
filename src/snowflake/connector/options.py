@@ -8,6 +8,7 @@ import importlib
 import warnings
 from logging import getLogger
 from types import ModuleType
+from typing import Union
 
 import pkg_resources
 

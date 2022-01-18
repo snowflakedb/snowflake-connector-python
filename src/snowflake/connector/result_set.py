@@ -92,7 +92,7 @@ def result_set_iterator(
     final()
 
 
-class ResultSet(Iterable[List[Any]]):
+class ResultSet(Iterable[list]):
     """This class retrieves the results of a query with the historical strategy.
 
     It pre-downloads the first up to 4 ResultChunks (this doesn't include the 1st chunk
