@@ -239,7 +239,6 @@ class SnowflakeConnection(object):
         role: Role in use on Snowflake.
         login_timeout: Login timeout in seconds. Used while authenticating.
         network_timeout: Network timeout. Used for general purpose.
-        client_session_keepalive: Whether to keep connection alive by issuing a heartbeat.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
