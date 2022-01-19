@@ -9,6 +9,23 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+
+- v2.7.3(January 22,2022)
+
+   - shifted package metadata from setup.py to setup.cfg
+   - Add Timezone to Timestamp_TZ 
+   - Fix Storage Credential Error
+   - fix py.typed not being included in wheels
+   - Negative Numbers Mangled for arrow_number_to_decimal
+   -
+   - Add GET Empty File Handling
+   - fix long description rendering for PyPi
+   -
+   - fixing typo
+   - handling no sms case for DUO
+   - Update requirements files Update numpy requirement from <1.22.0 to <1.23.0
+   - Update CODEOWNERS
+
 - v2.7.2(December 17,2021)
 
    - Added support for Python version 3.10.
