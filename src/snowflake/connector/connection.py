@@ -11,6 +11,7 @@ import re
 import sys
 import uuid
 import warnings
+import weakref
 from difflib import get_close_matches
 from functools import partial
 from io import StringIO
@@ -1260,8 +1261,16 @@ class SnowflakeConnection(object):
         """Add an hourly heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
             self._validate_client_session_keep_alive_heartbeat_frequency()
+            heartbeat_wref = weakref.WeakMethod(self._heartbeat_tick)
+
+            def beat_if_possible() -> None:
+                heartbeat_fn = heartbeat_wref()
+                if heartbeat_fn:
+                    heartbeat_fn()
+
             self.heartbeat_thread = HeartBeatTimer(
-                self.client_session_keep_alive_heartbeat_frequency, self._heartbeat_tick
+                self.client_session_keep_alive_heartbeat_frequency,
+                beat_if_possible,
             )
             self.heartbeat_thread.start()
             logger.debug("started heartbeat")
