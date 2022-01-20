@@ -9,6 +9,19 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+
+- v2.7.3(January 22,2022)
+
+   - Fixed a bug where timezone was missing from retrieved Timestamp_TZ columns
+   - Fixed a bug where a long running PUT/GET command could hit a Storage Credential Error while renewing credentials
+   - Fixed a bug where py.typed was not being included in our release wheels
+   - Fixed a bug where negative numbers were mangled when fetched with the connection parameter arrow_number_to_decimal
+   - Improved the error message that is encountered when running GET for a non-existing file
+   - Fixed rendering of our long description for PyPi
+   - Fixed a bug where DUO authentication ran into errors if sms authentication was disabled for the user
+   - Add the ability to auto-create a table when writing a pandas DataFrame to a Snowflake table
+   - Bumped the maximum dependency version of numpy from <1.22.0 to <1.23.0
+
 - v2.7.2(December 17,2021)
 
    - Added support for Python version 3.10.
