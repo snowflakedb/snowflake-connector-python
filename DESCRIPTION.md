@@ -16,7 +16,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
    - Fixed a bug where a long running PUT/GET command could hit a Storage Credential Error while renewing credentials
    - fix py.typed not being included in wheels
    - Negative Numbers Mangled for arrow_number_to_decimal
-   - Add GET Empty File Handling
+   - Improved the error message that is encountered when running GET for a non-existing file
    - fix long description rendering for PyPi
    - Fixed a bug where DUO authentication ran into errors if sms authentication was disabled for the user
    - Add the ability to auto-create a table when writing a pandas DataFrame to a Snowflake table
