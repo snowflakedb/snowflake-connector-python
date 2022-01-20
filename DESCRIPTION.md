@@ -18,7 +18,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
    - Negative Numbers Mangled for arrow_number_to_decimal
    - Add GET Empty File Handling
    - fix long description rendering for PyPi
-   - handling no sms case for DUO
+   - Fixed a bug where DUO authentication ran into errors if sms authentication was disabled for the user
    - Add the ability to auto-create a table when writing a pandas DataFrame to a Snowflake table
    - Update requirements files Update numpy requirement from <1.22.0 to <1.23.0
 
