@@ -29,7 +29,7 @@ def get_client_and_mock():
     rest = Mock()
     rest.attach_mock(rest_call, "request")
     client = snowflake.connector.telemetry.TelemetryClient(rest, 2)
-    return (client, rest_call)
+    return client, rest_call
 
 
 def test_telemetry_simple_flush():
