@@ -21,7 +21,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
    - handling no sms case for DUO
    - Add the ability to auto-create a table when writing a pandas DataFrame to a Snowflake table
    - Update requirements files Update numpy requirement from <1.22.0 to <1.23.0
-   - Update CODEOWNERS
 
 - v2.7.2(December 17,2021)
 
