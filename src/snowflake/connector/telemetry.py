@@ -143,7 +143,7 @@ class TelemetryClient(object):
 
     @property
     def is_closed(self):
-        return self._rest is not None
+        return self._rest is None
 
     def close(self, send_on_close=True):
         if not self.is_closed:
