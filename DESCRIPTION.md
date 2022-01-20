@@ -13,7 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v2.7.3(January 22,2022)
 
    - Add Timezone to Timestamp_TZ 
-   - Fix Storage Credential Error
+   - Fixed a bug where a long running PUT/GET command could hit a Storage Credential Error while renewing credentials
    - fix py.typed not being included in wheels
    - Negative Numbers Mangled for arrow_number_to_decimal
    - Add GET Empty File Handling
