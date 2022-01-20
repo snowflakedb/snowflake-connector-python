@@ -12,7 +12,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v2.7.3(January 22,2022)
 
-   - shifted package metadata from setup.py to setup.cfg
    - Add Timezone to Timestamp_TZ 
    - Fix Storage Credential Error
    - fix py.typed not being included in wheels
