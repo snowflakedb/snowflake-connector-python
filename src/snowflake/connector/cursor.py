@@ -113,7 +113,6 @@ LOG_MAX_QUERY_LENGTH = 80
 
 ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
-INCIDENT_BLACKLIST = (KeyError, ValueError, TypeError)
 
 
 class ResultMetadata(NamedTuple):
@@ -521,9 +520,6 @@ class SnowflakeCursor:
                 logger.debug(
                     "Failed to reset SIGINT handler. Not in main " "thread. Ignored..."
                 )
-            except Exception:
-                self.connection.incident.report_incident()
-                raise
             if self._timebomb is not None:
                 self._timebomb.cancel()
                 logger.debug("cancelled timebomb in finally")
@@ -641,62 +637,52 @@ class SnowflakeCursor:
             "_is_put_get": _is_put_get,
         }
 
-        try:
-            if self._connection.is_pyformat:
-                # pyformat/format paramstyle
-                # client side binding
-                processed_params = self._connection._process_params_pyformat(
+        if self._connection.is_pyformat:
+            # pyformat/format paramstyle
+            # client side binding
+            processed_params = self._connection._process_params_pyformat(params, self)
+            # SNOW-513061 collect telemetry for empty sequence usage before we make the breaking change announcement
+            if params is not None and len(params) == 0:
+                self._log_telemetry_job_data(
+                    TelemetryField.EMPTY_SEQ_INTERPOLATION,
+                    TelemetryData.TRUE
+                    if self.connection._interpolate_empty_sequences
+                    else TelemetryData.FALSE,
+                )
+            if logger.getEffectiveLevel() <= logging.DEBUG:
+                logger.debug(
+                    f"binding: [{self._format_query_for_log(command)}] "
+                    f"with input=[{params}], "
+                    f"processed=[{processed_params}]",
+                )
+            if (
+                self.connection._interpolate_empty_sequences
+                and processed_params is not None
+            ) or (
+                not self.connection._interpolate_empty_sequences
+                and len(processed_params) > 0
+            ):
+                query = command % processed_params
+            else:
+                query = command
+        else:
+            # qmark and numeric paramstyle
+            query = command
+            if _bind_stage:
+                kwargs["binding_stage"] = _bind_stage
+            else:
+                if params is not None and not isinstance(params, (list, tuple)):
+                    errorvalue = {
+                        "msg": "Binding parameters must be a list: {}".format(params),
+                        "errno": ER_FAILED_PROCESSING_PYFORMAT,
+                    }
+                    Error.errorhandler_wrapper(
+                        self.connection, self, ProgrammingError, errorvalue
+                    )
+
+                kwargs["binding_params"] = self._connection._process_params_qmarks(
                     params, self
                 )
-                # SNOW-513061 collect telemetry for empty sequence usage before we make the breaking change announcement
-                if params is not None and len(params) == 0:
-                    self._log_telemetry_job_data(
-                        TelemetryField.EMPTY_SEQ_INTERPOLATION,
-                        TelemetryData.TRUE
-                        if self.connection._interpolate_empty_sequences
-                        else TelemetryData.FALSE,
-                    )
-                if logger.getEffectiveLevel() <= logging.DEBUG:
-                    logger.debug(
-                        f"binding: [{self._format_query_for_log(command)}] "
-                        f"with input=[{params}], "
-                        f"processed=[{processed_params}]",
-                    )
-                if (
-                    self.connection._interpolate_empty_sequences
-                    and processed_params is not None
-                ) or (
-                    not self.connection._interpolate_empty_sequences
-                    and len(processed_params) > 0
-                ):
-                    query = command % processed_params
-                else:
-                    query = command
-            else:
-                # qmark and numeric paramstyle
-                query = command
-                if _bind_stage:
-                    kwargs["binding_stage"] = _bind_stage
-                else:
-                    if params is not None and not isinstance(params, (list, tuple)):
-                        errorvalue = {
-                            "msg": "Binding parameters must be a list: {}".format(
-                                params
-                            ),
-                            "errno": ER_FAILED_PROCESSING_PYFORMAT,
-                        }
-                        Error.errorhandler_wrapper(
-                            self.connection, self, ProgrammingError, errorvalue
-                        )
-
-                    kwargs["binding_params"] = self._connection._process_params_qmarks(
-                        params, self
-                    )
-        # Skip reporting Key, Value and Type errors
-        except Exception as exc:  # pragma: no cover
-            if not isinstance(exc, INCIDENT_BLACKLIST):
-                self.connection.incident.report_incident()
-            raise
 
         m = DESC_TABLE_RE.match(query)
         if m:
