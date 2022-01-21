@@ -52,7 +52,7 @@ def test_telemetry_close():
 
     client.close()
     assert rest_call.call_count == 1
-    assert client.is_closed()
+    assert client.is_closed
 
 
 def test_telemetry_close_empty():
@@ -61,7 +61,7 @@ def test_telemetry_close_empty():
 
     client.close()
     assert rest_call.call_count == 0
-    assert client.is_closed()
+    assert client.is_closed
 
 
 def test_telemetry_send_batch():
