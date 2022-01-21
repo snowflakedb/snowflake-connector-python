@@ -88,15 +88,19 @@ class ArrowConverterContext:
     def TIMESTAMP_NTZ_to_python_windows(self, microseconds):
         return ZERO_EPOCH + timedelta(seconds=microseconds)
 
-    def TIMESTAMP_LTZ_to_python_one_field(self, microseconds):
+    def TIMESTAMP_LTZ_to_python_with_epoch(self, microseconds: float) -> datetime:
         tzinfo = self._get_session_tz()
         return datetime.fromtimestamp(microseconds, tz=tzinfo)
 
-    def TIMESTAMP_LTZ_to_python_two_field(self, epoch: float, fraction: float):
+    def TIMESTAMP_LTZ_to_python_with_epoch_and_fraction(
+        self, epoch: float, fraction: float
+    ) -> datetime:
         tzinfo = self._get_session_tz()
         return datetime.fromtimestamp(epoch, tz=tzinfo) + timedelta(seconds=fraction)
 
-    def TIMESTAMP_LTZ_to_python_one_field_windows(self, microseconds):
+    def TIMESTAMP_LTZ_to_python_with_epoch_windows(
+        self, microseconds: float
+    ) -> datetime:
         tzinfo = self._get_session_tz()
         try:
             t0 = ZERO_EPOCH + timedelta(seconds=microseconds)
@@ -109,7 +113,9 @@ class ArrowConverterContext:
             )
             return time.localtime(microseconds)
 
-    def TIMESTAMP_LTZ_to_python_two_field_windows(self, epoch: float, fraction: float):
+    def TIMESTAMP_LTZ_to_python_with_epoch_and_fraction_windows(
+        self, epoch: float, fraction: float
+    ) -> datetime:
         tzinfo = self._get_session_tz()
         microseconds = epoch + fraction
         try:

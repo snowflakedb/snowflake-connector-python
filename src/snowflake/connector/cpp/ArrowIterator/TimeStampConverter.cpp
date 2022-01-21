@@ -135,10 +135,10 @@ PyObject* OneFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
         m_array->Value(rowIndex), m_scale);
 #ifdef _WIN32
     // this macro is enough for both win32 and win64
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_one_field_windows",
+    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_with_epoch_windows",
                                "d", microseconds);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_one_field", "d",
+    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_with_epoch", "d",
                                microseconds);
 #endif
   }
@@ -168,10 +168,10 @@ PyObject* TwoFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
         internal::powTenSB4[std::min(
             m_scale, internal::PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
 #ifdef _WIN32
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_two_field_windows",
+    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_with_epoch_and_fraction_windows",
                                "dd", epoch, fraction);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_two_field", "dd",
+    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_with_epoch_and_fraction", "dd",
                                epoch, fraction);
 #endif
   }
