@@ -11,6 +11,7 @@ import re
 import sys
 import uuid
 import warnings
+import weakref
 from difflib import get_close_matches
 from functools import partial
 from io import StringIO
@@ -81,7 +82,6 @@ from .errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
-from .incident import IncidentAPI
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -240,7 +240,6 @@ class SnowflakeConnection(object):
         role: Role in use on Snowflake.
         login_timeout: Login timeout in seconds. Used while authenticating.
         network_timeout: Network timeout. Used for general purpose.
-        client_session_keepalive: Whether to keep connection alive by issuing a heartbeat.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
@@ -284,7 +283,6 @@ class SnowflakeConnection(object):
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
-        self.incident = IncidentAPI(self._rest)
 
     def __del__(self):  # pragma: no cover
         try:
@@ -1263,8 +1261,16 @@ class SnowflakeConnection(object):
         """Add an hourly heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
             self._validate_client_session_keep_alive_heartbeat_frequency()
+            heartbeat_wref = weakref.WeakMethod(self._heartbeat_tick)
+
+            def beat_if_possible() -> None:
+                heartbeat_fn = heartbeat_wref()
+                if heartbeat_fn:
+                    heartbeat_fn()
+
             self.heartbeat_thread = HeartBeatTimer(
-                self.client_session_keep_alive_heartbeat_frequency, self._heartbeat_tick
+                self.client_session_keep_alive_heartbeat_frequency,
+                beat_if_possible,
             )
             self.heartbeat_thread.start()
             logger.debug("started heartbeat")
@@ -1283,7 +1289,7 @@ class SnowflakeConnection(object):
             logger.debug("heartbeating!")
             self.rest._heartbeat()
 
-    def _validate_client_session_keep_alive_heartbeat_frequency(self):
+    def _validate_client_session_keep_alive_heartbeat_frequency(self) -> int:
         """Validate and return heartbeat frequency in seconds."""
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)

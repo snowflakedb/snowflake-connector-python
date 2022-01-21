@@ -3,12 +3,13 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
+import gc
 import logging
 import os
 import queue
 import threading
 import warnings
+import weakref
 from uuid import uuid4
 
 import mock
@@ -1069,3 +1070,12 @@ def test_client_failover_connection_url(conn_cnx):
             assert cur.execute("select 1;").fetchall() == [
                 (1,),
             ]
+
+
+def test_connection_gc(conn_cnx):
+    """This test makes sure that a heartbeat thread doesn't prevent garbage collection of SnowflakeConnection."""
+    conn = conn_cnx(client_session_keep_alive=True).__enter__()
+    conn_wref = weakref.ref(conn)
+    del conn
+    gc.collect()
+    assert conn_wref() is None
