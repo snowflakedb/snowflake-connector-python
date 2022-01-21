@@ -56,11 +56,13 @@ from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import (
+        FIELD_ID_TO_NAME,
+        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+    )
+    from snowflake.connector.errorcode import (
         ER_NO_ARROW_RESULT,
         ER_NO_PYARROW,
         ER_NO_PYARROW_SNOWSQL,
-        FIELD_ID_TO_NAME,
-        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     )
     from snowflake.connector.result_batch import ArrowResultBatch, JSONResultBatch
 except ImportError:
@@ -69,6 +71,7 @@ except ImportError:
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
     ArrowResultBatch = JSONResultBatch = None
+    FIELD_ID_TO_NAME = {}
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.result_batch import ResultBatch
@@ -568,37 +571,39 @@ created_at timestamp, data variant)
             cnx.cursor().execute("drop table {name}".format(name=name_variant))
 
 
+@pytest.mark.skipolddriver
 def test_geography(conn, db_parameters):
     """Variant including JSON object."""
-    name_geo = db_parameters["name"] + "_geo"
+    name_geo = random_string(5, "test_geography_")
     with conn() as cnx:
         cnx.cursor().execute(
-            f"""
+            f"""\
 create table {name_geo} (geo geography)
 """
         )
         cnx.cursor().execute(
-            f"""
+            f"""\
 insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
 """
         )
+        expected_data = [
+            {"coordinates": [0, 0], "type": "Point"},
+            {"coordinates": [[1, 1], [2, 2]], "type": "LineString"},
+        ]
 
     try:
         with conn() as cnx:
             c = cnx.cursor()
             c.execute("alter session set GEOGRAPHY_OUTPUT_FORMAT='geoJson'")
 
-            # Test with OBJECT return type
-            c.execute("alter session set ENABLE_UDT_EXTERNAL_TYPE_NAMES=false")
-            result = c.execute(f"select * from {name_geo}")
-            metadata = result.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "OBJECT"
-
             # Test with GEOGRAPHY return type
-            c.execute("alter session set ENABLE_UDT_EXTERNAL_TYPE_NAMES=true")
             result = c.execute(f"select * from {name_geo}")
             metadata = result.description
             assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
+            data = result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
     finally:
         with conn() as cnx:
             cnx.cursor().execute("drop table {name}".format(name=name_geo))
