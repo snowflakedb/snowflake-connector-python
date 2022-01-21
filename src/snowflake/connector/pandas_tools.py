@@ -142,6 +142,7 @@ def write_pandas(
     if chunk_size is None:
         chunk_size = len(df)
     cursor = conn.cursor()
+    cursor.execute(f'USE SCHEMA "{schema}"')
     stage_name = None  # Forward declaration
     while True:
         try:
