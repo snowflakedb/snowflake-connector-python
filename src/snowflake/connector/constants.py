@@ -33,6 +33,7 @@ FIELD_TYPES: List[FieldType] = [
     FieldType(name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY]),
     FieldType(name="TIME", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
     FieldType(name="BOOLEAN", dbapi_type=[]),
+    FieldType(name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING]),
 ]
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
