@@ -129,7 +129,11 @@ class ResultMetadata(NamedTuple):
         """Initializes a ResultMetadata object from the column description in the query response."""
         return cls(
             col["name"],
-            FIELD_NAME_TO_ID[col["type"].upper()],
+            FIELD_NAME_TO_ID[
+                col["extTypeName"].upper()
+                if "extTypeName" in col
+                else col["type"].upper()
+            ],
             None,
             col["length"],
             col["precision"],
