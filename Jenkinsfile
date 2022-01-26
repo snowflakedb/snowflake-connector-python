@@ -29,8 +29,8 @@ timestamps {
         }
       }
       params = [
-        string(name: 'svn_revision', value: 'master'),
-        string(name: 'branch', value: 'master'),
+        string(name: 'svn_revision', value: 'main'),
+        string(name: 'branch', value: 'main'),
         string(name: 'client_git_commit', value: scmInfo.GIT_COMMIT),
         string(name: 'client_git_branch', value: scmInfo.GIT_BRANCH),
         string(name: 'parent_job', value: env.JOB_NAME),
