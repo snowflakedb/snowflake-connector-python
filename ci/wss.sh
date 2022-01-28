@@ -11,7 +11,7 @@ SCAN_DIRECTORIES="${CONNECTOR_DIR}"
 [[ -z "$WHITESOURCE_API_KEY" ]] && echo "[WARNING] No WHITESOURCE_API_KEY is set. No WhiteSource scan will occur." && exit 1
 
 export PRODUCT_NAME=snowflake-connector-python
-export PROD_BRANCH=master
+export PROD_BRANCH=main
 export PROJECT_VERSION="${GITHUB_SHA}"
 
 BRANCH_OR_PR_NUMBER="$(echo "${GITHUB_REF}" | awk 'BEGIN { FS = "/" } ; { print $3 }')"
