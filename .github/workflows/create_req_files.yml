@@ -2,8 +2,6 @@ name: Create Requirements Files
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   create-req-files:
