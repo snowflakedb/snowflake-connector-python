@@ -995,16 +995,7 @@ class SnowflakeCursor:
         logger.debug("executing many SQLs/commands")
         command = command.strip(" \t\n\r") if command else None
 
-        if len(seqparams) == 0:
-            Error.errorhandler_wrapper(
-                self.connection,
-                self,
-                InterfaceError,
-                {
-                    "msg": f"No parameters are specified for the command: {command}",
-                    "errno": ER_INVALID_VALUE,
-                },
-            )
+        if not seqparams:
             return self
 
         if self.INSERT_SQL_RE.match(command):
