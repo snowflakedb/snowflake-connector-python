@@ -756,6 +756,9 @@ def test_executemany_empty_params(conn):
         c.close()
 
 
+@pytest.mark.skipolddriver(
+    reason="old driver raises DatabaseError instead of InterfaceError"
+)
 def test_closed_cursor(conn, db_parameters):
     """Attempts to use the closed cursor. It should raise errors.
 
@@ -781,11 +784,9 @@ def test_closed_cursor(conn, db_parameters):
         c.close()
 
         fmt = "select aa from {name}".format(name=db_parameters["name"])
-        try:
+        with pytest.raises(InterfaceError, match="Cursor is closed in execute") as err:
             c.execute(fmt)
-            raise Exception("should fail as the cursor was closed.")
-        except snowflake.connector.Error as err:
-            assert err.errno == errorcode.ER_CURSOR_IS_CLOSED
+        assert err.value.errno == errorcode.ER_CURSOR_IS_CLOSED
 
 
 def test_fetchmany(conn, db_parameters):
@@ -1079,7 +1080,7 @@ def test_null_in_non_null(conn):
         cur = cnx.cursor()
         cur.execute(f"create temp table {table_name}(bar char not null)")
         with pytest.raises(errors.IntegrityError, match=error_msg):
-            cur.execute(f'insert into {table_name} values (null)')
+            cur.execute(f"insert into {table_name} values (null)")
 
 
 @pytest.mark.parametrize("sql", (None, ""), ids=["None", "empty"])
