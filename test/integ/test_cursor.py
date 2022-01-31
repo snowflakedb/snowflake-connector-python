@@ -46,7 +46,6 @@ except ImportError:
 
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
-    ER_INVALID_VALUE,
     ER_NOT_POSITIVE_SIZE,
 )
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
@@ -719,6 +718,44 @@ def test_executemany_qmark_types(conn, db_parameters):
                 cur.execute(f"drop table if exists {table_name}")
 
 
+@pytest.mark.skipolddriver
+def test_executemany_params_iterator(conn):
+    """Cursor.executemany() works with an interator of params."""
+    table_name = random_string(5, "executemany_params_iterator")
+    with conn() as cnx:
+        c = cnx.cursor()
+        c.execute(f"create temp table {table_name}(bar integer)")
+        fmt = f"insert into {table_name}(bar) values(%(value)s)"
+        c.executemany(fmt, ({"value": x} for x in ("1234", "234", "34", "4")))
+        cnt = 0
+        for rec in c:
+            cnt += int(rec[0])
+        assert cnt == 4, "number of records"
+        assert c.rowcount == 4, "wrong number of records were inserted"
+        c.close()
+
+        c = cnx.cursor()
+        fmt = f"insert into {table_name}(bar) values(%s)"
+        c.executemany(fmt, ((x,) for x in (12345, 1234, 234, 34, 4)))
+        rec = c.fetchone()
+        assert rec[0] == 5, "number of records"
+        assert c.rowcount == 5, "wrong number of records were inserted"
+        c.close()
+
+
+@pytest.mark.skipolddriver
+def test_executemany_empty_params(conn):
+    """Cursor.executemany() does nothing if params is empty."""
+    table_name = random_string(5, "executemany_empty_params")
+    with conn() as cnx:
+        c = cnx.cursor()
+        # The table isn't created, so if this were executed, it would error.
+        fmt = f"insert into {table_name}(aa) values(%(value)s)"
+        c.executemany(fmt, [])
+        assert c.query is None
+        c.close()
+
+
 @pytest.mark.skipolddriver(
     reason="old driver raises DatabaseError instead of InterfaceError"
 )
@@ -1274,18 +1311,6 @@ def test_query_cancellation(conn_cnx):
             )
             sf_qid = cur.sfqid
             cur.abort_query(sf_qid)
-
-
-def test_executemany_error(conn_cnx):
-    """Tests calling executemany without many things."""
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            with pytest.raises(
-                InterfaceError,
-                match="No parameters are specified for the command: select 1",
-            ) as ie:
-                cur.executemany("select 1", [])
-                assert ie.errno == ER_INVALID_VALUE
 
 
 def test_executemany_insert_rewrite(conn_cnx):
