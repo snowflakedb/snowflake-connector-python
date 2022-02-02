@@ -13,11 +13,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v2.7.4(February 05,2022)
 
    - Add Geography Types
-    - Removing automated incident reporting code
-    - Fixed a bug where circular reference would prevent garbage collection on some objects
-    - Fixed a bug where `DatabaseError` was thrown when executing against a closed cursor instead of `InterfaceError`
-    - Fixed a bug where calling `executemany` would crash if an iterator was supplied as args
-    - Fixed a bug where violating `NOT NULL` constraint raised `DatabaseError` instead of `IntegrityError`
+   - Removing automated incident reporting code
+   - Fixed a bug where circular reference would prevent garbage collection on some objects
+   - Fixed a bug where `DatabaseError` was thrown when executing against a closed cursor instead of `InterfaceError`
+   - Fixed a bug where calling `executemany` would crash if an iterator was supplied as args
+   - Fixed a bug where violating `NOT NULL` constraint raised `DatabaseError` instead of `IntegrityError`
 
 - v2.7.3(January 22,2022)
 
