@@ -10,6 +10,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.4(February 05,2022)
+
+   - Add Geography Types
+   - removing incident framework code and fixing memory leak
+
+
 - v2.7.3(January 22,2022)
 
    - Fixed a bug where timezone was missing from retrieved Timestamp_TZ columns
