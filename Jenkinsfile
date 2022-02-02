@@ -2,7 +2,7 @@ import groovy.json.JsonOutput
 
 
 timestamps {
-  node('parallelizable') {
+  node('parallelizable-c7') {
     stage('checkout') {
       scmInfo = checkout scm
       println("${scmInfo}")
