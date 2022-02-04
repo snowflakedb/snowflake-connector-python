@@ -56,6 +56,7 @@ SNOWFLAKE_CONNECTOR_VERSION = ".".join(str(v) for v in VERSION[0:3])
 __version__ = SNOWFLAKE_CONNECTOR_VERSION
 
 __all__ = [
+    "SnowflakeConnection",
     # Error handling
     "Error",
     "_Warning",
