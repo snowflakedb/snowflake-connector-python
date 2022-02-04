@@ -150,7 +150,7 @@ DEFAULT_CONFIGURATION: Dict[str, Tuple[Any, Union[Type, Tuple[Type, ...]]]] = {
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
-    "application": (os.environ.get('SNOWFLAKE_PARTNER', CLIENT_NAME), (type(None), str)),
+    "application": (CLIENT_NAME, (type(None), str)),
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
     "insecure_mode": (False, bool),  # Error security fix requirement
@@ -283,6 +283,10 @@ class SnowflakeConnection(object):
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
+        # Some configuration files need to be updated here to make them testable
+        # E.g.: if DEFAULT_CONFIGURATION pulled in env variables these would be not testable
+        if self.application == CLIENT_NAME and "SNOWFLAKE_PARTNER" in os.environ.keys():
+            self._application = os.environ["SNOWFLAKE_PARTNER"]
 
     def __del__(self):  # pragma: no cover
         try:
