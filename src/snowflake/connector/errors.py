@@ -148,7 +148,7 @@ class Error(BASE_EXCEPTION_CLASS):
         if (
             connection is not None
             and connection.telemetry_enabled
-            and not connection._telemetry.is_closed()
+            and not connection._telemetry.is_closed
         ):
             # Send with in-band telemetry
             telemetry_data[

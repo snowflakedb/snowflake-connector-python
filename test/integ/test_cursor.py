@@ -46,7 +46,6 @@ except ImportError:
 
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
-    ER_INVALID_VALUE,
     ER_NOT_POSITIVE_SIZE,
 )
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
@@ -56,6 +55,7 @@ from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import (
+        FIELD_ID_TO_NAME,
         PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     )
     from snowflake.connector.errorcode import (
@@ -70,6 +70,7 @@ except ImportError:
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
     ArrowResultBatch = JSONResultBatch = None
+    FIELD_ID_TO_NAME = {}
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.result_batch import ResultBatch
@@ -569,6 +570,44 @@ created_at timestamp, data variant)
             cnx.cursor().execute("drop table {name}".format(name=name_variant))
 
 
+@pytest.mark.skipolddriver
+def test_geography(conn, db_parameters):
+    """Variant including JSON object."""
+    name_geo = random_string(5, "test_geography_")
+    with conn() as cnx:
+        cnx.cursor().execute(
+            f"""\
+create table {name_geo} (geo geography)
+"""
+        )
+        cnx.cursor().execute(
+            f"""\
+insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
+"""
+        )
+        expected_data = [
+            {"coordinates": [0, 0], "type": "Point"},
+            {"coordinates": [[1, 1], [2, 2]], "type": "LineString"},
+        ]
+
+    try:
+        with conn() as cnx:
+            c = cnx.cursor()
+            c.execute("alter session set GEOGRAPHY_OUTPUT_FORMAT='geoJson'")
+
+            # Test with GEOGRAPHY return type
+            result = c.execute(f"select * from {name_geo}")
+            metadata = result.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
+            data = result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
+    finally:
+        with conn() as cnx:
+            cnx.cursor().execute("drop table {name}".format(name=name_geo))
+
+
 def test_callproc(conn_cnx):
     """Callproc test.
 
@@ -679,6 +718,47 @@ def test_executemany_qmark_types(conn, db_parameters):
                 cur.execute(f"drop table if exists {table_name}")
 
 
+@pytest.mark.skipolddriver
+def test_executemany_params_iterator(conn):
+    """Cursor.executemany() works with an interator of params."""
+    table_name = random_string(5, "executemany_params_iterator")
+    with conn() as cnx:
+        c = cnx.cursor()
+        c.execute(f"create temp table {table_name}(bar integer)")
+        fmt = f"insert into {table_name}(bar) values(%(value)s)"
+        c.executemany(fmt, ({"value": x} for x in ("1234", "234", "34", "4")))
+        cnt = 0
+        for rec in c:
+            cnt += int(rec[0])
+        assert cnt == 4, "number of records"
+        assert c.rowcount == 4, "wrong number of records were inserted"
+        c.close()
+
+        c = cnx.cursor()
+        fmt = f"insert into {table_name}(bar) values(%s)"
+        c.executemany(fmt, ((x,) for x in (12345, 1234, 234, 34, 4)))
+        rec = c.fetchone()
+        assert rec[0] == 5, "number of records"
+        assert c.rowcount == 5, "wrong number of records were inserted"
+        c.close()
+
+
+@pytest.mark.skipolddriver
+def test_executemany_empty_params(conn):
+    """Cursor.executemany() does nothing if params is empty."""
+    table_name = random_string(5, "executemany_empty_params")
+    with conn() as cnx:
+        c = cnx.cursor()
+        # The table isn't created, so if this were executed, it would error.
+        fmt = f"insert into {table_name}(aa) values(%(value)s)"
+        c.executemany(fmt, [])
+        assert c.query is None
+        c.close()
+
+
+@pytest.mark.skipolddriver(
+    reason="old driver raises DatabaseError instead of InterfaceError"
+)
 def test_closed_cursor(conn, db_parameters):
     """Attempts to use the closed cursor. It should raise errors.
 
@@ -704,11 +784,9 @@ def test_closed_cursor(conn, db_parameters):
         c.close()
 
         fmt = "select aa from {name}".format(name=db_parameters["name"])
-        try:
+        with pytest.raises(InterfaceError, match="Cursor is closed in execute") as err:
             c.execute(fmt)
-            raise Exception("should fail as the cursor was closed.")
-        except snowflake.connector.Error as err:
-            assert err.errno == errorcode.ER_CURSOR_IS_CLOSED
+        assert err.value.errno == errorcode.ER_CURSOR_IS_CLOSED
 
 
 def test_fetchmany(conn, db_parameters):
@@ -994,6 +1072,17 @@ def test_fetch_out_of_range_timestamp_value(conn, result_format):
             cur.fetchone()
 
 
+@pytest.mark.skipolddriver
+def test_null_in_non_null(conn):
+    table_name = random_string(5, "null_in_non_null")
+    error_msg = "NULL result in a non-nullable column"
+    with conn() as cnx:
+        cur = cnx.cursor()
+        cur.execute(f"create temp table {table_name}(bar char not null)")
+        with pytest.raises(errors.IntegrityError, match=error_msg):
+            cur.execute(f"insert into {table_name} values (null)")
+
+
 @pytest.mark.parametrize("sql", (None, ""), ids=["None", "empty"])
 def test_empty_execution(conn, sql):
     """Checks whether executing an empty string, or nothing behaves as expected."""
@@ -1222,18 +1311,6 @@ def test_query_cancellation(conn_cnx):
             )
             sf_qid = cur.sfqid
             cur.abort_query(sf_qid)
-
-
-def test_executemany_error(conn_cnx):
-    """Tests calling executemany without many things."""
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            with pytest.raises(
-                InterfaceError,
-                match="No parameters are specified for the command: select 1",
-            ) as ie:
-                cur.executemany("select 1", [])
-                assert ie.errno == ER_INVALID_VALUE
 
 
 def test_executemany_insert_rewrite(conn_cnx):

@@ -19,6 +19,6 @@ jobs:
           path-to-signatures: 'signatures/version1.json'
           path-to-document: 'https://github.com/Snowflake-Labs/CLA/blob/main/README.md'
           branch: 'main'
-          allowlist: 'dependabot[bot]'
+          allowlist: 'dependabot[bot],github-actions'
           remote-organization-name: 'snowflakedb'
           remote-repository-name: 'cla-db'
