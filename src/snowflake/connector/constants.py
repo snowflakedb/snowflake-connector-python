@@ -258,4 +258,4 @@ S3_CHUNK_SIZE = 8388608  # boto3 default
 AZURE_CHUNK_SIZE = 4 * megabyte
 
 # TODO: all env variables definitions should be here
-ENV_VAR_PARTNER = "SNOWFLAKE_PARTNER"
+ENV_VAR_PARTNER = "SF_PARTNER"
