@@ -88,32 +88,13 @@ class ArrowConverterContext:
     def TIMESTAMP_NTZ_to_python_windows(self, microseconds):
         return ZERO_EPOCH + timedelta(seconds=microseconds)
 
-    def TIMESTAMP_LTZ_to_python_with_epoch(self, microseconds: float) -> datetime:
+    def TIMESTAMP_LTZ_to_python(self, epoch: float, microseconds: float) -> datetime:
         tzinfo = self._get_session_tz()
-        return datetime.fromtimestamp(microseconds, tz=tzinfo)
+        return datetime.fromtimestamp(epoch, tz=tzinfo) + timedelta(
+            microseconds=microseconds
+        )
 
-    def TIMESTAMP_LTZ_to_python_with_epoch_and_fraction(
-        self, epoch: float, fraction: float
-    ) -> datetime:
-        tzinfo = self._get_session_tz()
-        return datetime.fromtimestamp(epoch, tz=tzinfo) + timedelta(seconds=fraction)
-
-    def TIMESTAMP_LTZ_to_python_with_epoch_windows(
-        self, microseconds: float
-    ) -> datetime:
-        tzinfo = self._get_session_tz()
-        try:
-            t0 = ZERO_EPOCH + timedelta(seconds=microseconds)
-            t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo)
-            return t
-        except OverflowError:
-            logger.debug(
-                "OverflowError in converting from epoch time to "
-                "timestamp_ltz: %s(ms). Falling back to use struct_time."
-            )
-            return time.localtime(microseconds)
-
-    def TIMESTAMP_LTZ_to_python_with_epoch_and_fraction_windows(
+    def TIMESTAMP_LTZ_to_python_windows(
         self, epoch: float, fraction: float
     ) -> datetime:
         tzinfo = self._get_session_tz()
