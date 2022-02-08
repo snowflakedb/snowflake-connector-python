@@ -3,11 +3,20 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
+from enum import Enum
 from typing import Optional
 from unittest import mock
 
 from snowflake.connector.network import SnowflakeRestful
+
+try:
+    from snowflake.connector.ssl_wrap_socket import DEFAULT_OCSP_MODE
+except ImportError:
+
+    class OCSPMode(Enum):
+        FAIL_OPEN = "FAIL_OPEN"
+
+    DEFAULT_OCSP_MODE = OCSPMode.FAIL_OPEN
 
 hostname_1 = "sfctest0.snowflakecomputing.com"
 url_1 = f"https://{hostname_1}:443/session/v1/login-request"
@@ -19,7 +28,7 @@ url_3 = f"https://{hostname_2}/rgm1-s-sfctst0/stages/another-url"
 
 mock_conn = mock.Mock()
 mock_conn.disable_request_pooling = False
-mock_conn._ocsp_mode = lambda: True
+mock_conn._ocsp_mode = lambda: DEFAULT_OCSP_MODE
 
 
 def close_sessions(rest: SnowflakeRestful, num_session_pools: int) -> None:

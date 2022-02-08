@@ -43,10 +43,13 @@ sf_connector_version_df = LazyVar(
 )
 
 
-@pytest.mark.parametrize("chunk_size", [5, 4, 3, 2, 1])
-@pytest.mark.parametrize("compression", ["gzip", "snappy"])
-# Note: since the file will to small to chunk, this is only testing the put command's syntax
-@pytest.mark.parametrize("parallel", [4, 99])
+@pytest.mark.parametrize("chunk_size", [5, 1])
+@pytest.mark.parametrize(
+    "compression",
+    [
+        "gzip",
+    ],
+)
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 @pytest.mark.parametrize("auto_create_table", [True, False])
 @pytest.mark.parametrize("create_temp_table", [True, False])
@@ -54,7 +57,6 @@ def test_write_pandas(
     conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
     db_parameters: Dict[str, str],
     compression: str,
-    parallel: int,
     chunk_size: int,
     quote_identifiers: bool,
     auto_create_table: bool,
@@ -66,7 +68,7 @@ def test_write_pandas(
         user=db_parameters["user"],
         account=db_parameters["account"],
         password=db_parameters["password"],
-    ) as cnx:  # type: SnowflakeConnection
+    ) as cnx:
         table_name = "driver_versions"
 
         if quote_identifiers:
@@ -90,7 +92,6 @@ def test_write_pandas(
                 sf_connector_version_df.get(),
                 table_name,
                 compression=compression,
-                parallel=parallel,
                 chunk_size=chunk_size,
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,

@@ -343,7 +343,7 @@ class SnowflakeRestful(object):
         port=8080,
         protocol="http",
         inject_client_pause=0,
-        connection=None,
+        connection: Optional["SnowflakeConnection"] = None,
     ):
         self._host = host
         self._port = port
@@ -357,11 +357,13 @@ class SnowflakeRestful(object):
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
-            self._connection and self._connection._ocsp_mode()
+            self._connection._ocsp_mode()
+            if self._connection
+            else ssl_wrap_socket.DEFAULT_OCSP_MODE
         )
         # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
-            self._connection and self._connection._ocsp_response_cache_filename
+            self._connection._ocsp_response_cache_filename if self._connection else None
         )
 
         # This is to address the issue where requests hangs
