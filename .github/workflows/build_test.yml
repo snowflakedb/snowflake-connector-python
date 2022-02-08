@@ -180,7 +180,7 @@ jobs:
            download_name: linux
          - image_name: macos-latest
            download_name: macos
-         - image_name: windows-latest
+         - image_name: windows-2019
            download_name: windows
         python-version: ["3.6", "3.7", "3.8", "3.9", "3.10"]
         cloud-provider: [aws, azure, gcp]
