@@ -28,12 +28,13 @@ from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext
 from .vendored.urllib3.util import ssl_ as ssl_
 
-FEATURE_OCSP_MODE = OCSPMode.FAIL_OPEN
+DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
+FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
 
 """
 OCSP Response cache file name
 """
-FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
+FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: Optional[str] = None
 
 log = logging.getLogger(__name__)
 
@@ -74,9 +75,6 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
         kwargs["ca_certs"] = certifi.where()
 
     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
-
-    global FEATURE_OCSP_MODE
-    global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 
     from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 

@@ -291,18 +291,21 @@ class SnowflakeConnection(object):
             pass
 
     @property
-    def insecure_mode(self):
+    def insecure_mode(self) -> bool:
         return self._insecure_mode
 
     @property
-    def ocsp_fail_open(self):
+    def ocsp_fail_open(self) -> bool:
         return self._ocsp_fail_open
 
-    def _ocsp_mode(self):
+    def _ocsp_mode(self) -> OCSPMode:
         """OCSP mode. INSECURE, FAIL_OPEN or FAIL_CLOSED."""
         if self.insecure_mode:
             return OCSPMode.INSECURE
-        return OCSPMode.FAIL_OPEN if self.ocsp_fail_open else OCSPMode.FAIL_CLOSED
+        elif self.ocsp_fail_open:
+            return OCSPMode.FAIL_OPEN
+        else:
+            return OCSPMode.FAIL_CLOSED
 
     @property
     def session_id(self):
