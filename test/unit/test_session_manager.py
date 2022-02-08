@@ -3,12 +3,20 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
+from enum import Enum
 from typing import Optional
 from unittest import mock
 
 from snowflake.connector.network import SnowflakeRestful
-from snowflake.connector.ssl_wrap_socket import DEFAULT_OCSP_MODE
+
+try:
+    from snowflake.connector.ssl_wrap_socket import DEFAULT_OCSP_MODE
+except ImportError:
+
+    class OCSPMode(Enum):
+        FAIL_OPEN = "FAIL_OPEN"
+
+    DEFAULT_OCSP_MODE = OCSPMode.FAIL_OPEN
 
 hostname_1 = "sfctest0.snowflakecomputing.com"
 url_1 = f"https://{hostname_1}:443/session/v1/login-request"
