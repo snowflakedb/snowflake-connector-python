@@ -139,7 +139,7 @@ PyObject* OneFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
                                "d", microseconds);
 #else
     return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", "dd",
-                               microseconds, 0);
+                               microseconds, 0.0);
 #endif
   }
 
@@ -164,18 +164,17 @@ PyObject* TwoFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
     double epoch = static_cast<double>(m_epoch->Value(rowIndex));
     double fraction = static_cast<double>(
         internal::castToFormattedFraction(
-            m_fraction->Value(rowIndex), epoch < 0, m_scale)) /
-        internal::powTenSB4[std::min(
-            m_scale, internal::PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
+            m_fraction->Value(rowIndex), epoch < 0, m_scale));
     double microseconds;
 #ifdef _WIN32
-    microseconds = epoch + fraction;
+    microseconds = epoch + fraction/
+        internal::powTenSB4[std::min(
+            m_scale, internal::PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
     return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows",
                                "d", microseconds);
 #else
-    microseconds = fraction *  internal::powTenSB4[internal::PYTHON_DATETIME_TIME_MICROSEC_DIGIT];
     return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", "dd",
-                               epoch, microseconds);
+                               epoch, fraction);
 #endif
   }
 
