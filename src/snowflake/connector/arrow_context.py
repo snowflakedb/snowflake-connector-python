@@ -94,11 +94,8 @@ class ArrowConverterContext:
             microseconds=microseconds
         )
 
-    def TIMESTAMP_LTZ_to_python_windows(
-        self, epoch: float, fraction: float
-    ) -> datetime:
+    def TIMESTAMP_LTZ_to_python_windows(self, microseconds: float) -> datetime:
         tzinfo = self._get_session_tz()
-        microseconds = epoch + fraction
         try:
             t0 = ZERO_EPOCH + timedelta(seconds=microseconds)
             t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo)
