@@ -165,9 +165,8 @@ PyObject* TwoFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
     double fraction = static_cast<double>(
         internal::castToFormattedFraction(
             m_fraction->Value(rowIndex), epoch < 0, m_scale));
-    double microseconds;
 #ifdef _WIN32
-    microseconds = epoch + fraction/
+    double microseconds = epoch + fraction/
         internal::powTenSB4[std::min(
             m_scale, internal::PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
     return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows",
