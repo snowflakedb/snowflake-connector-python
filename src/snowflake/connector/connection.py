@@ -45,6 +45,7 @@ from .auth_webbrowser import AuthByWebBrowser
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .constants import (
+    ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -283,6 +284,14 @@ class SnowflakeConnection(object):
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
+        # Some configuration files need to be updated here to make them testable
+        # E.g.: if DEFAULT_CONFIGURATION pulled in env variables these would be not testable
+        if (
+            self.application
+            == DEFAULT_CONFIGURATION["application"][0]  # still default value
+            and ENV_VAR_PARTNER in os.environ.keys()  # is defined as an env variable
+        ):
+            self._application = os.environ[ENV_VAR_PARTNER]
 
     def __del__(self):  # pragma: no cover
         try:
