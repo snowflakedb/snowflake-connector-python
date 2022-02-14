@@ -11,8 +11,9 @@ from mock import patch
 import snowflake.connector
 
 try:  # pragma: no cover
-    from snowflake.connector.constants import QueryStatus
+    from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 except ImportError:
+    ENV_VAR_PARTNER = "SF_PARTNER"
     QueryStatus = None
 
 
@@ -135,7 +136,7 @@ def test_is_still_running():
 
 @pytest.mark.skipolddriver
 def test_partner_env_var():
-    with patch.dict(os.environ, SNOWFLAKE_PARTNER="Amanda"):
+    with patch.dict(os.environ, {ENV_VAR_PARTNER: "Amanda"}):
         with patch("snowflake.connector.network.SnowflakeRestful.fetch"):
             with snowflake.connector.connect(
                 user="user",
