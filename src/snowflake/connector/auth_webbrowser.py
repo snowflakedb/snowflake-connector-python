@@ -41,11 +41,6 @@ BUF_SIZE = 16384
 # Snowflake server
 
 
-def _get_url_from_input(self):
-    # function here to facilitate tests better
-    return input("Enter the URL the SSO URL redirected you to: ")
-
-
 class AuthByWebBrowser(AuthByPlugin):
     """Authenticates user by web browser. Only used for SAML based authentication."""
 
@@ -140,7 +135,7 @@ class AuthByWebBrowser(AuthByPlugin):
                     "URL you are redirected to into the terminal."
                 )
                 print(f"URL: {sso_url}")
-                url = _get_url_from_input()
+                url = input("Enter the URL the SSO URL redirected you to: ")
                 self._process_get_url(url)
                 if not self._token:
                     # Input contained no token, either URL was incorrectly pasted,

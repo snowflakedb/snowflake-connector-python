@@ -3,10 +3,8 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-
-from mock import MagicMock, Mock, PropertyMock
-
 import pytest
+from mock import MagicMock, Mock, PropertyMock, patch
 
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.constants import OCSPMode
@@ -144,12 +142,8 @@ def test_auth_webbrowser_fail_webbrowser(
     auth = AuthByWebBrowser(
         rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
     )
-    mock__get_url_from_input = Mock(return_value=input_text)
-    monkeypatch.setattr(
-        "snowflake.connector.auth_webbrowser._get_url_from_input",
-        mock__get_url_from_input,
-    )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    with patch("builtins.input", return_value=input_text):
+        auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
     captured = capsys.readouterr()
     assert captured.out == (
         "Initiating login request with your identity provider. A browser window "
