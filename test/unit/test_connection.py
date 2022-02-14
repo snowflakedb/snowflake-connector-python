@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+import os
 
 import pytest
 from mock import patch
@@ -10,8 +11,9 @@ from mock import patch
 import snowflake.connector
 
 try:  # pragma: no cover
-    from snowflake.connector.constants import QueryStatus
+    from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 except ImportError:
+    ENV_VAR_PARTNER = "SF_PARTNER"
     QueryStatus = None
 
 
@@ -130,3 +132,15 @@ def test_is_still_running():
             snowflake.connector.SnowflakeConnection.is_still_running(status)
             == expected_result
         )
+
+
+@pytest.mark.skipolddriver
+def test_partner_env_var():
+    with patch.dict(os.environ, {ENV_VAR_PARTNER: "Amanda"}):
+        with patch("snowflake.connector.network.SnowflakeRestful.fetch"):
+            with snowflake.connector.connect(
+                user="user",
+                account="account",
+                password="password123",
+            ) as conn:
+                assert conn.application == "Amanda"
