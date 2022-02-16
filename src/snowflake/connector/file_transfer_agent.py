@@ -816,7 +816,7 @@ class SnowflakeFileTransferAgent:
                     # Windows path: /C:/data/file1.txt where it starts with slash
                     # followed by a drive letter and colon.
                     file_name = file_name[1:]
-                files = glob.glob(file_name)
+                files = glob.glob(glob.escape(file_name))
                 canonical_locations += files
             else:
                 canonical_locations.append(file_name)
