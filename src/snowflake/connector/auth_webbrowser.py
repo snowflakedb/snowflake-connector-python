@@ -115,16 +115,17 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
+            logger.debug("step 1: query GS to obtain SSO url")
+            sso_url = self._get_sso_url(
+                authenticator, service_name, account, callback_port, user
+            )
+
             print(
                 "Initiating login request with your identity provider. A "
                 "browser window should have opened for you to complete the "
                 "login. If you can't see it, check existing browser windows, "
-                "or your OS settings. Press CTRL+C to abort, and try again..."
-            )
-
-            logger.debug("step 1: query GS to obtain SSO url")
-            sso_url = self._get_sso_url(
-                authenticator, service_name, account, callback_port, user
+                f"your OS settings or click the following link:\n{sso_url}\n"
+                "If that doesn't work, press CTRL+C to abort, and try again..."
             )
 
             logger.debug("step 2: open a browser")
