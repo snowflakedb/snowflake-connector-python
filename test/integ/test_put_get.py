@@ -636,7 +636,7 @@ def test_multipart_put(conn_cnx, tmp_path, use_stream):
 
 @pytest.mark.skipolddriver
 def test_put_special_file_name(tmp_path, conn_cnx):
-    test_file = tmp_path / "data~%23.csv"
+    test_file = tmp_path / "data~%23[2] (1).csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_special_filename_")
     with conn_cnx() as cnx:
