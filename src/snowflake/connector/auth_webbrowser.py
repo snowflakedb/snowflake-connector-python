@@ -129,23 +129,30 @@ class AuthByWebBrowser(AuthByPlugin):
 
             logger.debug("step 2: open a browser")
             if not self._webbrowser.open_new(sso_url):
-                logger.error(
-                    "Unable to open a browser in this environment.", exc_info=True
-                )
                 print(
                     "We were unable to open a browser window for you, "
-                    f"please open the following url manually: {sso_url}"
+                    "please open the following url manually then paste the "
+                    "URL you are redirected to into the terminal."
                 )
-                self.handle_failure(
-                    {
-                        "code": ER_UNABLE_TO_OPEN_BROWSER,
-                        "message": "Unable to open a browser in this environment.",
-                    }
-                )
-                return  # required for test case
-
-            logger.debug("step 3: accept SAML token")
-            self._receive_saml_token(socket_connection)
+                print(f"URL: {sso_url}")
+                url = input("Enter the URL the SSO URL redirected you to: ")
+                self._process_get_url(url)
+                if not self._token:
+                    # Input contained no token, either URL was incorrectly pasted,
+                    # empty or just wrong
+                    self.handle_failure(
+                        {
+                            "code": ER_UNABLE_TO_OPEN_BROWSER,
+                            "message": (
+                                "Unable to open a browser in this environment and "
+                                "SSO URL contained no token"
+                            ),
+                        }
+                    )
+                    return
+            else:
+                logger.debug("step 3: accept SAML token")
+                self._receive_saml_token(socket_connection)
         finally:
             socket_connection.close()
 
@@ -265,6 +272,14 @@ You can close this window now and go back where you started from.
             ":".join(origin_line.split(":")[1:]).strip(),
         )
 
+    def _process_get_url(self, url: str) -> None:
+        parsed = parse_qs(urlparse(url).query)
+        if "token" not in parsed:
+            return
+        if not parsed["token"][0]:
+            return
+        self._token = parsed["token"][0]
+
     def _process_get(self, data):
         for line in data:
             if line.startswith("GET "):
@@ -275,7 +290,7 @@ You can close this window now and go back where you started from.
 
         self._get_user_agent(data)
         _, url, _ = target_line.split()
-        self._token = parse_qs(urlparse(url).query)["token"][0]
+        self._process_get_url(url)
         return True
 
     def _process_post(self, data):
