@@ -27,7 +27,7 @@ from snowflake.connector import (
     errorcode,
     errors,
 )
-from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.cursor import SnowflakeCursor
 
 try:
@@ -628,21 +628,13 @@ def test_invalid_bind_data_type(conn_cnx):
 
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
-        cnx.cursor().execute("select 1")
-        c = cnx.cursor()
-        try:
-            c.execute(
-                "select seq8() as c1 " "from table(generator(timeLimit => 60))",
-                timeout=5,
-            )
-            raise Exception("Must be canceled")
-        except BASE_EXCEPTION_CLASS as err:
-            assert isinstance(
-                err, errors.ProgrammingError
-            ), "Programming Error Exception"
-            assert err.errno == 604, "Invalid error code"
-        finally:
-            c.close()
+        with cnx.cursor() as c:
+            with pytest.raises(errors.ProgrammingError) as err:
+                c.execute(
+                    "select seq8() as c1 from table(generator(timeLimit => 60))",
+                    timeout=5,
+                )
+            assert err.value.errno == 604, "Invalid error code"
 
 
 def test_executemany(conn, db_parameters):
