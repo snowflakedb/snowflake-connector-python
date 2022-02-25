@@ -198,7 +198,11 @@ class ResultSet(Iterable[List[Any]]):
         """Fetches a single Pandas dataframe."""
         dataframes = list(self._fetch_pandas_batches())
         if dataframes:
-            return pandas.concat(dataframes, **kwargs)
+            return pandas.concat(
+                dataframes,
+                ignore_index=True,  # Don't keep in result batch indexes
+                **kwargs,
+            )
         return pandas.DataFrame(columns=self.batches[0].column_names)
 
     def _get_metrics(self) -> Dict[str, int]:
