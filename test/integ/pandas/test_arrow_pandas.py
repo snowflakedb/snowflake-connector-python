@@ -966,6 +966,7 @@ def test_resultbatches_pandas_functionality(conn_cnx):
             )
             assert cur._result_set.total_row_index() == rowcount
             result_batches = cur.get_result_batches()
+            assert cur.fetch_pandas_all().index[-1] == rowcount - 1
             assert len(result_batches) > 1
     tables = itertools.chain.from_iterable(
         list(b.create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow"))
