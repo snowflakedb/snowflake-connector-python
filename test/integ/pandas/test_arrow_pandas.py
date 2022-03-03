@@ -1165,7 +1165,6 @@ def test_arrow_number_to_decimal(conn_cnx):
 
 
 def test_time_interval_microsecond(conn_cnx):
-    eps = 1
     with conn_cnx(
         session_parameters={
             PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
@@ -1175,8 +1174,8 @@ def test_time_interval_microsecond(conn_cnx):
             res = cur.execute(
                 "SELECT TO_TIMESTAMP('2010-06-25 12:15:30.747000')+INTERVAL '8999999999999998 MICROSECONDS'"
             ).fetchone()
-            assert abs(res[0].microsecond - 746998) <= eps
+            assert res[0].microsecond == 746998
             res = cur.execute(
                 "SELECT TO_TIMESTAMP('2010-06-25 12:15:30.747000')+INTERVAL '8999999999999999 MICROSECONDS'"
             ).fetchone()
-            assert abs(res[0].microsecond - 746999) <= eps
+            assert res[0].microsecond == 746999
