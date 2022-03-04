@@ -5,7 +5,50 @@
 #include "TimeStampConverter.hpp"
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
+
+#include <cstdint>
 #include <memory>
+#include <type_traits>
+
+template <typename T>
+constexpr char toType() {
+    static_assert(
+        std::is_same<T, signed char>::value
+        || std::is_same<T, short>::value
+        || std::is_same<T, int>::value
+        || std::is_same<T, long>::value
+        || std::is_same<T, long long>::value
+    , "Unknown type");
+    return std::is_same<T, signed char>::value ? 'b'
+    : std::is_same<T, short>::value ? 'h'
+    : std::is_same<T, int>::value ? 'i'
+    : std::is_same<T, long>::value ? 'l'
+    : std::is_same<T, long long>::value ? 'L'
+    // Should not get here. Error.
+    : '?';
+}
+
+template <typename T1>
+struct FormatArgs1 {
+  char format[2];
+  constexpr FormatArgs1()
+  : format{toType<T1>(), '\0'}
+  {}
+};
+template <typename T1, typename T2>
+struct FormatArgs2 {
+  char format[3];
+  constexpr FormatArgs2()
+  : format{toType<T1>(), toType<T2>(), '\0'}
+  {}
+};
+template <typename T1, typename T2, typename T3>
+struct FormatArgs3 {
+  char format[4];
+  constexpr FormatArgs3()
+  : format{toType<T1>(), toType<T2>(), toType<T3>(), '\0'}
+  {}
+};
 
 namespace sf
 {
@@ -25,14 +68,15 @@ PyObject* OneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
-    double microseconds = internal::getFormattedDoubleFromEpoch(
-        m_array->Value(rowIndex), m_scale);
+    internal::TimeSpec ts(m_array->Value(rowIndex), m_scale);
+
+    static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
 #ifdef _WIN32
-    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python_windows",
-                               "d", microseconds);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python_windows", format.format,
+                               ts.seconds, ts.microseconds);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python", "d",
-                               microseconds);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python", format.format,
+                               ts.seconds, ts.microseconds);
 #endif
   }
   else
@@ -76,16 +120,16 @@ PyObject* TwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
-    int64_t epoch = m_epoch->Value(rowIndex);
-    int32_t frac = m_fraction->Value(rowIndex);
-    double microseconds =
-        internal::getFormattedDoubleFromEpochFraction(epoch, frac, m_scale);
+    int64_t seconds = m_epoch->Value(rowIndex);
+    int64_t microseconds = m_fraction->Value(rowIndex) / 1000;
+
+    static constexpr FormatArgs2<decltype(seconds), decltype(microseconds)> format;
 #ifdef _WIN32
-    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python_windows",
-                               "d", microseconds);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python_windows", format.format,
+                               seconds, microseconds);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python", "d",
-                               microseconds);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python", format.format,
+                               seconds, microseconds);
 #endif
   }
   else
@@ -131,15 +175,16 @@ PyObject* OneFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
-    double microseconds = internal::getFormattedDoubleFromEpoch(
-        m_array->Value(rowIndex), m_scale);
+    internal::TimeSpec ts(m_array->Value(rowIndex), m_scale);
+
+    static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
+
 #ifdef _WIN32
-    // this macro is enough for both win32 and win64
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows",
-                               "d", microseconds);
+        return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows", format.format,
+                                   ts.seconds, ts.microseconds);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", "dd",
-                               microseconds, 0.0);
+        return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", format.format,
+                                   ts.seconds, ts.microseconds);
 #endif
   }
 
@@ -161,19 +206,16 @@ PyObject* TwoFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
-    double epoch = static_cast<double>(m_epoch->Value(rowIndex));
-    double fraction = static_cast<double>(
-        internal::castToFormattedFraction(
-            m_fraction->Value(rowIndex), epoch < 0, m_scale));
+    int64_t seconds = m_epoch->Value(rowIndex);
+    int64_t microseconds = m_fraction->Value(rowIndex) / 1000;
+
+    static constexpr FormatArgs2<decltype(seconds), decltype(microseconds)> format;
 #ifdef _WIN32
-    double microseconds = epoch + fraction/
-        internal::powTenSB4[std::min(
-            m_scale, internal::PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows",
-                               "d", microseconds);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows", format.format,
+                               seconds, microseconds);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", "dd",
-                               epoch, fraction);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", format.format,
+                               seconds, microseconds);
 #endif
   }
 
@@ -195,15 +237,16 @@ PyObject* TwoFieldTimeStampTZConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
-    int64_t epoch = m_epoch->Value(rowIndex);
-    double microseconds = internal::getFormattedDoubleFromEpoch(epoch, m_scale);
     int32_t timezone = m_timezone->Value(rowIndex);
-#ifdef _WIN32
-    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python_windows",
-                               "di", microseconds, timezone);
+    internal::TimeSpec ts(m_epoch->Value(rowIndex), m_scale);
+
+    static constexpr FormatArgs3<decltype(ts.seconds), decltype(ts.microseconds), decltype(timezone)> format;
+#if _WIN32
+    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python_windows", format.format,
+                               ts.seconds, ts.microseconds, timezone);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python", "di",
-                               microseconds, timezone);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python", format.format,
+                               ts.seconds, ts.microseconds, timezone);
 #endif
   }
 
@@ -227,17 +270,17 @@ PyObject* ThreeFieldTimeStampTZConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
-    int64_t epoch = m_epoch->Value(rowIndex);
-    int32_t frac = m_fraction->Value(rowIndex);
-    double microseconds =
-        internal::getFormattedDoubleFromEpochFraction(epoch, frac, m_scale);
     int32_t timezone = m_timezone->Value(rowIndex);
+    int64_t seconds = m_epoch->Value(rowIndex);
+    int64_t microseconds = m_fraction->Value(rowIndex) / 1000;
+
+    static constexpr FormatArgs3<decltype(seconds), decltype(microseconds), decltype(timezone)> format;
 #ifdef _WIN32
-    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python_windows",
-                               "di", microseconds, timezone);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python_windows", format.format,
+                               seconds, microseconds, timezone);
 #else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python", "di",
-                               microseconds, timezone);
+    return PyObject_CallMethod(m_context, "TIMESTAMP_TZ_to_python", format.format,
+                               seconds, microseconds, timezone);
 #endif
   }
 

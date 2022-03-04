@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, tzinfo
+from functools import partial
 from logging import getLogger
 
 import pytz
@@ -26,56 +27,29 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         logger.debug("initialized")
 
     def _TIMESTAMP_TZ_to_python(self, ctx):
-        """Converts TIMESTAMP TZ to datetime.
-
-        The timezone offset is piggybacked.
-        """
         scale = ctx["scale"]
-
-        def conv0(encoded_value: str) -> datetime:
-            value, tz = encoded_value.split()
-            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            microseconds = float(value)
-            t = ZERO_EPOCH + timedelta(seconds=microseconds)
-            if pytz.utc != tzinfo:
-                t += tzinfo.utcoffset(t)
-            return t.replace(tzinfo=tzinfo)
 
         def conv(encoded_value: str) -> datetime:
             value, tz = encoded_value.split()
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            microseconds = float(value[0 : -scale + 6])
-            t = ZERO_EPOCH + timedelta(seconds=microseconds)
-            if pytz.utc != tzinfo:
-                t += tzinfo.utcoffset(t)
-            return t.replace(tzinfo=tzinfo)
-
-        return conv if scale > 6 else conv0
-
-    def _TIMESTAMP_NTZ_to_python(self, ctx):
-        """Converts TIMESTAMP NTZ to datetime.
-
-        No timezone info is attached.
-        """
-        scale = ctx["scale"]
-
-        def conv0(value: str) -> datetime:
-            logger.debug("timestamp_ntz: %s", value)
-            return ZERO_EPOCH + timedelta(seconds=(float(value)))
-
-        def conv(value: str) -> datetime:
-            logger.debug("timestamp_ntz: %s", value)
-            microseconds = float(value[0 : -scale + 6])
-            return ZERO_EPOCH + timedelta(seconds=(microseconds))
-
-        return conv if scale > 6 else conv0
-
-    def _TIMESTAMP_LTZ_to_python(self, ctx):
-        def conv(value: str) -> datetime:
-            t, _ = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
-            return t
+            return SnowflakeConverterIssue23517.create_timestamp_from_string(
+                value=value, scale=scale, tz=tzinfo
+            )
 
         return conv
+
+    def _TIMESTAMP_LTZ_to_python(self, ctx):
+        tzinfo = self._get_session_tz()
+        scale = ctx["scale"]
+
+        def conv(value: str) -> datetime:
+            ts = SnowflakeConverterIssue23517.create_timestamp_from_string(value=value, scale=scale)
+            return pytz.utc.localize(ts, is_dst=False).astimezone(tzinfo)
+        return conv
+
+    def _TIMESTAMP_NTZ_to_python(self, ctx):
+        scale = ctx['scale']
+        return partial(SnowflakeConverterIssue23517.create_timestamp_from_string, scale=scale)
 
     def _TIME_to_python(self, ctx):
         """Converts TIME to formatted string, SnowflakeDateTime, or datetime.time.
@@ -92,3 +66,15 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
             return (ZERO_EPOCH + timedelta(seconds=(microseconds))).time()
 
         return conv if scale > 6 else conv0
+
+    @staticmethod
+    def create_timestamp_from_string(
+            value: str,
+            scale: int,
+            tz: tzinfo | None = None,
+    ) -> datetime:
+        """Windows does not support negative timestamps, so we need to do that part in Python."""
+        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(value=value, scale=scale)
+        if not tz:
+            return datetime.utcfromtimestamp(0) + timedelta(seconds=seconds, microseconds=fraction)
+        return datetime.fromtimestamp(0, tz=tz) + timedelta(seconds=seconds, microseconds=fraction)
