@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import json
 import os
+from unittest.mock import Mock, patch
 
 import pytest
-from mock import Mock, patch
 
 import snowflake.connector
 from snowflake.connector.compat import IS_LINUX

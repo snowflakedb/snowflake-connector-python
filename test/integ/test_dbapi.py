@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
@@ -8,6 +7,8 @@
 
 Adapted from a script by M-A Lemburg and taken from the MySQL python driver.
 """
+
+from __future__ import annotations
 
 import time
 
@@ -26,16 +27,16 @@ def drop_dbapi_tables(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
             for ddl in (TABLE1, TABLE2):
-                dropsql = "drop table if exists {}".format(ddl)
+                dropsql = f"drop table if exists {ddl}"
                 cursor.execute(dropsql)
 
 
 def executeDDL1(cursor):
-    cursor.execute("create or replace table {} (name string)".format(TABLE1))
+    cursor.execute(f"create or replace table {TABLE1} (name string)")
 
 
 def executeDDL2(cursor):
-    cursor.execute("create or replace table {} (name string)".format(TABLE2))
+    cursor.execute(f"create or replace table {TABLE2} (name string)")
 
 
 @pytest.fixture()
@@ -50,15 +51,13 @@ def conn_local(request, conn_cnx):
 
 def _paraminsert(cur):
     executeDDL1(cur)
-    cur.execute("insert into {} values ('string inserted into table')".format(TABLE1))
+    cur.execute(f"insert into {TABLE1} values ('string inserted into table')")
     assert cur.rowcount in (-1, 1)
 
-    cur.execute(
-        "insert into {} values (%(dbapi_ddl2)s)".format(TABLE1), {TABLE2: "Cooper's"}
-    )
+    cur.execute(f"insert into {TABLE1} values (%(dbapi_ddl2)s)", {TABLE2: "Cooper's"})
     assert cur.rowcount in (-1, 1)
 
-    cur.execute("select name from {}".format(TABLE1))
+    cur.execute(f"select name from {TABLE1}")
     res = cur.fetchall()
     assert len(res) == 2, "cursor.fetchall returned too few rows"
     dbapi_ddl2s = [res[0][0], res[1][0]]
@@ -184,10 +183,8 @@ def test_cursor_isolation(conn_local):
         cur1 = con.cursor()
         cur2 = con.cursor()
         executeDDL1(cur1)
-        cur1.execute(
-            "insert into {} values ('string inserted into table')".format(TABLE1)
-        )
-        cur2.execute("select name from {}".format(TABLE1))
+        cur1.execute(f"insert into {TABLE1} values ('string inserted into table')")
+        cur2.execute(f"select name from {TABLE1}")
         dbapi_ddl1 = cur2.fetchall()
         assert len(dbapi_ddl1) == 1
         assert len(dbapi_ddl1[0]) == 1
@@ -275,7 +272,7 @@ def test_close(db_parameters):
 
     # calling cursor.execute after connection is closed should raise an error
     try:
-        cur.execute("create or replace table {} (name string)".format(TABLE1))
+        cur.execute(f"create or replace table {TABLE1} (name string)")
     except BASE_EXCEPTION_CLASS as error:
         assert (
             error.errno == errorcode.ER_CURSOR_IS_CLOSED
@@ -354,7 +351,7 @@ def _populate():
     """Returns a list of sql commands to setup the DB for the fetch tests."""
     populate = [
         # NOTE NO GOOD using format to bind data
-        "insert into {} values ('{}')".format(TABLE1, s)
+        f"insert into {TABLE1} values ('{s}')"
         for s in SAMPLES
     ]
     return populate
@@ -451,7 +448,7 @@ def test_fetchall(conn_local):
         #                                'after executing a a statement that does not return rows'
         #                                )
 
-        cur.execute("select name from {}".format(TABLE1))
+        cur.execute(f"select name from {TABLE1}")
         rows = cur.fetchall()
         assert cur.rowcount in (-1, len(SAMPLES))
         assert len(rows) == len(SAMPLES), "cursor.fetchall did not retrieve all rows"
@@ -737,4 +734,4 @@ def test_escape(conn_local):
             cur.execute("delete from %s where name=%%s" % TABLE1, i)
             assert (
                 i == row[0]
-            ), "newline not properly converted, got {}, should be {}".format(row[0], i)
+            ), f"newline not properly converted, got {row[0]}, should be {i}"

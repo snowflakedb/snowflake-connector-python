@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from mock import MagicMock, Mock, PropertyMock
+from __future__ import annotations
+
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.constants import OCSPMode
@@ -71,7 +72,7 @@ def test_auth_okta():
 
     # step 5
     rest._protocol = "https"
-    rest._host = "{account}.snowflakecomputing.com".format(account=account)
+    rest._host = f"{account}.snowflakecomputing.com"
     rest._port = 443
     auth._step5(ref_response_html)
     assert not rest._connection.errorhandler.called  # no error
@@ -218,7 +219,7 @@ def test_auth_okta_step5_negative():
 
     # step 5
     rest._protocol = "https"
-    rest._host = "{account}.snowflakecomputing.com".format(account=account)
+    rest._host = f"{account}.snowflakecomputing.com"
     rest._port = 443
     auth._step5(ref_response_html)
     assert rest._connection.errorhandler.called  # error

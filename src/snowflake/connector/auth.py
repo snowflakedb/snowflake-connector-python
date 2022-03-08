@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import codecs
 import copy
@@ -15,7 +16,6 @@ from datetime import datetime
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
-from typing import Dict, Optional, Union
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
@@ -112,7 +112,7 @@ ID_TOKEN = "ID_TOKEN"
 MFA_TOKEN = "MFATOKEN"
 
 
-class Auth(object):
+class Auth:
     """Snowflake Authenticator."""
 
     def __init__(self, rest):
@@ -166,7 +166,7 @@ class Auth(object):
         password_callback=None,
         session_parameters=None,
         timeout=120,
-    ) -> Dict[str, Union[str, int, bool]]:
+    ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 
         if session_parameters is None:
@@ -696,7 +696,7 @@ def build_temporary_credential_name(host, user, cred_type):
 
 
 def get_token_from_private_key(
-    user: str, account: str, privatekey_path: str, key_password: Optional[str]
+    user: str, account: str, privatekey_path: str, key_password: str | None
 ) -> str:
     encoded_password = key_password.encode() if key_password is not None else None
     with open(privatekey_path, "rb") as key:

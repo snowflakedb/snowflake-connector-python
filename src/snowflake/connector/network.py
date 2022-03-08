@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import collections
 import contextlib
@@ -15,7 +16,7 @@ import traceback
 import uuid
 from io import BytesIO
 from threading import Lock
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Type
+from typing import TYPE_CHECKING
 
 import OpenSSL.SSL
 
@@ -156,7 +157,7 @@ PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PL
 
 NO_TOKEN = "no-token"
 
-STATUS_TO_EXCEPTION: Dict[int, Type[Error]] = {
+STATUS_TO_EXCEPTION: dict[int, type[Error]] = {
     INTERNAL_SERVER_ERROR: InternalServerError,
     FORBIDDEN: ForbiddenError,
     SERVICE_UNAVAILABLE: ServiceUnavailableError,
@@ -185,14 +186,14 @@ def is_retryable_http_code(code: int) -> bool:
 
 
 def get_http_retryable_error(status_code: int) -> Error:
-    error_class: Type[Error] = STATUS_TO_EXCEPTION.get(
+    error_class: type[Error] = STATUS_TO_EXCEPTION.get(
         status_code, OtherHTTPRetryableError
     )
     return error_class(errno=status_code)
 
 
 def raise_okta_unauthorized_error(
-    connection: Optional["SnowflakeConnection"], response: Response
+    connection: SnowflakeConnection | None, response: Response
 ) -> None:
     Error.errorhandler_wrapper(
         connection,
@@ -207,7 +208,7 @@ def raise_okta_unauthorized_error(
 
 
 def raise_failed_request_error(
-    connection: Optional["SnowflakeConnection"],
+    connection: SnowflakeConnection | None,
     url: str,
     method: str,
     response: Response,
@@ -292,11 +293,11 @@ class SnowflakeAuth(AuthBase):
 
 
 class SessionPool:
-    def __init__(self, rest: "SnowflakeRestful"):
+    def __init__(self, rest: SnowflakeRestful):
         # A stack of the idle sessions
-        self._idle_sessions: List[Session] = []
-        self._active_sessions: Set[Session] = set()
-        self._rest: "SnowflakeRestful" = rest
+        self._idle_sessions: list[Session] = []
+        self._active_sessions: set[Session] = set()
+        self._rest: SnowflakeRestful = rest
 
     def get_session(self) -> Session:
         """Returns a session from the session pool or creates a new one."""
@@ -334,7 +335,7 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
-class SnowflakeRestful(object):
+class SnowflakeRestful:
     """Snowflake Restful class."""
 
     def __init__(
@@ -351,7 +352,7 @@ class SnowflakeRestful(object):
         self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._lock_token = Lock()
-        self._sessions_map: Dict[Optional[str], SessionPool] = collections.defaultdict(
+        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
 
@@ -757,7 +758,7 @@ class SnowflakeRestful(object):
     def fetch(self, method, full_url, headers, data=None, timeout=None, **kwargs):
         """Carry out API request with session management."""
 
-        class RetryCtx(object):
+        class RetryCtx:
             def __init__(self, timeout, _include_retry_params=False):
                 self.total_timeout = timeout
                 self.timeout = timeout
@@ -1095,7 +1096,7 @@ class SnowflakeRestful(object):
         return s
 
     @contextlib.contextmanager
-    def _use_requests_session(self, url: Optional[str] = None):
+    def _use_requests_session(self, url: str | None = None):
         """Session caching context manager.
 
         Notes:

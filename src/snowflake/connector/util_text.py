@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import logging
 import re
 from io import StringIO
-from typing import Optional
 
 COMMENT_PATTERN_RE = re.compile(r"^\s*\-\-")
 EMPTY_LINE_RE = re.compile(r"^\s*$")
@@ -15,7 +15,7 @@ EMPTY_LINE_RE = re.compile(r"^\s*$")
 _logger = logging.getLogger(__name__)
 
 
-class SQLDelimiter(object):
+class SQLDelimiter:
     """Class that wraps a SQL delimiter string.
 
     Since split_statements is a generator this mutable object will allow it change while executing.
@@ -32,7 +32,7 @@ class SQLDelimiter(object):
 def split_statements(
     buf: StringIO,
     remove_comments: bool = False,
-    delimiter: Optional[SQLDelimiter] = None,
+    delimiter: SQLDelimiter | None = None,
 ):
     """Splits a stream into SQL statements (ends with a semicolon) or commands (!...).
 
@@ -68,13 +68,13 @@ def split_statements(
             # Special characters possible in the sql delimiter are '_', '/' and ';'. If a delimiter does not end, or
             # start with a special character then look for word separation with \b regex.
             if re.match(r"\w", sql_delimiter[0]):
-                RE_START = re.compile(r"^[^\w$]?{}".format(escaped_delim))
+                RE_START = re.compile(fr"^[^\w$]?{escaped_delim}")
             else:
-                RE_START = re.compile(r"^.?{}".format(escaped_delim))
+                RE_START = re.compile(fr"^.?{escaped_delim}")
             if re.match(r"\w", sql_delimiter[-1]):
-                RE_END = re.compile(r"{}[^\w$]?$".format(escaped_delim))
+                RE_END = re.compile(fr"{escaped_delim}[^\w$]?$")
             else:
-                RE_END = re.compile(r"{}.?$".format(escaped_delim))
+                RE_END = re.compile(fr"{escaped_delim}.?$")
             previous_delimiter = sql_delimiter
         while True:
             if col >= len_line:
@@ -233,9 +233,9 @@ def construct_hostname(region, account):
     if region:
         if account.find(".") > 0:
             account = account[0 : account.find(".")]
-        host = "{}.{}.snowflakecomputing.com".format(account, region)
+        host = f"{account}.{region}.snowflakecomputing.com"
     else:
-        host = "{}.snowflakecomputing.com".format(account)
+        host = f"{account}.snowflakecomputing.com"
     return host
 
 

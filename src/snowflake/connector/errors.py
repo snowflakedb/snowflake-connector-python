@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import logging
 import os
 import re
 import traceback
 from logging import getLogger
-from typing import TYPE_CHECKING, Dict, Optional, Type, Union
+from typing import TYPE_CHECKING
 
 from .compat import BASE_EXCEPTION_CLASS
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
@@ -34,13 +35,13 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def __init__(
         self,
-        msg: Optional[str] = None,
-        errno: Optional[int] = None,
-        sqlstate: Optional[str] = None,
-        sfqid: Optional[str] = None,
-        done_format_msg: Optional[bool] = None,
-        connection: Optional["SnowflakeConnection"] = None,
-        cursor: Optional["SnowflakeCursor"] = None,
+        msg: str | None = None,
+        errno: int | None = None,
+        sqlstate: str | None = None,
+        sfqid: str | None = None,
+        done_format_msg: bool | None = None,
+        connection: SnowflakeConnection | None = None,
+        cursor: SnowflakeCursor | None = None,
     ):
         super().__init__(msg)
         self.msg = msg
@@ -109,7 +110,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
         return "".join(traceback.format_list(filtered_frames))
 
-    def telemetry_msg(self) -> Optional[str]:
+    def telemetry_msg(self) -> str | None:
         if self.sqlstate != "n/a":
             return f"{self.errno:06d} ({self.sqlstate})"
         elif self.errno != -1:
@@ -117,7 +118,7 @@ class Error(BASE_EXCEPTION_CLASS):
         else:
             return None
 
-    def generate_telemetry_exception_data(self) -> Dict[str, str]:
+    def generate_telemetry_exception_data(self) -> dict[str, str]:
         """Generate the data to send through telemetry."""
         telemetry_data = {
             TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
@@ -141,8 +142,8 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def send_exception_telemetry(
         self,
-        connection: Optional["SnowflakeConnection"],
-        telemetry_data: Dict[str, str],
+        connection: SnowflakeConnection | None,
+        telemetry_data: dict[str, str],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
         if (
@@ -169,8 +170,8 @@ class Error(BASE_EXCEPTION_CLASS):
     def exception_telemetry(
         self,
         msg: str,
-        cursor: Optional["SnowflakeCursor"],
-        connection: Optional["SnowflakeConnection"],
+        cursor: SnowflakeCursor | None,
+        connection: SnowflakeConnection | None,
     ) -> None:
         """Main method to generate and send telemetry data for exceptions."""
         try:
@@ -187,10 +188,10 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def default_errorhandler(
-        connection: "SnowflakeConnection",
-        cursor: "SnowflakeCursor",
-        error_class: Type["Error"],
-        error_value: Dict[str, str],
+        connection: SnowflakeConnection,
+        cursor: SnowflakeCursor,
+        error_class: type[Error],
+        error_value: dict[str, str],
     ) -> None:
         """Default error handler that raises an error.
 
@@ -215,9 +216,9 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_wrapper_from_cause(
-        connection: "SnowflakeConnection",
-        cause: Union["Error", Exception],
-        cursor: Optional["SnowflakeCursor"] = None,
+        connection: SnowflakeConnection,
+        cause: Error | Exception,
+        cursor: SnowflakeCursor | None = None,
     ) -> None:
         """Wrapper for errorhandler_wrapper, it is called with a cause instead of a dictionary.
 
@@ -248,10 +249,10 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_wrapper(
-        connection: Optional["SnowflakeConnection"],
-        cursor: Optional["SnowflakeCursor"],
-        error_class: Union[Type["Error"], Type[Exception]],
-        error_value: Dict[str, Union[str, bool, int]],
+        connection: SnowflakeConnection | None,
+        cursor: SnowflakeCursor | None,
+        error_class: type[Error] | type[Exception],
+        error_value: dict[str, str | bool | int],
     ) -> None:
         """Error handler wrapper that calls the errorhandler method.
 
@@ -283,9 +284,9 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_wrapper_from_ready_exception(
-        connection: Optional["SnowflakeConnection"],
-        cursor: Optional["SnowflakeCursor"],
-        error_exc: Union["Error", Exception],
+        connection: SnowflakeConnection | None,
+        cursor: SnowflakeCursor | None,
+        error_exc: Error | Exception,
     ) -> None:
         """Like errorhandler_wrapper, but it takes a ready to go Exception."""
         if isinstance(error_exc, Error):
@@ -309,10 +310,10 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def hand_to_other_handler(
-        connection: Optional["SnowflakeConnection"],
-        cursor: Optional["SnowflakeCursor"],
-        error_class: Union[Type["Error"], Type[Exception]],
-        error_value: Dict[str, Union[str, bool]],
+        connection: SnowflakeConnection | None,
+        cursor: SnowflakeCursor | None,
+        error_class: type[Error] | type[Exception],
+        error_value: dict[str, str | bool],
     ) -> bool:
         """If possible give error to a higher error handler in connection, or cursor.
 
@@ -333,9 +334,9 @@ class Error(BASE_EXCEPTION_CLASS):
 
     @staticmethod
     def errorhandler_make_exception(
-        error_class: Union[Type["Error"], Type[Exception]],
-        error_value: Dict[str, Union[str, bool]],
-    ) -> Union["Error", Exception]:
+        error_class: type[Error] | type[Exception],
+        error_value: dict[str, str | bool],
+    ) -> Error | Exception:
         """Helper function to errorhandler_wrapper that creates the exception."""
         error_value.setdefault("done_format_msg", False)
 
@@ -536,9 +537,7 @@ class MissingDependencyError(Error):
     """Exception for missing extras dependencies."""
 
     def __init__(self, dependency: str):
-        super(MissingDependencyError, self).__init__(
-            msg=f"Missing optional dependency: {dependency}"
-        )
+        super().__init__(msg=f"Missing optional dependency: {dependency}")
 
 
 class BindUploadError(Error):

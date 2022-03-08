@@ -1,14 +1,16 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, Generator
+from typing import TYPE_CHECKING, Callable, Generator
+from typing import Callable, Generator
+from unittest import mock
 
-import mock
 import pytest
 
 from snowflake.connector import DictCursor
@@ -24,8 +26,7 @@ except ImportError:
     write_pandas = None
 
 
-MYPY = False
-if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
+if TYPE_CHECKING:
     from snowflake.connector import SnowflakeConnection
 
 sf_connector_version_data = [
@@ -54,8 +55,8 @@ sf_connector_version_df = LazyVar(
 @pytest.mark.parametrize("auto_create_table", [True, False])
 @pytest.mark.parametrize("create_temp_table", [True, False])
 def test_write_pandas(
-    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
-    db_parameters: Dict[str, str],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    db_parameters: dict[str, str],
     compression: str,
     chunk_size: int,
     quote_identifiers: bool,
@@ -75,14 +76,14 @@ def test_write_pandas(
             create_sql = 'CREATE OR REPLACE TABLE "{}" ("name" STRING, "newest_version" STRING)'.format(
                 table_name
             )
-            select_sql = 'SELECT * FROM "{}"'.format(table_name)
-            drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
+            select_sql = f'SELECT * FROM "{table_name}"'
+            drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
         else:
             create_sql = "CREATE OR REPLACE TABLE {} (name STRING, newest_version STRING)".format(
                 table_name
             )
-            select_sql = "SELECT * FROM {}".format(table_name)
-            drop_sql = "DROP TABLE IF EXISTS {}".format(table_name)
+            select_sql = f"SELECT * FROM {table_name}"
+            drop_sql = f"DROP TABLE IF EXISTS {table_name}"
 
         if not auto_create_table:
             cnx.execute_string(create_sql)
@@ -135,7 +136,7 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with database, schema and table name."""
     from snowflake.connector.cursor import SnowflakeCursor
 
-    with conn_cnx() as cnx:  # type: SnowflakeConnection
+    with conn_cnx() as cnx:
 
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
@@ -161,7 +162,7 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
                 quote_identifiers=quote_identifiers,
             )
             assert m_execute.called and any(
-                map(lambda e: "COPY INTO" in str(e.args), m_execute.call_args_list)
+                map(lambda e: "COPY INTO" in str(e[0]), m_execute.call_args_list)
             )
 
 
@@ -170,7 +171,7 @@ def test_location_building_schema(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with schema and table name."""
     from snowflake.connector.cursor import SnowflakeCursor
 
-    with conn_cnx() as cnx:  # type: SnowflakeConnection
+    with conn_cnx() as cnx:
 
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
@@ -195,7 +196,7 @@ def test_location_building_schema(conn_cnx, quote_identifiers: bool):
                 quote_identifiers=quote_identifiers,
             )
             assert m_execute.called and any(
-                map(lambda e: "COPY INTO" in str(e.args), m_execute.call_args_list)
+                map(lambda e: "COPY INTO" in str(e[0]), m_execute.call_args_list)
             )
 
 
@@ -204,7 +205,7 @@ def test_location_building(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with schema and table name."""
     from snowflake.connector.cursor import SnowflakeCursor
 
-    with conn_cnx() as cnx:  # type: SnowflakeConnection
+    with conn_cnx() as cnx:
 
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
@@ -228,13 +229,13 @@ def test_location_building(conn_cnx, quote_identifiers: bool):
                 quote_identifiers=quote_identifiers,
             )
             assert m_execute.called and any(
-                map(lambda e: "COPY INTO" in str(e.args), m_execute.call_args_list)
+                map(lambda e: "COPY INTO" in str(e[0]), m_execute.call_args_list)
             )
 
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_default_value_insertion(
-    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     quote_identifiers: bool,
 ):
     """Tests whether default values can be successfully inserted with the pandas writeback."""
@@ -250,8 +251,8 @@ def test_default_value_insertion(
                  "ts" timestamp_ltz default current_timestamp)""".format(
         table_name
     )
-    select_sql = 'SELECT * FROM "{}"'.format(table_name)
-    drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
+    select_sql = f'SELECT * FROM "{table_name}"'
+    drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
     if not quote_identifiers:
         create_sql = create_sql.replace('"', "")
         select_sql = select_sql.replace('"', "")
@@ -288,7 +289,7 @@ def test_default_value_insertion(
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_autoincrement_insertion(
-    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     quote_identifiers: bool,
 ):
     """Tests whether default values can be successfully inserted with the pandas writeback."""
@@ -302,8 +303,8 @@ def test_autoincrement_insertion(
         'CREATE OR REPLACE TABLE "{}"'
         '("name" STRING, "balance" INT, "id" INT AUTOINCREMENT)'
     ).format(table_name)
-    select_sql = 'SELECT * FROM "{}"'.format(table_name)
-    drop_sql = 'DROP TABLE IF EXISTS "{}"'.format(table_name)
+    select_sql = f'SELECT * FROM "{table_name}"'
+    drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
     if not quote_identifiers:
         create_sql = create_sql.replace('"', "")
         select_sql = select_sql.replace('"', "")
@@ -333,7 +334,7 @@ def test_autoincrement_insertion(
 
 @pytest.mark.parametrize("auto_create_table", [True, False])
 def test_special_name_quoting(
-    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     auto_create_table: bool,
 ):
     """Tests whether special column names get quoted as expected."""

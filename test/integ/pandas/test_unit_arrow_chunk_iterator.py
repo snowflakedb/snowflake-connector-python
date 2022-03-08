@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import datetime
 import decimal
@@ -619,7 +620,7 @@ def iterate_over_test_chunk(
     fields = []
     for i in range(column_size):
         fields.append(
-            pyarrow.field("column_{}".format(i), pyarrow_type[i], True, column_meta[i])
+            pyarrow.field(f"column_{i}", pyarrow_type[i], True, column_meta[i])
         )
     schema = pyarrow.schema(fields)
 
@@ -652,7 +653,7 @@ def iterate_over_test_chunk(
                 ]
         expected_data.append(column_arrays)
 
-        column_names = ["column_{}".format(i) for i in range(column_size)]
+        column_names = [f"column_{i}" for i in range(column_size)]
         rb = RecordBatch.from_arrays(py_arrays, column_names)
         writer.write_batch(rb)
 

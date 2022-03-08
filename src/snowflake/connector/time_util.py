@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import random
 import time
 from logging import getLogger
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 logger = getLogger(__name__)
 
@@ -26,7 +27,7 @@ class HeartBeatTimer(Timer):
         self, client_session_keep_alive_heartbeat_frequency: int, f: Callable
     ) -> None:
         interval = client_session_keep_alive_heartbeat_frequency
-        super(HeartBeatTimer, self).__init__(interval, f)
+        super().__init__(interval, f)
         # Mark this as a daemon thread, so that it won't prevent Python from exiting.
         self.daemon = True
 
@@ -70,10 +71,10 @@ class TimerContextManager:
     """
 
     def __init__(self) -> None:
-        self._start: Optional[int] = None
-        self._end: Optional[int] = None
+        self._start: int | None = None
+        self._end: int | None = None
 
-    def __enter__(self) -> "TimerContextManager":
+    def __enter__(self) -> TimerContextManager:
         self._start = get_time_millis()
         return self
 

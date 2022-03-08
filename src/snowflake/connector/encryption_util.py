@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import base64
 import json
 import os
 import tempfile
 from logging import getLogger
-from typing import IO, TYPE_CHECKING, Tuple
+from typing import IO, TYPE_CHECKING
 
 from Cryptodome.Cipher import AES
 from cryptography.hazmat.backends import default_backend
@@ -45,11 +46,11 @@ class SnowflakeEncryptionUtil:
 
     @staticmethod
     def encrypt_stream(
-        encryption_material: "SnowflakeFileEncryptionMaterial",
+        encryption_material: SnowflakeFileEncryptionMaterial,
         src: IO[bytes],
         out: IO[bytes],
         chunk_size: int = 64 * kilobyte,  # block_size * 4 * 1024,
-    ) -> "EncryptionMetadata":
+    ) -> EncryptionMetadata:
         """Reads content from src and write the encrypted content into out.
 
         This function is sensitive to current position of src and out.
@@ -131,11 +132,11 @@ class SnowflakeEncryptionUtil:
 
     @staticmethod
     def encrypt_file(
-        encryption_material: "SnowflakeFileEncryptionMaterial",
+        encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
         tmp_dir: str = None,
-    ) -> Tuple["EncryptionMetadata", str]:
+    ) -> tuple[EncryptionMetadata, str]:
         """Encrypts a file in a temporary directory.
 
         Args:
@@ -166,8 +167,8 @@ class SnowflakeEncryptionUtil:
 
     @staticmethod
     def decrypt_file(
-        metadata: "EncryptionMetadata",
-        encryption_material: "SnowflakeFileEncryptionMaterial",
+        metadata: EncryptionMetadata,
+        encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
         tmp_dir=None,

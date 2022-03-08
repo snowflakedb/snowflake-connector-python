@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import logging
 import re
@@ -18,15 +19,10 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
     Generator,
     Iterator,
-    List,
     NamedTuple,
-    Optional,
     Sequence,
-    Tuple,
-    Union,
 )
 
 from snowflake.connector.result_batch import create_batches_from_response
@@ -126,7 +122,7 @@ class ResultMetadata(NamedTuple):
     is_nullable: bool
 
     @classmethod
-    def from_column(cls, col: Dict[str, Any]):
+    def from_column(cls, col: dict[str, Any]):
         """Initializes a ResultMetadata object from the column description in the query response."""
         return cls(
             col["name"],
@@ -198,7 +194,7 @@ class SnowflakeCursor:
     )
 
     @staticmethod
-    def get_file_transfer_type(sql: str) -> Optional[FileTransferType]:
+    def get_file_transfer_type(sql: str) -> FileTransferType | None:
         """Decide whether a SQL is a file transfer and return its type.
 
         None is returned if the SQL isn't a file transfer so that this function can be
@@ -212,7 +208,7 @@ class SnowflakeCursor:
 
     def __init__(
         self,
-        connection: "SnowflakeConnection",
+        connection: SnowflakeConnection,
         use_dict_result: bool = False,
     ) -> None:
         """Inits a SnowflakeCursor with a connection.
@@ -221,17 +217,17 @@ class SnowflakeCursor:
             connection: The connection that created this cursor.
             use_dict_result: Decides whether to use dict result or not.
         """
-        self._connection: "SnowflakeConnection" = connection
+        self._connection: SnowflakeConnection = connection
 
         self._errorhandler: Callable[
-            ["SnowflakeConnection", "SnowflakeCursor", Type["Error"], Dict[str, str]],
+            [SnowflakeConnection, SnowflakeCursor, type[Error], dict[str, str]],
             None,
         ] = Error.default_errorhandler
-        self.messages: List[
-            Tuple[Union[Type["Error"], Type[Exception]], Dict[str, Union[str, bool]]]
+        self.messages: list[
+            tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
-        self._timebomb: Optional[Timer] = None  # must be here for abort_exit method
-        self._description: Optional[List[ResultMetadata]] = None
+        self._timebomb: Timer | None = None  # must be here for abort_exit method
+        self._description: list[ResultMetadata] | None = None
         self._column_idx_to_name = None
         self._sfqid = None
         self._sqlstate = None
@@ -248,13 +244,13 @@ class SnowflakeCursor:
         self._time_output_format = None
         self._timezone = None
         self._binary_output_format = None
-        self._result: Optional[Union[Iterator[Tuple], Iterator[Dict]]] = None
-        self._result_set: Optional["ResultSet"] = None
+        self._result: Iterator[tuple] | Iterator[dict] | None = None
+        self._result_set: ResultSet | None = None
         self._result_state: ResultState = ResultState.DEFAULT
         self._use_dict_result = use_dict_result
-        self.query: Optional[str] = None
+        self.query: str | None = None
         # TODO: self._query_result_format could be defined as an enum
-        self._query_result_format: Optional[str] = None
+        self._query_result_format: str | None = None
 
         self._arraysize = 1  # PEP-0249: defaults to 1
 
@@ -263,9 +259,9 @@ class SnowflakeCursor:
         self._first_chunk_time = None
 
         self._log_max_query_length = connection.log_max_query_length
-        self._inner_cursor: Optional["SnowflakeCursor"] = None
+        self._inner_cursor: SnowflakeCursor | None = None
         self._prefetch_hook = None
-        self._rownumber: Optional[int] = None
+        self._rownumber: int | None = None
 
         self.reset()
 
@@ -277,7 +273,7 @@ class SnowflakeCursor:
                 logger.info(e)
 
     @property
-    def description(self) -> List[ResultMetadata]:
+    def description(self) -> list[ResultMetadata]:
         return self._description
 
     @property
@@ -381,7 +377,7 @@ class SnowflakeCursor:
             },
         )
 
-    def close(self) -> Optional[bool]:
+    def close(self) -> bool | None:
         """Closes the cursor object.
 
         Returns whether the cursor was closed during this call.
@@ -405,9 +401,9 @@ class SnowflakeCursor:
         self,
         query: str,
         timeout: int = 0,
-        statement_params: Optional[Dict[str, str]] = None,
-        binding_params: Union[Tuple, Dict[str, Dict[str, str]]] = None,
-        binding_stage: Optional[str] = None,
+        statement_params: dict[str, str] | None = None,
+        binding_params: tuple | dict[str, dict[str, str]] = None,
+        binding_stage: str | None = None,
         is_internal: bool = False,
         describe_only: bool = False,
         _no_results: bool = False,
@@ -561,28 +557,28 @@ class SnowflakeCursor:
     def execute(
         self,
         command: str,
-        params: Optional[Union[Sequence[Any], Dict[Any, Any]]] = None,
-        _bind_stage: Optional[str] = None,
-        timeout: Optional[int] = None,
+        params: Sequence[Any] | dict[Any, Any] | None = None,
+        _bind_stage: str | None = None,
+        timeout: int | None = None,
         _exec_async: bool = False,
         _do_reset: bool = True,
-        _put_callback: "SnowflakeProgressPercentage" = None,
-        _put_azure_callback: "SnowflakeProgressPercentage" = None,
+        _put_callback: SnowflakeProgressPercentage = None,
+        _put_azure_callback: SnowflakeProgressPercentage = None,
         _put_callback_output_stream: IO[str] = sys.stdout,
-        _get_callback: "SnowflakeProgressPercentage" = None,
-        _get_azure_callback: "SnowflakeProgressPercentage" = None,
+        _get_callback: SnowflakeProgressPercentage = None,
+        _get_azure_callback: SnowflakeProgressPercentage = None,
         _get_callback_output_stream: IO[str] = sys.stdout,
         _show_progress_bar: bool = True,
-        _statement_params: Optional[Dict[str, str]] = None,
+        _statement_params: dict[str, str] | None = None,
         _is_internal: bool = False,
         _describe_only: bool = False,
         _no_results: bool = False,
         _use_ijson: bool = False,
-        _is_put_get: Optional[bool] = None,
+        _is_put_get: bool | None = None,
         _raise_put_get_error: bool = True,
         _force_put_overwrite: bool = False,
-        file_stream: Optional[IO[bytes]] = None,
-    ) -> Optional[Union["SnowflakeCursor", None]]:
+        file_stream: IO[bytes] | None = None,
+    ) -> SnowflakeCursor | None:
         """Executes a command/query.
 
         Args:
@@ -691,7 +687,7 @@ class SnowflakeCursor:
 
         m = DESC_TABLE_RE.match(query)
         if m:
-            query1 = "describe table {}".format(m.group(1))
+            query1 = f"describe table {m.group(1)}"
             if logger.getEffectiveLevel() <= logging.WARNING:
                 logger.info(
                     "query was rewritten: org=%s, new=%s",
@@ -802,7 +798,7 @@ class SnowflakeCursor:
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
-    def describe(self, *args, **kwargs) -> List[ResultMetadata]:
+    def describe(self, *args, **kwargs) -> list[ResultMetadata]:
         """Obtain the schema of the result without executing the query.
 
         This function takes the same arguments as execute, please refer to that function
@@ -832,7 +828,7 @@ class SnowflakeCursor:
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description: List[ResultMetadata] = [
+        self._description: list[ResultMetadata] = [
             ResultMetadata.from_column(col) for col in data["rowtype"]
         ]
 
@@ -907,7 +903,7 @@ class SnowflakeCursor:
             )
 
     def query_result(self, qid):
-        url = "/queries/{qid}/result".format(qid=qid)
+        url = f"/queries/{qid}/result"
         ret = self._connection.rest.request(url=url, method="get")
         self._sfqid = (
             ret["data"]["queryId"]
@@ -951,14 +947,14 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_arrow_batches()
 
-    def fetch_arrow_all(self) -> Optional[Table]:
+    def fetch_arrow_all(self) -> Table | None:
         self.check_can_use_arrow_resultset()
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
         return self._result_set._fetch_arrow_all()
 
-    def fetch_pandas_batches(self, **kwargs) -> Iterator["pandas.DataFrame"]:
+    def fetch_pandas_batches(self, **kwargs) -> Iterator[pandas.DataFrame]:
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
@@ -969,7 +965,7 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_pandas_batches(**kwargs)
 
-    def fetch_pandas_all(self, **kwargs) -> "pandas.DataFrame":
+    def fetch_pandas_all(self, **kwargs) -> pandas.DataFrame:
         """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
@@ -982,15 +978,15 @@ class SnowflakeCursor:
         return self._result_set._fetch_pandas_all(**kwargs)
 
     def abort_query(self, qid):
-        url = "/queries/{qid}/abort-request".format(qid=qid)
+        url = f"/queries/{qid}/abort-request"
         ret = self._connection.rest.request(url=url, method="post")
         return ret.get("success")
 
     def executemany(
         self,
         command: str,
-        seqparams: Union[Sequence[Any], Dict[str, Any]],
-    ) -> "SnowflakeCursor":
+        seqparams: Sequence[Any] | dict[str, Any],
+    ) -> SnowflakeCursor:
         """Executes a command/query with the given set of parameters sequentially."""
         logger.debug("executing many SQLs/commands")
         command = command.strip(" \t\n\r") if command else None
@@ -1076,7 +1072,7 @@ class SnowflakeCursor:
 
     def _result_iterator(
         self,
-    ) -> Union[Generator[Dict, None, None], Generator[Tuple, None, None]]:
+    ) -> Generator[dict, None, None] | Generator[tuple, None, None]:
         """Yields the elements from _result and raises an exception when appropriate."""
         try:
             for _next in self._result:
@@ -1094,7 +1090,7 @@ class SnowflakeCursor:
             else:
                 yield None
 
-    def fetchone(self) -> Optional[Union[Dict, Tuple]]:
+    def fetchone(self) -> dict | tuple | None:
         """Fetches one row."""
         if self._prefetch_hook is not None:
             self._prefetch_hook()
@@ -1132,7 +1128,7 @@ class SnowflakeCursor:
 
         return ret
 
-    def fetchall(self) -> Union[List[Tuple], List[Dict]]:
+    def fetchall(self) -> list[tuple] | list[dict]:
         """Fetches all of the results."""
         ret = []
         while True:
@@ -1183,7 +1179,7 @@ class SnowflakeCursor:
         if not self.connection._reuse_results:
             self._result_set = None
 
-    def __iter__(self) -> Union[Iterator[Dict], Iterator[Tuple]]:
+    def __iter__(self) -> Iterator[dict] | Iterator[tuple]:
         """Iteration over the result set."""
         # set _result if _result_set is not None
         if self._result is None and self._result_set is not None:
@@ -1254,9 +1250,7 @@ class SnowflakeCursor:
                         sfqid, status.name
                     )
                 )
-            self._inner_cursor.execute(
-                "select * from table(result_scan('{}'))".format(sfqid)
-            )
+            self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
             self._result = self._inner_cursor._result
             self._query_result_format = self._inner_cursor._query_result_format
             self._total_rowcount = self._inner_cursor._total_rowcount
@@ -1275,7 +1269,7 @@ class SnowflakeCursor:
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
-    def get_result_batches(self) -> Optional[List["ResultBatch"]]:
+    def get_result_batches(self) -> list[ResultBatch] | None:
         """Get the previously executed query's ``ResultBatch`` s if available.
 
         If they are unavailable, in case nothing has been executed yet None will

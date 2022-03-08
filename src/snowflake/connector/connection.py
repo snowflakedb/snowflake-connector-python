@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import copy
 import logging
@@ -18,20 +19,7 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generator,
-    Iterable,
-    List,
-    NamedTuple,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 
 from . import errors, proxy
 from .auth import Auth
@@ -121,7 +109,7 @@ SUPPORTED_PARAMSTYLES = {
     "pyformat",
 }
 # Default configs, tuple of default variable and accepted types
-DEFAULT_CONFIGURATION: Dict[str, Tuple[Any, Union[Type, Tuple[Type, ...]]]] = {
+DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "dsn": (None, (type(None), str)),  # standard
     "user": ("", str),  # standard
     "password": ("", str),  # standard
@@ -212,10 +200,10 @@ class TypeAndBinding(NamedTuple):
     """Stores the type name and the Snowflake binding."""
 
     type: str
-    binding: Optional[str]
+    binding: str | None
 
 
-class SnowflakeConnection(object):
+class SnowflakeConnection:
     """Implementation of the connection object for the Snowflake Database.
 
     Use connect(..) to get the object.
@@ -265,7 +253,7 @@ class SnowflakeConnection(object):
         self._async_sfqids = set()
         self._done_async_sfqids = set()
         self.telemetry_enabled = False
-        self._session_parameters: Dict[str, Union[str, int, bool]] = {}
+        self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
             "Snowflake Connector for Python Version: %s, "
             "Python Version: %s, Platform: %s",
@@ -561,12 +549,12 @@ class SnowflakeConnection(object):
                 None,
                 ProgrammingError,
                 {
-                    "msg": "Invalid parameter: {}".format(mode),
+                    "msg": f"Invalid parameter: {mode}",
                     "errno": ER_INVALID_VALUE,
                 },
             )
         try:
-            self.cursor().execute("ALTER SESSION SET autocommit={}".format(mode))
+            self.cursor().execute(f"ALTER SESSION SET autocommit={mode}")
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
                 logger.debug(
@@ -582,7 +570,7 @@ class SnowflakeConnection(object):
         self.cursor().execute("ROLLBACK")
 
     def cursor(
-        self, cursor_class: Type[SnowflakeCursor] = SnowflakeCursor
+        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
     ) -> SnowflakeCursor:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
@@ -621,7 +609,7 @@ class SnowflakeConnection(object):
         remove_comments: bool = False,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
         **kwargs,
-    ) -> Generator["SnowflakeCursor", None, None]:
+    ) -> Generator[SnowflakeCursor, None, None]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
         split_statements_list = split_statements(
             stream, remove_comments=remove_comments
@@ -644,7 +632,7 @@ class SnowflakeConnection(object):
     @staticmethod
     def setup_ocsp_privatelink(app, hostname):
         SnowflakeConnection.OCSP_ENV_LOCK.acquire()
-        ocsp_cache_server = "http://ocsp.{}/ocsp_response_cache.json".format(hostname)
+        ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
         os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
         logger.debug("OCSP Cache Server is updated: %s", ocsp_cache_server)
         SnowflakeConnection.OCSP_ENV_LOCK.release()
@@ -770,7 +758,7 @@ class SnowflakeConnection(object):
         if "application" in kwargs:
             value = kwargs["application"]
             if not APPLICATION_RE.match(value):
-                msg = "Invalid application name: {}".format(value)
+                msg = f"Invalid application name: {value}"
                 raise ProgrammingError(msg=msg, errno=0)
             else:
                 self._application = value
@@ -787,7 +775,7 @@ class SnowflakeConnection(object):
                     guess = close_matches[0] if len(close_matches) > 0 else None
                     warnings.warn(
                         "'{}' is an unknown connection parameter{}".format(
-                            name, ", did you mean '{}'?".format(guess) if guess else ""
+                            name, f", did you mean '{guess}'?" if guess else ""
                         )
                     )
                 elif not isinstance(value, DEFAULT_CONFIGURATION[name][1]):
@@ -922,10 +910,10 @@ class SnowflakeConnection(object):
         sql: str,
         sequence_counter: int,
         request_id: uuid.UUID,
-        binding_params: Union[None, Tuple, Dict[str, Dict[str, str]]] = None,
-        binding_stage: Optional[str] = None,
+        binding_params: None | tuple | dict[str, dict[str, str]] = None,
+        binding_stage: str | None = None,
         is_file_transfer: bool = False,
-        statement_params: Optional[Dict[str, str]] = None,
+        statement_params: dict[str, str] | None = None,
         is_internal: bool = False,
         describe_only: bool = False,
         _no_results: bool = False,
@@ -1074,8 +1062,8 @@ class SnowflakeConnection(object):
                 break
 
     def _write_params_to_byte_rows(
-        self, params: List[Tuple[Union[Any, Tuple]]]
-    ) -> List[bytes]:
+        self, params: list[tuple[Any | tuple]]
+    ) -> list[bytes]:
         """Write csv-format rows of binding values as list of bytes string.
 
         Args:
@@ -1097,8 +1085,8 @@ class SnowflakeConnection(object):
 
     def _get_snowflake_type_and_binding(
         self,
-        cursor: Optional["SnowflakeCursor"],
-        v: Union[Tuple[str, Any], Any],
+        cursor: SnowflakeCursor | None,
+        v: tuple[str, Any] | Any,
     ) -> TypeAndBinding:
         if isinstance(v, tuple):
             if len(v) != 2:
@@ -1137,9 +1125,9 @@ class SnowflakeConnection(object):
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(
         self,
-        params: Optional[Sequence],
-        cursor: Optional["SnowflakeCursor"] = None,
-    ) -> Optional[Dict[str, Dict[str, str]]]:
+        params: Sequence | None,
+        cursor: SnowflakeCursor | None = None,
+    ) -> dict[str, dict[str, str]] | None:
         if not params:
             return None
         processed_params = {}
@@ -1171,9 +1159,9 @@ class SnowflakeConnection(object):
 
     def _process_params_pyformat(
         self,
-        params: Optional[Union[Any, Sequence[Any], Dict[Any, Any]]],
-        cursor: Optional["SnowflakeCursor"] = None,
-    ) -> Optional[Union[Tuple[Any], Dict[str, Any]]]:
+        params: Any | Sequence[Any] | dict[Any, Any] | None,
+        cursor: SnowflakeCursor | None = None,
+    ) -> tuple[Any] | dict[str, Any] | None:
         """Process parameters for client-side parameter binding.
 
         Args:
@@ -1211,8 +1199,8 @@ class SnowflakeConnection(object):
             )
 
     def _process_params_dict(
-        self, params: Dict[Any, Any], cursor: Optional["SnowflakeCursor"] = None
-    ) -> Dict:
+        self, params: dict[Any, Any], cursor: SnowflakeCursor | None = None
+    ) -> dict:
         try:
             res = {k: self._process_single_param(v) for k, v in params.items()}
             logger.debug(f"parameters: {res}")
@@ -1329,7 +1317,7 @@ class SnowflakeConnection(object):
 
     def _update_parameters(
         self,
-        parameters: Dict[str, Union[str, int, bool]],
+        parameters: dict[str, str | int | bool],
     ) -> None:
         """Update session parameters."""
         with self._lock_converter:
@@ -1383,7 +1371,7 @@ class SnowflakeConnection(object):
                 self.rollback()
         self.close()
 
-    def _get_query_status(self, sf_qid: str) -> Tuple[QueryStatus, Dict[str, Any]]:
+    def _get_query_status(self, sf_qid: str) -> tuple[QueryStatus, dict[str, Any]]:
         """Retrieves the status of query with sf_qid and returns it with the raw response.
 
         This is the underlying function used by the public get_status functions.
@@ -1397,8 +1385,8 @@ class SnowflakeConnection(object):
         try:
             uuid.UUID(sf_qid)
         except ValueError:
-            raise ValueError("Invalid UUID: '{}'".format(sf_qid))
-        logger.debug("get_query_status sf_qid='{}'".format(sf_qid))
+            raise ValueError(f"Invalid UUID: '{sf_qid}'")
+        logger.debug(f"get_query_status sf_qid='{sf_qid}'")
 
         status = "NO_DATA"
         if self.is_closed():

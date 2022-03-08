@@ -2,6 +2,8 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 
 import pytz
@@ -42,7 +44,7 @@ def test_fetch_various_timestamps(conn_cnx):
                         {
                             "scale": 0,
                             "dt": dt,
-                            "inp": ts.strftime("%Y-%m-%d %H:%M:%S{tz}".format(tz=tz)),
+                            "inp": ts.strftime(f"%Y-%m-%d %H:%M:%S{tz}"),
                             "out": ts,
                         }
                     )
@@ -76,12 +78,8 @@ def test_fetch_various_timestamps(conn_cnx):
                 for idx in range(len(fractions)):
                     ts0 = datetime.fromtimestamp(float(et))
                     ts0 = pytz.utc.localize(ts0).astimezone(tzinfo)
-                    ts0_str = ts0.strftime(
-                        "%Y-%m-%d %H:%M:%S.{ff}".format(ff=fractions[: idx + 1])
-                    )
-                    ts1 = ts0 + timedelta(
-                        seconds=float("0.{}".format(fractions[: idx + 1]))
-                    )
+                    ts0_str = ts0.strftime(f"%Y-%m-%d %H:%M:%S.{fractions[: idx + 1]}")
+                    ts1 = ts0 + timedelta(seconds=float(f"0.{fractions[: idx + 1]}"))
                     data.append(
                         {"scale": idx + 1, "dt": dt, "inp": ts0_str, "out": ts1}
                     )
@@ -99,9 +97,7 @@ def test_fetch_various_timestamps(conn_cnx):
                         ts0 = datetime.fromtimestamp(float(et))
                     except (OSError, ValueError):
                         ts0 = ZERO_EPOCH + timedelta(seconds=(float(et)))
-                    ts0_str = ts0.strftime(
-                        "%Y-%m-%d %H:%M:%S.{ff}".format(ff=fractions[: idx + 1])
-                    )
+                    ts0_str = ts0.strftime(f"%Y-%m-%d %H:%M:%S.{fractions[: idx + 1]}")
                     ts1 = parse(ts0_str)
                     data.append(
                         {"scale": idx + 1, "dt": dt, "inp": ts0_str, "out": ts1}

@@ -1,6 +1,8 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import abc
 import io
 import json
@@ -8,18 +10,7 @@ import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Iterator,
-    List,
-    NamedTuple,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
 from .compat import OK, UNAUTHORIZED, urlparse
@@ -64,7 +55,7 @@ else:
     DataType, Table = None, None
 
 # emtpy pyarrow type array corresponding to FIELD_TYPES
-FIELD_TYPE_TO_PA_TYPE: List[DataType] = []
+FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
@@ -90,29 +81,27 @@ class RemoteChunkInfo(NamedTuple):
 
 
 def create_batches_from_response(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     _format: str,
-    data: Dict[str, Any],
-    schema: Sequence["ResultMetadata"],
-) -> List["ResultBatch"]:
-    column_converters: List[Tuple[str, "SnowflakeConverterType"]] = []
-    arrow_context: Optional["ArrowConverterContext"] = None
+    data: dict[str, Any],
+    schema: Sequence[ResultMetadata],
+) -> list[ResultBatch]:
+    column_converters: list[tuple[str, SnowflakeConverterType]] = []
+    arrow_context: ArrowConverterContext | None = None
     rowtypes = data["rowtype"]
     total_len: int = data.get("total", 0)
     first_chunk_len = total_len
-    rest_of_chunks: List["ResultBatch"] = []
+    rest_of_chunks: list[ResultBatch] = []
     if _format == "json":
 
-        def col_to_converter(
-            col: Dict[str, Any]
-        ) -> Tuple[str, "SnowflakeConverterType"]:
+        def col_to_converter(col: dict[str, Any]) -> tuple[str, SnowflakeConverterType]:
             type_name = col["type"].upper()
             python_method = cursor._connection.converter.to_python_method(
                 type_name, col
             )
             return type_name, python_method
 
-        column_converters: List[Tuple[str, "SnowflakeConverterType"]] = [
+        column_converters: list[tuple[str, SnowflakeConverterType]] = [
             col_to_converter(c) for c in rowtypes
         ]
     else:
@@ -123,7 +112,7 @@ def create_batches_from_response(
         logger.debug(f"chunk size={len(chunks)}")
         # prepare the downloader for further fetch
         qrmk = data.get("qrmk")
-        chunk_headers: Dict[str, Any] = {}
+        chunk_headers: dict[str, Any] = {}
         if "chunkHeaders" in data:
             chunk_headers = {}
             for header_key, header_value in data["chunkHeaders"].items():
@@ -137,7 +126,7 @@ def create_batches_from_response(
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 
-        def remote_chunk_info(c: Dict[str, Any]) -> RemoteChunkInfo:
+        def remote_chunk_info(c: dict[str, Any]) -> RemoteChunkInfo:
             return RemoteChunkInfo(
                 url=c["url"],
                 uncompressedSize=c["uncompressedSize"],
@@ -229,9 +218,9 @@ class ResultBatch(abc.ABC):
     def __init__(
         self,
         rowcount: int,
-        chunk_headers: Optional[Dict[str, str]],
-        remote_chunk_info: Optional["RemoteChunkInfo"],
-        schema: Sequence["ResultMetadata"],
+        chunk_headers: dict[str, str] | None,
+        remote_chunk_info: RemoteChunkInfo | None,
+        schema: Sequence[ResultMetadata],
         use_dict_result: bool,
     ):
         self.rowcount = rowcount
@@ -239,8 +228,8 @@ class ResultBatch(abc.ABC):
         self._remote_chunk_info = remote_chunk_info
         self.schema = schema
         self._use_dict_result = use_dict_result
-        self._metrics: Dict[str, int] = {}
-        self._data: Optional[Union[str, List[Tuple[Any, ...]]]] = None
+        self._metrics: dict[str, int] = {}
+        self._data: str | list[tuple[Any, ...]] | None = None
         if self._remote_chunk_info:
             parsed_url = urlparse(self._remote_chunk_info.url)
             path_parts = parsed_url.path.rsplit("/", 1)
@@ -254,7 +243,7 @@ class ResultBatch(abc.ABC):
         return self._data is not None
 
     @property
-    def compressed_size(self) -> Optional[int]:
+    def compressed_size(self) -> int | None:
         """Returns the size of chunk in bytes in compressed form.
 
         If it's a local chunk this function returns None.
@@ -264,7 +253,7 @@ class ResultBatch(abc.ABC):
         return self._remote_chunk_info.compressedSize
 
     @property
-    def uncompressed_size(self) -> Optional[int]:
+    def uncompressed_size(self) -> int | None:
         """Returns the size of chunk in bytes in uncompressed form.
 
         If it's a local chunk this function returns None.
@@ -274,12 +263,12 @@ class ResultBatch(abc.ABC):
         return self._remote_chunk_info.uncompressedSize
 
     @property
-    def column_names(self) -> List[str]:
+    def column_names(self) -> list[str]:
         return [col.name for col in self.schema]
 
     def __iter__(
         self,
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Returns an iterator through the data this chunk holds.
 
         In case of this chunk being a local one it iterates through the local already
@@ -289,8 +278,8 @@ class ResultBatch(abc.ABC):
         return self.create_iter()
 
     def _download(
-        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
-    ) -> "Response":
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Response:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
         backoff = DecorrelateJitterBackoff(1, 16)
@@ -354,12 +343,12 @@ class ResultBatch(abc.ABC):
     @abc.abstractmethod
     def create_iter(
         self, **kwargs
-    ) -> Union[
-        Iterator[Union[Dict, Exception]],
-        Iterator[Union[Tuple, Exception]],
-        Iterator[Table],
-        Iterator["pandas.DataFrame"],
-    ]:
+    ) -> (
+        Iterator[dict | Exception]
+        | Iterator[tuple | Exception]
+        | Iterator[Table]
+        | Iterator[pandas.DataFrame]
+    ):
         """Downloads the data from from blob storage that this ResultChunk points at.
 
         This function is the one that does the actual work for ``self.__iter__``.
@@ -387,7 +376,7 @@ class ResultBatch(abc.ABC):
             )
 
     @abc.abstractmethod
-    def to_pandas(self) -> "pandas.DataFrame":
+    def to_pandas(self) -> pandas.DataFrame:
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -399,10 +388,10 @@ class JSONResultBatch(ResultBatch):
     def __init__(
         self,
         rowcount: int,
-        chunk_headers: Optional[Dict[str, str]],
-        remote_chunk_info: Optional["RemoteChunkInfo"],
-        schema: Sequence["ResultMetadata"],
-        column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
+        chunk_headers: dict[str, str] | None,
+        remote_chunk_info: RemoteChunkInfo | None,
+        schema: Sequence[ResultMetadata],
+        column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
     ):
         super().__init__(
@@ -419,8 +408,8 @@ class JSONResultBatch(ResultBatch):
         cls,
         data: Sequence[Sequence[Any]],
         data_len: int,
-        schema: Sequence["ResultMetadata"],
-        column_converters: Sequence[Tuple[str, "SnowflakeConverterType"]],
+        schema: Sequence[ResultMetadata],
+        column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
     ):
         """Initializes a ``JSONResultBatch`` from static, local data."""
@@ -432,12 +421,12 @@ class JSONResultBatch(ResultBatch):
             column_converters,
             use_dict_result,
         )
-        new_chunk._data: Union[
-            List[Union[Dict, Exception]], List[Union[Tuple, Exception]]
-        ] = new_chunk._parse(data)
+        new_chunk._data: (
+            list[dict | Exception] | list[tuple | Exception]
+        ) = new_chunk._parse(data)
         return new_chunk
 
-    def _load(self, response: "Response") -> List:
+    def _load(self, response: Response) -> list:
         """This function loads a compressed JSON file into memory.
 
         Returns:
@@ -450,7 +439,7 @@ class JSONResultBatch(ResultBatch):
 
     def _parse(
         self, downloaded_data
-    ) -> Union[List[Union[Dict, Exception]], List[Union[Tuple, Exception]]]:
+    ) -> list[dict | Exception] | list[tuple | Exception]:
         """Parses downloaded data into its final form."""
         logger.debug(f"parsing for result batch id: {self.id}")
         result_list = []
@@ -508,8 +497,8 @@ class JSONResultBatch(ResultBatch):
         return f"JSONResultChunk({self.id})"
 
     def create_iter(
-        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         if self._local:
             return iter(self._data)
         response = self._download(connection=connection)
@@ -542,12 +531,12 @@ class ArrowResultBatch(ResultBatch):
     def __init__(
         self,
         rowcount: int,
-        chunk_headers: Optional[Dict[str, str]],
-        remote_chunk_info: Optional["RemoteChunkInfo"],
-        context: "ArrowConverterContext",
+        chunk_headers: dict[str, str] | None,
+        remote_chunk_info: RemoteChunkInfo | None,
+        context: ArrowConverterContext,
         use_dict_result: bool,
         numpy: bool,
-        schema: Sequence["ResultMetadata"],
+        schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
     ):
         super().__init__(
@@ -565,8 +554,8 @@ class ArrowResultBatch(ResultBatch):
         return f"ArrowResultChunk({self.id})"
 
     def _load(
-        self, response: "Response", row_unit: IterUnit
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+        self, response: Response, row_unit: IterUnit
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` from a response.
 
         This is used to iterate through results in different ways depending on which
@@ -589,7 +578,7 @@ class ArrowResultBatch(ResultBatch):
 
     def _from_data(
         self, data: str, iter_unit: IterUnit
-    ) -> Union[Iterator[Union[Dict, Exception]], Iterator[Union[Tuple, Exception]]]:
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` files from a str.
 
         This is used to iterate through results in different ways depending on which
@@ -619,10 +608,10 @@ class ArrowResultBatch(ResultBatch):
         cls,
         data: str,
         data_len: int,
-        context: "ArrowConverterContext",
+        context: ArrowConverterContext,
         use_dict_result: bool,
         numpy: bool,
-        schema: Sequence["ResultMetadata"],
+        schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
@@ -641,12 +630,8 @@ class ArrowResultBatch(ResultBatch):
         return new_chunk
 
     def _create_iter(
-        self, iter_unit: IterUnit, connection: Optional["SnowflakeConnection"] = None
-    ) -> Union[
-        Iterator[Union[Dict, Exception]],
-        Iterator[Union[Tuple, Exception]],
-        Iterator[Table],
-    ]:
+        self, iter_unit: IterUnit, connection: SnowflakeConnection | None = None
+    ) -> (Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]):
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
             return self._from_data(self._data, iter_unit)
@@ -659,7 +644,7 @@ class ArrowResultBatch(ResultBatch):
         return loaded_data
 
     def _get_arrow_iter(
-        self, connection: Optional["SnowflakeConnection"] = None
+        self, connection: SnowflakeConnection | None = None
     ) -> Iterator[Table]:
         """Returns an iterator for this batch which yields a pyarrow Table"""
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
@@ -689,7 +674,7 @@ class ArrowResultBatch(ResultBatch):
         ]
         return schema(fields).empty_table()
 
-    def to_arrow(self, connection: Optional["SnowflakeConnection"] = None) -> Table:
+    def to_arrow(self, connection: SnowflakeConnection | None = None) -> Table:
         """Returns this batch as a pyarrow Table"""
         val = next(self._get_arrow_iter(connection=connection), None)
         if val is not None:
@@ -697,16 +682,16 @@ class ArrowResultBatch(ResultBatch):
         return self._create_empty_table()
 
     def to_pandas(
-        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
-    ) -> "pandas.DataFrame":
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> pandas.DataFrame:
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
         return table.to_pandas(**kwargs)
 
     def _get_pandas_iter(
-        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
-    ) -> Iterator["pandas.DataFrame"]:
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Iterator[pandas.DataFrame]:
         """An iterator for this batch which yields a pandas DataFrame"""
         iterator_data = []
         dataframe = self.to_pandas(connection=connection, **kwargs)
@@ -715,13 +700,13 @@ class ArrowResultBatch(ResultBatch):
         return iter(iterator_data)
 
     def create_iter(
-        self, connection: Optional["SnowflakeConnection"] = None, **kwargs
-    ) -> Union[
-        Iterator[Union[Dict, Exception]],
-        Iterator[Union[Tuple, Exception]],
-        Iterator[Table],
-        Iterator["pandas.DataFrame"],
-    ]:
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> (
+        Iterator[dict | Exception]
+        | Iterator[tuple | Exception]
+        | Iterator[Table]
+        | Iterator[pandas.DataFrame]
+    ):
         """The interface used by ResultSet to create an iterator for this ResultBatch."""
         iter_unit: IterUnit = kwargs.pop("iter_unit", IterUnit.ROW_UNIT)
         if iter_unit == IterUnit.TABLE_UNIT:

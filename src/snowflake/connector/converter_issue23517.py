@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 from logging import getLogger
@@ -21,7 +22,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
     """
 
     def __init__(self, **kwargs):
-        super(SnowflakeConverterIssue23517, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         logger.debug("initialized")
 
     def _TIMESTAMP_TZ_to_python(self, ctx):

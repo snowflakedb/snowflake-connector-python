@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import logging
 import re
 from os import path
+from unittest import mock
+from unittest.mock import MagicMock
 
-import mock
 import pytest
-from mock import MagicMock
 
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import SHA256_DIGEST

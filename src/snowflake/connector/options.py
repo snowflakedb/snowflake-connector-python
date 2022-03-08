@@ -2,11 +2,13 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import importlib
 import warnings
 from logging import getLogger
 from types import ModuleType
-from typing import Tuple, Union
+from typing import Union
 
 import pkg_resources
 
@@ -23,7 +25,7 @@ a MissingDependencyError.
 """
 
 
-class MissingOptionalDependency(object):
+class MissingOptionalDependency:
     """A class to replace missing dependencies.
 
     The only thing this class is supposed to do is raise a MissingDependencyError when __getattr__ is called.
@@ -52,7 +54,7 @@ ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
 def warn_incompatible_dep(
-    dep_name: str, installed_ver: str, expected_ver: "pkg_resources.Requirement"
+    dep_name: str, installed_ver: str, expected_ver: pkg_resources.Requirement
 ) -> None:
     warnings.warn(
         "You have an incompatible version of '{}' installed ({}), please install a version that "
@@ -61,7 +63,7 @@ def warn_incompatible_dep(
     )
 
 
-def _import_or_missing_pandas_option() -> Tuple[
+def _import_or_missing_pandas_option() -> tuple[
     ModuleLikeObject, ModuleLikeObject, bool
 ]:
     """This function tries importing the following packages: pandas, pyarrow.
@@ -107,7 +109,7 @@ def _import_or_missing_pandas_option() -> Tuple[
         return MissingPandas(), MissingPandas(), False
 
 
-def _import_or_missing_keyring_option() -> Tuple[ModuleLikeObject, bool]:
+def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
     """This function tries importing the following packages: keyring.
 
     If available it returns keyring package with a flag of whether it was imported.

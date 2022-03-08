@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
@@ -36,7 +37,7 @@ def _concurrent_insert(meta):
     try:
         cnx.cursor().execute("use warehouse {}".format(meta["warehouse"]))
         table = meta["table"]
-        sql = "insert into {name} values(%(c1)s, %(c2)s)".format(name=table)
+        sql = f"insert into {table} values(%(c1)s, %(c2)s)"
         logger.debug(sql)
         cnx.cursor().execute(
             sql,
@@ -131,8 +132,8 @@ def _concurrent_insert_using_connection(meta):
     name = meta["name"]
     try:
         connection.cursor().execute(
-            "INSERT INTO {name} VALUES(%s, %s)".format(name=name),
-            (idx, "test string{}".format(idx)),
+            f"INSERT INTO {name} VALUES(%s, %s)",
+            (idx, f"test string{idx}"),
         )
     except ProgrammingError as e:
         if e.errno != 619:  # SQL Execution Canceled

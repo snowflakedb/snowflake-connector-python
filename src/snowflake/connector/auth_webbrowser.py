@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import json
 import logging
@@ -195,9 +196,9 @@ class AuthByWebBrowser(AuthByPlugin):
                 time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
             ),
             "Access-Control-Allow-Methods: POST, GET",
-            "Access-Control-Allow-Headers: {}".format(requested_headers),
+            f"Access-Control-Allow-Headers: {requested_headers}",
             "Access-Control-Max-Age: 86400",
-            "Access-Control-Allow-Origin: {}".format(self._origin),
+            f"Access-Control-Allow-Origin: {self._origin}",
             "",
             "",
         ]
@@ -229,7 +230,7 @@ class AuthByWebBrowser(AuthByPlugin):
         if self._origin:
             data = {"consent": self._consent_cache_id_token}
             msg = json.dumps(data)
-            content.append("Access-Control-Allow-Origin: {}".format(self._origin))
+            content.append(f"Access-Control-Allow-Origin: {self._origin}")
             content.append("Vary: Accept-Encoding, Origin")
         else:
             msg = """
@@ -241,7 +242,7 @@ You can close this window now and go back where you started from.
 </body></html>""".format(
                 self._application
             )
-        content.append("Content-Length: {}".format(len(msg)))
+        content.append(f"Content-Length: {len(msg)}")
         content.append("")
         content.append(msg)
 

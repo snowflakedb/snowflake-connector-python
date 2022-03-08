@@ -1,23 +1,13 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 from collections import deque
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Deque,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Callable, Deque, Iterable, Iterator
 
 from .constants import IterUnit
 from .errors import NotSupportedError
@@ -43,17 +33,13 @@ logger = getLogger(__name__)
 
 
 def result_set_iterator(
-    first_batch_iter: Iterator[Tuple],
-    unconsumed_batches: "Deque[Future[Iterator[Tuple]]]",
-    unfetched_batches: Deque["ResultBatch"],
+    first_batch_iter: Iterator[tuple],
+    unconsumed_batches: Deque[Future[Iterator[tuple]]],
+    unfetched_batches: Deque[ResultBatch],
     final: Callable[[], None],
     prefetch_thread_num: int,
     **kw: Any,
-) -> Union[
-    Iterator[Union[Dict, Exception]],
-    Iterator[Union[Tuple, Exception]],
-    Iterator[Table],
-]:
+) -> (Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]):
     """Creates an iterator over some other iterators.
 
     Very similar to itertools.chain but we need some keywords to be propagated to
@@ -106,7 +92,7 @@ def result_set_iterator(
     final()
 
 
-class ResultSet(Iterable[List[Any]]):
+class ResultSet(Iterable[list]):
     """This class retrieves the results of a query with the historical strategy.
 
     It pre-downloads the first up to 4 ResultChunks (this doesn't include the 1st chunk
@@ -122,8 +108,8 @@ class ResultSet(Iterable[List[Any]]):
 
     def __init__(
         self,
-        cursor: "SnowflakeCursor",
-        result_chunks: Union[List["JSONResultBatch"], List["ArrowResultBatch"]],
+        cursor: SnowflakeCursor,
+        result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
     ):
         self.batches = result_chunks
@@ -177,7 +163,7 @@ class ResultSet(Iterable[List[Any]]):
         self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
 
-    def _fetch_arrow_all(self) -> Optional[Table]:
+    def _fetch_arrow_all(self) -> Table | None:
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
         tables = list(self._fetch_arrow_batches())
         if tables:
@@ -185,7 +171,7 @@ class ResultSet(Iterable[List[Any]]):
         else:
             return None
 
-    def _fetch_pandas_batches(self, **kwargs) -> Iterator["pandas.DataFrame"]:
+    def _fetch_pandas_batches(self, **kwargs) -> Iterator[pandas.DataFrame]:
         """Fetches Pandas dataframes in batches, where batch refers to Snowflake Chunk.
 
         Thus, the batch size (the number of rows in dataframe) is determined by
@@ -194,7 +180,7 @@ class ResultSet(Iterable[List[Any]]):
         self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas")
 
-    def _fetch_pandas_all(self, **kwargs) -> "pandas.DataFrame":
+    def _fetch_pandas_all(self, **kwargs) -> pandas.DataFrame:
         """Fetches a single Pandas dataframe."""
         dataframes = list(self._fetch_pandas_batches())
         if dataframes:
@@ -205,27 +191,27 @@ class ResultSet(Iterable[List[Any]]):
             )
         return pandas.DataFrame(columns=self.batches[0].column_names)
 
-    def _get_metrics(self) -> Dict[str, int]:
+    def _get_metrics(self) -> dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""
-        overall_metrics: Dict[str, int] = {}
+        overall_metrics: dict[str, int] = {}
         for c in self.batches:
             for n, v in c._metrics.items():
                 overall_metrics[n] = overall_metrics.get(n, 0) + v
         return overall_metrics
 
-    def __iter__(self) -> Iterator[Tuple]:
+    def __iter__(self) -> Iterator[tuple]:
         """Returns a new iterator through all batches with default values."""
         return self._create_iter()
 
     def _create_iter(
         self,
         **kwargs,
-    ) -> Union[
-        Iterator[Union[Dict, Exception]],
-        Iterator[Union[Tuple, Exception]],
-        Iterator[Table],
-        Iterator["pandas.DataFrame"],
-    ]:
+    ) -> (
+        Iterator[dict | Exception]
+        | Iterator[tuple | Exception]
+        | Iterator[Table]
+        | Iterator[pandas.DataFrame]
+    ):
         """Set up a new iterator through all batches with first 5 chunks downloaded.
 
         This function is a helper function to ``__iter__`` and it was introduced for the
@@ -237,7 +223,7 @@ class ResultSet(Iterable[List[Any]]):
         first_batch_iter = self.batches[0].create_iter(**kwargs)
 
         # Iterator[Tuple] Futures that have not been consumed by the user
-        unconsumed_batches: Deque[Future[Iterator[Tuple]]] = deque()
+        unconsumed_batches: Deque[Future[Iterator[tuple]]] = deque()
 
         # batches that have not been fetched
         unfetched_batches = deque(self.batches[1:])

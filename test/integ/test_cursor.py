@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import decimal
 import json
@@ -11,9 +12,9 @@ import os
 import pickle
 import time
 from datetime import date, datetime
-from typing import TYPE_CHECKING, List, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
+from unittest import mock
 
-import mock
 import pytest
 import pytz
 
@@ -325,7 +326,7 @@ def test_insert_timestamp_select(conn, db_parameters):
         assert desc[5][0].upper() == "TM", "invalid column name"
         assert (
             constants.FIELD_ID_TO_NAME[desc[0][1]] == "FIXED"
-        ), "invalid column name: {}".format(constants.FIELD_ID_TO_NAME[desc[0][1]])
+        ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
         assert (
             constants.FIELD_ID_TO_NAME[desc[1][1]] == "TIMESTAMP_LTZ"
         ), "invalid column name"
@@ -346,7 +347,7 @@ def test_insert_timestamp_ltz(conn, db_parameters):
     tzstr = "America/New_York"
     # sync with the session parameter
     with conn() as cnx:
-        cnx.cursor().execute("alter session set timezone='{tzstr}'".format(tzstr=tzstr))
+        cnx.cursor().execute(f"alter session set timezone='{tzstr}'")
 
         current_time = datetime.now()
         current_time = current_time.replace(tzinfo=pytz.timezone(tzstr))
@@ -558,7 +559,7 @@ created_at timestamp, data variant)
                 c.close()
 
             result = cnx.cursor().execute(
-                "select created_at, data from {name}".format(name=name_variant)
+                f"select created_at, data from {name_variant}"
             )
             _, data = result.fetchone()
             data = json.loads(data)
@@ -567,7 +568,7 @@ created_at timestamp, data variant)
             )
     finally:
         with conn() as cnx:
-            cnx.cursor().execute("drop table {name}".format(name=name_variant))
+            cnx.cursor().execute(f"drop table {name_variant}")
 
 
 @pytest.mark.skipolddriver
@@ -1159,9 +1160,9 @@ def test_desc_rewrite(conn, caplog):
         with cnx.cursor() as cur:
             table_name = random_string(5, "test_desc_rewrite_")
             try:
-                cur.execute("create or replace table {} (a int)".format(table_name))
+                cur.execute(f"create or replace table {table_name} (a int)")
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
-                cur.execute("desc {}".format(table_name))
+                cur.execute(f"desc {table_name}")
                 assert (
                     "snowflake.connector.cursor",
                     20,
@@ -1170,7 +1171,7 @@ def test_desc_rewrite(conn, caplog):
                     ),
                 ) in caplog.record_tuples
             finally:
-                cur.execute("drop table {}".format(table_name))
+                cur.execute(f"drop table {table_name}")
 
 
 @pytest.mark.skipolddriver
@@ -1422,7 +1423,7 @@ def test_resultbatch(
                     t.message["type"] == TelemetryField.GET_PARTITIONS_USED.value
                     for t in telemetry_data.records
                 )
-    post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
+    post_pickle_partitions: list[ResultBatch] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually
     for i, partition in enumerate(post_pickle_partitions):

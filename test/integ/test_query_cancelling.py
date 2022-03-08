@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import logging
 import time
@@ -52,7 +53,7 @@ def _query_run(conn, shared, expectedCanceled=True):
             for rec in c:
                 with shared.lock:
                     shared.session_id = int(rec[0])
-        logger.info("Current Session id: {}".format(shared.session_id))
+        logger.info(f"Current Session id: {shared.session_id}")
 
         # Run a long query and see if we're canceled
         canceled = False
@@ -98,9 +99,9 @@ def _query_cancel(conn, shared, user, password, expectedCanceled):
                     break
             logger.info("User %s is waiting for Session ID to be available", user)
             time.sleep(1)
-        logger.info("Target Session id: {}".format(shared.session_id))
+        logger.info(f"Target Session id: {shared.session_id}")
         try:
-            query = "call system$cancel_all_queries({})".format(shared.session_id)
+            query = f"call system$cancel_all_queries({shared.session_id})"
             logger.info("Query: %s", query)
             cnx.cursor().execute(query)
             assert (
@@ -124,7 +125,7 @@ def _test_helper(conn, expectedCanceled, cancelUser, cancelPass):
     queryCancel is run with cancelUser/cancelPass
     """
 
-    class Shared(object):
+    class Shared:
         def __init__(self):
             self.lock = Lock()
             self.session_id = None

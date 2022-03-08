@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 #
 # SSL wrap socket for PyOpenSSL.
@@ -10,13 +11,11 @@
 # https://github.com/shazow/urllib3/blob/master/urllib3/contrib/pyopenssl.py
 #
 # and added OCSP validator on the top.
-
 import logging
 import time
 from functools import wraps
 from inspect import getfullargspec as get_args
 from socket import socket
-from typing import Optional
 
 import certifi
 import OpenSSL.SSL
@@ -108,7 +107,7 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
 
 
 def _openssl_connect(
-    hostname: str, port: int = 443, max_retry: int = 20, timeout: Optional[int] = None
+    hostname: str, port: int = 443, max_retry: int = 20, timeout: int | None = None
 ) -> OpenSSL.SSL.Connection:
     """The OpenSSL connection without validating certificates.
 

@@ -7,7 +7,7 @@
 set -o pipefail
 
 U_WIDTH=16
-PYTHON_VERSIONS="${1:-3.6 3.7 3.8 3.9 3.10}"
+PYTHON_VERSIONS="${1:-3.7 3.8 3.9 3.10}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 DIST_DIR="${CONNECTOR_DIR}/dist"
@@ -55,4 +55,5 @@ fi
 done
 
 # Move lowest Python version generated sdist to right location
-mv "${DIST_DIR}"/3.6/*.tar.gz dist
+LOWEST_SDIST="$(find dist -iname '*.tar.gz' | sort | head -n 1)"
+mv "${LOWEST_SDIST}" dist

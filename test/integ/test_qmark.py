@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import pytest
 
@@ -162,12 +163,8 @@ def test_binding_none(conn_cnx):
     with conn_cnx() as con:
         try:
             table_name = "foo"
-            con.cursor().execute(
-                "CREATE TABLE {table}(bar text)".format(table=table_name)
-            )
-            con.cursor().execute(
-                "INSERT INTO {table} VALUES (?)".format(table=table_name), [None]
-            )
+            con.cursor().execute(f"CREATE TABLE {table_name}(bar text)")
+            con.cursor().execute(f"INSERT INTO {table_name} VALUES (?)", [None])
         finally:
-            con.cursor().execute("DROP TABLE {table}".format(table=table_name))
+            con.cursor().execute(f"DROP TABLE {table_name}")
             snowflake.connector.paramstyle = original
