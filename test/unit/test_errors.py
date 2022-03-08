@@ -1,6 +1,9 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All right reserved.
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
+
 import re
 import uuid
 
@@ -34,4 +37,4 @@ def test_detecting_duplicate_detail_insertion():
 
 
 def test_args():
-    assert errors.Error('msg').args == ('msg',)
+    assert errors.Error("msg").args == ("msg",)

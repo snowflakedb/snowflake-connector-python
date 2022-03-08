@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import binascii
 import glob
@@ -14,19 +15,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from functools import partial
 from logging import getLogger
 from time import time
-from typing import (
-    IO,
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS, dataclass
@@ -112,50 +101,50 @@ class SnowflakeFileMeta:
     name: str
     src_file_name: str
     stage_location_type: str
-    result_status: Optional["ResultStatus"] = None
+    result_status: ResultStatus | None = None
 
-    self: Optional["SnowflakeFileTransferAgent"] = None
-    put_callback: Optional[Type["SnowflakeProgressPercentage"]] = None
-    put_azure_callback: Optional[Type["SnowflakeProgressPercentage"]] = None
-    put_callback_output_stream: Optional[IO[str]] = None
-    get_callback: Optional[Type["SnowflakeProgressPercentage"]] = None
-    get_azure_callback: Optional[Type["SnowflakeProgressPercentage"]] = None
-    get_callback_output_stream: Optional[IO[str]] = None
+    self: SnowflakeFileTransferAgent | None = None
+    put_callback: type[SnowflakeProgressPercentage] | None = None
+    put_azure_callback: type[SnowflakeProgressPercentage] | None = None
+    put_callback_output_stream: IO[str] | None = None
+    get_callback: type[SnowflakeProgressPercentage] | None = None
+    get_azure_callback: type[SnowflakeProgressPercentage] | None = None
+    get_callback_output_stream: IO[str] | None = None
     show_progress_bar: bool = False
     multipart_threshold: int = 67108864  # Historical value
-    presigned_url: Optional[str] = None
+    presigned_url: str | None = None
     overwrite: bool = False
-    sha256_digest: Optional[str] = None
-    upload_size: Optional[int] = None
-    real_src_file_name: Optional[str] = None
-    error_details: Optional[Exception] = None
-    last_error: Optional[Exception] = None
+    sha256_digest: str | None = None
+    upload_size: int | None = None
+    real_src_file_name: str | None = None
+    error_details: Exception | None = None
+    last_error: Exception | None = None
     no_sleeping_time: bool = False
-    gcs_file_header_digest: Optional[str] = None
-    gcs_file_header_content_length: Optional[int] = None
-    gcs_file_header_encryption_metadata: Optional[Dict[str, Any]] = None
+    gcs_file_header_digest: str | None = None
+    gcs_file_header_content_length: int | None = None
+    gcs_file_header_encryption_metadata: dict[str, Any] | None = None
 
-    encryption_material: Optional["SnowflakeFileEncryptionMaterial"] = None
+    encryption_material: SnowflakeFileEncryptionMaterial | None = None
     # Specific to Uploads only
     src_file_size: int = 0
-    src_compression_type: Optional["CompressionType"] = None
-    dst_compression_type: "CompressionType" = None
+    src_compression_type: CompressionType | None = None
+    dst_compression_type: CompressionType = None
     require_compress: bool = False
-    dst_file_name: Optional[str] = None
+    dst_file_name: str | None = None
     dst_file_size: int = -1
-    intermediate_stream: Optional[IO[bytes]] = None
-    src_stream: Optional[IO[bytes]] = None
+    intermediate_stream: IO[bytes] | None = None
+    src_stream: IO[bytes] | None = None
     # Specific to Downloads only
-    local_location: Optional[str] = None
+    local_location: str | None = None
 
 
 def _update_progress(
     file_name: str,
     start_time: float,
     total_size: float,
-    progress: Union[float, int],
-    output_stream: Optional[IO] = sys.stdout,
-    show_progress_bar: Optional[bool] = True,
+    progress: float | int,
+    output_stream: IO | None = sys.stdout,
+    show_progress_bar: bool | None = True,
 ) -> bool:
     bar_length = 10  # Modify this to change the length of the progress bar
     total_size /= megabyte
@@ -202,9 +191,9 @@ class SnowflakeProgressPercentage:
     def __init__(
         self,
         filename: str,
-        filesize: Union[int, float],
-        output_stream: Optional[IO] = sys.stdout,
-        show_progress_bar: Optional[bool] = True,
+        filesize: int | float,
+        output_stream: IO | None = sys.stdout,
+        show_progress_bar: bool | None = True,
     ):
         last_pound_char = filename.rfind("#")
         if last_pound_char < 0:
@@ -226,11 +215,11 @@ class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
     def __init__(
         self,
         filename: str,
-        filesize: Union[int, float],
-        output_stream: Optional[IO] = sys.stdout,
-        show_progress_bar: Optional[bool] = True,
+        filesize: int | float,
+        output_stream: IO | None = sys.stdout,
+        show_progress_bar: bool | None = True,
     ):
-        super(SnowflakeS3ProgressPercentage, self).__init__(
+        super().__init__(
             filename,
             filesize,
             output_stream=output_stream,
@@ -257,11 +246,11 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
     def __init__(
         self,
         filename: str,
-        filesize: Union[int, float],
-        output_stream: Optional[IO] = sys.stdout,
-        show_progress_bar: Optional[bool] = True,
+        filesize: int | float,
+        output_stream: IO | None = sys.stdout,
+        show_progress_bar: bool | None = True,
     ):
-        super(SnowflakeAzureProgressPercentage, self).__init__(
+        super().__init__(
             filename,
             filesize,
             output_stream=output_stream,
@@ -287,8 +276,8 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
 class StorageCredential:
     def __init__(
         self,
-        credentials: Dict[str, Any],
-        connection: "SnowflakeConnection",
+        credentials: dict[str, Any],
+        connection: SnowflakeConnection,
         command: str,
     ):
         self.creds = credentials
@@ -319,20 +308,20 @@ class SnowflakeFileTransferAgent:
 
     def __init__(
         self,
-        cursor: "SnowflakeCursor",
+        cursor: SnowflakeCursor,
         command: str,
-        ret: Dict[str, Any],
-        put_callback: Optional[Type["SnowflakeProgressPercentage"]] = None,
-        put_azure_callback: Optional[Type["SnowflakeProgressPercentage"]] = None,
+        ret: dict[str, Any],
+        put_callback: type[SnowflakeProgressPercentage] | None = None,
+        put_azure_callback: type[SnowflakeProgressPercentage] | None = None,
         put_callback_output_stream: IO[str] = sys.stdout,
-        get_callback: Optional[Type["SnowflakeProgressPercentage"]] = None,
-        get_azure_callback: Optional[Type["SnowflakeProgressPercentage"]] = None,
+        get_callback: type[SnowflakeProgressPercentage] | None = None,
+        get_azure_callback: type[SnowflakeProgressPercentage] | None = None,
         get_callback_output_stream: IO[str] = sys.stdout,
         show_progress_bar: bool = True,
         raise_put_get_error: bool = True,
         force_put_overwrite: bool = True,
-        multipart_threshold: Optional[int] = None,
-        source_from_stream: Optional[IO[bytes]] = None,
+        multipart_threshold: int | None = None,
+        source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
     ):
         self._cursor = cursor
@@ -355,11 +344,11 @@ class SnowflakeFileTransferAgent:
         self._source_from_stream = source_from_stream
         # The list of self-sufficient file metas that are sent to
         # remote storage clients to get operated on.
-        self._file_metadata: List["SnowflakeFileMeta"] = []
-        self._results: List["SnowflakeFileMeta"] = []
+        self._file_metadata: list[SnowflakeFileMeta] = []
+        self._results: list[SnowflakeFileMeta] = []
         self._multipart_threshold = multipart_threshold or 67108864  # Historical value
         self._use_s3_regional_url = use_s3_regional_url
-        self._credentials: Optional[StorageCredential] = None
+        self._credentials: StorageCredential | None = None
 
     def execute(self) -> None:
         self._parse_command()
@@ -414,7 +403,7 @@ class SnowflakeFileTransferAgent:
         for result in self._results:
             result.result_status = result.result_status.value
 
-    def transfer(self, metas: List["SnowflakeFileMeta"]) -> None:
+    def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
@@ -428,7 +417,7 @@ class SnowflakeFileTransferAgent:
         num_total_files = len(metas)
         transfer_metadata = TransferMetadata()  # this is protected by cv_chunk_process
         is_upload = self._command_type == CMD_TYPE_UPLOAD
-        exception_caught_in_callback: Optional[Exception] = None
+        exception_caught_in_callback: Exception | None = None
 
         def notify_file_completed():
             # Increment the number of completed files, then notify the main thread.
@@ -440,7 +429,7 @@ class SnowflakeFileTransferAgent:
             success: bool,
             result: Any,
             file_meta: SnowflakeFileMeta,
-            done_client: "SnowflakeStorageClient",
+            done_client: SnowflakeStorageClient,
         ):
             if not success:
                 logger.debug(f"Failed to prepare {done_client.meta.name}.")
@@ -495,8 +484,8 @@ class SnowflakeFileTransferAgent:
         def transfer_done_cb(
             success: bool,
             result: Any,
-            file_meta: "SnowflakeFileMeta",
-            done_client: "SnowflakeStorageClient",
+            file_meta: SnowflakeFileMeta,
+            done_client: SnowflakeStorageClient,
             chunk_id: int,
         ):
             # Note: chunk_id is 0 based while num_of_chunks is count
@@ -543,8 +532,8 @@ class SnowflakeFileTransferAgent:
         def postprocess_done_cb(
             success: bool,
             result: Any,
-            file_meta: "SnowflakeFileMeta",
-            done_client: "SnowflakeStorageClient",
+            file_meta: SnowflakeFileMeta,
+            done_client: SnowflakeStorageClient,
         ):
             logger.debug(f"File {done_client.meta.name} reached postprocess callback")
 
@@ -561,10 +550,8 @@ class SnowflakeFileTransferAgent:
 
         def function_and_callback_wrapper(
             work: Callable[..., _T],
-            _callback: Callable[
-                [bool, Union[_T, Exception], "SnowflakeFileMeta"], None
-            ],
-            file_meta: "SnowflakeFileMeta",
+            _callback: Callable[[bool, _T | Exception, SnowflakeFileMeta], None],
+            file_meta: SnowflakeFileMeta,
             *args: Any,
             **kwargs: Any,
         ) -> None:
@@ -575,7 +562,7 @@ class SnowflakeFileTransferAgent:
             lead to unexpected slowdowns and behavior.
             """
             try:
-                result: Tuple[bool, Union[_T, Exception]] = (
+                result: tuple[bool, _T | Exception] = (
                     True,
                     work(*args, **kwargs),
                 )
@@ -633,8 +620,8 @@ class SnowflakeFileTransferAgent:
         self._results = metas
 
     def _create_file_transfer_client(
-        self, meta: "SnowflakeFileMeta"
-    ) -> "SnowflakeStorageClient":
+        self, meta: SnowflakeFileMeta
+    ) -> SnowflakeStorageClient:
         from .constants import AZURE_CHUNK_SIZE, S3_CHUNK_SIZE
 
         if self._stage_location_type == LOCAL_FS:
@@ -1078,7 +1065,7 @@ class SnowflakeFileTransferAgent:
         for m in self._file_metadata:
             file_name = m.src_file_name
 
-            current_file_compression_type: Optional["CompressionType"] = None
+            current_file_compression_type: CompressionType | None = None
             if auto_detect:
                 mimetypes.init()
                 _, encoding = mimetypes.guess_type(file_name)

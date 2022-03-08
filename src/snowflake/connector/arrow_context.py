@@ -1,14 +1,14 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import decimal
 import time
 from datetime import datetime, timedelta
 from logging import getLogger
-from typing import Dict, Optional, Union
 
 import pytz
 
@@ -31,10 +31,10 @@ ZERO_EPOCH = datetime.utcfromtimestamp(0)
 logger = getLogger(__name__)
 
 
-class ArrowConverterContext(object):
+class ArrowConverterContext:
     def __init__(
         self,
-        session_parameters: Optional[Dict[str, Union[str, int, bool]]] = None,
+        session_parameters: dict[str, str | int | bool] | None = None,
     ):
         if session_parameters is None:
             session_parameters = {}

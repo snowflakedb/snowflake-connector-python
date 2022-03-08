@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import filecmp
 import os
 import pathlib
@@ -11,8 +12,8 @@ from io import BytesIO
 from logging import getLogger
 from os import path
 from typing import TYPE_CHECKING, Callable, NamedTuple
+from unittest import mock
 
-import mock
 import pytest
 
 from snowflake.connector import OperationalError
@@ -42,16 +43,16 @@ class _TestData(NamedTuple):
     warehouse_name: str
     database_name: str
     user_bucket: str
-    connection: Callable[..., "SnowflakeConnection"]
+    connection: Callable[..., SnowflakeConnection]
 
 
 @pytest.fixture()
-def test_data(request, conn_cnx: Callable[..., "SnowflakeConnection"]) -> _TestData:
+def test_data(request, conn_cnx: Callable[..., SnowflakeConnection]) -> _TestData:
     return create_test_data(request, conn_cnx)
 
 
 def create_test_data(
-    request, connection: Callable[..., "SnowflakeConnection"]
+    request, connection: Callable[..., SnowflakeConnection]
 ) -> _TestData:
     assert "AWS_ACCESS_KEY_ID" in os.environ
     assert "AWS_SECRET_ACCESS_KEY" in os.environ
@@ -584,7 +585,7 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
             autospec=SnowflakeFileTransferAgent,
         ) as mock_agent:
             cur.execute(f"put file://{file} @{stage_name} threshold=156")
-        assert mock_agent.call_args.kwargs.get("multipart_threshold", -1) == 156
+        assert mock_agent.call_args[1].get("multipart_threshold", -1) == 156
 
 
 # Snowflake on GCP does not support multipart uploads

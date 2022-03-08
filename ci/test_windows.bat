@@ -30,7 +30,7 @@ gpg --quiet --batch --yes --decrypt --passphrase="%PARAMETERS_SECRET%" %PARAMS_F
 
 :: create tox execution virtual env
 set venv_dir=%WORKSPACE%\tox_venv
-py -3.6 -m venv %venv_dir%
+py -3.7 -m venv %venv_dir%
 if %errorlevel% neq 0 goto :error
 
 call %venv_dir%\scripts\activate

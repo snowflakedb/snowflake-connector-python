@@ -9,6 +9,8 @@ It tests for functionality and data integrity for some of the basic data types. 
 taken from the MySQL python driver.
 """
 
+from __future__ import annotations
+
 import random
 import time
 from math import fabs
@@ -33,7 +35,7 @@ def table_exists(conn_cnx, name):
 
 
 def create_table(conn_cnx, columndefs, partial_name):
-    table = '"dbabi_dibasic_{}"'.format(partial_name)
+    table = f'"dbabi_dibasic_{partial_name}"'
     with conn_cnx() as cnx:
         cnx.cursor().execute(
             "CREATE OR REPLACE TABLE {table} ({columns})".format(
@@ -64,7 +66,7 @@ def check_data_integrity(conn_cnx, columndefs, partial_name, generator):
 
             # verify 2 things: correct number of rows, correct values for
             # each row
-            cursor.execute("select * from {} order by 1".format(table))
+            cursor.execute(f"select * from {table} order by 1")
             result_sequences = cursor.fetchall()
             results = []
             for i in result_sequences:
@@ -90,7 +92,7 @@ def check_data_integrity(conn_cnx, columndefs, partial_name, generator):
                 else:
                     assert list(x) == list(y), "fetchall did not return correct values"
 
-            cursor.execute("drop table if exists {}".format(table))
+            cursor.execute(f"drop table if exists {table}")
 
 
 def test_INT(conn_cnx):

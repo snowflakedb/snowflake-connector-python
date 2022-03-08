@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2019 Snowflake Computing Inc. All rights reserved.
 #
+
 import os
 import sys
 import warnings
@@ -151,7 +151,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             libs_to_bundle = self.arrow_libs_to_copy[sys.platform]
 
             for lib in libs_to_bundle:
-                source = "{}/{}".format(self._get_arrow_lib_dir(), lib)
+                source = f"{self._get_arrow_lib_dir()}/{lib}"
                 build_dir = os.path.join(self.build_lib, "snowflake", "connector")
                 copy(source, build_dir)
 
@@ -160,7 +160,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             ret = []
 
             for lib in link_lib:
-                source = "{}/{}".format(self._get_arrow_lib_dir(), lib)
+                source = f"{self._get_arrow_lib_dir()}/{lib}"
                 assert os.path.exists(source)
                 ret.append(source)
 

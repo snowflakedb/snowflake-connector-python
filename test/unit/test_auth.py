@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import time
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
-from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.auth_default import AuthByDefault

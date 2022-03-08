@@ -2,6 +2,8 @@
 #
 # Set a complex password for test user snowman
 #
+from __future__ import annotations
+
 import os
 import sys
 
@@ -31,7 +33,7 @@ def change_password():
 
     conn = snowflake.connector.connect(**params)
     conn.cursor().execute("use role accountadmin")
-    cmd = "alter user set password = '{}'".format(SNOWFLAKE_TEST_PASSWORD_NEW)
+    cmd = f"alter user set password = '{SNOWFLAKE_TEST_PASSWORD_NEW}'"
     print(cmd)
     conn.cursor().execute(cmd)
     conn.close()

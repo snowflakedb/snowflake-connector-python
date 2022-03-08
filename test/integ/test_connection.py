@@ -1,18 +1,20 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
+
 import gc
 import logging
 import os
 import queue
 import threading
 import warnings
+from unittest import mock
 import weakref
 from uuid import uuid4
 
-import mock
 import pytest
 
 import snowflake.connector
@@ -525,7 +527,7 @@ def test_privatelink(db_parameters):
     assert cnx, "invalid cnx"
 
     ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
-    assert ocsp_url is None, "OCSP URL should be None: {}".format(ocsp_url)
+    assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
     del os.environ["SF_OCSP_DO_RETRY"]
     del os.environ["SF_OCSP_FAIL_OPEN"]
 
@@ -636,7 +638,7 @@ class ExecPrivatelinkThread(threading.Thread):
         SnowflakeConnection.setup_ocsp_privatelink(self.client_name, self.hostname)
         ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
         if ocsp_cache_server is not None and ocsp_cache_server != self.expectation:
-            print("Got {} Expected {}".format(ocsp_cache_server, self.expectation))
+            print(f"Got {ocsp_cache_server} Expected {self.expectation}")
             self.bucket.put("Fail")
         else:
             self.bucket.put("Success")
@@ -717,7 +719,7 @@ def test_dashed_url(db_parameters):
             ) = lambda: None  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
-                    c.args[1].startswith("https://test-host:443")
+                    c[0][1].startswith("https://test-host:443")
                     for c in mocked_fetch.call_args_list
                 ]
             )
@@ -741,7 +743,7 @@ def test_dashed_url_account_name(db_parameters):
             ) = lambda: None  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
-                    c.args[1].startswith(
+                    c[0][1].startswith(
                         "https://test-account.snowflakecomputing.com:443"
                     )
                     for c in mocked_fetch.call_args_list

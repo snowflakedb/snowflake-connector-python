@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import codecs
 import glob
@@ -18,7 +19,6 @@ except ImportError:  # keep olddrivertest from breaking
     from snowflake.connector.remote_storage_util import (
         SnowflakeFileEncryptionMaterial,
     )
-
 
 from ..generate_test_files import generate_k_lines_of_n_files
 

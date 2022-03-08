@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import glob
 import gzip
@@ -11,8 +12,8 @@ import sys
 import time
 from filecmp import cmp
 from logging import getLogger
+from unittest import mock
 
-import mock
 import pytest
 
 from snowflake.connector.constants import UTF8
