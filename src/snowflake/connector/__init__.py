@@ -4,6 +4,8 @@
 #
 # Python Db API v2
 #
+from __future__ import annotations
+
 apilevel = "2.0"
 threadsafety = 2
 paramstyle = "pyformat"
@@ -45,7 +47,7 @@ from .version import VERSION
 logging.getLogger(__name__).addHandler(NullHandler())
 
 
-def Connect(**kwargs):
+def Connect(**kwargs) -> SnowflakeConnection:
     return SnowflakeConnection(**kwargs)
 
 

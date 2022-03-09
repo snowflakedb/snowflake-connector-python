@@ -2,7 +2,7 @@
 #
 # Build Snowflake Python Connector in Docker
 # NOTES:
-#   - To compile only a specific version(s) pass in versions like: `./build_docker.sh "3.5 3.6"`
+#   - To compile only a specific version(s) pass in versions like: `./build_docker.sh "3.7 3.8"`
 set -o pipefail
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

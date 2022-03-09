@@ -3,7 +3,7 @@
 # Build Snowflake Python Connector on Linux
 # NOTES:
 #   - This is designed to ONLY be called in our build docker image
-#   - To compile only a specific version(s) pass in versions like: `./build_linux.sh "3.5 3.6"`
+#   - To compile only a specific version(s) pass in versions like: `./build_linux.sh "3.7 3.8"`
 set -o pipefail
 
 U_WIDTH=16

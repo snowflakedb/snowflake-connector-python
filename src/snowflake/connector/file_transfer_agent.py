@@ -12,13 +12,14 @@ import os
 import sys
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import dataclass
 from functools import partial
 from logging import getLogger
 from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
 from .azure_storage_client import SnowflakeAzureRestClient
-from .compat import GET_CWD, IS_WINDOWS, dataclass
+from .compat import GET_CWD, IS_WINDOWS
 from .constants import (
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,

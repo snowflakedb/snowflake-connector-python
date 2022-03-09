@@ -40,7 +40,7 @@ either does the same as providing both of them.
 ## Test categories
 Chaining these categories is possible, but isn't encouraged.
 Note: running multiple categories in one `tox` run should be done like:
-`tox -e "fix_lint,py36-{,-sso},coverage"`
+`tox -e "fix_lint,py37-{,-sso},coverage"`
 
 * **pandas**: Tests specifically testing our optional dependency group "pandas".
 * **sso**: Tests specifically testing our optional dependency group "sso".
