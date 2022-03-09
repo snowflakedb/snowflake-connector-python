@@ -127,12 +127,3 @@ def INPUT(prompt: str) -> str:
 def quote_url_piece(piece: str) -> str:
     """Helper function to urlencode a string and turn it into bytes."""
     return quote(piece)
-
-
-try:
-    # builtin dataclass
-    from dataclass import dataclass, field
-except ImportError:
-    # backported dataclass for Python 3.6
-    from dataclasses import dataclass  # NOQA
-    from dataclasses import field  # NOQA

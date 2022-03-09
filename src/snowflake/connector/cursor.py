@@ -22,6 +22,7 @@ from typing import (
     Generator,
     Iterator,
     NamedTuple,
+    NoReturn,
     Sequence,
 )
 
@@ -139,8 +140,7 @@ class ResultMetadata(NamedTuple):
         )
 
 
-# TODO: once we drop 3.6 support the return type becomes NoReturn
-def exit_handler(*_) -> None:  # pragma: no cover
+def exit_handler(*_) -> NoReturn:
     """Handler for signal. When called, it will raise SystemExit with exit code FORCE_EXIT."""
     print("\nForce exit")
     logger.info("Force exit")
@@ -674,7 +674,7 @@ class SnowflakeCursor:
             else:
                 if params is not None and not isinstance(params, (list, tuple)):
                     errorvalue = {
-                        "msg": "Binding parameters must be a list: {}".format(params),
+                        "msg": f"Binding parameters must be a list: {params}",
                         "errno": ER_FAILED_PROCESSING_PYFORMAT,
                     }
                     Error.errorhandler_wrapper(
@@ -782,11 +782,11 @@ class SnowflakeCursor:
                 "sqlstate": self._sqlstate,
                 "sfqid": self._sfqid,
             }
-            is_integrity_error = code == "100072"  # NULL result in a non-nullable column
+            is_integrity_error = (
+                code == "100072"
+            )  # NULL result in a non-nullable column
             error_class = IntegrityError if is_integrity_error else ProgrammingError
-            Error.errorhandler_wrapper(
-                self.connection, self, error_class, errvalue
-            )
+            Error.errorhandler_wrapper(self.connection, self, error_class, errvalue)
         return self
 
     def execute_async(self, *args, **kwargs):

@@ -15,7 +15,7 @@ using the Snowflake JDBC or ODBC drivers.
 
 The connector has **no** dependencies on JDBC or ODBC.
 It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
-where Python 3.6.0 (or higher) is installed.
+where Python 3.7.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
 https://docs.snowflake.com/
@@ -42,7 +42,7 @@ Find the `snowflake_connector_python*.whl` package in the `./dist` directory.
 ### In Docker
 Or use our Dockerized build script `ci/build_docker.sh` and find the built wheel files in `dist/repaired_wheels`.
 
-Note: `ci/build_docker.sh` can be used to compile only certain versions, like this: `ci/build_docker.sh "3.6 3.7"`
+Note: `ci/build_docker.sh` can be used to compile only certain versions, like this: `ci/build_docker.sh "3.7 3.8"`
 
 ## Code hygiene and other utilities
 These tools are integrated into `tox` to allow us to easily set them up universally on any computer.

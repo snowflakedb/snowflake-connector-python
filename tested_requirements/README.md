@@ -8,5 +8,5 @@ Snowflake used to run tests with.
 Use it like a regular requirements file, with:
 
 ```shell
-python -m pip install -r requirements_36.reqs
+python -m pip install -r requirements_37.reqs
 ```
