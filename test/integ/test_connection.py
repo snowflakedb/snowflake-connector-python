@@ -1083,6 +1083,7 @@ def test_connection_gc(conn_cnx):
     assert conn_wref() is None
 
 
+@pytest.mark.skipolddriver
 def test_connection_cant_be_reused(conn_cnx):
     row_count = 50_000
     with conn_cnx() as conn:
