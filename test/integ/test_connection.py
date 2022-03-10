@@ -11,8 +11,8 @@ import os
 import queue
 import threading
 import warnings
-from unittest import mock
 import weakref
+from unittest import mock
 from uuid import uuid4
 
 import pytest
@@ -1081,3 +1081,13 @@ def test_connection_gc(conn_cnx):
     del conn
     gc.collect()
     assert conn_wref() is None
+
+
+def test_connection_cant_be_reused(conn_cnx):
+    row_count = 50_000
+    with conn_cnx() as conn:
+        cursors = conn.execute_string(
+            f"select seq4() as n from table(generator(rowcount => {row_count}));"
+        )
+        assert len(cursors[0]._result_set.batches) > 1  # We need to have remote results
+    assert list(cursors[0])
