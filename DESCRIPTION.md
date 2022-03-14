@@ -10,6 +10,19 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.5(March 17,2022)
+
+   - fix previous rebase issue
+   -  partner application name injection
+   - Wait for URL input after SSO login
+   - removing doubly listed dependency
+   -  Deprecate Python 3.6
+   - export SnowflakeConnection
+   - fix index numbers when using fetch_pandas_all
+   - fix hanging FIPS tests
+   - Remove 3.6 Tests from GitHub actions
+
+
 - v2.7.4(February 05,2022)
 
    - Add Geography Types
