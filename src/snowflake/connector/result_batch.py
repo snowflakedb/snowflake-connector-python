@@ -35,6 +35,7 @@ MAX_DOWNLOAD_RETRY = 10
 DOWNLOAD_TIMEOUT = 7  # seconds
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .connection import SnowflakeConnection
     from .converter import SnowflakeConverterType
     from .cursor import ResultMetadata, SnowflakeCursor
     from .vendored.requests import Response
@@ -293,7 +294,8 @@ class ResultBatch(abc.ABC):
                         "headers": self._chunk_headers,
                         "timeout": DOWNLOAD_TIMEOUT,
                     }
-                    if connection:
+                    # Try to reuse a connection if possible
+                    if connection and connection._rest is not None:
                         with connection._rest._use_requests_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
