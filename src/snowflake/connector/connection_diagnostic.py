@@ -18,7 +18,7 @@ from .compat import IS_WINDOWS, urlparse
 logger = getLogger(__name__)
 
 
-class ConnectionDiagnostic(object):
+class ConnectionDiagnostic:
     """Implementation of a connection test utility for Snowflake connector
 
     Use new ConnectionTest() to get the object.
