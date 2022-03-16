@@ -127,7 +127,6 @@ class ConnectionDiagnostic(object):
             self.test_results[host_type].append(f"{host_type}: {host}:{port}: URL Check: Connected Successfully")
         except Exception as e:
             self.test_results[host_type].append(f"{host_type}: {host}:{port}: URL Check: Failed: {e}")
-            pass
         finally:
             s.close()
 
