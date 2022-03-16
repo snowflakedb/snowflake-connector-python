@@ -137,7 +137,6 @@ class ConnectionDiagnostic(object):
                 results = json.loads(str(results))
             except Exception as e:
                 logger.warning(f"Unable to do whitelist checks: exception: {e}")
-                pass
         else:
             results_file = open(self.whitelist_json)
             results = json.load(results_file)
