@@ -356,5 +356,4 @@ class ConnectionDiagnostic:
             )
 
         logger.debug(message)
-        with open(self.report_file, "w") as report_file_handle:
-            report_file_handle.write(message)
+        self.report_file.write_text(message)
