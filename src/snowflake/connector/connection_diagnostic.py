@@ -51,8 +51,7 @@ class ConnectionDiagnostic:
 
         self.whitelist_json = Path(str(kwargs.get('connection_diag_whitelist_path')))
         if not self.whitelist_json.is_absolute():
-            logger.warning(f"Path '{self.whitelist_json}' for connection test whitelist is not absolute and is not "
-                           f"valid.")
+            logger.warning(f"Path '{self.whitelist_json}' for connection test whitelist is not absolute.")
             logger.warning(f"Will connect to Snowflake for whitelist json instead.  If you did not provide a valid "
                            f"password, please make sure to update and run again.")
             self.whitelist_json = None
