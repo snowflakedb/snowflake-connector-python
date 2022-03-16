@@ -520,7 +520,6 @@ class SnowflakeConnection:
                 connection_diag.run_post_test()
             except Exception as e:
                 logger.warning(f"Exception during connection test: {e}")
-                pass
             finally:
                 connection_diag.generate_report()
         else:
