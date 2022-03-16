@@ -10,6 +10,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.5(March 17,2022)
+
+   - Added an option for partners to inject their name through an environmental variable (SF_PARTNER)
+   - Fixed a bug where we would not wait for input if a browser window couldn't be opened for SSO login
+   - Deprecate support for Python 3.6
+   - Exported a type definition for SnowflakeConnection
+   - Fixed a bug where final Arrow table would contain duplicate index numbers when using fetch_pandas_all
+
+
 - v2.7.4(February 05,2022)
 
    - Add Geography Types
