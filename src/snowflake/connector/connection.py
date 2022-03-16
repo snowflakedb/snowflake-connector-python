@@ -501,7 +501,7 @@ class SnowflakeConnection:
         self._arrow_number_to_decimal = value
 
     def connect(self, **kwargs):
-            """Establishes connection to Snowflake."""
+        """Establishes connection to Snowflake."""
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
