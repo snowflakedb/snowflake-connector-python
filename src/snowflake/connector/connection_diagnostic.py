@@ -179,7 +179,6 @@ class ConnectionDiagnostic(object):
                         self.test_results[host_type].append(f"{base_message}: public ip: {ip}")
         except Exception as e:
             logger.warning(f"Connectivity Test Exception in list_ips: {e}")
-            pass
 
     def __https_host_report(self, host, port=443, host_type="SNOWFLAKE_URL"):
         try:
