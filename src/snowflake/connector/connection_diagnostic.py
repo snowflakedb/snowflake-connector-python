@@ -32,7 +32,7 @@ class ConnectionDiagnostic:
         self.report_destination = Path(str(kwargs.get('connection_diag_log_path')))
         if not self.report_destination.is_absolute():
             path_failed = True
-            logger.warning(f"Path({self.report_destination} for connection test is not absolute and is not valid.")
+            logger.warning(f"Path({self.report_destination} for connection test is not absolute.")
         elif not self.report_destination.exists():
             path_failed = True
             logger.warning(f"Path({self.report_destination} for connection test does not exist.")
