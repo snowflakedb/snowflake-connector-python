@@ -46,7 +46,7 @@ class ConnectionDiagnostic:
                            f" {new_report_destination}")
             self.report_destination = new_report_destination
 
-        self.report_file = Path(f"{str(self.report_destination)}/{self.report_file}")
+        self.report_file = Path(str(self.report_destination)}/{self.report_file})
         logger.info(f"Reporting to file {self.report_file}")
 
         self.whitelist_json = Path(str(kwargs.get('connection_diag_whitelist_path')))
