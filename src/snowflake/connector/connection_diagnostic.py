@@ -232,8 +232,7 @@ class ConnectionDiagnostic(object):
             pass
 
     def __check_for_proxies(self):
-        # To do
-        # See if we need to do anything for noproxy
+        # TODO: See if we need to do anything for noproxy
         # If we need more proxy checks, this site might work
         # curl -k -v https://amibehindaproxy.com 2>&1 | tee | grep alert
         env_proxy_backup = {}
