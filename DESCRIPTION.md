@@ -10,6 +10,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.6(March 17,2022)
+
+   - Fixed missing python_requires tag in setup.cfg
+
 - v2.7.5(March 17,2022)
 
    - Added an option for partners to inject their name through an environmental variable (SF_PARTNER)
@@ -17,7 +21,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
    - Deprecate support for Python 3.6
    - Exported a type definition for SnowflakeConnection
    - Fixed a bug where final Arrow table would contain duplicate index numbers when using fetch_pandas_all
-
 
 - v2.7.4(February 05,2022)
 
