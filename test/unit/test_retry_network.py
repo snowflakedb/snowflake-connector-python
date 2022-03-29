@@ -5,12 +5,10 @@
 
 from __future__ import annotations
 
-import errno
 import os
 import time
 from unittest.mock import MagicMock, Mock, PropertyMock
 
-import OpenSSL.SSL
 import pytest
 
 from snowflake.connector.compat import (
@@ -22,7 +20,6 @@ from snowflake.connector.compat import (
     OK,
     SERVICE_UNAVAILABLE,
     UNAUTHORIZED,
-    BadStatusLine,
     IncompleteRead,
 )
 from snowflake.connector.errors import (
@@ -124,24 +121,6 @@ def test_request_exec():
         except RetryRequest as e:
             cause = e.args[0]
             assert isinstance(cause, exc), "same error class"
-
-    # handle OpenSSL errors and BadStateLine
-    for exc in [
-        OpenSSL.SSL.SysCallError(errno.ECONNRESET),
-        OpenSSL.SSL.SysCallError(errno.ETIMEDOUT),
-        OpenSSL.SSL.SysCallError(errno.EPIPE),
-        OpenSSL.SSL.SysCallError(-1),  # unknown
-        # TODO: should we keep this?
-        # urllib3.exceptions.ReadTimeoutError(None, None, None),
-        BadStatusLine("fake"),
-    ]:
-        session = MagicMock()
-        session.request = Mock(side_effect=exc)
-        try:
-            rest._request_exec(session=session, **default_parameters)
-            pytest.fail("should fail")
-        except RetryRequest as e:
-            assert e.args[0] == exc, "same error instance"
 
 
 def test_fetch():

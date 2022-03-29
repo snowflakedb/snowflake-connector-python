@@ -12,7 +12,6 @@ import pytest
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.auth_default import AuthByDefault
-from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
 
@@ -22,7 +21,6 @@ def _init_rest(application, post_requset):
     connection._login_timeout = 120
     connection._network_timeout = None
     connection.errorhandler = Mock(return_value=None)
-    connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=application)
     type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_version = PropertyMock(

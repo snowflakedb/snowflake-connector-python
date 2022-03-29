@@ -18,9 +18,6 @@ from io import BytesIO
 from threading import Lock
 from typing import TYPE_CHECKING
 
-import OpenSSL.SSL
-
-from . import ssl_wrap_socket
 from .compat import (
     BAD_GATEWAY,
     BAD_REQUEST,
@@ -87,7 +84,6 @@ from .time_util import (
     DecorrelateJitterBackoff,
     get_time_millis,
 )
-from .tool.probe_connection import probe_connection
 from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import HTTPAdapter
@@ -97,7 +93,6 @@ from .vendored.requests.exceptions import (
     ConnectTimeout,
     InvalidProxyURL,
     ReadTimeout,
-    SSLError,
 )
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError
@@ -107,10 +102,6 @@ if TYPE_CHECKING:
     from .connection import SnowflakeConnection
 logger = logging.getLogger(__name__)
 
-"""
-Monkey patch for PyOpenSSL Socket wrapper
-"""
-ssl_wrap_socket.inject_into_urllib3()
 
 # known applications
 APPLICATION_SNOWSQL = "SnowSQL"
@@ -344,7 +335,7 @@ class SnowflakeRestful:
         port=8080,
         protocol="http",
         inject_client_pause=0,
-        connection: Optional["SnowflakeConnection"] = None,
+        connection: Optional[SnowflakeConnection] = None,
     ):
         self._host = host
         self._port = port
@@ -354,17 +345,6 @@ class SnowflakeRestful:
         self._lock_token = Lock()
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
-        )
-
-        # OCSP mode (OCSPMode.FAIL_OPEN by default)
-        ssl_wrap_socket.FEATURE_OCSP_MODE = (
-            self._connection._ocsp_mode()
-            if self._connection
-            else ssl_wrap_socket.DEFAULT_OCSP_MODE
-        )
-        # cache file name (enabled by default)
-        ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
-            self._connection._ocsp_response_cache_filename if self._connection else None
         )
 
         # This is to address the issue where requests hangs
@@ -1033,25 +1013,12 @@ class SnowflakeRestful:
                     return None  # required for tests
             finally:
                 raw_ret.close()  # ensure response is closed
-        except SSLError as se:
-            logger.debug("Hit non-retryable SSL error, %s", str(se))
-            TelemetryService.get_instance().log_http_request_error(
-                "CertificateException%s" % str(se),
-                full_url,
-                method,
-                SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                ER_FAILED_TO_REQUEST,
-                exception=se,
-                stack_trace=traceback.format_exc(),
-            )
-
         except (
             BadStatusLine,
             ConnectionError,
             ConnectTimeout,
             IncompleteRead,
             ProtocolError,  # from urllib3  # from urllib3
-            OpenSSL.SSL.SysCallError,
             KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
             ValueError,
             ReadTimeout,

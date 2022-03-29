@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 import pytest
 
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
-from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR, SnowflakeRestful
 
@@ -222,7 +221,6 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
     connection._login_timeout = 120
     connection._network_timeout = None
     connection.errorhandler = Mock(return_value=None)
-    connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_version = PropertyMock(

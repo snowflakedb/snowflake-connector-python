@@ -125,7 +125,6 @@ class Auth:
         application,
         internal_application_name,
         internal_application_version,
-        ocsp_mode,
         login_timeout,
         network_timeout=None,
     ):
@@ -143,7 +142,6 @@ class Auth:
                     "PYTHON_VERSION": PYTHON_VERSION,
                     "PYTHON_RUNTIME": IMPLEMENTATION,
                     "PYTHON_COMPILER": COMPILER,
-                    "OCSP_MODE": ocsp_mode.name,
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
@@ -190,7 +188,6 @@ class Auth:
             self._rest._connection.application,
             self._rest._connection._internal_application_name,
             self._rest._connection._internal_application_version,
-            self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
         )

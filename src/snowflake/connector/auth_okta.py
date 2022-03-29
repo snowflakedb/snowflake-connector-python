@@ -130,7 +130,6 @@ class AuthByOkta(AuthByPlugin):
             self._rest._connection.application,
             self._rest._connection._internal_application_name,
             self._rest._connection._internal_application_version,
-            self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
         )

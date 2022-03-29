@@ -46,7 +46,6 @@ from .constants import (
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
-    OCSPMode,
     QueryStatus,
 )
 from .converter import SnowflakeConverter
@@ -143,7 +142,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
     "insecure_mode": (False, bool),  # Error security fix requirement
-    "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
     "autocommit": (None, (type(None), bool)),  # snowflake
@@ -154,7 +152,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
     "numpy": (False, bool),  # snowflake
-    "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
     "validate_default_parameters": (False, bool),  # snowflake
     "probe_connection": (False, bool),  # snowflake
@@ -211,8 +208,6 @@ class SnowflakeConnection:
     Attributes:
         insecure_mode: Whether or not the connection is in insecure mode. Insecure mode means that the connection
             validates the TLS certificate but doesn't check revocation status.
-        ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
-            continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
         session_id: The session ID of the connection.
         user: The user name used in the connection.
         host: The host name the connection attempts to connect to.
@@ -241,8 +236,6 @@ class SnowflakeConnection:
         use_openssl_only: Use OpenSSL instead of pure Python libraries for signature verification and encryption.
         enable_stage_s3_privatelink_for_us_east_1: when true, clients use regional s3 url to upload files.
     """
-
-    OCSP_ENV_LOCK = Lock()
 
     def __init__(self, **kwargs):
         self._lock_sequence_counter = Lock()
@@ -286,23 +279,6 @@ class SnowflakeConnection:
             self.close(retry=False)
         except Exception:
             pass
-
-    @property
-    def insecure_mode(self) -> bool:
-        return self._insecure_mode
-
-    @property
-    def ocsp_fail_open(self) -> bool:
-        return self._ocsp_fail_open
-
-    def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSECURE, FAIL_OPEN or FAIL_CLOSED."""
-        if self.insecure_mode:
-            return OCSPMode.INSECURE
-        elif self.ocsp_fail_open:
-            return OCSPMode.FAIL_OPEN
-        else:
-            return OCSPMode.FAIL_CLOSED
 
     @property
     def session_id(self):
@@ -629,14 +605,6 @@ class SnowflakeConnection:
             name = m if not m.startswith("_") else m[1:]
             setattr(self, name, getattr(errors, m))
 
-    @staticmethod
-    def setup_ocsp_privatelink(app, hostname):
-        SnowflakeConnection.OCSP_ENV_LOCK.acquire()
-        ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
-        os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
-        logger.debug("OCSP Cache Server is updated: %s", ocsp_cache_server)
-        SnowflakeConnection.OCSP_ENV_LOCK.release()
-
     def __open_connection(self):
         """Opens a new network connection."""
         self.converter = self._converter_class(
@@ -655,18 +623,6 @@ class SnowflakeConnection:
             connection=self,
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
-
-        if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
-            logger.debug(
-                "Custom OCSP Cache Server URL found in environment - %s",
-                os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
-            )
-
-        if self.host.endswith(".privatelink.snowflakecomputing.com"):
-            SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
-        else:
-            if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
-                del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
         if self._authenticator == DEFAULT_AUTHENTICATOR:
             auth_instance = AuthByDefault(self._password)
@@ -873,24 +829,6 @@ class SnowflakeConnection:
             )
         if "." in self._account:
             self._account = parse_account(self._account)
-
-        if self.ocsp_fail_open:
-            logger.info(
-                "This connection is in OCSP Fail Open Mode. "
-                "TLS Certificates would be checked for validity "
-                "and revocation status. Any other Certificate "
-                "Revocation related exceptions or OCSP Responder "
-                "failures would be disregarded in favor of "
-                "connectivity."
-            )
-
-        if self.insecure_mode:
-            logger.info(
-                "THIS CONNECTION IS IN INSECURE MODE. IT "
-                "MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE "
-                "CERTIFICATE REVOCATION STATUS WILL NOT BE "
-                "CHECKED."
-            )
 
         if "SF_USE_OPENSSL_ONLY" not in os.environ:
             logger.info("Setting use_openssl_only mode to %s", self.use_openssl_only)

@@ -17,8 +17,6 @@ from math import ceil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
-import OpenSSL
-
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
@@ -50,7 +48,7 @@ METHODS = {
 class SnowflakeStorageClient(ABC):
     TRANSIENT_HTTP_ERR = (408, 429, 500, 502, 503, 504)
 
-    TRANSIENT_ERRORS = (OpenSSL.SSL.SysCallError, Timeout, ConnectionError)
+    TRANSIENT_ERRORS = (Timeout, ConnectionError)
     SLEEP_MAX = 16.0
     SLEEP_UNIT = 1.0
 

@@ -196,24 +196,6 @@ HTTP_HEADER_VALUE_OCTET_STREAM = "application/octet-stream"
 
 
 @unique
-class OCSPMode(Enum):
-    """OCSP Mode enumerator for all the available modes.
-
-    OCSP mode descriptions:
-        FAIL_CLOSED: If the client or driver does not receive a valid OCSP CA response for any reason,
-            the connection fails.
-        FAIL_OPEN: A response indicating a revoked certificate results in a failed connection. A response with any
-            other certificate errors or statuses allows the connection to occur, but denotes the message in the logs
-            at the WARNING level with the relevant details in JSON format.
-        INSECURE: The connection will occur anyway.
-    """
-
-    FAIL_CLOSED = "FAIL_CLOSED"
-    FAIL_OPEN = "FAIL_OPEN"
-    INSECURE = "INSECURE"
-
-
-@unique
 class FileTransferType(Enum):
     """This enum keeps track of the possible file transfer types."""
 

@@ -8,8 +8,6 @@ from __future__ import annotations
 import gc
 import logging
 import os
-import queue
-import threading
 import warnings
 import weakref
 from unittest import mock
@@ -20,11 +18,7 @@ import pytest
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.auth_okta import AuthByOkta
-from snowflake.connector.connection import (
-    DEFAULT_CLIENT_PREFETCH_THREADS,
-    SnowflakeConnection,
-)
-from snowflake.connector.description import CLIENT_NAME
+from snowflake.connector.connection import DEFAULT_CLIENT_PREFETCH_THREADS
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -33,7 +27,7 @@ from snowflake.connector.errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from snowflake.connector.errors import Error, ForbiddenError
-from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
+from snowflake.connector.network import ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 
 try:  # pragma: no cover
@@ -444,33 +438,6 @@ def test_invalid_proxy(db_parameters):
     del os.environ["HTTPS_PROXY"]
 
 
-@pytest.mark.timeout(15)
-def test_eu_connection(tmpdir):
-    """Tests setting custom region.
-
-    If region is specified to eu-central-1, the URL should become
-    https://testaccount1234.eu-central-1.snowflakecomputing.com/ .
-
-    Notes:
-        Region is deprecated.
-    """
-    import os
-
-    os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
-    with pytest.raises(ForbiddenError):
-        # must reach Snowflake
-        snowflake.connector.connect(
-            account="testaccount1234",
-            user="testuser",
-            password="testpassword",
-            region="eu-central-1",
-            login_timeout=5,
-            ocsp_response_cache_filename=os.path.join(
-                str(tmpdir), "test_ocsp_cache.txt"
-            ),
-        )
-
-
 def test_us_west_connection(tmpdir):
     """Tests default region setting.
 
@@ -491,47 +458,6 @@ def test_us_west_connection(tmpdir):
         )
 
 
-@pytest.mark.timeout(60)
-def test_privatelink(db_parameters):
-    """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""
-    try:
-        os.environ["SF_OCSP_FAIL_OPEN"] = "false"
-        os.environ["SF_OCSP_DO_RETRY"] = "false"
-        snowflake.connector.connect(
-            account="testaccount",
-            user="testuser",
-            password="testpassword",
-            region="eu-central-1.privatelink",
-            login_timeout=5,
-        )
-        pytest.fail("should not make connection")
-    except OperationalError:
-        ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
-        assert ocsp_url is not None, "OCSP URL should not be None"
-        assert (
-            ocsp_url == "http://ocsp.testaccount.eu-central-1."
-            "privatelink.snowflakecomputing.com/"
-            "ocsp_response_cache.json"
-        )
-
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    assert cnx, "invalid cnx"
-
-    ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
-    assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
-    del os.environ["SF_OCSP_DO_RETRY"]
-    del os.environ["SF_OCSP_FAIL_OPEN"]
-
-
 def test_disable_request_pooling(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {
@@ -546,102 +472,8 @@ def test_disable_request_pooling(db_parameters):
         "timezone": "UTC",
         "disable_request_pooling": True,
     }
-    cnx = snowflake.connector.connect(**config)
-    try:
+    with snowflake.connector.connect(**config) as cnx:
         assert cnx.disable_request_pooling
-    finally:
-        cnx.close()
-
-
-def test_privatelink_ocsp_url_creation():
-    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    SnowflakeConnection.setup_ocsp_privatelink(APPLICATION_SNOWSQL, hostname)
-
-    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-    assert (
-        ocsp_cache_server
-        == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    )
-
-    del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
-
-    SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
-    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-    assert (
-        ocsp_cache_server
-        == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    )
-
-
-def test_privatelink_ocsp_url_multithreaded():
-    bucket = queue.Queue()
-
-    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    thread_obj = []
-    for _ in range(15):
-        thread_obj.append(
-            ExecPrivatelinkThread(bucket, hostname, expectation, CLIENT_NAME)
-        )
-
-    for t in thread_obj:
-        t.start()
-
-    fail_flag = False
-    for t in thread_obj:
-        t.join()
-        exc = bucket.get(block=False)
-        if exc != "Success" and not fail_flag:
-            fail_flag = True
-
-    if fail_flag:
-        raise AssertionError()
-
-    if os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None) is not None:
-        del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
-
-
-def test_privatelink_ocsp_url_multithreaded_snowsql():
-    bucket = queue.Queue()
-
-    hostname = "testaccount.us-east-1.privatelink.snowflakecomputing.com"
-    expectation = "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
-    thread_obj = []
-    for _ in range(15):
-        thread_obj.append(
-            ExecPrivatelinkThread(bucket, hostname, expectation, APPLICATION_SNOWSQL)
-        )
-
-    for t in thread_obj:
-        t.start()
-
-    fail_flag = False
-    for i in range(15):
-        thread_obj[i].join()
-        exc = bucket.get(block=False)
-        if exc != "Success" and not fail_flag:
-            fail_flag = True
-
-    if fail_flag:
-        raise AssertionError()
-
-
-class ExecPrivatelinkThread(threading.Thread):
-    def __init__(self, bucket, hostname, expectation, client_name):
-        threading.Thread.__init__(self)
-        self.bucket = bucket
-        self.hostname = hostname
-        self.expectation = expectation
-        self.client_name = client_name
-
-    def run(self):
-        SnowflakeConnection.setup_ocsp_privatelink(self.client_name, self.hostname)
-        ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
-        if ocsp_cache_server is not None and ocsp_cache_server != self.expectation:
-            print(f"Got {ocsp_cache_server} Expected {self.expectation}")
-            self.bucket.put("Fail")
-        else:
-            self.bucket.put("Success")
 
 
 @pytest.mark.skipolddriver

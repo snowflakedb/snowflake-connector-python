@@ -32,6 +32,7 @@ TelemetryEventBase = namedtuple(
 
 
 class TelemetryAPIEndpoint:
+
     SFCTEST = TelemetryAPI(
         url="https://sfctest.client-telemetry.snowflakecomputing.com/enqueue",
         api_key="rRNY3EPNsB4U89XYuqsZKa7TSxb9QVX93yNM4tS6",
@@ -322,40 +323,6 @@ class TelemetryService:
             deployment = TelemetryServerDeployments.PREPROD3
 
         self.deployment = deployment
-
-    def log_ocsp_exception(
-        self,
-        event_type,
-        telemetry_data,
-        exception=None,
-        stack_trace=None,
-        tags=None,
-        urgent=False,
-    ):
-        """Logs an OCSP Exception and adds it to the queue to be uploaded."""
-        if tags is None:
-            tags = dict()
-        try:
-            if self.enabled:
-                event_name = "OCSPException"
-                if exception is not None:
-                    telemetry_data["exceptionMessage"] = str(exception)
-                if stack_trace is not None:
-                    telemetry_data["exceptionStackTrace"] = stack_trace
-
-                if tags is None:
-                    tags = dict()
-
-                tags["eventType"] = event_type
-
-                log_event = TelemetryLogEvent(
-                    name=event_name, tags=tags, urgent=urgent, value=telemetry_data
-                )
-
-                self.add(log_event)
-        except Exception:
-            # Do nothing on exception, just log
-            logger.debug("Failed to log OCSP exception", exc_info=True)
 
     def log_http_request_error(
         self,

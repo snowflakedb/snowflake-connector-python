@@ -6,10 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-import snowflake.connector.errorcode
 from snowflake.connector.errorcode import ER_FAILED_TO_REQUEST
-from snowflake.connector.errors import RevocationCheckError
-from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
+from snowflake.connector.errors import OperationalError
 from snowflake.connector.sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from snowflake.connector.telemetry_oob import TelemetryService
 
@@ -21,9 +19,8 @@ DEV_CONFIG = {
     "password": "ShouldNotShowUp",
     "protocol": "http",
 }
-telemetry_data = {}
-exception = RevocationCheckError("Test OCSP Revocation error")
-event_type = "Test OCSP Exception"
+exception = OperationalError("Test error")
+event_type = "Test Exception"
 stack_trace = [
     "Traceback (most recent call last):\n",
     '  File "<doctest...>", line 10, in <module>\n    lumberjack()\n',
@@ -47,11 +44,16 @@ def telemetry_setup(request):
 
 
 def test_telemetry_oob_simple_flush(telemetry_setup):
-    """Tests capturing and sending a simple OCSP Exception message."""
+    """Tests capturing and sending a simple Exception message."""
     telemetry = TelemetryService.get_instance()
 
-    telemetry.log_ocsp_exception(
-        event_type, telemetry_data, exception=exception, stack_trace=stack_trace
+    telemetry.log_general_exception(
+        "OCSPException",
+        telemetry_data={
+            "exceptionMessage": str(exception),
+            "exceptionStackTrace": stack_trace,
+        },
+        tags={"eventType": event_type},
     )
     assert telemetry.size() == 1
     telemetry.flush()
@@ -60,14 +62,16 @@ def test_telemetry_oob_simple_flush(telemetry_setup):
 
 @pytest.mark.flaky(reruns=3)
 def test_telemetry_oob_urgent(telemetry_setup):
-    """Tests sending an urgent OCSP Exception message."""
+    """Tests sending an urgent Exception message."""
     telemetry = TelemetryService.get_instance()
 
-    telemetry.log_ocsp_exception(
-        event_type,
-        telemetry_data,
-        exception=exception,
-        stack_trace=stack_trace,
+    telemetry.log_general_exception(
+        "OCSPException",
+        telemetry_data={
+            "exceptionMessage": str(exception),
+            "exceptionStackTrace": stack_trace,
+        },
+        tags={"eventType": event_type},
         urgent=True,
     )
     assert telemetry.size() == 0
@@ -77,8 +81,13 @@ def test_telemetry_oob_close(telemetry_setup):
     """Tests closing the Telemetry Service when there are still messages in the queue."""
     telemetry = TelemetryService.get_instance()
 
-    telemetry.log_ocsp_exception(
-        event_type, telemetry_data, exception=exception, stack_trace=stack_trace
+    telemetry.log_general_exception(
+        "OCSPException",
+        telemetry_data={
+            "exceptionMessage": str(exception),
+            "exceptionStackTrace": stack_trace,
+        },
+        tags={"eventType": event_type},
     )
     assert telemetry.size() == 1
     telemetry.close()
@@ -100,8 +109,13 @@ def test_telemetry_oob_log_when_disabled(telemetry_setup):
 
     assert telemetry.size() == 0
     telemetry.disable()
-    telemetry.log_ocsp_exception(
-        event_type, telemetry_data, exception=exception, stack_trace=stack_trace
+    telemetry.log_general_exception(
+        "OCSPException",
+        telemetry_data={
+            "exceptionMessage": str(exception),
+            "exceptionStackTrace": stack_trace,
+        },
+        tags={"eventType": event_type},
     )
     assert telemetry.size() == 0
     telemetry.enable()
@@ -123,15 +137,6 @@ def test_telemetry_oob_http_log(telemetry_setup):
     assert telemetry.size() == 1
     telemetry.flush()
     assert telemetry.size() == 0
-
-
-def test_telemetry_oob_error_code_mapping():
-    """Tests that all OCSP error codes have a corresponding Telemetry sub event type."""
-    ec_dict = snowflake.connector.errorcode.__dict__
-    for ec, ec_val in ec_dict.items():
-        if not ec.startswith("__") and ec not in ("annotations",):
-            if 254000 <= ec_val < 255000:
-                assert ec_val in OCSPTelemetryData.ERROR_CODE_MAP
 
 
 @pytest.mark.flaky(reruns=3)

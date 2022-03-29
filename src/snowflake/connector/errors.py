@@ -406,14 +406,6 @@ class NotSupportedError(DatabaseError):
         return self.msg
 
 
-class RevocationCheckError(OperationalError):
-    """Exception for errors during certificate revocation check."""
-
-    # We already send OCSP exception events
-    def exception_telemetry(self, msg, cursor, connection):
-        pass
-
-
 # internal errors
 class InternalServerError(Error):
     """Exception for 500 HTTP code for retry."""
