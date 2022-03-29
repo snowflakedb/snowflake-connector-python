@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from enum import Enum, unique
 from threading import Lock
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .secret_detector import SecretDetector
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
@@ -71,8 +71,8 @@ class TelemetryClient:
     SF_PATH_TELEMETRY = "/telemetry/send"
     DEFAULT_FORCE_FLUSH_SIZE = 100
 
-    def __init__(self, rest: "SnowflakeRestful", flush_size=None):
-        self._rest: Optional["SnowflakeRestful"] = rest
+    def __init__(self, rest: SnowflakeRestful, flush_size=None):
+        self._rest: SnowflakeRestful | None = rest
         self._log_batch = []
         self._flush_size = flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
         self._lock = Lock()

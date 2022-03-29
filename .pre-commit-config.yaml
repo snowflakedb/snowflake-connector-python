@@ -37,10 +37,6 @@ repos:
             - //
             - --license-filepath
             - license_header.txt
--   repo: https://github.com/myint/rstcheck
-    rev: 3f92957478422df87bd730abde66f089cc1ee19b
-    hooks:
-    -   id: rstcheck
 -   repo: https://github.com/asottile/yesqa
     rev: v1.3.0
     hooks:

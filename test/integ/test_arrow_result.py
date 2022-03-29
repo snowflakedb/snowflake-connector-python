@@ -503,10 +503,10 @@ def test_select_with_float(conn_cnx):
     # if we assign val_len a larger value like 20, then the precision difference between c++ and python will become
     # very obvious so if we meet some error in this test in the future, please check that whether it is caused by
     # different precision between python and c++
-    val_range = random.randint(0, 10 ** val_len)
+    val_range = random.randint(0, 10**val_len)
 
     sql_text = "select seq4() as c1, as_double(uniform({}, {}, random({})))/{} as c2 from ".format(
-        -val_range, val_range, random_seed, 10 ** pow_val
+        -val_range, val_range, random_seed, 10**pow_val
     ) + "table(generator(rowcount=>{})) order by c1".format(
         row_count
     )

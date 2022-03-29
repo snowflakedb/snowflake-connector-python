@@ -344,7 +344,7 @@ class SnowflakeRestful:
         port=8080,
         protocol="http",
         inject_client_pause=0,
-        connection: Optional["SnowflakeConnection"] = None,
+        connection: Optional[SnowflakeConnection] = None,
     ):
         self._host = host
         self._port = port

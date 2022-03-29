@@ -848,15 +848,11 @@ class SnowflakeCursor:
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
             for idx, desc in enumerate(self._description):
-                if (
-                    desc[0]
-                    in (
-                        "number of rows updated",
-                        "number of multi-joined rows updated",
-                        "number of rows deleted",
-                    )
-                    or desc[0].startswith("number of rows inserted")
-                ):
+                if desc[0] in (
+                    "number of rows updated",
+                    "number of multi-joined rows updated",
+                    "number of rows deleted",
+                ) or desc[0].startswith("number of rows inserted"):
                     updated_rows += int(data["rowset"][0][idx])
             if self._total_rowcount == -1:
                 self._total_rowcount = updated_rows
