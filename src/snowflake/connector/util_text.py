@@ -68,13 +68,13 @@ def split_statements(
             # Special characters possible in the sql delimiter are '_', '/' and ';'. If a delimiter does not end, or
             # start with a special character then look for word separation with \b regex.
             if re.match(r"\w", sql_delimiter[0]):
-                RE_START = re.compile(fr"^[^\w$]?{escaped_delim}")
+                RE_START = re.compile(rf"^[^\w$]?{escaped_delim}")
             else:
-                RE_START = re.compile(fr"^.?{escaped_delim}")
+                RE_START = re.compile(rf"^.?{escaped_delim}")
             if re.match(r"\w", sql_delimiter[-1]):
-                RE_END = re.compile(fr"{escaped_delim}[^\w$]?$")
+                RE_END = re.compile(rf"{escaped_delim}[^\w$]?$")
             else:
-                RE_END = re.compile(fr"{escaped_delim}.?$")
+                RE_END = re.compile(rf"{escaped_delim}.?$")
             previous_delimiter = sql_delimiter
         while True:
             if col >= len_line:

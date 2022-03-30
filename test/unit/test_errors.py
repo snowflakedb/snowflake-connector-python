@@ -15,7 +15,7 @@ def test_detecting_duplicate_detail_insertion():
     sqlstate = "24000"
     errno = 123456
     msg = "Some error happened"
-    expected_msg = re.compile(fr"{errno} \({sqlstate}\): {sfqid}: {msg}")
+    expected_msg = re.compile(rf"{errno} \({sqlstate}\): {sfqid}: {msg}")
     original_ex = errors.ProgrammingError(
         sqlstate=sqlstate,
         sfqid=sfqid,

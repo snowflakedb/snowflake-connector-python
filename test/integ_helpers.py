@@ -18,7 +18,7 @@ def put(
     stage_path: str,
     from_path: bool,
     sql_options: str | None = "",
-    **kwargs
+    **kwargs,
 ) -> SnowflakeCursor:
     """Execute PUT <file> <stage> <options> query with given cursor.
 

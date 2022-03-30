@@ -210,12 +210,12 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters):
 
 def _total_milliseconds_from_timedelta(td):
     """Returns the total number of milliseconds contained in the duration object."""
-    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10 ** 6) // 10 ** 3
+    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) // 10**3
 
 
 def _total_seconds_from_timedelta(td):
     """Returns the total number of seconds contained in the duration object."""
-    return _total_milliseconds_from_timedelta(td) // 10 ** 3
+    return _total_milliseconds_from_timedelta(td) // 10**3
 
 
 def test_insert_timestamp_select(conn, db_parameters):
@@ -606,7 +606,7 @@ insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
                 assert row in expected_data
     finally:
         with conn() as cnx:
-            cnx.cursor().execute("drop table {name}".format(name=name_geo))
+            cnx.cursor().execute(f"drop table {name_geo}")
 
 
 def test_callproc(conn_cnx):

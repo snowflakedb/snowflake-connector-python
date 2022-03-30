@@ -61,7 +61,7 @@ class SnowLogger(logging.LoggerAdapter):
         func_name: str | None = None,
         line_num: int = 0,
         *args,
-        **kwargs
+        **kwargs,
     ):
         """Generalized log method of SnowLogger wrapper.
 
@@ -91,6 +91,6 @@ class SnowLogger(logging.LoggerAdapter):
                 args,
                 None,
                 func_name,
-                **kwargs
+                **kwargs,
             )
             self.logger.handle(record)
