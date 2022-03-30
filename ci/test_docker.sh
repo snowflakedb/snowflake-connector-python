@@ -37,6 +37,7 @@ user_id=$(id -u ${USER})
 docker run --network=host \
     -e TERM=vt102 \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    -e OPENSSL_FIPS=1 \
     -e LOCAL_USER_ID=${user_id} \
     -e AWS_ACCESS_KEY_ID \
     -e AWS_SECRET_ACCESS_KEY \
