@@ -32,6 +32,7 @@ from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
+from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
@@ -508,15 +509,15 @@ class SnowflakeConnection:
             TelemetryService.get_instance().update_context(kwargs)
 
         if self.enable_connection_diag:
-            connection_diag = ConnectionDiagnostic(connection_diag_log_path=self.connection_diag_log_path,
+            connection_diag = ConnectionDiagnostic(account=self.account, host=self.host,
+                                                   connection_diag_log_path=self.connection_diag_log_path,
                                                    connection_diag_whitelist_path=self.connection_diag_whitelist_path,
-                                                   host=self.host, account=self.account, proxy_host=self.proxy_host,
-                                                   proxy_port=self.proxy_port, proxy_user=self.proxy_user,
-                                                   proxy_password=self.proxy_password)
+                                                   proxy_host=self.proxy_host, proxy_port=self.proxy_port,
+                                                   proxy_user=self.proxy_user, proxy_password=self.proxy_password)
             try:
                 connection_diag.run_test()
                 self.__open_connection()
-                connection_diag.set_cursor(self.cursor)
+                connection_diag.cursor = self.cursor
                 connection_diag.run_post_test()
             except Exception as e:
                 logger.warning(f"Exception during connection test: {e}")
