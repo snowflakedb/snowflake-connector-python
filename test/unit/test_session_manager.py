@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 from unittest import mock
 
 from snowflake.connector.network import SnowflakeRestful

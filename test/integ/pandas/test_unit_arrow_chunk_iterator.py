@@ -320,9 +320,9 @@ def test_iterate_over_time_chunk():
         return random.randint(0, 863999999)
 
     def expected_data_transform_int64(data):
-        milisec = data % (10 ** 9)
-        milisec //= 10 ** 3
-        data //= 10 ** 9
+        milisec = data % (10**9)
+        milisec //= 10**3
+        data //= 10**9
         second = data % 60
         data //= 60
         minute = data % 60
@@ -330,9 +330,9 @@ def test_iterate_over_time_chunk():
         return datetime.time(hour, minute, second, milisec)
 
     def expected_data_transform_int32(data):
-        milisec = data % (10 ** 4)
-        milisec *= 10 ** 2
-        data //= 10 ** 4
+        milisec = data % (10**4)
+        milisec *= 10**2
+        data //= 10**4
         second = data % 60
         data //= 60
         minute = data % 60
@@ -379,9 +379,9 @@ def test_iterate_over_timestamp_ntz_chunk():
     def timestamp_ntz_generator(scale):
         epoch = random.randint(-621355968, 2534023007)
         frac = (
-            random.randint(0, 10 ** scale - 1) * (10 ** (9 - scale))
+            random.randint(0, 10**scale - 1) * (10 ** (9 - scale))
             if scale > 7
-            else random.randint(0, 10 ** scale - 1)
+            else random.randint(0, 10**scale - 1)
         )
         if scale > 7:
             return {"epoch": epoch, "fraction": frac}
@@ -399,7 +399,7 @@ def test_iterate_over_timestamp_ntz_chunk():
                 epoch = data["epoch"]
                 if epoch < 0:
                     epoch += 1
-                    frac = 10 ** 9 - frac
+                    frac = 10**9 - frac
                 frac = str(int(frac / 10 ** (9 - scale)))
                 ZERO_FILL = "000000000"
                 frac = ZERO_FILL[: scale - len(frac)] + frac
@@ -455,9 +455,9 @@ def test_iterate_over_timestamp_ltz_chunk():
     def timestamp_ltz_generator(scale):
         epoch = random.randint(-621355968, 2534023007)
         frac = (
-            random.randint(0, 10 ** scale - 1) * (10 ** (9 - scale))
+            random.randint(0, 10**scale - 1) * (10 ** (9 - scale))
             if scale > 7
-            else random.randint(0, 10 ** scale - 1)
+            else random.randint(0, 10**scale - 1)
         )
         if scale > 7:
             return {"epoch": epoch, "fraction": frac}
@@ -476,7 +476,7 @@ def test_iterate_over_timestamp_ltz_chunk():
                 epoch = data["epoch"]
                 if epoch < 0:
                     epoch += 1
-                    frac = 10 ** 9 - frac
+                    frac = 10**9 - frac
                 frac = str(int(frac / 10 ** (9 - scale)))
                 ZERO_FILL = "000000000"
                 frac = ZERO_FILL[: scale - len(frac)] + frac
@@ -546,9 +546,9 @@ def test_iterate_over_timestamp_tz_chunk():
     def timestamp_tz_generator(scale):
         epoch = random.randint(-621355968, 2534023007)
         frac = (
-            random.randint(0, 10 ** scale - 1) * (10 ** (9 - scale))
+            random.randint(0, 10**scale - 1) * (10 ** (9 - scale))
             if scale > 3
-            else random.randint(0, 10 ** scale - 1)
+            else random.randint(0, 10**scale - 1)
         )
         timezone = random.randint(1, 2879)
         if scale > 3:
@@ -572,7 +572,7 @@ def test_iterate_over_timestamp_tz_chunk():
                 frac = data["fraction"]
                 if epoch < 0:
                     epoch += 1
-                    frac = 10 ** 9 - frac
+                    frac = 10**9 - frac
                 frac = str(int(frac / 10 ** (9 - scale)))
                 ZERO_FILL = "000000000"
                 frac = ZERO_FILL[: scale - len(frac)] + frac

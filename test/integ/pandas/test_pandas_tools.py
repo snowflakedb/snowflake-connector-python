@@ -8,7 +8,6 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Generator
-from typing import Callable, Generator
 from unittest import mock
 
 import pytest
@@ -379,7 +378,7 @@ def test_special_name_quoting(
 
 
 def test_auto_create_table_similar_column_names(
-    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
 ):
     """Tests whether similar names do not cause issues when auto-creating a table as expected."""
     table_name = random_string(5, "numbas_")
@@ -410,7 +409,7 @@ def test_auto_create_table_similar_column_names(
 
 
 def test_all_pandas_types(
-    conn_cnx: Callable[..., Generator["SnowflakeConnection", None, None]]
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]
 ):
     table_name = random_string(5, "all_types_")
     datetime_with_tz = datetime(
