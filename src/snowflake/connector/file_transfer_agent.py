@@ -338,7 +338,10 @@ class SnowflakeFileTransferAgent:
             get_azure_callback if get_azure_callback else get_callback
         )
         self._get_callback_output_stream = get_callback_output_stream
-        self._use_accelerate_endpoint = False
+        # when we have not checked whether we should use accelerate, this boolean is None
+        # _use_accelerate_endpoint in SnowflakeFileTransferAgent could be passed to each SnowflakeS3RestClient
+        # so we could avoid check accelerate configuration for each S3 client created for each file meta.
+        self._use_accelerate_endpoint = None
         self._raise_put_get_error = raise_put_get_error
         self._show_progress_bar = show_progress_bar
         self._force_put_overwrite = force_put_overwrite
@@ -646,6 +649,7 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 self._stage_info,
                 S3_CHUNK_SIZE,
+                use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
             )
         elif self._stage_location_type == GCS_FS:
