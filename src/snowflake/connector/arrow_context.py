@@ -32,6 +32,13 @@ logger = getLogger(__name__)
 
 
 class ArrowConverterContext:
+    """Python helper functions for arrow conversions.
+
+    Windows timestamp functions are necessary because Windows cannot handle -ve timestamps.
+    Putting the OS check into the non-windows function would probably take up more CPU cycles then
+    just deciding this at compile time.
+    """
+
     def __init__(
         self,
         session_parameters: dict[str, str | int | bool] | None = None,
@@ -67,37 +74,44 @@ class ArrowConverterContext:
                 except AttributeError:
                     return pytz.timezone("UTC")
 
-    def TIMESTAMP_TZ_to_python(self, microseconds: float, tz: int):
-        """Timestamp TZ to datetime.
-
-        The timezone offset is piggybacked.
-        """
+    def TIMESTAMP_TZ_to_python(
+        self, epoch: int, microseconds: int, tz: int
+    ) -> datetime:
         tzinfo = _generate_tzinfo_from_tzoffset(tz - 1440)
-        return datetime.fromtimestamp(microseconds, tz=tzinfo)
+        return datetime.fromtimestamp(epoch, tz=tzinfo) + timedelta(
+            microseconds=microseconds
+        )
 
-    def TIMESTAMP_TZ_to_python_windows(self, microseconds, tz):
+    def TIMESTAMP_TZ_to_python_windows(
+        self, epoch: int, microseconds: int, tz: int
+    ) -> datetime:
         tzinfo = _generate_tzinfo_from_tzoffset(tz - 1440)
-        t = ZERO_EPOCH + timedelta(seconds=microseconds)
+        t = ZERO_EPOCH + timedelta(seconds=epoch, microseconds=microseconds)
         if pytz.utc != tzinfo:
             t += tzinfo.utcoffset(t)
         return t.replace(tzinfo=tzinfo)
 
-    def TIMESTAMP_NTZ_to_python(self, microseconds):
-        return datetime.utcfromtimestamp(microseconds)
+    def TIMESTAMP_NTZ_to_python(self, epoch: int, microseconds: int) -> datetime:
+        return datetime.utcfromtimestamp(epoch) + timedelta(microseconds=microseconds)
 
-    def TIMESTAMP_NTZ_to_python_windows(self, microseconds):
-        return ZERO_EPOCH + timedelta(seconds=microseconds)
+    def TIMESTAMP_NTZ_to_python_windows(
+        self, epoch: int, microseconds: int
+    ) -> datetime:
+        return ZERO_EPOCH + timedelta(seconds=epoch, microseconds=microseconds)
 
-    def TIMESTAMP_LTZ_to_python(self, microseconds):
+    def TIMESTAMP_LTZ_to_python(self, epoch: int, microseconds: int) -> datetime:
         tzinfo = self._get_session_tz()
-        return datetime.fromtimestamp(microseconds, tz=tzinfo)
+        return datetime.fromtimestamp(epoch, tz=tzinfo) + timedelta(
+            microseconds=microseconds
+        )
 
-    def TIMESTAMP_LTZ_to_python_windows(self, microseconds):
-        tzinfo = self._get_session_tz()
+    def TIMESTAMP_LTZ_to_python_windows(
+        self, epoch: int, microseconds: int
+    ) -> datetime:
         try:
-            t0 = ZERO_EPOCH + timedelta(seconds=microseconds)
-            t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo)
-            return t
+            tzinfo = self._get_session_tz()
+            ts = ZERO_EPOCH + timedelta(seconds=epoch, microseconds=microseconds)
+            return pytz.utc.localize(ts, is_dst=False).astimezone(tzinfo)
         except OverflowError:
             logger.debug(
                 "OverflowError in converting from epoch time to "

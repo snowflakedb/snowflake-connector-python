@@ -1162,3 +1162,28 @@ def test_arrow_number_to_decimal(conn_cnx):
             val = df.NUM[0]
             assert val == Decimal("-3.20")
             assert isinstance(val, decimal.Decimal)
+
+
+@pytest.mark.parametrize(
+    "timestamp_type",
+    [
+        "TIMESTAMP_TZ",
+        "TIMESTAMP_NTZ",
+        "TIMESTAMP_LTZ",
+    ],
+)
+def test_time_interval_microsecond(conn_cnx, timestamp_type):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        }
+    ) as cnx:
+        with cnx.cursor() as cur:
+            res = cur.execute(
+                f"SELECT TO_{timestamp_type}('2010-06-25 12:15:30.747000')+INTERVAL '8999999999999998 MICROSECONDS'"
+            ).fetchone()
+            assert res[0].microsecond == 746998
+            res = cur.execute(
+                f"SELECT TO_{timestamp_type}('2010-06-25 12:15:30.747000')+INTERVAL '8999999999999999 MICROSECONDS'"
+            ).fetchone()
+            assert res[0].microsecond == 746999

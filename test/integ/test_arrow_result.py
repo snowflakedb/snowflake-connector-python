@@ -5,9 +5,8 @@
 
 from __future__ import annotations
 
-import itertools
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy
 import pytest
@@ -432,12 +431,8 @@ def test_select_date(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.parametrize(
-    "scale, type",
-    itertools.product(
-        [i for i in range(10)], ["timestampntz", "timestampltz", "timestamptz"]
-    ),
-)
+@pytest.mark.parametrize("scale", range(10))
+@pytest.mark.parametrize("type", ["timestampntz", "timestampltz", "timestamptz"])
 def test_select_timestamp_with_scale(conn_cnx, scale, type):
     cases = [
         "2017-01-01 12:00:00",
@@ -447,6 +442,8 @@ def test_select_timestamp_with_scale(conn_cnx, scale, type):
         "2014-01-02 16:00:00.000000001",
         "2014-01-02 12:34:56.1",
         "1969-12-31 23:59:59.000000001",
+        "1969-12-31 23:59:58.000000001",
+        "1969-11-30 23:58:58.000001001",
         "1970-01-01 00:00:00.123412423",
         "1970-01-01 00:00:01.000001",
         "1969-12-31 11:59:59.001",
@@ -463,7 +460,10 @@ def test_select_timestamp_with_scale(conn_cnx, scale, type):
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    iterate_over_test_chunk(type, conn_cnx, sql_text, row_count, col_count)
+    # TODO SNOW-534252
+    iterate_over_test_chunk(
+        type, conn_cnx, sql_text, row_count, col_count, eps=timedelta(microseconds=1)
+    )
     finish(conn_cnx, table)
 
 
@@ -634,6 +634,12 @@ def iterate_over_test_chunk(
                     arrow_res = cursor_arrow.fetchone()
                     for j in range(0, col_count):
                         if test_name == "float" and eps is not None:
+                            assert abs(json_res[j] - arrow_res[j]) <= eps
+                        elif (
+                            test_name == "timestampltz"
+                            and json_res[j] is not None
+                            and eps is not None
+                        ):
                             assert abs(json_res[j] - arrow_res[j]) <= eps
                         else:
                             assert json_res[j] == arrow_res[j]
