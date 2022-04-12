@@ -352,7 +352,7 @@ def test_fetch_timestamps_negative_epoch(conn_cnx):
     with conn_cnx() as cnx:
         cur = cnx.cursor()
         cur.execute(
-            """
+            """\
 SELECT
     '1950-11-27 12:34:56.123456'::timestamp_ntz(6),
     '2012-01-03 12:34:56.123456'::timestamp_ntz(6)
