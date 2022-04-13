@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
 import tempfile
@@ -19,12 +20,13 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 import OpenSSL
 
-from .constants import FileHeader, ResultStatus
+from .constants import HTTP_HEADER_CONTENT_ENCODING, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
+from .vendored.urllib3 import HTTPResponse
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -45,6 +47,15 @@ METHODS = {
     "HEAD": requests.head,
     "DELETE": requests.delete,
 }
+
+
+def remove_content_encoding(resp: requests.Response, **kwargs):
+    """Remove content-encoding header and decoder so decompression is not triggered"""
+    if HTTP_HEADER_CONTENT_ENCODING in resp.headers:
+        # resp.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
+        if isinstance(resp.raw, HTTPResponse):
+            resp.raw._decoder = None
+            resp.raw.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
 
 
 class SnowflakeStorageClient(ABC):
@@ -256,8 +267,8 @@ class SnowflakeStorageClient(ABC):
         rest_call = METHODS[verb]
         url = b""
         conn = None
-        if self.meta.self and self.meta.self._cursor.connection:
-            conn = self.meta.self._cursor.connection
+        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
+            conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
@@ -334,15 +345,28 @@ class SnowflakeStorageClient(ABC):
         """Writes given data to the temp location starting at chunk_id * chunk_size."""
         # TODO: should we use chunking and write content in smaller chunks?
         with self.intermediate_dst_path.open("rb+") as fd:
+            dec_data = io.BytesIO()
+            if self.meta.presigned_url is not None and self.encryption_metadata is None:
+                file_header = self.get_file_header(self.meta.src_file_name)
+                self.encryption_metadata = file_header.encryption_metadata
+
+            SnowflakeEncryptionUtil.decrypt_stream(
+                self.encryption_metadata,
+                self.meta.encryption_material,
+                io.BytesIO(data),
+                dec_data,
+            )
             fd.seek(self.chunk_size * chunk_id)
-            fd.write(data)
+            fd.write(dec_data.getvalue())
 
     def finish_download(self) -> None:
         meta = self.meta
         if self.num_of_chunks != 0 and self.successful_transfers == self.num_of_chunks:
             meta.result_status = ResultStatus.DOWNLOADED
+            """
             if meta.encryption_material:
                 logger.debug(f"encrypted data file={self.full_dst_file_name}")
+
                 # For storage utils that do not have the privilege of
                 # getting the metadata early, both object and metadata
                 # are downloaded at once. In which case, the file meta will
@@ -366,6 +390,8 @@ class SnowflakeStorageClient(ABC):
             else:
                 logger.debug(f"not encrypted data file={self.full_dst_file_name}")
                 shutil.move(str(self.intermediate_dst_path), self.full_dst_file_name)
+            """
+            shutil.move(str(self.intermediate_dst_path), self.full_dst_file_name)
             stat_info = os.stat(self.full_dst_file_name)
             meta.dst_file_size = stat_info.st_size
         else:

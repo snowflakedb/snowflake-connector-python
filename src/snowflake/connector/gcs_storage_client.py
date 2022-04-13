@@ -326,8 +326,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 content_length=meta.gcs_file_header_content_length,
                 encryption_metadata=meta.gcs_file_header_encryption_metadata,
             )
-        elif self.presigned_url:
-            meta.result_status = ResultStatus.NOT_FOUND_FILE
+
         else:
 
             def generate_url_and_authenticated_headers():
@@ -372,6 +371,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 )
             response.raise_for_status()
             return None
+        return None
 
     @staticmethod
     def extract_bucket_name_and_path(stage_location: str) -> GcsLocation:

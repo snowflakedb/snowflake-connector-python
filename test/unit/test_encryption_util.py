@@ -10,8 +10,10 @@ import glob
 import os
 from os import path
 
+from snowflake.connector import encryption_util
 from snowflake.connector.constants import UTF8
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
+from snowflake.connector.file_util import SnowflakeFileUtil
 
 try:  # pragma: no cover
     from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
@@ -70,7 +72,7 @@ def test_encrypt_decrypt_large_file(tmpdir):
 
     # generates N files
     number_of_files = 1
-    number_of_lines = 10000
+    number_of_lines = 100_000
     tmp_dir = generate_k_lines_of_n_files(
         number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
     )
@@ -80,20 +82,34 @@ def test_encrypt_decrypt_large_file(tmpdir):
     encrypted_file = None
     decrypted_file = None
     try:
-        (metadata, encrypted_file) = SnowflakeEncryptionUtil.encrypt_file(
-            encryption_material, input_file
-        )
-        decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
-            metadata, encryption_material, encrypted_file
-        )
+        digest_in, size_in = SnowflakeFileUtil.get_digest_and_size_for_file(input_file)
+        for run_count in range(2):
+            # Test padding cases when size is and is not multiple of block_size
+            if run_count == 1:
+                # second time run, truncate the file to test a different padding case
+                with open(input_file, "wb") as f_in:
+                    if size_in % encryption_util.block_size == 0:
+                        size_in -= 3
+                    else:
+                        size_in -= size_in % encryption_util.block_size
+                    f_in.truncate(size_in)
+                digest_in, size_in = SnowflakeFileUtil.get_digest_and_size_for_file(
+                    input_file
+                )
 
-        contents = ""
-        cnt = 0
-        with codecs.open(decrypted_file, "r", encoding=UTF8) as fd:
-            for line in fd:
-                contents += line
-                cnt += 1
-        assert cnt == number_of_lines, "number of lines"
+            (metadata, encrypted_file) = SnowflakeEncryptionUtil.encrypt_file(
+                encryption_material, input_file
+            )
+            decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
+                metadata, encryption_material, encrypted_file
+            )
+
+            digest_dec, size_dec = SnowflakeFileUtil.get_digest_and_size_for_file(
+                decrypted_file
+            )
+            assert size_in == size_dec
+            assert digest_in == digest_dec
+
     finally:
         os.remove(input_file)
         if encrypted_file:

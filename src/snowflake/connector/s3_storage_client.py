@@ -23,7 +23,7 @@ from .constants import (
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata
-from .storage_client import SnowflakeStorageClient
+from .storage_client import SnowflakeStorageClient, remove_content_encoding
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -269,6 +269,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         headers: dict[str, str] | None = None,
         payload: bytes | bytearray | IOBase | None = None,
         unsigned_payload: bool = False,
+        ignore_content_encoding: bool = False,
     ) -> requests.Response:
         if x_amz_headers is None:
             x_amz_headers = {}
@@ -335,6 +336,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
             if payload:
                 rest_args["data"] = payload
+
+            # add customized hook: to remove content-encoding from response.
+            if ignore_content_encoding:
+                rest_args["hooks"] = {"response": remove_content_encoding}
 
             return url.encode("utf-8"), rest_args
 
@@ -516,7 +521,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         url = self.endpoint + f"/{path}"
         if self.num_of_chunks == 1:
             response = self._send_request_with_authentication_and_retry(
-                url=url, verb="GET", retry_id=chunk_id
+                url=url,
+                verb="GET",
+                retry_id=chunk_id,
+                ignore_content_encoding=True,
             )
             if response.status_code == 200:
                 self.write_downloaded_chunk(0, response.content)
@@ -542,7 +550,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def transfer_accelerate_config(self) -> bool:
         query_parts = (("accelerate", ""),)
         query_string = self._construct_query_string(query_parts)
-        url = self.endpoint + f"/{self.endpoint}/?{query_string}"
+        url = f"{self.endpoint}/?{query_string}"
         retry_id = "accelerate"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
