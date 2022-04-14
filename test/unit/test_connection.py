@@ -177,5 +177,7 @@ def test_partner_env_var(mockSnowflakeRestfulPostRequest, capsys):
         )
         assert con.application == PARTNER_NAME
 
+    # Check that the json body of the request that is made contains the new
+    # APPLICATION name, instead of the default value
     captured = capsys.readouterr()
     assert f'"APPLICATION": "{PARTNER_NAME}"' in captured.out
