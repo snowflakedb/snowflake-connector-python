@@ -6,6 +6,8 @@
 #
 # Copyright (c) 2012-2022 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import filecmp
 import pathlib
 from logging import getLogger
@@ -14,14 +16,20 @@ from unittest.mock import patch
 
 import pytest
 
-from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
-
 from ..integ_helpers import put
 
+pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
+
 try:
-    from ..parameters import CONNECTION_PARAMETERS_ADMIN
+    from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
+
+    orig_send_req = SnowflakeS3RestClient._send_request_with_authentication_and_retry
+    hack_s3_rest_client = True
 except ImportError:
-    CONNECTION_PARAMETERS_ADMIN = {}
+    hack_s3_rest_client = False
+    SnowflakeS3RestClient = None
+    orig_send_req = None
+
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
@@ -37,9 +45,6 @@ def _prepare_tmp_file(to_dir: str) -> str:
         f.write("test1,test2\n")
         f.write("test3,test4")
     return test_path, file_name
-
-
-orig_send_req = SnowflakeS3RestClient._send_request_with_authentication_and_retry
 
 
 def mock_send_request(
@@ -71,11 +76,7 @@ def mock_send_request(
     )
 
 
-@pytest.mark.skipolddriver
-@pytest.mark.aws
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
-)
+@pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 @pytest.mark.parametrize("auto_compress", [True, False])
 def test_auto_compress_switch(
     tmp_path: pathlib.Path,
@@ -127,6 +128,7 @@ def test_auto_compress_switch(
                 file_stream.close()
 
 
+@pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 def test_get_gzip_content_encoding(
     tmp_path: pathlib.Path,
     conn_cnx,
@@ -173,6 +175,7 @@ def test_get_gzip_content_encoding(
                     file_stream.close()
 
 
+@pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 def test_sse_get_gzip_content_encoding(
     tmp_path: pathlib.Path,
     conn_cnx,
