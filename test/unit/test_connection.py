@@ -136,12 +136,46 @@ def test_is_still_running():
 
 
 @pytest.mark.skipolddriver
-def test_partner_env_var():
-    with patch.dict(os.environ, {ENV_VAR_PARTNER: "Amanda"}):
-        with patch("snowflake.connector.network.SnowflakeRestful.fetch"):
-            with snowflake.connector.connect(
-                user="user",
-                account="account",
-                password="password123",
-            ) as conn:
-                assert conn.application == "Amanda"
+@patch("snowflake.connector.network.SnowflakeRestful._post_request")
+def test_partner_env_var(mockSnowflakeRestfulPostRequest, capsys):
+    PARTNER_NAME = "Amanda"
+
+    def mock_post_request(url, headers, json_body, **kwargs):
+        global mock_cnt
+        print(json_body)
+        ret = None
+        if mock_cnt == 0:
+            # return from /v1/login-request
+            ret = {
+                "success": True,
+                "message": None,
+                "data": {
+                    "token": "TOKEN",
+                    "masterToken": "MASTER_TOKEN",
+                    "idToken": None,
+                    "parameters": [
+                        {"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}
+                    ],
+                },
+            }
+        return ret
+
+    # POST requests mock
+    mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
+
+    global mock_cnt
+    mock_cnt = 0
+
+    with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
+        # connection
+        con = snowflake.connector.connect(
+            user="user",
+            account="account",
+            password="testpassword",
+            database="TESTDB",
+            warehouse="TESTWH",
+        )
+        assert con.application == PARTNER_NAME
+
+    captured = capsys.readouterr()
+    assert f'"APPLICATION": "{PARTNER_NAME}"' in captured.out
