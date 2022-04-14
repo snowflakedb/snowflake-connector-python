@@ -19,12 +19,13 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 import OpenSSL
 
-from .constants import FileHeader, ResultStatus
+from .constants import HTTP_HEADER_CONTENT_ENCODING, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
+from .vendored.urllib3 import HTTPResponse
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -45,6 +46,15 @@ METHODS = {
     "HEAD": requests.head,
     "DELETE": requests.delete,
 }
+
+
+def remove_content_encoding(resp: requests.Response, **kwargs):
+    """Remove content-encoding header and decoder so decompression is not triggered"""
+    if HTTP_HEADER_CONTENT_ENCODING in resp.headers:
+        # resp.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
+        if isinstance(resp.raw, HTTPResponse):
+            resp.raw._decoder = None
+            resp.raw.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
 
 
 class SnowflakeStorageClient(ABC):
@@ -256,8 +266,8 @@ class SnowflakeStorageClient(ABC):
         rest_call = METHODS[verb]
         url = b""
         conn = None
-        if self.meta.self and self.meta.self._cursor.connection:
-            conn = self.meta.self._cursor.connection
+        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
+            conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp

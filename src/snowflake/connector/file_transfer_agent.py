@@ -104,7 +104,7 @@ class SnowflakeFileMeta:
     stage_location_type: str
     result_status: ResultStatus | None = None
 
-    self: SnowflakeFileTransferAgent | None = None
+    sfagent: SnowflakeFileTransferAgent | None = None
     put_callback: type[SnowflakeProgressPercentage] | None = None
     put_azure_callback: type[SnowflakeProgressPercentage] | None = None
     put_callback_output_stream: IO[str] | None = None
@@ -362,7 +362,7 @@ class SnowflakeFileTransferAgent:
             self._process_file_compression_type()
 
         for m in self._file_metadata:
-            m.self = self
+            m.sfagent = self
 
         self._transfer_accelerate_config()
 
@@ -376,7 +376,7 @@ class SnowflakeFileTransferAgent:
 
         for m in self._file_metadata:
             m.overwrite = self._overwrite
-            m.self = self
+            m.sfagent = self
             if self._stage_location_type != LOCAL_FS:
                 m.put_callback = self._put_callback
                 m.put_azure_callback = self._put_azure_callback
