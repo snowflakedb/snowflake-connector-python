@@ -141,30 +141,20 @@ def test_partner_env_var(mockSnowflakeRestfulPostRequest, capsys):
     PARTNER_NAME = "Amanda"
 
     def mock_post_request(url, headers, json_body, **kwargs):
-        global mock_cnt
         print(json_body)
-        ret = None
-        if mock_cnt == 0:
-            # return from /v1/login-request
-            return {
-                "success": True,
-                "message": None,
-                "data": {
-                    "token": "TOKEN",
-                    "masterToken": "MASTER_TOKEN",
-                    "idToken": None,
-                    "parameters": [
-                        {"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}
-                    ],
-                },
-            }
-        return ret
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
 
     # POST requests mock
     mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
-
-    global mock_cnt
-    mock_cnt = 0
 
     with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
         # connection
