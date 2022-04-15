@@ -4,6 +4,7 @@
 #
 from __future__ import annotations
 
+import json
 import os
 from unittest.mock import patch
 
@@ -136,12 +137,38 @@ def test_is_still_running():
 
 
 @pytest.mark.skipolddriver
-def test_partner_env_var():
-    with patch.dict(os.environ, {ENV_VAR_PARTNER: "Amanda"}):
-        with patch("snowflake.connector.network.SnowflakeRestful.fetch"):
-            with snowflake.connector.connect(
-                user="user",
-                account="account",
-                password="password123",
-            ) as conn:
-                assert conn.application == "Amanda"
+@patch("snowflake.connector.network.SnowflakeRestful._post_request")
+def test_partner_env_var(mockSnowflakeRestfulPostRequest):
+    PARTNER_NAME = "Amanda"
+
+    request_body = {}
+
+    def mock_post_request(url, headers, json_body, **kwargs):
+        nonlocal request_body
+        request_body = json.loads(json_body)
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    # POST requests mock
+    mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
+
+    with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
+        # connection
+        con = snowflake.connector.connect(
+            user="user",
+            account="account",
+            password="testpassword",
+            database="TESTDB",
+            warehouse="TESTWH",
+        )
+        assert con.application == PARTNER_NAME
+
+    assert request_body["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
