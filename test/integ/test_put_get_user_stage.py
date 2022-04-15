@@ -15,8 +15,6 @@ from unittest.mock import patch
 import pytest
 
 from snowflake.connector.cursor import SnowflakeCursor
-from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
-from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
@@ -42,17 +40,22 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, fro
     )
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.parametrize(
     "from_path",
-    [True, pytest.param(False, marks=pytest.mark.skipolddriver)],
+    [True, False],
 )
 @pytest.mark.parametrize(
-    "accelerate_config", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+    "accelerate_config",
+    [True, False],
 )
 def test_put_get_accelerate_user_stage(
     is_public_test, tmpdir, conn_cnx, from_path, accelerate_config
 ):
+    from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+    from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
+
     """[s3] Puts and Gets Small Data via User Stage."""
     if is_public_test or "AWS_ACCESS_KEY_ID" not in os.environ:
         pytest.skip("This test requires to change the internal parameter")
