@@ -141,7 +141,7 @@ def test_is_still_running():
 def test_partner_env_var(mockSnowflakeRestfulPostRequest):
     PARTNER_NAME = "Amanda"
 
-    request_body = None
+    request_body = {}
 
     def mock_post_request(url, headers, json_body, **kwargs):
         nonlocal request_body
