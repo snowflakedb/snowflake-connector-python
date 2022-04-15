@@ -4,6 +4,7 @@
 #
 from __future__ import annotations
 
+import json
 import os
 from unittest.mock import patch
 
@@ -137,11 +138,14 @@ def test_is_still_running():
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.network.SnowflakeRestful._post_request")
-def test_partner_env_var(mockSnowflakeRestfulPostRequest, capsys):
+def test_partner_env_var(mockSnowflakeRestfulPostRequest):
     PARTNER_NAME = "Amanda"
 
+    request_body = None
+
     def mock_post_request(url, headers, json_body, **kwargs):
-        print(json_body)
+        nonlocal request_body
+        request_body = json.loads(json_body)
         return {
             "success": True,
             "message": None,
@@ -167,7 +171,4 @@ def test_partner_env_var(mockSnowflakeRestfulPostRequest, capsys):
         )
         assert con.application == PARTNER_NAME
 
-    # Check that the json body of the request that is made contains the new
-    # APPLICATION name, instead of the default value
-    captured = capsys.readouterr()
-    assert f'"APPLICATION": "{PARTNER_NAME}"' in captured.out
+    assert request_body["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
