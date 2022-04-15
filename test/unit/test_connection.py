@@ -146,7 +146,7 @@ def test_partner_env_var(mockSnowflakeRestfulPostRequest, capsys):
         ret = None
         if mock_cnt == 0:
             # return from /v1/login-request
-            ret = {
+            return {
                 "success": True,
                 "message": None,
                 "data": {
