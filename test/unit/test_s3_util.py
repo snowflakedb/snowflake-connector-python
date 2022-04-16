@@ -106,13 +106,20 @@ def test_upload_file_with_s3_upload_failed_error(tmp_path):
         },
     )
     exc = Exception("Stop executing")
+
+    def mock_transfer_accelerate_config(
+        self: SnowflakeS3RestClient, use_accelerate_endpoint: bool = None
+    ) -> bool:
+        self.endpoint = f"https://{self.s3location.bucket_name}.s3.awsamazon.com"
+        return False
+
     with mock.patch(
         "snowflake.connector.s3_storage_client.SnowflakeS3RestClient._has_expired_token",
         return_value=True,
     ):
         with mock.patch(
             "snowflake.connector.s3_storage_client.SnowflakeS3RestClient.transfer_accelerate_config",
-            return_value=False,
+            mock_transfer_accelerate_config,
         ):
             with mock.patch(
                 "snowflake.connector.file_transfer_agent.StorageCredential.update",
