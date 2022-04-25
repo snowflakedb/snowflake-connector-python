@@ -431,6 +431,7 @@ class SnowflakeRestful:
         _no_results=False,
         timeout=None,
         _include_retry_params=False,
+        _no_retry=False,
     ):
         if body is None:
             body = {}
@@ -470,6 +471,7 @@ class SnowflakeRestful:
                 _no_results=_no_results,
                 timeout=timeout,
                 _include_retry_params=_include_retry_params,
+                no_retry=_no_retry,
             )
         else:
             return self._get_request(url, headers, token=self.token, timeout=timeout)
@@ -871,28 +873,16 @@ class SnowflakeRestful:
                     exception=str(e),
                     stack_trace=traceback.format_exc(),
                 )
-            if no_retry:
-                return {}
             cause = e.args[0]
+            if no_retry:
+                self.log_and_handle_http_error_with_cause(e, full_url, method, retry_ctx.total_timeout, retry_ctx.cnt,
+                                                          conn, timed_out=False)
+                return {}  # required for tests
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= int(time.time() - start_request_thread)
                 if retry_ctx.timeout <= 0:
-                    logger.error(cause, exc_info=True)
-                    TelemetryService.get_instance().log_http_request_error(
-                        "HttpRequestRetryTimeout",
-                        full_url,
-                        method,
-                        SQLSTATE_IO_ERROR,
-                        ER_FAILED_TO_REQUEST,
-                        retry_timeout=retry_ctx.total_timeout,
-                        retry_count=retry_ctx.cnt,
-                        exception=str(e),
-                        stack_trace=traceback.format_exc(),
-                    )
-                    if isinstance(cause, Error):
-                        Error.errorhandler_wrapper_from_cause(conn, cause)
-                    else:
-                        self.handle_invalid_certificate_error(conn, full_url, cause)
+                    self.log_and_handle_http_error_with_cause(e, full_url, method, retry_ctx.total_timeout,
+                                                              retry_ctx.cnt, conn)
                     return {}  # required for tests
             sleeping_time = retry_ctx.next_sleep()
             logger.debug(
@@ -915,6 +905,34 @@ class SnowflakeRestful:
                 raise e
             logger.debug("Ignored error", exc_info=True)
             return {}
+
+    def log_and_handle_http_error_with_cause(
+            self,
+            e: Exception,
+            full_url: str,
+            method: str,
+            retry_timeout: int,
+            retry_count: int,
+            conn: SnowflakeConnection,
+            timed_out: bool = True
+    ) -> None:
+        cause = e.args[0]
+        logger.error(cause, exc_info=True)
+        TelemetryService.get_instance().log_http_request_error(
+            "HttpRequestRetryTimeout" if timed_out else f"HttpRequestError: {cause}",
+            full_url,
+            method,
+            SQLSTATE_IO_ERROR,
+            ER_FAILED_TO_REQUEST,
+            retry_timeout=retry_timeout,
+            retry_count=retry_count,
+            exception=str(e),
+            stack_trace=traceback.format_exc(),
+        )
+        if isinstance(cause, Error):
+            Error.errorhandler_wrapper_from_cause(conn, cause)
+        else:
+            self.handle_invalid_certificate_error(conn, full_url, cause)
 
     def handle_invalid_certificate_error(self, conn, full_url, cause):
         # all other errors raise exception

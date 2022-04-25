@@ -209,3 +209,11 @@ def test_fetch():
     cnt.set(NOT_RETRYABLE)
     with pytest.raises(NotRetryableException):
         rest.fetch(timeout=7, **default_parameters)
+
+    # first attempt fails and will not retry
+    cnt.reset()
+    default_parameters["no_retry"] = True
+    ret = rest.fetch(timeout=10, **default_parameters)
+    assert ret == {}
+    assert cnt.c == 1  # failed on first call - did not retry
+    assert rest._connection.errorhandler.called  # error
