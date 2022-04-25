@@ -408,6 +408,7 @@ class SnowflakeCursor:
         describe_only: bool = False,
         _no_results: bool = False,
         _is_put_get=None,
+        _no_retry: bool = False,
     ):
         del self.messages[:]
 
@@ -512,6 +513,7 @@ class SnowflakeCursor:
                 is_internal=is_internal,
                 describe_only=describe_only,
                 _no_results=_no_results,
+                _no_retry=_no_retry,
             )
         finally:
             try:
@@ -561,6 +563,7 @@ class SnowflakeCursor:
         _bind_stage: str | None = None,
         timeout: int | None = None,
         _exec_async: bool = False,
+        _no_retry: bool = False,
         _do_reset: bool = True,
         _put_callback: SnowflakeProgressPercentage = None,
         _put_azure_callback: SnowflakeProgressPercentage = None,
@@ -587,6 +590,7 @@ class SnowflakeCursor:
             _bind_stage: Path in temporary stage where binding parameters are uploaded as CSV files.
             timeout: Number of seconds after which to abort the query.
             _exec_async: Whether to execute this query asynchronously.
+            _no_retry: Whether or not to retry on known errors.
             _do_reset: Whether or not the result set needs to be reset before executing query.
             _put_callback: Function to which GET command should call back to.
             _put_azure_callback: Function to which an Azure GET command should call back to.
@@ -636,6 +640,7 @@ class SnowflakeCursor:
             "describe_only": _describe_only,
             "_no_results": _no_results,
             "_is_put_get": _is_put_get,
+            "_no_retry": _no_retry,
         }
 
         if self._connection.is_pyformat:
