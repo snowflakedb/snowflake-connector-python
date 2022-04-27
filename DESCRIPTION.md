@@ -10,6 +10,18 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.7(April 30,2022)
+
+   -pre-commit autoupdate (#1084)
+   - added fips env var
+   - SNOW-581651 Support pandas < 1.5.0
+   - Set application from env var properly
+   - switch to new build process
+   - add _no_retry option when submitting queries
+   - Add Interval Precision to Timestamp
+   - Update requirements files
+
+
 - v2.7.6(March 17,2022)
 
    - Fixed missing python_requires tag in setup.cfg
