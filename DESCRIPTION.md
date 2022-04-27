@@ -12,14 +12,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v2.7.7(April 30,2022)
 
-   -pre-commit autoupdate (#1084)
-   - added fips env var
-   - SNOW-581651 Support pandas < 1.5.0
-   - Set application from env var properly
-   - switch to new build process
-   - add _no_retry option when submitting queries
-   - Add Interval Precision to Timestamp
-   - Update requirements files
+   - Bumped supported pandas version to < 1.5.0
+   - Fixed a bug where partner name (from SF_PARTNER environmental variable) was set after connection was established
+   - Added a new _no_retry option to executing queries
+   - Fixed a bug where extreme timestamps lost precision
 
 
 - v2.7.6(March 17,2022)
