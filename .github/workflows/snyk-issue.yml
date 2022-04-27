@@ -1,15 +1,14 @@
 name: Snyk Issue
 
 on:
-  issues:
-    types: [opened, reopened]
+  schedule:
+    - cron: '* */12 * * *'
 
 concurrency: snyk-issue
 
 jobs:
   whitesource:
     runs-on: ubuntu-latest
-    if: ${{ github.event.issue.user.login == 'sfc-gh-snyk-sca-sa' }}
     steps:
     - name: checkout action
       uses: actions/checkout@v2
@@ -17,9 +16,14 @@ jobs:
         repository: snowflakedb/whitesource-actions
         token: ${{ secrets.WHITESOURCE_ACTION_TOKEN }}
         path: whitesource-actions
-
+    - name: set-env
+      run: echo "REPO=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
     - name: Jira Creation
       uses: ./whitesource-actions/snyk-issue
       with:
+        snyk_org: 91a1c3d0-0729-4a98-8210-28087460f1e3
+        snyk_token:  ${{ secrets.SNYK_GITHUB_INTEGRATION_TOKEN }}
         jira_token: ${{ secrets.JIRA_TOKEN }}
-        gh_token: ${{ secrets.GITHUB_TOKEN }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

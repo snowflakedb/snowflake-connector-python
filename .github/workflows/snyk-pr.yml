@@ -2,7 +2,7 @@ name: snyk-pr
 on:
   pull_request:
     branches:
-      - main
+      - master
 jobs:
   whitesource:
     runs-on: ubuntu-latest
@@ -23,6 +23,8 @@ jobs:
 
     - name: PR
       uses: ./whitesource-actions/snyk-pr
+      env:
+        PR_TITLE: ${{ github.event.pull_request.title }}
       with:
         jira_token: ${{ secrets.JIRA_TOKEN }}
         gh_token: ${{ secrets.GITHUB_TOKEN }}
