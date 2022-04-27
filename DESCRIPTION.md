@@ -10,6 +10,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.7(April 30,2022)
+
+   - Bumped supported pandas version to < 1.5.0
+   - Fixed a bug where partner name (from SF_PARTNER environmental variable) was set after connection was established
+   - Added a new _no_retry option to executing queries
+   - Fixed a bug where extreme timestamps lost precision
+
+
 - v2.7.6(March 17,2022)
 
    - Fixed missing python_requires tag in setup.cfg
