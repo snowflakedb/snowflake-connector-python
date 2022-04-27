@@ -789,7 +789,15 @@ void CArrowTableIterator::convertTimestampColumn(
                 structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH))->Value(rowIdx);
               int32_t fraction = std::static_pointer_cast<arrow::Int32Array>(
                 structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION))->Value(rowIdx);
-              val = epoch * sf::internal::powTenSB4[9] + fraction;
+              // Clip the epoch to max/min values avoiding overflows
+              int powTenSB4 = sf::internal::powTenSB4[9];
+              if (epoch > (INT64_MAX / powTenSB4)) {
+                val = INT64_MAX;
+              } else if (epoch < (INT64_MIN / powTenSB4)) {
+                val = INT64_MIN;
+              } else {
+                val = epoch * powTenSB4 + fraction;
+              }
             }
             break;
           default:
