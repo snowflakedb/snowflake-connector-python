@@ -1,4 +1,4 @@
-# Generated on: Python 3.9.10
+# Generated on: Python 3.9.12
 asn1crypto==1.5.1
 certifi==2021.10.8
 cffi==1.15.0
@@ -10,8 +10,8 @@ pycparser==2.21
 pycryptodomex==3.14.1
 PyJWT==2.3.0
 pyOpenSSL==21.0.0
-pytz==2021.3
+pytz==2022.1
 requests==2.27.1
 six==1.16.0
 urllib3==1.26.9
-snowflake-connector-python==2.7.6
+snowflake-connector-python==2.7.7
