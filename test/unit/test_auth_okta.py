@@ -43,18 +43,27 @@ def test_auth_okta():
     auth._step2(authenticator, sso_url, token_url)
     assert not rest._connection.errorhandler.called  # no error
 
-    # step 3
-    ref_one_time_token = "1token1"
-
+    # step 3.1
+    ref_session_token = "one_session_token"
     def fake_fetch(method, full_url, headers, **kwargs):
         return {
-            "cookieToken": ref_one_time_token,
+            "sessionToken": ref_session_token,
         }
-
     rest.fetch = fake_fetch
-    one_time_token = auth._step3(headers, token_url, user, password)
+    session_token = auth._step3_1(headers, token_url, user, password)
     assert not rest._connection.errorhandler.called  # no error
-    assert one_time_token == ref_one_time_token
+    assert session_token == ref_session_token
+
+    # step 3.2
+    ref_cookie_token = "one_cookie_token"
+    def fake_fetch(method, full_url, headers, **kwargs):
+        return {
+            "cookieToken": ref_cookie_token,
+        }
+    rest.fetch = fake_fetch
+    cookieToken = auth._step3_2(headers, token_url, session_token)
+    assert not rest._connection.errorhandler.called  # no error
+    assert cookieToken == ref_cookie_token
 
     # step 4
     ref_response_html = """
@@ -67,7 +76,7 @@ def test_auth_okta():
         return ref_response_html
 
     rest.fetch = fake_fetch
-    response_html = auth._step4(one_time_token, sso_url)
+    response_html = auth._step4(cookieToken, sso_url)
     assert response_html == response_html
 
     # step 5
@@ -163,7 +172,7 @@ def test_auth_okta_step3_negative():
         }
 
     rest.fetch = fake_fetch
-    _ = auth._step3(headers, token_url, user, password)
+    _ = auth._step3_1(headers, token_url, user, password)
     assert rest._connection.errorhandler.called  # auth failure error
 
 
@@ -190,15 +199,16 @@ def test_auth_okta_step5_negative():
     auth._step2(authenticator, sso_url, token_url)
     assert not rest._connection.errorhandler.called  # no error
     # step 3
-    ref_one_time_token = "1token1"
+    ref_session_token = "one_session_token"
+    ref_cookie_token = "one_cookie_token"
 
     def fake_fetch(method, full_url, headers, **kwargs):
         return {
-            "cookieToken": ref_one_time_token,
+            "cookieToken": ref_cookie_token,
         }
 
     rest.fetch = fake_fetch
-    one_time_token = auth._step3(headers, token_url, user, password)
+    one_time_token = auth._step3_2(headers, token_url, ref_session_token)
     assert not rest._connection.errorhandler.called  # no error
 
     # step 4

@@ -4,6 +4,7 @@
 #
 
 from __future__ import annotations
+from urllib.parse import urlsplit
 
 import json
 import logging
@@ -91,7 +92,8 @@ class AuthByOkta(AuthByPlugin):
             This provides a way for the user to 'authenticate' the IDP it is
             sending his/her credentials to.  Without such a check, the user could
             be coerced to provide credentials to an IDP impersonator.
-        3.  query IDP token url to authenticate and retrieve access token
+        3.1 query IDP to authenticate and retrieve session token
+        3.2 query IDP token url to retrieve cookie token
         4.  given access token, query IDP URL snowflake app to get SAML response
         5.  IMPORTANT Client side validation:
             validate the post back url come back with the SAML response
@@ -109,8 +111,9 @@ class AuthByOkta(AuthByPlugin):
             authenticator, service_name, account, user
         )
         self._step2(authenticator, sso_url, token_url)
-        one_time_token = self._step3(headers, token_url, user, password)
-        response_html = self._step4(one_time_token, sso_url)
+        session_token = self._step3_1(headers, token_url, user, password)
+        cookieToken = self._step3_2(headers, token_url, session_token)
+        response_html = self._step4(cookieToken, sso_url)
         self._step5(response_html)
 
     def _step1(self, authenticator, service_name, account, user):
@@ -170,27 +173,58 @@ class AuthByOkta(AuthByPlugin):
                 DatabaseError,
                 {
                     "msg": (
-                        "The specified authenticator is not supported: "
-                        "{authenticator}, token_url: {token_url}, "
-                        "sso_url: {sso_url}".format(
-                            authenticator=authenticator,
-                            token_url=token_url,
-                            sso_url=sso_url,
-                        )
+                        f"The specified authenticator is not supported: {authenticator}, token_url: {token_url}, sso_url: {sso_url}"
                     ),
                     "errno": ER_IDP_CONNECTION_ERROR,
                     "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 },
             )
 
-    def _step3(self, headers, token_url, user, password):
+    def _step3_1(self, headers, token_url, user, password):
         logger.debug(
-            "step 3: query IDP token url to authenticate and " "retrieve access token"
+            "step 3.1: query IDP to authenticate and retrieve session token"
         )
         data = {
             "username": user,
             "password": password,
         }
+        
+        okta_split = urlsplit(token_url)
+        okta_auth_url = f"{okta_split.scheme}://{okta_split.hostname}/api/v1/authn"
+        ret = self._rest.fetch(
+            "post",
+            okta_auth_url,
+            headers,
+            data=json.dumps(data),
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout,
+            catch_okta_unauthorized_error=True,
+        )
+        session_token = ret.get("sessionToken")
+
+        if not session_token:
+            Error.errorhandler_wrapper(
+                self._rest._connection,
+                None,
+                DatabaseError,
+                {
+                    "msg": (
+                        f"The authentication failed for {user} by {okta_auth_url}."
+                    ),
+                    "errno": ER_IDP_CONNECTION_ERROR,
+                    "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                },
+            )
+        return session_token
+
+    def _step3_2(self, headers, token_url, session_token):
+        logger.debug(
+            "step 3.2: query IDP token url to retrieve cookie token"
+        )
+        data = { 
+            "sessionToken": session_token 
+        }
+        
         ret = self._rest.fetch(
             "post",
             token_url,
@@ -200,31 +234,13 @@ class AuthByOkta(AuthByPlugin):
             socket_timeout=self._rest._connection.login_timeout,
             catch_okta_unauthorized_error=True,
         )
-        one_time_token = ret.get("cookieToken")
-        if not one_time_token:
-            Error.errorhandler_wrapper(
-                self._rest._connection,
-                None,
-                DatabaseError,
-                {
-                    "msg": (
-                        "The authentication failed for {user} "
-                        "by {token_url}.".format(
-                            token_url=token_url,
-                            user=user,
-                        )
-                    ),
-                    "errno": ER_IDP_CONNECTION_ERROR,
-                    "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                },
-            )
-        return one_time_token
+        cookieToken = ret.get("cookieToken")
+        return cookieToken
 
-    def _step4(self, one_time_token, sso_url):
+    def _step4(self, cookieToken, sso_url):
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
         url_parameters = {
-            "RelayState": "/some/deep/link",
-            "onetimetoken": one_time_token,
+            "onetimetoken": cookieToken,
         }
         sso_url = sso_url + "?" + urlencode(url_parameters)
         headers = {
