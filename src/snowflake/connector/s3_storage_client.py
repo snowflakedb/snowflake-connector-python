@@ -59,7 +59,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         credentials: StorageCredential,
         stage_info: dict[str, Any],
         chunk_size: int,
-        use_accelerate_endpoint: bool = None,
+        use_accelerate_endpoint: bool | None = None,
         use_s3_regional_url=False,
     ) -> None:
         """Rest client for S3 storage.
@@ -82,14 +82,16 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         self.use_s3_regional_url = use_s3_regional_url
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
-        self.endpoint = None
+        self.endpoint: str | None = None
         if stage_info["endPoint"]:
             self.endpoint = (
                 f"https://{self.s3location.bucket_name}." + stage_info["endPoint"]
             )
         self.transfer_accelerate_config(use_accelerate_endpoint)
 
-    def transfer_accelerate_config(self, use_accelerate_endpoint: bool = None) -> bool:
+    def transfer_accelerate_config(
+        self, use_accelerate_endpoint: bool | None = None
+    ) -> bool:
         # if self.endpoint has been set, e.g. by metadata, no more config is needed.
         if self.endpoint is not None:
             return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0

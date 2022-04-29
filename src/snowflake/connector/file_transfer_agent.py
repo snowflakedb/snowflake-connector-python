@@ -341,7 +341,7 @@ class SnowflakeFileTransferAgent:
         # when we have not checked whether we should use accelerate, this boolean is None
         # _use_accelerate_endpoint in SnowflakeFileTransferAgent could be passed to each SnowflakeS3RestClient
         # so we could avoid check accelerate configuration for each S3 client created for each file meta.
-        self._use_accelerate_endpoint = None
+        self._use_accelerate_endpoint: bool | None = None
         self._raise_put_get_error = raise_put_get_error
         self._show_progress_bar = show_progress_bar
         self._force_put_overwrite = force_put_overwrite
