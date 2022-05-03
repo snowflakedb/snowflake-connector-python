@@ -1273,7 +1273,7 @@ def test_check_cannot_use_pandas(conn_cnx):
             with mock.patch("snowflake.connector.cursor.installed_pandas", False):
                 with pytest.raises(
                     ProgrammingError,
-                    match=r"Optional dependency: 'pyarrow' is not installed, please see the "
+                    match=r"Optional dependency: 'pandas' is not installed, please see the "
                     "following link for install instructions: https:.*",
                 ) as pe:
                     cur.check_can_use_pandas()
