@@ -888,7 +888,7 @@ class SnowflakeCursor:
     def check_can_use_pandas(self):
         if not installed_pandas:
             msg = (
-                "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+                "Optional dependency: 'pandas' is not installed, please see the following link for install "
                 "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
             )
             errno = ER_NO_PYARROW
