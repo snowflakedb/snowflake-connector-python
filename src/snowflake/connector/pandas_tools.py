@@ -10,7 +10,7 @@ import string
 from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Callable, Iterable, Iterator, Sequence, TypeVar
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, Iterator, Sequence, TypeVar
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
@@ -47,6 +47,7 @@ def write_pandas(
     quote_identifiers: bool = True,
     auto_create_table: bool = False,
     create_temp_table: bool = False,
+    column_formats: Dict[str, string.Template] | None = None,
 ) -> tuple[
     bool,
     int,
@@ -101,11 +102,13 @@ def write_pandas(
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
             the passed in DataFrame. The table will not be created if it already exists
         create_temp_table: Will make the auto-created table as a temporary table
-
+        column_formats: Allow custom formatting of columns using a string. Template for each column.
+            The Example: {"listColumnExample": string.Template("TRY_PARSE_JSON($$1:$col)::variant")}
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
         ingested correctly, # of chunks, # of ingested rows, and ingest's output.
     """
+    column_formats = column_formats or {}
     if database is not None and schema is None:
         raise ProgrammingError(
             "Schema has to be provided to write_pandas when a database is provided"
@@ -225,6 +228,12 @@ def write_pandas(
         parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in df.columns)
     else:
         parquet_columns = "$1:" + ",$1:".join(df.columns)
+    parquet_columns = ",".join(
+        [
+            "$1:"+x if x not in column_formats else column_formats[x].substitute(col=x)
+            for x in df.columns
+        ]
+    )
     copy_into_sql = (
         "COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         "({columns}) "
