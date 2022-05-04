@@ -137,16 +137,13 @@ def test_is_still_running():
         )
 
 
-@pytest.mark.skipolddriver
-@patch("snowflake.connector.network.SnowflakeRestful._post_request")
-def test_partner_env_var(mockSnowflakeRestfulPostRequest):
-    PARTNER_NAME = "Amanda"
+@pytest.fixture
+def mock_post_requests(monkeypatch):
+    request_body = []
 
-    request_body = {}
-
-    def mock_post_request(url, headers, json_body, **kwargs):
+    def mock_post_request(request, url, headers, json_body, **kwargs):
         nonlocal request_body
-        request_body = json.loads(json_body)
+        request_body.append(json.loads(json_body))
         return {
             "success": True,
             "message": None,
@@ -158,54 +155,51 @@ def test_partner_env_var(mockSnowflakeRestfulPostRequest):
             },
         }
 
-    # POST requests mock
-    mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
+    monkeypatch.setattr(
+        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
+    )
+
+    return request_body
+
+
+@pytest.mark.skipolddriver
+def test_partner_env_var(mock_post_requests):
+    PARTNER_NAME = "Amanda"
 
     with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
         # connection
-        con = snowflake.connector.connect(
-            user="user",
-            account="account",
-            password="testpassword",
-            database="TESTDB",
-            warehouse="TESTWH",
+        assert (
+            snowflake.connector.connect(
+                user="user",
+                account="account",
+                password="testpassword",
+                database="TESTDB",
+                warehouse="TESTWH",
+            ).application
+            == PARTNER_NAME
         )
-        assert con.application == PARTNER_NAME
 
-    assert request_body["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
+    assert (
+        mock_post_requests[0]["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"]
+        == PARTNER_NAME
+    )
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.network.SnowflakeRestful._post_request")
-def test_imported_module(mockSnowflakeRestfulPostRequest):
-    request_body = {}
-
-    def mock_post_request(url, headers, json_body, **kwargs):
-        nonlocal request_body
-        request_body = json.loads(json_body)
-        return {
-            "success": True,
-            "message": None,
-            "data": {
-                "token": "TOKEN",
-                "masterToken": "MASTER_TOKEN",
-                "idToken": None,
-                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
-            },
-        }
-
-    # POST requests mock
-    mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
-
+def test_imported_module(mock_post_requests):
     with patch.dict(sys.modules, {"streamlit": "foo"}):
-        # connection
-        con = snowflake.connector.connect(
-            user="user",
-            account="account",
-            password="testpassword",
-            database="TESTDB",
-            warehouse="TESTWH",
+        assert (
+            snowflake.connector.connect(
+                user="user",
+                account="account",
+                password="testpassword",
+                database="TESTDB",
+                warehouse="TESTWH",
+            ).application
+            == "streamlit"
         )
-        assert con.application == "streamlit"
 
-    assert request_body["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
+    assert (
+        mock_post_requests[0]["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"]
+        == "streamlit"
+    )
