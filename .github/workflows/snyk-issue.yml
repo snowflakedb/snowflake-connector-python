@@ -21,7 +21,7 @@ jobs:
     - name: Jira Creation
       uses: ./whitesource-actions/snyk-issue
       with:
-        snyk_org: 91a1c3d0-0729-4a98-8210-28087460f1e3
+        snyk_org: ${{ secrets.SNYK_ORG_ID }}
         snyk_token:  ${{ secrets.SNYK_GITHUB_INTEGRATION_TOKEN }}
         jira_token: ${{ secrets.JIRA_TOKEN }}
       env:
