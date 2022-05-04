@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -172,3 +173,39 @@ def test_partner_env_var(mockSnowflakeRestfulPostRequest):
         assert con.application == PARTNER_NAME
 
     assert request_body["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.network.SnowflakeRestful._post_request")
+def test_imported_module(mockSnowflakeRestfulPostRequest):
+    request_body = {}
+
+    def mock_post_request(url, headers, json_body, **kwargs):
+        nonlocal request_body
+        request_body = json.loads(json_body)
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    # POST requests mock
+    mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
+
+    with patch.dict(sys.modules, {"streamlit": "foo"}):
+        # connection
+        con = snowflake.connector.connect(
+            user="user",
+            account="account",
+            password="testpassword",
+            database="TESTDB",
+            warehouse="TESTWH",
+        )
+        assert con.application == "streamlit"
+
+    assert request_body["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
