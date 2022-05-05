@@ -20,6 +20,7 @@ from .result_batch import (
 )
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
+from json import loads
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.cursor import SnowflakeCursor
@@ -180,9 +181,24 @@ class ResultSet(Iterable[list]):
         self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas")
 
+    def _convert_string_to_json(self, dataframe: pandas.DataFrame) -> pandas.DataFrame:
+        """Converts string columns to JSON columns.
+
+        This is necessary for the JSON columns in the dataframe to be
+        serialized properly.
+        """
+        for col in dataframe:
+            if dataframe[col].dtype == "object":
+                try:
+                    dataframe[col] = dataframe[col].apply(loads)
+                    logger.debug(f"Converted column {col} to json")
+                except Exception as e:
+                    logger.debug(f"Could not convert column {col} to json")
+        return dataframe
+
     def _fetch_pandas_all(self, **kwargs) -> pandas.DataFrame:
         """Fetches a single Pandas dataframe."""
-        dataframes = list(self._fetch_pandas_batches())
+        dataframes = list(map(self._convert_string_to_json, self._fetch_pandas_batches()))
         if dataframes:
             return pandas.concat(
                 dataframes,

@@ -9,6 +9,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Generator
 from unittest import mock
+from string import Template
 
 import pytest
 
@@ -282,6 +283,67 @@ def test_default_value_insertion(
                     row["name" if quote_identifiers else "NAME"],
                     row["balance" if quote_identifiers else "BALANCE"],
                 ) in df_data
+        finally:
+            cnx.execute_string(drop_sql)
+
+
+@pytest.mark.parametrize("quote_identifiers", [True, False])
+def test_json_string_in_db_to_dict_in_datafram_query(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    quote_identifiers: bool,
+):
+    """Tests whether fetch_pandas_all can return a VARIANT field as an object not a string."""
+    table_name = "objects"
+    df_data = [({"key", "value"}, [1, 2]), ({"key", "value2"}, [3, 4])]
+
+    # Create a DataFrame containing data about customers
+    df = pandas.DataFrame(df_data, columns=["objects", "lists"])
+    # Assume quote_identifiers is true in string and if not remove " from strings
+    create_sql = """CREATE OR REPLACE TABLE "{}"
+                 ("objects" VARIANT, "lists" VARIANT,
+                 "id" varchar(36) default uuid_string(),
+                 "ts" timestamp_ltz default current_timestamp)""".format(
+        table_name
+    )
+    select_sql = f'SELECT * FROM "{table_name}"'
+    drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
+    if not quote_identifiers:
+        create_sql = create_sql.replace('"', "")
+        select_sql = select_sql.replace('"', "")
+        drop_sql = drop_sql.replace('"', "")
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            column_formats={
+                "lists": Template("TRY_PARSE_JSON($$1:$col)::variant"),
+                "objects": Template("TRY_PARSE_JSON($$1:$col)::variant")
+            }
+            success, nchunks, nrows, _ = write_pandas(
+                cnx, df, table_name, quote_identifiers=quote_identifiers,
+                column_formats=column_formats
+            )
+
+            # Check write_pandas output
+            assert success
+            assert nrows == len(df_data)
+            assert nchunks == 1
+            # Check table's contents
+            result = cnx.cursor().execute(select_sql).fetch_pandas_all()
+            for row in result:
+                assert (
+                    row["id" if quote_identifiers else "ID"] is not None
+                )  # ID (UUID String)
+                assert len(row["id" if quote_identifiers else "ID"]) == 36
+                assert (
+                    row["ts" if quote_identifiers else "TS"] is not None
+                )  # TS (Current Timestamp)
+                #assert isinstance(row["ts" if quote_identifiers else "TS"], datetime)
+                assert (
+                    isinstance(row["objects" if quote_identifiers else "OBJECTS"], dict)
+                )
+                assert (
+                    isinstance(row["lists" if quote_identifiers else "LISTS"], list)
+                )
         finally:
             cnx.execute_string(drop_sql)
 
