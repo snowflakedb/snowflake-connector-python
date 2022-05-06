@@ -35,7 +35,7 @@ jobs:
           summary: '${{ github.event.issue.title }}'
           description: |
             ${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}
-          fields: '{ "customfield_11401": {"id": "13475"}, "assignee": {"id": "61027a219798100070592b20"} }'
+          fields: '{"customfield_11401":{"id":"13474"},"assignee":{"id":"6103883b7ab143006edb6446"},"components":[{"id":"16413"}]}'
 
       - name: Update GitHub Issue
         uses: ./jira/gajira-issue-update
