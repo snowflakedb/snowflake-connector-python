@@ -20,45 +20,43 @@ except ImportError:
     QueryStatus = None
 
 
-@patch("snowflake.connector.network.SnowflakeRestful._post_request")
-def test_connect_with_service_name(mockSnowflakeRestfulPostRequest):
-    def mock_post_request(url, headers, json_body, **kwargs):
-        global mock_cnt
-        ret = None
-        if mock_cnt == 0:
-            # return from /v1/login-request
-            ret = {
-                "success": True,
-                "message": None,
-                "data": {
-                    "token": "TOKEN",
-                    "masterToken": "MASTER_TOKEN",
-                    "idToken": None,
-                    "parameters": [
-                        {"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}
-                    ],
-                },
-            }
-        return ret
-
-    # POST requests mock
-    mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
-
-    global mock_cnt
-    mock_cnt = 0
-
-    account = "testaccount"
-    user = "testuser"
-
-    # connection
-    con = snowflake.connector.connect(
-        account=account,
-        user=user,
+def fake_connector() -> snowflake.connector:
+    return snowflake.connector.connect(
+        user="user",
+        account="account",
         password="testpassword",
         database="TESTDB",
         warehouse="TESTWH",
     )
-    assert con.service_name == "FAKE_SERVICE_NAME"
+
+
+@pytest.fixture
+def mock_post_requests(monkeypatch):
+    request_body = {}
+
+    def mock_post_request(request, url, headers, json_body, **kwargs):
+        nonlocal request_body
+        request_body.update(json.loads(json_body))
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    monkeypatch.setattr(
+        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
+    )
+
+    return request_body
+
+
+def test_connect_with_service_name(mock_post_requests):
+    assert fake_connector().service_name == "FAKE_SERVICE_NAME"
 
 
 @pytest.mark.skip(reason="Mock doesn't work as expected.")
@@ -137,69 +135,23 @@ def test_is_still_running():
         )
 
 
-@pytest.fixture
-def mock_post_requests(monkeypatch):
-    request_body = []
-
-    def mock_post_request(request, url, headers, json_body, **kwargs):
-        nonlocal request_body
-        request_body.append(json.loads(json_body))
-        return {
-            "success": True,
-            "message": None,
-            "data": {
-                "token": "TOKEN",
-                "masterToken": "MASTER_TOKEN",
-                "idToken": None,
-                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
-            },
-        }
-
-    monkeypatch.setattr(
-        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
-    )
-
-    return request_body
-
-
 @pytest.mark.skipolddriver
 def test_partner_env_var(mock_post_requests):
     PARTNER_NAME = "Amanda"
 
     with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
-        # connection
-        assert (
-            snowflake.connector.connect(
-                user="user",
-                account="account",
-                password="testpassword",
-                database="TESTDB",
-                warehouse="TESTWH",
-            ).application
-            == PARTNER_NAME
-        )
+        assert fake_connector().application == PARTNER_NAME
 
     assert (
-        mock_post_requests[0]["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"]
-        == PARTNER_NAME
+        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
     )
 
 
 @pytest.mark.skipolddriver
 def test_imported_module(mock_post_requests):
     with patch.dict(sys.modules, {"streamlit": "foo"}):
-        assert (
-            snowflake.connector.connect(
-                user="user",
-                account="account",
-                password="testpassword",
-                database="TESTDB",
-                warehouse="TESTWH",
-            ).application
-            == "streamlit"
-        )
+        assert fake_connector().application == "streamlit"
 
     assert (
-        mock_post_requests[0]["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"]
-        == "streamlit"
+        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
     )
