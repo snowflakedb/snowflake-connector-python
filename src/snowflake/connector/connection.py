@@ -268,8 +268,11 @@ class SnowflakeConnection:
 
         self.heartbeat_thread = None
 
-        if "application" not in kwargs and ENV_VAR_PARTNER in os.environ.keys():
-            kwargs["application"] = os.environ[ENV_VAR_PARTNER]
+        if "application" not in kwargs:
+            if ENV_VAR_PARTNER in os.environ.keys():
+                kwargs["application"] = os.environ[ENV_VAR_PARTNER]
+            elif "streamlit" in sys.modules:
+                kwargs["application"] = "streamlit"
 
         self.converter = None
         self.__set_error_attributes()
