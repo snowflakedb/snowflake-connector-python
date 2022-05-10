@@ -20,7 +20,7 @@ except ImportError:
     QueryStatus = None
 
 
-def fake_connector() -> snowflake.connector:
+def fake_connector() -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(
         user="user",
         account="account",
