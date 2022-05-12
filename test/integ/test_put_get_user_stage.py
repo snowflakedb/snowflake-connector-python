@@ -51,9 +51,7 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, fro
     "accelerate_config",
     [True, False],
 )
-def test_put_get_accelerate_user_stage(
-    is_public_test, tmpdir, conn_cnx, from_path, accelerate_config
-):
+def test_put_get_accelerate_user_stage(tmpdir, conn_cnx, from_path, accelerate_config):
     """[s3] Puts and Gets Small Data via User Stage."""
     from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
     from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
