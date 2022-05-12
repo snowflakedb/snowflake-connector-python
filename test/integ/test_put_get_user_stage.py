@@ -10,6 +10,7 @@ import os
 import time
 from getpass import getuser
 from logging import getLogger
+from unittest.mock import patch
 
 import pytest
 
@@ -37,6 +38,69 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, fro
         number_of_lines=number_of_lines,
         from_path=from_path,
     )
+
+
+@pytest.mark.internal
+@pytest.mark.skipolddriver
+@pytest.mark.aws
+@pytest.mark.parametrize(
+    "from_path",
+    [True, False],
+)
+@pytest.mark.parametrize(
+    "accelerate_config",
+    [True, False],
+)
+def test_put_get_accelerate_user_stage(tmpdir, conn_cnx, from_path, accelerate_config):
+    """[s3] Puts and Gets Small Data via User Stage."""
+    from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+    from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
+
+    number_of_files = 5 if from_path else 1
+    number_of_lines = 1
+    endpoints = []
+
+    def mocked_file_agent(*args, **kwargs):
+        agent = SnowflakeFileTransferAgent(*args, **kwargs)
+        mocked_file_agent.agent = agent
+        return agent
+
+    original_accelerate_config = SnowflakeS3RestClient.transfer_accelerate_config
+    expected_cfg = accelerate_config
+
+    def mock_s3_transfer_accelerate_config(self, *args, **kwargs) -> bool:
+        bret = original_accelerate_config(self, *args, **kwargs)
+        endpoints.append(self.endpoint)
+        return bret
+
+    def mock_s3_get_bucket_config(self, *args, **kwargs) -> bool:
+        return expected_cfg
+
+    with patch(
+        "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+        side_effect=mocked_file_agent,
+    ):
+        with patch.multiple(
+            "snowflake.connector.s3_storage_client.SnowflakeS3RestClient",
+            _get_bucket_accelerate_config=mock_s3_get_bucket_config,
+            transfer_accelerate_config=mock_s3_transfer_accelerate_config,
+        ):
+            _put_get_user_stage(
+                tmpdir,
+                conn_cnx,
+                number_of_files=number_of_files,
+                number_of_lines=number_of_lines,
+                from_path=from_path,
+            )
+            config_accl = mocked_file_agent.agent._use_accelerate_endpoint
+            if accelerate_config:
+                assert (config_accl is True) and all(
+                    ele.find("s3-acc") >= 0 for ele in endpoints
+                )
+            else:
+                assert (config_accl is False) and all(
+                    ele.find("s3-acc") < 0 for ele in endpoints
+                )
 
 
 @pytest.mark.aws
@@ -143,6 +207,7 @@ def _put_get_user_stage(
     tmp_dir = generate_k_lines_of_n_files(
         number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
     )
+
     files = os.path.join(tmp_dir, "file*" if from_path else os.listdir(tmp_dir)[0])
     file_stream = None if from_path else open(files, "rb")
 

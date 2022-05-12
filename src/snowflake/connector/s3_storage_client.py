@@ -59,14 +59,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         credentials: StorageCredential,
         stage_info: dict[str, Any],
         chunk_size: int,
-        use_accelerate_endpoint: bool = False,
+        use_accelerate_endpoint: bool | None = None,
         use_s3_regional_url=False,
     ) -> None:
         """Rest client for S3 storage.
 
         Args:
             stage_info:
-            use_accelerate_endpoint:
         """
         super().__init__(meta, stage_info, chunk_size, credentials=credentials)
         # Signature version V4
@@ -81,25 +80,42 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
         )
         self.use_s3_regional_url = use_s3_regional_url
+
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
+        self.endpoint: str | None = None
         if stage_info["endPoint"]:
             self.endpoint = (
                 f"https://{self.s3location.bucket_name}." + stage_info["endPoint"]
             )
-        elif use_accelerate_endpoint:
+        self.transfer_accelerate_config(use_accelerate_endpoint)
+
+    def transfer_accelerate_config(
+        self, use_accelerate_endpoint: bool | None = None
+    ) -> bool:
+        # if self.endpoint has been set, e.g. by metadata, no more config is needed.
+        if self.endpoint is not None:
+            return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0
+        if self.use_s3_regional_url:
             self.endpoint = (
-                f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
+                f"https://{self.s3location.bucket_name}."
+                f"s3.{self.region_name}.amazonaws.com"
             )
+            return False
         else:
-            if self.use_s3_regional_url:
+            if use_accelerate_endpoint is None:
+                use_accelerate_endpoint = self._get_bucket_accelerate_config(
+                    self.s3location.bucket_name
+                )
+
+            if use_accelerate_endpoint:
                 self.endpoint = (
-                    f"https://{self.s3location.bucket_name}."
-                    f"s3.{self.region_name}.amazonaws.com"
+                    f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
                 )
             else:
                 self.endpoint = (
                     f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
                 )
+            return use_accelerate_endpoint
 
     @staticmethod
     def _sign_bytes(secret_key: bytes, _input: str) -> bytes:
@@ -539,10 +555,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.write_downloaded_chunk(chunk_id, response.content)
             response.raise_for_status()
 
-    def transfer_accelerate_config(self) -> bool:
+    def _get_bucket_accelerate_config(self, bucket_name: str) -> bool:
         query_parts = (("accelerate", ""),)
         query_string = self._construct_query_string(query_parts)
-        url = self.endpoint + f"/{self.endpoint}/?{query_string}"
+        url = f"https://{bucket_name}.s3.amazonaws.com/?{query_string}"
         retry_id = "accelerate"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
@@ -550,8 +566,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         )
         if response.status_code == 200:
             config = ET.fromstring(response.text)
+            namespace = config.tag[: config.tag.index("}") + 1]
+            statusTag = f"{namespace}Status"
+            found = config.find(statusTag)
             use_accelerate_endpoint = (
-                config.find("Status") and config.find("Status").text == "Enabled"
+                False if found is None else (found.text == "Enabled")
             )
             logger.debug(f"use_accelerate_endpoint: {use_accelerate_endpoint}")
             return use_accelerate_endpoint
