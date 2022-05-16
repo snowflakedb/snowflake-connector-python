@@ -210,7 +210,7 @@ class ConnectionDiagnostic:
             host_type = result['type']
             host = result['host']
             host_port = result['port']
-            if host_type in ["OCSP_RESPONDER"]:
+            if host_type in ("OCSP_RESPONDER"):
                 if host not in self.ocsp_urls:
                     self.__test_socket_get_cert(host, port=host_port, host_type=host_type)
             elif host_type in ["STAGE", "OUT_OF_BAND_TELEMETRY"]:
