@@ -194,7 +194,7 @@ class ConnectionDiagnostic:
             self.__append_message(host_type, f"{host}:{port}: URL Check: Failed: Unknown Exception: {e}")
             return "FAILED"
 
-    def run_post_test(self):
+    def run_post_test(self) -> None:
         if self.full_connection_diag_whitelist_path is None:
             try:
                 results = self.cursor().execute(self.whitelist_sql).fetchall()[0][0]
