@@ -491,7 +491,7 @@ class ConnectionDiagnostic:
         while True:
             try:
                 registry_key_value = winreg.EnumValue(registry_key, i)
-            except WindowsError as e:
+            except WindowsError:
                 break
             registry_key_values[registry_key_value[0]] = registry_key_value[1:]
             i = i + 1
