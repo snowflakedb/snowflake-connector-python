@@ -9,8 +9,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Deque, Iterable, Iterator
 
-from orjson import JSONDecodeError
-
 from .constants import IterUnit
 from .errors import NotSupportedError
 from .options import installed_pandas, pandas
@@ -22,7 +20,7 @@ from .result_batch import (
 )
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
-from json import loads
+from json import loads, JSONDecodeError
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.cursor import SnowflakeCursor
