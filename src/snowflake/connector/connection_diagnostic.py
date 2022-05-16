@@ -351,9 +351,9 @@ class ConnectionDiagnostic:
 
         self.__append_message(host_type, f"Proxies with Env vars restored(ENV PROXIES): {getproxies()}")
 
-        cert_authorities = ['C=US; O=Google Trust Services LLC',
+        cert_authorities = ('C=US; O=Google Trust Services LLC',
                             'C=US; O=Amazon',
-                            'C=US; O=DigiCert Inc']
+                            'C=US; O=DigiCert Inc')
 
         check_pattern = f"(^{'|^'.join(cert_authorities)})"
         issuer = self.__get_issuer_string(self.cert_info[self.host]['issuer'])
