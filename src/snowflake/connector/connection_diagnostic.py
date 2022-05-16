@@ -502,7 +502,7 @@ class ConnectionDiagnostic:
         host_type: str,
         hkey_str: str,
         registry_key_str: str
-    ):
+    ) -> None:
         """Walks the windows registry to search for key relating to proxies"""
         if hkey_str == "HKEY_CURRENT_USER":
             hkey = winreg.HKEY_CURRENT_USER
