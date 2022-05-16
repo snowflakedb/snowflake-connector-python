@@ -47,7 +47,7 @@ class ConnectionDiagnostic:
         self.__append_message(host_type, f"Specified snowflake account: {self.account}")
         self.__append_message(host_type, f"Host based on specified account: {self.host}")
         if '.com.snowflakecomputing.com' in self.host:
-            self.host = host.split('.com.snow')[0] + ".com"
+            self.host = host.split('.com.snow', 1)[0] + ".com"
             logger.warning(f"Account should not have snowflakecomputing.com in it. You provided {host}.  "
                            f"Continuing with fixed host.")
             self.__append_message(host_type,
