@@ -9,6 +9,8 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Deque, Iterable, Iterator
 
+from orjson import JSONDecodeError
+
 from .constants import IterUnit
 from .errors import NotSupportedError
 from .options import installed_pandas, pandas
@@ -192,8 +194,12 @@ class ResultSet(Iterable[list]):
                 try:
                     dataframe[col] = dataframe[col].apply(loads)
                     logger.debug(f"Converted column {col} to json")
-                except Exception as e:
-                    logger.debug(f"Could not convert column {col} to json")
+                except JSONDecodeError as e:
+                    logger.debug(f"""{e}, {type(e).__name__}: 
+                    Could not convert column {col} to json""")
+                except TypeError as e:                    
+                    logger.debug(f"""{e}, {type(e).__name__}: 
+                    Already converted column {col} to json?""")
         return dataframe
 
     def _fetch_pandas_all(self, **kwargs) -> pandas.DataFrame:

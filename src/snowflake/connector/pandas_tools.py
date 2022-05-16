@@ -229,10 +229,8 @@ def write_pandas(
     else:
         parquet_columns = "$1:" + ",$1:".join(df.columns)
     parquet_columns = ",".join(
-        [
-            "$1:"+x if x not in column_formats else column_formats[x].substitute(col=x)
-            for x in df.columns
-        ]
+        "$1:" + x if x not in column_formats else column_formats[x].substitute(col=x)
+        for x in df.columns
     )
     copy_into_sql = (
         "COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
