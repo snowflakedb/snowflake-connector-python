@@ -517,10 +517,14 @@ class SnowflakeConnection:
             try:
                 connection_diag.run_test()
                 self.__open_connection()
-                connection_diag.cursor = self.cursor
-                connection_diag.run_post_test()
+                connection_diag.cursor = self.cursor()
             except Exception as e:
                 logger.warning(f"Exception during connection test: {e}")
+
+            try:
+                connection_diag.run_post_test()
+            except Exception as e:
+                logger.warning(f"Exception during post connection test: {e}")
             finally:
                 connection_diag.generate_report()
         else:

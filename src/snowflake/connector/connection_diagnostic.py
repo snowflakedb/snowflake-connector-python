@@ -11,7 +11,7 @@ import OpenSSL
 from datetime import datetime
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, Tuple, AnyStr, Dict
 from urllib.request import getproxies
 from .compat import IS_WINDOWS, urlparse
 from .cursor import SnowflakeCursor
@@ -41,7 +41,7 @@ class ConnectionDiagnostic:
     ):
         self.account = account
         self.host = host
-        self.test_results: dict[str, Any] = {'INITIAL': [], 'PROXY': [], 'SNOWFLAKE_URL': [], 'STAGE': [],
+        self.test_results: Dict[str, Any] = {'INITIAL': [], 'PROXY': [], 'SNOWFLAKE_URL': [], 'STAGE': [],
                                              'OCSP_RESPONDER': [], 'OUT_OF_BAND_TELEMETRY': [], 'IGNORE': []}
         host_type: str = "INITIAL"
         self.__append_message(host_type, f"Specified snowflake account: {self.account}")
@@ -58,7 +58,7 @@ class ConnectionDiagnostic:
 
         self.ocsp_urls: list[str] = []
         self.crl_urls: list[str] = []
-        self.cert_info: dict[str, dict[str, Any]] = {}
+        self.cert_info: Dict[str, Dict[str, Any]] = {}
         self.proxy_type: str = "params"
         self.proxy_host = proxy_host
         self.proxy_port = proxy_port
@@ -143,6 +143,7 @@ class ConnectionDiagnostic:
         host_type: str = "SNOWFLAKE_URL"
     ) -> str:
         try:
+            self.__list_ips(host, host_type=host_type)
             connect_creds: str = ""
             conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             conn.settimeout(timeout)
@@ -176,9 +177,8 @@ class ConnectionDiagnostic:
                     connect = f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
 
                 conn.send(str.encode(connect))
-                conn.recv(4096).decode("utf-8")
+                response = conn.recv(4096).decode("utf-8")
                 conn.close()
-                return "SUCCESS"
 
             if response is not None:
                 good_responses = "(200|301|cloudfront)"
@@ -186,6 +186,7 @@ class ConnectionDiagnostic:
                     self.__append_message(host_type, f"{host}:{port}: URL Check: Failed: {response}")
                     return "FAILED"
             self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
+            return "SUCCESS"
         except ssl.SSLError as e:
             if 'WRONG_VERSION_NUMBER' in str(e):
                 self.__append_message(host_type, f"{host}:{port}: URL Check: Failed: Proxy Auth Error: {e}")
@@ -194,27 +195,36 @@ class ConnectionDiagnostic:
             self.__append_message(host_type, f"{host}:{port}: URL Check: Failed: Unknown Exception: {e}")
             return "FAILED"
 
+        self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
+        return "SUCCESS"
+
     def run_post_test(self) -> None:
         if self.full_connection_diag_whitelist_path is None:
-            try:
-                results = self.cursor().execute(self.whitelist_sql).fetchall()[0][0]
-                results = json.loads(str(results))
-            except Exception as e:
-                logger.warning(f"Unable to do whitelist checks: exception: {e}")
+            if self.cursor is not None:
+                try:
+                    results = self.cursor.execute(self.whitelist_sql).fetchall()[0][0]
+                    results = json.loads(str(results))
+                    self.whitelist_retrieval_success = True
+                except Exception as e:
+                    logger.warning(f"Unable to do whitelist checks: exception: {e}")
         else:
             results_file = open(self.full_connection_diag_whitelist_path)
             results = json.load(results_file)
+            self.whitelist_retrieval_success = True
 
-        self.whitelist_retrieval_success = True
         for result in results:
             host_type = result['type']
             host = result['host']
             host_port = result['port']
+
             if host_type in ("OCSP_RESPONDER"):
                 if host not in self.ocsp_urls:
                     self.__test_socket_get_cert(host, port=host_port, host_type=host_type)
             elif host_type in ("STAGE", "OUT_OF_BAND_TELEMETRY"):
-                self.__https_host_report(host, port=host_port, host_type=host_type)
+                try:
+                    self.__https_host_report(host, port=host_port, host_type=host_type)
+                except Exception:
+                    pass
 
     def __is_privatelink(self) -> bool:
         return "privatelink" in self.host
@@ -228,19 +238,23 @@ class ConnectionDiagnostic:
             ips = socket.gethostbyname_ex(host)[2]
             base_message = f"{host}: nslookup results"
 
-            self.__append_message(host_type, f"{base_message}: {ips}")
-            if host_type in ("SNOWFLAKE_URL"):
+
+            if "snowflakecomputing" in host:
                 for ip in ips:
                     if ipaddress.ip_address(ip).is_private:
-                        if self.__is_privatelink():
-                            self.__append_message(host_type,
-                                                  f"{base_message}: private ip: {ip}: we expect this for privatelink.")
-                        else:
+                        if not self.__is_privatelink():
                             self.__append_message(host_type,
                                                   f"{base_message}: private ip: {ip}: WARNING: this is not "
                                                   f"typical for a non-privatelink account")
                     else:
-                        self.__append_message(host_type, f"{base_message}: public ip: {ip}")
+                         if self.__is_privatelink():
+                            self.__append_message(host_type,
+                                                  f"{base_message}: public ip: {ip}: WARNING: privatelink accounts "
+                                                  f"must have a private ip.")
+                         else:
+                            self.__append_message(host_type, f"{base_message}: public ip: {ip}")
+            else:
+                self.__append_message(host_type, f"{base_message}: {ips}")
         except Exception as e:
             logger.warning(f"Connectivity Test Exception in list_ips: {e}")
 
@@ -251,7 +265,6 @@ class ConnectionDiagnostic:
         host_type: str = "SNOWFLAKE_URL"
     ):
         try:
-            self.__list_ips(host, host_type=host_type)
             certificate = self.__test_socket_get_cert(host, port=port, host_type=host_type)
             if "BEGIN CERTIFICATE" in certificate:
                 x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, certificate)
@@ -265,7 +278,21 @@ class ConnectionDiagnostic:
                     'notAfter': datetime.strptime(str(x509.get_notAfter().decode("utf-8")), '%Y%m%d%H%M%SZ'),
                 }
                 self.cert_info[host] = result
-                self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
+                extensions = (x509.get_extension(i) for i in range(x509.get_extension_count()))
+                extension_data = {}
+                for e in extensions:
+                    extension_data[e.get_short_name().decode("utf-8")] = str(e)
+
+                host_suffix = host.split('.')
+                host_suffix.pop(0)
+                host_suffix = '.'.join(host_suffix)
+                if host_suffix in str(result['subject']):
+                    self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
+                elif 'subjectAltName' in extension_data:
+                    if host_suffix in str(extension_data['subjectAltName']):
+                        self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
+                    else:
+                        self.__append_message(host_type, f"{host}:{port}: URL Check: Failed: Certificate mismatch: Host not in subject or alt names")
                 self.__append_message(host_type, f"{host}: Cert info:")
                 self.__append_message(host_type, f"{host}: subject: {result['subject']}")
                 self.__append_message(host_type, f"{host}: issuer: {result['issuer']}")
@@ -273,11 +300,6 @@ class ConnectionDiagnostic:
                 self.__append_message(host_type, f"{host}: version: {result['version']}")
                 self.__append_message(host_type, f"{host}: notBefore: {result['notBefore']}")
                 self.__append_message(host_type, f"{host}: notAfter: {result['notAfter']}")
-
-                extensions = (x509.get_extension(i) for i in range(x509.get_extension_count()))
-                extension_data = {}
-                for e in extensions:
-                    extension_data[e.get_short_name().decode("utf-8")] = str(e)
 
                 if host_type == "SNOWFLAKE_URL":
                     if 'authorityInfoAccess' in extension_data:
@@ -305,9 +327,9 @@ class ConnectionDiagnostic:
 
     def __get_issuer_string(
         self,
-        issuer: dict[bytes, bytes]
+        issuer: Dict[bytes, bytes]
     ) -> str:
-        issuer: dict[str, str] = {y.decode('ascii'): issuer.get(y).decode('ascii') for y in issuer.keys()}
+        issuer: Dict[str, str] = {y.decode('ascii'): issuer.get(y).decode('ascii') for y in issuer.keys()}
         issuer_str: str = re.sub('[{}"]', '', json.dumps(issuer)).replace(": ", "=").replace(",", ";")
         return issuer_str
 
@@ -322,7 +344,7 @@ class ConnectionDiagnostic:
         # TODO: See if we need to do anything for noproxy
         # If we need more proxy checks, this site might work
         # curl -k -v https://amibehindaproxy.com 2>&1 | tee | grep alert
-        env_proxy_backup: dict[str, str] = {}
+        env_proxy_backup: Dict[str, str] = {}
         proxy_keys = ("HTTP_PROXY", "HTTPS_PROXY", "https_proxy", "http_proxy")
         restore_keys = []
 
@@ -361,7 +383,7 @@ class ConnectionDiagnostic:
             self.__append_message(host_type, f"There is likely a proxy because the issuer for {self.host} is "
                                              f"not correct. Got {issuer} and expected one of {cert_authorities}")
 
-        test_host = "google.com"
+        test_host = "www.google.com"
         self.__https_host_report(test_host, port=443, host_type="IGNORE")
         issuer = self.__get_issuer_string(self.cert_info[test_host]['issuer'])
         if not re.search(check_pattern, issuer):
@@ -479,8 +501,8 @@ class ConnectionDiagnostic:
 
     def __get_win_registry_values(
         self,
-        registry_key: Any
-    ) -> dict[str, str]:
+        registry_key: AnyStr
+    ) -> Dict[str, str]:
         """Gets values from windows registry key"""
         registry_key_values: dict = {}
         i = 0
@@ -554,4 +576,3 @@ class ConnectionDiagnostic:
                         self.__walk_win_registry(host_type, hkey_str, new_registry_key_str)
             except WindowsError:
                 pass
-
