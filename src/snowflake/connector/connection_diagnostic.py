@@ -302,7 +302,6 @@ class ConnectionDiagnostic:
 
         except Exception as e:
             logger.warning(f"Connectivity Test Exception in https_host_report: {e}")
-            pass
 
     def __get_issuer_string(
         self,
