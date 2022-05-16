@@ -223,7 +223,7 @@ class ConnectionDiagnostic:
         self,
         host: str,
         host_type: str = "SNOWFLAKE_URL"
-    ):
+    ) -> None:
         try:
             ips = socket.gethostbyname_ex(host)[2]
             base_message = f"{host}: nslookup results"
