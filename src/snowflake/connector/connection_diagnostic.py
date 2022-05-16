@@ -400,7 +400,7 @@ class ConnectionDiagnostic:
                 self.__append_message(host_type,
                                       f"Could not determine if a proxy does or does not exist based on Exception: {e}")
 
-    def run_test(self):
+    def run_test(self) -> None:
         self.__check_for_proxies()
         self.ocsp_urls = list(set(self.ocsp_urls))
         for url in self.ocsp_urls:
