@@ -229,7 +229,7 @@ class ConnectionDiagnostic:
             base_message = f"{host}: nslookup results"
 
             self.__append_message(host_type, f"{base_message}: {ips}")
-            if host_type in ["SNOWFLAKE_URL"]:
+            if host_type in ("SNOWFLAKE_URL"):
                 for ip in ips:
                     if ipaddress.ip_address(ip).is_private:
                         if self.__is_privatelink():
