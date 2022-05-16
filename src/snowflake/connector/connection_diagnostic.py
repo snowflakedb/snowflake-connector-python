@@ -217,9 +217,7 @@ class ConnectionDiagnostic:
                 self.__https_host_report(host, port=host_port, host_type=host_type)
 
     def __is_privatelink(self) -> bool:
-        if "privatelink" in self.host:
-            return True
-        return False
+        return "privatelink" in self.host
 
     def __list_ips(
         self,
