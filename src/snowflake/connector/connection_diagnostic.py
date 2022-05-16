@@ -84,8 +84,7 @@ class ConnectionDiagnostic:
             else None
         )
         self.tmpdir: str = (
-            tempfile.gettempdir() if IS_WINDOWS
-            else "/tmp"
+            tempfile.gettempdir()
         )
         if self.full_connection_diag_log_path is None:
             self.full_connection_diag_log_path = Path(self.tmpdir)
