@@ -399,7 +399,6 @@ class ConnectionDiagnostic:
             else:
                 self.__append_message(host_type,
                                       f"Could not determine if a proxy does or does not exist based on Exception: {e}")
-            pass
 
     def run_test(self):
         self.__check_for_proxies()
