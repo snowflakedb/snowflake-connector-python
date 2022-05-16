@@ -323,7 +323,7 @@ class ConnectionDiagnostic:
         # If we need more proxy checks, this site might work
         # curl -k -v https://amibehindaproxy.com 2>&1 | tee | grep alert
         env_proxy_backup: dict[str, str] = {}
-        proxy_keys = ["HTTP_PROXY", "HTTPS_PROXY", "https_proxy", "http_proxy"]
+        proxy_keys = ("HTTP_PROXY", "HTTPS_PROXY", "https_proxy", "http_proxy")
         restore_keys = []
 
         for proxy_key in proxy_keys:
