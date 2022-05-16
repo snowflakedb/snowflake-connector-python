@@ -316,7 +316,7 @@ class ConnectionDiagnostic:
         self,
         host_type: str,
         message: str
-    ):
+    ) -> None:
         self.test_results[host_type].append(f"{host_type}: {message}")
 
     def __check_for_proxies(self):
