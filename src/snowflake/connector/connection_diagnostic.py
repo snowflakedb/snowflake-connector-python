@@ -410,7 +410,7 @@ class ConnectionDiagnostic:
         for url in self.ocsp_urls:
             self.__test_socket_get_cert(url, port=80, host_type='OCSP_RESPONDER')
 
-    def generate_report(self):
+    def generate_report(self) -> None:
         message = "=========Connectivity diagnostic report================================"
         initial_joined_results = '\n'.join(self.test_results['INITIAL'])
         message = (
