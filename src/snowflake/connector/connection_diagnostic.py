@@ -96,7 +96,7 @@ class ConnectionDiagnostic:
                 logger.warning(f"Path {self.full_connection_diag_log_path} for connection test does not exist.")
                 self.full_connection_diag_log_path = Path(self.tmpdir)
 
-        self.report_file: Path = Path.joinpath(self.full_connection_diag_log_path, "SnowflakeConnectionTestReport.txt")
+        self.report_file: Path = self.full_connection_diag_log_path / "SnowflakeConnectionTestReport.txt"
         logger.info(f"Reporting to file {self.report_file}")
 
         if self.full_connection_diag_whitelist_path is not None:
