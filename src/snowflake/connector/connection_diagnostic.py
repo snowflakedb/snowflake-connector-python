@@ -213,7 +213,7 @@ class ConnectionDiagnostic:
             if host_type in ("OCSP_RESPONDER"):
                 if host not in self.ocsp_urls:
                     self.__test_socket_get_cert(host, port=host_port, host_type=host_type)
-            elif host_type in ["STAGE", "OUT_OF_BAND_TELEMETRY"]:
+            elif host_type in ("STAGE", "OUT_OF_BAND_TELEMETRY"):
                 self.__https_host_report(host, port=host_port, host_type=host_type)
 
     def __is_privatelink(self) -> bool:
