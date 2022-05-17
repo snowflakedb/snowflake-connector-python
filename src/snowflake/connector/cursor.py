@@ -364,18 +364,22 @@ class SnowflakeCursor:
         """Whether the command is PUT or GET."""
         return hasattr(self, "_is_file_transfer") and self._is_file_transfer
 
-    def callproc(self, procname, args=()):
-        """Not supported."""
-        Error.errorhandler_wrapper(
-            self.connection,
-            self,
-            NotSupportedError,
-            {
-                "msg": "callproc is not supported.",
-                "errno": ER_UNSUPPORTED_METHOD,
-                "sqlstate": SQLSTATE_FEATURE_NOT_SUPPORTED,
-            },
+    def callproc(self, procname: str, args: Sequence[Any] = ()) -> Sequence[Any]:
+        """Call a stored procedure.
+
+        Args:
+            procname: The stored procedure to be executed.
+            args: Parameters to be bound into the stored procedure.
+
+        Returns:
+            The input parameters.
+        """
+        marker_format = "%s" if self._connection.is_pyformat else "?"
+        command = (
+            f"CALL {procname}({', '.join([marker_format for _ in range(len(args))])})"
         )
+        self.execute(command, args)
+        return args
 
     def close(self) -> bool | None:
         """Closes the cursor object.

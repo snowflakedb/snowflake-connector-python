@@ -735,3 +735,29 @@ def test_escape(conn_local):
             assert (
                 i == row[0]
             ), f"newline not properly converted, got {row[0]}, should be {i}"
+
+
+def test_callproc(conn_local):
+    with conn_local() as con:
+        cur = con.cursor()
+        executeDDL1(cur)
+        cur.execute(
+            """
+            create or replace procedure output_message(message varchar)
+            returns varchar not null
+            language sql
+            as
+            begin
+              return message;
+            end;
+            """
+        )
+        ret = cur.callproc("output_message", ("test varchar",))
+        assert ret == ("test varchar",)
+
+        res = cur.fetchall()
+        assert len(res) == 1
+        assert len(res[0]) == 1
+        assert res[0][0] == "test varchar"
+
+        cur.execute("drop procedure if exists output_message(varchar)")

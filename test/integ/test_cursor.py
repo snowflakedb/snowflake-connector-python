@@ -610,14 +610,117 @@ insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
 
 
 def test_callproc(conn_cnx):
-    """Callproc test.
+    """Callproc test."""
 
-    Notes:
-        It's a nop as of now.
-    """
+    def create_stored_procedure(cursor):
+        cursor.execute(
+            "drop procedure if exists test_stored_procedure(varchar, int, date)"
+        )
+        cursor.execute("drop procedure if exists test_stored_procedure(float, char)")
+        cursor.execute("drop procedure if exists test_stored_procedure()")
+
+        cursor.execute(
+            """
+            create or replace procedure test_stored_procedure(p1 varchar, p2 int, p3 date)
+            returns string not null
+            language sql
+            as
+            begin
+              return 'teststring';
+            end;
+            """
+        )
+
+        cursor.execute(
+            """
+            create or replace procedure test_stored_procedure(p1 float, p2 char)
+            returns float not null
+            language sql
+            as
+            begin
+              return 1.23;
+            end;
+            """
+        )
+
+        cursor.execute(
+            """
+            create or replace procedure test_stored_procedure()
+            returns boolean
+            language sql
+            as
+            begin
+              return true;
+            end;
+            """
+        )
+
+    def verify_stored_procedure(cursor):
+        ret = cursor.callproc("test_stored_procedure", ("str", 1, "2022-02-22"))
+        assert ret == ("str", 1, "2022-02-22")
+        res = cur.fetchall()
+        assert len(res) == 1 and len(res[0]) == 1 and res[0][0] == "teststring"
+
+        ret = cursor.callproc("test_stored_procedure", (0.99, "c"))
+        assert ret == (0.99, "c")
+        res = cur.fetchall()
+        assert len(res) == 1 and len(res[0]) == 1 and res[0][0] == 1.23
+
+        ret = cursor.callproc("test_stored_procedure")
+        assert ret == ()
+        res = cur.fetchall()
+        assert len(res) == 1 and len(res[0]) == 1 and res[0][0] is True
+
+    # test pyformat paramstyle
     with conn_cnx() as cnx:
-        with pytest.raises(errors.NotSupportedError):
-            cnx.cursor().callproc("whatever the stored procedure")
+        with cnx.cursor() as cur:
+            create_stored_procedure(cur)
+            verify_stored_procedure(cur)
+
+    # test qmark paramstyle
+    with conn_cnx(paramstyle="qmark") as cnx:
+        with cnx.cursor() as cur:
+            create_stored_procedure(cur)
+            verify_stored_procedure(cur)
+
+
+def test_callproc_invalid(conn_cnx):
+    """Test invalid callproc"""
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("drop procedure if exists output_message(varchar)")
+
+            # stored procedure does not exist
+            with pytest.raises(ProgrammingError) as pe:
+                cur.callproc("output_message")
+                assert pe.errno == 1044
+
+            cur.execute(
+                """
+                create or replace procedure output_message(message varchar)
+                returns varchar not null
+                language sql
+                as
+                begin
+                  return message;
+                end;
+                """
+            )
+
+            # parameters do not match the signature
+            with pytest.raises(ProgrammingError) as pe:
+                cur.callproc("output_message")
+                assert pe.errno == 1044
+
+            with pytest.raises(TypeError):
+                cur.callproc("output_message", "test varchar")
+
+            ret = cur.callproc("output_message", ("test varchar",))
+            assert ret == ("test varchar",)
+            res = cur.fetchall()
+            assert len(res) == 1
+            assert len(res[0]) == 1
+            assert res[0][0] == "test varchar"
 
 
 def test_invalid_bind_data_type(conn_cnx):
