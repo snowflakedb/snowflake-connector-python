@@ -3,20 +3,16 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-#
-# Copyright (c) 2012-2022 Snowflake Computing Inc. All rights reserved.
-#
 from __future__ import annotations
 
 import filecmp
 import pathlib
-from logging import getLogger
-from os import path
 from unittest.mock import patch
 
 import pytest
 
 from ..integ_helpers import put
+from ..randomize import random_string
 
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
@@ -29,11 +25,6 @@ except ImportError:
     hack_s3_rest_client = False
     SnowflakeS3RestClient = None
     orig_send_req = None
-
-
-THIS_DIR = path.dirname(path.realpath(__file__))
-
-logger = getLogger(__name__)
 
 
 def _prepare_tmp_file(to_dir: str) -> str:
@@ -76,7 +67,6 @@ def mock_send_request(
     )
 
 
-@pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 @pytest.mark.parametrize("auto_compress", [True, False])
 def test_auto_compress_switch(
     tmp_path: pathlib.Path,
@@ -84,7 +74,7 @@ def test_auto_compress_switch(
     auto_compress,
 ):
     """Tests PUT command with auto_compress=False|True."""
-    _test_name = "test_auto_compress_switch"
+    _test_name = random_string(5, "test_auto_compress_switch")
     test_data, file_name = _prepare_tmp_file(tmp_path)
 
     with conn_cnx() as cnx:
@@ -128,13 +118,14 @@ def test_auto_compress_switch(
                 file_stream.close()
 
 
+@pytest.mark.aws
 @pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 def test_get_gzip_content_encoding(
     tmp_path: pathlib.Path,
     conn_cnx,
 ):
     """Tests GET command for a content-encoding=GZIP in stage"""
-    _test_name = "test_get_gzip_content_encoding"
+    _test_name = random_string(5, "test_get_gzip_content_encoding")
     test_data, file_name = _prepare_tmp_file(tmp_path)
 
     with patch(
@@ -153,7 +144,7 @@ def test_get_gzip_content_encoding(
                         False,
                         sql_options="auto_compress=True",
                         file_stream=file_stream,
-                    ).fetchone()
+                    )
 
                 ret = cnx.cursor().execute(f"LS @~/{_test_name}").fetchone()
                 assert f"{file_name}.gz" in ret[0]
@@ -175,15 +166,16 @@ def test_get_gzip_content_encoding(
                     file_stream.close()
 
 
+@pytest.mark.aws
 @pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 def test_sse_get_gzip_content_encoding(
     tmp_path: pathlib.Path,
     conn_cnx,
 ):
     """Tests GET command for a content-encoding=GZIP in stage and it is SSE(server side encrypted)"""
-    _test_name = "test_sse_get_gzip_content_encoding"
+    _test_name = random_string(5, "test_sse_get_gzip_content_encoding")
     test_data, orig_file_name = _prepare_tmp_file(tmp_path)
-    stage_name = "sse_stage"
+    stage_name = random_string(5, "sse_stage")
     with patch(
         "snowflake.connector.s3_storage_client.SnowflakeS3RestClient._send_request_with_authentication_and_retry",
         mock_send_request,

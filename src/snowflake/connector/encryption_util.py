@@ -24,6 +24,8 @@ block_size = int(algorithms.AES.block_size / 8)  # in bytes
 if TYPE_CHECKING:  # pragma: no cover
     from .storage_client import SnowflakeFileEncryptionMaterial
 
+logger = getLogger(__name__)
+
 
 def matdesc_to_unicode(matdesc):
     """Convert Material Descriptor to Unicode String."""
@@ -173,6 +175,8 @@ class SnowflakeEncryptionUtil:
         out: IO[bytes],
         chunk_size: int = 64 * kilobyte,  # block_size * 4 * 1024,
     ) -> None:
+        """To read from `src` stream then decrypt to `out` stream."""
+
         use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         key_base64 = metadata.key
         iv_base64 = metadata.iv
@@ -196,15 +200,11 @@ class SnowflakeEncryptionUtil:
             )
             decryptor = cipher.decryptor()
 
-        total_file_size = 0
         last_decrypted_chunk = None
         chunk = src.read(chunk_size)
-        while True:
-            if len(chunk) == 0:
-                break
+        while len(chunk) != 0:
             if last_decrypted_chunk is not None:
                 out.write(last_decrypted_chunk)
-            total_file_size += len(chunk)
             if not use_openssl_only:
                 d = data_cipher.decrypt(chunk)
             else:
@@ -214,7 +214,6 @@ class SnowflakeEncryptionUtil:
 
         if last_decrypted_chunk is not None:
             offset = PKCS5_OFFSET(last_decrypted_chunk)
-            total_file_size -= offset
             out.write(last_decrypted_chunk[:-offset])
         if use_openssl_only:
             out.write(decryptor.finalize())
@@ -225,7 +224,7 @@ class SnowflakeEncryptionUtil:
         encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
-        tmp_dir=None,
+        tmp_dir: str | None = None,
     ) -> str:
         """Decrypts a file and stores the output in the temporary directory.
 
@@ -242,7 +241,6 @@ class SnowflakeEncryptionUtil:
         temp_output_fd, temp_output_file = tempfile.mkstemp(
             text=False, dir=tmp_dir, prefix=os.path.basename(in_filename) + "#"
         )
-        logger = getLogger(__name__)
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
         with open(in_filename, "rb") as infile:
             with os.fdopen(temp_output_fd, "wb") as outfile:

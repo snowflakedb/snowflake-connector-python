@@ -51,7 +51,6 @@ METHODS = {
 def remove_content_encoding(resp: requests.Response, **kwargs):
     """Remove content-encoding header and decoder so decompression is not triggered"""
     if HTTP_HEADER_CONTENT_ENCODING in resp.headers:
-        # resp.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
         if isinstance(resp.raw, HTTPResponse):
             resp.raw._decoder = None
             resp.raw.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
