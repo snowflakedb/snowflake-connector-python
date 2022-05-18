@@ -737,6 +737,7 @@ def test_escape(conn_local):
             ), f"newline not properly converted, got {row[0]}, should be {i}"
 
 
+@pytest.mark.skipolddriver
 def test_callproc(conn_local):
     with conn_local() as con:
         cur = con.cursor()

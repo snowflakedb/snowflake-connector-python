@@ -368,8 +368,8 @@ class SnowflakeCursor:
         """Call a stored procedure.
 
         Args:
-            procname: The stored procedure to be executed.
-            args: Parameters to be bound into the stored procedure.
+            procname: The stored procedure to be called.
+            args: Parameters to be passed into the stored procedure.
 
         Returns:
             The input parameters.
