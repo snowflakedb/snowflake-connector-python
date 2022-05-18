@@ -609,6 +609,7 @@ insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
             cnx.cursor().execute(f"drop table {name_geo}")
 
 
+@pytest.mark.skipolddriver
 def test_callproc(conn_cnx):
     """Callproc test."""
 
