@@ -19,6 +19,8 @@ import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
 from snowflake.connector.compat import BASE_EXCEPTION_CLASS
 
+from ..randomize import random_string
+
 TABLE1 = "dbapi_ddl1"
 TABLE2 = "dbapi_ddl2"
 
@@ -739,12 +741,14 @@ def test_escape(conn_local):
 
 @pytest.mark.skipolddriver
 def test_callproc(conn_local):
+    name_sp = random_string(5, "test_stored_procedure_")
+    message = random_string(10)
     with conn_local() as con:
         cur = con.cursor()
         executeDDL1(cur)
         cur.execute(
-            """
-            create or replace procedure output_message(message varchar)
+            f"""
+            create or replace temporary procedure {name_sp}(message varchar)
             returns varchar not null
             language sql
             as
@@ -753,12 +757,5 @@ def test_callproc(conn_local):
             end;
             """
         )
-        ret = cur.callproc("output_message", ("test varchar",))
-        assert ret == ("test varchar",)
-
-        res = cur.fetchall()
-        assert len(res) == 1
-        assert len(res[0]) == 1
-        assert res[0][0] == "test varchar"
-
-        cur.execute("drop procedure if exists output_message(varchar)")
+        ret = cur.callproc(name_sp, (message,))
+        assert ret == (message,) and cur.fetchall() == [(message,)]
