@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import logging
 import re
 import signal
@@ -69,7 +70,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeProgressPercentage
     from .result_batch import ResultBatch
 
-T = TypeVar("T", bound=Sequence)
+T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 
