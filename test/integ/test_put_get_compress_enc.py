@@ -25,7 +25,7 @@ except ImportError:
     orig_send_req = None
 
 
-def _prepare_tmp_file(to_dir: str) -> str:
+def _prepare_tmp_file(to_dir: pathlib.Path) -> tuple[pathlib.Path, str]:
     tmp_dir = to_dir / "data"
     tmp_dir.mkdir()
     file_name = "data.txt"

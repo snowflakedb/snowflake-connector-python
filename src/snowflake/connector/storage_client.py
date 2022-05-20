@@ -48,7 +48,7 @@ METHODS = {
 }
 
 
-def remove_content_encoding(resp: requests.Response, **kwargs):
+def remove_content_encoding(resp: requests.Response, **kwargs) -> None:
     """Remove content-encoding header and decoder so decompression is not triggered"""
     if HTTP_HEADER_CONTENT_ENCODING in resp.headers:
         if isinstance(resp.raw, HTTPResponse):
