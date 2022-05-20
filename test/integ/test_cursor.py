@@ -644,109 +644,96 @@ def test_executemany(conn, db_parameters):
     Notes:
         The binding data type is dict and tuple, respectively.
     """
+    table_name = random_string(5, "test_executemany_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%(value)s)".format(
-            name=db_parameters["name"]
-        )
-        c.executemany(
-            fmt,
-            [
-                {"value": "1234"},
-                {"value": "234"},
-                {"value": "34"},
-                {"value": "4"},
-            ],
-        )
-        cnt = 0
-        for rec in c:
-            cnt += int(rec[0])
-        assert cnt == 4, "number of records"
-        assert c.rowcount == 4, "wrong number of records were inserted"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            c.executemany(
+                f"insert into {table_name}(aa) values(%(value)s)",
+                [
+                    {"value": 1234},
+                    {"value": 234},
+                    {"value": 34},
+                    {"value": 4},
+                ],
+            )
+            assert c.fetchone()[0] == 4, "number of records"
+            assert c.rowcount == 4, "wrong number of records were inserted"
 
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%s)".format(name=db_parameters["name"])
-        c.executemany(
-            fmt,
-            [
-                (12345,),
-                (1234,),
-                (234,),
-                (34,),
-                (4,),
-            ],
-        )
-        rec = c.fetchone()
-        assert rec[0] == 5, "number of records"
-        assert c.rowcount == 5, "wrong number of records were inserted"
-        c.close()
+        with cnx.cursor() as c:
+            fmt = "insert into {name}(aa) values(%s)".format(name=db_parameters["name"])
+            c.executemany(
+                fmt,
+                [
+                    (12345,),
+                    (1234,),
+                    (234,),
+                    (34,),
+                    (4,),
+                ],
+            )
+            assert c.fetchone()[0] == 5, "number of records"
+            assert c.rowcount == 5, "wrong number of records were inserted"
 
 
 @pytest.mark.skipolddriver
 def test_executemany_qmark_types(conn, db_parameters):
-    table_name = random_string(5, "date_test_")
+    table_name = random_string(5, "test_executemany_qmark_types_")
     with conn(paramstyle="qmark") as cnx:
         with cnx.cursor() as cur:
-            cur.execute(f"create table {table_name} (birth_date date)")
+            cur.execute(f"create temp table {table_name} (birth_date date)")
 
             insert_qy = f"INSERT INTO {table_name} (birth_date) values (?)"
             date_1, date_2 = date(1969, 2, 7), date(1969, 1, 1)
 
-            try:
-                # insert two dates, one in tuple format which specifies
-                # the snowflake type similar to how we support it in this
-                # example:
-                # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
-                cur.executemany(
-                    insert_qy,
-                    [[date_1], [("DATE", date_2)]],
-                )
+            # insert two dates, one in tuple format which specifies
+            # the snowflake type similar to how we support it in this
+            # example:
+            # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
+            cur.executemany(
+                insert_qy,
+                [[date_1], [("DATE", date_2)]],
+                # test that kwargs get passed through executemany properly
+                _statement_params={
+                    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "json"
+                },
+            )
+            assert all(
+                isinstance(rb, JSONResultBatch) for rb in cur.get_result_batches()
+            )
 
-                cur.execute(f"select * from {table_name}")
-                inserted_dates = [row[0] for row in cur.fetchall()]
-                assert date_1 in inserted_dates
-                assert date_2 in inserted_dates
-            finally:
-                cur.execute(f"drop table if exists {table_name}")
+            cur.execute(f"select * from {table_name}")
+            assert {row[0] for row in cur} == {date_1, date_2}
 
 
 @pytest.mark.skipolddriver
 def test_executemany_params_iterator(conn):
     """Cursor.executemany() works with an interator of params."""
-    table_name = random_string(5, "executemany_params_iterator")
+    table_name = random_string(5, "executemany_params_iterator_")
     with conn() as cnx:
-        c = cnx.cursor()
-        c.execute(f"create temp table {table_name}(bar integer)")
-        fmt = f"insert into {table_name}(bar) values(%(value)s)"
-        c.executemany(fmt, ({"value": x} for x in ("1234", "234", "34", "4")))
-        cnt = 0
-        for rec in c:
-            cnt += int(rec[0])
-        assert cnt == 4, "number of records"
-        assert c.rowcount == 4, "wrong number of records were inserted"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name}(bar integer)")
+            fmt = f"insert into {table_name}(bar) values(%(value)s)"
+            c.executemany(fmt, ({"value": x} for x in ("1234", "234", "34", "4")))
+            assert c.fetchone()[0] == 4, "number of records"
+            assert c.rowcount == 4, "wrong number of records were inserted"
 
-        c = cnx.cursor()
-        fmt = f"insert into {table_name}(bar) values(%s)"
-        c.executemany(fmt, ((x,) for x in (12345, 1234, 234, 34, 4)))
-        rec = c.fetchone()
-        assert rec[0] == 5, "number of records"
-        assert c.rowcount == 5, "wrong number of records were inserted"
-        c.close()
+        with cnx.cursor() as c:
+            fmt = f"insert into {table_name}(bar) values(%s)"
+            c.executemany(fmt, ((x,) for x in (12345, 1234, 234, 34, 4)))
+            assert c.fetchone()[0] == 5, "number of records"
+            assert c.rowcount == 5, "wrong number of records were inserted"
 
 
 @pytest.mark.skipolddriver
 def test_executemany_empty_params(conn):
     """Cursor.executemany() does nothing if params is empty."""
-    table_name = random_string(5, "executemany_empty_params")
+    table_name = random_string(5, "executemany_empty_params_")
     with conn() as cnx:
-        c = cnx.cursor()
-        # The table isn't created, so if this were executed, it would error.
-        fmt = f"insert into {table_name}(aa) values(%(value)s)"
-        c.executemany(fmt, [])
-        assert c.query is None
-        c.close()
+        with cnx.cursor() as c:
+            # The table isn't created, so if this were executed, it would error.
+            c.executemany(f"insert into {table_name}(aa) values(%(value)s)", [])
+            assert c.query is None
 
 
 @pytest.mark.skipolddriver(
@@ -758,122 +745,95 @@ def test_closed_cursor(conn, db_parameters):
     Notes:
         The binding data type is scalar.
     """
+    table_name = random_string(5, "test_closed_cursor_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%s)".format(name=db_parameters["name"])
-        c.executemany(
-            fmt,
-            [
-                12345,
-                1234,
-                234,
-                34,
-                4,
-            ],
-        )
-        rec = c.fetchone()
-        assert rec[0] == 5, "number of records"
-        assert c.rowcount == 5, "number of records"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            fmt = f"insert into {table_name}(aa) values(%s)"
+            c.executemany(
+                fmt,
+                [
+                    12345,
+                    1234,
+                    234,
+                    34,
+                    4,
+                ],
+            )
+            assert c.fetchone()[0] == 5, "number of records"
+            assert c.rowcount == 5, "number of records"
 
-        fmt = "select aa from {name}".format(name=db_parameters["name"])
         with pytest.raises(InterfaceError, match="Cursor is closed in execute") as err:
-            c.execute(fmt)
+            c.execute(f"select aa from {table_name}")
         assert err.value.errno == errorcode.ER_CURSOR_IS_CLOSED
 
 
 def test_fetchmany(conn, db_parameters):
+    table_name = random_string(5, "test_fetchmany_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%(value)s)".format(
-            name=db_parameters["name"]
-        )
-        c.executemany(
-            fmt,
-            [
-                {"value": "3456789"},
-                {"value": "234567"},
-                {"value": "1234"},
-                {"value": "234"},
-                {"value": "34"},
-                {"value": "4"},
-            ],
-        )
-        cnt = 0
-        for rec in c:
-            cnt += int(rec[0])
-        assert cnt == 6, "number of records"
-        assert c.rowcount == 6, "number of records"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            c.executemany(
+                f"insert into {table_name}(aa) values(%(value)s)",
+                [
+                    {"value": "3456789"},
+                    {"value": "234567"},
+                    {"value": "1234"},
+                    {"value": "234"},
+                    {"value": "34"},
+                    {"value": "4"},
+                ],
+            )
+            assert c.fetchone()[0] == 6, "number of records"
+            assert c.rowcount == 6, "number of records"
 
-        c = cnx.cursor()
-        fmt = "select aa from {name} order by aa desc".format(
-            name=db_parameters["name"]
-        )
-        c.execute(fmt)
+        with cnx.cursor() as c:
+            c.execute(f"select aa from {table_name} order by aa desc")
 
-        rows = c.fetchmany(2)
-        assert len(rows) == 2, "The number of records"
-        assert rows[1][0] == 234567, "The second record"
+            rows = c.fetchmany(2)
+            assert len(rows) == 2, "The number of records"
+            assert rows[1][0] == 234567, "The second record"
 
-        rows = c.fetchmany(1)
-        assert len(rows) == 1, "The number of records"
-        assert rows[0][0] == 1234, "The first record"
+            rows = c.fetchmany(1)
+            assert len(rows) == 1, "The number of records"
+            assert rows[0][0] == 1234, "The first record"
 
-        rows = c.fetchmany(5)
-        assert len(rows) == 3, "The number of records"
-        assert rows[-1][0] == 4, "The last record"
+            rows = c.fetchmany(5)
+            assert len(rows) == 3, "The number of records"
+            assert rows[-1][0] == 4, "The last record"
 
-        rows = c.fetchmany(15)
-        assert len(rows) == 0, "The number of records"
-
-        c.close()
+            assert len(c.fetchmany(15)) == 0, "The number of records"
 
 
 def test_process_params(conn, db_parameters):
     """Binds variables for insert and other queries."""
+    table_name = random_string(5, "test_process_params_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%(value)s)".format(
-            name=db_parameters["name"]
-        )
-        c.executemany(
-            fmt,
-            [
-                {"value": "3456789"},
-                {"value": "234567"},
-                {"value": "1234"},
-                {"value": "234"},
-                {"value": "34"},
-                {"value": "4"},
-            ],
-        )
-        cnt = 0
-        for rec in c:
-            cnt += int(rec[0])
-        c.close()
-        assert cnt == 6, "number of records"
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            c.executemany(
+                f"insert into {table_name}(aa) values(%(value)s)",
+                [
+                    {"value": "3456789"},
+                    {"value": "234567"},
+                    {"value": "1234"},
+                    {"value": "234"},
+                    {"value": "34"},
+                    {"value": "4"},
+                ],
+            )
+            assert c.fetchone()[0] == 6, "number of records"
 
-        fmt = "select count(aa) from {name} where aa > %(value)s".format(
-            name=db_parameters["name"]
-        )
+        with cnx.cursor() as c:
+            c.execute(
+                f"select count(aa) from {table_name} where aa > %(value)s",
+                {"value": 1233},
+            )
+            assert c.fetchone()[0] == 3, "the number of records"
 
-        c = cnx.cursor()
-        c.execute(fmt, {"value": 1233})
-        for (_cnt,) in c:
-            pass
-        assert _cnt == 3, "the number of records"
-        c.close()
-
-        fmt = "select count(aa) from {name} where aa > %s".format(
-            name=db_parameters["name"]
-        )
-        c = cnx.cursor()
-        c.execute(fmt, (1234,))
-        for (_cnt,) in c:
-            pass
-        assert _cnt == 2, "the number of records"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"select count(aa) from {table_name} where aa > %s", (1234,))
+            assert c.fetchone()[0] == 2, "the number of records"
 
 
 @pytest.mark.skipolddriver

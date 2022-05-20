@@ -447,8 +447,7 @@ class SnowflakeCursor:
 
         logger.debug(f"Request id: {self._request_id}")
 
-        if logger.getEffectiveLevel() <= logging.DEBUG:
-            logger.debug("running query [%s]", self._format_query_for_log(query))
+        logger.debug("running query [%s]", self._format_query_for_log(query))
         if _is_put_get is not None:
             # if told the query is PUT or GET, use the information
             self._is_file_transfer = _is_put_get
@@ -576,7 +575,6 @@ class SnowflakeCursor:
         _is_internal: bool = False,
         _describe_only: bool = False,
         _no_results: bool = False,
-        _use_ijson: bool = False,
         _is_put_get: bool | None = None,
         _raise_put_get_error: bool = True,
         _force_put_overwrite: bool = False,
@@ -987,6 +985,7 @@ class SnowflakeCursor:
         self,
         command: str,
         seqparams: Sequence[Any] | dict[str, Any],
+        **kwargs: dict[str, Any],
     ) -> SnowflakeCursor:
         """Executes a command/query with the given set of parameters sequentially."""
         logger.debug("executing many SQLs/commands")
@@ -1019,7 +1018,7 @@ class SnowflakeCursor:
                         fmt % self._connection._process_params_pyformat(param, self)
                     )
                 command = command.replace(fmt, ",".join(values), 1)
-                self.execute(command)
+                self.execute(command, **kwargs)
                 return self
             else:
                 logger.debug("bulk insert")
@@ -1056,19 +1055,17 @@ class SnowflakeCursor:
                             "Failed to upload binds to stage, sending binds to "
                             "Snowflake instead."
                         )
-                    except Exception as exc:
-                        if not isinstance(exc, INCIDENT_BLACKLIST):
-                            self.connection.incident.report_incident()
-                        raise
                 binding_param = (
                     None if bind_stage else list(map(list, zip(*seqparams)))
                 )  # transpose
-                self.execute(command, params=binding_param, _bind_stage=bind_stage)
+                self.execute(
+                    command, params=binding_param, _bind_stage=bind_stage, **kwargs
+                )
                 return self
 
         self.reset()
         for param in seqparams:
-            self.execute(command, param, _do_reset=False)
+            self.execute(command, params=param, _do_reset=False, **kwargs)
         return self
 
     def _result_iterator(
