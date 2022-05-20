@@ -1663,7 +1663,7 @@ def test_callproc_invalid(conn_cnx):
 
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("paramstyle", ["pyformat", "qmark"])
-def test_callproc(conn_cnx, paramstyle):
+def test_callproc_params(conn_cnx, paramstyle):
     """Test calling stored procedures overloaded with different input parameters and returns."""
     name_sp = random_string(5, "test_stored_procedure_")
     with conn_cnx(paramstyle=paramstyle) as cnx:
