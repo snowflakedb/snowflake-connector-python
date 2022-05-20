@@ -610,11 +610,10 @@ insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.parametrize("paramstyle", ["pyformat", "qmark"])
-def test_callproc(conn_cnx, paramstyle):
+def test_callproc(conn_cnx):
     """Test calling stored procedures overloaded with different input parameters and returns."""
     name_sp = random_string(5, "test_stored_procedure_")
-    with conn_cnx(paramstyle=paramstyle) as cnx:
+    with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
 
             cursor.execute(
