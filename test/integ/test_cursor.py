@@ -685,30 +685,32 @@ def test_executemany(conn, db_parameters):
 
 @pytest.mark.skipolddriver
 def test_executemany_qmark_types(conn, db_parameters):
-    table_name = random_string(5, "date_test_")
+    table_name = random_string(5, "test_executemany_qmark_types_")
     with conn(paramstyle="qmark") as cnx:
         with cnx.cursor() as cur:
-            cur.execute(f"create table {table_name} (birth_date date)")
+            cur.execute(f"create temp table {table_name} (birth_date date)")
 
             insert_qy = f"INSERT INTO {table_name} (birth_date) values (?)"
             date_1, date_2 = date(1969, 2, 7), date(1969, 1, 1)
 
-            try:
-                # insert two dates, one in tuple format which specifies
-                # the snowflake type similar to how we support it in this
-                # example:
-                # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
-                cur.executemany(
-                    insert_qy,
-                    [[date_1], [("DATE", date_2)]],
-                )
+            # insert two dates, one in tuple format which specifies
+            # the snowflake type similar to how we support it in this
+            # example:
+            # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
+            cur.executemany(
+                insert_qy,
+                [[date_1], [("DATE", date_2)]],
+                # test that kwargs get passed through executemany properly
+                _statement_params={
+                    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "json"
+                },
+            )
+            assert all(
+                isinstance(rb, JSONResultBatch) for rb in cur.get_result_batches()
+            )
 
-                cur.execute(f"select * from {table_name}")
-                inserted_dates = [row[0] for row in cur.fetchall()]
-                assert date_1 in inserted_dates
-                assert date_2 in inserted_dates
-            finally:
-                cur.execute(f"drop table if exists {table_name}")
+            cur.execute(f"select * from {table_name}")
+            assert {row[0] for row in cur} == {date_1, date_2}
 
 
 @pytest.mark.skipolddriver
