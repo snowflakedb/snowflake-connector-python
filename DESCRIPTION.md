@@ -8,9 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.7.8(Unreleased)
 
-   - Added `callproc` support to SnowflakeCursor.
 
 - v2.7.7(April 30,2022)
 
