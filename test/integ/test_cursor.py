@@ -1623,3 +1623,39 @@ def test_null_connection(conn_cnx):
             status = con.get_query_status(cur.sfqid)
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
+
+
+@pytest.mark.skipolddriver
+def test_callproc_invalid(conn_cnx):
+    """Test invalid callproc"""
+    name_sp = random_string(5, "test_stored_procedure_")
+    message = random_string(10)
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            # stored procedure does not exist
+            with pytest.raises(ProgrammingError) as pe:
+                cur.callproc(name_sp)
+            assert pe.value.errno == 2140
+
+            cur.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(message varchar)
+                returns varchar not null
+                language sql
+                as
+                begin
+                  return message;
+                end;
+                """
+            )
+
+            # parameters do not match the signature
+            with pytest.raises(ProgrammingError) as pe:
+                cur.callproc(name_sp)
+            assert pe.value.errno == 1044
+
+            with pytest.raises(TypeError):
+                cur.callproc(name_sp, message)
+
+            ret = cur.callproc(name_sp, (message,))
+            assert ret == (message,) and cur.fetchall() == [(message,)]
