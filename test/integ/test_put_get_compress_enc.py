@@ -20,9 +20,7 @@ try:
     from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
 
     orig_send_req = SnowflakeS3RestClient._send_request_with_authentication_and_retry
-    hack_s3_rest_client = True
 except ImportError:
-    hack_s3_rest_client = False
     SnowflakeS3RestClient = None
     orig_send_req = None
 
@@ -101,10 +99,8 @@ def test_auto_compress_switch(
             # get this file, if the client handle compression meta correctly
             get_dir = tmp_path / "get_dir"
             get_dir.mkdir()
-            cnx.cursor().execute(
-                f"GET @~/{_test_name}/{file_name} file://{get_dir}"
-            ).fetchone()
-            # TODO: The downloaded file should always be the unzip (original) file
+            cnx.cursor().execute(f"GET @~/{_test_name}/{file_name} file://{get_dir}")
+
             downloaded_file = get_dir / (
                 uploaded_gz_name if auto_compress else file_name
             )
@@ -119,7 +115,6 @@ def test_auto_compress_switch(
 
 
 @pytest.mark.aws
-@pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 def test_get_gzip_content_encoding(
     tmp_path: pathlib.Path,
     conn_cnx,
@@ -167,7 +162,6 @@ def test_get_gzip_content_encoding(
 
 
 @pytest.mark.aws
-@pytest.mark.skipif(hack_s3_rest_client, reason="s3_rest_client could not be imported.")
 def test_sse_get_gzip_content_encoding(
     tmp_path: pathlib.Path,
     conn_cnx,
