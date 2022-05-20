@@ -1659,3 +1659,75 @@ def test_callproc_invalid(conn_cnx):
 
             ret = cur.callproc(name_sp, (message,))
             assert ret == (message,) and cur.fetchall() == [(message,)]
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("paramstyle", ["pyformat", "qmark"])
+def test_callproc(conn_cnx, paramstyle):
+    """Test calling stored procedures overloaded with different input parameters and returns."""
+    name_sp = random_string(5, "test_stored_procedure_")
+    with conn_cnx(paramstyle=paramstyle) as cnx:
+        with cnx.cursor() as cursor:
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 varchar, p2 int, p3 date)
+                returns string not null
+                language sql
+                as
+                begin
+                  return 'teststring';
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 float, p2 char)
+                returns float not null
+                language sql
+                as
+                begin
+                  return 1.23;
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 boolean)
+                returns table(col1 int, col2 string)
+                language sql
+                as
+                declare
+                    res resultset default (SELECT * from values(1, 'a'),(2, 'b') as t(col1, col2));
+                begin
+                    return table(res);
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}()
+                returns boolean
+                language sql
+                as
+                begin
+                  return true;
+                end;
+                """
+            )
+
+            ret = cursor.callproc(name_sp, ("str", 1, "2022-02-22"))
+            assert ret == ("str", 1, "2022-02-22") and cursor.fetchall() == [
+                ("teststring",)
+            ]
+
+            ret = cursor.callproc(name_sp, (0.99, "c"))
+            assert ret == (0.99, "c") and cursor.fetchall() == [(1.23,)]
+
+            ret = cursor.callproc(name_sp, (True,))
+            assert ret == (True,) and cursor.fetchall() == [(1, "a"), (2, "b")]
+
+            ret = cursor.callproc(name_sp)
+            assert ret == () and cursor.fetchall() == [(True,)]
