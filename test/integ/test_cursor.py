@@ -1680,6 +1680,7 @@ def test_callproc(conn_cnx, paramstyle):
                 """
             )
 
+        with cnx.cursor() as cursor:
             cursor.execute(
                 f"""
                 create or replace temporary procedure {name_sp}(p1 float, p2 char)
@@ -1692,6 +1693,7 @@ def test_callproc(conn_cnx, paramstyle):
                 """
             )
 
+        with cnx.cursor() as cursor:
             cursor.execute(
                 f"""
                 create or replace temporary procedure {name_sp}(p1 boolean)
@@ -1706,6 +1708,7 @@ def test_callproc(conn_cnx, paramstyle):
                 """
             )
 
+        with cnx.cursor() as cursor:
             cursor.execute(
                 f"""
                 create or replace temporary procedure {name_sp}()
@@ -1718,16 +1721,20 @@ def test_callproc(conn_cnx, paramstyle):
                 """
             )
 
+        with cnx.cursor() as cursor:
             ret = cursor.callproc(name_sp, ("str", 1, "2022-02-22"))
             assert ret == ("str", 1, "2022-02-22") and cursor.fetchall() == [
                 ("teststring",)
             ]
 
+        with cnx.cursor() as cursor:
             ret = cursor.callproc(name_sp, (0.99, "c"))
             assert ret == (0.99, "c") and cursor.fetchall() == [(1.23,)]
 
+        with cnx.cursor() as cursor:
             ret = cursor.callproc(name_sp, (True,))
             assert ret == (True,) and cursor.fetchall() == [(1, "a"), (2, "b")]
 
+        with cnx.cursor() as cursor:
             ret = cursor.callproc(name_sp)
             assert ret == () and cursor.fetchall() == [(True,)]
