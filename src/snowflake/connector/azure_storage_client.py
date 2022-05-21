@@ -121,7 +121,8 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         r = self._send_request_with_authentication_and_retry("HEAD", url, retry_id)
         if r.status_code == 200:
             meta.result_status = ResultStatus.UPLOADED
-            encryption_data = json.loads(r.headers.get(ENCRYPTION_DATA))
+            enc_data_str = r.headers.get(ENCRYPTION_DATA)
+            encryption_data = None if enc_data_str is None else json.loads(enc_data_str)
             encryption_metadata = (
                 None
                 if not encryption_data
