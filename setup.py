@@ -158,7 +158,7 @@ setup(
         'azure-common',
         'azure-storage-blob',
         'boto3>=1.4.4,<=1.17.0',
-        'botocore>=1.5.0,<=1.20.0',
+        'botocore>=1.5.0,<=1.20.20',
         'certifi',
         'future',
         'six',
