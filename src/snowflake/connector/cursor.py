@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import logging
 import re
 import signal
@@ -24,6 +25,7 @@ from typing import (
     NamedTuple,
     NoReturn,
     Sequence,
+    TypeVar,
 )
 
 from snowflake.connector.result_batch import create_batches_from_response
@@ -68,6 +70,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeProgressPercentage
     from .result_batch import ResultBatch
 
+T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 
@@ -364,18 +367,22 @@ class SnowflakeCursor:
         """Whether the command is PUT or GET."""
         return hasattr(self, "_is_file_transfer") and self._is_file_transfer
 
-    def callproc(self, procname, args=()):
-        """Not supported."""
-        Error.errorhandler_wrapper(
-            self.connection,
-            self,
-            NotSupportedError,
-            {
-                "msg": "callproc is not supported.",
-                "errno": ER_UNSUPPORTED_METHOD,
-                "sqlstate": SQLSTATE_FEATURE_NOT_SUPPORTED,
-            },
+    def callproc(self, procname: str, args: T = ()) -> T:
+        """Call a stored procedure.
+
+        Args:
+            procname: The stored procedure to be called.
+            args: Parameters to be passed into the stored procedure.
+
+        Returns:
+            The input parameters.
+        """
+        marker_format = "%s" if self._connection.is_pyformat else "?"
+        command = (
+            f"CALL {procname}({', '.join([marker_format for _ in range(len(args))])})"
         )
+        self.execute(command, args)
+        return args
 
     def close(self) -> bool | None:
         """Closes the cursor object.
