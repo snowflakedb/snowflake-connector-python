@@ -609,17 +609,6 @@ insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
             cnx.cursor().execute(f"drop table {name_geo}")
 
 
-def test_callproc(conn_cnx):
-    """Callproc test.
-
-    Notes:
-        It's a nop as of now.
-    """
-    with conn_cnx() as cnx:
-        with pytest.raises(errors.NotSupportedError):
-            cnx.cursor().callproc("whatever the stored procedure")
-
-
 def test_invalid_bind_data_type(conn_cnx):
     """Invalid bind data type."""
     with conn_cnx() as cnx:
