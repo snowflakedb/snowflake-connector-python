@@ -13,6 +13,7 @@ from typing import Generator
 import pytest
 
 from snowflake.connector import SnowflakeConnection
+from snowflake.connector.compat import IS_LINUX
 from snowflake.connector.telemetry import TelemetryClient, TelemetryData
 
 from . import (
@@ -138,7 +139,9 @@ def pytest_runtest_setup(item) -> None:
                     current_provider
                 )
             )
-    if EXTERNAL_SKIP_TAGS.intersection(test_tags) and running_on_public_ci():
-        pytest.skip("cannot run this test on external CI")
+    if EXTERNAL_SKIP_TAGS.intersection(test_tags) and (
+        not IS_LINUX or running_on_public_ci()
+    ):
+        pytest.skip("cannot run this test on public Snowflake deployment")
     elif INTERNAL_SKIP_TAGS.intersection(test_tags) and not running_on_public_ci():
-        pytest.skip("cannot run this test on internal CI")
+        pytest.skip("cannot run this test on private Snowflake deployment")
