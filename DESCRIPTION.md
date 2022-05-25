@@ -10,6 +10,22 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.8(May 28,2022)
+
+   - Update BUG_REPORT.md
+   - Update pytest requirement from <6.3.0 to <7.2.0 
+   - Update documentation link to python specific main page 
+   - Fix the error message when pandas is not installed 
+   -  Implement callproc 
+   -  Ignore content-encoding when GET
+   - handle s3 accelerate configuration correctly 
+   -  update cla_bot repository name
+   - add kwargs to executemany
+   -  Jira creation adjustments
+   -  Set application name based on streamlit being in sys.modules
+   - Update pyopenssl requirement from <22.0.0,>=16.2.0 to >=16.2.0,<23.0.0
+
+
 - v2.7.7(April 30,2022)
 
    - Bumped supported pandas version to < 1.5.0
