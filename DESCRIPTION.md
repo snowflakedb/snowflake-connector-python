@@ -10,6 +10,18 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.8(May 28,2022)
+
+   - Updated PyPi documentation link to python specific main page 
+   - Fixed an error message that appears when pandas optional dependency group is required but is not installed
+   - Implemented the DB API 2 callproc() method
+   - Fixed a bug where decryption took place before decompression when downloading files from stages
+   - Fixed a bug where s3 accelerate configuration was handled incorrectly 
+   - Extra named arguments given executemany() are now forwarded to execute()
+   - Automatically sets the application name to streamlit when streamlit is imported and application name was not explicitly set
+   - Bumped pyopenssl dependency version to >=16.2.0,<23.0.0
+
+
 - v2.7.7(April 30,2022)
 
    - Bumped supported pandas version to < 1.5.0
