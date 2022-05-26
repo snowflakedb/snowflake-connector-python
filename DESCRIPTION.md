@@ -12,7 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v2.7.8(May 28,2022)
 
-   - Update PyPi documentation link to python specific main page 
+   - Updated PyPi documentation link to python specific main page 
    - Fixed an error message that appears when pandas optional dependency group is required but is not installed
    - Implemented callproc method from DB API 2
    - Fixed a bug where decryption took place before decompression when downloading files from stages
