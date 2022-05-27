@@ -17,7 +17,6 @@ import pytest
 import snowflake.connector
 import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
-from snowflake.connector.compat import BASE_EXCEPTION_CLASS
 
 TABLE1 = "dbapi_ddl1"
 TABLE2 = "dbapi_ddl2"
@@ -271,20 +270,18 @@ def test_close(db_parameters):
     #   errorcode.ER_CURSOR_IS_CLOSED),'cursor.close() called twice in a row')
 
     # calling cursor.execute after connection is closed should raise an error
-    try:
+    with pytest.raises(errors.Error) as e:
         cur.execute(f"create or replace table {TABLE1} (name string)")
-    except BASE_EXCEPTION_CLASS as error:
-        assert (
-            error.errno == errorcode.ER_CURSOR_IS_CLOSED
-        ), "cursor.execute() called twice in a row"
+    assert (
+        e.value.errno == errorcode.ER_CURSOR_IS_CLOSED
+    ), "cursor.execute() called twice in a row"
 
-        # try to create a cursor on a closed connection
-        try:
-            con.cursor()
-        except BASE_EXCEPTION_CLASS as error:
-            assert (
-                error.errno == errorcode.ER_CONNECTION_IS_CLOSED
-            ), "tried to create a cursor on a closed cursor"
+    # try to create a cursor on a closed connection
+    with pytest.raises(errors.Error) as e:
+        con.cursor()
+    assert (
+        e.value.errno == errorcode.ER_CONNECTION_IS_CLOSED
+    ), "tried to create a cursor on a closed cursor"
 
 
 def test_execute(conn_local):

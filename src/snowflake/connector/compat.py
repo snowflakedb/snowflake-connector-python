@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from snowflake.connector.constants import UTF8
+from .constants import UTF8
 
 IS_LINUX = platform.system() == "Linux"
 IS_WINDOWS = platform.system() == "Windows"
@@ -44,7 +44,6 @@ except (ImportError, AttributeError):
     numpy = None
 
 GET_CWD = os.getcwd
-BASE_EXCEPTION_CLASS = Exception
 TO_UNICODE = str
 ITERATOR = collections.abc.Iterator
 MAPPING = collections.abc.Mapping
