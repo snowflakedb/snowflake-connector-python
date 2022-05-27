@@ -32,7 +32,6 @@ from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
 
 from .bind_upload_agent import BindUploadAgent, BindUploadError
-from .compat import BASE_EXCEPTION_CLASS
 from .constants import (
     FIELD_NAME_TO_ID,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
@@ -271,7 +270,7 @@ class SnowflakeCursor:
     def __del__(self) -> None:  # pragma: no cover
         try:
             self.close()
-        except BASE_EXCEPTION_CLASS as e:
+        except Exception as e:
             if logger.getEffectiveLevel() <= logging.INFO:
                 logger.info(e)
 
