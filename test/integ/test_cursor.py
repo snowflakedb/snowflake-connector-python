@@ -572,41 +572,33 @@ created_at timestamp, data variant)
 
 
 @pytest.mark.skipolddriver
-def test_geography(conn, db_parameters):
+def test_geography(conn_cnx):
     """Variant including JSON object."""
     name_geo = random_string(5, "test_geography_")
-    with conn() as cnx:
-        cnx.cursor().execute(
-            f"""\
-create table {name_geo} (geo geography)
-"""
-        )
-        cnx.cursor().execute(
-            f"""\
-insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')
-"""
-        )
-        expected_data = [
-            {"coordinates": [0, 0], "type": "Point"},
-            {"coordinates": [[1, 1], [2, 2]], "type": "LineString"},
-        ]
+    with conn_cnx(
+        session_parameters={
+            "GEOGRAPHY_OUTPUT_FORMAT": "geoJson",
+        },
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary table {name_geo} (geo geography)")
+            cur.execute(
+                f"insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')"
+            )
+            expected_data = [
+                {"coordinates": [0, 0], "type": "Point"},
+                {"coordinates": [[1, 1], [2, 2]], "type": "LineString"},
+            ]
 
-    try:
-        with conn() as cnx:
-            c = cnx.cursor()
-            c.execute("alter session set GEOGRAPHY_OUTPUT_FORMAT='geoJson'")
-
+        with cnx.cursor() as cur:
             # Test with GEOGRAPHY return type
-            result = c.execute(f"select * from {name_geo}")
+            result = cur.execute(f"select * from {name_geo}")
             metadata = result.description
             assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
             data = result.fetchall()
             for raw_data in data:
                 row = json.loads(raw_data[0])
                 assert row in expected_data
-    finally:
-        with conn() as cnx:
-            cnx.cursor().execute(f"drop table {name_geo}")
 
 
 def test_callproc(conn_cnx):
