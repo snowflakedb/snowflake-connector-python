@@ -59,6 +59,7 @@ from .description import (
     SNOWFLAKE_CONNECTOR_VERSION,
 )
 from .errorcode import (
+    ER_ASYNC_NOT_FOUND,
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
@@ -1433,19 +1434,32 @@ class SnowflakeConnection:
         """
         status, status_resp = self._get_query_status(sf_qid)
         queries = status_resp["data"]["queries"]
+        try:
+            found_query = queries[0]
+        except IndexError:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": f"Results for query id: '{sf_qid}' not found",
+                    "errno": ER_ASYNC_NOT_FOUND,
+                },
+            )
+
         if self.is_an_error(status):
             if sf_qid in self._async_sfqids:
                 self._async_sfqids.remove(sf_qid)
             message = status_resp.get("message")
             if message is None:
                 message = ""
-            code = status_resp.get("code")
+            code = found_query.get("code")
             if code is None:
                 code = -1
             sql_state = None
             if "data" in status_resp:
                 message += (
-                    queries[0].get("errorMessage", "") if len(queries) > 0 else ""
+                    found_query.get("errorMessage", "") if len(queries) > 0 else ""
                 )
                 sql_state = status_resp["data"].get("sqlState")
             Error.errorhandler_wrapper(

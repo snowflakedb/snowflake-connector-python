@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import time
+from uuid import uuid4
 
 import pytest
 
 from snowflake.connector import ProgrammingError
+from snowflake.connector.errorcode import ER_ASYNC_NOT_FOUND
 
 # Mark all tests in this file to time out after 2 minutes to prevent hanging forever
 pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver]
@@ -91,6 +93,15 @@ def test_async_error(conn_cnx):
                 con.get_query_status_throw_if_error(q_id)
             with pytest.raises(ProgrammingError):
                 cur.get_results_from_sfqid(q_id)
+
+
+def test_not_found_query(conn_cnx):
+    random_uuid = str(uuid4())
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            with pytest.raises(ProgrammingError) as e:
+                cur.get_results_from_sfqid(random_uuid)
+            assert e.value.errno == ER_ASYNC_NOT_FOUND
 
 
 def test_mix_sync_async(conn_cnx):
