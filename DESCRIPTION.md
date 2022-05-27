@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.9()
+
+   - Bumped supported pyarrow version to >=8.0.0,<8.1.0
+
+
 - v2.7.8(May 28,2022)
 
    - Updated PyPi documentation link to python specific main page 
