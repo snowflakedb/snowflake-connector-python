@@ -11,7 +11,11 @@ from uuid import uuid4
 import pytest
 
 from snowflake.connector import ProgrammingError
-from snowflake.connector.errorcode import ER_ASYNC_NOT_FOUND
+
+try:
+    from snowflake.connector.errorcode import ER_ASYNC_NOT_FOUND
+except ImportError:
+    ER_ASYNC_NOT_FOUND = 251012
 
 # Mark all tests in this file to time out after 2 minutes to prevent hanging forever
 pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver]
