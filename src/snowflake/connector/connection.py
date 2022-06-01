@@ -1439,9 +1439,7 @@ class SnowflakeConnection:
             message = status_resp.get("message")
             if message is None:
                 message = ""
-            code = status_resp.get("code")
-            if code is None:
-                code = -1
+            code = queries[0].get("errorCode", -1)
             sql_state = None
             if "data" in status_resp:
                 message += (
