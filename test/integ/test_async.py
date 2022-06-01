@@ -80,17 +80,22 @@ def test_async_error(conn_cnx):
     """
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute_async("select * from nonexistentTable")
+            sql = "select * from nonexistentTable"
+            cur.execute_async(sql)
             q_id = cur.sfqid
+            with pytest.raises(ProgrammingError) as sync_error:
+                cur.execute(sql)
             while con.is_still_running(con.get_query_status(q_id)):
                 time.sleep(1)
             status = con.get_query_status(q_id)
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
-            with pytest.raises(ProgrammingError):
+            with pytest.raises(ProgrammingError) as e1:
                 con.get_query_status_throw_if_error(q_id)
-            with pytest.raises(ProgrammingError):
+            assert sync_error.value.errno != -1
+            with pytest.raises(ProgrammingError) as e2:
                 cur.get_results_from_sfqid(q_id)
+            assert e1.value.errno == e2.value.errno == sync_error.value.errno
 
 
 def test_mix_sync_async(conn_cnx):
