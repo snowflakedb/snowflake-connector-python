@@ -39,6 +39,9 @@ FIELD_TYPES: tuple[FieldType] = (
     ),
     FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()),
     FieldType(
+        name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda: pa.date64()
+    ),
+    FieldType(
         name="TIMESTAMP",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
         pa_type=lambda: pa.time64("ns"),
