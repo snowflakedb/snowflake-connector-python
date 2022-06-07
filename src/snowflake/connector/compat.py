@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from .constants import UTF8
+from . import constants
 
 IS_LINUX = platform.system() == "Linux"
 IS_WINDOWS = platform.system() == "Windows"
@@ -44,6 +44,7 @@ except (ImportError, AttributeError):
     numpy = None
 
 GET_CWD = os.getcwd
+BASE_EXCEPTION_CLASS = Exception
 TO_UNICODE = str
 ITERATOR = collections.abc.Iterator
 MAPPING = collections.abc.Mapping
@@ -110,7 +111,7 @@ def PKCS5_PAD(value: bytes, block_size: int) -> bytes:
         [
             value,
             (block_size - len(value) % block_size)
-            * chr(block_size - len(value) % block_size).encode(UTF8),
+            * chr(block_size - len(value) % block_size).encode(constants.UTF8),
         ]
     )
 

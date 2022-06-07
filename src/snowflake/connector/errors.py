@@ -12,6 +12,13 @@ import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+from .compat import BASE_EXCEPTION_CLASS
+from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
+from .secret_detector import SecretDetector
+from .telemetry import TelemetryData, TelemetryField
+from .telemetry_oob import TelemetryService
+from .time_util import get_time_millis
+
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .cursor import SnowflakeCursor
@@ -23,7 +30,7 @@ connector_base_path = os.path.join("snowflake", "connector")
 RE_FORMATTED_ERROR = re.compile(r"^(\d{6,})(?: \((\S+)\))?:")
 
 
-class Error(Exception):
+class Error(BASE_EXCEPTION_CLASS):
     """Base Snowflake exception class."""
 
     def __init__(
@@ -113,7 +120,6 @@ class Error(Exception):
 
     def generate_telemetry_exception_data(self) -> dict[str, str]:
         """Generate the data to send through telemetry."""
-        from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 
         telemetry_data = {
             TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
@@ -129,8 +135,6 @@ class Error(Exception):
         if self.errno:
             telemetry_data[TelemetryField.KEY_ERROR_NUMBER.value] = str(self.errno)
 
-        from .secret_detector import SecretDetector
-
         telemetry_data[
             TelemetryField.KEY_STACKTRACE.value
         ] = SecretDetector.mask_secrets(self.telemetry_traceback)
@@ -143,8 +147,6 @@ class Error(Exception):
         telemetry_data: dict[str, str],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
-        from .telemetry import TelemetryData, TelemetryField
-        from .time_util import get_time_millis
 
         if (
             connection is not None
@@ -164,7 +166,6 @@ class Error(Exception):
                 logger.debug("Cursor failed to log to telemetry.", exc_info=True)
         elif connection is None:
             # Send with out-of-band telemetry
-            from .telemetry_oob import TelemetryService
 
             telemetry_oob = TelemetryService.get_instance()
             telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
@@ -352,7 +353,7 @@ class Error(Exception):
         return error_class(error_value)
 
 
-class _Warning(Exception):
+class _Warning(BASE_EXCEPTION_CLASS):
     """Exception for important warnings."""
 
     pass

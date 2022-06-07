@@ -12,7 +12,7 @@ from typing import Union
 
 import pkg_resources
 
-from .errors import MissingDependencyError
+from . import errors
 
 logger = getLogger(__name__)
 
@@ -35,7 +35,7 @@ class MissingOptionalDependency:
     _dep_name = "not set"
 
     def __getattr__(self, item):
-        raise MissingDependencyError(self._dep_name)
+        raise errors.MissingDependencyError(self._dep_name)
 
 
 class MissingPandas(MissingOptionalDependency):

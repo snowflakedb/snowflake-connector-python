@@ -41,6 +41,14 @@ if TYPE_CHECKING:  # pragma: no cover
     from .cursor import ResultMetadata, SnowflakeCursor
     from .vendored.requests import Response
 
+    if installed_pandas:
+        DataType = pa.DataType
+        Table = pa.Table
+    else:
+        DataType = None
+        Table = None
+
+
 # emtpy pyarrow type array corresponding to FIELD_TYPES
 FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
 
