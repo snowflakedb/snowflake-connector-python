@@ -11,9 +11,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 - v2.7.9(Unreleased)
-`
 
    - Fixed a bug where errors raised during get_results_from_sfqid() were missing errno
+   - Fixed a bug where empty results containing GEOGRAPHY type raised IndexError
 
 
 - v2.7.8(May 28,2022)

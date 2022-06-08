@@ -436,7 +436,7 @@ def _put_list_rm_files_in_stage(tmpdir, conn_cnx, elem):
 
     from io import open
 
-    from snowflake.connector.compat import UTF8
+    from snowflake.connector.constants import UTF8
 
     tmp_dir = str(tmpdir.mkdir("data"))
     data_file = os.path.join(tmp_dir, data_file_name)

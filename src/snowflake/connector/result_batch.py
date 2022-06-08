@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
 from .compat import OK, UNAUTHORIZED, urlparse
-from .constants import IterUnit
+from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
 from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
 from .network import (
@@ -25,6 +25,7 @@ from .network import (
     raise_okta_unauthorized_error,
 )
 from .options import installed_pandas, pandas
+from .options import pyarrow as pa
 from .secret_detector import SecretDetector
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
 from .vendored import requests
@@ -40,20 +41,13 @@ if TYPE_CHECKING:  # pragma: no cover
     from .cursor import ResultMetadata, SnowflakeCursor
     from .vendored.requests import Response
 
-if installed_pandas:
-    from pyarrow import DataType, Table
-    from pyarrow import binary as pa_bin
-    from pyarrow import bool_ as pa_bool
-    from pyarrow import date64 as pa_date64
-    from pyarrow import field
-    from pyarrow import float64 as pa_flt64
-    from pyarrow import int64 as pa_int64
-    from pyarrow import schema
-    from pyarrow import string as pa_str
-    from pyarrow import time64 as pa_time64
-    from pyarrow import timestamp as pa_ts
-else:
-    DataType, Table = None, None
+    if installed_pandas:
+        DataType = pa.DataType
+        Table = pa.Table
+    else:
+        DataType = None
+        Table = None
+
 
 # emtpy pyarrow type array corresponding to FIELD_TYPES
 FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
@@ -655,26 +649,11 @@ class ArrowResultBatch(ResultBatch):
         """Returns emtpy Arrow table based on schema"""
         if installed_pandas:
             # initialize pyarrow type array corresponding to FIELD_TYPES
-            FIELD_TYPE_TO_PA_TYPE = [
-                pa_int64(),
-                pa_flt64(),
-                pa_str(),
-                pa_date64(),
-                pa_time64("ns"),
-                pa_str(),
-                pa_ts("ns"),
-                pa_ts("ns"),
-                pa_ts("ns"),
-                pa_str(),
-                pa_str(),
-                pa_bin(),
-                pa_time64("ns"),
-                pa_bool(),
-            ]
+            FIELD_TYPE_TO_PA_TYPE = [e.pa_type() for e in FIELD_TYPES]
         fields = [
-            field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code]) for s in self.schema
+            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code]) for s in self.schema
         ]
-        return schema(fields).empty_table()
+        return pa.schema(fields).empty_table()
 
     def to_arrow(self, connection: SnowflakeConnection | None = None) -> Table:
         """Returns this batch as a pyarrow Table"""

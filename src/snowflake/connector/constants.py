@@ -6,7 +6,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from enum import Enum, auto, unique
-from typing import Any, DefaultDict, NamedTuple
+from typing import Any, Callable, DefaultDict, NamedTuple
+
+from .options import installed_pandas
+from .options import pyarrow as pa
+
+if installed_pandas:
+    DataType = pa.DataType
+else:
+    DataType = None
+
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -17,25 +26,61 @@ DBAPI_TYPE_TIMESTAMP = 3
 class FieldType(NamedTuple):
     name: str
     dbapi_type: list[int]
+    pa_type: Callable[[], DataType]
 
 
-FIELD_TYPES: list[FieldType] = [
-    FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER]),
-    FieldType(name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER]),
-    FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING]),
-    FieldType(name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="TIMESTAMP", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="TIMESTAMP_LTZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="TIMESTAMP_TZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="TIMESTAMP_NTZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="TIME", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="BOOLEAN", dbapi_type=[]),
-    FieldType(name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING]),
-]
+# This type mapping holds column type definitions.
+#  Be careful to not change the ordering as the index is what Snowflake
+#  gives to as schema
+FIELD_TYPES: tuple[FieldType] = (
+    FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.int64()),
+    FieldType(
+        name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.float64()
+    ),
+    FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()),
+    FieldType(
+        name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda: pa.date64()
+    ),
+    FieldType(
+        name="TIMESTAMP",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.time64("ns"),
+    ),
+    FieldType(
+        name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+    ),
+    FieldType(
+        name="TIMESTAMP_LTZ",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.timestamp("ns"),
+    ),
+    FieldType(
+        name="TIMESTAMP_TZ",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.timestamp("ns"),
+    ),
+    FieldType(
+        name="TIMESTAMP_NTZ",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.timestamp("ns"),
+    ),
+    FieldType(
+        name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+    ),
+    FieldType(
+        name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+    ),
+    FieldType(
+        name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.binary()
+    ),
+    FieldType(
+        name="TIME", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda: pa.time64("ns")
+    ),
+    FieldType(name="BOOLEAN", dbapi_type=[], pa_type=lambda: pa.bool_()),
+    FieldType(
+        name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()
+    ),
+)
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
 FIELD_ID_TO_NAME: DefaultDict[int, str] = defaultdict(str)
