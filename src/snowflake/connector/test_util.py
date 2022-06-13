@@ -10,7 +10,7 @@ import os
 
 from .compat import IS_LINUX
 
-RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") is not None
+RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME", "JENKINS_HOME_NOT_SET") is not "JENKINS_HOME_NOT_SET"
 REGRESSION_TEST_LOG_DIR = os.getenv("CLIENT_LOG_DIR_PATH_DOCKER", "/tmp")
 ENABLE_TELEMETRY_LOG = RUNNING_ON_JENKINS and IS_LINUX
 rt_plain_logger = None
