@@ -10,6 +10,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 
 
+- v2.7.9(June 26,2022)
+
+   - get_results_from_sfqid missing errno
+   - consolidate definitions and resolve circular dependency issues
+
+
 - v2.7.9(Unreleased)
 
    - Fixed a bug where errors raised during get_results_from_sfqid() were missing errno
