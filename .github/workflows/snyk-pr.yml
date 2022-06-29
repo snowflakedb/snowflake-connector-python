@@ -2,20 +2,20 @@ name: snyk-pr
 on:
   pull_request:
     branches:
-      - master
+      - main
 jobs:
   whitesource:
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request.user.login == 'sfc-gh-snyk-sca-sa' }}
     steps:
     - name: checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.ref }}
         fetch-depth: 0
 
     - name: checkout action
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: snowflakedb/whitesource-actions
         token: ${{ secrets.WHITESOURCE_ACTION_TOKEN }}
@@ -26,6 +26,6 @@ jobs:
       env:
         PR_TITLE: ${{ github.event.pull_request.title }}
       with:
-        jira_token: ${{ secrets.JIRA_TOKEN }}
+        jira_token: ${{ secrets.JIRA_TOKEN_PUBLIC_REPO }}
         gh_token: ${{ secrets.GITHUB_TOKEN }}
         amend: false # true if you want the commit to be amended with the JIRA number
