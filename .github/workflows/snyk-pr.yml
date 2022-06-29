@@ -18,14 +18,14 @@ jobs:
       uses: actions/checkout@v3
       with:
         repository: snowflakedb/whitesource-actions
-        token: ${{ secrets.WHITESOURCE_ACTION_TOKEN }}
+        token: ${{ secrets.whitesource_action_token }}
         path: whitesource-actions
 
-    - name: PR
+    - name: snyk pr
       uses: ./whitesource-actions/snyk-pr
       env:
-        PR_TITLE: ${{ github.event.pull_request.title }}
+        pr_title: ${{ github.event.pull_request.title }}
       with:
-        jira_token: ${{ secrets.JIRA_TOKEN_PUBLIC_REPO }}
-        gh_token: ${{ secrets.GITHUB_TOKEN }}
+        jira_token: ${{ secrets.jira_token_public_repo }}
+        gh_token: ${{ secrets.github_token }}
         amend: false

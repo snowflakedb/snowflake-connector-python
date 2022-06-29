@@ -1,4 +1,4 @@
-name: Snyk Issue
+name: snyk issue
 
 on:
   schedule:
@@ -14,16 +14,16 @@ jobs:
       uses: actions/checkout@v3
       with:
         repository: snowflakedb/whitesource-actions
-        token: ${{ secrets.WHITESOURCE_ACTION_TOKEN }}
+        token: ${{ secrets.whitesource_action_token }}
         path: whitesource-actions
     - name: set-env
-      run: echo "REPO=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
-    - name: Jira Creation
+      run: echo "repo=$(basename $github_repository)" >> $github_env
+    - name: jira creation
       uses: ./whitesource-actions/snyk-issue
       with:
-        snyk_org: ${{ secrets.SNYK_ORG_ID_PUBLIC_REPO }}
-        snyk_token:  ${{ secrets.SNYK_GITHUB_INTEGRATION_TOKEN_PUBLIC_REPO }}
-        jira_token: ${{ secrets.JIRA_TOKEN_PUBLIC_REPO }}
+        snyk_org: ${{ secrets.snyk_org_id_public_repo }}
+        snyk_token:  ${{ secrets.snyk_github_integration_token_public_repo }}
+        jira_token: ${{ secrets.jira_token_public_repo }}
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        gh_token: ${{ secrets.github_token }}
 
