@@ -1,4 +1,4 @@
-name: snyk issue
+name: Snyk Issue
 
 on:
   schedule:
@@ -7,18 +7,18 @@ on:
 concurrency: snyk-issue
 
 jobs:
-  whitesource:
+  snyk:
     runs-on: ubuntu-latest
     steps:
-    - name: checkout action
+    - name: Checkout Action
       uses: actions/checkout@v3
       with:
         repository: snowflakedb/whitesource-actions
         token: ${{ secrets.whitesource_action_token }}
         path: whitesource-actions
-    - name: set-env
+    - name: Set Env
       run: echo "repo=$(basename $github_repository)" >> $github_env
-    - name: jira creation
+    - name: Jira Creation
       uses: ./whitesource-actions/snyk-issue
       with:
         snyk_org: ${{ secrets.snyk_org_id_public_repo }}

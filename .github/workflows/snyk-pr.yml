@@ -1,27 +1,27 @@
-name: snyk-pr
+name: Snyk PR
 on:
   pull_request:
     branches:
       - main
 jobs:
-  whitesource:
+  snyk:
     runs-on: ubuntu-latest
     if: ${{ github.event.pull_request.user.login == 'sfc-gh-snyk-sca-sa' }}
     steps:
-    - name: checkout
+    - name: Checkout
       uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.ref }}
         fetch-depth: 0
 
-    - name: checkout action
+    - name: Checkout Action
       uses: actions/checkout@v3
       with:
         repository: snowflakedb/whitesource-actions
         token: ${{ secrets.whitesource_action_token }}
         path: whitesource-actions
 
-    - name: snyk pr
+    - name: Snyk Pull Request Scan Check
       uses: ./whitesource-actions/snyk-pr
       env:
         pr_title: ${{ github.event.pull_request.title }}
