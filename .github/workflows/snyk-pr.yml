@@ -28,4 +28,4 @@ jobs:
       with:
         jira_token: ${{ secrets.JIRA_TOKEN_PUBLIC_REPO }}
         gh_token: ${{ secrets.GITHUB_TOKEN }}
-        amend: false # true if you want the commit to be amended with the JIRA number
+        amend: false
