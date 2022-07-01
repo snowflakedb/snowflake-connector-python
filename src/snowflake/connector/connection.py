@@ -452,7 +452,7 @@ class SnowflakeConnection:
 
     @property
     def log_max_query_length(self):
-        return self._log_max_query_length
+        return int(self._log_max_query_length)
 
     @property
     def disable_request_pooling(self):
