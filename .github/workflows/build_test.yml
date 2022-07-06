@@ -46,29 +46,6 @@ jobs:
       - name: Run fix_lint
         run: python -m tox -e fix_lint
 
-  whitesource:
-    name: Whitesource linux-3.7
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.7
-      - name: Display Python version
-        run: python -c "import sys; print(sys.version)"
-      - name: Upgrade setuptools, pip, wheel and build
-        run: python -m pip install -U setuptools pip wheel build
-      - name: Build Python connector
-        run: python -m build --wheel .
-      - name: Show wheels generated
-        run: ls -lh dist/
-      - name: Run WhiteSource script
-        run: ./ci/wss.sh
-        env:
-          WHITESOURCE_API_KEY: ${{ secrets.WHITESOURCE_API_KEY }}
-
   build:
     needs: lint
     strategy:
