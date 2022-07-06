@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import os
 import random
 import string
@@ -23,7 +24,7 @@ if TYPE_CHECKING:  # pragma: no cover
     except ImportError:
         sqlalchemy = None
 
-T = TypeVar("T", bound=Sequence)
+T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 

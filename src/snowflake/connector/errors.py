@@ -120,6 +120,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def generate_telemetry_exception_data(self) -> dict[str, str]:
         """Generate the data to send through telemetry."""
+
         telemetry_data = {
             TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
             TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
@@ -146,6 +147,7 @@ class Error(BASE_EXCEPTION_CLASS):
         telemetry_data: dict[str, str],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
+
         if (
             connection is not None
             and connection.telemetry_enabled
@@ -164,6 +166,7 @@ class Error(BASE_EXCEPTION_CLASS):
                 logger.debug("Cursor failed to log to telemetry.", exc_info=True)
         elif connection is None:
             # Send with out-of-band telemetry
+
             telemetry_oob = TelemetryService.get_instance()
             telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
 

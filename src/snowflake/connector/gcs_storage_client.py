@@ -348,7 +348,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 return None
             elif response.status_code == 200:
                 digest = response.headers.get(GCS_METADATA_SFC_DIGEST, None)
-                content_length = response.headers.get("content-length", None)
+                content_length = int(response.headers.get("content-length", "0"))
 
                 encryption_metadata = EncryptionMetadata("", "", "")
                 if response.headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None):

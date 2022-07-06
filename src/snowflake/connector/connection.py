@@ -268,8 +268,11 @@ class SnowflakeConnection:
 
         self.heartbeat_thread = None
 
-        if "application" not in kwargs and ENV_VAR_PARTNER in os.environ.keys():
-            kwargs["application"] = os.environ[ENV_VAR_PARTNER]
+        if "application" not in kwargs:
+            if ENV_VAR_PARTNER in os.environ.keys():
+                kwargs["application"] = os.environ[ENV_VAR_PARTNER]
+            elif "streamlit" in sys.modules:
+                kwargs["application"] = "streamlit"
 
         self.converter = None
         self.__set_error_attributes()
@@ -1436,9 +1439,7 @@ class SnowflakeConnection:
             message = status_resp.get("message")
             if message is None:
                 message = ""
-            code = status_resp.get("code")
-            if code is None:
-                code = -1
+            code = queries[0].get("errorCode", -1)
             sql_state = None
             if "data" in status_resp:
                 message += (

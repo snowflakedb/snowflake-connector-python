@@ -17,7 +17,8 @@ import pytest
 import snowflake.connector
 import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
-from snowflake.connector.compat import BASE_EXCEPTION_CLASS
+
+from ..randomize import random_string
 
 TABLE1 = "dbapi_ddl1"
 TABLE2 = "dbapi_ddl2"
@@ -271,20 +272,18 @@ def test_close(db_parameters):
     #   errorcode.ER_CURSOR_IS_CLOSED),'cursor.close() called twice in a row')
 
     # calling cursor.execute after connection is closed should raise an error
-    try:
+    with pytest.raises(errors.Error) as e:
         cur.execute(f"create or replace table {TABLE1} (name string)")
-    except BASE_EXCEPTION_CLASS as error:
-        assert (
-            error.errno == errorcode.ER_CURSOR_IS_CLOSED
-        ), "cursor.execute() called twice in a row"
+    assert (
+        e.value.errno == errorcode.ER_CURSOR_IS_CLOSED
+    ), "cursor.execute() called twice in a row"
 
-        # try to create a cursor on a closed connection
-        try:
-            con.cursor()
-        except BASE_EXCEPTION_CLASS as error:
-            assert (
-                error.errno == errorcode.ER_CONNECTION_IS_CLOSED
-            ), "tried to create a cursor on a closed cursor"
+    # try to create a cursor on a closed connection
+    with pytest.raises(errors.Error) as e:
+        con.cursor()
+    assert (
+        e.value.errno == errorcode.ER_CONNECTION_IS_CLOSED
+    ), "tried to create a cursor on a closed cursor"
 
 
 def test_execute(conn_local):
@@ -735,3 +734,134 @@ def test_escape(conn_local):
             assert (
                 i == row[0]
             ), f"newline not properly converted, got {row[0]}, should be {i}"
+
+
+@pytest.mark.skipolddriver
+def test_callproc(conn_local):
+    name_sp = random_string(5, "test_stored_procedure_")
+    message = random_string(10)
+    with conn_local() as con:
+        cur = con.cursor()
+        executeDDL1(cur)
+        cur.execute(
+            f"""
+            create or replace temporary procedure {name_sp}(message varchar)
+            returns varchar not null
+            language sql
+            as
+            begin
+              return message;
+            end;
+            """
+        )
+        ret = cur.callproc(name_sp, (message,))
+        assert ret == (message,) and cur.fetchall() == [(message,)]
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("paramstyle", ["pyformat", "qmark"])
+def test_callproc_overload(conn_cnx, paramstyle):
+    """Test calling stored procedures overloaded with different input parameters and returns."""
+    name_sp = random_string(5, "test_stored_procedure_")
+    with conn_cnx(paramstyle=paramstyle) as cnx:
+        with cnx.cursor() as cursor:
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 varchar, p2 int, p3 date)
+                returns string not null
+                language sql
+                as
+                begin
+                  return 'teststring';
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 float, p2 char)
+                returns float not null
+                language sql
+                as
+                begin
+                  return 1.23;
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 boolean)
+                returns table(col1 int, col2 string)
+                language sql
+                as
+                declare
+                    res resultset default (SELECT * from values(1, 'a'),(2, 'b') as t(col1, col2));
+                begin
+                    return table(res);
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}()
+                returns boolean
+                language sql
+                as
+                begin
+                  return true;
+                end;
+                """
+            )
+
+            ret = cursor.callproc(name_sp, ("str", 1, "2022-02-22"))
+            assert ret == ("str", 1, "2022-02-22") and cursor.fetchall() == [
+                ("teststring",)
+            ]
+
+            ret = cursor.callproc(name_sp, (0.99, "c"))
+            assert ret == (0.99, "c") and cursor.fetchall() == [(1.23,)]
+
+            ret = cursor.callproc(name_sp, (True,))
+            assert ret == (True,) and cursor.fetchall() == [(1, "a"), (2, "b")]
+
+            ret = cursor.callproc(name_sp)
+            assert ret == () and cursor.fetchall() == [(True,)]
+
+
+@pytest.mark.skipolddriver
+def test_callproc_invalid(conn_cnx):
+    """Test invalid callproc"""
+    name_sp = random_string(5, "test_stored_procedure_")
+    message = random_string(10)
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            # stored procedure does not exist
+            with pytest.raises(errors.ProgrammingError) as pe:
+                cur.callproc(name_sp)
+            assert pe.value.errno == 2140
+
+            cur.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(message varchar)
+                returns varchar not null
+                language sql
+                as
+                begin
+                  return message;
+                end;
+                """
+            )
+
+            # parameters do not match the signature
+            with pytest.raises(errors.ProgrammingError) as pe:
+                cur.callproc(name_sp)
+            assert pe.value.errno == 1044
+
+            with pytest.raises(TypeError):
+                cur.callproc(name_sp, message)
+
+            ret = cur.callproc(name_sp, (message,))
+            assert ret == (message,) and cur.fetchall() == [(message,)]

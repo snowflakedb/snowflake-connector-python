@@ -1,3 +1,5 @@
+test/parameters*.py
+
 # Byte-compiled / optimized / DLL files
 .mypy_cache
 __pycache__
@@ -10,6 +12,7 @@ __pycache__
 *.exe
 *.o
 *.so
+*.dylib
 
 # Distribution / packaging
 .Python
@@ -99,10 +102,9 @@ ENV/
 # others
 generated_version.py
 *coverage.xml
-.idea/
 .pytest_cache/
 snowflake_connector_python.egg-info/
-.tox
+.tox/
 
 # WhiteSource Scan
 wss*.config
@@ -116,7 +118,9 @@ core.*
 .gdb_history
 
 # Editor specific
-.vscode
+.idea/
+.vscode/
+*.code-workspace
 
 # Compiled Cython
 src/snowflake/connector/arrow_iterator.cpp

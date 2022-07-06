@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import logging
 import re
 import signal
@@ -24,13 +25,14 @@ from typing import (
     NamedTuple,
     NoReturn,
     Sequence,
+    TypeVar,
 )
 
 from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
 
+from . import compat
 from .bind_upload_agent import BindUploadAgent, BindUploadError
-from .compat import BASE_EXCEPTION_CLASS
 from .constants import (
     FIELD_NAME_TO_ID,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
@@ -68,6 +70,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeProgressPercentage
     from .result_batch import ResultBatch
 
+T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 
@@ -268,7 +271,7 @@ class SnowflakeCursor:
     def __del__(self) -> None:  # pragma: no cover
         try:
             self.close()
-        except BASE_EXCEPTION_CLASS as e:
+        except compat.BASE_EXCEPTION_CLASS as e:
             if logger.getEffectiveLevel() <= logging.INFO:
                 logger.info(e)
 
@@ -364,18 +367,22 @@ class SnowflakeCursor:
         """Whether the command is PUT or GET."""
         return hasattr(self, "_is_file_transfer") and self._is_file_transfer
 
-    def callproc(self, procname, args=()):
-        """Not supported."""
-        Error.errorhandler_wrapper(
-            self.connection,
-            self,
-            NotSupportedError,
-            {
-                "msg": "callproc is not supported.",
-                "errno": ER_UNSUPPORTED_METHOD,
-                "sqlstate": SQLSTATE_FEATURE_NOT_SUPPORTED,
-            },
+    def callproc(self, procname: str, args: T = ()) -> T:
+        """Call a stored procedure.
+
+        Args:
+            procname: The stored procedure to be called.
+            args: Parameters to be passed into the stored procedure.
+
+        Returns:
+            The input parameters.
+        """
+        marker_format = "%s" if self._connection.is_pyformat else "?"
+        command = (
+            f"CALL {procname}({', '.join([marker_format for _ in range(len(args))])})"
         )
+        self.execute(command, args)
+        return args
 
     def close(self) -> bool | None:
         """Closes the cursor object.
@@ -447,8 +454,7 @@ class SnowflakeCursor:
 
         logger.debug(f"Request id: {self._request_id}")
 
-        if logger.getEffectiveLevel() <= logging.DEBUG:
-            logger.debug("running query [%s]", self._format_query_for_log(query))
+        logger.debug("running query [%s]", self._format_query_for_log(query))
         if _is_put_get is not None:
             # if told the query is PUT or GET, use the information
             self._is_file_transfer = _is_put_get
@@ -576,7 +582,6 @@ class SnowflakeCursor:
         _is_internal: bool = False,
         _describe_only: bool = False,
         _no_results: bool = False,
-        _use_ijson: bool = False,
         _is_put_get: bool | None = None,
         _raise_put_get_error: bool = True,
         _force_put_overwrite: bool = False,
@@ -888,7 +893,7 @@ class SnowflakeCursor:
     def check_can_use_pandas(self):
         if not installed_pandas:
             msg = (
-                "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+                "Optional dependency: 'pandas' is not installed, please see the following link for install "
                 "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
             )
             errno = ER_NO_PYARROW
@@ -987,6 +992,7 @@ class SnowflakeCursor:
         self,
         command: str,
         seqparams: Sequence[Any] | dict[str, Any],
+        **kwargs: dict[str, Any],
     ) -> SnowflakeCursor:
         """Executes a command/query with the given set of parameters sequentially."""
         logger.debug("executing many SQLs/commands")
@@ -1019,7 +1025,7 @@ class SnowflakeCursor:
                         fmt % self._connection._process_params_pyformat(param, self)
                     )
                 command = command.replace(fmt, ",".join(values), 1)
-                self.execute(command)
+                self.execute(command, **kwargs)
                 return self
             else:
                 logger.debug("bulk insert")
@@ -1056,19 +1062,17 @@ class SnowflakeCursor:
                             "Failed to upload binds to stage, sending binds to "
                             "Snowflake instead."
                         )
-                    except Exception as exc:
-                        if not isinstance(exc, INCIDENT_BLACKLIST):
-                            self.connection.incident.report_incident()
-                        raise
                 binding_param = (
                     None if bind_stage else list(map(list, zip(*seqparams)))
                 )  # transpose
-                self.execute(command, params=binding_param, _bind_stage=bind_stage)
+                self.execute(
+                    command, params=binding_param, _bind_stage=bind_stage, **kwargs
+                )
                 return self
 
         self.reset()
         for param in seqparams:
-            self.execute(command, param, _do_reset=False)
+            self.execute(command, params=param, _do_reset=False, **kwargs)
         return self
 
     def _result_iterator(

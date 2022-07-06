@@ -104,7 +104,7 @@ class SnowflakeFileMeta:
     stage_location_type: str
     result_status: ResultStatus | None = None
 
-    self: SnowflakeFileTransferAgent | None = None
+    sfagent: SnowflakeFileTransferAgent | None = None
     put_callback: type[SnowflakeProgressPercentage] | None = None
     put_azure_callback: type[SnowflakeProgressPercentage] | None = None
     put_callback_output_stream: IO[str] | None = None
@@ -338,7 +338,10 @@ class SnowflakeFileTransferAgent:
             get_azure_callback if get_azure_callback else get_callback
         )
         self._get_callback_output_stream = get_callback_output_stream
-        self._use_accelerate_endpoint = False
+        # when we have not checked whether we should use accelerate, this boolean is None
+        # _use_accelerate_endpoint in SnowflakeFileTransferAgent could be passed to each SnowflakeS3RestClient
+        # so we could avoid check accelerate configuration for each S3 client created for each file meta.
+        self._use_accelerate_endpoint: bool | None = None
         self._raise_put_get_error = raise_put_get_error
         self._show_progress_bar = show_progress_bar
         self._force_put_overwrite = force_put_overwrite
@@ -359,7 +362,7 @@ class SnowflakeFileTransferAgent:
             self._process_file_compression_type()
 
         for m in self._file_metadata:
-            m.self = self
+            m.sfagent = self
 
         self._transfer_accelerate_config()
 
@@ -373,7 +376,7 @@ class SnowflakeFileTransferAgent:
 
         for m in self._file_metadata:
             m.overwrite = self._overwrite
-            m.self = self
+            m.sfagent = self
             if self._stage_location_type != LOCAL_FS:
                 m.put_callback = self._put_callback
                 m.put_azure_callback = self._put_azure_callback
@@ -646,6 +649,7 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 self._stage_info,
                 S3_CHUNK_SIZE,
+                use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
             )
         elif self._stage_location_type == GCS_FS:
