@@ -4,36 +4,38 @@
 
 from __future__ import annotations
 
-import copy
 import datetime
-import logging
-from collections.abc import Iterator, MutableMapping, ValuesView
+from collections.abc import Iterator
 from threading import Lock
-from typing import Generic, ItemsView, KeysView, NamedTuple, TypeVar
+from typing import Generic, TypeVar
 
-logger = logging.getLogger(__name__)
+from typing_extensions import NamedTuple, Self
+
 now = datetime.datetime.now
 
 T = TypeVar("T")
 
 
-class CacheEntry(NamedTuple):
+class CacheEntry(NamedTuple, Generic[T]):
     expiry: datetime.datetime
     entry: T
 
 
-# Hack, because NamedTuples cannot inherit from multiple classes
-class CacheEntry(CacheEntry, Generic[T]):
-    pass
-
-
 K = TypeVar("K")
 V = TypeVar("V")
-Self = TypeVar("Self", bound="SFDictCache")
 
 
-class SFDictCache(MutableMapping[K, V]):
-    """A generic cache that acts like a dictionary with a few extra functions."""
+def is_expired(d: datetime.datetime) -> bool:
+    return now() >= d
+
+
+class SFDictCache(Generic[K, V]):
+    """A generic in-memory cache that acts somewhat like a dictionary.
+
+    Notes:
+    - Unlike normal dictionaries keys, values and items return list
+      materialized at call time, instead of returning a view object.
+    """
 
     def __init__(
         self,
@@ -44,146 +46,161 @@ class SFDictCache(MutableMapping[K, V]):
         self._lock = Lock()
 
     @classmethod
-    def from_dict(cls, _dict: dict[K, V], **kw) -> Self[K, V]:
+    def from_dict(
+        cls,
+        _dict: dict[K, V],
+        **kw,
+    ) -> Self:
         cache = cls(**kw)
         for k, v in _dict.items():
             cache[k] = v
         return cache
 
-    @classmethod
-    def fromkeys(cls, keys: Iterator[K], v: V = None, **kw) -> Self[K, V]:
-        cache = cls(**kw)
-        for k in keys:
-            cache[k] = v
-        return cache
+    def __getitem(
+        self,
+        k: K,
+    ) -> V:
+        """Non-locking version of __getitem__.
 
-    # The following functions are to make the cache act like the
-    #  underlying cache dictionary, they act exactly like how dictionaries do
-
-    def keys(self) -> KeysView[K]:
-        return KeysView(self)
-
-    def __reversed__(self) -> Iterator[K]:
-        yield from list(iter(self))[::-1]
-
-    def __or__(self, other: SFDictCache | dict[K, V]) -> None:
-        self_copy = copy.deepcopy(self)
-        self_copy.update(other)
-        return self_copy
-
-    def __ior__(self, other: SFDictCache | dict[K, V]) -> None:
-        self.update(other)
-
-    def values(self) -> ValuesView[V]:
-        return ValuesView(self)
-
-    def items(self) -> ItemsView[K, V]:
-        return ItemsView(self)
-
-    def get(self, key: K, default: V | None = None) -> V | None:
-        if key in self._cache:
-            if self._is_expired(self._cache[key].expiry):
-                del self._cache[key]
-            else:
-                return self._cache[key].entry
-        return default
-
-    def clear(self) -> None:
-        self._cache.clear()
-
-    def setdefault(self, key: K, default: V | None = None) -> V:
-        return self._cache.setdefault(
-            key, CacheEntry(expiry=now() + self._entry_lifetime, entry=default)
-        ).entry
-
-    def pop(self, key: K, default=None) -> V:
-        # TODO: don't return expired element
-        if key in self._cache:
-            return self._cache.pop(key).entry
-        return default
-
-    def popitem(self) -> tuple[K, V]:
-        # TODO: don't return expired element
-        k, (_, v) = self._cache.popitem()
-        return k, v
-
-    def copy(self) -> Self:
-        return self.__copy__()
-
-    def __copy__(self) -> Self:
-        _cache_copy = self._cache.copy()
-        cache_copy = SFDictCache()
-        cache_copy._cache = _cache_copy
-        return cache_copy
-
-    def __deepcopy__(self, memo: dict) -> Self:  # TODO: type-hint
-        _cache_copy = copy.deepcopy(self._cache, memo=memo)
-        cache_copy = SFDictCache()
-        cache_copy._cache = _cache_copy
-        return cache_copy
-
-    def update(self, other: dict[K, V] | SFDictCache[K, V], **kw: dict[K, V]) -> None:
-        t = now() + self._entry_lifetime
-        if isinstance(other, SFDictCache):
-            self._cache.update(
-                {k: CacheEntry(expiry=t, entry=v) for k, v in other.items()}
-            )
-        elif isinstance(other, dict):
-            self._cache.update(
-                {k: CacheEntry(expiry=t, entry=v) for k, v in (other | kw).items()}
-            )
-        else:
-            raise TypeError
-
-    def __getitem__(self, k: K) -> V:
-        """Returns an element if it hasn't expired yet."""
+        This should only be used by internal functions when already
+        holding self._lock.
+        """
         t, v = self._cache[k]
-        if self._is_expired(t):
+        if is_expired(t):
             del self._cache[k]
             raise KeyError
         return v
 
-    def __setitem__(self, key: K, value: V) -> None:
-        self._cache[key] = CacheEntry(
+    def __setitem(
+        self,
+        k: K,
+        v: V,
+    ) -> None:
+        """Non-locking version of __setitem__.
+
+        This should only be used by internal functions when already
+        holding self._lock.
+        """
+        self._cache[k] = CacheEntry(
             expiry=now() + self._entry_lifetime,
-            entry=value,
+            entry=v,
         )
 
-    def __delitem__(self, key: K) -> None:
-        del self._cache[key]
+    def __getitem__(
+        self,
+        k: K,
+    ) -> V:
+        """Returns an element if it hasn't expired yet in a thread-safe way."""
+        with self._lock:
+            return self.__getitem(k)
 
-    def __contains__(self, key: K) -> bool:
-        if key in self._cache.keys():
-            try:
-                self[key]
-                return True
-            except KeyError:
-                # Fall through
-                pass
-        return False
-
-    def __len__(self) -> int:
-        length = 0
-        for _ in iter(self):
-            length += 1
-        return length
-
-    def __repr__(self):
-        return f"SFDictCache({len(self)})"
+    def __setitem__(
+        self,
+        k: K,
+        v: V,
+    ) -> None:
+        """Inserts an element in a thread-safe way."""
+        with self._lock:
+            self.__setitem(k, v)
 
     def __iter__(self) -> Iterator[K]:
-        for k in self._cache.keys():
-            try:
-                _ = self[k]
-                yield k
-            except KeyError:
-                pass
+        return iter(self.keys())
 
-    @staticmethod
-    def _is_expired(d: datetime) -> bool:
-        return now() >= d
+    def keys(self) -> list[K]:
+        keys: list[K] = []
+        with self._lock:
+            for k in list(self._cache.keys()):
+                try:
+                    _ = self.__getitem(k)
+                    keys.append(k)
+                except KeyError:
+                    continue
+        return keys
+
+    def __items(self) -> list[tuple[K, V]]:
+        """Non-locking version of items.
+
+        This should only be used by internal functions when already
+        holding self._lock.
+        """
+        values: list[tuple[K, V]] = []
+        for k in list(self._cache.keys()):
+            try:
+                v = self.__getitem(k)
+                values.append((k, v))
+            except KeyError:
+                continue
+        return values
+
+    def items(self) -> list[tuple[K, V]]:
+        with self._lock:
+            return self.__items()
+
+    def values(self) -> list[V]:
+        values: list[V] = []
+        with self._lock:
+            for k in list(self._cache.keys()):
+                try:
+                    v = self.__getitem(k)
+                    values.append(v)
+                except KeyError:
+                    continue
+        return values
+
+    def get(
+        self,
+        k: K,
+        default: V | None = None,
+    ) -> V | None:
+        try:
+            return self[k]
+        except KeyError:
+            return default
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+    def __delitem__(
+        self,
+        key: K,
+    ) -> None:
+        with self._lock:
+            del self._cache[key]
+
+    def __contains__(
+        self,
+        key: K,
+    ) -> bool:
+        with self._lock:
+            if key in self._cache.keys():
+                try:
+                    self.__getitem(key)
+                    return True
+                except KeyError:
+                    # Fall through
+                    pass
+        return False
+
+    def update(
+        self,
+        other: dict[K, V] | SFDictCache[K, V],
+    ) -> None:
+        t = now() + self._entry_lifetime
+
+        if isinstance(other, (SFDictCache, dict)):
+            to_insert: dict[K, CacheEntry[V]] = {
+                k: CacheEntry(expiry=t, entry=v) for k, v in other.items()
+            }
+            with self._lock:
+                self._cache.update(to_insert)
+        else:
+            raise TypeError
 
     def _clear_expired_entries(self) -> None:
-        for k, (t, _) in self._cache.items():
-            if self._is_expired(t):
-                del self._cache[k]
+        with self._lock:
+            for k in self._cache.keys():
+                try:
+                    self.__getitem(k)
+                except KeyError:
+                    continue
