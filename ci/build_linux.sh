@@ -34,7 +34,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # Clean up possible build artifacts
     rm -rf build generated_version.py
     # Update PEP-517 dependencies
-    ${PYTHON} -m pip install --upgrade pip setuptools wheel build
+    ${PYTHON} -m pip install --upgrade pip setuptools wheel build cffi --only-binary=:all:
     # Use new PEP-517 build
     ${PYTHON} -m build --outdir ${BUILD_DIR} .
     # On Linux we should repair wheel(s) generated
