@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import collections
 import contextlib
+import gzip
 import itertools
 import json
 import logging
@@ -1004,7 +1005,11 @@ class SnowflakeRestful:
             socket_timeout = DEFAULT_SOCKET_CONNECT_TIMEOUT
         logger.debug("socket timeout: %s", socket_timeout)
         try:
-            input_data = data
+            if not catch_okta_unauthorized_error and data and len(data) > 0:
+                headers["Content-Encoding"] = "gzip"
+                input_data = gzip.compress(data.encode("utf-8"))
+            else:
+                input_data = data
 
             download_start_time = get_time_millis()
             # socket timeout is constant. You should be able to receive
