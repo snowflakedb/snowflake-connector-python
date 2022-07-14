@@ -7,14 +7,12 @@ from __future__ import annotations
 
 import collections
 import contextlib
-import gzip
 import itertools
 import json
 import logging
 import time
 import traceback
 import uuid
-from io import BytesIO
 from threading import Lock
 from typing import TYPE_CHECKING
 
@@ -1006,14 +1004,7 @@ class SnowflakeRestful:
             socket_timeout = DEFAULT_SOCKET_CONNECT_TIMEOUT
         logger.debug("socket timeout: %s", socket_timeout)
         try:
-            if not catch_okta_unauthorized_error and data and len(data) > 0:
-                gzdata = BytesIO()
-                gzip.GzipFile(fileobj=gzdata, mode="wb").write(data.encode("utf-8"))
-                gzdata.seek(0, 0)
-                headers["Content-Encoding"] = "gzip"
-                input_data = gzdata
-            else:
-                input_data = data
+            input_data = data
 
             download_start_time = get_time_millis()
             # socket timeout is constant. You should be able to receive
