@@ -29,6 +29,9 @@ import jwt
 # part of the code where we want to call out to check for revoked certificates,
 # we don't want to use our hardened version of requests.
 import requests as generic_requests
+from asn1crypto.ocsp import CertId, OCSPRequest
+from asn1crypto.x509 import Certificate
+from OpenSSL.SSL import Connection
 
 from snowflake.connector.compat import OK, urlsplit
 from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
@@ -64,7 +67,28 @@ from snowflake.connector.ssd_internal_keys import (
 from snowflake.connector.telemetry_oob import TelemetryService
 from snowflake.connector.time_util import DecorrelateJitterBackoff
 
+from .cache import SFDictCache
+
+OCSP_CACHE: SFDictCache[
+    tuple[bytes, bytes, int, str],
+    tuple[Exception | None, Certificate, Certificate, CertId, bytes],
+] = SFDictCache(
+    entry_lifetime=60 * 60 * 24,  # A day in seconds
+)
+
 logger = getLogger(__name__)
+
+
+def generate_cache_key(
+    cert: Certificate,
+    subject: Certificate,
+) -> tuple[bytes, bytes, int, str]:
+    return (
+        cert.native["issuer_name_hash"],
+        cert.native["issuer_key_hash"],
+        int(cert.native["serial_number"]),
+        subject.subject.name,
+    )
 
 
 class OCSPTelemetryData:
@@ -1058,7 +1082,20 @@ class SnowflakeOCSP:
             None, cert_data, telemetry_data, do_retry=False, no_exception=no_exception
         )
 
-    def validate(self, hostname, connection, no_exception=False):
+    def validate(
+        self,
+        hostname: str | None,
+        connection: Connection,
+        no_exception: bool = False,
+    ) -> list[
+        tuple[
+            Exception | None,
+            Certificate,
+            Certificate,
+            CertId,
+            str | bytes,
+        ]
+    ] | None:
         """Validates the certificate is not revoked using OCSP."""
         logger.debug("validating certificate: %s", hostname)
 
@@ -1094,9 +1131,14 @@ class SnowflakeOCSP:
         )
 
     def _validate(
-        self, hostname, cert_data, telemetry_data, do_retry=True, no_exception=False
-    ):
-        # Validate certs sequentially if OCSP response cache server is used
+        self,
+        hostname: str | None,
+        cert_data: list[tuple[Certificate, Certificate]],
+        telemetry_data: OCSPTelemetryData,
+        do_retry: bool = True,
+        no_exception: bool = False,
+    ) -> list[tuple[Exception | None, Certificate, Certificate, CertId, bytes]]:
+        """Validate certs sequentially if OCSP response cache server is used."""
         results = self._validate_certificates_sequential(
             cert_data, telemetry_data, hostname, do_retry=do_retry
         )
@@ -1104,7 +1146,7 @@ class SnowflakeOCSP:
         SnowflakeOCSP.OCSP_CACHE.update_file(self)
 
         any_err = False
-        for err, _issuer, _subject, _cert_id, _ocsp_response in results:
+        for err, _, _, _, _ in results:
             if isinstance(err, RevocationCheckError):
                 err.msg += f" for {hostname}"
             if not no_exception and err is not None:
@@ -1163,8 +1205,13 @@ class SnowflakeOCSP:
         logger.error(ocsp_warning)
 
     def validate_by_direct_connection(
-        self, issuer, subject, telemetry_data, hostname=None, do_retry=True
-    ):
+        self,
+        issuer: Certificate,
+        subject: Certificate,
+        telemetry_data: OCSPTelemetryData,
+        hostname: str = None,
+        do_retry: bool = True,
+    ) -> tuple[Exception | None, Certificate, Certificate, CertId, bytes]:
         ssd_cache_status = False
         cache_status = False
         ocsp_response = None
@@ -1306,8 +1353,12 @@ class SnowflakeOCSP:
                 return None
 
     def _validate_certificates_sequential(
-        self, cert_data, telemetry_data, hostname=None, do_retry=True
-    ):
+        self,
+        cert_data: list[tuple[Certificate, Certificate]],
+        telemetry_data: OCSPTelemetryData,
+        hostname: str | None = None,
+        do_retry: bool = True,
+    ) -> list[tuple[Exception | None, Certificate, Certificate, CertId, bytes]]:
         results = []
         try:
             self._check_ocsp_response_cache_server(cert_data)
@@ -1322,13 +1373,23 @@ class SnowflakeOCSP:
             )
 
         for issuer, subject in cert_data:
-            r = self.validate_by_direct_connection(
-                issuer, subject, telemetry_data, hostname, do_retry=do_retry
-            )
-            results.append(r)
+            cert_id, _ = self.create_ocsp_request(issuer=issuer, subject=subject)
+            cache_key = generate_cache_key(cert_id, subject)
+            cache_hit = OCSP_CACHE.get(cache_key)
+            if cache_hit is None:
+                r = self.validate_by_direct_connection(
+                    issuer, subject, telemetry_data, hostname, do_retry=do_retry
+                )
+                OCSP_CACHE[cache_key] = r
+                results.append(r)
+            else:
+                results.append(cache_hit)
         return results
 
-    def _check_ocsp_response_cache_server(self, cert_data):
+    def _check_ocsp_response_cache_server(
+        self,
+        cert_data: list[tuple[Certificate, Certificate]],
+    ) -> None:
         """Checks if OCSP response is in cache, and if not it downloads the OCSP response cache from the server.
 
         Args:
@@ -1878,7 +1939,11 @@ class SnowflakeOCSP:
         """Decodes base64 Cert ID to native CertID."""
         raise NotImplementedError
 
-    def create_ocsp_request(self, issuer, subject):
+    def create_ocsp_request(
+        self,
+        issuer: Certificate,
+        subject: Certificate,
+    ) -> tuple[CertId, OCSPRequest]:
         """Creates CertId and OCSPRequest."""
         raise NotImplementedError
 

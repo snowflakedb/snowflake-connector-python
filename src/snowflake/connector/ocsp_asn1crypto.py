@@ -131,7 +131,11 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                     crt = Certificate.load(der_bytes)
                     storage[crt.subject.sha256] = crt
 
-    def create_ocsp_request(self, issuer, subject):
+    def create_ocsp_request(
+        self,
+        issuer: Certificate,
+        subject: Certificate,
+    ) -> tuple[CertId, OCSPRequest]:
         """Creates CertId and OCSPRequest."""
         cert_id = CertId(
             {
