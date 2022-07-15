@@ -44,6 +44,7 @@ class SFDictCache(Generic[K, V]):
         self._entry_lifetime = datetime.timedelta(seconds=entry_lifetime)
         self._cache: dict[K, CacheEntry[V]] = {}
         self._lock = Lock()
+        self._setup_telemetry()
 
     @classmethod
     def from_dict(
@@ -59,16 +60,27 @@ class SFDictCache(Generic[K, V]):
     def __getitem(
         self,
         k: K,
+        *,
+        should_record_hits: bool = True,
     ) -> V:
         """Non-locking version of __getitem__.
 
         This should only be used by internal functions when already
         holding self._lock.
         """
-        t, v = self._cache[k]
+        try:
+            t, v = self._cache[k]
+        except KeyError:
+            # Call telemetry function
+            self._miss(k)
+            raise
         if is_expired(t):
+            # Call telemetry function
+            self._expiration(k)
             del self._cache[k]
             raise KeyError
+        if should_record_hits:
+            self._hit(k)
         return v
 
     def __setitem(
@@ -92,7 +104,7 @@ class SFDictCache(Generic[K, V]):
     ) -> V:
         """Returns an element if it hasn't expired yet in a thread-safe way."""
         with self._lock:
-            return self.__getitem(k)
+            return self.__getitem(k, should_record_hits=True)
 
     def __setitem__(
         self,
@@ -111,7 +123,7 @@ class SFDictCache(Generic[K, V]):
         with self._lock:
             for k in list(self._cache.keys()):
                 try:
-                    _ = self.__getitem(k)
+                    _ = self.__getitem(k, should_record_hits=False)
                     keys.append(k)
                 except KeyError:
                     continue
@@ -126,7 +138,7 @@ class SFDictCache(Generic[K, V]):
         values: list[tuple[K, V]] = []
         for k in list(self._cache.keys()):
             try:
-                v = self.__getitem(k)
+                v = self.__getitem(k, should_record_hits=False)
                 values.append((k, v))
             except KeyError:
                 continue
@@ -141,7 +153,7 @@ class SFDictCache(Generic[K, V]):
         with self._lock:
             for k in list(self._cache.keys()):
                 try:
-                    v = self.__getitem(k)
+                    v = self.__getitem(k, should_record_hits=False)
                     values.append(v)
                 except KeyError:
                     continue
@@ -175,7 +187,7 @@ class SFDictCache(Generic[K, V]):
         with self._lock:
             if key in self._cache.keys():
                 try:
-                    self.__getitem(key)
+                    self.__getitem(key, should_record_hits=True)
                     return True
                 except KeyError:
                     # Fall through
@@ -201,6 +213,40 @@ class SFDictCache(Generic[K, V]):
         with self._lock:
             for k in self._cache.keys():
                 try:
-                    self.__getitem(k)
+                    self.__getitem(k, should_record_hits=False)
                 except KeyError:
                     continue
+
+    # Telemetry related functions, these can be plugged by child classes
+    def _setup_telemetry(self) -> None:
+        self.telemetry = {
+            "hit": 0,
+            "miss": 0,
+            "expiration": 0,
+        }
+
+    def _hit(self, k: K) -> None:
+        """This function gets called when a hit occurs.
+
+        Functions that hit every entry (like values) is not going to count.
+
+        Note that while this function does not interact with lock, but it's only
+        called from contexts where the lock is already held.
+        """
+        self.telemetry["hit"] += 1
+
+    def _miss(self, k: K) -> None:
+        """This function gets called when a miss occurs.
+
+        Note that while this function does not interact with lock, but it's only
+        called from contexts where the lock is already held.
+        """
+        self.telemetry["miss"] += 1
+
+    def _expiration(self, k: K) -> None:
+        """This function gets called when an expiration occurs.
+
+        Note that while this function does not interact with lock, but it's only
+        called from contexts where the lock is already held.
+        """
+        self.telemetry["expiration"] += 1
