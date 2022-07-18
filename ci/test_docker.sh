@@ -20,14 +20,11 @@ cd $THIS_DIR/docker/connector_test
 CONTAINER_NAME=test_pyconnector
 
 echo "[Info] Building docker image"
-arch=$(uname -p)
-
-echo "[Info] Building docker image"
 if [[ "$arch" == "aarch64" ]]; then
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.11/gosu-arm64
 else
-  BASE_IMAGE=$BASE_IMAGE_MANYLINUX2010
+  BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.11/gosu-amd64
 fi
 
