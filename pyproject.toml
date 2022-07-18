@@ -11,7 +11,7 @@ requires = [
 
 [tool.cibuildwheel]
 test-skip = "*"
-manylinux-x86_64-image = "manylinux2010"
+manylinux-x86_64-image = "manylinux2014"
 environment = {AUDITWHEEL_PLAT="manylinux2014_$(uname -m)"}
 build-verbosity = 1
 
