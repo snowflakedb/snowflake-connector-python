@@ -61,6 +61,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
             ),
         ],
+        compile_time_env={'PYARROW_HAS_LIBARROW_PYTHON':
+                          int(pyarrow.__version__.split('.', 1)[0]) >= 8}
     )
 
     class MyBuildExt(build_ext):

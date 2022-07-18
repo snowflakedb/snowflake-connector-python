@@ -19,10 +19,14 @@ from pyarrow.includes.libarrow cimport (
     CRecordBatchStreamReader,
     FileInterface,
     FileMode,
-    PyReadableFile,
     Readable,
     Seekable,
 )
+
+IF PYARROW_HAS_LIBARROW_PYTHON:
+    from pyarrow.includes.libarrow_python cimport PyReadableFile
+ELSE:
+    from pyarrow.includes.libarrow cimport PyReadableFile
 
 from .constants import IterUnit
 from .errorcode import (
