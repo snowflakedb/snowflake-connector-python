@@ -85,7 +85,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 "libarrow_python.800.dylib",
                 "libparquet.800.dylib",
             ],
-            "win32": ["arrow.lib", "arrow_python.lib", "parquet.dll"],
+            "win32": ["arrow.lib", "arrow_python.lib", "parquet.lib"],
         }
 
         def build_extension(self, ext):
