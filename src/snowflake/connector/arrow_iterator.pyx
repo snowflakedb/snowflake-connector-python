@@ -22,7 +22,11 @@ from pyarrow.includes.libarrow cimport (
     Readable,
     Seekable,
 )
-from pyarrow.includes.libarrow_python cimport PyReadableFile
+
+IF ARROW_LESS_THAN_8:
+    from pyarrow.includes.libarrow cimport PyReadableFile
+ELSE:
+    from pyarrow.includes.libarrow_python cimport PyReadableFile
 
 from .constants import IterUnit
 from .errorcode import (

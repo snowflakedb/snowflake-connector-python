@@ -54,6 +54,7 @@ except ImportError:
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
 
+    pyarrow_version = tuple(int(x) for x in pyarrow.__version__.split("."))
     extensions = cythonize(
         [
             Extension(
@@ -61,6 +62,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
             ),
         ],
+        compile_time_env=dict(ARROW_LESS_THAN_8=pyarrow_version < (8,)),
     )
 
     class MyBuildExt(build_ext):
