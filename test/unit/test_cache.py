@@ -142,3 +142,54 @@ def test_values():
     c._entry_lifetime = NO_LIFETIME
     c["c"] = 3
     assert c.values() == [1, 2]
+
+
+def test_telemetry():
+    c = cache.SFDictCache.from_dict({"a": 1, "b": 2})
+    assert c.telemetry == {
+        "hit": 0,
+        "miss": 0,
+        "expiration": 0,
+        "size": 2,
+    }
+    c["a"] = 1
+    assert c.telemetry["hit"] == 0
+    assert c["a"] == 1
+    assert c.telemetry["hit"] == 1
+    with pytest.raises(KeyError):
+        c["c"]
+    assert c.telemetry["miss"] == 1
+    # Make sure that this filters out expired entries
+    c._entry_lifetime = NO_LIFETIME
+    c["c"] = 3
+    with pytest.raises(KeyError):
+        c["c"]
+    assert c.telemetry["expiration"] == 1
+    assert c.get("c") is None
+    assert c.telemetry["miss"] == 2
+    # These functions should not affect any numbers other than expirations
+    c["c"] = 3  # expired
+    assert c.values() == [1, 2]
+    assert c.keys() == ["a", "b"]
+    assert c.items() == [("a", 1), ("b", 2)]
+    assert c.telemetry == {
+        "hit": 1,
+        "miss": 2,
+        "expiration": 2,
+        "size": 2,
+    }
+    assert "b" in c
+    c.clear()
+    assert c.telemetry == {
+        "hit": 0,
+        "miss": 0,
+        "expiration": 0,
+        "size": 0,
+    }
+    c.update({"a": 1, "b": 2})
+    assert c.telemetry == {
+        "hit": 0,
+        "miss": 0,
+        "expiration": 0,
+        "size": 2,
+    }

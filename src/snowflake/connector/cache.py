@@ -75,7 +75,7 @@ class SFDictCache(Generic[K, V]):
             raise
         if is_expired(t):
             self._expiration(k)
-            del self._cache[k]
+            self.__delitem(k)
             raise KeyError
         if should_record_hits:
             self._hit(k)
@@ -95,6 +95,7 @@ class SFDictCache(Generic[K, V]):
             expiry=now() + self._entry_lifetime,
             entry=v,
         )
+        self.telemetry["size"] = len(self._cache)
 
     def __getitem__(
         self,
@@ -150,12 +151,24 @@ class SFDictCache(Generic[K, V]):
             self._cache.clear()
             self._reset_telemetry()
 
+    def __delitem(
+        self,
+        key: K,
+    ) -> None:
+        """Non-locking version of __delitem__.
+
+        This should only be used by internal functions when already
+        holding self._lock.
+        """
+        del self._cache[key]
+        self.telemetry["size"] = len(self._cache)
+
     def __delitem__(
         self,
         key: K,
     ) -> None:
         with self._lock:
-            del self._cache[key]
+            self.__delitem(key)
 
     def __contains__(
         self,
@@ -189,10 +202,12 @@ class SFDictCache(Generic[K, V]):
             }
             with self._lock:
                 self._cache.update(to_insert)
+                self.telemetry["size"] = len(self._cache)
         elif isinstance(other, SFDictCache):
             to_insert: dict[K, CacheEntry[V]] = {k: v for k, v in other._cache.items()}
             with self._lock:
                 self._cache.update(to_insert)
+                self.telemetry["size"] = len(self._cache)
         else:
             raise TypeError
 
@@ -203,6 +218,7 @@ class SFDictCache(Generic[K, V]):
                     self.__getitem(k, should_record_hits=False)
                 except KeyError:
                     continue
+            self.telemetry["size"] = len(self._cache)
 
     # Telemetry related functions, these can be plugged by child classes
     def _reset_telemetry(self) -> None:
@@ -215,6 +231,7 @@ class SFDictCache(Generic[K, V]):
             "hit": 0,
             "miss": 0,
             "expiration": 0,
+            "size": 0,
         }
 
     def _hit(self, k: K) -> None:
