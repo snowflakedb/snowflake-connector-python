@@ -6,12 +6,12 @@ requires = [
     "wheel",
     "cython",
     # Must be kept in sync with the `setup_requirements` in `setup.cfg`
-    "pyarrow>=6.0.0,<6.1.0",
+    "pyarrow>=8.0.0,<8.1.0",
 ]
 
 [tool.cibuildwheel]
 test-skip = "*"
-manylinux-x86_64-image = "manylinux2010"
+manylinux-x86_64-image = "manylinux2014"
 environment = {AUDITWHEEL_PLAT="manylinux2014_$(uname -m)"}
 build-verbosity = 1
 
