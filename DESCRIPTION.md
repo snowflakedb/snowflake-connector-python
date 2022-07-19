@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+- v2.7.10(Unreleased)
+
+   - Release wheels are now built on manylinux2014
+   - Bumped supported pyarrow version to >=8.0.0,<8.1.0
+
+
 - v2.7.9(June 26,2022)
 
    - Fixed a bug where errors raised during get_results_from_sfqid() were missing errno

@@ -22,7 +22,7 @@ else
 fi
 
 # replace test password with a more complex one, and generate known ssm file
-pip3 install -U snowflake-connector-python >& /dev/null
+python3 -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
 python3 ${THIS_DIR}/change_snowflake_test_pwd.py
 mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
 

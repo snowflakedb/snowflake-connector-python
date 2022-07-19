@@ -19,10 +19,14 @@ from pyarrow.includes.libarrow cimport (
     CRecordBatchStreamReader,
     FileInterface,
     FileMode,
-    PyReadableFile,
     Readable,
     Seekable,
 )
+
+IF ARROW_LESS_THAN_8:
+    from pyarrow.includes.libarrow cimport PyReadableFile
+ELSE:
+    from pyarrow.includes.libarrow_python cimport PyReadableFile
 
 from .constants import IterUnit
 from .errorcode import (

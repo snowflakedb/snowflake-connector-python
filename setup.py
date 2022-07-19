@@ -54,6 +54,7 @@ except ImportError:
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
 
+    pyarrow_version = tuple(int(x) for x in pyarrow.__version__.split("."))
     extensions = cythonize(
         [
             Extension(
@@ -61,6 +62,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
             ),
         ],
+        compile_time_env=dict(ARROW_LESS_THAN_8=pyarrow_version < (8,)),
     )
 
     class MyBuildExt(build_ext):
@@ -69,15 +71,23 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            "linux": ["libarrow.so.600", "libarrow_python.so.600"],
-            "darwin": ["libarrow.600.dylib", "libarrow_python.600.dylib"],
-            "win32": ["arrow.dll", "arrow_python.dll"],
+            "linux": ["libarrow.so.800", "libarrow_python.so.800", "libparquet.so.800"],
+            "darwin": [
+                "libarrow.800.dylib",
+                "libarrow_python.800.dylib",
+                "libparquet.800.dylib",
+            ],
+            "win32": ["arrow.dll", "arrow_python.dll", "parquet.dll"],
         }
 
         arrow_libs_to_link = {
-            "linux": ["libarrow.so.600", "libarrow_python.so.600"],
-            "darwin": ["libarrow.600.dylib", "libarrow_python.600.dylib"],
-            "win32": ["arrow.lib", "arrow_python.lib"],
+            "linux": ["libarrow.so.800", "libarrow_python.so.800", "libparquet.so.800"],
+            "darwin": [
+                "libarrow.800.dylib",
+                "libarrow_python.800.dylib",
+                "libparquet.800.dylib",
+            ],
+            "win32": ["arrow.lib", "arrow_python.lib", "parquet.lib"],
         }
 
         def build_extension(self, ext):
