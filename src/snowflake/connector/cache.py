@@ -44,7 +44,7 @@ class SFDictCache(Generic[K, V]):
         self._entry_lifetime = datetime.timedelta(seconds=entry_lifetime)
         self._cache: dict[K, CacheEntry[V]] = {}
         self._lock = Lock()
-        self._setup_telemetry()
+        self._reset_telemetry()
 
     @classmethod
     def from_dict(
@@ -71,11 +71,9 @@ class SFDictCache(Generic[K, V]):
         try:
             t, v = self._cache[k]
         except KeyError:
-            # Call telemetry function
             self._miss(k)
             raise
         if is_expired(t):
-            # Call telemetry function
             self._expiration(k)
             del self._cache[k]
             raise KeyError
@@ -119,45 +117,23 @@ class SFDictCache(Generic[K, V]):
         return iter(self.keys())
 
     def keys(self) -> list[K]:
-        keys: list[K] = []
-        with self._lock:
-            for k in list(self._cache.keys()):
-                try:
-                    _ = self.__getitem(k, should_record_hits=False)
-                    keys.append(k)
-                except KeyError:
-                    continue
-        return keys
-
-    def __items(self) -> list[tuple[K, V]]:
-        """Non-locking version of items.
-
-        This should only be used by internal functions when already
-        holding self._lock.
-        """
-        values: list[tuple[K, V]] = []
-        for k in list(self._cache.keys()):
-            try:
-                v = self.__getitem(k, should_record_hits=False)
-                values.append((k, v))
-            except KeyError:
-                continue
-        return values
+        return [k for k, _ in self.items()]
 
     def items(self) -> list[tuple[K, V]]:
         with self._lock:
-            return self.__items()
-
-    def values(self) -> list[V]:
-        values: list[V] = []
-        with self._lock:
+            values: list[tuple[K, V]] = []
             for k in list(self._cache.keys()):
                 try:
+                    # TODO: this function could be further optimized by removing
+                    #  the need here to call __getitem here and call se;f._cache.keys()
                     v = self.__getitem(k, should_record_hits=False)
-                    values.append(v)
+                    values.append((k, v))
                 except KeyError:
                     continue
         return values
+
+    def values(self) -> list[V]:
+        return [v for _, v in self.items()]
 
     def get(
         self,
@@ -172,6 +148,7 @@ class SFDictCache(Generic[K, V]):
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()
+            self._reset_telemetry()
 
     def __delitem__(
         self,
@@ -198,12 +175,22 @@ class SFDictCache(Generic[K, V]):
         self,
         other: dict[K, V] | SFDictCache[K, V],
     ) -> None:
-        t = now() + self._entry_lifetime
+        """Insert multiple values at the same time.
 
-        if isinstance(other, (SFDictCache, dict)):
+        If this function is given a dictionary, expiration timestamps
+        will be all the same a self._entry_lifetime form now. If it's
+        given another SFDictCache then the timestamps will be taken
+        from the other cache.
+        """
+        if isinstance(other, dict):
+            t = now() + self._entry_lifetime
             to_insert: dict[K, CacheEntry[V]] = {
                 k: CacheEntry(expiry=t, entry=v) for k, v in other.items()
             }
+            with self._lock:
+                self._cache.update(to_insert)
+        elif isinstance(other, SFDictCache):
+            to_insert: dict[K, CacheEntry[V]] = {k: v for k, v in other._cache.items()}
             with self._lock:
                 self._cache.update(to_insert)
         else:
@@ -218,7 +205,12 @@ class SFDictCache(Generic[K, V]):
                     continue
 
     # Telemetry related functions, these can be plugged by child classes
-    def _setup_telemetry(self) -> None:
+    def _reset_telemetry(self) -> None:
+        """(Re)set telemetry fields.
+
+        This function will be called by the initalizer and other functions that should
+        reset telemtry entries.
+        """
         self.telemetry = {
             "hit": 0,
             "miss": 0,
@@ -233,6 +225,7 @@ class SFDictCache(Generic[K, V]):
         Note that while this function does not interact with lock, but it's only
         called from contexts where the lock is already held.
         """
+        del k
         self.telemetry["hit"] += 1
 
     def _miss(self, k: K) -> None:
@@ -241,6 +234,7 @@ class SFDictCache(Generic[K, V]):
         Note that while this function does not interact with lock, but it's only
         called from contexts where the lock is already held.
         """
+        del k
         self.telemetry["miss"] += 1
 
     def _expiration(self, k: K) -> None:
@@ -249,4 +243,5 @@ class SFDictCache(Generic[K, V]):
         Note that while this function does not interact with lock, but it's only
         called from contexts where the lock is already held.
         """
+        del k
         self.telemetry["expiration"] += 1
