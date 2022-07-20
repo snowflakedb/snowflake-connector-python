@@ -2,16 +2,16 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import division
+from __future__ import annotations
 
 import binascii
 import re
-import xml.etree.cElementTree as ET
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from io import IOBase
 from logging import getLogger
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from cryptography.hazmat.primitives import hashes, hmac
 
@@ -23,7 +23,7 @@ from .constants import (
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata
-from .storage_client import SnowflakeStorageClient
+from .storage_client import SnowflakeStorageClient, remove_content_encoding
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -55,51 +55,67 @@ class S3Location(NamedTuple):
 class SnowflakeS3RestClient(SnowflakeStorageClient):
     def __init__(
         self,
-        meta: "SnowflakeFileMeta",
-        credentials: "StorageCredential",
-        stage_info: Dict[str, Any],
+        meta: SnowflakeFileMeta,
+        credentials: StorageCredential,
+        stage_info: dict[str, Any],
         chunk_size: int,
-        use_accelerate_endpoint: bool = False,
+        use_accelerate_endpoint: bool | None = None,
         use_s3_regional_url=False,
     ) -> None:
         """Rest client for S3 storage.
 
         Args:
             stage_info:
-            use_accelerate_endpoint:
         """
         super().__init__(meta, stage_info, chunk_size, credentials=credentials)
         # Signature version V4
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]
         # Multipart upload only
-        self.upload_id: Optional[str] = None
-        self.etags: Optional[List[str]] = None
-        self.s3location: "S3Location" = (
+        self.upload_id: str | None = None
+        self.etags: list[str] | None = None
+        self.s3location: S3Location = (
             SnowflakeS3RestClient._extract_bucket_name_and_path(
                 self.stage_info["location"]
             )
         )
         self.use_s3_regional_url = use_s3_regional_url
+
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
+        self.endpoint: str | None = None
         if stage_info["endPoint"]:
             self.endpoint = (
                 f"https://{self.s3location.bucket_name}." + stage_info["endPoint"]
             )
-        elif use_accelerate_endpoint:
+        self.transfer_accelerate_config(use_accelerate_endpoint)
+
+    def transfer_accelerate_config(
+        self, use_accelerate_endpoint: bool | None = None
+    ) -> bool:
+        # if self.endpoint has been set, e.g. by metadata, no more config is needed.
+        if self.endpoint is not None:
+            return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0
+        if self.use_s3_regional_url:
             self.endpoint = (
-                f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
+                f"https://{self.s3location.bucket_name}."
+                f"s3.{self.region_name}.amazonaws.com"
             )
+            return False
         else:
-            if self.use_s3_regional_url:
+            if use_accelerate_endpoint is None:
+                use_accelerate_endpoint = self._get_bucket_accelerate_config(
+                    self.s3location.bucket_name
+                )
+
+            if use_accelerate_endpoint:
                 self.endpoint = (
-                    f"https://{self.s3location.bucket_name}."
-                    f"s3.{self.region_name}.amazonaws.com"
+                    f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
                 )
             else:
                 self.endpoint = (
                     f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
                 )
+            return use_accelerate_endpoint
 
     @staticmethod
     def _sign_bytes(secret_key: bytes, _input: str) -> bytes:
@@ -127,7 +143,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     @staticmethod
     def _construct_query_string(
-        query_parts: Tuple[Tuple[str, str], ...],
+        query_parts: tuple[tuple[str, str], ...],
     ) -> str:
         """Convenience function to build the query part of a URL from key-value pairs.
 
@@ -137,8 +153,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
 
     @staticmethod
     def _construct_canonicalized_and_signed_headers(
-        headers: Dict[str, Union[str, List[str]]]
-    ) -> Tuple[str, str]:
+        headers: dict[str, str | list[str]]
+    ) -> tuple[str, str]:
         """Construct canonical headers as per AWS specs, returns the signed headers too.
 
         Does not support sorting by values in case the keys are the same, don't send
@@ -167,10 +183,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def _construct_canonical_request_and_signed_headers(
         verb: str,
         canonical_uri_parameter: str,
-        query_parts: Dict[str, str],
-        canonical_headers: Optional[Dict[str, Union[str, List[str]]]] = None,
+        query_parts: dict[str, str],
+        canonical_headers: dict[str, str | list[str]] | None = None,
         payload_hash: str = "",
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Build canonical request and also return signed headers.
 
         Note: this doesn't support sorting by values in case the same key is given
@@ -207,7 +223,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         amzdate: str,
         short_amzdate: str,
         canonical_request_hash: bytes,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Given all the necessary information construct a V4 string to sign.
 
         As per AWS specs it requires the scope, the hash of the canonical request and
@@ -251,7 +267,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         return err.find("Code").text == EXPIRED_TOKEN
 
     @staticmethod
-    def _extract_bucket_name_and_path(stage_location) -> "S3Location":
+    def _extract_bucket_name_and_path(stage_location) -> S3Location:
         # split stage location as bucket name and path
         bucket_name, _, path = stage_location.partition("/")
         if path and not path.endswith("/"):
@@ -263,12 +279,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         self,
         url: str,
         verb: str,
-        retry_id: Union[int, str],
-        query_parts: Optional[Dict[str, str]] = None,
-        x_amz_headers: Optional[Dict[str, str]] = None,
-        headers: Optional[Dict[str, str]] = None,
-        payload: Union[bytes, bytearray, IOBase, None] = None,
+        retry_id: int | str,
+        query_parts: dict[str, str] | None = None,
+        x_amz_headers: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        payload: bytes | bytearray | IOBase | None = None,
         unsigned_payload: bool = False,
+        ignore_content_encoding: bool = False,
     ) -> requests.Response:
         if x_amz_headers is None:
             x_amz_headers = {}
@@ -290,7 +307,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 SnowflakeS3RestClient._hash_bytes_hex(payload).lower().decode()
             )
 
-        def generate_authenticated_url_and_args_v4() -> Tuple[bytes, Dict[str, bytes]]:
+        def generate_authenticated_url_and_args_v4() -> tuple[bytes, dict[str, bytes]]:
             t = datetime.utcnow()
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
@@ -336,13 +353,17 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             if payload:
                 rest_args["data"] = payload
 
+            # add customized hook: to remove content-encoding from response.
+            if ignore_content_encoding:
+                rest_args["hooks"] = {"response": remove_content_encoding}
+
             return url.encode("utf-8"), rest_args
 
         return self._send_request_with_retry(
             verb, generate_authenticated_url_and_args_v4, retry_id
         )
 
-    def get_file_header(self, filename: str) -> Optional[FileHeader]:
+    def get_file_header(self, filename: str) -> FileHeader | None:
         """Gets the metadata of file in specified location.
 
         Args:
@@ -386,7 +407,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         else:
             response.raise_for_status()
 
-    def _prepare_file_metadata(self) -> Dict[str, Any]:
+    def _prepare_file_metadata(self) -> dict[str, Any]:
         """Construct metadata for a file to be uploaded.
 
         Returns: File metadata in a dict.
@@ -516,7 +537,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         url = self.endpoint + f"/{path}"
         if self.num_of_chunks == 1:
             response = self._send_request_with_authentication_and_retry(
-                url=url, verb="GET", retry_id=chunk_id
+                url=url,
+                verb="GET",
+                retry_id=chunk_id,
+                ignore_content_encoding=True,
             )
             if response.status_code == 200:
                 self.write_downloaded_chunk(0, response.content)
@@ -539,10 +563,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.write_downloaded_chunk(chunk_id, response.content)
             response.raise_for_status()
 
-    def transfer_accelerate_config(self) -> bool:
+    def _get_bucket_accelerate_config(self, bucket_name: str) -> bool:
         query_parts = (("accelerate", ""),)
         query_string = self._construct_query_string(query_parts)
-        url = self.endpoint + f"/{self.endpoint}/?{query_string}"
+        url = f"https://{bucket_name}.s3.amazonaws.com/?{query_string}"
         retry_id = "accelerate"
         self.retry_count[retry_id] = 0
         response = self._send_request_with_authentication_and_retry(
@@ -550,8 +574,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         )
         if response.status_code == 200:
             config = ET.fromstring(response.text)
+            namespace = config.tag[: config.tag.index("}") + 1]
+            statusTag = f"{namespace}Status"
+            found = config.find(statusTag)
             use_accelerate_endpoint = (
-                config.find("Status") and config.find("Status").text == "Enabled"
+                False if found is None else (found.text == "Enabled")
             )
             logger.debug(f"use_accelerate_endpoint: {use_accelerate_endpoint}")
             return use_accelerate_endpoint

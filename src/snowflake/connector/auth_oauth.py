@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 from .auth_by_plugin import AuthByPlugin
 from .network import OAUTH_AUTHENTICATOR
@@ -21,6 +22,7 @@ class AuthByOAuth(AuthByPlugin):
 
     def __init__(self, oauth_token):
         """Initializes an instance with an OAuth Token."""
+        super().__init__()
         self._oauth_token = oauth_token
 
     def authenticate(self, authenticator, service_name, account, user, password):

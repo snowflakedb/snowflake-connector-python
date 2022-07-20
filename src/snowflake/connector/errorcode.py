@@ -1,11 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-"""This module contains Snowflake error codes."""
+from __future__ import annotations
 
 # network
 ER_FAILED_TO_CONNECT_TO_DB = 250001
@@ -29,6 +27,8 @@ ER_NO_PASSWORD = 251006
 ER_INVALID_VALUE = 251007
 ER_INVALID_PRIVATE_KEY = 251008
 ER_NO_HOSTNAME_FOUND = 251009
+ER_JWT_RETRY_EXPIRED = 251010
+ER_CONNECTION_TIMEOUT = 251011
 
 # cursor
 ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT = 252001

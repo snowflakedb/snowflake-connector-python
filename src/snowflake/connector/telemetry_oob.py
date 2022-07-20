@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import datetime
 import json
@@ -10,7 +11,6 @@ import logging
 import uuid
 from collections import namedtuple
 from queue import Queue
-from typing import Optional
 
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
@@ -31,7 +31,7 @@ TelemetryEventBase = namedtuple(
 )
 
 
-class TelemetryAPIEndpoint(object):
+class TelemetryAPIEndpoint:
     SFCTEST = TelemetryAPI(
         url="https://sfctest.client-telemetry.snowflakecomputing.com/enqueue",
         api_key="rRNY3EPNsB4U89XYuqsZKa7TSxb9QVX93yNM4tS6",
@@ -46,7 +46,7 @@ class TelemetryAPIEndpoint(object):
     )
 
 
-class TelemetryServerDeployments(object):
+class TelemetryServerDeployments:
     DEV = TelemetryServer(
         "dev", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key
     )
@@ -144,7 +144,7 @@ class TelemetryMetricEvent(TelemetryEvent):
         return "Metric"
 
 
-class TelemetryService(object):
+class TelemetryService:
     __instance = None
 
     @staticmethod
@@ -380,7 +380,7 @@ class TelemetryService(object):
                 telemetry_data = dict()
                 response_status_code = -1
                 # This mimics the output of HttpRequestBase.toString() from JBDC
-                telemetry_data["request"] = "{} {}".format(method, url)
+                telemetry_data["request"] = f"{method} {url}"
                 telemetry_data["sqlState"] = sqlstate
                 telemetry_data["errorCode"] = errno
                 if response:
@@ -418,8 +418,8 @@ class TelemetryService(object):
         self,
         event_name: str,
         telemetry_data: dict,
-        tags: Optional[dict] = None,
-        urgent: Optional[bool] = False,
+        tags: dict | None = None,
+        urgent: bool | None = False,
     ):
         """Sends any type of exception through OOB telemetry."""
         if tags is None:
@@ -445,12 +445,10 @@ class TelemetryService(object):
             if not self.is_deployment_enabled():
                 logger.debug("Skip the disabled deployment: %s", self.deployment.name)
                 return
-            logger.debug("Sending OOB telemetry data. Payload: {}".format(payload))
+            logger.debug(f"Sending OOB telemetry data. Payload: {payload}")
             if ENABLE_TELEMETRY_LOG:
                 # This logger guarantees the payload won't be masked. Testing purpose.
-                rt_plain_logger.debug(
-                    "OOB telemetry data being sent is {}".format(payload)
-                )
+                rt_plain_logger.debug(f"OOB telemetry data being sent is {payload}")
 
             with requests.Session() as session:
                 headers = {

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import codecs
 import json
@@ -23,8 +24,10 @@ from snowflake.connector.ssl_wrap_socket import _openssl_connect
 from ..randomize import random_string
 
 try:
-    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_FETCH_FAILURE  # NOQA
-    from snowflake.connector.errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
+    from snowflake.connector.errorcode import (
+        ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+        ER_OCSP_RESPONSE_FETCH_FAILURE,
+    )
 except ImportError:
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED = None
     ER_OCSP_RESPONSE_FETCH_FAILURE = None
@@ -61,7 +64,7 @@ def test_ocsp():
     ocsp = SFOCSP()
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url, timeout=5)
-        assert ocsp.validate(url, connection), "Failed to validate: {}".format(url)
+        assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 def test_ocsp_wo_cache_server():
@@ -70,7 +73,7 @@ def test_ocsp_wo_cache_server():
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
-        assert ocsp.validate(url, connection), "Failed to validate: {}".format(url)
+        assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 def test_ocsp_wo_cache_file():
@@ -89,7 +92,7 @@ def test_ocsp_wo_cache_file():
         ocsp = SFOCSP()
         for url in TARGET_HOSTS:
             connection = _openssl_connect(url)
-            assert ocsp.validate(url, connection), "Failed to validate: {}".format(url)
+            assert ocsp.validate(url, connection), f"Failed to validate: {url}"
     finally:
         del environ["SF_OCSP_RESPONSE_CACHE_DIR"]
         OCSPCache.reset_cache_dir()
@@ -184,7 +187,7 @@ def test_ocsp_by_post_method():
     ocsp = SFOCSP(use_post_method=True)
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
-        assert ocsp.validate(url, connection), "Failed to validate: {}".format(url)
+        assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 def test_ocsp_with_file_cache(tmpdir):
@@ -197,7 +200,7 @@ def test_ocsp_with_file_cache(tmpdir):
     ocsp = SFOCSP(ocsp_response_cache_uri="file://" + cache_file_name)
     for url in TARGET_HOSTS:
         connection = _openssl_connect(url)
-        assert ocsp.validate(url, connection), "Failed to validate: {}".format(url)
+        assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 def test_ocsp_with_bogus_cache_files(tmpdir):
@@ -283,7 +286,7 @@ def test_ocsp_with_invalid_cache_file():
     ocsp = SFOCSP(ocsp_response_cache_uri="NEVER_EXISTS")
     for url in TARGET_HOSTS[0:1]:
         connection = _openssl_connect(url)
-        assert ocsp.validate(url, connection), "Failed to validate: {}".format(url)
+        assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 def test_concurrent_ocsp_requests(tmpdir):

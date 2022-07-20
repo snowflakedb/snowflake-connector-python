@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import json
+from unittest.mock import patch
 
 import pytest
-from mock import patch
 
 import snowflake.connector
-from snowflake.connector.compat import IS_LINUX  # NOQA
+from snowflake.connector.compat import IS_LINUX
 
 try:
     from snowflake.connector.options import installed_keyring
@@ -18,7 +19,7 @@ except ImportError:
     # if installed_keyring is unavailable, we set it as True to skip the test
     installed_keyring = True
 try:
-    from snowflake.connector.auth import delete_temporary_credential  # NOQA
+    from snowflake.connector.auth import delete_temporary_credential
 except ImportError:
     delete_temporary_credential = None
 

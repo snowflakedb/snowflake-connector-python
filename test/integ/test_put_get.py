@@ -1,18 +1,22 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import filecmp
 import os
 import pathlib
 from getpass import getuser
+from io import BytesIO
 from logging import getLogger
 from os import path
 from typing import TYPE_CHECKING, Callable, NamedTuple
+from unittest import mock
 
-import mock
 import pytest
+
+from snowflake.connector import OperationalError
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
@@ -39,16 +43,16 @@ class _TestData(NamedTuple):
     warehouse_name: str
     database_name: str
     user_bucket: str
-    connection: Callable[..., "SnowflakeConnection"]
+    connection: Callable[..., SnowflakeConnection]
 
 
 @pytest.fixture()
-def test_data(request, conn_cnx: Callable[..., "SnowflakeConnection"]) -> _TestData:
+def test_data(request, conn_cnx: Callable[..., SnowflakeConnection]) -> _TestData:
     return create_test_data(request, conn_cnx)
 
 
 def create_test_data(
-    request, connection: Callable[..., "SnowflakeConnection"]
+    request, connection: Callable[..., SnowflakeConnection]
 ) -> _TestData:
     assert "AWS_ACCESS_KEY_ID" in os.environ
     assert "AWS_SECRET_ACCESS_KEY" in os.environ
@@ -581,14 +585,15 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
             autospec=SnowflakeFileTransferAgent,
         ) as mock_agent:
             cur.execute(f"put file://{file} @{stage_name} threshold=156")
-        assert mock_agent.call_args.kwargs.get("multipart_threshold", -1) == 156
+        assert mock_agent.call_args[1].get("multipart_threshold", -1) == 156
 
 
 # Snowflake on GCP does not support multipart uploads
 @pytest.mark.aws
 @pytest.mark.azure
 @pytest.mark.skipolddriver
-def test_multipart_put(conn_cnx, tmp_path):
+@pytest.mark.parametrize("use_stream", [False, True])
+def test_multipart_put(conn_cnx, tmp_path, use_stream):
     """This test does a multipart upload of a smaller file and then downloads it."""
     stage_name = random_string(5, "test_multipart_put_")
     chunk_size = 6967790
@@ -612,12 +617,53 @@ def test_multipart_put(conn_cnx, tmp_path):
                 with mock.patch(
                     "snowflake.connector.constants.S3_CHUNK_SIZE", chunk_size
                 ):
-                    cur.execute(
-                        f"put file://{upload_file} @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE"
-                    )
+                    if use_stream:
+                        kw = {
+                            "command": f"put file://file0 @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE",
+                            "file_stream": BytesIO(upload_file.read_bytes()),
+                        }
+                    else:
+                        kw = {
+                            "command": f"put file://{upload_file} @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE",
+                        }
+                    cur.execute(**kw)
             cur.execute(
                 f"get @{stage_name}/sub/folders/{upload_file.name} file://{get_dir}"
             )
     downloaded_file = get_dir / upload_file.name
     assert downloaded_file.exists()
     assert filecmp.cmp(upload_file, downloaded_file)
+
+
+@pytest.mark.skipolddriver
+def test_put_special_file_name(tmp_path, conn_cnx):
+    test_file = tmp_path / "data~%23.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_special_filename_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}",
+            ).fetchall()
+            cur.execute(f"select $1, $2, $3 from  @{stage_name}")
+            assert cur.fetchone() == ("1", "2", "3")
+
+
+@pytest.mark.skipolddriver
+def test_get_empty_file(tmp_path, conn_cnx):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_empty_file_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}",
+            )
+            empty_file = tmp_path / "foo.csv"
+            with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
+                cur.execute(f"GET @{stage_name}/foo.csv file://{tmp_path}")
+            assert not empty_file.exists()

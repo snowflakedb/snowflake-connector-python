@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import decimal
 import json
@@ -11,9 +12,9 @@ import os
 import pickle
 import time
 from datetime import date, datetime
-from typing import TYPE_CHECKING, List, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
+from unittest import mock
 
-import mock
 import pytest
 import pytz
 
@@ -27,7 +28,7 @@ from snowflake.connector import (
     errorcode,
     errors,
 )
-from snowflake.connector.compat import BASE_EXCEPTION_CLASS, IS_WINDOWS
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.cursor import SnowflakeCursor
 
 try:
@@ -46,7 +47,6 @@ except ImportError:
 
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
-    ER_INVALID_VALUE,
     ER_NOT_POSITIVE_SIZE,
 )
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
@@ -56,6 +56,7 @@ from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import (
+        FIELD_ID_TO_NAME,
         PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     )
     from snowflake.connector.errorcode import (
@@ -70,9 +71,15 @@ except ImportError:
     ER_NO_PYARROW = None
     ER_NO_PYARROW_SNOWSQL = None
     ArrowResultBatch = JSONResultBatch = None
+    FIELD_ID_TO_NAME = {}
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.result_batch import ResultBatch
+
+try:  # pragma: no cover
+    from snowflake.connector.constants import QueryStatus
+except ImportError:
+    QueryStatus = None
 
 
 def _drop_warehouse(conn, db_parameters):
@@ -203,12 +210,12 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters):
 
 def _total_milliseconds_from_timedelta(td):
     """Returns the total number of milliseconds contained in the duration object."""
-    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10 ** 6) // 10 ** 3
+    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) // 10**3
 
 
 def _total_seconds_from_timedelta(td):
     """Returns the total number of seconds contained in the duration object."""
-    return _total_milliseconds_from_timedelta(td) // 10 ** 3
+    return _total_milliseconds_from_timedelta(td) // 10**3
 
 
 def test_insert_timestamp_select(conn, db_parameters):
@@ -319,7 +326,7 @@ def test_insert_timestamp_select(conn, db_parameters):
         assert desc[5][0].upper() == "TM", "invalid column name"
         assert (
             constants.FIELD_ID_TO_NAME[desc[0][1]] == "FIXED"
-        ), "invalid column name: {}".format(constants.FIELD_ID_TO_NAME[desc[0][1]])
+        ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
         assert (
             constants.FIELD_ID_TO_NAME[desc[1][1]] == "TIMESTAMP_LTZ"
         ), "invalid column name"
@@ -340,7 +347,7 @@ def test_insert_timestamp_ltz(conn, db_parameters):
     tzstr = "America/New_York"
     # sync with the session parameter
     with conn() as cnx:
-        cnx.cursor().execute("alter session set timezone='{tzstr}'".format(tzstr=tzstr))
+        cnx.cursor().execute(f"alter session set timezone='{tzstr}'")
 
         current_time = datetime.now()
         current_time = current_time.replace(tzinfo=pytz.timezone(tzstr))
@@ -552,7 +559,7 @@ created_at timestamp, data variant)
                 c.close()
 
             result = cnx.cursor().execute(
-                "select created_at, data from {name}".format(name=name_variant)
+                f"select created_at, data from {name_variant}"
             )
             _, data = result.fetchone()
             data = json.loads(data)
@@ -561,18 +568,37 @@ created_at timestamp, data variant)
             )
     finally:
         with conn() as cnx:
-            cnx.cursor().execute("drop table {name}".format(name=name_variant))
+            cnx.cursor().execute(f"drop table {name_variant}")
 
 
-def test_callproc(conn_cnx):
-    """Callproc test.
+@pytest.mark.skipolddriver
+def test_geography(conn_cnx):
+    """Variant including JSON object."""
+    name_geo = random_string(5, "test_geography_")
+    with conn_cnx(
+        session_parameters={
+            "GEOGRAPHY_OUTPUT_FORMAT": "geoJson",
+        },
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary table {name_geo} (geo geography)")
+            cur.execute(
+                f"insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')"
+            )
+            expected_data = [
+                {"coordinates": [0, 0], "type": "Point"},
+                {"coordinates": [[1, 1], [2, 2]], "type": "LineString"},
+            ]
 
-    Notes:
-        It's a nop as of now.
-    """
-    with conn_cnx() as cnx:
-        with pytest.raises(errors.NotSupportedError):
-            cnx.cursor().callproc("whatever the stored procedure")
+        with cnx.cursor() as cur:
+            # Test with GEOGRAPHY return type
+            result = cur.execute(f"select * from {name_geo}")
+            metadata = result.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
+            data = result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
 
 
 def test_invalid_bind_data_type(conn_cnx):
@@ -584,21 +610,13 @@ def test_invalid_bind_data_type(conn_cnx):
 
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
-        cnx.cursor().execute("select 1")
-        c = cnx.cursor()
-        try:
-            c.execute(
-                "select seq8() as c1 " "from table(generator(timeLimit => 60))",
-                timeout=5,
-            )
-            raise Exception("Must be canceled")
-        except BASE_EXCEPTION_CLASS as err:
-            assert isinstance(
-                err, errors.ProgrammingError
-            ), "Programming Error Exception"
-            assert err.errno == 604, "Invalid error code"
-        finally:
-            c.close()
+        with cnx.cursor() as c:
+            with pytest.raises(errors.ProgrammingError) as err:
+                c.execute(
+                    "select seq8() as c1 from table(generator(timeLimit => 60))",
+                    timeout=5,
+                )
+            assert err.value.errno == 604, "Invalid error code"
 
 
 def test_executemany(conn, db_parameters):
@@ -607,197 +625,210 @@ def test_executemany(conn, db_parameters):
     Notes:
         The binding data type is dict and tuple, respectively.
     """
+    table_name = random_string(5, "test_executemany_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%(value)s)".format(
-            name=db_parameters["name"]
-        )
-        c.executemany(
-            fmt,
-            [
-                {"value": "1234"},
-                {"value": "234"},
-                {"value": "34"},
-                {"value": "4"},
-            ],
-        )
-        cnt = 0
-        for rec in c:
-            cnt += int(rec[0])
-        assert cnt == 4, "number of records"
-        assert c.rowcount == 4, "wrong number of records were inserted"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            c.executemany(
+                f"insert into {table_name}(aa) values(%(value)s)",
+                [
+                    {"value": 1234},
+                    {"value": 234},
+                    {"value": 34},
+                    {"value": 4},
+                ],
+            )
+            assert c.fetchone()[0] == 4, "number of records"
+            assert c.rowcount == 4, "wrong number of records were inserted"
 
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%s)".format(name=db_parameters["name"])
-        c.executemany(
-            fmt,
-            [
-                (12345,),
-                (1234,),
-                (234,),
-                (34,),
-                (4,),
-            ],
-        )
-        rec = c.fetchone()
-        assert rec[0] == 5, "number of records"
-        assert c.rowcount == 5, "wrong number of records were inserted"
-        c.close()
+        with cnx.cursor() as c:
+            fmt = "insert into {name}(aa) values(%s)".format(name=db_parameters["name"])
+            c.executemany(
+                fmt,
+                [
+                    (12345,),
+                    (1234,),
+                    (234,),
+                    (34,),
+                    (4,),
+                ],
+            )
+            assert c.fetchone()[0] == 5, "number of records"
+            assert c.rowcount == 5, "wrong number of records were inserted"
 
 
 @pytest.mark.skipolddriver
 def test_executemany_qmark_types(conn, db_parameters):
-    table_name = random_string(5, "date_test_")
+    table_name = random_string(5, "test_executemany_qmark_types_")
     with conn(paramstyle="qmark") as cnx:
         with cnx.cursor() as cur:
-            cur.execute(f"create table {table_name} (birth_date date)")
+            cur.execute(f"create temp table {table_name} (birth_date date)")
 
             insert_qy = f"INSERT INTO {table_name} (birth_date) values (?)"
             date_1, date_2 = date(1969, 2, 7), date(1969, 1, 1)
 
-            try:
-                # insert two dates, one in tuple format which specifies
-                # the snowflake type similar to how we support it in this
-                # example:
-                # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
-                cur.executemany(
-                    insert_qy,
-                    [[date_1], [("DATE", date_2)]],
-                )
+            # insert two dates, one in tuple format which specifies
+            # the snowflake type similar to how we support it in this
+            # example:
+            # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
+            cur.executemany(
+                insert_qy,
+                [[date_1], [("DATE", date_2)]],
+                # test that kwargs get passed through executemany properly
+                _statement_params={
+                    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "json"
+                },
+            )
+            assert all(
+                isinstance(rb, JSONResultBatch) for rb in cur.get_result_batches()
+            )
 
-                cur.execute(f"select * from {table_name}")
-                inserted_dates = [row[0] for row in cur.fetchall()]
-                assert date_1 in inserted_dates
-                assert date_2 in inserted_dates
-            finally:
-                cur.execute(f"drop table if exists {table_name}")
+            cur.execute(f"select * from {table_name}")
+            assert {row[0] for row in cur} == {date_1, date_2}
 
 
+@pytest.mark.skipolddriver
+def test_executemany_params_iterator(conn):
+    """Cursor.executemany() works with an interator of params."""
+    table_name = random_string(5, "executemany_params_iterator_")
+    with conn() as cnx:
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name}(bar integer)")
+            fmt = f"insert into {table_name}(bar) values(%(value)s)"
+            c.executemany(fmt, ({"value": x} for x in ("1234", "234", "34", "4")))
+            assert c.fetchone()[0] == 4, "number of records"
+            assert c.rowcount == 4, "wrong number of records were inserted"
+
+        with cnx.cursor() as c:
+            fmt = f"insert into {table_name}(bar) values(%s)"
+            c.executemany(fmt, ((x,) for x in (12345, 1234, 234, 34, 4)))
+            assert c.fetchone()[0] == 5, "number of records"
+            assert c.rowcount == 5, "wrong number of records were inserted"
+
+
+@pytest.mark.skipolddriver
+def test_executemany_empty_params(conn):
+    """Cursor.executemany() does nothing if params is empty."""
+    table_name = random_string(5, "executemany_empty_params_")
+    with conn() as cnx:
+        with cnx.cursor() as c:
+            # The table isn't created, so if this were executed, it would error.
+            c.executemany(f"insert into {table_name}(aa) values(%(value)s)", [])
+            assert c.query is None
+
+
+@pytest.mark.skipolddriver(
+    reason="old driver raises DatabaseError instead of InterfaceError"
+)
 def test_closed_cursor(conn, db_parameters):
     """Attempts to use the closed cursor. It should raise errors.
 
     Notes:
         The binding data type is scalar.
     """
+    table_name = random_string(5, "test_closed_cursor_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%s)".format(name=db_parameters["name"])
-        c.executemany(
-            fmt,
-            [
-                12345,
-                1234,
-                234,
-                34,
-                4,
-            ],
-        )
-        rec = c.fetchone()
-        assert rec[0] == 5, "number of records"
-        assert c.rowcount == 5, "number of records"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            fmt = f"insert into {table_name}(aa) values(%s)"
+            c.executemany(
+                fmt,
+                [
+                    12345,
+                    1234,
+                    234,
+                    34,
+                    4,
+                ],
+            )
+            assert c.fetchone()[0] == 5, "number of records"
+            assert c.rowcount == 5, "number of records"
 
-        fmt = "select aa from {name}".format(name=db_parameters["name"])
-        try:
-            c.execute(fmt)
-            raise Exception("should fail as the cursor was closed.")
-        except snowflake.connector.Error as err:
-            assert err.errno == errorcode.ER_CURSOR_IS_CLOSED
+        with pytest.raises(InterfaceError, match="Cursor is closed in execute") as err:
+            c.execute(f"select aa from {table_name}")
+        assert err.value.errno == errorcode.ER_CURSOR_IS_CLOSED
 
 
 def test_fetchmany(conn, db_parameters):
+    table_name = random_string(5, "test_fetchmany_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%(value)s)".format(
-            name=db_parameters["name"]
-        )
-        c.executemany(
-            fmt,
-            [
-                {"value": "3456789"},
-                {"value": "234567"},
-                {"value": "1234"},
-                {"value": "234"},
-                {"value": "34"},
-                {"value": "4"},
-            ],
-        )
-        cnt = 0
-        for rec in c:
-            cnt += int(rec[0])
-        assert cnt == 6, "number of records"
-        assert c.rowcount == 6, "number of records"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            c.executemany(
+                f"insert into {table_name}(aa) values(%(value)s)",
+                [
+                    {"value": "3456789"},
+                    {"value": "234567"},
+                    {"value": "1234"},
+                    {"value": "234"},
+                    {"value": "34"},
+                    {"value": "4"},
+                ],
+            )
+            assert c.fetchone()[0] == 6, "number of records"
+            assert c.rowcount == 6, "number of records"
 
-        c = cnx.cursor()
-        fmt = "select aa from {name} order by aa desc".format(
-            name=db_parameters["name"]
-        )
-        c.execute(fmt)
+        with cnx.cursor() as c:
+            c.execute(f"select aa from {table_name} order by aa desc")
 
-        rows = c.fetchmany(2)
-        assert len(rows) == 2, "The number of records"
-        assert rows[1][0] == 234567, "The second record"
+            rows = c.fetchmany(2)
+            assert len(rows) == 2, "The number of records"
+            assert rows[1][0] == 234567, "The second record"
 
-        rows = c.fetchmany(1)
-        assert len(rows) == 1, "The number of records"
-        assert rows[0][0] == 1234, "The first record"
+            rows = c.fetchmany(1)
+            assert len(rows) == 1, "The number of records"
+            assert rows[0][0] == 1234, "The first record"
 
-        rows = c.fetchmany(5)
-        assert len(rows) == 3, "The number of records"
-        assert rows[-1][0] == 4, "The last record"
+            rows = c.fetchmany(5)
+            assert len(rows) == 3, "The number of records"
+            assert rows[-1][0] == 4, "The last record"
 
-        rows = c.fetchmany(15)
-        assert len(rows) == 0, "The number of records"
-
-        c.close()
+            assert len(c.fetchmany(15)) == 0, "The number of records"
 
 
 def test_process_params(conn, db_parameters):
     """Binds variables for insert and other queries."""
+    table_name = random_string(5, "test_process_params_")
     with conn() as cnx:
-        c = cnx.cursor()
-        fmt = "insert into {name}(aa) values(%(value)s)".format(
-            name=db_parameters["name"]
-        )
-        c.executemany(
-            fmt,
-            [
-                {"value": "3456789"},
-                {"value": "234567"},
-                {"value": "1234"},
-                {"value": "234"},
-                {"value": "34"},
-                {"value": "4"},
-            ],
-        )
-        cnt = 0
-        for rec in c:
-            cnt += int(rec[0])
-        c.close()
-        assert cnt == 6, "number of records"
+        with cnx.cursor() as c:
+            c.execute(f"create temp table {table_name} (aa number)")
+            c.executemany(
+                f"insert into {table_name}(aa) values(%(value)s)",
+                [
+                    {"value": "3456789"},
+                    {"value": "234567"},
+                    {"value": "1234"},
+                    {"value": "234"},
+                    {"value": "34"},
+                    {"value": "4"},
+                ],
+            )
+            assert c.fetchone()[0] == 6, "number of records"
 
-        fmt = "select count(aa) from {name} where aa > %(value)s".format(
-            name=db_parameters["name"]
-        )
+        with cnx.cursor() as c:
+            c.execute(
+                f"select count(aa) from {table_name} where aa > %(value)s",
+                {"value": 1233},
+            )
+            assert c.fetchone()[0] == 3, "the number of records"
 
-        c = cnx.cursor()
-        c.execute(fmt, {"value": 1233})
-        for (_cnt,) in c:
-            pass
-        assert _cnt == 3, "the number of records"
-        c.close()
+        with cnx.cursor() as c:
+            c.execute(f"select count(aa) from {table_name} where aa > %s", (1234,))
+            assert c.fetchone()[0] == 2, "the number of records"
 
-        fmt = "select count(aa) from {name} where aa > %s".format(
-            name=db_parameters["name"]
-        )
-        c = cnx.cursor()
-        c.execute(fmt, (1234,))
-        for (_cnt,) in c:
-            pass
-        assert _cnt == 2, "the number of records"
-        c.close()
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    ("interpolate_empty_sequences", "expected_outcome"), [(False, "%%s"), (True, "%s")]
+)
+def test_process_params_empty(conn_cnx, interpolate_empty_sequences, expected_outcome):
+    """SQL is interpolated if params aren't None."""
+    with conn_cnx(interpolate_empty_sequences=interpolate_empty_sequences) as cnx:
+        with cnx.cursor() as cursor:
+            cursor.execute("select '%%s'", None)
+            assert cursor.fetchone() == ("%%s",)
+            cursor.execute("select '%%s'", ())
+            assert cursor.fetchone() == (expected_outcome,)
 
 
 def test_real_decimal(conn, db_parameters):
@@ -868,6 +899,15 @@ def test_binding_negative(negative_conn_cnx, db_parameters):
                 "INSERT INTO {name}(aa) VALUES(%s)".format(name=db_parameters["name"]),
                 (["a"],),
             )
+
+
+@pytest.mark.skipolddriver
+def test_execute_stores_query(conn_cnx):
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cursor:
+            assert cursor.query is None
+            cursor.execute("select 1")
+            assert cursor.query == "select 1"
 
 
 def test_execute_after_close(conn_testaccount):
@@ -966,6 +1006,17 @@ def test_fetch_out_of_range_timestamp_value(conn, result_format):
             cur.fetchone()
 
 
+@pytest.mark.skipolddriver
+def test_null_in_non_null(conn):
+    table_name = random_string(5, "null_in_non_null")
+    error_msg = "NULL result in a non-nullable column"
+    with conn() as cnx:
+        cur = cnx.cursor()
+        cur.execute(f"create temp table {table_name}(bar char not null)")
+        with pytest.raises(errors.IntegrityError, match=error_msg):
+            cur.execute(f"insert into {table_name} values (null)")
+
+
 @pytest.mark.parametrize("sql", (None, ""), ids=["None", "empty"])
 def test_empty_execution(conn, sql):
     """Checks whether executing an empty string, or nothing behaves as expected."""
@@ -1050,9 +1101,9 @@ def test_desc_rewrite(conn, caplog):
         with cnx.cursor() as cur:
             table_name = random_string(5, "test_desc_rewrite_")
             try:
-                cur.execute("create or replace table {} (a int)".format(table_name))
+                cur.execute(f"create or replace table {table_name} (a int)")
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
-                cur.execute("desc {}".format(table_name))
+                cur.execute(f"desc {table_name}")
                 assert (
                     "snowflake.connector.cursor",
                     20,
@@ -1061,7 +1112,7 @@ def test_desc_rewrite(conn, caplog):
                     ),
                 ) in caplog.record_tuples
             finally:
-                cur.execute("drop table {}".format(table_name))
+                cur.execute(f"drop table {table_name}")
 
 
 @pytest.mark.skipolddriver
@@ -1163,7 +1214,7 @@ def test_check_cannot_use_pandas(conn_cnx):
             with mock.patch("snowflake.connector.cursor.installed_pandas", False):
                 with pytest.raises(
                     ProgrammingError,
-                    match=r"Optional dependency: 'pyarrow' is not installed, please see the "
+                    match=r"Optional dependency: 'pandas' is not installed, please see the "
                     "following link for install instructions: https:.*",
                 ) as pe:
                     cur.check_can_use_pandas()
@@ -1194,18 +1245,6 @@ def test_query_cancellation(conn_cnx):
             )
             sf_qid = cur.sfqid
             cur.abort_query(sf_qid)
-
-
-def test_executemany_error(conn_cnx):
-    """Tests calling executemany without many things."""
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            with pytest.raises(
-                InterfaceError,
-                match="No parameters are specified for the command: select 1",
-            ) as ie:
-                cur.executemany("select 1", [])
-                assert ie.errno == ER_INVALID_VALUE
 
 
 def test_executemany_insert_rewrite(conn_cnx):
@@ -1264,13 +1303,16 @@ def test_scroll(conn_cnx):
                 assert nse.errno == SQLSTATE_FEATURE_NOT_SUPPORTED
 
 
+@pytest.mark.skipolddriver
 def test__log_telemetry_job_data(conn_cnx, caplog):
     """Tests whether we handle missing connection object correctly while logging a telemetry event."""
     with conn_cnx() as con:
         with con.cursor() as cur:
             with mock.patch.object(cur, "_connection", None):
                 caplog.set_level(logging.DEBUG, "snowflake.connector")
-                cur._log_telemetry_job_data("test", True)
+                cur._log_telemetry_job_data(
+                    TelemetryField.ARROW_FETCH_ALL, True
+                )  # dummy value
     assert (
         "snowflake.connector.cursor",
         logging.WARNING,
@@ -1319,10 +1361,10 @@ def test_resultbatch(
                 )
                 pickle_str = pickle.dumps(pre_pickle_partitions)
                 assert any(
-                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED
+                    t.message["type"] == TelemetryField.GET_PARTITIONS_USED.value
                     for t in telemetry_data.records
                 )
-    post_pickle_partitions: List["ResultBatch"] = pickle.loads(pickle_str)
+    post_pickle_partitions: list[ResultBatch] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually
     for i, partition in enumerate(post_pickle_partitions):
@@ -1425,6 +1467,7 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
             ]
 
 
+@pytest.mark.skipolddriver
 def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
     """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
     with conn_cnx() as con:
@@ -1436,7 +1479,8 @@ def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
                     (1,),
                 ]
             assert not any(
-                r.message.get("type", "") == TelemetryField.TIME_CONSUME_LAST_RESULT
+                r.message.get("type", "")
+                == TelemetryField.TIME_CONSUME_LAST_RESULT.value
                 for r in telemetry.records
             )
 
@@ -1518,3 +1562,16 @@ def test_fetch_batches_with_sessions(conn_cnx):
                 # all but one batch is downloaded using a session
                 assert get_session_mock.call_count == num_batches - 1
                 assert len(result) == rowcount
+
+
+@pytest.mark.skipolddriver
+def test_null_connection(conn_cnx):
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute_async(
+                "select seq4() as c from table(generator(rowcount=>50000))"
+            )
+            con.rest.delete_session()
+            status = con.get_query_status(cur.sfqid)
+            assert status == QueryStatus.FAILED_WITH_ERROR
+            assert con.is_an_error(status)

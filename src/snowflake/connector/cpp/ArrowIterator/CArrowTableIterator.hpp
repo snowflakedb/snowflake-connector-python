@@ -170,7 +170,8 @@ private:
     const int byteLength,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild
+    bool& needsRebuild,
+    const std::string timezone
     );
 
   /**

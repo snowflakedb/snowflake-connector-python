@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import logging
 import re
 from os import path
+from unittest import mock
+from unittest.mock import MagicMock
 
-import mock
 import pytest
-from mock import MagicMock
 
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import SHA256_DIGEST
@@ -32,7 +33,7 @@ try:
         SnowflakeS3RestClient,
     )
     from snowflake.connector.vendored.requests import HTTPError, Response
-except ImportError:  # NOQA
+except ImportError:
     # Compatibility for olddriver tests
     from requests import HTTPError, Response
 
@@ -105,13 +106,21 @@ def test_upload_file_with_s3_upload_failed_error(tmp_path):
         },
     )
     exc = Exception("Stop executing")
+
+    def mock_transfer_accelerate_config(
+        self: SnowflakeS3RestClient,
+        use_accelerate_endpoint: bool | None = None,
+    ) -> bool:
+        self.endpoint = f"https://{self.s3location.bucket_name}.s3.awsamazon.com"
+        return False
+
     with mock.patch(
         "snowflake.connector.s3_storage_client.SnowflakeS3RestClient._has_expired_token",
         return_value=True,
     ):
         with mock.patch(
             "snowflake.connector.s3_storage_client.SnowflakeS3RestClient.transfer_accelerate_config",
-            return_value=False,
+            mock_transfer_accelerate_config,
         ):
             with mock.patch(
                 "snowflake.connector.file_transfer_agent.StorageCredential.update",

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import time
 from datetime import date, datetime, timedelta
@@ -40,7 +41,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     """
 
     def __init__(self, **kwargs):
-        super(SnowflakeConverterSnowSQL, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self._support_negative_year = kwargs.get("support_negative_year", True)
 
     def _get_format(self, type_name):
@@ -87,7 +88,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
             fmt = SnowflakeBinaryFormat(self._get_format(type_name))
         logger.debug("Type: %s, Format: %s", type_name, fmt)
         ctx["fmt"] = fmt
-        converters = ["_{type_name}_to_python".format(type_name=type_name)]
+        converters = [f"_{type_name}_to_python"]
         for conv in converters:
             try:
                 return getattr(self, conv)(ctx)

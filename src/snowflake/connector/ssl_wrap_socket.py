@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 #
 # SSL wrap socket for PyOpenSSL.
@@ -10,13 +11,11 @@
 # https://github.com/shazow/urllib3/blob/master/urllib3/contrib/pyopenssl.py
 #
 # and added OCSP validator on the top.
-
 import logging
 import time
 from functools import wraps
 from inspect import getfullargspec as get_args
 from socket import socket
-from typing import Optional
 
 import certifi
 import OpenSSL.SSL
@@ -28,12 +27,13 @@ from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext
 from .vendored.urllib3.util import ssl_ as ssl_
 
-FEATURE_OCSP_MODE = OCSPMode.FAIL_OPEN
+DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
+FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
 
 """
 OCSP Response cache file name
 """
-FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = None
+FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: Optional[str] = None
 
 log = logging.getLogger(__name__)
 
@@ -75,9 +75,6 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
 
     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
 
-    global FEATURE_OCSP_MODE
-    global FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
-
     from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 
     log.debug(
@@ -110,7 +107,7 @@ def ssl_wrap_socket_with_ocsp(*args, **kwargs):
 
 
 def _openssl_connect(
-    hostname: str, port: int = 443, max_retry: int = 20, timeout: Optional[int] = None
+    hostname: str, port: int = 443, max_retry: int = 20, timeout: int | None = None
 ) -> OpenSSL.SSL.Connection:
     """The OpenSSL connection without validating certificates.
 

@@ -1,6 +1,8 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import pytest
 
 from snowflake.connector.telemetry_oob import TelemetryService

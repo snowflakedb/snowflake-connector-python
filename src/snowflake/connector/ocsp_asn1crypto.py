@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import os
 import platform
@@ -82,7 +83,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     WILDCARD_CERTID = None
 
     def __init__(self, **kwargs):
-        super(SnowflakeOCSPAsn1Crypto, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.WILDCARD_CERTID = self.encode_cert_id_key(ret_wildcard_hkey())
 
     def encode_cert_id_key(self, hkey):
@@ -202,7 +203,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                     cur_time,
                     val_start,
                     val_end,
-                    super(SnowflakeOCSPAsn1Crypto, self).debug_ocsp_failure_url,
+                    super().debug_ocsp_failure_url,
                 )
             )
 

@@ -2,7 +2,7 @@ import groovy.json.JsonOutput
 
 
 timestamps {
-  node('parallelizable') {
+  node('parallelizable-c7') {
     stage('checkout') {
       scmInfo = checkout scm
       println("${scmInfo}")
@@ -21,7 +21,7 @@ timestamps {
         |export GIT_COMMIT=${GIT_COMMIT}
         |./ci/build_docker.sh
         |cp dist/**/*.txt dist/repaired_wheels/
-        |cp dist/src/* dist/repaired_wheels/
+        |cp dist/*.tar.gz dist/repaired_wheels/
         |aws s3 cp --only-show-errors ./dist/repaired_wheels/ s3://sfc-jenkins/repository/python_connector/linux/${GIT_BRANCH}/${GIT_COMMIT}/ --recursive --include '*'
         |echo ${GIT_COMMIT} > latest_commit
         |aws s3 cp --only-show-errors latest_commit s3://sfc-jenkins/repository/python_connector/linux/${GIT_BRANCH}/
@@ -29,8 +29,8 @@ timestamps {
         }
       }
       params = [
-        string(name: 'svn_revision', value: 'master'),
-        string(name: 'branch', value: 'master'),
+        string(name: 'svn_revision', value: 'main'),
+        string(name: 'branch', value: 'main'),
         string(name: 'client_git_commit', value: scmInfo.GIT_COMMIT),
         string(name: 'client_git_branch', value: scmInfo.GIT_BRANCH),
         string(name: 'parent_job', value: env.JOB_NAME),
@@ -38,10 +38,10 @@ timestamps {
       ]
       stage('Test') {
         parallel (
-          'Test Python 36': { build job: 'RT-PyConnector36-PC',parameters: params},
           'Test Python 37': { build job: 'RT-PyConnector37-PC',parameters: params},
           'Test Python 38': { build job: 'RT-PyConnector38-PC',parameters: params},
           'Test Python 39': { build job: 'RT-PyConnector39-PC',parameters: params},
+          'Test Python 310': { build job: 'RT-PyConnector310-PC',parameters: params},
           'Test Python Lambda 37': { build job: 'RT-PyConnector37-PC-Lambda',parameters: params}
           )
         }

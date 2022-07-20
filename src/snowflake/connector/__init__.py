@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 # Python Db API v2
 #
+from __future__ import annotations
+
 apilevel = "2.0"
 threadsafety = 2
 paramstyle = "pyformat"
@@ -46,7 +47,7 @@ from .version import VERSION
 logging.getLogger(__name__).addHandler(NullHandler())
 
 
-def Connect(**kwargs):
+def Connect(**kwargs) -> SnowflakeConnection:
     return SnowflakeConnection(**kwargs)
 
 
@@ -56,6 +57,7 @@ SNOWFLAKE_CONNECTOR_VERSION = ".".join(str(v) for v in VERSION[0:3])
 __version__ = SNOWFLAKE_CONNECTOR_VERSION
 
 __all__ = [
+    "SnowflakeConnection",
     # Error handling
     "Error",
     "_Warning",

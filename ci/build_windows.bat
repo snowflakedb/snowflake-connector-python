@@ -6,14 +6,14 @@
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 
-set python_versions= 3.6 3.7 3.8 3.9
+set python_versions= 3.7 3.8 3.9 3.10
 
 cd %CONNECTOR_DIR%
 
 set venv_dir=%WORKSPACE%\venv-flake8
 if %errorlevel% neq 0 goto :error
 
-py -3.6 -m venv %venv_dir%
+py -3.7 -m venv %venv_dir%
 if %errorlevel% neq 0 goto :error
 
 call %venv_dir%\scripts\activate
@@ -36,10 +36,10 @@ EXIT /B %ERRORLEVEL%
 set pv=%~1
 
 echo Going to compile wheel for Python %pv%
-py -%pv% -m pip install -U pip setuptools
+py -%pv% -m pip install --upgrade pip setuptools wheel build
 if %errorlevel% neq 0 goto :error
 
-py -%pv% -m pip wheel -w dist --no-deps .
+py -%pv% -m build --wheel .
 if %errorlevel% neq 0 goto :error
 
 EXIT /B 0

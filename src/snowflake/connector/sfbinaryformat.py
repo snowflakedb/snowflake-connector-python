@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 from base64 import b16decode, b16encode, standard_b64encode
-from typing import Union
 
 from .errors import InternalError
 
@@ -13,7 +13,7 @@ from .errors import InternalError
 binary_to_python = b16decode
 
 
-def binary_to_snowflake(binary_value) -> Union[bytes, bytearray]:
+def binary_to_snowflake(binary_value) -> bytes | bytearray:
     """Encodes a "bytes" object for passing to Snowflake."""
     result = b16encode(binary_value)
 
@@ -22,7 +22,7 @@ def binary_to_snowflake(binary_value) -> Union[bytes, bytearray]:
     return result
 
 
-class SnowflakeBinaryFormat(object):
+class SnowflakeBinaryFormat:
     """Formats binary values ("bytes" objects) in hex or base64."""
 
     def __init__(self, name):
@@ -32,7 +32,7 @@ class SnowflakeBinaryFormat(object):
         elif name == "BASE64":
             self._encode = standard_b64encode
         else:
-            raise InternalError("Unrecognized binary format {}".format(name))
+            raise InternalError(f"Unrecognized binary format {name}")
 
     def format(self, binary_value):
         """Formats a "bytes" object, returning a string."""

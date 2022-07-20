@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import os
 
@@ -25,15 +26,11 @@ def test_abc(conn_cnx, tmpdir, db_parameters):
         account=db_parameters["account"],
         password=db_parameters["password"],
     ) as con:
-        rec = con.cursor().execute("put {} @~/{}0/".format(fileURI, subdir)).fetchall()
+        rec = con.cursor().execute(f"put {fileURI} @~/{subdir}0/").fetchall()
         assert rec[0][6] == "UPLOADED"
 
-        rec = (
-            con.cursor()
-            .execute("put file://{} @~/{}1/".format(test_data, subdir))
-            .fetchall()
-        )
+        rec = con.cursor().execute(f"put file://{test_data} @~/{subdir}1/").fetchall()
         assert rec[0][6] == "UPLOADED"
 
-        con.cursor().execute("rm @~/{}0".format(subdir))
-        con.cursor().execute("rm @~/{}1".format(subdir))
+        con.cursor().execute(f"rm @~/{subdir}0")
+        con.cursor().execute(f"rm @~/{subdir}1")

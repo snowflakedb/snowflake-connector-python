@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import datetime
 import decimal
 import os
-import platform
 import random
 from io import BytesIO
 
@@ -15,10 +15,9 @@ import pytest
 import pytz
 
 from snowflake.connector.arrow_context import ArrowConverterContext
-from snowflake.connector.converter import _generate_tzinfo_from_tzoffset
 
 try:
-    from snowflake.connector.options import installed_pandas  # NOQA
+    from snowflake.connector.options import installed_pandas
 except ImportError:
     installed_pandas = False
 
@@ -29,15 +28,13 @@ except ImportError:
 
 try:
     import pyarrow
-    from pyarrow import RecordBatch  # NOQA
     from pyarrow import RecordBatchStreamReader  # NOQA
-    from pyarrow import RecordBatchStreamWriter  # NOQA
+    from pyarrow import RecordBatch, RecordBatchStreamWriter
 except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import IterUnit  # NOQA
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.arrow_iterator import IterUnit, PyArrowIterator
 
     no_arrow_iterator_ext = False
 except ImportError:
@@ -321,9 +318,9 @@ def test_iterate_over_time_chunk():
         return random.randint(0, 863999999)
 
     def expected_data_transform_int64(data):
-        milisec = data % (10 ** 9)
-        milisec //= 10 ** 3
-        data //= 10 ** 9
+        milisec = data % (10**9)
+        milisec //= 10**3
+        data //= 10**9
         second = data % 60
         data //= 60
         minute = data % 60
@@ -331,9 +328,9 @@ def test_iterate_over_time_chunk():
         return datetime.time(hour, minute, second, milisec)
 
     def expected_data_transform_int32(data):
-        milisec = data % (10 ** 4)
-        milisec *= 10 ** 2
-        data //= 10 ** 4
+        milisec = data % (10**4)
+        milisec *= 10**2
+        data //= 10**4
         second = data % 60
         data //= 60
         minute = data % 60
@@ -355,258 +352,6 @@ def test_iterate_over_time_chunk():
     )
 
 
-@pytest.mark.skipif(
-    not installed_pandas or no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built, or pandas option is not installed.",
-)
-def test_iterate_over_timestamp_ntz_chunk():
-    random.seed(datetime.datetime.now().timestamp())
-    scale = random.randint(0, 9)
-    column_meta = [
-        {"logicalType": "TIMESTAMP_NTZ", "scale": str(scale)},
-        {"logicalType": "TIMESTAMP_NTZ", "scale": str(scale)},
-    ]
-    data_type = (
-        pyarrow.struct(
-            [
-                pyarrow.field("epoch", pyarrow.int64()),
-                pyarrow.field("fraction", pyarrow.int32()),
-            ]
-        )
-        if scale > 7
-        else pyarrow.int64()
-    )
-
-    def timestamp_ntz_generator(scale):
-        epoch = random.randint(-621355968, 2534023007)
-        frac = (
-            random.randint(0, 10 ** scale - 1) * (10 ** (9 - scale))
-            if scale > 7
-            else random.randint(0, 10 ** scale - 1)
-        )
-        if scale > 7:
-            return {"epoch": epoch, "fraction": frac}
-        else:
-            epoch = str(epoch)
-            frac = str(frac)
-            ZEROFILL = "000000000"
-            frac = ZEROFILL[: scale - len(frac)] + frac
-            return int(epoch + frac) if scale else int(epoch)
-
-    def expected_data_transform_ntz(_scale):
-        def expected_data_transform_ntz_impl(data, scale=_scale):
-            if scale > 7:
-                frac = data["fraction"]
-                epoch = data["epoch"]
-                if epoch < 0:
-                    epoch += 1
-                    frac = 10 ** 9 - frac
-                frac = str(int(frac / 10 ** (9 - scale)))
-                ZERO_FILL = "000000000"
-                frac = ZERO_FILL[: scale - len(frac)] + frac
-                data = int(str(epoch) + frac)
-
-            microsec = str(data)
-            if scale > 6:
-                microsec = microsec[:-scale] + "." + microsec[-scale : -scale + 6]
-            else:
-                microsec = (
-                    microsec[:-scale] + "." + microsec[-scale:] if scale else microsec
-                )
-
-            if platform.system() == "Windows":
-                return datetime.datetime.utcfromtimestamp(0) + datetime.timedelta(
-                    seconds=(float(microsec))
-                )
-            else:
-                return datetime.datetime.utcfromtimestamp(float(microsec))
-
-        return expected_data_transform_ntz_impl
-
-    iterate_over_test_chunk(
-        [data_type, data_type],
-        column_meta,
-        lambda: timestamp_ntz_generator(scale),
-        expected_data_transform_ntz(scale),
-    )
-
-
-@pytest.mark.skipif(
-    not installed_pandas or no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built, or pandas option is not installed.",
-)
-def test_iterate_over_timestamp_ltz_chunk():
-    random.seed(datetime.datetime.now().timestamp())
-    scale = random.randint(0, 9)
-    column_meta = [
-        {"logicalType": "TIMESTAMP_LTZ", "scale": str(scale)},
-        {"logicalType": "TIMESTAMP_LTZ", "scale": str(scale)},
-    ]
-    data_type = (
-        pyarrow.struct(
-            [
-                pyarrow.field("epoch", pyarrow.int64()),
-                pyarrow.field("fraction", pyarrow.int32()),
-            ]
-        )
-        if scale > 7
-        else pyarrow.int64()
-    )
-
-    def timestamp_ltz_generator(scale):
-        epoch = random.randint(-621355968, 2534023007)
-        frac = (
-            random.randint(0, 10 ** scale - 1) * (10 ** (9 - scale))
-            if scale > 7
-            else random.randint(0, 10 ** scale - 1)
-        )
-        if scale > 7:
-            return {"epoch": epoch, "fraction": frac}
-        else:
-            epoch = str(epoch)
-            frac = str(frac)
-            ZEROFILL = "000000000"
-            frac = ZEROFILL[: scale - len(frac)] + frac
-            return int(epoch + frac) if scale else int(epoch)
-
-    def expected_data_transform_ltz(_scale):
-        def expected_data_transform_ltz_impl(data, scale=_scale):
-            tzinfo = get_timezone()  # can put a string parameter here in the future
-            if scale > 7:
-                frac = data["fraction"]
-                epoch = data["epoch"]
-                if epoch < 0:
-                    epoch += 1
-                    frac = 10 ** 9 - frac
-                frac = str(int(frac / 10 ** (9 - scale)))
-                ZERO_FILL = "000000000"
-                frac = ZERO_FILL[: scale - len(frac)] + frac
-                data = int(str(epoch) + frac)
-
-            microsec = str(data)
-            if scale > 6:
-                microsec = microsec[:-scale] + "." + microsec[-scale : -scale + 6]
-            else:
-                microsec = (
-                    microsec[:-scale] + "." + microsec[-scale:] if scale else microsec
-                )
-
-            if platform.system() == "Windows":
-                t0 = datetime.datetime.utcfromtimestamp(0) + datetime.timedelta(
-                    seconds=(float(microsec))
-                )
-                return pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo)
-            else:
-                return datetime.datetime.fromtimestamp(float(microsec), tz=tzinfo)
-
-        return expected_data_transform_ltz_impl
-
-    iterate_over_test_chunk(
-        [data_type, data_type],
-        column_meta,
-        lambda: timestamp_ltz_generator(scale),
-        expected_data_transform_ltz(scale),
-    )
-
-
-@pytest.mark.skipif(
-    not installed_pandas or no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built, or pandas option is not installed.",
-)
-def test_iterate_over_timestamp_tz_chunk():
-    random.seed(datetime.datetime.now().timestamp())
-    scale = random.randint(0, 9)
-    column_meta = [
-        {
-            "byteLength": "16" if scale > 3 else "8",
-            "logicalType": "TIMESTAMP_TZ",
-            "scale": str(scale),
-        },
-        {
-            "byteLength": "16" if scale > 3 else "8",
-            "logicalType": "TIMESTAMP_TZ",
-            "scale": str(scale),
-        },
-    ]
-
-    type1 = pyarrow.struct(
-        [
-            pyarrow.field("epoch", pyarrow.int64()),
-            pyarrow.field("timezone", pyarrow.int32()),
-            pyarrow.field("fraction", pyarrow.int32()),
-        ]
-    )
-    type2 = pyarrow.struct(
-        [
-            pyarrow.field("epoch", pyarrow.int64()),
-            pyarrow.field("timezone", pyarrow.int32()),
-        ]
-    )
-    data_type = type1 if scale > 3 else type2
-
-    def timestamp_tz_generator(scale):
-        epoch = random.randint(-621355968, 2534023007)
-        frac = (
-            random.randint(0, 10 ** scale - 1) * (10 ** (9 - scale))
-            if scale > 3
-            else random.randint(0, 10 ** scale - 1)
-        )
-        timezone = random.randint(1, 2879)
-        if scale > 3:
-            return {"epoch": epoch, "timezone": timezone, "fraction": frac}
-        else:
-            epoch = str(epoch)
-            frac = str(frac)
-            ZEROFILL = "000000000"
-            frac = ZEROFILL[: scale - len(frac)] + frac
-            return {
-                "epoch": int(epoch + frac) if scale else int(epoch),
-                "timezone": timezone,
-            }
-
-    def expected_data_transform_tz(_scale):
-        def expected_data_transform_tz_impl(data, scale=_scale):
-            timezone = data["timezone"]
-            tzinfo = _generate_tzinfo_from_tzoffset(timezone - 1440)
-            epoch = data["epoch"]
-            if scale > 3:
-                frac = data["fraction"]
-                if epoch < 0:
-                    epoch += 1
-                    frac = 10 ** 9 - frac
-                frac = str(int(frac / 10 ** (9 - scale)))
-                ZERO_FILL = "000000000"
-                frac = ZERO_FILL[: scale - len(frac)] + frac
-                epoch = int(str(epoch) + frac)
-
-            microsec = str(epoch)
-            if scale > 6:
-                microsec = microsec[:-scale] + "." + microsec[-scale : -scale + 6]
-            else:
-                microsec = (
-                    microsec[:-scale] + "." + microsec[-scale:] if scale else microsec
-                )
-
-            if platform.system() == "Windows":
-                t = datetime.datetime.utcfromtimestamp(0) + datetime.timedelta(
-                    seconds=(float(microsec))
-                )
-                if pytz.utc != tzinfo:
-                    t += tzinfo.utcoffset(t)
-                return t.replace(tzinfo=tzinfo)
-            else:
-                return datetime.datetime.fromtimestamp(float(microsec), tz=tzinfo)
-
-        return expected_data_transform_tz_impl
-
-    iterate_over_test_chunk(
-        [data_type, data_type],
-        column_meta,
-        lambda: timestamp_tz_generator(scale),
-        expected_data_transform_tz(scale),
-    )
-
-
 def iterate_over_test_chunk(
     pyarrow_type, column_meta, source_data_generator, expected_data_transformer=None
 ):
@@ -621,7 +366,7 @@ def iterate_over_test_chunk(
     fields = []
     for i in range(column_size):
         fields.append(
-            pyarrow.field("column_{}".format(i), pyarrow_type[i], True, column_meta[i])
+            pyarrow.field(f"column_{i}", pyarrow_type[i], True, column_meta[i])
         )
     schema = pyarrow.schema(fields)
 
@@ -654,7 +399,7 @@ def iterate_over_test_chunk(
                 ]
         expected_data.append(column_arrays)
 
-        column_names = ["column_{}".format(i) for i in range(column_size)]
+        column_names = [f"column_{i}" for i in range(column_size)]
         rb = RecordBatch.from_arrays(py_arrays, column_names)
         writer.write_batch(rb)
 

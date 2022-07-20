@@ -1,30 +1,37 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import os
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import Generator, List
+from typing import Generator
 
 import pytest
 
 from snowflake.connector import SnowflakeConnection
+from snowflake.connector.compat import IS_LINUX
 from snowflake.connector.telemetry import TelemetryClient, TelemetryData
 
-from . import CLOUD_PROVIDERS, PUBLIC_SKIP_TAGS, running_on_public_ci
+from . import (
+    CLOUD_PROVIDERS,
+    EXTERNAL_SKIP_TAGS,
+    INTERNAL_SKIP_TAGS,
+    running_on_public_ci,
+)
 
 
 class TelemetryCaptureHandler(TelemetryClient):
     def __init__(
         self,
-        real_telemetry: "TelemetryClient",
+        real_telemetry: TelemetryClient,
         propagate: bool = True,
     ):
         super().__init__(real_telemetry._rest)
-        self.records: List["TelemetryData"] = []
+        self.records: list[TelemetryData] = []
         self._real_telemetry = real_telemetry
         self._propagate = propagate
 
@@ -45,9 +52,9 @@ class TelemetryCaptureFixture:
     @contextmanager
     def patch_connection(
         self,
-        con: "SnowflakeConnection",
+        con: SnowflakeConnection,
         propagate: bool = True,
-    ) -> Generator["TelemetryCaptureHandler", None, None]:
+    ) -> Generator[TelemetryCaptureHandler, None, None]:
         original_telemetry = con._telemetry
         new_telemetry = TelemetryCaptureHandler(
             original_telemetry,
@@ -61,7 +68,7 @@ class TelemetryCaptureFixture:
 
 
 @pytest.fixture(scope="session")
-def capture_sf_telemetry() -> "TelemetryCaptureFixture":
+def capture_sf_telemetry() -> TelemetryCaptureFixture:
     return TelemetryCaptureFixture()
 
 
@@ -132,5 +139,9 @@ def pytest_runtest_setup(item) -> None:
                     current_provider
                 )
             )
-    if PUBLIC_SKIP_TAGS.intersection(test_tags) and running_on_public_ci():
-        pytest.skip("cannot run unit test on public CI")
+    if EXTERNAL_SKIP_TAGS.intersection(test_tags) and (
+        not IS_LINUX or running_on_public_ci()
+    ):
+        pytest.skip("cannot run this test on public Snowflake deployment")
+    elif INTERNAL_SKIP_TAGS.intersection(test_tags) and not running_on_public_ci():
+        pytest.skip("cannot run this test on private Snowflake deployment")

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import pytest
 
 import snowflake.connector.errorcode
@@ -128,7 +129,7 @@ def test_telemetry_oob_error_code_mapping():
     """Tests that all OCSP error codes have a corresponding Telemetry sub event type."""
     ec_dict = snowflake.connector.errorcode.__dict__
     for ec, ec_val in ec_dict.items():
-        if not ec.startswith("__"):
+        if not ec.startswith("__") and ec not in ("annotations",):
             if 254000 <= ec_val < 255000:
                 assert ec_val in OCSPTelemetryData.ERROR_CODE_MAP
 

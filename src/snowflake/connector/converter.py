@@ -1,17 +1,20 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import binascii
 import decimal
 import time
 from datetime import date, datetime
 from datetime import time as dt_t
-from datetime import timedelta
+from datetime import timedelta, tzinfo
+from functools import partial
 from logging import getLogger
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from math import ceil
+from typing import Any, Callable
 
 import pytz
 
@@ -90,25 +93,25 @@ def convert_datetime_to_epoch(dt: datetime) -> float:
 
 
 def _convert_datetime_to_epoch_nanoseconds(dt: datetime) -> str:
-    return "{:f}".format(convert_datetime_to_epoch(dt)).replace(".", "") + "000"
+    return f"{convert_datetime_to_epoch(dt):f}".replace(".", "") + "000"
 
 
 def _convert_date_to_epoch_milliseconds(dt: datetime) -> str:
-    return "{:.3f}".format((dt - ZERO_EPOCH_DATE).total_seconds()).replace(".", "")
+    return f"{(dt - ZERO_EPOCH_DATE).total_seconds():.3f}".replace(".", "")
 
 
 def _convert_time_to_epoch_nanoseconds(tm: dt_t) -> str:
     return (
         str(tm.hour * 3600 + tm.minute * 60 + tm.second)
-        + "{:06d}".format(tm.microsecond)
+        + f"{tm.microsecond:06d}"
         + "000"
     )
 
 
-def _extract_timestamp(value, ctx):
+def _extract_timestamp(value: str, ctx: dict) -> tuple[float, int]:
     """Extracts timestamp from a raw data."""
     scale = ctx["scale"]
-    microseconds = float(value[0 : -scale + 6]) if scale > 6 else float(value)
+    microseconds = float(value[0: -scale + 6]) if scale > 6 else float(value)
     fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
         value, ctx["max_fraction"], scale
     )
@@ -116,7 +119,7 @@ def _extract_timestamp(value, ctx):
     return microseconds, fraction_of_nanoseconds
 
 
-def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
+def _adjust_fraction_of_nanoseconds(value: str, max_fraction: int, scale: int) -> int:
     if scale == 0:
         return 0
     if value[0] != "-":
@@ -129,41 +132,39 @@ def _adjust_fraction_of_nanoseconds(value, max_fraction, scale):
         return int(str(max_fraction - frac) + ZERO_FILL[: 9 - scale])
 
 
-def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> pytz._FixedOffset:
+def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> tzinfo:
     """Generates tzinfo object from tzoffset."""
     return pytz.FixedOffset(tzoffset_minutes)
 
 
-class SnowflakeConverter(object):
+class SnowflakeConverter:
     def __init__(self, **kwargs):
-        self._parameters: Dict[str, Union[str, int, bool]] = {}
+        self._parameters: dict[str, str | int | bool] = {}
         self._use_numpy = kwargs.get("use_numpy", False) and numpy is not None
 
         logger.debug("use_numpy: %s", self._use_numpy)
 
-    def set_parameters(self, new_parameters: Dict) -> None:
+    def set_parameters(self, new_parameters: dict) -> None:
         self._parameters = new_parameters
 
     def set_parameter(self, param: Any, value: Any) -> None:
         self._parameters[param] = value
 
-    def get_parameters(self) -> Dict[str, Union[str, int, bool]]:
+    def get_parameters(self) -> dict[str, str | int | bool]:
         return self._parameters
 
-    def get_parameter(self, param: str) -> Optional[Union[str, int, bool]]:
+    def get_parameter(self, param: str) -> str | int | bool | None:
         return self._parameters.get(param)
 
-    def to_python_method(self, type_name, column) -> "SnowflakeConverterType":
+    def to_python_method(self, type_name, column) -> SnowflakeConverterType:
         """FROM Snowflake to Python Objects"""
         ctx = column.copy()
         if ctx.get("scale") is not None:
             ctx["max_fraction"] = int(10 ** ctx["scale"])
             ctx["zero_fill"] = "0" * (9 - ctx["scale"])
-        converters = ["_{type_name}_to_python".format(type_name=type_name)]
+        converters = [f"_{type_name}_to_python"]
         if self._use_numpy:
-            converters.insert(
-                0, "_{type_name}_numpy_to_python".format(type_name=type_name)
-            )
+            converters.insert(0, f"_{type_name}_numpy_to_python")
         for conv in converters:
             try:
                 return getattr(self, conv)(ctx)
@@ -227,18 +228,14 @@ class SnowflakeConverter(object):
         """
         scale = ctx["scale"]
 
-        def conv0(encoded_value: str) -> datetime:
-            value, tz = encoded_value.split()
-            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            return datetime.fromtimestamp(float(value), tz=tzinfo)
-
         def conv(encoded_value: str) -> datetime:
             value, tz = encoded_value.split()
-            microseconds = float(value[0 : -scale + 6])
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            return datetime.fromtimestamp(microseconds, tz=tzinfo)
+            return SnowflakeConverter.create_timestamp_from_string(
+                value=value, scale=scale, tz=tzinfo
+            )
 
-        return conv if scale > 6 else conv0
+        return conv
 
     def _get_session_tz(self):
         """Gets the session timezone or use the local computer's timezone."""
@@ -277,14 +274,9 @@ class SnowflakeConverter(object):
         tzinfo = self._get_session_tz()
         scale = ctx["scale"]
 
-        def conv0(value):
-            return datetime.fromtimestamp(float(value), tz=tzinfo)
-
-        def conv(value):
-            microseconds = float(value[0 : -scale + 6])
-            return datetime.fromtimestamp(microseconds, tz=tzinfo)
-
-        return conv if scale > 6 else conv0
+        return partial(
+            SnowflakeConverter.create_timestamp_from_string, scale=scale, tz=tzinfo
+        )
 
     _TIMESTAMP_to_python = _TIMESTAMP_LTZ_to_python
 
@@ -292,19 +284,12 @@ class SnowflakeConverter(object):
         """TIMESTAMP NTZ to datetime with no timezone info is attached."""
         scale = ctx["scale"]
 
-        def conv0(value):
-            return datetime.utcfromtimestamp(float(value))
-
-        def conv(value: str) -> datetime:
-            microseconds = float(value[0 : -scale + 6])
-            return datetime.utcfromtimestamp(microseconds)
-
-        return conv if scale > 6 else conv0
+        return partial(SnowflakeConverter.create_timestamp_from_string, scale=scale)
 
     def _TIMESTAMP_NTZ_numpy_to_python(self, ctx):
         """TIMESTAMP NTZ to datetime64 with no timezone info is attached."""
 
-        def conv(value: str) -> "numpy.datetime64":
+        def conv(value: str) -> numpy.datetime64:
             nanoseconds = int(decimal.Decimal(value).scaleb(9))
             return numpy.datetime64(nanoseconds, "ns")
 
@@ -401,7 +386,7 @@ class SnowflakeConverter(object):
 
     def _derive_offset_timestamp(
         self, value: datetime, is_utc: bool = False
-    ) -> Tuple[float, datetime]:
+    ) -> tuple[float, datetime]:
         """Derives TZ offset and timestamp from the datetime objects."""
         tzinfo = value.tzinfo
         if tzinfo is None:
@@ -436,9 +421,7 @@ class SnowflakeConverter(object):
         (mins, secs) = divmod(r, 60)
         hours += value.days * 24
         return (
-            str(hours * 3600 + mins * 60 + secs)
-            + "{:06d}".format(value.microseconds)
-            + "000"
+            str(hours * 3600 + mins * 60 + secs) + f"{value.microseconds:06d}" + "000"
         )
 
     def to_snowflake(self, value: Any) -> Any:
@@ -453,7 +436,7 @@ class SnowflakeConverter(object):
         return int(value)
 
     def _long_to_snowflake(self, value):
-        return long(value)  # noqa: F821
+        return long(value)
 
     def _float_to_snowflake(self, value: float) -> float:
         return float(value)
@@ -582,7 +565,7 @@ class SnowflakeConverter(object):
             hour=hours, minute=mins, second=secs
         )
 
-    def _decimal_to_snowflake(self, value: decimal.Decimal) -> Optional[str]:
+    def _decimal_to_snowflake(self, value: decimal.Decimal) -> str | None:
         if isinstance(value, decimal.Decimal):
             return str(value)
 
@@ -632,9 +615,9 @@ class SnowflakeConverter(object):
                 ),
                 errno=ER_NOT_SUPPORT_DATA_TYPE,
             )
-        raise AttributeError("No method is available: {}".format(item))
+        raise AttributeError(f"No method is available: {item}")
 
-    def to_csv_bindings(self, value: Union[Tuple[str, Any], Any]) -> Union[str, None]:
+    def to_csv_bindings(self, value: tuple[str, Any] | Any) -> str | None:
         """Convert value to a string representation in CSV-escaped format to INSERT INTO."""
         if isinstance(value, tuple) and len(value) == 2:
             _type, val = value
@@ -681,7 +664,7 @@ class SnowflakeConverter(object):
             # Binary literal syntax
             return "X'{}'".format(value.decode("ascii"))
 
-        return "'{}'".format(value)
+        return f"'{value}'"
 
     @staticmethod
     def escape_for_csv(value: str) -> str:
@@ -700,3 +683,42 @@ class SnowflakeConverter(object):
             return f'"{value}"'
         else:
             return value
+
+    @staticmethod
+    def get_seconds_microseconds(
+        value: str,
+        scale: int,
+    ) -> tuple[int, int]:
+        """Calculate the second and microsecond parts og a timestamp given as a string.
+
+        The trick is that we always want to do floor division, but if the timestamp
+        is negative then it is given as its inverse. So -0.000_000_009
+        (which is 1969-12-31-23:59:59.999999991) should round down to 6
+        fraction figures as Python doesn't support sub-microseconds.
+        Ultimately for the aforementioned example we should return two integers 0 and -000_001.
+        """
+        negative = value[0] == "-"
+        lhs, _, rhs = value.partition(".")
+        seconds = int(lhs)
+        microseconds = int(rhs) if rhs else 0
+        if scale < 6:
+            microseconds *= 10 ** (6 - scale)
+        elif scale > 6:
+            if negative:
+                microseconds = ceil(microseconds / 10 ** (scale - 6))
+            else:
+                microseconds = microseconds // 10 ** (scale - 6)
+        if negative:
+            microseconds = -microseconds
+        return seconds, microseconds
+
+    @staticmethod
+    def create_timestamp_from_string(
+        value: str,
+        scale: int,
+        tz: tzinfo | None = None,
+    ) -> datetime:
+        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(value=value, scale=scale)
+        if not tz:
+            return datetime.utcfromtimestamp(seconds) + timedelta(microseconds=fraction)
+        return datetime.fromtimestamp(seconds, tz=tz) + timedelta(microseconds=fraction)

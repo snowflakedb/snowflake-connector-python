@@ -3,14 +3,21 @@ name: Jira creation
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
 
 jobs:
   create-issue:
     runs-on: ubuntu-latest
-    if: ${{ github.event.pull_request.user.login != 'whitesource-for-github-com[bot]' }}
+    if: ((github.event_name == 'issue_comment' && github.event.comment.body == 'recreate jira' && github.event.comment.user.login == 'sfc-gh-mkeller') || (github.event_name == 'issues' && github.event.pull_request.user.login != 'whitesource-for-github-com[bot]'))
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          repository: snowflakedb/gh-actions
+          ref: jira_v1
+          token: ${{ secrets.SNOWFLAKE_GITHUB_TOKEN }} # stored in GitHub secrets
+          path: .
 
       - name: Login
         uses: atlassian/gajira-login@v2.0.0
@@ -19,7 +26,7 @@ jobs:
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
-      - name: Create
+      - name: Create JIRA Ticket
         id: create
         uses: atlassian/gajira-create@v2.0.1
         with:
@@ -28,10 +35,10 @@ jobs:
           summary: '${{ github.event.issue.title }}'
           description: |
             ${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}
-          fields: '{ "customfield_11401": {"id": "12360"}, "assignee": {"id": "61027a219798100070592b20"} }'
+          fields: '{"customfield_11401":{"id":"14586"},"assignee":{"id":"61027a237ab143006ecfb9a2"},"components":[{"id":"16413"}]}'
 
-      - name: update issue
-        uses: ./.github/actions/gajira-issue-update
+      - name: Update GitHub Issue
+        uses: ./jira/gajira-issue-update
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

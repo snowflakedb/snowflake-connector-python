@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-from typing import Pattern, Sequence, Tuple, Union
+from __future__ import annotations
 
-from mock import Mock
+from typing import Pattern, Sequence
+from unittest.mock import Mock
 
 from snowflake.connector.compat import OK
 
@@ -26,8 +26,8 @@ def create_mock_response(status_code: int) -> Mock:
 def verify_log_tuple(
     module: str,
     level: int,
-    message: Union[str, Pattern],
-    log_tuples: Sequence[Tuple[str, int, str]],
+    message: str | Pattern,
+    log_tuples: Sequence[tuple[str, int, str]],
 ):
     """Convenience function to be able to search for regex patterns in log messages.
 

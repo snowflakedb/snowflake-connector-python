@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import decimal
 import itertools
 import random
@@ -14,9 +15,14 @@ from unittest import mock
 
 import numpy
 import pytest
+import pytz
+from numpy.testing import assert_equal
 
 try:
-    from snowflake.connector.constants import IterUnit
+    from snowflake.connector.constants import (
+        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+        IterUnit,
+    )
 except ImportError:
     # This is because of olddriver tests
     class IterUnit(Enum):
@@ -25,7 +31,7 @@ except ImportError:
 
 
 try:
-    from snowflake.connector.options import installed_pandas, pandas, pyarrow  # NOQA
+    from snowflake.connector.options import installed_pandas, pandas, pyarrow
 except ImportError:
     installed_pandas = False
     pandas = None
@@ -52,9 +58,10 @@ def test_num_one(conn_cnx):
     row_count = 50000
     col_count = 2
     random_seed = get_random_seed()
-    sql_exec = "select seq4() as c1, uniform(1, 10, random({})) as c2 from ".format(
-        random_seed
-    ) + "table(generator(rowcount=>{})) order by c1, c2".format(row_count)
+    sql_exec = (
+        f"select seq4() as c1, uniform(1, 10, random({random_seed})) as c2 from "
+        f"table(generator(rowcount=>{row_count})) order by c1, c2"
+    )
     fetch_pandas(conn_cnx, sql_exec, row_count, col_count, "one")
 
 
@@ -69,7 +76,7 @@ def test_scaled_tinyint(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one")
         finish(conn, table)
 
@@ -85,7 +92,7 @@ def test_scaled_smallint(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one")
         finish(conn, table)
 
@@ -110,7 +117,7 @@ def test_scaled_int(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one")
         finish(conn, table)
 
@@ -139,7 +146,7 @@ def test_scaled_bigint(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one", epsilon=EPSILON)
         finish(conn, table)
 
@@ -166,7 +173,7 @@ def test_decimal(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one", data_type="decimal")
         finish(conn, table)
 
@@ -193,7 +200,7 @@ def test_scaled_decimal(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one", data_type="decimal")
         finish(conn, table)
 
@@ -226,7 +233,7 @@ def test_scaled_decimal_SNOW_133561(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one", data_type="float")
         finish(conn, table)
 
@@ -242,7 +249,7 @@ def test_boolean(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one")
         finish(conn, table)
 
@@ -271,7 +278,7 @@ def test_double(conn_cnx):
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one")
         finish(conn, table)
 
@@ -350,7 +357,7 @@ def test_date(conn_cnx):
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one", data_type="date")
         finish(conn, table)
 
@@ -377,13 +384,13 @@ def test_time(conn_cnx, scale):
         "NULL",
     ]
     table = "test_arrow_time"
-    column = "(a time({}))".format(scale)
+    column = f"(a time({scale}))"
     values = ",".join(
         [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(conn, sql_text, cases, 1, "one", data_type="time", scale=scale)
         finish(conn, table)
 
@@ -415,14 +422,14 @@ def test_timestampntz(conn_cnx, scale):
         "NULL",
     ]
     table = "test_arrow_timestamp"
-    column = "(a timestampntz({}))".format(scale)
+    column = f"(a timestampntz({scale}))"
 
     values = ",".join(
         [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(
             conn, sql_text, cases, 1, "one", data_type="timestamp", scale=scale
         )
@@ -461,13 +468,13 @@ def test_timestamptz(conn_cnx, scale, timezone):
         "NULL",
     ]
     table = "test_arrow_timestamp"
-    column = "(a timestamptz({}))".format(scale)
+    column = f"(a timestamptz({scale}))"
     values = ",".join(
         [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values, timezone=timezone)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(
             conn,
             sql_text,
@@ -513,13 +520,13 @@ def test_timestampltz(conn_cnx, scale, timezone):
         "NULL",
     ]
     table = "test_arrow_timestamp"
-    column = "(a timestampltz({}))".format(scale)
+    column = f"(a timestampltz({scale}))"
     values = ",".join(
         [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
     )
     with conn_cnx() as conn:
         init(conn, table, column, values, timezone=timezone)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
         validate_pandas(
             conn,
             sql_text,
@@ -629,7 +636,6 @@ def validate_pandas(
                             )
                             if data_type == "timestamptz":
                                 c_case = c_case.tz_convert("UTC")
-                                c_case = c_case.tz_localize(None)
                         else:
                             c_case = pandas.Timestamp(cases[i][:time_str_len])
                         assert c_case == c_new, (
@@ -738,7 +744,7 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
         if method == "one":
             df_old = pandas.DataFrame(
                 cursor_row.fetchall(),
-                columns=["c{}".format(i) for i in range(col_count)],
+                columns=[f"c{i}" for i in range(col_count)],
             )
         else:
             print("use fetchmany")
@@ -748,11 +754,11 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
                     break
                 else:
                     df_old = pandas.DataFrame(
-                        dat, columns=["c{}".format(i) for i in range(col_count)]
+                        dat, columns=[f"c{i}" for i in range(col_count)]
                     )
                     rows += df_old.shape[0]
         end_time = time.time()
-        print("The original way took {}s".format(end_time - start_time))
+        print(f"The original way took {end_time - start_time}s")
         cursor_row.close()
 
         # fetch dataframe with new arrow support
@@ -771,9 +777,9 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
                 total_rows += df_new.shape[0]
                 total_batches += 1
         end_time = time.time()
-        print("new way (fetching {}) took {}s".format(method, end_time - start_time))
+        print(f"new way (fetching {method}) took {end_time - start_time}s")
         if method == "batch":
-            print("new way has # of batches : {}".format(total_batches))
+            print(f"new way has # of batches : {total_batches}")
         cursor_table.close()
         assert total_rows == row_count, "there should be {} rows, but {} rows".format(
             row_count, total_rows
@@ -800,21 +806,21 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
         else:
             assert (
                 rows == total_rows
-            ), "the number of rows are not equal {} vs {}".format(rows, total_rows)
+            ), f"the number of rows are not equal {rows} vs {total_rows}"
 
 
 def init(json_cnx, table, column, values, timezone=None):
     cursor_json = json_cnx.cursor()
     if timezone is not None:
-        cursor_json.execute("ALTER SESSION SET TIMEZONE = '{}'".format(timezone))
+        cursor_json.execute(f"ALTER SESSION SET TIMEZONE = '{timezone}'")
     column_with_seq = column[0] + "s number, " + column[1:]
-    cursor_json.execute("create or replace table {} {}".format(table, column_with_seq))
-    cursor_json.execute("insert into {} values {}".format(table, values))
+    cursor_json.execute(f"create or replace table {table} {column_with_seq}")
+    cursor_json.execute(f"insert into {table} values {values}")
 
 
 def finish(json_cnx, table):
     cursor_json = json_cnx.cursor()
-    cursor_json.execute("drop table if exists {};".format(table))
+    cursor_json.execute(f"drop table if exists {table};")
 
 
 @pytest.mark.skipif(
@@ -831,7 +837,7 @@ def test_arrow_fetch_result_scan(conn_cnx):
         res = cur.execute("select 1, 2, 3").fetch_pandas_all()
         assert tuple(res) == ("1", "2", "3")
         result_scan_res = cur.execute(
-            "select * from table(result_scan('{}'));".format(cur.sfqid)
+            f"select * from table(result_scan('{cur.sfqid}'));"
         ).fetch_pandas_all()
         assert tuple(result_scan_res) == ("1", "2", "3")
 
@@ -866,9 +872,7 @@ def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
                     resultscan_format
                 )
             )
-            resultscan_cur.execute(
-                "select * from table(result_scan('{}'))".format(sfqid)
-            )
+            resultscan_cur.execute(f"select * from table(result_scan('{sfqid}'))")
             if resultscan_format == "JSON":
                 scanned_results = resultscan_cur.fetchall()
             else:
@@ -962,6 +966,7 @@ def test_resultbatches_pandas_functionality(conn_cnx):
             )
             assert cur._result_set.total_row_index() == rowcount
             result_batches = cur.get_result_batches()
+            assert cur.fetch_pandas_all().index[-1] == rowcount - 1
             assert len(result_batches) > 1
     tables = itertools.chain.from_iterable(
         list(b.create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow"))
@@ -994,7 +999,7 @@ def test_pandas_telemetry(
         conn, False
     ) as telemetry_test:
         init(conn, table, column, values)
-        sql_text = "select a from {} order by s".format(table)
+        sql_text = f"select a from {table} order by s"
 
         validate_pandas(
             conn,
@@ -1094,3 +1099,91 @@ def test_sessions_used(conn_cnx, fetch_fn_name, pass_connection):
             ) as get_session_mock:
                 fetch_fn(connection=connection)
                 assert get_session_mock.call_count == (1 if pass_connection else 0)
+
+
+def assert_dtype_equal(a, b):
+    """Pandas method of asserting the same numpy dtype of variables by computing hash."""
+    assert_equal(a, b)
+    assert_equal(
+        hash(a), hash(b), "two equivalent types do not hash to the same value !"
+    )
+
+
+def test_pandas_dtypes(conn_cnx):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        }
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(
+                "select 1::integer, 2.3::double, 'foo'::string, current_timestamp()::timestamp where 1=0"
+            )
+            batches = cur.get_result_batches()
+            batch = batches[0].to_pandas()
+
+            assert batch.dtypes is not None
+            assert batches[0].to_arrow() is not True
+
+            pandas_dtypes = batch.dtypes
+            expected_types = [numpy.int64, float, object, numpy.datetime64]
+            # pd.string is represented as an np.object
+            # np.dtype string is not the same as pd.string (python)
+            for i, typ in enumerate(expected_types):
+                assert_dtype_equal(pandas_dtypes[i].type, numpy.dtype(typ).type)
+
+
+def test_timestamp_tz(conn_cnx):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        }
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select '1990-01-04 10:00:00 +1100'::timestamp_tz as d")
+            res = cur.fetchall()
+            assert res[0][0].tzinfo is not None
+            res_pd = cur.fetch_pandas_all()
+            assert res_pd.D.dt.tz is pytz.UTC
+            res_pa = cur.fetch_arrow_all()
+            assert res_pa.field("D").type.tz == "UTC"
+
+
+def test_arrow_number_to_decimal(conn_cnx):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        },
+        arrow_number_to_decimal=True,
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select -3.20 as num")
+            df = cur.fetch_pandas_all()
+            val = df.NUM[0]
+            assert val == Decimal("-3.20")
+            assert isinstance(val, decimal.Decimal)
+
+
+@pytest.mark.parametrize(
+    "timestamp_type",
+    [
+        "TIMESTAMP_TZ",
+        "TIMESTAMP_NTZ",
+        "TIMESTAMP_LTZ",
+    ],
+)
+def test_time_interval_microsecond(conn_cnx, timestamp_type):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
+        }
+    ) as cnx:
+        with cnx.cursor() as cur:
+            res = cur.execute(
+                f"SELECT TO_{timestamp_type}('2010-06-25 12:15:30.747000')+INTERVAL '8999999999999998 MICROSECONDS'"
+            ).fetchone()
+            assert res[0].microsecond == 746998
+            res = cur.execute(
+                f"SELECT TO_{timestamp_type}('2010-06-25 12:15:30.747000')+INTERVAL '8999999999999999 MICROSECONDS'"
+            ).fetchone()
+            assert res[0].microsecond == 746999

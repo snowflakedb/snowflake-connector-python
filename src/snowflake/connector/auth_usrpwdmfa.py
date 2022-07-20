@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import logging
 
@@ -24,6 +25,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
 
     def __init__(self, password, mfa_token=None):
         """Initializes and instance with a password and a mfa token."""
+        super().__init__()
         self._password = password
         self._mfa_token = mfa_token
 

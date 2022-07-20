@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -13,7 +14,7 @@ def _insert_timestamp(ctx, table, tz, dt):
     myzone = pytz.timezone(tz)
     ts = myzone.localize(dt, is_dst=True)
     print("\n")
-    print("{}".format(repr(ts)))
+    print(f"{repr(ts)}")
     ctx.cursor().execute(
         "INSERT INTO {table} VALUES(%s)".format(
             table=table,
@@ -21,16 +22,14 @@ def _insert_timestamp(ctx, table, tz, dt):
         (ts,),
     )
 
-    result = (
-        ctx.cursor().execute("SELECT * FROM {table}".format(table=table)).fetchone()
-    )
+    result = ctx.cursor().execute(f"SELECT * FROM {table}").fetchone()
     retrieved_ts = result[0]
     print("#####")
-    print("Retrieved ts: {}".format(repr(retrieved_ts)))
-    print("Retrieved and converted TS{}".format(repr(retrieved_ts.astimezone(myzone))))
+    print(f"Retrieved ts: {repr(retrieved_ts)}")
+    print(f"Retrieved and converted TS{repr(retrieved_ts.astimezone(myzone))}")
     print("#####")
     assert result[0] == ts
-    ctx.cursor().execute("DELETE FROM {table}".format(table=table))
+    ctx.cursor().execute(f"DELETE FROM {table}")
 
 
 def test_daylight_savings_in_TIMESTAMP_LTZ(conn_cnx, db_parameters):

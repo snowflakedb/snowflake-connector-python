@@ -2,7 +2,7 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import division
+from __future__ import annotations
 
 import os
 import shutil
@@ -15,25 +15,17 @@ from io import BytesIO
 from logging import getLogger
 from math import ceil
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    NamedTuple,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 import OpenSSL
 
-from .constants import FileHeader, ResultStatus
+from .constants import HTTP_HEADER_CONTENT_ENCODING, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
+from .vendored.urllib3 import HTTPResponse
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -56,6 +48,14 @@ METHODS = {
 }
 
 
+def remove_content_encoding(resp: requests.Response, **kwargs) -> None:
+    """Remove content-encoding header and decoder so decompression is not triggered"""
+    if HTTP_HEADER_CONTENT_ENCODING in resp.headers:
+        if isinstance(resp.raw, HTTPResponse):
+            resp.raw._decoder = None
+            resp.raw.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
+
+
 class SnowflakeStorageClient(ABC):
     TRANSIENT_HTTP_ERR = (408, 429, 500, 502, 503, 504)
 
@@ -65,19 +65,19 @@ class SnowflakeStorageClient(ABC):
 
     def __init__(
         self,
-        meta: "SnowflakeFileMeta",
-        stage_info: Dict[str, Any],
+        meta: SnowflakeFileMeta,
+        stage_info: dict[str, Any],
         chunk_size: int,
-        chunked_transfer: Optional[bool] = True,
-        credentials: Optional["StorageCredential"] = None,
+        chunked_transfer: bool | None = True,
+        credentials: StorageCredential | None = None,
         max_retry: int = 5,
     ) -> None:
         self.meta = meta
         self.stage_info = stage_info
-        self.retry_count: Dict[Union[int, str], int] = defaultdict(lambda: 0)
+        self.retry_count: dict[int | str, int] = defaultdict(lambda: 0)
         self.tmp_dir = tempfile.mkdtemp()
-        self.data_file: Optional[str] = None
-        self.encryption_metadata: Optional["EncryptionMetadata"] = None
+        self.data_file: str | None = None
+        self.encryption_metadata: EncryptionMetadata | None = None
 
         self.max_retry = max_retry  # TODO
         self.credentials = credentials
@@ -88,7 +88,7 @@ class SnowflakeStorageClient(ABC):
             False  # so we don't repeat compression/file digest when re-encrypting
         )
         # DOWNLOAD
-        self.full_dst_file_name: Optional[str] = (
+        self.full_dst_file_name: str | None = (
             os.path.realpath(
                 os.path.join(
                     self.meta.local_location, os.path.basename(self.meta.dst_file_name)
@@ -97,7 +97,7 @@ class SnowflakeStorageClient(ABC):
             if self.meta.local_location
             else None
         )
-        self.intermediate_dst_path: Optional[Path] = (
+        self.intermediate_dst_path: Path | None = (
             Path(self.full_dst_file_name + ".part")
             if self.meta.local_location
             else None
@@ -116,11 +116,13 @@ class SnowflakeStorageClient(ABC):
         if self.meta.require_compress:
             meta = self.meta
             logger.debug(f"compressing file={meta.src_file_name}")
-            if meta.src_stream:
+            if meta.intermediate_stream:
                 (
-                    meta.real_src_stream,
+                    meta.src_stream,
                     upload_size,
-                ) = SnowflakeFileUtil.compress_with_gzip_from_stream(meta.src_stream)
+                ) = SnowflakeFileUtil.compress_with_gzip_from_stream(
+                    meta.intermediate_stream
+                )
             else:
                 (
                     meta.real_src_file_name,
@@ -132,7 +134,7 @@ class SnowflakeStorageClient(ABC):
     def get_digest(self) -> None:
         meta = self.meta
         logger.debug(f"getting digest file={meta.real_src_file_name}")
-        if meta.src_stream is None:
+        if meta.intermediate_stream is None:
             (
                 meta.sha256_digest,
                 meta.upload_size,
@@ -142,13 +144,13 @@ class SnowflakeStorageClient(ABC):
                 meta.sha256_digest,
                 meta.upload_size,
             ) = SnowflakeFileUtil.get_digest_and_size_for_stream(
-                meta.real_src_stream or meta.src_stream
+                meta.src_stream or meta.intermediate_stream
             )
 
     def encrypt(self) -> None:
         meta = self.meta
         logger.debug(f"encrypting file={meta.real_src_file_name}")
-        if meta.src_stream is None:
+        if meta.intermediate_stream is None:
             (
                 self.encryption_metadata,
                 self.data_file,
@@ -160,7 +162,7 @@ class SnowflakeStorageClient(ABC):
             meta.upload_size = os.path.getsize(self.data_file)
         else:
             encrypted_stream = BytesIO()
-            src_stream = meta.real_src_stream or meta.src_stream
+            src_stream = meta.src_stream or meta.intermediate_stream
             src_stream.seek(0)
             self.encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
                 meta.encryption_material, src_stream, encrypted_stream
@@ -168,13 +170,13 @@ class SnowflakeStorageClient(ABC):
             src_stream.seek(0)
             meta.upload_size = encrypted_stream.seek(0, os.SEEK_END)
             encrypted_stream.seek(0)
-            if meta.real_src_stream is not None:
-                meta.real_src_stream.close()
-            meta.real_src_stream = encrypted_stream
+            if meta.src_stream is not None:
+                meta.src_stream.close()
+            meta.src_stream = encrypted_stream
             self.data_file = meta.real_src_file_name
 
     @abstractmethod
-    def get_file_header(self, filename: str) -> Optional[FileHeader]:
+    def get_file_header(self, filename: str) -> FileHeader | None:
         """Check if file exists in target location and obtain file metadata if exists.
 
         Notes:
@@ -257,14 +259,14 @@ class SnowflakeStorageClient(ABC):
     def _send_request_with_retry(
         self,
         verb: str,
-        get_request_args: Callable[[], Tuple[bytes, Dict[str, Any]]],
+        get_request_args: Callable[[], tuple[bytes, dict[str, Any]]],
         retry_id: int,
     ) -> requests.Response:
         rest_call = METHODS[verb]
         url = b""
         conn = None
-        if self.meta.self and self.meta.self._cursor.connection:
-            conn = self.meta.self._cursor.connection
+        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
+            conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
@@ -384,17 +386,21 @@ class SnowflakeStorageClient(ABC):
             meta.result_status = ResultStatus.ERROR
 
     def upload_chunk(self, chunk_id: int) -> None:
+        new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
         fd = (
-            self.meta.real_src_stream
-            or self.meta.src_stream
+            self.meta.src_stream
+            or self.meta.intermediate_stream
             or open(self.data_file, "rb")
         )
-        with fd:
+        try:
             if self.num_of_chunks == 1:
                 _data = fd.read()
             else:
                 fd.seek(chunk_id * self.chunk_size)
                 _data = fd.read(self.chunk_size)
+        finally:
+            if new_stream:
+                fd.close()
         logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
         self._upload_chunk(chunk_id, _data)
         logger.debug(f"Successfully uploaded chunk {chunk_id} of file {self.data_file}")
@@ -433,8 +439,8 @@ class SnowflakeStorageClient(ABC):
         if os.path.exists(self.tmp_dir):
             logger.debug(f"cleaning up tmp dir: {self.tmp_dir}")
             shutil.rmtree(self.tmp_dir)
-        if self.meta.real_src_stream and not self.meta.real_src_stream.closed:
-            self.meta.real_src_stream.close()
+        if self.meta.src_stream and not self.meta.src_stream.closed:
+            self.meta.src_stream.close()
 
     def __del__(self) -> None:
         self.delete_client_data()

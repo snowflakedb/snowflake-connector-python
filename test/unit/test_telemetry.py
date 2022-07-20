@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from mock import Mock
+from __future__ import annotations
+
+from unittest.mock import Mock
 
 import snowflake.connector.telemetry
 
@@ -29,7 +30,7 @@ def get_client_and_mock():
     rest = Mock()
     rest.attach_mock(rest_call, "request")
     client = snowflake.connector.telemetry.TelemetryClient(rest, 2)
-    return (client, rest_call)
+    return client, rest_call
 
 
 def test_telemetry_simple_flush():
@@ -52,7 +53,7 @@ def test_telemetry_close():
 
     client.close()
     assert rest_call.call_count == 1
-    assert client.is_closed()
+    assert client.is_closed
 
 
 def test_telemetry_close_empty():
@@ -61,7 +62,7 @@ def test_telemetry_close_empty():
 
     client.close()
     assert rest_call.call_count == 0
-    assert client.is_closed()
+    assert client.is_closed
 
 
 def test_telemetry_send_batch():

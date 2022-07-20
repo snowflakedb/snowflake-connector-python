@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import logging
 from os import path
+from unittest import mock
 from unittest.mock import Mock
 
-import mock
 import pytest
 
 from snowflake.connector import SnowflakeConnection
@@ -25,7 +26,7 @@ try:
     )
     from snowflake.connector.storage_client import METHODS
     from snowflake.connector.vendored.requests import Response
-except ImportError:  # NOQA
+except ImportError:
     # Compatibility for olddriver tests
     from requests import Response
 
@@ -41,7 +42,7 @@ except ImportError:
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
-    from snowflake.connector.vendored import requests  # NOQA
+    from snowflake.connector.vendored import requests
 
     vendored_request = True
 except ImportError:  # pragma: no cover

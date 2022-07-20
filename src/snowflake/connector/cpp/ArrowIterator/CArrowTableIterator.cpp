@@ -135,7 +135,7 @@ void CArrowTableIterator::reconstructRecordBatches()
                 ? std::stoi(metaData->value(metaData->FindKey("byteLength")))
                 : 16;
 
-          convertTimestampTZColumn(batchIdx, colIdx, field, columnArray, scale, byteLength, futureFields, futureColumns, needsRebuild);
+          convertTimestampTZColumn(batchIdx, colIdx, field, columnArray, scale, byteLength, futureFields, futureColumns, needsRebuild, m_timezone);
           break;
         }
 
@@ -303,25 +303,25 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn(
         case arrow::Type::type::INT8:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         case arrow::Type::type::INT16:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         case arrow::Type::type::INT32:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         case arrow::Type::type::INT64:
         {
           auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
-          val = arrow::Decimal128(0, originalVal);
+          val = arrow::Decimal128(originalVal);
           break;
         }
         default:
@@ -831,7 +831,8 @@ void CArrowTableIterator::convertTimestampTZColumn(
   const int byteLength,
   std::vector<std::shared_ptr<arrow::Field>>& futureFields,
   std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-  bool& needsRebuild
+  bool& needsRebuild,
+  const std::string timezone
 )
 {
   std::shared_ptr<arrow::Field> tsField;
@@ -848,28 +849,53 @@ void CArrowTableIterator::convertTimestampTZColumn(
 
   if (scale == 0)
   {
-    timeType = arrow::timestamp(arrow::TimeUnit::SECOND);
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::SECOND, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::SECOND);
+    }
     tsField = std::make_shared<arrow::Field>(
       field->name(), timeType, field->nullable());
   }
   else if (scale <= 3)
   {
-    timeType = arrow::timestamp(arrow::TimeUnit::MILLI);
-
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MILLI, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MILLI);
+    }
     tsField = std::make_shared<arrow::Field>(
       field->name(), timeType, field->nullable());
   }
   else if (scale <= 6)
   {
-    timeType = arrow::timestamp(arrow::TimeUnit::MICRO);
-
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MICRO, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MICRO);
+    }
     tsField = std::make_shared<arrow::Field>(
       field->name(), timeType, field->nullable());
   }
   else
   {
-    timeType = arrow::timestamp(arrow::TimeUnit::NANO);
-
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::NANO, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::NANO);
+    }
     tsField = std::make_shared<arrow::Field>(
       field->name(), timeType, field->nullable());
   }

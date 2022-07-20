@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
@@ -9,6 +8,8 @@
 Adapted from a script by M-A Lemburg and taken from the MySQL python driver.
 """
 
+from __future__ import annotations
+
 import time
 
 import pytest
@@ -16,7 +17,8 @@ import pytest
 import snowflake.connector
 import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
-from snowflake.connector.compat import BASE_EXCEPTION_CLASS
+
+from ..randomize import random_string
 
 TABLE1 = "dbapi_ddl1"
 TABLE2 = "dbapi_ddl2"
@@ -26,16 +28,16 @@ def drop_dbapi_tables(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cursor:
             for ddl in (TABLE1, TABLE2):
-                dropsql = "drop table if exists {}".format(ddl)
+                dropsql = f"drop table if exists {ddl}"
                 cursor.execute(dropsql)
 
 
 def executeDDL1(cursor):
-    cursor.execute("create or replace table {} (name string)".format(TABLE1))
+    cursor.execute(f"create or replace table {TABLE1} (name string)")
 
 
 def executeDDL2(cursor):
-    cursor.execute("create or replace table {} (name string)".format(TABLE2))
+    cursor.execute(f"create or replace table {TABLE2} (name string)")
 
 
 @pytest.fixture()
@@ -50,15 +52,13 @@ def conn_local(request, conn_cnx):
 
 def _paraminsert(cur):
     executeDDL1(cur)
-    cur.execute("insert into {} values ('string inserted into table')".format(TABLE1))
+    cur.execute(f"insert into {TABLE1} values ('string inserted into table')")
     assert cur.rowcount in (-1, 1)
 
-    cur.execute(
-        "insert into {} values (%(dbapi_ddl2)s)".format(TABLE1), {TABLE2: "Cooper's"}
-    )
+    cur.execute(f"insert into {TABLE1} values (%(dbapi_ddl2)s)", {TABLE2: "Cooper's"})
     assert cur.rowcount in (-1, 1)
 
-    cur.execute("select name from {}".format(TABLE1))
+    cur.execute(f"select name from {TABLE1}")
     res = cur.fetchall()
     assert len(res) == 2, "cursor.fetchall returned too few rows"
     dbapi_ddl2s = [res[0][0], res[1][0]]
@@ -184,10 +184,8 @@ def test_cursor_isolation(conn_local):
         cur1 = con.cursor()
         cur2 = con.cursor()
         executeDDL1(cur1)
-        cur1.execute(
-            "insert into {} values ('string inserted into table')".format(TABLE1)
-        )
-        cur2.execute("select name from {}".format(TABLE1))
+        cur1.execute(f"insert into {TABLE1} values ('string inserted into table')")
+        cur2.execute(f"select name from {TABLE1}")
         dbapi_ddl1 = cur2.fetchall()
         assert len(dbapi_ddl1) == 1
         assert len(dbapi_ddl1[0]) == 1
@@ -274,20 +272,18 @@ def test_close(db_parameters):
     #   errorcode.ER_CURSOR_IS_CLOSED),'cursor.close() called twice in a row')
 
     # calling cursor.execute after connection is closed should raise an error
-    try:
-        cur.execute("create or replace table {} (name string)".format(TABLE1))
-    except BASE_EXCEPTION_CLASS as error:
-        assert (
-            error.errno == errorcode.ER_CURSOR_IS_CLOSED
-        ), "cursor.execute() called twice in a row"
+    with pytest.raises(errors.Error) as e:
+        cur.execute(f"create or replace table {TABLE1} (name string)")
+    assert (
+        e.value.errno == errorcode.ER_CURSOR_IS_CLOSED
+    ), "cursor.execute() called twice in a row"
 
-        # try to create a cursor on a closed connection
-        try:
-            con.cursor()
-        except BASE_EXCEPTION_CLASS as error:
-            assert (
-                error.errno == errorcode.ER_CONNECTION_IS_CLOSED
-            ), "tried to create a cursor on a closed cursor"
+    # try to create a cursor on a closed connection
+    with pytest.raises(errors.Error) as e:
+        con.cursor()
+    assert (
+        e.value.errno == errorcode.ER_CONNECTION_IS_CLOSED
+    ), "tried to create a cursor on a closed cursor"
 
 
 def test_execute(conn_local):
@@ -354,7 +350,7 @@ def _populate():
     """Returns a list of sql commands to setup the DB for the fetch tests."""
     populate = [
         # NOTE NO GOOD using format to bind data
-        "insert into {} values ('{}')".format(TABLE1, s)
+        f"insert into {TABLE1} values ('{s}')"
         for s in SAMPLES
     ]
     return populate
@@ -451,7 +447,7 @@ def test_fetchall(conn_local):
         #                                'after executing a a statement that does not return rows'
         #                                )
 
-        cur.execute("select name from {}".format(TABLE1))
+        cur.execute(f"select name from {TABLE1}")
         rows = cur.fetchall()
         assert cur.rowcount in (-1, len(SAMPLES))
         assert len(rows) == len(SAMPLES), "cursor.fetchall did not retrieve all rows"
@@ -737,4 +733,135 @@ def test_escape(conn_local):
             cur.execute("delete from %s where name=%%s" % TABLE1, i)
             assert (
                 i == row[0]
-            ), "newline not properly converted, got {}, should be {}".format(row[0], i)
+            ), f"newline not properly converted, got {row[0]}, should be {i}"
+
+
+@pytest.mark.skipolddriver
+def test_callproc(conn_local):
+    name_sp = random_string(5, "test_stored_procedure_")
+    message = random_string(10)
+    with conn_local() as con:
+        cur = con.cursor()
+        executeDDL1(cur)
+        cur.execute(
+            f"""
+            create or replace temporary procedure {name_sp}(message varchar)
+            returns varchar not null
+            language sql
+            as
+            begin
+              return message;
+            end;
+            """
+        )
+        ret = cur.callproc(name_sp, (message,))
+        assert ret == (message,) and cur.fetchall() == [(message,)]
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("paramstyle", ["pyformat", "qmark"])
+def test_callproc_overload(conn_cnx, paramstyle):
+    """Test calling stored procedures overloaded with different input parameters and returns."""
+    name_sp = random_string(5, "test_stored_procedure_")
+    with conn_cnx(paramstyle=paramstyle) as cnx:
+        with cnx.cursor() as cursor:
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 varchar, p2 int, p3 date)
+                returns string not null
+                language sql
+                as
+                begin
+                  return 'teststring';
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 float, p2 char)
+                returns float not null
+                language sql
+                as
+                begin
+                  return 1.23;
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(p1 boolean)
+                returns table(col1 int, col2 string)
+                language sql
+                as
+                declare
+                    res resultset default (SELECT * from values(1, 'a'),(2, 'b') as t(col1, col2));
+                begin
+                    return table(res);
+                end;
+                """
+            )
+
+            cursor.execute(
+                f"""
+                create or replace temporary procedure {name_sp}()
+                returns boolean
+                language sql
+                as
+                begin
+                  return true;
+                end;
+                """
+            )
+
+            ret = cursor.callproc(name_sp, ("str", 1, "2022-02-22"))
+            assert ret == ("str", 1, "2022-02-22") and cursor.fetchall() == [
+                ("teststring",)
+            ]
+
+            ret = cursor.callproc(name_sp, (0.99, "c"))
+            assert ret == (0.99, "c") and cursor.fetchall() == [(1.23,)]
+
+            ret = cursor.callproc(name_sp, (True,))
+            assert ret == (True,) and cursor.fetchall() == [(1, "a"), (2, "b")]
+
+            ret = cursor.callproc(name_sp)
+            assert ret == () and cursor.fetchall() == [(True,)]
+
+
+@pytest.mark.skipolddriver
+def test_callproc_invalid(conn_cnx):
+    """Test invalid callproc"""
+    name_sp = random_string(5, "test_stored_procedure_")
+    message = random_string(10)
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            # stored procedure does not exist
+            with pytest.raises(errors.ProgrammingError) as pe:
+                cur.callproc(name_sp)
+            assert pe.value.errno == 2140
+
+            cur.execute(
+                f"""
+                create or replace temporary procedure {name_sp}(message varchar)
+                returns varchar not null
+                language sql
+                as
+                begin
+                  return message;
+                end;
+                """
+            )
+
+            # parameters do not match the signature
+            with pytest.raises(errors.ProgrammingError) as pe:
+                cur.callproc(name_sp)
+            assert pe.value.errno == 1044
+
+            with pytest.raises(TypeError):
+                cur.callproc(name_sp, message)
+
+            ret = cur.callproc(name_sp, (message,))
+            assert ret == (message,) and cur.fetchall() == [(message,)]

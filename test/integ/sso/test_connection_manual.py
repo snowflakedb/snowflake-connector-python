@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 # This test requires the SSO and Snowflake admin connection parameters.
 #
@@ -17,7 +18,6 @@
 # }
 #
 # CONNECTION_PARAMETERS_ADMIN = { ... Snowflake admin ... }
-
 import os
 import sys
 

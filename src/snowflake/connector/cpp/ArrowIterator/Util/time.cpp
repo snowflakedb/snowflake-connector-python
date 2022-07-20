@@ -10,27 +10,6 @@ namespace sf
 namespace internal
 {
 
-int32_t getNumberOfDigit(int32_t num)
-{
-  return (num >= 100000000)
-             ? 9
-             : (num >= 10000000)
-                   ? 8
-                   : (num >= 1000000)
-                         ? 7
-                         : (num >= 100000)
-                               ? 6
-                               : (num >= 10000)
-                                     ? 5
-                                     : (num >= 1000)
-                                           ? 4
-                                           : (num >= 100) ? 3 : (num >= 10)
-                                                                    ? 2
-                                                                    : (num >= 1)
-                                                                          ? 1
-                                                                          : 0;
-}
-
 int32_t getHourFromSeconds(int64_t seconds, int32_t scale)
 {
   return seconds / powTenSB4[scale] / SECONDS_PER_HOUR;
@@ -69,43 +48,28 @@ int32_t getMicrosecondFromSeconds(int64_t seconds, int32_t scale)
          powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_DIGIT - scale];
 }
 
-double getFormattedDoubleFromEpoch(int64_t epoch, int32_t scale)
-{
-  return scale > PYTHON_DATETIME_TIME_MICROSEC_DIGIT
-             ? static_cast<double>(
-                   epoch /
-                   powTenSB4[scale - PYTHON_DATETIME_TIME_MICROSEC_DIGIT]) /
-                   powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_DIGIT]
-             : static_cast<double>(epoch) / powTenSB4[scale];
-}
-
-double getFormattedDoubleFromEpochFraction(int64_t epoch, int32_t frac,
-                                           int32_t scale)
-{
-  return static_cast<double>(epoch) +
-         static_cast<double>(castToFormattedFraction(frac, epoch < 0, scale)) /
-             powTenSB4[std::min(scale, PYTHON_DATETIME_TIME_MICROSEC_DIGIT)];
-}
-
-int32_t castToFormattedFraction(int32_t frac, bool isNegative, int32_t scale)
-{
-  // if scale > 6 or not
-  constexpr int DIFF_DIGIT =
-      NANOSEC_DIGIT - PYTHON_DATETIME_TIME_MICROSEC_DIGIT;
-  if (scale > 6)
-  {
-    return !isNegative
-               ? (frac / powTenSB4[DIFF_DIGIT])
-               : (powTenSB4[PYTHON_DATETIME_TIME_MICROSEC_DIGIT] -
-                  (powTenSB4[NANOSEC_DIGIT] - frac) / powTenSB4[DIFF_DIGIT]);
-  }
-  else
-  {
-    return !isNegative
-               ? (frac / powTenSB4[NANOSEC_DIGIT - scale])
-               : (powTenSB4[scale] - (powTenSB4[NANOSEC_DIGIT] - frac) /
-                                         powTenSB4[NANOSEC_DIGIT - scale]);
-  }
+TimeSpec::TimeSpec(int64_t units, int32_t scale) {
+      if (scale == 0) {
+        seconds = units;
+        microseconds = 0;
+      } else if (scale == 6) {
+        seconds = 0;
+        microseconds = units;
+      } else if (scale > 6) {
+        seconds = 0;
+        const int divider = internal::powTenSB4[scale - 6];
+        if (units < 0) {
+            units -= divider - 1;
+        }
+        microseconds = units / divider;
+      } else {
+        seconds = units / internal::powTenSB4[scale];
+        int64_t fractions = std::abs(units % internal::powTenSB4[scale]);
+        microseconds = fractions * internal::powTenSB4[6 - scale];
+        if (units < 0) {
+            microseconds = -microseconds;
+        }
+      }
 }
 
 }  // namespace internal

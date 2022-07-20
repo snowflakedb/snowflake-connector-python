@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import json
 import os
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from .compat import quote
 from .constants import (
@@ -22,6 +23,7 @@ from .storage_client import SnowflakeStorageClient
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
@@ -45,10 +47,10 @@ class GcsLocation(NamedTuple):
 class SnowflakeGCSRestClient(SnowflakeStorageClient):
     def __init__(
         self,
-        meta: "SnowflakeFileMeta",
-        credentials: "StorageCredential",
-        stage_info: Dict[str, Any],
-        cnx: "SnowflakeConnection",
+        meta: SnowflakeFileMeta,
+        credentials: StorageCredential,
+        stage_info: dict[str, Any],
+        cnx: SnowflakeConnection,
         command: str,
         use_s3_regional_url=False,
     ) -> None:
@@ -138,8 +140,8 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 }
             )
 
-        def generate_url_and_rest_args() -> Tuple[
-            str, Dict[str, Union[Dict[Union[str, Any], Optional[str]], bytes]]
+        def generate_url_and_rest_args() -> tuple[
+            str, dict[str, dict[str | Any, str | None] | bytes]
         ]:
             if not self.presigned_url:
                 upload_url = self.generate_file_url(
@@ -148,7 +150,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 access_token = self.security_token
             else:
                 upload_url = self.presigned_url
-                access_token: Optional[str] = None
+                access_token: str | None = None
             if access_token:
                 gcs_headers.update({"Authorization": f"Bearer {access_token}"})
             rest_args = {"headers": gcs_headers, "data": chunk}
@@ -167,8 +169,8 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
     def download_chunk(self, chunk_id: int) -> None:
         meta = self.meta
 
-        def generate_url_and_rest_args() -> Tuple[
-            str, Dict[str, Union[Dict[str, str], bool]]
+        def generate_url_and_rest_args() -> tuple[
+            str, dict[str, dict[str, str] | bool]
         ]:
             gcs_headers = {}
             if not self.presigned_url:
@@ -257,7 +259,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.meta.presigned_url = stage_info.get("presignedUrl")
         self.presigned_url = stage_info.get("presignedUrl")
 
-    def _get_local_file_path_from_put_command(self) -> Optional[str]:
+    def _get_local_file_path_from_put_command(self) -> str | None:
         """Get the local file path from PUT command (Logic adopted from JDBC, written by Polita).
 
         Args:
@@ -299,7 +301,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
 
         return file_path
 
-    def get_file_header(self, filename: str) -> Optional[FileHeader]:
+    def get_file_header(self, filename: str) -> FileHeader | None:
         """Gets the remote file's metadata.
 
         Args:
@@ -346,7 +348,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 return None
             elif response.status_code == 200:
                 digest = response.headers.get(GCS_METADATA_SFC_DIGEST, None)
-                content_length = response.headers.get("content-length", None)
+                content_length = int(response.headers.get("content-length", "0"))
 
                 encryption_metadata = EncryptionMetadata("", "", "")
                 if response.headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None):

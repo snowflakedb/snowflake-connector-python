@@ -2,9 +2,10 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import logging
 import warnings
-from typing import Optional
 
 
 def getSnowLogger(name=None, extra=None):
@@ -56,11 +57,11 @@ class SnowLogger(logging.LoggerAdapter):
         self,
         level: int,
         msg: str,
-        path_name: Optional[str] = None,
-        func_name: Optional[str] = None,
+        path_name: str | None = None,
+        func_name: str | None = None,
         line_num: int = 0,
         *args,
-        **kwargs
+        **kwargs,
     ):
         """Generalized log method of SnowLogger wrapper.
 
@@ -90,6 +91,6 @@ class SnowLogger(logging.LoggerAdapter):
                 args,
                 None,
                 func_name,
-                **kwargs
+                **kwargs,
             )
             self.logger.handle(record)

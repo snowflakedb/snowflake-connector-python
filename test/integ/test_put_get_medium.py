@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import datetime
 import gzip
@@ -10,7 +11,7 @@ import os
 import sys
 import time
 from logging import getLogger
-from typing import IO, TYPE_CHECKING, Dict, List, Tuple, Union
+from typing import IO, TYPE_CHECKING
 
 import pytest
 import pytz
@@ -40,7 +41,7 @@ logger = getLogger(__name__)
 
 
 @pytest.fixture()
-def file_src(request) -> Tuple[str, int, IO[bytes]]:
+def file_src(request) -> tuple[str, int, IO[bytes]]:
     file_name = request.param
     data_file = os.path.join(THIS_DIR, "../data", file_name)
     file_size = os.stat(data_file).st_size
@@ -64,13 +65,13 @@ def test_put_copy0(conn_cnx, db_parameters, from_path, file_src):
         "file_stream": file_stream,
     }
 
-    def run(cnx: "SnowflakeConnection", sql: str) -> List[Tuple]:
+    def run(cnx: SnowflakeConnection, sql: str) -> list[tuple]:
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor().execute(sql).fetchall()
 
     def run_with_cursor(
-        cnx: "SnowflakeConnection", sql: str
-    ) -> Tuple["SnowflakeCursor", Union[List[Tuple], List[Dict]]]:
+        cnx: SnowflakeConnection, sql: str
+    ) -> tuple[SnowflakeCursor, list[tuple] | list[dict]]:
         sql = sql.format(name=db_parameters["name"])
         c = cnx.cursor(DictCursor)
         return c, c.execute(sql).fetchall()
@@ -116,7 +117,7 @@ def test_put_copy_compressed(conn_cnx, db_parameters, from_path, file_src):
     """Puts and Copies compressed files."""
     file_name, file_size, file_stream = file_src
 
-    def run(cnx: "SnowflakeConnection", sql: str) -> List[Dict]:
+    def run(cnx: SnowflakeConnection, sql: str) -> list[dict]:
         sql = sql.format(name=db_parameters["name"])
         return cnx.cursor(DictCursor).execute(sql).fetchall()
 
@@ -597,7 +598,7 @@ def test_put_collision(tmpdir, conn_cnx):
 
     stage_name = random_string(5, "test_put_collision_")
     with conn_cnx() as cnx:
-        cnx.cursor().execute("RM @~/{}".format(stage_name))
+        cnx.cursor().execute(f"RM @~/{stage_name}")
         try:
             # upload all files
             success_cnt = 0
@@ -649,15 +650,15 @@ def test_put_collision(tmpdir, conn_cnx):
 
         finally:
             with conn_cnx() as cnx:
-                cnx.cursor().execute("RM @~/{}".format(stage_name))
+                cnx.cursor().execute(f"RM @~/{stage_name}")
 
 
 def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     fname = str(tmpdir.join("test_put_get_huge_json"))
     f = gzip.open(fname, "wb")
     for i in range(n):
-        logger.debug("adding a value in {}".format(i))
-        f.write('{{"k":"{}"}}'.format(random_string(value_size)))
+        logger.debug(f"adding a value in {i}")
+        f.write(f'{{"k":"{random_string(value_size)}"}}')
     f.close()
     return fname
 

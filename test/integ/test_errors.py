@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 import traceback
 
 import pytest
@@ -32,7 +33,7 @@ def test_error_code(conn_cnx):
             ctx.cursor().execute("SELECT * FROOOM TEST")
         assert e.value.errno == syntax_errno, "Syntax error code"
         assert e.value.sqlstate == syntax_sqlstate, "Syntax SQL state"
-        e.match(fr"^{syntax_errno:06d} \({syntax_sqlstate}\): ")
+        e.match(rf"^{syntax_errno:06d} \({syntax_sqlstate}\): ")
 
 
 @pytest.mark.skipolddriver
@@ -47,5 +48,5 @@ def test_error_telemetry(conn_cnx):
         telemetry_data = e.value.generate_telemetry_exception_data()
         assert (
             "Failed to detect Syntax error"
-            not in telemetry_data[TelemetryField.KEY_REASON]
+            not in telemetry_data[TelemetryField.KEY_REASON.value]
         )

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import json
 import logging
@@ -66,6 +67,7 @@ class AuthByOkta(AuthByPlugin):
     """Authenticate user by OKTA."""
 
     def __init__(self, rest, application):
+        super().__init__()
         self._rest = rest
         self._saml_response = None
         self._application = application

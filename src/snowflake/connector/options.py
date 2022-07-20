@@ -2,15 +2,17 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import importlib
 import warnings
 from logging import getLogger
 from types import ModuleType
-from typing import Tuple, Union
+from typing import Union
 
 import pkg_resources
 
-from .errors import MissingDependencyError
+from . import errors
 
 logger = getLogger(__name__)
 
@@ -23,7 +25,7 @@ a MissingDependencyError.
 """
 
 
-class MissingOptionalDependency(object):
+class MissingOptionalDependency:
     """A class to replace missing dependencies.
 
     The only thing this class is supposed to do is raise a MissingDependencyError when __getattr__ is called.
@@ -33,7 +35,7 @@ class MissingOptionalDependency(object):
     _dep_name = "not set"
 
     def __getattr__(self, item):
-        raise MissingDependencyError(self._dep_name)
+        raise errors.MissingDependencyError(self._dep_name)
 
 
 class MissingPandas(MissingOptionalDependency):
@@ -52,7 +54,7 @@ ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
 def warn_incompatible_dep(
-    dep_name: str, installed_ver: str, expected_ver: "pkg_resources.Requirement"
+    dep_name: str, installed_ver: str, expected_ver: pkg_resources.Requirement
 ) -> None:
     warnings.warn(
         "You have an incompatible version of '{}' installed ({}), please install a version that "
@@ -61,7 +63,7 @@ def warn_incompatible_dep(
     )
 
 
-def _import_or_missing_pandas_option() -> Tuple[
+def _import_or_missing_pandas_option() -> tuple[
     ModuleLikeObject, ModuleLikeObject, bool
 ]:
     """This function tries importing the following packages: pandas, pyarrow.
@@ -70,11 +72,11 @@ def _import_or_missing_pandas_option() -> Tuple[
     It also warns users if they have an unsupported pyarrow version installed if possible.
     """
     try:
-        pandas = importlib.import_module("pandas")  # NOQA
+        pandas = importlib.import_module("pandas")
         # since we enable relative imports without dots this import gives us an issues when ran from test directory
         from pandas import DataFrame  # NOQA
 
-        pyarrow = importlib.import_module("pyarrow")  # NOQA
+        pyarrow = importlib.import_module("pyarrow")
         # Check whether we have the currently supported pyarrow installed
         installed_packages = pkg_resources.working_set.by_key
         if all(
@@ -82,7 +84,7 @@ def _import_or_missing_pandas_option() -> Tuple[
         ):
             _pandas_extras = installed_packages["snowflake-connector-python"]._dep_map[
                 "pandas"
-            ]  # NOQA
+            ]
             _expected_pyarrow_version = [
                 dep for dep in _pandas_extras if dep.name == "pyarrow"
             ][0]
@@ -107,13 +109,13 @@ def _import_or_missing_pandas_option() -> Tuple[
         return MissingPandas(), MissingPandas(), False
 
 
-def _import_or_missing_keyring_option() -> Tuple[ModuleLikeObject, bool]:
+def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
     """This function tries importing the following packages: keyring.
 
     If available it returns keyring package with a flag of whether it was imported.
     """
     try:
-        keyring = importlib.import_module("keyring")  # NOQA
+        keyring = importlib.import_module("keyring")
         return keyring, True
     except ImportError:
         return MissingKeyring(), False

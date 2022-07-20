@@ -3,21 +3,23 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector.cursor import SnowflakeCursor
 
 
 def put(
-    csr: "SnowflakeCursor",
+    csr: SnowflakeCursor,
     file_path: str,
     stage_path: str,
     from_path: bool,
-    sql_options: Optional[str] = "",
-    **kwargs
-) -> "SnowflakeCursor":
+    sql_options: str | None = "",
+    **kwargs,
+) -> SnowflakeCursor:
     """Execute PUT <file> <stage> <options> query with given cursor.
 
     Args:

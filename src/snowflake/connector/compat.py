@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import collections.abc
 import decimal
@@ -13,15 +14,15 @@ import platform
 import queue
 import urllib.parse
 import urllib.request
-from typing import Any, Tuple, Type
+from typing import Any
 
-from snowflake.connector.constants import UTF8
+from . import constants
 
 IS_LINUX = platform.system() == "Linux"
 IS_WINDOWS = platform.system() == "Windows"
 IS_MACOS = platform.system() == "Darwin"
 
-NUM_DATA_TYPES: Tuple[Type, ...] = ()
+NUM_DATA_TYPES: tuple[type, ...] = ()
 try:
     import numpy
 
@@ -110,7 +111,7 @@ def PKCS5_PAD(value: bytes, block_size: int) -> bytes:
         [
             value,
             (block_size - len(value) % block_size)
-            * chr(block_size - len(value) % block_size).encode(UTF8),
+            * chr(block_size - len(value) % block_size).encode(constants.UTF8),
         ]
     )
 
@@ -126,13 +127,3 @@ def INPUT(prompt: str) -> str:
 def quote_url_piece(piece: str) -> str:
     """Helper function to urlencode a string and turn it into bytes."""
     return quote(piece)
-
-
-try:
-    # builtin dataclass
-    from dataclass import dataclass  # NOQA
-    from dataclass import field  # NOQA
-except ImportError:
-    # backported dataclass for Python 3.6
-    from dataclasses import dataclass  # NOQA
-    from dataclasses import field  # NOQA

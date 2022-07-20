@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import base64
 import hashlib
+import os
 from datetime import datetime, timedelta
 from logging import getLogger
-from typing import Optional
 
 import jwt
 from cryptography.hazmat.backends import default_backend
@@ -20,8 +21,12 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from .auth_by_plugin import AuthByPlugin
-from .errorcode import ER_INVALID_PRIVATE_KEY
-from .errors import ProgrammingError
+from .errorcode import (
+    ER_CONNECTION_TIMEOUT,
+    ER_FAILED_TO_CONNECT_TO_DB,
+    ER_INVALID_PRIVATE_KEY,
+)
+from .errors import OperationalError, ProgrammingError
 from .network import KEY_PAIR_AUTHENTICATOR
 
 logger = getLogger(__name__)
@@ -35,7 +40,9 @@ class AuthByKeyPair(AuthByPlugin):
     SUBJECT = "sub"
     EXPIRE_TIME = "exp"
     ISSUE_TIME = "iat"
-    LIFETIME = 120
+    LIFETIME = 60
+    DEFAULT_JWT_RETRY_ATTEMPTS = 10
+    DEFAULT_JWT_CNXN_WAIT_TIME = 10
 
     def __init__(self, private_key, lifetime_in_seconds: int = LIFETIME):
         """Inits AuthByKeyPair class with private key.
@@ -44,18 +51,34 @@ class AuthByKeyPair(AuthByPlugin):
             private_key: a byte array of der formats of private key
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
+        super().__init__()
         self._private_key = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
-        self._lifetime = timedelta(seconds=lifetime_in_seconds)
+        self._lifetime = timedelta(
+            seconds=int(os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds))
+        )
+        self._jwt_retry_attempts = int(
+            os.getenv(
+                "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
+            )
+        )
+        self._jwt_cnxn_wait_time = timedelta(
+            seconds=int(
+                os.getenv(
+                    "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+                )
+            )
+        )
+        self._current_retry_count = 0
 
     def authenticate(
         self,
         authenticator: str,
-        service_name: Optional[str],
+        service_name: str | None,
         account: str,
         user: str,
-        password: Optional[str],
+        password: str | None,
     ) -> str:
         if ".global" in account:
             account = account.partition("-")[0]
@@ -90,8 +113,8 @@ class AuthByKeyPair(AuthByPlugin):
 
         self._jwt_token_exp = now + self._lifetime
         payload = {
-            self.ISSUER: "{}.{}.{}".format(account, user, public_key_fp),
-            self.SUBJECT: "{}.{}".format(account, user),
+            self.ISSUER: f"{account}.{user}.{public_key_fp}",
+            self.SUBJECT: f"{account}.{user}",
             self.ISSUE_TIME: now,
             self.EXPIRE_TIME: self._jwt_token_exp,
         }
@@ -131,3 +154,38 @@ class AuthByKeyPair(AuthByPlugin):
 
     def assertion_content(self):
         return self._jwt_token
+
+    def should_retry(self, count: int) -> bool:
+        return count < self._jwt_retry_attempts
+
+    def get_timeout(self) -> int:
+        return self._jwt_cnxn_wait_time.seconds
+
+    def handle_timeout(
+        self,
+        authenticator: str,
+        service_name: str | None,
+        account: str,
+        user: str,
+        password: str | None,
+    ) -> None:
+        if self._retry_ctx.get_current_retry_count() > self._jwt_retry_attempts:
+            logger.debug("Exhausted max login attempts. Aborting connection")
+            self._retry_ctx.reset()
+            raise OperationalError(
+                msg=f"Could not connect to Snowflake backend after {self._retry_ctx.get_current_retry_count()} attempt(s)."
+                "Aborting",
+                errno=ER_FAILED_TO_CONNECT_TO_DB,
+            )
+        else:
+            logger.debug(
+                f"Hit JWT timeout, attempt {self._retry_ctx.get_current_retry_count()}. Retrying..."
+            )
+            self._retry_ctx.increment_retry()
+
+        self.authenticate(authenticator, service_name, account, user, password)
+
+    def can_handle_exception(self, op: OperationalError) -> bool:
+        if op.errno is ER_CONNECTION_TIMEOUT:
+            return True
+        return False

@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import mimetypes
 import os
 import time
 from getpass import getuser
 from logging import getLogger
-from typing import Optional
+from unittest.mock import patch
 
 import pytest
 
@@ -37,6 +38,69 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, fro
         number_of_lines=number_of_lines,
         from_path=from_path,
     )
+
+
+@pytest.mark.internal
+@pytest.mark.skipolddriver
+@pytest.mark.aws
+@pytest.mark.parametrize(
+    "from_path",
+    [True, False],
+)
+@pytest.mark.parametrize(
+    "accelerate_config",
+    [True, False],
+)
+def test_put_get_accelerate_user_stage(tmpdir, conn_cnx, from_path, accelerate_config):
+    """[s3] Puts and Gets Small Data via User Stage."""
+    from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
+    from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
+
+    number_of_files = 5 if from_path else 1
+    number_of_lines = 1
+    endpoints = []
+
+    def mocked_file_agent(*args, **kwargs):
+        agent = SnowflakeFileTransferAgent(*args, **kwargs)
+        mocked_file_agent.agent = agent
+        return agent
+
+    original_accelerate_config = SnowflakeS3RestClient.transfer_accelerate_config
+    expected_cfg = accelerate_config
+
+    def mock_s3_transfer_accelerate_config(self, *args, **kwargs) -> bool:
+        bret = original_accelerate_config(self, *args, **kwargs)
+        endpoints.append(self.endpoint)
+        return bret
+
+    def mock_s3_get_bucket_config(self, *args, **kwargs) -> bool:
+        return expected_cfg
+
+    with patch(
+        "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+        side_effect=mocked_file_agent,
+    ):
+        with patch.multiple(
+            "snowflake.connector.s3_storage_client.SnowflakeS3RestClient",
+            _get_bucket_accelerate_config=mock_s3_get_bucket_config,
+            transfer_accelerate_config=mock_s3_transfer_accelerate_config,
+        ):
+            _put_get_user_stage(
+                tmpdir,
+                conn_cnx,
+                number_of_files=number_of_files,
+                number_of_lines=number_of_lines,
+                from_path=from_path,
+            )
+            config_accl = mocked_file_agent.agent._use_accelerate_endpoint
+            if accelerate_config:
+                assert (config_accl is True) and all(
+                    ele.find("s3-acc") >= 0 for ele in endpoints
+                )
+            else:
+                assert (config_accl is False) and all(
+                    ele.find("s3-acc") < 0 for ele in endpoints
+                )
 
 
 @pytest.mark.aws
@@ -100,7 +164,7 @@ def _put_get_user_stage_s3_regional_url(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-) -> Optional[SnowflakeCursor]:
+) -> SnowflakeCursor | None:
     with conn_cnx(
         role="accountadmin",
     ) as cnx:
@@ -131,8 +195,8 @@ def _put_get_user_stage(
     number_of_files=1,
     number_of_lines=1,
     from_path=True,
-) -> Optional[SnowflakeCursor]:
-    put_cursor: Optional[SnowflakeCursor] = None
+) -> SnowflakeCursor | None:
+    put_cursor: SnowflakeCursor | None = None
     # sanity check
     assert "AWS_ACCESS_KEY_ID" in os.environ, "AWS_ACCESS_KEY_ID is missing"
     assert "AWS_SECRET_ACCESS_KEY" in os.environ, "AWS_SECRET_ACCESS_KEY is missing"
@@ -143,6 +207,7 @@ def _put_get_user_stage(
     tmp_dir = generate_k_lines_of_n_files(
         number_of_lines, number_of_files, tmp_dir=str(tmpdir.mkdir("data"))
     )
+
     files = os.path.join(tmp_dir, "file*" if from_path else os.listdir(tmp_dir)[0])
     file_stream = None if from_path else open(files, "rb")
 
@@ -193,7 +258,7 @@ credentials=(
                 assert rows == number_of_files * number_of_lines, "Number of rows"
             finally:
                 c.close()
-            cnx.cursor().execute("rm @{stage_name}".format(stage_name=stage_name))
+            cnx.cursor().execute(f"rm @{stage_name}")
             cnx.cursor().execute(f"copy into @{stage_name} from {random_str}")
             tmp_dir_user = str(tmpdir.mkdir("put_get_stage"))
             cnx.cursor().execute(f"get @{stage_name}/ file://{tmp_dir_user}/")
@@ -252,7 +317,7 @@ ratio number(6,2))
 """
         )
         user_bucket = os.getenv(
-            "SF_AWS_USER_BUCKET", "sfc-dev1-regression/{}/reg".format(getuser())
+            "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
         )
         cnx.cursor().execute(
             f"""
@@ -351,7 +416,7 @@ def test_get_data_user_stage(
         pytest.skip("This test requires to change the internal parameter")
 
     default_s3bucket = os.getenv(
-        "SF_AWS_USER_BUCKET", "sfc-dev1-regression/{}/reg".format(getuser())
+        "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
     )
     test_data = [
         {
@@ -371,13 +436,13 @@ def _put_list_rm_files_in_stage(tmpdir, conn_cnx, elem):
 
     from io import open
 
-    from snowflake.connector.compat import UTF8
+    from snowflake.connector.constants import UTF8
 
     tmp_dir = str(tmpdir.mkdir("data"))
     data_file = os.path.join(tmp_dir, data_file_name)
     with open(data_file, "w", encoding=UTF8) as f:
-        f.write(str("123,456,string1\n"))
-        f.write(str("789,012,string2\n"))
+        f.write("123,456,string1\n")
+        f.write("789,012,string2\n")
 
     output_dir = str(tmpdir.mkdir("output"))
     with conn_cnx() as cnx:
@@ -450,6 +515,4 @@ RM @{stage_name}
                     stage_name=stage_name
                 )
             )
-            cnx.cursor().execute(
-                "drop stage if exists {stage_name}".format(stage_name=stage_name)
-            )
+            cnx.cursor().execute(f"drop stage if exists {stage_name}")

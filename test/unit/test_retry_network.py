@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import errno
 import os
 import time
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 import OpenSSL.SSL
 import pytest
-from mock import MagicMock, Mock, PropertyMock
 
 from snowflake.connector.compat import (
     BAD_GATEWAY,
@@ -37,8 +38,7 @@ from snowflake.connector.network import (
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
-    from snowflake.connector.vendored import requests  # NOQA
-    from snowflake.connector.vendored import urllib3  # NOQA
+    from snowflake.connector.vendored import requests, urllib3
 except ImportError:  # pragma: no cover
     import requests
     import urllib3
@@ -131,7 +131,8 @@ def test_request_exec():
         OpenSSL.SSL.SysCallError(errno.ETIMEDOUT),
         OpenSSL.SSL.SysCallError(errno.EPIPE),
         OpenSSL.SSL.SysCallError(-1),  # unknown
-        urllib3.exceptions.ReadTimeoutError(None, None, None),
+        # TODO: should we keep this?
+        # urllib3.exceptions.ReadTimeoutError(None, None, None),
         BadStatusLine("fake"),
     ]:
         session = MagicMock()
@@ -151,7 +152,7 @@ def test_fetch():
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
 
-    class Cnt(object):
+    class Cnt:
         def __init__(self):
             self.c = 0
 
@@ -208,3 +209,11 @@ def test_fetch():
     cnt.set(NOT_RETRYABLE)
     with pytest.raises(NotRetryableException):
         rest.fetch(timeout=7, **default_parameters)
+
+    # first attempt fails and will not retry
+    cnt.reset()
+    default_parameters["no_retry"] = True
+    ret = rest.fetch(timeout=10, **default_parameters)
+    assert ret == {}
+    assert cnt.c == 1  # failed on first call - did not retry
+    assert rest._connection.errorhandler.called  # error

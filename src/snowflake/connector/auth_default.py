@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 from .auth_by_plugin import AuthByPlugin
 
@@ -16,6 +17,7 @@ class AuthByDefault(AuthByPlugin):
 
     def __init__(self, password):
         """Initializes an instance with a password."""
+        super().__init__()
         self._password = password
 
     def authenticate(self, authenticator, service_name, account, user, password):

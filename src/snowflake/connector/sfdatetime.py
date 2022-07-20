@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import time
 from collections import namedtuple
@@ -34,7 +35,7 @@ ElementType = {
 
 
 def sfdatetime_total_seconds_from_timedelta(td):
-    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10 ** 6) // 10 ** 6
+    return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) // 10**6
 
 
 SnowflakeDateTime = namedtuple("SnowflakeDateTime", "datetime nanosecond scale")
@@ -119,7 +120,7 @@ NOT_OTHER_FORMAT = {
 }
 
 
-class SnowflakeDateTimeFormat(object):
+class SnowflakeDateTimeFormat:
     """Snowflake DateTime Formatter."""
 
     def __init__(
@@ -142,9 +143,7 @@ class SnowflakeDateTimeFormat(object):
             self._support_negative_year_method = _support_negative_year
 
         # format method
-        self.format = getattr(
-            self, "_format_{type_name}".format(type_name=datetime_class.__name__)
-        )
+        self.format = getattr(self, f"_format_{datetime_class.__name__}")
         self._compile(
             support_negative_year=support_negative_year, inject_fraction=inject_fraction
         )
@@ -335,7 +334,7 @@ class SnowflakeDateTimeFormat(object):
 class SnowflakeDateFormat(SnowflakeDateTimeFormat):
     def __init__(self, sql_format, **kwargs):
         kwargs["inject_fraction"] = False  # no fraction
-        super(SnowflakeDateFormat, self).__init__(sql_format, **kwargs)
+        super().__init__(sql_format, **kwargs)
 
     def _format_struct_time(self, value):
         """Formats struct_time."""

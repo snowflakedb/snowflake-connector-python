@@ -46,14 +46,14 @@ constexpr int pow10Int(int n)
   return n == 0 ? 1 : 10 * pow10Int(n - 1);
 }
 
-/** if the fraction's digit is greater than PYTHON_DATETIME_TIME_MICROSEC_DIGIT,
- * we cast it to exactly PYTHON_DATETIME_TIME_MICROSEC_DIGIT digit */
-int32_t castToFormattedFraction(int32_t frac, bool isPositive, int32_t scale);
+struct TimeSpec {
+    int64_t seconds;
+    int64_t microseconds;
+    TimeSpec(int64_t units, int32_t scale);
+};
 
-int32_t getNumberOfDigit(int32_t num);
-
-// TODO : I think we can just keep int64_t version, since we can call the
-// function with implicit conversion from int32 to int64
+// TODO: I think we can just keep int64_t version, since we can call the
+//  function with implicit conversion from int32 to int64
 int32_t getHourFromSeconds(int64_t seconds, int32_t scale);
 
 int32_t getMinuteFromSeconds(int64_t seconds, int32_t scale);
@@ -69,15 +69,6 @@ int32_t getMinuteFromSeconds(int32_t seconds, int32_t scale);
 int32_t getSecondFromSeconds(int32_t seconds, int32_t scale);
 
 int32_t getMicrosecondFromSeconds(int32_t seconds, int32_t scale);
-
-/** the input epoch is the combination of seconds and fraction
- *  the output is formatted double needed by python connector */
-double getFormattedDoubleFromEpoch(int64_t epoch, int32_t scale);
-
-/** the input are epoch (value based on the scale)  and fraction
- *  the output is formatted double needed by python connector */
-double getFormattedDoubleFromEpochFraction(int64_t epoch, int32_t frac,
-                                           int32_t scale);
 
 }  // namespace internal
 }  // namespace sf

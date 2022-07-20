@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import glob
 import gzip
@@ -11,8 +12,8 @@ import sys
 import time
 from filecmp import cmp
 from logging import getLogger
+from unittest import mock
 
-import mock
 import pytest
 
 from snowflake.connector.constants import UTF8
@@ -25,7 +26,7 @@ try:  # pragma: no cover
     )
     from snowflake.connector.gcs_storage_client import SnowflakeGCSRestClient
 except ImportError:
-    from snowflake.connector.file_transfer_agent import (  # NOQA
+    from snowflake.connector.file_transfer_agent import (
         SnowflakeFileTransferAgent,
         SnowflakeProgressPercentage,
     )
@@ -38,7 +39,7 @@ from ..randomize import random_string
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
-    from snowflake.connector.vendored import requests  # NOQA
+    from snowflake.connector.vendored import requests
 
     vendored_request = True
 except ImportError:  # pragma: no cover

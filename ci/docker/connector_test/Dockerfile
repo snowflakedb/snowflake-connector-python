@@ -1,5 +1,4 @@
-# We use manylinux1 base image because pyarrow_manylinux2010 has a bug and wheel failed to be audited
-ARG BASE_IMAGE=quay.io/pypa/manylinux2010_x86_64
+ARG BASE_IMAGE=quay.io/pypa/manylinux2014_x86_64
 FROM $BASE_IMAGE
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
@@ -13,6 +12,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /home/user
 RUN chmod 777 /home/user
-ENV PATH="${PATH}:/opt/python/cp36-cp36m/bin:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin/:/opt/python/cp39-cp39/bin/"
+ENV PATH="${PATH}:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin/:/opt/python/cp39-cp39/bin/:/opt/python/cp310-cp310/bin/"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

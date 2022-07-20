@@ -1,11 +1,13 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
 import json
 import logging
+import os
 import socket
 import time
 import webbrowser
@@ -53,6 +55,7 @@ class AuthByWebBrowser(AuthByPlugin):
         host=None,
         port=None,
     ):
+        super().__init__()
         self._rest = rest
         self._token = None
         self._consent_cache_id_token = True
@@ -90,12 +93,17 @@ class AuthByWebBrowser(AuthByPlugin):
 
         # ignore password. user is still needed by GS to verify
         # the assertion.
-        _ = password  # noqa: F841
+        _ = password
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             try:
-                socket_connection.bind(("localhost", 0))
+                socket_connection.bind(
+                    (
+                        os.getenv("SF_AUTH_SOCKET_ADDR", "localhost"),
+                        int(os.getenv("SF_AUTH_SOCKET_PORT", 0)),
+                    )
+                )
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
@@ -122,23 +130,30 @@ class AuthByWebBrowser(AuthByPlugin):
 
             logger.debug("step 2: open a browser")
             if not self._webbrowser.open_new(sso_url):
-                logger.error(
-                    "Unable to open a browser in this environment.", exc_info=True
-                )
                 print(
                     "We were unable to open a browser window for you, "
-                    f"please open the following url manually: {sso_url}"
+                    "please open the following url manually then paste the "
+                    "URL you are redirected to into the terminal."
                 )
-                self.handle_failure(
-                    {
-                        "code": ER_UNABLE_TO_OPEN_BROWSER,
-                        "message": "Unable to open a browser in this environment.",
-                    }
-                )
-                return  # required for test case
-
-            logger.debug("step 3: accept SAML token")
-            self._receive_saml_token(socket_connection)
+                print(f"URL: {sso_url}")
+                url = input("Enter the URL the SSO URL redirected you to: ")
+                self._process_get_url(url)
+                if not self._token:
+                    # Input contained no token, either URL was incorrectly pasted,
+                    # empty or just wrong
+                    self.handle_failure(
+                        {
+                            "code": ER_UNABLE_TO_OPEN_BROWSER,
+                            "message": (
+                                "Unable to open a browser in this environment and "
+                                "SSO URL contained no token"
+                            ),
+                        }
+                    )
+                    return
+            else:
+                logger.debug("step 3: accept SAML token")
+                self._receive_saml_token(socket_connection)
         finally:
             socket_connection.close()
 
@@ -181,9 +196,9 @@ class AuthByWebBrowser(AuthByPlugin):
                 time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
             ),
             "Access-Control-Allow-Methods: POST, GET",
-            "Access-Control-Allow-Headers: {}".format(requested_headers),
+            f"Access-Control-Allow-Headers: {requested_headers}",
             "Access-Control-Max-Age: 86400",
-            "Access-Control-Allow-Origin: {}".format(self._origin),
+            f"Access-Control-Allow-Origin: {self._origin}",
             "",
             "",
         ]
@@ -215,7 +230,7 @@ class AuthByWebBrowser(AuthByPlugin):
         if self._origin:
             data = {"consent": self._consent_cache_id_token}
             msg = json.dumps(data)
-            content.append("Access-Control-Allow-Origin: {}".format(self._origin))
+            content.append(f"Access-Control-Allow-Origin: {self._origin}")
             content.append("Vary: Accept-Encoding, Origin")
         else:
             msg = """
@@ -227,7 +242,7 @@ You can close this window now and go back where you started from.
 </body></html>""".format(
                 self._application
             )
-        content.append("Content-Length: {}".format(len(msg)))
+        content.append(f"Content-Length: {len(msg)}")
         content.append("")
         content.append(msg)
 
@@ -258,6 +273,14 @@ You can close this window now and go back where you started from.
             ":".join(origin_line.split(":")[1:]).strip(),
         )
 
+    def _process_get_url(self, url: str) -> None:
+        parsed = parse_qs(urlparse(url).query)
+        if "token" not in parsed:
+            return
+        if not parsed["token"][0]:
+            return
+        self._token = parsed["token"][0]
+
     def _process_get(self, data):
         for line in data:
             if line.startswith("GET "):
@@ -268,7 +291,7 @@ You can close this window now and go back where you started from.
 
         self._get_user_agent(data)
         _, url, _ = target_line.split()
-        self._token = parse_qs(urlparse(url).query)["token"][0]
+        self._process_get_url(url)
         return True
 
     def _process_post(self, data):

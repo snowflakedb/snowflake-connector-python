@@ -1,10 +1,13 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from mock import MagicMock, Mock, PropertyMock
+from __future__ import annotations
+
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+
+import pytest
 
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.constants import OCSPMode
@@ -45,7 +48,7 @@ def test_auth_webbrowser_get():
     mock_socket_client.recv.return_value = (
         "\r\n".join(
             [
-                "GET /?token={}&confirm=true HTTP/1.1".format(ref_token),
+                f"GET /?token={ref_token}&confirm=true HTTP/1.1",
                 "User-Agent: snowflake-agent",
             ]
         )
@@ -88,7 +91,7 @@ def test_auth_webbrowser_post():
                 "User-Agent: snowflake-agent",
                 "Host: localhost:12345",
                 "",
-                "token={}&confirm=true".format(ref_token),
+                f"token={ref_token}&confirm=true",
             ]
         )
     ).encode("utf-8")
@@ -108,9 +111,21 @@ def test_auth_webbrowser_post():
     assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
 
 
-def test_auth_webbrowser_fail_webbrowser():
+@pytest.mark.parametrize(
+    "input_text,expected_error",
+    [
+        ("", True),
+        ("http://example.com/notokenurl", True),
+        ("http://example.com/sso?token=", True),
+        ("http://example.com/sso?token=MOCK_TOKEN", False),
+    ],
+)
+def test_auth_webbrowser_fail_webbrowser(
+    monkeypatch, capsys, input_text, expected_error
+):
     """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    ref_token = "MOCK_TOKEN"
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -130,12 +145,30 @@ def test_auth_webbrowser_fail_webbrowser():
     auth = AuthByWebBrowser(
         rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
     )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
-    assert rest._connection.errorhandler.called  # an error
-    assert auth.assertion_content is None
+    with patch("builtins.input", return_value=input_text):
+        auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    captured = capsys.readouterr()
+    assert captured.out == (
+        "Initiating login request with your identity provider. A browser window "
+        "should have opened for you to complete the login. If you can't see it, "
+        "check existing browser windows, or your OS settings. Press CTRL+C to "
+        "abort and try again...\nWe were unable to open a browser window for "
+        "you, please open the following url manually then paste the URL you "
+        f"are redirected to into the terminal.\nURL: {REF_SSO_URL}\n"
+    )
+    if expected_error:
+        assert rest._connection.errorhandler.called  # an error
+        assert auth.assertion_content is None
+    else:
+        assert not rest._connection.errorhandler.called  # no error
+        body = {"data": {}}
+        auth.update_body(body)
+        assert body["data"]["TOKEN"] == ref_token
+        assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
 
 
-def test_auth_webbrowser_fail_webserver():
+def test_auth_webbrowser_fail_webserver(capsys):
     """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
@@ -159,6 +192,13 @@ def test_auth_webbrowser_fail_webserver():
         rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
     )
     auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    captured = capsys.readouterr()
+    assert captured.out == (
+        "Initiating login request with your identity provider. A browser window "
+        "should have opened for you to complete the login. If you can't see it, "
+        "check existing browser windows, or your OS settings. Press CTRL+C to "
+        "abort and try again...\n"
+    )
     assert rest._connection.errorhandler.called  # an error
     assert auth.assertion_content is None
 

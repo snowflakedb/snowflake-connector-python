@@ -1,17 +1,20 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
+import gc
 import logging
 import os
 import queue
 import threading
 import warnings
+import weakref
+from unittest import mock
 from uuid import uuid4
 
-import mock
 import pytest
 
 import snowflake.connector
@@ -37,6 +40,11 @@ try:  # pragma: no cover
     from parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
+
+try:
+    from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
+except ImportError:  # Keep olddrivertest from breaking
+    ER_FAILED_PROCESSING_QMARK = 252012
 
 
 def test_basic(conn_testaccount):
@@ -519,7 +527,7 @@ def test_privatelink(db_parameters):
     assert cnx, "invalid cnx"
 
     ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
-    assert ocsp_url is None, "OCSP URL should be None: {}".format(ocsp_url)
+    assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
     del os.environ["SF_OCSP_DO_RETRY"]
     del os.environ["SF_OCSP_FAIL_OPEN"]
 
@@ -630,7 +638,7 @@ class ExecPrivatelinkThread(threading.Thread):
         SnowflakeConnection.setup_ocsp_privatelink(self.client_name, self.hostname)
         ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
         if ocsp_cache_server is not None and ocsp_cache_server != self.expectation:
-            print("Got {} Expected {}".format(ocsp_cache_server, self.expectation))
+            print(f"Got {ocsp_cache_server} Expected {self.expectation}")
             self.bucket.put("Fail")
         else:
             self.bucket.put("Success")
@@ -711,7 +719,7 @@ def test_dashed_url(db_parameters):
             ) = lambda: None  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
-                    c.args[1].startswith("https://test-host:443")
+                    c[0][1].startswith("https://test-host:443")
                     for c in mocked_fetch.call_args_list
                 ]
             )
@@ -735,7 +743,7 @@ def test_dashed_url_account_name(db_parameters):
             ) = lambda: None  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
-                    c.args[1].startswith(
+                    c[0][1].startswith(
                         "https://test-account.snowflakecomputing.com:443"
                     )
                     for c in mocked_fetch.call_args_list
@@ -963,27 +971,41 @@ def test_authenticate_error(conn_cnx, caplog):
         ) in caplog.record_tuples
 
 
+@pytest.mark.skipolddriver
 def test_process_qmark_params_error(conn_cnx):
     """Tests errors thrown in _process_params_qmarks."""
-    with conn_cnx() as conn:
-        with pytest.raises(
-            ProgrammingError, match="Binding parameters must be a list: invalid input"
-        ) as pe:
-            conn._process_params_qmarks("invalid input")
-            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
-        with pytest.raises(
-            ProgrammingError,
-            match="Binding parameters must be a list where one element is a single value or "
-            "a pair of Snowflake datatype and a value",
-        ) as pe:
-            conn._process_params_qmarks(((1, 2, 3),))
-            assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
-    with pytest.raises(
-        ProgrammingError,
-        match=r"Python data type \[magicmock\] cannot be automatically mapped to Snowflake",
-    ) as pe:
-        conn._process_params_qmarks([mock.MagicMock()])
-        assert pe.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
+    sql = "select 1;"
+    with conn_cnx(paramstyle="qmark") as conn:
+        with conn.cursor() as cur:
+            with pytest.raises(
+                ProgrammingError,
+                match="Binding parameters must be a list: invalid input",
+            ) as pe:
+                cur.execute(sql, params="invalid input")
+            assert pe.value.errno == ER_FAILED_PROCESSING_PYFORMAT
+            with pytest.raises(
+                ProgrammingError,
+                match="Binding parameters must be a list where one element is a single "
+                "value or a pair of Snowflake datatype and a value",
+            ) as pe:
+                cur.execute(
+                    sql,
+                    params=(
+                        (
+                            1,
+                            2,
+                            3,
+                        ),
+                    ),
+                )
+            assert pe.value.errno == ER_FAILED_PROCESSING_QMARK
+            with pytest.raises(
+                ProgrammingError,
+                match=r"Python data type \[magicmock\] cannot be automatically mapped "
+                r"to Snowflake",
+            ) as pe:
+                cur.execute(sql, params=[mock.MagicMock()])
+            assert pe.value.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
 
 
 @pytest.mark.skipolddriver
@@ -1031,6 +1053,7 @@ def test_autocommit(conn_cnx, db_parameters, auto_commit):
         assert mocked_commit.called
 
 
+@pytest.mark.skipolddriver
 def test_client_prefetch_threads_setting(conn_cnx):
     """Tests whether client_prefetch_threads updated and is propagated to result set."""
     with conn_cnx() as conn:
@@ -1040,3 +1063,32 @@ def test_client_prefetch_threads_setting(conn_cnx):
             cur.execute(f"alter session set client_prefetch_threads={new_thread_count}")
             assert cur._result_set.prefetch_thread_num == new_thread_count
         assert conn.client_prefetch_threads == new_thread_count
+
+
+@pytest.mark.external
+def test_client_failover_connection_url(conn_cnx):
+    with conn_cnx("client_failover") as conn:
+        with conn.cursor() as cur:
+            assert cur.execute("select 1;").fetchall() == [
+                (1,),
+            ]
+
+
+def test_connection_gc(conn_cnx):
+    """This test makes sure that a heartbeat thread doesn't prevent garbage collection of SnowflakeConnection."""
+    conn = conn_cnx(client_session_keep_alive=True).__enter__()
+    conn_wref = weakref.ref(conn)
+    del conn
+    gc.collect()
+    assert conn_wref() is None
+
+
+@pytest.mark.skipolddriver
+def test_connection_cant_be_reused(conn_cnx):
+    row_count = 50_000
+    with conn_cnx() as conn:
+        cursors = conn.execute_string(
+            f"select seq4() as n from table(generator(rowcount => {row_count}));"
+        )
+        assert len(cursors[0]._result_set.batches) > 1  # We need to have remote results
+    assert list(cursors[0])

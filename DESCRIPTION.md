@@ -6,8 +6,112 @@ https://docs.snowflake.com/
 
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
-Release Notes
--------------------------------------------------------------------------------
+# Release Notes
+
+
+- v2.7.10(Unreleased)
+
+   - Release wheels are now built on manylinux2014
+   - Bumped supported pyarrow version to >=8.0.0,<8.1.0
+
+
+- v2.7.9(June 26,2022)
+
+   - Fixed a bug where errors raised during get_results_from_sfqid() were missing errno
+   - Fixed a bug where empty results containing GEOGRAPHY type raised IndexError
+
+
+- v2.7.8(May 28,2022)
+
+   - Updated PyPi documentation link to python specific main page
+   - Fixed an error message that appears when pandas optional dependency group is required but is not installed
+   - Implemented the DB API 2 callproc() method
+   - Fixed a bug where decryption took place before decompression when downloading files from stages
+   - Fixed a bug where s3 accelerate configuration was handled incorrectly
+   - Extra named arguments given executemany() are now forwarded to execute()
+   - Automatically sets the application name to streamlit when streamlit is imported and application name was not explicitly set
+   - Bumped pyopenssl dependency version to >=16.2.0,<23.0.0
+
+
+- v2.7.7(April 30,2022)
+
+   - Bumped supported pandas version to < 1.5.0
+   - Fixed a bug where partner name (from SF_PARTNER environmental variable) was set after connection was established
+   - Added a new _no_retry option to executing queries
+   - Fixed a bug where extreme timestamps lost precision
+
+
+- v2.7.6(March 17,2022)
+
+   - Fixed missing python_requires tag in setup.cfg
+
+- v2.7.5(March 17,2022)
+
+   - Added an option for partners to inject their name through an environmental variable (SF_PARTNER)
+   - Fixed a bug where we would not wait for input if a browser window couldn't be opened for SSO login
+   - Deprecate support for Python 3.6
+   - Exported a type definition for SnowflakeConnection
+   - Fixed a bug where final Arrow table would contain duplicate index numbers when using fetch_pandas_all
+
+- v2.7.4(February 05,2022)
+
+   - Add Geography Types
+   - Removing automated incident reporting code
+   - Fixed a bug where circular reference would prevent garbage collection on some objects
+   - Fixed a bug where `DatabaseError` was thrown when executing against a closed cursor instead of `InterfaceError`
+   - Fixed a bug where calling `executemany` would crash if an iterator was supplied as args
+   - Fixed a bug where violating `NOT NULL` constraint raised `DatabaseError` instead of `IntegrityError`
+
+- v2.7.3(January 22,2022)
+
+   - Fixed a bug where timezone was missing from retrieved Timestamp_TZ columns
+   - Fixed a bug where a long running PUT/GET command could hit a Storage Credential Error while renewing credentials
+   - Fixed a bug where py.typed was not being included in our release wheels
+   - Fixed a bug where negative numbers were mangled when fetched with the connection parameter arrow_number_to_decimal
+   - Improved the error message that is encountered when running GET for a non-existing file
+   - Fixed rendering of our long description for PyPi
+   - Fixed a bug where DUO authentication ran into errors if sms authentication was disabled for the user
+   - Add the ability to auto-create a table when writing a pandas DataFrame to a Snowflake table
+   - Bumped the maximum dependency version of numpy from <1.22.0 to <1.23.0
+
+- v2.7.2(December 17,2021)
+
+   - Added support for Python version 3.10.
+   - Fixed an issue bug where _get_query_status failed if there was a network error.
+   - Added the interpolate_empty_sequences connection parameter to control interpolating empty sequences into queries.
+   - Fixed an issue where where BLOCKED was considered to be an error by is_an_error.
+   - Added source field to Telemetry.
+   - Increased the cryptography dependency version.
+   - Increased the pyopenssl dependency version.
+   - Fixed an issue where dbapi.Binary returned a string instead of bytes.
+   - Increased the required version of numpy.
+   - Increased the required version of keyring.
+   - Fixed issue so that fetch functions now return a typed DataFrames and pyarrow Tables for empty results.
+   - Added py.typed
+   - Improved error messages for PUT/GET.
+   - Added Cursor.query attribute for accessing last query.
+   - Increased the required version of pyarrow.
+
+
+- v2.7.1(November 19,2021)
+
+   - Fixed a bug where uploading a streaming file with multiple parts did not work.
+   - JWT tokens are now regenerated when a request is retired.
+   - Updated URL escaping when uploading to AWS S3 to match how S3 escapes URLs.
+   - Removed the unused s3_connection_pool_size connection parameter.
+   - Blocked queries are now be considered to be still running.
+   - Snowflake specific exceptions are now set using Exception arguments.
+   - Fixed an issue where use_s3_regional_url was not set correctly by the connector.
+
+
+- v2.7.0(October 25,2021)
+
+   - Removing cloud sdks.snowflake-connector-python will not install them anymore. Recreate your virtualenv to get rid of unnecessary dependencies.
+   - Include Standard C++ headers.
+   - Update minimum dependency version pin of cryptography.
+   - Fixed a bug where error number would not be added to Exception messages.
+   - Fixed a bug where client_prefetch_threads parameter was not respected when pre-fetching results.
+   - Update signature of SnowflakeCursor.execute's params argument.
 
 
 - v2.6.2(September 27,2021)

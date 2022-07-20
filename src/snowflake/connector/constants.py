@@ -1,11 +1,21 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+from __future__ import annotations
+
 from collections import defaultdict
 from enum import Enum, auto, unique
-from typing import Any, DefaultDict, List, NamedTuple, Optional
+from typing import Any, Callable, DefaultDict, NamedTuple
+
+from .options import installed_pandas
+from .options import pyarrow as pa
+
+if installed_pandas:
+    DataType = pa.DataType
+else:
+    DataType = None
+
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
@@ -15,37 +25,74 @@ DBAPI_TYPE_TIMESTAMP = 3
 
 class FieldType(NamedTuple):
     name: str
-    dbapi_type: List[int]
+    dbapi_type: list[int]
+    pa_type: Callable[[], DataType]
 
 
-FIELD_TYPES: List[FieldType] = [
-    FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER]),
-    FieldType(name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER]),
-    FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING]),
-    FieldType(name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="TIMESTAMP", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="TIMESTAMP_LTZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="TIMESTAMP_TZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="TIMESTAMP_NTZ", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY]),
-    FieldType(name="TIME", dbapi_type=[DBAPI_TYPE_TIMESTAMP]),
-    FieldType(name="BOOLEAN", dbapi_type=[]),
-]
+# This type mapping holds column type definitions.
+#  Be careful to not change the ordering as the index is what Snowflake
+#  gives to as schema
+FIELD_TYPES: tuple[FieldType] = (
+    FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.int64()),
+    FieldType(
+        name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.float64()
+    ),
+    FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()),
+    FieldType(
+        name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda: pa.date64()
+    ),
+    FieldType(
+        name="TIMESTAMP",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.time64("ns"),
+    ),
+    FieldType(
+        name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+    ),
+    FieldType(
+        name="TIMESTAMP_LTZ",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.timestamp("ns"),
+    ),
+    FieldType(
+        name="TIMESTAMP_TZ",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.timestamp("ns"),
+    ),
+    FieldType(
+        name="TIMESTAMP_NTZ",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda: pa.timestamp("ns"),
+    ),
+    FieldType(
+        name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+    ),
+    FieldType(
+        name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+    ),
+    FieldType(
+        name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.binary()
+    ),
+    FieldType(
+        name="TIME", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda: pa.time64("ns")
+    ),
+    FieldType(name="BOOLEAN", dbapi_type=[], pa_type=lambda: pa.bool_()),
+    FieldType(
+        name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()
+    ),
+)
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
 FIELD_ID_TO_NAME: DefaultDict[int, str] = defaultdict(str)
 
-__binary_types: List[int] = []
-__binary_type_names: List[str] = []
-__string_types: List[int] = []
-__string_type_names: List[str] = []
-__number_types: List[int] = []
-__number_type_names: List[str] = []
-__timestamp_types: List[int] = []
-__timestamp_type_names: List[str] = []
+__binary_types: list[int] = []
+__binary_type_names: list[str] = []
+__string_types: list[int] = []
+__string_type_names: list[str] = []
+__number_types: list[int] = []
+__number_type_names: list[str] = []
+__timestamp_types: list[int] = []
+__timestamp_type_names: list[str] = []
 
 for idx, field_type in enumerate(FIELD_TYPES):
     FIELD_ID_TO_NAME[idx] = field_type.name
@@ -67,7 +114,7 @@ for idx, field_type in enumerate(FIELD_TYPES):
             __string_type_names.append(field_type.name)
 
 
-def get_binary_types() -> List[int]:
+def get_binary_types() -> list[int]:
     return __binary_types
 
 
@@ -75,7 +122,7 @@ def is_binary_type_name(type_name: str) -> bool:
     return type_name in __binary_type_names
 
 
-def get_string_types() -> List[int]:
+def get_string_types() -> list[int]:
     return __string_types
 
 
@@ -83,7 +130,7 @@ def is_string_type_name(type_name) -> bool:
     return type_name in __string_type_names
 
 
-def get_number_types() -> List[int]:
+def get_number_types() -> list[int]:
     return __number_types
 
 
@@ -91,7 +138,7 @@ def is_number_type_name(type_name) -> bool:
     return type_name in __number_type_names
 
 
-def get_timestamp_types() -> List[int]:
+def get_timestamp_types() -> list[int]:
     return __timestamp_types
 
 
@@ -157,9 +204,9 @@ class EncryptionMetadata(NamedTuple):
 
 
 class FileHeader(NamedTuple):
-    digest: Optional[str]
-    content_length: Optional[int]
-    encryption_metadata: Optional[EncryptionMetadata]
+    digest: str | None
+    content_length: int | None
+    encryption_metadata: EncryptionMetadata | None
 
 
 PARAMETER_AUTOCOMMIT = "AUTOCOMMIT"
@@ -191,9 +238,6 @@ HTTP_HEADER_USER_AGENT = "User-Agent"
 HTTP_HEADER_SERVICE_NAME = "X-Snowflake-Service"
 
 HTTP_HEADER_VALUE_OCTET_STREAM = "application/octet-stream"
-
-DEFAULT_S3_CONNECTION_POOL_SIZE = 10
-MAX_S3_CONNECTION_POOL_SIZE = 20
 
 
 @unique
@@ -258,3 +302,6 @@ class IterUnit(Enum):
 
 S3_CHUNK_SIZE = 8388608  # boto3 default
 AZURE_CHUNK_SIZE = 4 * megabyte
+
+# TODO: all env variables definitions should be here
+ENV_VAR_PARTNER = "SF_PARTNER"

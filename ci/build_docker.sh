@@ -2,7 +2,7 @@
 #
 # Build Snowflake Python Connector in Docker
 # NOTES:
-#   - To compile only a specific version(s) pass in versions like: `./build_docker.sh "3.5 3.6"`
+#   - To compile only a specific version(s) pass in versions like: `./build_docker.sh "3.7 3.8"`
 set -o pipefail
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -20,7 +20,7 @@ if [[ "$arch" == "aarch64" ]]; then
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.11/gosu-arm64
 else
-  BASE_IMAGE=$BASE_IMAGE_MANYLINUX2010
+  BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014
   GOSU_URL=https://github.com/tianon/gosu/releases/download/1.11/gosu-amd64
 fi
 

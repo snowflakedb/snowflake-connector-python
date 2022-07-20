@@ -1,11 +1,13 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
+from __future__ import annotations
+
+from unittest.mock import Mock
+
 import pytest
-from mock import Mock
 
 from snowflake.connector.telemetry import TelemetryField
 
@@ -112,6 +114,7 @@ def test_query_large_result_set_n_threads(
 
 
 @pytest.mark.aws
+@pytest.mark.skipolddriver
 def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
     """[s3] Gets Large Result set."""
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
@@ -141,7 +144,7 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
             result999
         ), "result length is different: result2, and result999"
         for i, (x, y) in enumerate(zip(result2, result999)):
-            assert x == y, "element {}".format(i)
+            assert x == y, f"element {i}"
 
         # verify that the expected telemetry metrics were logged
         expected = [
@@ -154,8 +157,11 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
         ]
         for field in expected:
             assert (
-                sum(1 if x.message["type"] == field else 0 for x in telemetry_data) == 2
+                sum(
+                    1 if x.message["type"] == field.value else 0 for x in telemetry_data
+                )
+                == 2
             ), (
                 "Expected three telemetry logs (one per query) "
-                "for log type {}".format(field)
+                "for log type {}".format(field.value)
             )

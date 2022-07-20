@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import codecs
 import copy
@@ -15,7 +16,6 @@ from datetime import datetime
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
-from typing import Dict, Optional, Union
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
@@ -67,6 +67,7 @@ from .version import VERSION
 
 logger = logging.getLogger(__name__)
 
+
 # Cache directory
 CACHE_ROOT_DIR = (
     getenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR")
@@ -111,7 +112,7 @@ ID_TOKEN = "ID_TOKEN"
 MFA_TOKEN = "MFATOKEN"
 
 
-class Auth(object):
+class Auth:
     """Snowflake Authenticator."""
 
     def __init__(self, rest):
@@ -165,7 +166,7 @@ class Auth(object):
         password_callback=None,
         session_parameters=None,
         timeout=120,
-    ) -> Dict[str, Union[str, int, bool]]:
+    ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 
         if session_parameters is None:
@@ -237,13 +238,28 @@ class Auth(object):
             {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
         )
 
+        # accommodate any authenticator specific timeout requirements here.
+        # login_timeout comes from user configuration.
+        # Between login timeout and auth specific
+        # timeout use whichever value is smaller
+        if hasattr(auth_instance, "get_timeout"):
+            logger.debug(
+                f"Authenticator, {type(auth_instance).__name__}, implements get_timeout"
+            )
+            auth_timeout = min(
+                self._rest._connection.login_timeout, auth_instance.get_timeout()
+            )
+        else:
+            auth_timeout = self._rest._connection.login_timeout
+        logger.debug(f"Timeout set to {auth_timeout}")
+
         try:
             ret = self._rest._post_request(
                 url,
                 headers,
                 json.dumps(body),
-                timeout=self._rest._connection.login_timeout,
-                socket_timeout=self._rest._connection.login_timeout,
+                timeout=auth_timeout,
+                socket_timeout=auth_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403
@@ -273,7 +289,10 @@ class Auth(object):
             )
 
         # waiting for MFA authentication
-        if ret["data"].get("nextAction") == "EXT_AUTHN_DUO_ALL":
+        if ret["data"].get("nextAction") in (
+            "EXT_AUTHN_DUO_ALL",
+            "EXT_AUTHN_DUO_PUSH_N_PASSCODE",
+        ):
             body["inFlightCtx"] = ret["data"]["inFlightCtx"]
             body["data"]["EXT_AUTHN_DUO_METHOD"] = "push"
             self.ret = {"message": "Timeout", "data": {}}
@@ -677,7 +696,7 @@ def build_temporary_credential_name(host, user, cred_type):
 
 
 def get_token_from_private_key(
-    user: str, account: str, privatekey_path: str, key_password: Optional[str]
+    user: str, account: str, privatekey_path: str, key_password: str | None
 ) -> str:
     encoded_password = key_password.encode() if key_password is not None else None
     with open(privatekey_path, "rb") as key:

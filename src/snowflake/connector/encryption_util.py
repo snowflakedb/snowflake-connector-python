@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
+
+from __future__ import annotations
 
 import base64
 import json
 import os
 import tempfile
 from logging import getLogger
-from typing import IO, TYPE_CHECKING, Tuple
+from typing import IO, TYPE_CHECKING
 
 from Cryptodome.Cipher import AES
 from cryptography.hazmat.backends import default_backend
@@ -22,6 +23,8 @@ block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
 if TYPE_CHECKING:  # pragma: no cover
     from .storage_client import SnowflakeFileEncryptionMaterial
+
+logger = getLogger(__name__)
 
 
 def matdesc_to_unicode(matdesc):
@@ -45,11 +48,11 @@ class SnowflakeEncryptionUtil:
 
     @staticmethod
     def encrypt_stream(
-        encryption_material: "SnowflakeFileEncryptionMaterial",
+        encryption_material: SnowflakeFileEncryptionMaterial,
         src: IO[bytes],
         out: IO[bytes],
         chunk_size: int = 64 * kilobyte,  # block_size * 4 * 1024,
-    ) -> "EncryptionMetadata":
+    ) -> EncryptionMetadata:
         """Reads content from src and write the encrypted content into out.
 
         This function is sensitive to current position of src and out.
@@ -131,11 +134,11 @@ class SnowflakeEncryptionUtil:
 
     @staticmethod
     def encrypt_file(
-        encryption_material: "SnowflakeFileEncryptionMaterial",
+        encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
         tmp_dir: str = None,
-    ) -> Tuple["EncryptionMetadata", str]:
+    ) -> tuple[EncryptionMetadata, str]:
         """Encrypts a file in a temporary directory.
 
         Args:
@@ -165,26 +168,15 @@ class SnowflakeEncryptionUtil:
         return metadata, temp_output_file
 
     @staticmethod
-    def decrypt_file(
-        metadata: "EncryptionMetadata",
-        encryption_material: "SnowflakeFileEncryptionMaterial",
-        in_filename: str,
-        chunk_size: int = 64 * kilobyte,
-        tmp_dir=None,
-    ) -> str:
-        """Decrypts a file and stores the output in the temporary directory.
+    def decrypt_stream(
+        metadata: EncryptionMetadata,
+        encryption_material: SnowflakeFileEncryptionMaterial,
+        src: IO[bytes],
+        out: IO[bytes],
+        chunk_size: int = 64 * kilobyte,  # block_size * 4 * 1024,
+    ) -> None:
+        """To read from `src` stream then decrypt to `out` stream."""
 
-        Args:
-            metadata: The file's metadata input.
-            encryption_material: The file's encryption material.
-            in_filename: The name of the input file.
-            chunk_size: The size of read chunks (Default value = block_size * 4 * 1024).
-            tmp_dir: Temporary directory to use, optional (Default value = None).
-
-        Returns:
-            The decrypted file's location.
-        """
-        logger = getLogger(__name__)
         use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         key_base64 = metadata.key
         iv_base64 = metadata.iv
@@ -208,28 +200,51 @@ class SnowflakeEncryptionUtil:
             )
             decryptor = cipher.decryptor()
 
+        last_decrypted_chunk = None
+        chunk = src.read(chunk_size)
+        while len(chunk) != 0:
+            if last_decrypted_chunk is not None:
+                out.write(last_decrypted_chunk)
+            if not use_openssl_only:
+                d = data_cipher.decrypt(chunk)
+            else:
+                d = decryptor.update(chunk)
+            last_decrypted_chunk = d
+            chunk = src.read(chunk_size)
+
+        if last_decrypted_chunk is not None:
+            offset = PKCS5_OFFSET(last_decrypted_chunk)
+            out.write(last_decrypted_chunk[:-offset])
+        if use_openssl_only:
+            out.write(decryptor.finalize())
+
+    @staticmethod
+    def decrypt_file(
+        metadata: EncryptionMetadata,
+        encryption_material: SnowflakeFileEncryptionMaterial,
+        in_filename: str,
+        chunk_size: int = 64 * kilobyte,
+        tmp_dir: str | None = None,
+    ) -> str:
+        """Decrypts a file and stores the output in the temporary directory.
+
+        Args:
+            metadata: The file's metadata input.
+            encryption_material: The file's encryption material.
+            in_filename: The name of the input file.
+            chunk_size: The size of read chunks (Default value = block_size * 4 * 1024).
+            tmp_dir: Temporary directory to use, optional (Default value = None).
+
+        Returns:
+            The decrypted file's location.
+        """
         temp_output_fd, temp_output_file = tempfile.mkstemp(
             text=False, dir=tmp_dir, prefix=os.path.basename(in_filename) + "#"
         )
-        total_file_size = 0
-        prev_chunk = None
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
         with open(in_filename, "rb") as infile:
             with os.fdopen(temp_output_fd, "wb") as outfile:
-                while True:
-                    chunk = infile.read(chunk_size)
-                    if len(chunk) == 0:
-                        break
-                    total_file_size += len(chunk)
-                    if not use_openssl_only:
-                        d = data_cipher.decrypt(chunk)
-                    else:
-                        d = decryptor.update(chunk)
-                    outfile.write(d)
-                    prev_chunk = d
-                if prev_chunk is not None:
-                    total_file_size -= PKCS5_OFFSET(prev_chunk)
-                if use_openssl_only:
-                    outfile.write(decryptor.finalize())
-                outfile.truncate(total_file_size)
+                SnowflakeEncryptionUtil.decrypt_stream(
+                    metadata, encryption_material, infile, outfile, chunk_size
+                )
         return temp_output_file
