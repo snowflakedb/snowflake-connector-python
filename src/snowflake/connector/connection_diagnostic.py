@@ -43,7 +43,7 @@ class ConnectionDiagnostic:
         self.host = host
         self.test_results: Dict[str, list[str]] = {'INITIAL': [], 'PROXY': [], 'SNOWFLAKE_URL': [], 'STAGE': [],
                                              'OCSP_RESPONDER': [], 'OUT_OF_BAND_TELEMETRY': [], 'IGNORE': []}
-        host_type: str = "INITIAL"
+        host_type = "INITIAL"
         self.__append_message(host_type, f"Specified snowflake account: {self.account}")
         self.__append_message(host_type, f"Host based on specified account: {self.host}")
         if '.com.snowflakecomputing.com' in self.host:
