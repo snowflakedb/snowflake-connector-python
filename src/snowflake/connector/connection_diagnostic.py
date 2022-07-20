@@ -113,7 +113,7 @@ class ConnectionDiagnostic:
                                f"password, please make sure to update and run again.")
                 self.full_connection_diag_whitelist_path = None
 
-        self.whitelist_sql: str = "select system$whitelist();"
+        self.whitelist_sql: str = "select /* snowflake-connector-python:connection_diagnostics */ system$whitelist();"
 
         if self.__is_privatelink():
             self.ocsp_urls.append(f"ocsp.{self.host}")
