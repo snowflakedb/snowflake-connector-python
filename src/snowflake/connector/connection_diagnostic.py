@@ -338,7 +338,7 @@ class ConnectionDiagnostic:
     ) -> None:
         self.test_results[host_type].append(f"{host_type}: {message}")
 
-    def __check_for_proxies(self):
+    def __check_for_proxies(self) -> None:
         # TODO: See if we need to do anything for noproxy
         # If we need more proxy checks, this site might work
         # curl -k -v https://amibehindaproxy.com 2>&1 | tee | grep alert
