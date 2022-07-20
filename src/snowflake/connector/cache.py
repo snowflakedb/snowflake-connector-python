@@ -11,6 +11,8 @@ from typing import Generic, TypeVar
 
 from typing_extensions import NamedTuple, Self
 
+from . import constants
+
 now = datetime.datetime.now
 
 T = TypeVar("T")
@@ -32,14 +34,13 @@ def is_expired(d: datetime.datetime) -> bool:
 class SFDictCache(Generic[K, V]):
     """A generic in-memory cache that acts somewhat like a dictionary.
 
-    Notes:
-    - Unlike normal dictionaries keys, values and items return list
-      materialized at call time, instead of returning a view object.
+    Unlike normal dictionaries keys(), values() and items() return list materialized
+    at call time, unlike normal dictionaries that return a view object.
     """
 
     def __init__(
         self,
-        entry_lifetime: int = 60 * 60 * 24,  # 1 day in seconds
+        entry_lifetime: int = constants.DAY_IN_SECONDS,
     ) -> None:
         self._entry_lifetime = datetime.timedelta(seconds=entry_lifetime)
         self._cache: dict[K, CacheEntry[V]] = {}
@@ -52,6 +53,11 @@ class SFDictCache(Generic[K, V]):
         _dict: dict[K, V],
         **kw,
     ) -> Self:
+        """Create an dictionary cache from an already existing dictionary.
+
+        Note that the same references will be stored in the cache than in
+        the dictionary provided.
+        """
         cache = cls(**kw)
         for k, v in _dict.items():
             cache[k] = v
@@ -198,16 +204,13 @@ class SFDictCache(Generic[K, V]):
             to_insert: dict[K, CacheEntry[V]] = {
                 k: CacheEntry(expiry=t, entry=v) for k, v in other.items()
             }
-            with self._lock:
-                self._cache.update(to_insert)
-                self.telemetry["size"] = len(self._cache)
         elif isinstance(other, SFDictCache):
             to_insert: dict[K, CacheEntry[V]] = {k: v for k, v in other._cache.items()}
-            with self._lock:
-                self._cache.update(to_insert)
-                self.telemetry["size"] = len(self._cache)
         else:
             raise TypeError
+        with self._lock:
+            self._cache.update(to_insert)
+            self.telemetry["size"] = len(self._cache)
 
     def _clear_expired_entries(self) -> None:
         with self._lock:

@@ -303,5 +303,7 @@ class IterUnit(Enum):
 S3_CHUNK_SIZE = 8388608  # boto3 default
 AZURE_CHUNK_SIZE = 4 * megabyte
 
+DAY_IN_SECONDS = 60 * 60 * 24
+
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"

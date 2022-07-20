@@ -67,13 +67,14 @@ from snowflake.connector.ssd_internal_keys import (
 from snowflake.connector.telemetry_oob import TelemetryService
 from snowflake.connector.time_util import DecorrelateJitterBackoff
 
+from . import constants
 from .cache import SFDictCache
 
 OCSP_CACHE: SFDictCache[
     tuple[bytes, bytes, int, str],
     tuple[Exception | None, Certificate, Certificate, CertId, bytes],
 ] = SFDictCache(
-    entry_lifetime=60 * 60 * 24,  # A day in seconds
+    entry_lifetime=constants.DAY_IN_SECONDS,
 )
 
 logger = getLogger(__name__)
