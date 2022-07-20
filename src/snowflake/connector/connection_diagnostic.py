@@ -283,9 +283,7 @@ class ConnectionDiagnostic:
                 for e in extensions:
                     extension_data[e.get_short_name().decode("utf-8")] = str(e)
 
-                host_suffix = host.split('.')
-                host_suffix.pop(0)
-                host_suffix = '.'.join(host_suffix)
+                _, _, host_suffix = host.partition('.')
                 if host_suffix in str(result['subject']):
                     self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
                 elif 'subjectAltName' in extension_data:
