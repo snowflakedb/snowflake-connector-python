@@ -184,8 +184,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     # parameter protecting behavior change of SNOW-501058
     "interpolate_empty_sequences": (False, bool),
     "enable_connection_diag": (False, bool),  # Generate SnowCD like report
-    "connection_diag_log_path": (None, (type(None), str)),  # Path to connection diag report
-    "connection_diag_whitelist_path": (None, (type(None), str)),  # Path to connection diag whitelist json
+    "connection_diag_log_path": (
+        None,
+        (type(None), str),
+    ),  # Path to connection diag report
+    "connection_diag_whitelist_path": (
+        None,
+        (type(None), str),
+    ),  # Path to connection diag whitelist json
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -509,11 +515,16 @@ class SnowflakeConnection:
             TelemetryService.get_instance().update_context(kwargs)
 
         if self.enable_connection_diag:
-            connection_diag = ConnectionDiagnostic(account=self.account, host=self.host,
-                                                   connection_diag_log_path=self.connection_diag_log_path,
-                                                   connection_diag_whitelist_path=self.connection_diag_whitelist_path,
-                                                   proxy_host=self.proxy_host, proxy_port=self.proxy_port,
-                                                   proxy_user=self.proxy_user, proxy_password=self.proxy_password)
+            connection_diag = ConnectionDiagnostic(
+                account=self.account,
+                host=self.host,
+                connection_diag_log_path=self.connection_diag_log_path,
+                connection_diag_whitelist_path=self.connection_diag_whitelist_path,
+                proxy_host=self.proxy_host,
+                proxy_port=self.proxy_port,
+                proxy_user=self.proxy_user,
+                proxy_password=self.proxy_password,
+            )
             try:
                 connection_diag.run_test()
                 self.__open_connection()
