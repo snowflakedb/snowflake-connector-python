@@ -41,7 +41,7 @@ class ConnectionDiagnostic:
     ):
         self.account = account
         self.host = host
-        self.test_results: Dict[str, Any] = {'INITIAL': [], 'PROXY': [], 'SNOWFLAKE_URL': [], 'STAGE': [],
+        self.test_results: Dict[str, list[str]] = {'INITIAL': [], 'PROXY': [], 'SNOWFLAKE_URL': [], 'STAGE': [],
                                              'OCSP_RESPONDER': [], 'OUT_OF_BAND_TELEMETRY': [], 'IGNORE': []}
         host_type: str = "INITIAL"
         self.__append_message(host_type, f"Specified snowflake account: {self.account}")
