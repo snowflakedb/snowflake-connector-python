@@ -175,14 +175,12 @@ class SFDictCache(Generic[K, V]):
         key: K,
     ) -> bool:
         with self._lock:
-            if key in self._cache.keys():
-                try:
-                    self.__getitem(key, should_record_hits=True)
-                    return True
-                except KeyError:
-                    # Fall through
-                    pass
-        return False
+            try:
+                self.__getitem(key, should_record_hits=True)
+                return True
+            except KeyError:
+                # Fall through
+                return False
 
     def update(
         self,
