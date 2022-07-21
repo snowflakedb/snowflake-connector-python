@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 
+from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.cursor import SnowflakeCursor
 
 try:
@@ -17,6 +18,12 @@ except ImportError:
         PUT = "put"
 
 
+class FakeConnection(SnowflakeConnection):
+    def __init__(self):
+        self._log_max_query_length = 0
+        self._reuse_results = None
+
+
 @pytest.mark.parametrize(
     "sql,_type",
     (
@@ -27,3 +34,9 @@ except ImportError:
 )
 def test_get_filetransfer_type(sql, _type):
     assert SnowflakeCursor.get_file_transfer_type(sql) == _type
+
+
+def test_cursor_attribute():
+    fake_conn = FakeConnection()
+    cursor = SnowflakeCursor(fake_conn)
+    assert not cursor.lastrowid
