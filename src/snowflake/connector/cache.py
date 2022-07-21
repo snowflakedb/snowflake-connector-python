@@ -243,7 +243,6 @@ class SFDictCache(Generic[K, V]):
         Note that while this function does not interact with lock, but it's only
         called from contexts where the lock is already held.
         """
-        del k
         self.telemetry["hit"] += 1
 
     def _miss(self, k: K) -> None:
@@ -252,7 +251,6 @@ class SFDictCache(Generic[K, V]):
         Note that while this function does not interact with lock, but it's only
         called from contexts where the lock is already held.
         """
-        del k
         self.telemetry["miss"] += 1
 
     def _expiration(self, k: K) -> None:
@@ -261,5 +259,4 @@ class SFDictCache(Generic[K, V]):
         Note that while this function does not interact with lock, but it's only
         called from contexts where the lock is already held.
         """
-        del k
         self.telemetry["expiration"] += 1
