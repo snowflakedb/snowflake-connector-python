@@ -63,7 +63,7 @@ class SFDictCache(Generic[K, V]):
             cache[k] = v
         return cache
 
-    def __getitem(
+    def _getitem(
         self,
         k: K,
         *,
@@ -81,13 +81,13 @@ class SFDictCache(Generic[K, V]):
             raise
         if is_expired(t):
             self._expiration(k)
-            self.__delitem(k)
+            self._delitem(k)
             raise KeyError
         if should_record_hits:
             self._hit(k)
         return v
 
-    def __setitem(
+    def _setitem(
         self,
         k: K,
         v: V,
@@ -109,7 +109,7 @@ class SFDictCache(Generic[K, V]):
     ) -> V:
         """Returns an element if it hasn't expired yet in a thread-safe way."""
         with self._lock:
-            return self.__getitem(k, should_record_hits=True)
+            return self._getitem(k, should_record_hits=True)
 
     def __setitem__(
         self,
@@ -118,7 +118,7 @@ class SFDictCache(Generic[K, V]):
     ) -> None:
         """Inserts an element in a thread-safe way."""
         with self._lock:
-            self.__setitem(k, v)
+            self._setitem(k, v)
 
     def __iter__(self) -> Iterator[K]:
         return iter(self.keys())
@@ -132,8 +132,8 @@ class SFDictCache(Generic[K, V]):
             for k in list(self._cache.keys()):
                 try:
                     # TODO: this function could be further optimized by removing
-                    #  the need here to call __getitem here and call se;f._cache.keys()
-                    v = self.__getitem(k, should_record_hits=False)
+                    #  the need here to call _getitem here and call self._cache.keys()
+                    v = self._getitem(k, should_record_hits=False)
                     values.append((k, v))
                 except KeyError:
                     continue
@@ -157,7 +157,7 @@ class SFDictCache(Generic[K, V]):
             self._cache.clear()
             self._reset_telemetry()
 
-    def __delitem(
+    def _delitem(
         self,
         key: K,
     ) -> None:
@@ -174,7 +174,7 @@ class SFDictCache(Generic[K, V]):
         key: K,
     ) -> None:
         with self._lock:
-            self.__delitem(key)
+            self._delitem(key)
 
     def __contains__(
         self,
@@ -182,7 +182,7 @@ class SFDictCache(Generic[K, V]):
     ) -> bool:
         with self._lock:
             try:
-                self.__getitem(key, should_record_hits=True)
+                self._getitem(key, should_record_hits=True)
                 return True
             except KeyError:
                 # Fall through
@@ -216,7 +216,7 @@ class SFDictCache(Generic[K, V]):
         with self._lock:
             for k in self._cache.keys():
                 try:
-                    self.__getitem(k, should_record_hits=False)
+                    self._getitem(k, should_record_hits=False)
                 except KeyError:
                     continue
             self.telemetry["size"] = len(self._cache)
