@@ -19,3 +19,4 @@ prune benchmark
 prune test
 prune tested_requirements
 prune src/snowflake/connector/cpp/scripts
+prune __pycache__
