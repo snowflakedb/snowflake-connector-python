@@ -344,7 +344,7 @@ class SnowflakeRestful:
         port=8080,
         protocol="http",
         inject_client_pause=0,
-        connection: Optional[SnowflakeConnection] = None,
+        connection: SnowflakeConnection | None = None,
     ):
         self._host = host
         self._port = port
@@ -875,14 +875,27 @@ class SnowflakeRestful:
                 )
             cause = e.args[0]
             if no_retry:
-                self.log_and_handle_http_error_with_cause(e, full_url, method, retry_ctx.total_timeout, retry_ctx.cnt,
-                                                          conn, timed_out=False)
+                self.log_and_handle_http_error_with_cause(
+                    e,
+                    full_url,
+                    method,
+                    retry_ctx.total_timeout,
+                    retry_ctx.cnt,
+                    conn,
+                    timed_out=False,
+                )
                 return {}  # required for tests
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= int(time.time() - start_request_thread)
                 if retry_ctx.timeout <= 0:
-                    self.log_and_handle_http_error_with_cause(e, full_url, method, retry_ctx.total_timeout,
-                                                              retry_ctx.cnt, conn)
+                    self.log_and_handle_http_error_with_cause(
+                        e,
+                        full_url,
+                        method,
+                        retry_ctx.total_timeout,
+                        retry_ctx.cnt,
+                        conn,
+                    )
                     return {}  # required for tests
             sleeping_time = retry_ctx.next_sleep()
             logger.debug(
@@ -907,14 +920,14 @@ class SnowflakeRestful:
             return {}
 
     def log_and_handle_http_error_with_cause(
-            self,
-            e: Exception,
-            full_url: str,
-            method: str,
-            retry_timeout: int,
-            retry_count: int,
-            conn: SnowflakeConnection,
-            timed_out: bool = True
+        self,
+        e: Exception,
+        full_url: str,
+        method: str,
+        retry_timeout: int,
+        retry_count: int,
+        conn: SnowflakeConnection,
+        timed_out: bool = True,
     ) -> None:
         cause = e.args[0]
         logger.error(cause, exc_info=True)

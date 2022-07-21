@@ -26,4 +26,3 @@ jobs:
         jira_token: ${{ secrets.jira_token_public_repo }}
       env:
         gh_token: ${{ secrets.github_token }}
-

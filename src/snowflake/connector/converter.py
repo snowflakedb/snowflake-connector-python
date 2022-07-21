@@ -111,7 +111,7 @@ def _convert_time_to_epoch_nanoseconds(tm: dt_t) -> str:
 def _extract_timestamp(value: str, ctx: dict) -> tuple[float, int]:
     """Extracts timestamp from a raw data."""
     scale = ctx["scale"]
-    microseconds = float(value[0: -scale + 6]) if scale > 6 else float(value)
+    microseconds = float(value[0 : -scale + 6]) if scale > 6 else float(value)
     fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
         value, ctx["max_fraction"], scale
     )
@@ -718,7 +718,9 @@ class SnowflakeConverter:
         scale: int,
         tz: tzinfo | None = None,
     ) -> datetime:
-        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(value=value, scale=scale)
+        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(
+            value=value, scale=scale
+        )
         if not tz:
             return datetime.utcfromtimestamp(seconds) + timedelta(microseconds=fraction)
         return datetime.fromtimestamp(seconds, tz=tz) + timedelta(microseconds=fraction)
