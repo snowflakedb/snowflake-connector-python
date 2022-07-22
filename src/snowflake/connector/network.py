@@ -14,7 +14,6 @@ import logging
 import time
 import traceback
 import uuid
-from io import BytesIO
 from threading import Lock
 from typing import TYPE_CHECKING
 
@@ -1007,11 +1006,8 @@ class SnowflakeRestful:
         logger.debug("socket timeout: %s", socket_timeout)
         try:
             if not catch_okta_unauthorized_error and data and len(data) > 0:
-                gzdata = BytesIO()
-                gzip.GzipFile(fileobj=gzdata, mode="wb").write(data.encode("utf-8"))
-                gzdata.seek(0, 0)
                 headers["Content-Encoding"] = "gzip"
-                input_data = gzdata
+                input_data = gzip.compress(data.encode("utf-8"))
             else:
                 input_data = data
 
