@@ -43,6 +43,95 @@ sf_connector_version_df = LazyVar(
 )
 
 
+@pytest.mark.parametrize("quote_identifiers", [True, False])
+@pytest.mark.parametrize("auto_create_table", [True, False])
+def test_write_pandas_with_overwrite(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    quote_identifiers: bool,
+    auto_create_table: bool,
+):
+    """Tests whether overwriting table using a Pandas DataFrame works as expected."""
+    random_table_name = random_string(5, "userspoints_")
+    df1_data = [("John", 10), ("Jane", 20)]
+    df1 = pandas.DataFrame(df1_data, columns=["name", "points"])
+    df2_data = [("Dash", 50)]
+    df2 = pandas.DataFrame(df2_data, columns=["name", "points"])
+    df3_data = [(2022, "Jan", 10000), (2022, "Feb", 10220)]
+    df3 = pandas.DataFrame(df3_data, columns=["year", "month", "revenue"])
+
+    if quote_identifiers:
+        table_name = '"' + random_table_name + '"'
+        col_id = '"id"'
+        col_name = '"name"'
+        col_points = '"points"'
+    else:
+        table_name = random_table_name
+        col_id = "id"
+        col_name = "name"
+        col_points = "points"
+
+    create_sql = (
+        f"CREATE OR REPLACE TABLE {table_name}"
+        f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
+    )
+
+    select_sql = f"SELECT * FROM {table_name}"
+    select_count_sql = f"SELECT count(*) FROM {table_name}"
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            # Write dataframe with 2 rows
+            write_pandas(
+                cnx,
+                df1,
+                random_table_name,
+                quote_identifiers=quote_identifiers,
+                auto_create_table=auto_create_table,
+                overwrite=True,
+            )
+            # Write dataframe with 1 row
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                df2,
+                random_table_name,
+                quote_identifiers=quote_identifiers,
+                auto_create_table=auto_create_table,
+                overwrite=True,
+            )
+            # Check write_pandas output
+            assert success
+            assert nchunks == 1
+            result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+            # Check number of rows
+            assert result["COUNT(*)"] == 1
+
+            # Write dataframe with a different schema
+            if auto_create_table:
+                # Should drop table and SUCCEED because the new table will be created with new schema of df3
+                success, nchunks, nrows, _ = write_pandas(
+                    cnx,
+                    df3,
+                    random_table_name,
+                    quote_identifiers=quote_identifiers,
+                    auto_create_table=auto_create_table,
+                    overwrite=True,
+                )
+                # Check write_pandas output
+                assert success
+                assert nchunks == 1
+                result = cnx.execute_string(select_sql)
+                # Check column names
+                assert (
+                    "year"
+                    if quote_identifiers
+                    else "YEAR" in [col.name for col in result[0].description]
+                )
+
+        finally:
+            cnx.execute_string(drop_sql)
+
+
 @pytest.mark.parametrize("chunk_size", [5, 1])
 @pytest.mark.parametrize(
     "compression",
