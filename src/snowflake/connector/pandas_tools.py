@@ -48,6 +48,7 @@ def write_pandas(
     quote_identifiers: bool = True,
     auto_create_table: bool = False,
     create_temp_table: bool = False,
+    overwrite: bool = False,
 ) -> tuple[
     bool,
     int,
@@ -102,6 +103,9 @@ def write_pandas(
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
             the passed in DataFrame. The table will not be created if it already exists
         create_temp_table: Will make the auto-created table as a temporary table
+        overwrite: When true, and if auto_create_table is true, then it drops the table. Otherwise, it
+        truncates the table. In both cases it will replace the existing contents of the table with that of the passed in
+            Pandas DataFrame.
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
@@ -176,6 +180,16 @@ def write_pandas(
     else:
         columns = ",".join(list(df.columns))
 
+    if overwrite:
+        if auto_create_table:
+            drop_table_sql = f"DROP TABLE IF EXISTS {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            logger.debug(f"dropping table with '{drop_table_sql}'")
+            cursor.execute(drop_table_sql, _is_internal=True)
+        else:
+            truncate_table_sql = f"TRUNCATE TABLE IF EXISTS {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            logger.debug(f"truncating table with '{truncate_table_sql}'")
+            cursor.execute(truncate_table_sql, _is_internal=True)
+
     if auto_create_table:
         file_format_name = None
         while True:
@@ -226,6 +240,7 @@ def write_pandas(
         parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in df.columns)
     else:
         parquet_columns = "$1:" + ",$1:".join(df.columns)
+
     copy_into_sql = (
         "COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         "({columns}) "
