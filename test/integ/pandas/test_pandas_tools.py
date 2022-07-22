@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from snowflake.connector import DictCursor, ProgrammingError
+from snowflake.connector import DictCursor
 
 from ...lazy_var import LazyVar
 from ...randomize import random_string
@@ -44,12 +44,10 @@ sf_connector_version_df = LazyVar(
 
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])
-@pytest.mark.parametrize("overwrite", [True, False])
 @pytest.mark.parametrize("auto_create_table", [True, False])
 def test_write_pandas_with_overwrite(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     quote_identifiers: bool,
-    overwrite: bool,
     auto_create_table: bool,
 ):
     """Tests whether overwriting table using a Pandas DataFrame works as expected."""
@@ -84,13 +82,13 @@ def test_write_pandas_with_overwrite(
         cnx.execute_string(create_sql)
         try:
             # Write dataframe with 2 rows
-            success, nchunks, nrows, _ = write_pandas(
+            write_pandas(
                 cnx,
                 df1,
                 random_table_name,
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
-                overwrite=overwrite,
+                overwrite=True,
             )
             # Write dataframe with 1 row
             success, nchunks, nrows, _ = write_pandas(
@@ -99,57 +97,37 @@ def test_write_pandas_with_overwrite(
                 random_table_name,
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
-                overwrite=overwrite,
+                overwrite=True,
             )
             # Check write_pandas output
             assert success
             assert nchunks == 1
             result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
-            if overwrite:
-                # Check number of rows
-                assert result["COUNT(*)"] == 1
-            else:
-                # Check number of rows
-                assert result["COUNT(*)"] == 3
+            # Check number of rows
+            assert result["COUNT(*)"] == 1
 
             # Write dataframe with a different schema
-            if overwrite:
-                if auto_create_table:
-                    # Should drop table and SUCCEED because the new table will be created with new schema of df3
-                    success, nchunks, nrows, _ = write_pandas(
-                        cnx,
-                        df3,
-                        random_table_name,
-                        quote_identifiers=quote_identifiers,
-                        auto_create_table=auto_create_table,
-                        overwrite=overwrite,
-                    )
-                    # Check write_pandas output
-                    assert success
-                    assert nchunks == 1
-                    result = cnx.execute_string(select_sql)
-                    # Check column names
-                    assert (
-                        "year"
-                        if quote_identifiers
-                        else "YEAR" in [col.name for col in result[0].description]
-                    )
-                else:
-                    # Should truncate table and FAIL because the new dataframe schema will not match old table's schema
-                    with pytest.raises(
-                        ProgrammingError,
-                        match=r'.* SQL compilation error: error line 1 at position 92\ninvalid identifier \'"year"\''
-                        if quote_identifiers
-                        else r".* SQL compilation error: error line 1 at position 90\ninvalid identifier 'YEAR'",
-                    ):
-                        success, nchunks, nrows, _ = write_pandas(
-                            cnx,
-                            df3,
-                            random_table_name,
-                            quote_identifiers=quote_identifiers,
-                            auto_create_table=auto_create_table,
-                            overwrite=overwrite,
-                        )
+            if auto_create_table:
+                # Should drop table and SUCCEED because the new table will be created with new schema of df3
+                success, nchunks, nrows, _ = write_pandas(
+                    cnx,
+                    df3,
+                    random_table_name,
+                    quote_identifiers=quote_identifiers,
+                    auto_create_table=auto_create_table,
+                    overwrite=True,
+                )
+                # Check write_pandas output
+                assert success
+                assert nchunks == 1
+                result = cnx.execute_string(select_sql)
+                # Check column names
+                assert (
+                    "year"
+                    if quote_identifiers
+                    else "YEAR" in [col.name for col in result[0].description]
+                )
+
         finally:
             cnx.execute_string(drop_sql)
 
