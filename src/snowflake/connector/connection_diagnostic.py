@@ -46,7 +46,7 @@ class ConnectionDiagnostic:
         proxy_port: str | None = None,
         proxy_user: str | None = None,
         proxy_password: str | None = None,
-    ):
+    ) -> None:
         self.account = account
         self.host = host
         self.test_results: dict[str, list[str]] = {
