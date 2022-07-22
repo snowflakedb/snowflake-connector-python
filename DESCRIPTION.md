@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
    - Bumped supported pyarrow version to >=8.0.0,<8.1.0
    - Added overwrite option to write_pandas
    - Fixed a bug where gzip compressed http requests might be garbled by an unflushed buffer
+   - Added new connection diagnostics capabilities to snowflake-connector-python
 
 
 
