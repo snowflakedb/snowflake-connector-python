@@ -367,6 +367,11 @@ class SnowflakeCursor:
         """Whether the command is PUT or GET."""
         return hasattr(self, "_is_file_transfer") and self._is_file_transfer
 
+    @property
+    def lastrowid(self) -> None:
+        """Snowflake does not support lastrowid in which case None should be returned as per PEP249."""
+        return None
+
     def callproc(self, procname: str, args: T = ()) -> T:
         """Call a stored procedure.
 
