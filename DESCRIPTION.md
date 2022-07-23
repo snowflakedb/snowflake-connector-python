@@ -16,6 +16,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
    - Added overwrite option to write_pandas
    - Added attribute `lastrowid` to `SnowflakeCursor` in compliance with PEP249.
    - Fixed a bug where gzip compressed http requests might be garbled by an unflushed buffer
+   - Added new connection diagnostics capabilities to snowflake-connector-python
 
 
 - v2.7.9(June 26,2022)
