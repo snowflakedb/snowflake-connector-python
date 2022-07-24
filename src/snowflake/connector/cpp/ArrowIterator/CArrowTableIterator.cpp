@@ -755,13 +755,42 @@ void CArrowTableIterator::convertTimestampColumn(
   }
   else
   {
+     bool has_valid_overflow = false;
+     if (dt->id() == arrow::Type::type::STRUCT)
+     {
+         auto structArray = std::dynamic_pointer_cast<arrow::StructArray>(columnArray);
+         for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+           {
+              if (columnArray->IsValid(rowIdx))
+              {
+                  int64_t epoch = std::static_pointer_cast<arrow::Int64Array>(
+                    structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH))->Value(rowIdx);
+                  int32_t fraction = std::static_pointer_cast<arrow::Int32Array>(
+                    structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION))->Value(rowIdx);
+                  int powTenSB4 = sf::internal::powTenSB4[9];
+                  if (epoch > (INT64_MAX / powTenSB4) || epoch < (INT64_MIN / powTenSB4))
+                  {
+                    has_valid_overflow = true;
+                    if (fraction % 1000 != 0) {
+                        std::string errorInfo = Logger::formatString(
+                          "The total number of nanoseconds %d%d overflows int64 range. If you use a timestamp with "
+                          "the nanosecond part over 6-digits in the Snowflake database, the timestamp must be "
+                          "between '1677-09-21 00:12:43.145224192' and '2262-04-11 23:47:16.854775807' to not overflow."
+                          , epoch, fraction);
+                        throw std::overflow_error(errorInfo.c_str());
+                    }
+                  }
+                }
+           }
+     }
+    auto timeUnit = has_valid_overflow? arrow::TimeUnit::MICRO: arrow::TimeUnit::NANO;
     if (!timezone.empty())
     {
-      timeType = arrow::timestamp(arrow::TimeUnit::NANO, timezone);
+      timeType = arrow::timestamp(timeUnit, timezone);
     }
     else
     {
-      timeType = arrow::timestamp(arrow::TimeUnit::NANO);
+      timeType = arrow::timestamp(timeUnit);
     }
     tsField = std::make_shared<arrow::Field>(
       field->name(), timeType, field->nullable());
@@ -789,7 +818,13 @@ void CArrowTableIterator::convertTimestampColumn(
                 structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH))->Value(rowIdx);
               int32_t fraction = std::static_pointer_cast<arrow::Int32Array>(
                 structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION))->Value(rowIdx);
-              val = epoch * sf::internal::powTenSB4[9] + fraction;
+              if (has_valid_overflow)
+              {
+                val = epoch * sf::internal::powTenSB4[6] + fraction / 1000;
+              } else
+              {
+                val = epoch * sf::internal::powTenSB4[9] + fraction;
+              }
             }
             break;
           default:

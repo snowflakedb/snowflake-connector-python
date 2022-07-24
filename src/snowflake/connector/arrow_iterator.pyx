@@ -42,7 +42,7 @@ cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
         PyObject * exception;
 
     cdef cppclass CArrowIterator:
-        shared_ptr[ReturnVal] next();
+        shared_ptr[ReturnVal] next() except +;
 
 
 cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
