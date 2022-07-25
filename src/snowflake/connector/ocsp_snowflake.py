@@ -68,13 +68,20 @@ from snowflake.connector.telemetry_oob import TelemetryService
 from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 from . import constants
-from .cache import SFDictCache
+from .cache import SFDictFileCache
 
-OCSP_CACHE: SFDictCache[
+OCSP_CACHE: SFDictFileCache[
     tuple[bytes, bytes, int, str],
     tuple[Exception | None, Certificate, Certificate, CertId, bytes],
-] = SFDictCache(
+] = SFDictFileCache(
     entry_lifetime=constants.DAY_IN_SECONDS,
+    file_path={
+        "linux": os.path.join("~", ".cache", "snowflake", "ocsp_cache"),
+        "darwin": os.path.join("~", "Library", "Caches", "Snowflake", "ocsp_cache"),
+        "windows": os.path.join(
+            "~", "AppData", "Local", "Snowflake", "Caches", "ocsp_cache"
+        ),
+    },
 )
 
 logger = getLogger(__name__)

@@ -3,6 +3,10 @@
 #
 
 import datetime
+import logging
+import os.path
+import pickle
+from unittest import mock
 
 import pytest
 
@@ -21,6 +25,13 @@ class TestSFDictCache:
         assert 1 in c and 2 in c
         assert c[1] == "a"
         assert c[2] == "b"
+
+    def test_miss(self):
+        c = cache.SFDictCache.from_dict(
+            {"a": 1},
+        )
+        with pytest.raises(KeyError):
+            c["b"]
 
     def test_expiration(self):
         c = cache.SFDictCache.from_dict(
@@ -179,3 +190,148 @@ class TestSFDictCache:
             "expiration": 0,
             "size": 2,
         }
+
+
+class AlwaysSaveSFDictFileCache(cache.SFDictFileCache):
+    def _should_save(self):
+        return True
+
+
+class NeverSaveSFDictFileCache(cache.SFDictFileCache):
+    def _should_save(self):
+        return False
+
+
+class TestSFDictFileCache:
+    # Since the __getitem__ is overwritten copied over tests to test it
+    def test_simple_usage(self):
+        c = cache.SFDictCache.from_dict({1: "a", 2: "b"})
+        assert 1 in c and 2 in c
+        assert c[1] == "a"
+        assert c[2] == "b"
+        assert c.telemetry == {
+            "hit": 4,
+            "miss": 0,
+            "expiration": 0,
+            "size": 2,
+        }
+
+    def test_miss(self):
+        c = cache.SFDictCache.from_dict(
+            {"a": 1},
+        )
+        with pytest.raises(KeyError):
+            c["b"]
+        assert c.telemetry == {
+            "hit": 0,
+            "miss": 1,
+            "expiration": 0,
+            "size": 1,
+        }
+
+    def test_expiration(self):
+        c = cache.SFDictCache.from_dict(
+            {"a": 1},
+            entry_lifetime=0,
+        )
+        with pytest.raises(KeyError):
+            c["a"]
+        assert c.telemetry == {
+            "hit": 0,
+            "miss": 0,
+            "expiration": 1,
+            "size": 0,
+        }
+
+    # The rest of the tests test the file cache portion
+
+    def test_simple_miss(self, tmpdir):
+        """Check whether miss triggers a load."""
+        c = AlwaysSaveSFDictFileCache.from_dict(
+            {"a": 1, "b": 2}, file_path=os.path.join(tmpdir, "c.txt")
+        )
+        c2 = pickle.loads(pickle.dumps(c))
+        c2["c"] = 3
+        assert c["c"] == 3
+
+    def test_simple_expiration(self, tmpdir):
+        """Check whether expiration triggers a load."""
+        c = AlwaysSaveSFDictFileCache.from_dict(
+            {"a": 1, "b": 2}, file_path=os.path.join(tmpdir, "c.txt")
+        )
+        c2 = pickle.loads(pickle.dumps(c))
+        c2._entry_lifetime = NO_LIFETIME
+        c2["c"] = 3
+        c["c"] = 3
+        assert c2["c"] == 3
+
+    def test_filelock_hang(self, tmpdir, caplog):
+        """Check whether if file lock is held save doesn't hang."""
+        c = AlwaysSaveSFDictFileCache.from_dict(
+            {"a": 1, "b": 2}, file_path=os.path.join(tmpdir, "c.txt")
+        )
+        c2 = pickle.loads(pickle.dumps(c))
+        with c2._file_lock:
+            with caplog.at_level(logging.DEBUG, logger="snowflake.connector.cache"):
+                assert c._save() is False
+            assert caplog.record_tuples == [
+                (
+                    "snowflake.connector.cache",
+                    logging.DEBUG,
+                    f"acquiring {c._file_lock_path} timed out, skipping saving...",
+                ),
+            ]
+
+    def test_pickle(self, tmpdir):
+        c = AlwaysSaveSFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
+        c2 = pickle.loads(pickle.dumps(c))
+        assert c is not c2
+        assert c._lock is not c2._lock
+        assert c._file_lock is not c2._file_lock
+
+    def test_precise_save_load(self, tmpdir):
+        c1 = NeverSaveSFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
+        c2 = pickle.loads(pickle.dumps(c1))
+        c1["a"] = 1
+        c1["b"] = 1
+        assert c1._save()
+        assert c2.telemetry == {
+            "hit": 0,
+            "miss": 0,
+            "expiration": 0,
+            "size": 0,
+        }
+        assert c2._load()
+        assert c2.telemetry == {
+            "hit": 0,
+            "miss": 0,
+            "expiration": 0,
+            "size": 2,
+        }
+
+    def test_clear_expired_entries(self, tmpdir):
+        c1 = NeverSaveSFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
+        c2 = pickle.loads(pickle.dumps(c1))
+        c1["a"] = 1
+        c1._entry_lifetime = NO_LIFETIME
+        c1["b"] = 1
+        c1["c"] = 1
+        assert c1._save()  # Save calls self._clear_expired_entries()
+        assert c2._load()
+        assert c2.keys() == ["a"]
+
+    def test_path_choosing(self, tmpdir):
+        tmp_file = os.path.join(tmpdir, "cache.txt")
+        non_existent_file = "/nowhere/cache.txt"
+        platforms = ("linux", "darwin", "windows")
+        wrong_paths = {p: non_existent_file for p in platforms}
+        for platform in platforms:
+            with mock.patch(
+                "snowflake.connector.cache.platform.system", return_value=platform
+            ):
+                assert (
+                    cache.SFDictFileCache(
+                        file_path={**wrong_paths, platform: tmp_file},
+                    ).file_path
+                    == tmp_file
+                )
