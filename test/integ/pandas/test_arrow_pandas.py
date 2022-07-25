@@ -440,9 +440,8 @@ def test_timestampntz(conn_cnx, scale):
 def test_timestampntz_raises_overflow(conn_cnx, timestamp_str):
     with conn_cnx() as conn:
         r = conn.cursor().execute(f"select {timestamp_str}")
-        with pytest.raises(OverflowError) as exec_info:
+        with pytest.raises(OverflowError, match="overflows int64 range."):
             r.fetch_arrow_all()
-        assert "overflows int64 range." in str(exec_info.value)
 
 
 def test_timestampntz_down_scale(conn_cnx):
