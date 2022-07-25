@@ -755,7 +755,7 @@ void CArrowTableIterator::convertTimestampColumn(
   }
   else
   {
-     bool has_valid_overflow = false;
+     bool has_overflow_to_downscale = false;
      if (dt->id() == arrow::Type::type::STRUCT)
      {
          auto structArray = std::dynamic_pointer_cast<arrow::StructArray>(columnArray);
@@ -770,7 +770,6 @@ void CArrowTableIterator::convertTimestampColumn(
                   int powTenSB4 = sf::internal::powTenSB4[9];
                   if (epoch > (INT64_MAX / powTenSB4) || epoch < (INT64_MIN / powTenSB4))
                   {
-                    has_valid_overflow = true;
                     if (fraction % 1000 != 0) {
                         std::string errorInfo = Logger::formatString(
                           "The total number of nanoseconds %d%d overflows int64 range. If you use a timestamp with "
@@ -778,12 +777,14 @@ void CArrowTableIterator::convertTimestampColumn(
                           "between '1677-09-21 00:12:43.145224192' and '2262-04-11 23:47:16.854775807' to not overflow."
                           , epoch, fraction);
                         throw std::overflow_error(errorInfo.c_str());
+                    } else {
+                        has_overflow_to_downscale = true;
                     }
                   }
                 }
            }
      }
-    auto timeUnit = has_valid_overflow? arrow::TimeUnit::MICRO: arrow::TimeUnit::NANO;
+    auto timeUnit = has_overflow_to_downscale? arrow::TimeUnit::MICRO: arrow::TimeUnit::NANO;
     if (!timezone.empty())
     {
       timeType = arrow::timestamp(timeUnit, timezone);
@@ -818,7 +819,7 @@ void CArrowTableIterator::convertTimestampColumn(
                 structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH))->Value(rowIdx);
               int32_t fraction = std::static_pointer_cast<arrow::Int32Array>(
                 structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION))->Value(rowIdx);
-              if (has_valid_overflow)
+              if (has_overflow_to_downscale)
               {
                 val = epoch * sf::internal::powTenSB4[6] + fraction / 1000;
               } else
