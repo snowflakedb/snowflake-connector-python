@@ -436,7 +436,13 @@ def test_timestampntz(conn_cnx, scale):
         finish(conn, table)
 
 
-@pytest.mark.parametrize("timestamp_str", ["'1400-01-01 01:02:03.123456789'::timestamp as low_ts", "'9999-01-01 01:02:03.123456789789'::timestamp as high_ts"])
+@pytest.mark.parametrize(
+    "timestamp_str",
+    [
+        "'1400-01-01 01:02:03.123456789'::timestamp as low_ts",
+        "'9999-01-01 01:02:03.123456789789'::timestamp as high_ts",
+    ],
+)
 def test_timestampntz_raises_overflow(conn_cnx, timestamp_str):
     with conn_cnx() as conn:
         r = conn.cursor().execute(f"select {timestamp_str}")
@@ -446,10 +452,12 @@ def test_timestampntz_raises_overflow(conn_cnx, timestamp_str):
 
 def test_timestampntz_down_scale(conn_cnx):
     with conn_cnx() as conn:
-        r = conn.cursor().execute("select '1400-01-01 01:02:03.123456'::timestamp as low_ts, '9999-01-01 01:02:03.123456'::timestamp as high_ts")
+        r = conn.cursor().execute(
+            "select '1400-01-01 01:02:03.123456'::timestamp as low_ts, '9999-01-01 01:02:03.123456'::timestamp as high_ts"
+        )
         table = r.fetch_arrow_all()
-        assert str(table[0][0]) == '1400-01-01 01:02:03.123456'
-        assert str(table[1][0]) == '9999-01-01 01:02:03.123456'
+        assert str(table[0][0]) == "1400-01-01 01:02:03.123456"
+        assert str(table[1][0]) == "9999-01-01 01:02:03.123456"
 
 
 @pytest.mark.skipif(
