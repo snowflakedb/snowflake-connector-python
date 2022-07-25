@@ -9,10 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
-- v2.7.10(Unreleased)
+- v2.7.10(July 22,2022)
 
    - Release wheels are now built on manylinux2014
    - Bumped supported pyarrow version to >=8.0.0,<8.1.0
+   - Updated vendored library versions requests to 2.28.1 and urllib3 to 1.26.10
+   - Added in-memory cache to OCSP requests
    - Added overwrite option to write_pandas
    - Added attribute `lastrowid` to `SnowflakeCursor` in compliance with PEP249.
    - Fixed a bug where gzip compressed http requests might be garbled by an unflushed buffer
