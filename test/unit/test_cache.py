@@ -336,3 +336,17 @@ class TestSFDictFileCache:
                     ).file_path
                     == tmp_file
                 )
+        # Test fallback too
+        with mock.patch(
+            "snowflake.connector.cache.platform.system",
+            return_value="BSD",
+        ):
+            assert (
+                cache.SFDictFileCache(
+                    file_path={
+                        "linux": tmp_file,
+                        "windows": non_existent_file,
+                    },
+                ).file_path
+                == tmp_file
+            )
