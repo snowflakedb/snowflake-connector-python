@@ -43,13 +43,18 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         scale = ctx["scale"]
 
         def conv(value: str) -> datetime:
-            ts = SnowflakeConverterIssue23517.create_timestamp_from_string(value=value, scale=scale)
+            ts = SnowflakeConverterIssue23517.create_timestamp_from_string(
+                value=value, scale=scale
+            )
             return pytz.utc.localize(ts, is_dst=False).astimezone(tzinfo)
+
         return conv
 
     def _TIMESTAMP_NTZ_to_python(self, ctx):
-        scale = ctx['scale']
-        return partial(SnowflakeConverterIssue23517.create_timestamp_from_string, scale=scale)
+        scale = ctx["scale"]
+        return partial(
+            SnowflakeConverterIssue23517.create_timestamp_from_string, scale=scale
+        )
 
     def _TIME_to_python(self, ctx):
         """Converts TIME to formatted string, SnowflakeDateTime, or datetime.time.
@@ -69,12 +74,18 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
 
     @staticmethod
     def create_timestamp_from_string(
-            value: str,
-            scale: int,
-            tz: tzinfo | None = None,
+        value: str,
+        scale: int,
+        tz: tzinfo | None = None,
     ) -> datetime:
         """Windows does not support negative timestamps, so we need to do that part in Python."""
-        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(value=value, scale=scale)
+        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(
+            value=value, scale=scale
+        )
         if not tz:
-            return datetime.utcfromtimestamp(0) + timedelta(seconds=seconds, microseconds=fraction)
-        return datetime.fromtimestamp(0, tz=tz) + timedelta(seconds=seconds, microseconds=fraction)
+            return datetime.utcfromtimestamp(0) + timedelta(
+                seconds=seconds, microseconds=fraction
+            )
+        return datetime.fromtimestamp(0, tz=tz) + timedelta(
+            seconds=seconds, microseconds=fraction
+        )

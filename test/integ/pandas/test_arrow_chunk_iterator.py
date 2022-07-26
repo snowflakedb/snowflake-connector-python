@@ -36,7 +36,7 @@ def test_iterate_over_timestamp_chunk(conn_cnx, timestamp_type):
         def generate_test_data() -> int:
             nonlocal scale
             epoch = random.randint(-100_355_968, 2_534_023_007)
-            frac = random.randint(0, 10 ** scale - 1)
+            frac = random.randint(0, 10**scale - 1)
             if scale == 8:
                 frac *= 10 ** (9 - scale)
                 scale = 9

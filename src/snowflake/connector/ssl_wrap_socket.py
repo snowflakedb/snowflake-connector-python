@@ -33,7 +33,7 @@ FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
 """
 OCSP Response cache file name
 """
-FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: Optional[str] = None
+FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: str | None = None
 
 log = logging.getLogger(__name__)
 

@@ -32,6 +32,7 @@ from .auth_usrpwdmfa import AuthByUsrPwdMfa
 from .auth_webbrowser import AuthByWebBrowser
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
+from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
@@ -182,6 +183,15 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "reuse_results": (False, bool),
     # parameter protecting behavior change of SNOW-501058
     "interpolate_empty_sequences": (False, bool),
+    "enable_connection_diag": (False, bool),  # Generate SnowCD like report
+    "connection_diag_log_path": (
+        None,
+        (type(None), str),
+    ),  # Path to connection diag report
+    "connection_diag_whitelist_path": (
+        None,
+        (type(None), str),
+    ),  # Path to connection diag whitelist json
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -240,6 +250,9 @@ class SnowflakeConnection:
         consent_cache_id_token: Consented cache ID token.
         use_openssl_only: Use OpenSSL instead of pure Python libraries for signature verification and encryption.
         enable_stage_s3_privatelink_for_us_east_1: when true, clients use regional s3 url to upload files.
+        enable_connection_diag: when true, clients will generate a connectivity diagnostic report.
+        connection_diag_log_path: path to location to create diag report with enable_connection_diag.
+        connection_diag_whitelist_path: path to a whitelist.json file to test with enable_connection_diag.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -478,6 +491,18 @@ class SnowflakeConnection:
     def enable_stage_s3_privatelink_for_us_east_1(self, value):
         self._enable_stage_s3_privatelink_for_us_east_1 = True if value else False
 
+    @property
+    def enable_connection_diag(self):
+        return self._enable_connection_diag
+
+    @property
+    def connection_diag_log_path(self):
+        return self._connection_diag_log_path
+
+    @property
+    def connection_diag_whitelist_path(self):
+        return self._connection_diag_whitelist_path
+
     @arrow_number_to_decimal.setter
     def arrow_number_to_decimal_setter(self, value: bool):
         self._arrow_number_to_decimal = value
@@ -489,7 +514,32 @@ class SnowflakeConnection:
             self.__config(**kwargs)
             TelemetryService.get_instance().update_context(kwargs)
 
-        self.__open_connection()
+        if self.enable_connection_diag:
+            connection_diag = ConnectionDiagnostic(
+                account=self.account,
+                host=self.host,
+                connection_diag_log_path=self.connection_diag_log_path,
+                connection_diag_whitelist_path=self.connection_diag_whitelist_path,
+                proxy_host=self.proxy_host,
+                proxy_port=self.proxy_port,
+                proxy_user=self.proxy_user,
+                proxy_password=self.proxy_password,
+            )
+            try:
+                connection_diag.run_test()
+                self.__open_connection()
+                connection_diag.cursor = self.cursor()
+            except Exception as e:
+                logger.warning(f"Exception during connection test: {e}")
+
+            try:
+                connection_diag.run_post_test()
+            except Exception as e:
+                logger.warning(f"Exception during post connection test: {e}")
+            finally:
+                connection_diag.generate_report()
+        else:
+            self.__open_connection()
 
     def close(self, retry=True):
         """Closes the connection."""
