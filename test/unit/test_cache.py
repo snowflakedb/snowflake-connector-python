@@ -192,14 +192,15 @@ class TestSFDictCache:
         }
 
 
-class AlwaysSaveSFDictFileCache(cache.SFDictFileCache):
-    def _should_save(self):
-        return True
+if cache is not None:
 
+    class AlwaysSaveSFDictFileCache(cache.SFDictFileCache):
+        def _should_save(self):
+            return True
 
-class NeverSaveSFDictFileCache(cache.SFDictFileCache):
-    def _should_save(self):
-        return False
+    class NeverSaveSFDictFileCache(cache.SFDictFileCache):
+        def _should_save(self):
+            return False
 
 
 class TestSFDictFileCache:
