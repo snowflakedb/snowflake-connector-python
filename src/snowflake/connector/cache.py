@@ -315,7 +315,7 @@ class SFDictFileCache(SFDictCache):
         entry_lifetime: int = constants.DAY_IN_SECONDS,
         file_timeout: int = 0,
     ) -> None:
-        """Inits an SFDictFileCache with path, lifetime and .
+        """Inits an SFDictFileCache with path, lifetime.
 
         File path can be a dictionary that contains different paths for different OSes,
         possible keys are: 'darwin', 'linux' and 'windows'. If a current platform
