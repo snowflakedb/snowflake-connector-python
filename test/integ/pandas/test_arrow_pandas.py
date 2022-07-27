@@ -456,8 +456,14 @@ def test_timestampntz_down_scale(conn_cnx):
             "select '1400-01-01 01:02:03.123456'::timestamp as low_ts, '9999-01-01 01:02:03.123456'::timestamp as high_ts"
         )
         table = r.fetch_arrow_all()
-        assert table[0][0].as_py() == datetime(1400, 1, 1, 1, 2, 3, 123456)
-        assert table[1][0].as_py() == datetime(9999, 1, 1, 1, 2, 3, 123456)
+        assert (
+            table[0][0].as_py().timestamp()
+            == datetime(1400, 1, 1, 1, 2, 3, 123456).timestamp()
+        )
+        assert (
+            table[1][0].as_py().timestamp()
+            == datetime(9999, 1, 1, 1, 2, 3, 123456).timestamp()
+        )
 
 
 @pytest.mark.skipif(
