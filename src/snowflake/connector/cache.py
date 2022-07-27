@@ -111,7 +111,7 @@ class SFDictCache(Generic[K, V]):
             expiry=now() + self._entry_lifetime,
             entry=v,
         )
-        self.telemetry["size"] = len(self._cache)
+        self._add_or_remove()
 
     def __getitem__(
         self,
@@ -175,7 +175,7 @@ class SFDictCache(Generic[K, V]):
         holding self._lock.
         """
         del self._cache[key]
-        self.telemetry["size"] = len(self._cache)
+        self._add_or_remove()
 
     def __delitem__(
         self,
@@ -227,7 +227,7 @@ class SFDictCache(Generic[K, V]):
         else:
             raise TypeError
         self._cache.update(to_insert)
-        self.telemetry["size"] = len(self._cache)
+        self._add_or_remove()
         return len(to_insert) > 0
 
     def update(
@@ -258,7 +258,7 @@ class SFDictCache(Generic[K, V]):
                 self._getitem(k, should_record_hits=False)
             except KeyError:
                 continue
-        self.telemetry["size"] = len(self._cache)
+        self._add_or_remove()
 
     def clear_expired_entries(self) -> None:
         """Remove expired entries from the cache."""
@@ -304,6 +304,14 @@ class SFDictCache(Generic[K, V]):
         called from contexts where the lock is already held.
         """
         self.telemetry["expiration"] += 1
+
+    def _add_or_remove(self) -> None:
+        """This function gets called when an element is added, or removed.
+
+        Note that while this function does not interact with lock, but it's only
+        called from contexts where the lock is already held.
+        """
+        self.telemetry["size"] = len(self._cache)
 
 
 class SFDictFileCache(SFDictCache):
