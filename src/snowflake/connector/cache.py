@@ -241,9 +241,7 @@ class SFDictCache(Generic[K, V]):
         given another SFDictCache then the timestamps will be taken
         from the other cache.
 
-        Returns a tuple of 2 booleans. The first one describes whether self learnt
-        from other and the second describes whether other could learn from self
-        (it's important to notice that other has not learnt anythin from self).
+        Returns a boolean. It describes whether self learnt anything from other.
 
         Note that clear_expired_entries will be called on both caches. To
         prevent deadlocks this is done without acquiring other._lock. The
