@@ -436,6 +436,48 @@ def test_timestampntz(conn_cnx, scale):
         finish(conn, table)
 
 
+@pytest.mark.parametrize(
+    "timestamp_str",
+    [
+        "'1400-01-01 01:02:03.123456789'::timestamp as low_ts",
+        "'9999-01-01 01:02:03.123456789789'::timestamp as high_ts",
+    ],
+)
+def test_timestampntz_raises_overflow(conn_cnx, timestamp_str):
+    with conn_cnx() as conn:
+        r = conn.cursor().execute(f"select {timestamp_str}")
+        with pytest.raises(OverflowError, match="overflows int64 range."):
+            r.fetch_arrow_all()
+
+
+def test_timestampntz_down_scale(conn_cnx):
+    with conn_cnx() as conn:
+        r = conn.cursor().execute(
+            "select '1400-01-01 01:02:03.123456'::timestamp as low_ts, '9999-01-01 01:02:03.123456'::timestamp as high_ts"
+        )
+        table = r.fetch_arrow_all()
+        lower_dt = table[0][0].as_py()  # type: datetime
+        assert (
+            lower_dt.year,
+            lower_dt.month,
+            lower_dt.day,
+            lower_dt.hour,
+            lower_dt.minute,
+            lower_dt.second,
+            lower_dt.microsecond,
+        ) == (1400, 1, 1, 1, 2, 3, 123456)
+        higher_dt = table[1][0].as_py()
+        assert (
+            higher_dt.year,
+            higher_dt.month,
+            higher_dt.day,
+            higher_dt.hour,
+            higher_dt.minute,
+            higher_dt.second,
+            higher_dt.microsecond,
+        ) == (9999, 1, 1, 1, 2, 3, 123456)
+
+
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing.",
