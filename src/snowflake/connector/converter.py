@@ -639,10 +639,9 @@ class SnowflakeConverter:
 
     @staticmethod
     def escape(value):
-        if isinstance(value, list):
+        if not isinstance(value, str):
             return value
-        if value is None or IS_NUMERIC(value) or IS_BINARY(value):
-            return value
+
         res = value
         res = res.replace("\\", "\\\\")
         res = res.replace("\n", "\\n")
