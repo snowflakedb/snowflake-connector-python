@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum, unique
 from os import getenv
 from typing import Any
@@ -75,7 +75,7 @@ class AuthType(Enum):
     OKTA = "OKTA"
 
 
-class AuthByPlugin:
+class AuthByPlugin(ABC):
     """External Authenticator interface."""
 
     def __init__(self) -> None:
@@ -181,12 +181,3 @@ class AuthByPlugin:
             )
             self._retry_ctx.increment_retry()
             time.sleep(self._retry_ctx.next_sleep_duration())
-
-
-class ReauthByPlugin:
-    def __init__(self, conn) -> None:
-        self.conn = conn
-
-    @abstractmethod
-    def reauthenticate(self) -> dict[str, str]:
-        raise NotImplementedError
