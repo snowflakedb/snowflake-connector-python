@@ -242,15 +242,7 @@ class Auth:
         # login_timeout comes from user configuration.
         # Between login timeout and auth specific
         # timeout use whichever value is smaller
-        if hasattr(auth_instance, "get_timeout"):
-            logger.debug(
-                f"Authenticator, {type(auth_instance).__name__}, implements get_timeout"
-            )
-            auth_timeout = min(
-                self._rest._connection.login_timeout, auth_instance.get_timeout()
-            )
-        else:
-            auth_timeout = self._rest._connection.login_timeout
+        auth_timeout = min(self._rest._connection.login_timeout, auth_instance.timeout)
         logger.debug(f"Timeout set to {auth_timeout}")
 
         try:

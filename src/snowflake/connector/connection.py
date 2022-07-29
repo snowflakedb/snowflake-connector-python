@@ -25,7 +25,6 @@ from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 from . import errors, proxy
 from .auth import Auth
 from .auth_default import AuthByDefault
-from .auth_idtoken import AuthByIdToken
 from .auth_keypair import AuthByKeyPair
 from .auth_oauth import AuthByOAuth
 from .auth_okta import AuthByOkta
@@ -739,7 +738,7 @@ class SnowflakeConnection:
         elif self._authenticator == OAUTH_AUTHENTICATOR:
             auth_instance = AuthByOAuth(self._token)
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
-            auth_instance = AuthByUsrPwdMfa(self._password)
+            auth_instance = AuthByUsrPwdMfa(self._password, rest=self.rest)
         else:
             # okta URL, e.g., https://<account>.okta.com/
             auth_instance = AuthByOkta(self.rest, self.application)
@@ -795,15 +794,6 @@ class SnowflakeConnection:
             # By this point it should have been decided if the heartbeat has to be enabled
             # and what would the heartbeat frequency be
             self._add_heartbeat()
-
-    def __preprocess_auth_instance(self, auth_instance):
-        if type(auth_instance) is AuthByWebBrowser:
-            if self._rest.id_token is not None:
-                return AuthByIdToken(self._rest.id_token)
-        if type(auth_instance) is AuthByUsrPwdMfa:
-            if self._rest.mfa_token is not None:
-                auth_instance.set_mfa_token(self._rest.mfa_token)
-        return auth_instance
 
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
@@ -1049,11 +1039,11 @@ class SnowflakeConnection:
     def _authenticate(self, auth_instance):
         # make some changes if needed before real __authenticate
         try:
-            self.__authenticate(self.__preprocess_auth_instance(auth_instance))
+            self.__authenticate(auth_instance.preprocess())
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            self.__authenticate(self.__preprocess_auth_instance(auth_instance))
+            self.__authenticate(auth_instance.preprocess())
 
     def __authenticate(self, auth_instance):
         auth_instance.authenticate(

@@ -13,7 +13,8 @@ import time
 import webbrowser
 
 from .auth import Auth
-from .auth_by_plugin import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin, AuthType
+from .auth_idtoken import AuthByIdToken
 from .compat import parse_qs, urlparse, urlsplit
 from .constants import (
     HTTP_HEADER_ACCEPT,
@@ -69,8 +70,14 @@ class AuthByWebBrowser(AuthByPlugin):
         self._origin = None
 
     @property
-    def consent_cache_id_token(self):
-        return self._consent_cache_id_token
+    def type(self) -> AuthType:
+        return AuthType.EXTERNAL_BROWSER
+
+    def preprocess(self) -> AuthByPlugin:
+        if self._rest.id_token is not None:
+            return AuthByIdToken(self._rest.id_token)
+        else:
+            return self
 
     @property
     def assertion_content(self):

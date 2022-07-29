@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from .auth_by_plugin import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin, AuthType
 from .errorcode import ER_NO_PASSWORD
 from .errors import ProgrammingError
 
@@ -23,11 +23,21 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     def assertion_content(self):
         return "*********"
 
-    def __init__(self, password, mfa_token=None):
+    def __init__(self, password, mfa_token=None, rest=None):
         """Initializes and instance with a password and a mfa token."""
         super().__init__()
         self._password = password
         self._mfa_token = mfa_token
+        self._rest = rest
+
+    @property
+    def type(self) -> AuthType:
+        return AuthType.USR_PWD_MFA
+
+    def preprocess(self) -> AuthByPlugin:
+        if self._rest and self._rest.mfa_token:
+            self.set_mfa_token(self._rest.mfa_token)
+        return self
 
     def set_mfa_token(self, value):
         self._mfa_token = value

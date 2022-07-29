@@ -9,7 +9,7 @@ import json
 import logging
 
 from .auth import Auth
-from .auth_by_plugin import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin, AuthType
 from .compat import unescape, urlencode, urlsplit
 from .constants import (
     HTTP_HEADER_ACCEPT,
@@ -71,6 +71,10 @@ class AuthByOkta(AuthByPlugin):
         self._rest = rest
         self._saml_response = None
         self._application = application
+
+    @property
+    def type(self) -> AuthType:
+        return AuthType.OKTA
 
     @property
     def assertion_content(self):

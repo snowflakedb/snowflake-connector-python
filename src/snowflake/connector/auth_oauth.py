@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from .auth_by_plugin import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin, AuthType
 from .network import OAUTH_AUTHENTICATOR
 
 
@@ -14,6 +14,10 @@ class AuthByOAuth(AuthByPlugin):
 
     Works by accepting an OAuth token and using that to authenticate.
     """
+
+    @property
+    def type(self) -> AuthType:
+        return AuthType.OAUTH
 
     @property
     def assertion_content(self):

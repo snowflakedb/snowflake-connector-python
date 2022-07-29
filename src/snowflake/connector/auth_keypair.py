@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_der_private_key,
 )
 
-from .auth_by_plugin import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin, AuthType
 from .errorcode import (
     ER_CONNECTION_TIMEOUT,
     ER_FAILED_TO_CONNECT_TO_DB,
@@ -63,14 +63,18 @@ class AuthByKeyPair(AuthByPlugin):
                 "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
             )
         )
-        self._jwt_cnxn_wait_time = timedelta(
+        self._timeout = timedelta(
             seconds=int(
                 os.getenv(
                     "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
                 )
             )
-        )
+        ).seconds
         self._current_retry_count = 0
+
+    @property
+    def type(self) -> AuthType:
+        return AuthType.KEY_PAIR
 
     def authenticate(
         self,
@@ -158,8 +162,9 @@ class AuthByKeyPair(AuthByPlugin):
     def should_retry(self, count: int) -> bool:
         return count < self._jwt_retry_attempts
 
+    # Keep this API eventhough we have self.timeout to keep compatability
     def get_timeout(self) -> int:
-        return self._jwt_cnxn_wait_time.seconds
+        return self._timeout
 
     def handle_timeout(
         self,

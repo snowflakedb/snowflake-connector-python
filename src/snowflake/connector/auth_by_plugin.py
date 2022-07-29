@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import logging
 import time
+from abc import abstractmethod
+from enum import Enum, unique
 from os import getenv
+from typing import Any
 
 from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from .errors import DatabaseError, Error, OperationalError
@@ -61,23 +64,75 @@ class AuthRetryCtx:
         self._current_sleep_time = 1
 
 
+@unique
+class AuthType(Enum):
+    DEFAULT = "SNOWFLAKE"  # default authenticator name
+    EXTERNAL_BROWSER = "EXTERNALBROWSER"
+    KEY_PAIR = "SNOWFLAKE_JWT"
+    OAUTH = "OAUTH"
+    ID_TOKEN = "ID_TOKEN"
+    USR_PWD_MFA = "USERNAME_PASSWORD_MFA"
+    OKTA = "OKTA"
+
+
 class AuthByPlugin:
     """External Authenticator interface."""
 
     def __init__(self) -> None:
         self._retry_ctx = AuthRetryCtx()
+        self._is_custom_auth = False
+        self._consent_cache_id_token = False
+        self._timeout = 120
 
     @property
-    def assertion_content(self):
+    def is_custom_auth(self) -> bool:
+        return self._is_custom_auth
+
+    @is_custom_auth.setter
+    def is_custom_auth(self, value) -> None:
+        self._is_custom_auth = bool(value)
+
+    @property
+    def consent_cache_id_token(self) -> bool:
+        return self._consent_cache_id_token
+
+    @property
+    def timeout(self) -> int:
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, value) -> None:
+        self._timeout = int(value)
+
+    @property
+    @abstractmethod
+    def type(self) -> AuthType:
         raise NotImplementedError
 
-    def update_body(self, body):
+    @property
+    @abstractmethod
+    def assertion_content(self) -> str:
         raise NotImplementedError
 
-    def authenticate(self, authenticator, service_name, account, user, password):
+    def preprocess(self) -> AuthByPlugin:
+        return self
+
+    @abstractmethod
+    def update_body(self, body: dict[Any, Any]) -> None:
         raise NotImplementedError
 
-    def handle_failure(self, ret):
+    @abstractmethod
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: str,
+        account: str,
+        user: str,
+        password: str,
+    ) -> str | None:
+        raise NotImplementedError
+
+    def handle_failure(self, ret: dict[Any, Any]):
         """Handles a failure when connecting to Snowflake."""
         Error.errorhandler_wrapper(
             self._rest._connection,
@@ -126,3 +181,12 @@ class AuthByPlugin:
             )
             self._retry_ctx.increment_retry()
             time.sleep(self._retry_ctx.next_sleep_duration())
+
+
+class ReauthByPlugin:
+    def __init__(self, conn) -> None:
+        self.conn = conn
+
+    @abstractmethod
+    def reauthenticate(self) -> dict[str, str]:
+        raise NotImplementedError

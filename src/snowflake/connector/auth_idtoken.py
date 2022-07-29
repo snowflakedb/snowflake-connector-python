@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from .auth_by_plugin import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin, AuthType
 from .network import ID_TOKEN_AUTHENTICATOR
 
 
@@ -14,6 +14,10 @@ class AuthByIdToken(AuthByPlugin):
 
     Works by accepting an id_toke and use that to authenticate. Only be used when users are using EXTERNAL_BROWSER_AUTHENTICATOR
     """
+
+    @property
+    def type(self) -> AuthType:
+        return AuthType.ID_TOKEN
 
     @property
     def assertion_content(self):

@@ -5,11 +5,15 @@
 
 from __future__ import annotations
 
-from .auth_by_plugin import AuthByPlugin
+from .auth_by_plugin import AuthByPlugin, AuthType
 
 
 class AuthByDefault(AuthByPlugin):
     """Default username and password authenticator."""
+
+    @property
+    def type(self) -> AuthType:
+        return AuthType.DEFAULT
 
     @property
     def assertion_content(self):
