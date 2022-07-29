@@ -957,8 +957,13 @@ def test_empty_response(conn_cnx, resp):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.xfail(
+    reason="Mock changed and marks any method in Mock that starts with assert or assret as an AssertionError"
+)
 def test_authenticate_error(conn_cnx, caplog):
     """Test Reauthenticate error handling while authenticating."""
+    # The docs say unsafe should make this test work, but
+    # it doesn't seem to work on MagicMock
     mock_auth = mock.MagicMock(unsafe=True)
     mock_auth.authenticate.side_effect = ReauthenticationRequest(None)
     with conn_cnx() as conn:
