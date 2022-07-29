@@ -68,21 +68,31 @@ from snowflake.connector.telemetry_oob import TelemetryService
 from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 from . import constants
-from .cache import SFDictFileCache
+from .cache import SFDictCache, SFDictFileCache
 
-OCSP_CACHE: SFDictFileCache[
-    tuple[bytes, bytes, int, str],
-    tuple[Exception | None, Certificate, Certificate, CertId, bytes],
-] = SFDictFileCache(
-    entry_lifetime=constants.DAY_IN_SECONDS,
-    file_path={
-        "linux": os.path.join("~", ".cache", "snowflake", "ocsp_cache"),
-        "darwin": os.path.join("~", "Library", "Caches", "Snowflake", "ocsp_cache"),
-        "windows": os.path.join(
-            "~", "AppData", "Local", "Snowflake", "Caches", "ocsp_cache"
-        ),
-    },
-)
+try:
+    OCSP_CACHE: SFDictFileCache[
+        tuple[bytes, bytes, int, str],
+        tuple[Exception | None, Certificate, Certificate, CertId, bytes],
+    ] = SFDictFileCache(
+        entry_lifetime=constants.DAY_IN_SECONDS,
+        file_path={
+            "linux": os.path.join("~", ".cache", "snowflake", "ocsp_cache"),
+            "darwin": os.path.join("~", "Library", "Caches", "Snowflake", "ocsp_cache"),
+            "windows": os.path.join(
+                "~", "AppData", "Local", "Snowflake", "Caches", "ocsp_cache"
+            ),
+        },
+    )
+except OSError:
+    # In case we run into some read/write permission error fall back onto
+    #  in memory caching
+    OCSP_CACHE: SFDictCache[
+        tuple[bytes, bytes, int, str],
+        tuple[Exception | None, Certificate, Certificate, CertId, bytes],
+    ] = SFDictCache(
+        entry_lifetime=constants.DAY_IN_SECONDS,
+    )
 
 logger = getLogger(__name__)
 

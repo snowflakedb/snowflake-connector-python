@@ -10,6 +10,7 @@ import os
 import pickle
 import platform
 import random
+import string
 import tempfile
 from collections.abc import Iterator
 from threading import Lock
@@ -326,6 +327,10 @@ class SFDictFileCache(SFDictCache):
         File path can be a dictionary that contains different paths for different OSes,
         possible keys are: 'darwin', 'linux' and 'windows'. If a current platform
         cannot be determined, or is not in the dictionary we'll use the first value.
+
+        Once we select a location based on file path, we write and read a random
+        temporary file to check for read/write permissions. If this fails OSError might
+        be thrown.
         """
         super().__init__(
             entry_lifetime=entry_lifetime,
@@ -338,6 +343,23 @@ class SFDictFileCache(SFDictCache):
                 self.file_path = next(iter(file_path.values()))
             else:
                 self.file_path = os.path.expanduser(file_path[current_platform])
+        # Once we decided on where to put the file cache make sure that this
+        #  place is readable/writable by us
+        random_string = "".join(random.choice(string.ascii_letters) for _ in range(5))
+        tmp_file, tmp_file_path = tempfile.mkstemp(
+            dir=os.path.dirname(self.file_path),
+        )
+        try:
+            with open(tmp_file, "w") as w_file:
+                # Might raise an OSError
+                w_file.write(random_string)
+            with open(tmp_file_path) as r_file:
+                # Might raise an OSError
+                if r_file.read() != random_string:
+                    Exception("Temporary file just written has wrong content")
+        finally:
+            if os.path.exists(tmp_file_path) and os.path.isfile(tmp_file_path):
+                os.unlink(tmp_file_path)
         self.file_timeout = file_timeout
         self._file_lock_path = f"{self.file_path}.lock"
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
@@ -415,6 +437,7 @@ class SFDictFileCache(SFDictCache):
             with self._file_lock:
                 self._load_if_should()
                 _dir, fname = os.path.split(self.file_path)
+                # TODO add exception handling for folder not being writeable
                 tmp_file, tmp_file_path = tempfile.mkstemp(
                     prefix=fname,
                     dir=_dir,

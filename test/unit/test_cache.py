@@ -6,9 +6,12 @@ import datetime
 import logging
 import os.path
 import pickle
+import stat
 from unittest import mock
 
 import pytest
+
+from snowflake.connector.compat import IS_WINDOWS
 
 try:
     import snowflake.connector.cache as cache
@@ -350,3 +353,10 @@ class TestSFDictFileCache:
                 ).file_path
                 == tmp_file
             )
+
+    def test_read_only(self, tmpdir):
+        if IS_WINDOWS:
+            pytest.skip("chmod does not work on Windows")
+        os.chmod(tmpdir, stat.S_IRUSR | stat.S_IXUSR)
+        with pytest.raises(PermissionError):
+            cache.SFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
