@@ -959,7 +959,7 @@ def test_empty_response(conn_cnx, resp):
 @pytest.mark.skipolddriver
 def test_authenticate_error(conn_cnx, caplog):
     """Test Reauthenticate error handling while authenticating."""
-    mock_auth = mock.MagicMock()
+    mock_auth = mock.MagicMock(unsafe=True)
     mock_auth.authenticate.side_effect = ReauthenticationRequest(None)
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
