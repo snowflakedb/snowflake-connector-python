@@ -126,13 +126,27 @@ class TestSFDictCache:
 
     def test_update(self):
         c = cache.SFDictCache()
-        c.update({"a": 1, "b": 2})
-        c.update(cache.SFDictCache.from_dict({"c": 3}))
+        c.update({"a": 1})
+        other = cache.SFDictCache.from_dict({"b": 2, "c": 3})
+        c["b"] = 4
+        c.update(other)
         assert c.items() == [("a", 1), ("b", 2), ("c", 3)]
         # Make sure that this filters out expired entries
         c._entry_lifetime = NO_LIFETIME
         c["d"] = 4
         assert c.items() == [("a", 1), ("b", 2), ("c", 3)]
+
+    def test_update_newer(self):
+        c = cache.SFDictCache()
+        c.update({"a": 1})
+        other = cache.SFDictCache.from_dict({"a": 2, "b": 4, "c": 2})
+        c["b"] = 2
+        c.update_newer(other)
+        assert c.items() == [("a", 2), ("b", 2), ("c", 2)]
+        # Make sure that this filters out expired entries
+        c._entry_lifetime = NO_LIFETIME
+        c["d"] = 4
+        assert c.items() == [("a", 2), ("b", 2), ("c", 2)]
 
     def test_values(self):
         c = cache.SFDictCache()

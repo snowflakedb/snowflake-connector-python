@@ -200,6 +200,7 @@ class SFDictCache(Generic[K, V]):
     def _update(
         self,
         other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
+        update_newer_only: bool = False,
     ) -> bool:
         to_insert: dict[K, CacheEntry[V]]
         self._clear_expired_entries()
@@ -221,7 +222,9 @@ class SFDictCache(Generic[K, V]):
                 if (
                     # self doesn't have this key
                     k not in self._cache
-                    # other has newer expiry time
+                    # we should update entries, regardless of whether they are newer
+                    or (not update_newer_only)
+                    # other has newer expiry time we want to update newer values only
                     or self._cache[k].expiry < v.expiry
                 )
             }
@@ -235,7 +238,7 @@ class SFDictCache(Generic[K, V]):
         self,
         other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
     ) -> bool:
-        """Insert multiple values at the same time, if dicts could learn from the other.
+        """Insert multiple values at the same time, if self could learn from the other.
 
         If this function is given a dictionary, or list expiration timestamps
         will be all the same a self._entry_lifetime form now. If it's
@@ -247,11 +250,22 @@ class SFDictCache(Generic[K, V]):
         Note that clear_expired_entries will be called on both caches. To
         prevent deadlocks this is done without acquiring other._lock. The
         intended behavior is to use this function with an unpickled/unused cache.
-        If live caches are are being merged then use .items() on them first and
-        merge those into the other caches.
+        If live caches are being merged then use .items() on them first and merge those
+        into the other caches.
         """
         with self._lock:
             return self._update(other)
+
+    def update_newer(
+        self,
+        other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
+    ) -> bool:
+        """This function is like update, but it only updates newer elements."""
+        with self._lock:
+            return self._update(
+                other,
+                update_newer_only=True,
+            )
 
     def _clear_expired_entries(self) -> None:
         for k in list(self._cache.keys()):
@@ -424,7 +438,10 @@ class SFDictFileCache(SFDictCache):
         try:
             with open(self.file_path, "rb") as r_file:
                 other = pickle.load(r_file)
-            _ = self._update(other)
+            _ = self._update(
+                other,
+                update_newer_only=True,
+            )
             self.last_loaded = now()
             return True
         except OSError:
