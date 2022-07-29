@@ -671,7 +671,7 @@ class SnowflakeRestful:
             except ReauthenticationRequest as ex:
                 if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
                     raise ex.cause
-                ret = self._connection._reauthenticate_by_webbrowser()
+                ret = self._connection._reauthenticate()
             logger.debug(
                 "ret[code] = {code} after renew_session".format(
                     code=(ret.get("code", "N/A"))
@@ -724,7 +724,7 @@ class SnowflakeRestful:
             except ReauthenticationRequest as ex:
                 if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
                     raise ex.cause
-                ret = self._connection._reauthenticate_by_webbrowser()
+                ret = self._connection._reauthenticate()
             logger.debug(
                 "ret[code] = {code} after renew_session".format(
                     code=(ret.get("code", "N/A"))

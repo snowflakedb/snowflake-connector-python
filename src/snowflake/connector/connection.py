@@ -84,6 +84,8 @@ from .network import (
     SnowflakeRestful,
 )
 from .reauth_by_plugin import ReauthByPlugin
+from .reauth_default import ReauthByDefault
+from .reauth_webbrowser import ReauthByWebBrowser
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
@@ -143,7 +145,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
-    "reauth_class": (None, (type(None), ReauthByPlugin)),
+    "reauth_class": (ReauthByDefault(), (type(None), ReauthByPlugin)),
     "application": (CLIENT_NAME, (type(None), str)),
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
@@ -761,6 +763,7 @@ class SnowflakeConnection:
                 host=self.host,
                 port=self.port,
             )
+            self._reauth_class = ReauthByWebBrowser(self)
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
             auth_instance = AuthByKeyPair(self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
@@ -816,6 +819,7 @@ class SnowflakeConnection:
         self._authenticate(auth_instance)
 
         self._password = None  # ensure password won't persist
+        self._auth_class = None  # ensure custom auth class won't persist
 
         if self.client_session_keep_alive:
             # This will be called after the heartbeat frequency has actually been set.
@@ -890,6 +894,12 @@ class SnowflakeConnection:
                 msg="Invalid paramstyle is specified", errno=ER_INVALID_VALUE
             )
 
+        if self._auth_class and not isinstance(self._auth_class, AuthByPlugin):
+            raise TypeError("auth_class must subclass AuthByPlugin")
+
+        if self._reauth_class and not isinstance(self._reauth_class, ReauthByPlugin):
+            raise TypeError("reauth_class must subclass ReauthByPlugin")
+
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
@@ -897,6 +907,11 @@ class SnowflakeConnection:
                 self._port = "443"
             if "protocol" not in kwargs:
                 self._protocol = "https"
+
+        # If using a custom auth class, we should set the authenticator
+        # type to be the same as the custom auth class
+        if self._auth_class:
+            self._authenticator = self._auth_class.type.value
 
         if self._authenticator:
             # Only upper self._authenticator if it is a non-okta link
@@ -1052,17 +1067,6 @@ class SnowflakeConnection:
                 self._role = data["finalRoleName"]
 
         return ret
-
-    def _reauthenticate_by_webbrowser(self):
-        auth_instance = AuthByWebBrowser(
-            self.rest,
-            self.application,
-            protocol=self._protocol,
-            host=self.host,
-            port=self.port,
-        )
-        self._authenticate(auth_instance)
-        return {"success": True}
 
     def _reauthenticate(self):
         return self._reauth_class.reauthenticate()
