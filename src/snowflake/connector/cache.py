@@ -330,6 +330,10 @@ class SFDictCache(Generic[K, V]):
 
 
 class SFDictFileCache(SFDictCache):
+
+    # This number decides the chance of saving after writing (probability: 1/n+1)
+    MAX_RAND_INT = 9
+
     def __init__(
         self,
         file_path: str | dict[str, str],
@@ -511,7 +515,7 @@ class SFDictFileCache(SFDictCache):
         This is a simple random number generator to randomize writes across processes
         that are possibly saving the same values in this cache.
         """
-        return random.randint(0, 9) == 1
+        return random.randint(0, self.MAX_RAND_INT) == 0
 
     def _should_load(self) -> bool:
         """Decide whether we should load.
