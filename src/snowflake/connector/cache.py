@@ -438,7 +438,7 @@ class SFDictFileCache(SFDictCache):
         try:
             with open(self.file_path, "rb") as r_file:
                 other = pickle.load(r_file)
-            _ = self._update(
+            self._update(
                 other,
                 update_newer_only=True,
             )
