@@ -472,13 +472,19 @@ class SFDictFileCache(SFDictCache):
             with self._file_lock:
                 self._load_if_should()
                 _dir, fname = os.path.split(self.file_path)
-                # TODO add exception handling for folder not being writeable
-                tmp_file, tmp_file_path = tempfile.mkstemp(
-                    prefix=fname,
-                    dir=_dir,
-                )
-                with open(tmp_file, "wb") as w_file:
-                    pickle.dump(self, w_file)
+                try:
+                    tmp_file, tmp_file_path = tempfile.mkstemp(
+                        prefix=fname,
+                        dir=_dir,
+                    )
+                    with open(tmp_file, "wb") as w_file:
+                        pickle.dump(self, w_file)
+                except OSError as o_err:
+                    raise PermissionError(
+                        o_err.errno,
+                        "Cache folder is not writeable",
+                        _dir,
+                    )
                 # We write to a tmp file and then move it to have atomic write
                 os.replace(tmp_file_path, self.file_path)
                 self.last_loaded = datetime.datetime.fromtimestamp(
