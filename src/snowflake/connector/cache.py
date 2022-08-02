@@ -140,12 +140,11 @@ class SFDictCache(Generic[K, V]):
     def items(self) -> list[tuple[K, V]]:
         with self._lock:
             values: list[tuple[K, V]] = []
-            for k, v in list(self._cache.items()):
-                if is_expired(v.expiry):
-                    self._expiration(k)
-                    self._delitem(k)
-                else:
-                    values.append((k, v.entry))
+            for k in list(self._cache.keys()):
+                try:
+                    values.append((k, self._getitem(k, should_record_hits=False)))
+                except KeyError:
+                    pass
         return values
 
     def values(self) -> list[V]:
