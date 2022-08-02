@@ -139,9 +139,10 @@ def test_write_pandas_with_overwrite(
         "gzip",
     ],
 )
-@pytest.mark.parametrize("quote_identifiers", [True, False])
-@pytest.mark.parametrize("auto_create_table", [True, False])
-@pytest.mark.parametrize("create_temp_table", [True, False])
+@pytest.mark.parametrize("quote_identifiers", [True])
+@pytest.mark.parametrize("auto_create_table", [True])
+@pytest.mark.parametrize("create_temp_table", [True])
+@pytest.mark.parametrize("table_type", [""])
 def test_write_pandas(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     db_parameters: dict[str, str],
@@ -150,6 +151,7 @@ def test_write_pandas(
     quote_identifiers: bool,
     auto_create_table: bool,
     create_temp_table: bool,
+    table_type: str,
 ):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
 
@@ -176,16 +178,31 @@ def test_write_pandas(
         if not auto_create_table:
             cnx.execute_string(create_sql)
         try:
-            success, nchunks, nrows, _ = write_pandas(
-                cnx,
-                sf_connector_version_df.get(),
-                table_name,
-                compression=compression,
-                chunk_size=chunk_size,
-                quote_identifiers=quote_identifiers,
-                auto_create_table=auto_create_table,
-                create_temp_table=create_temp_table,
-            )
+            if create_temp_table:
+                with pytest.deprecated_call(match="create_temp_table is deprecated"):
+                    success, nchunks, nrows, _ = write_pandas(
+                        cnx,
+                        sf_connector_version_df.get(),
+                        table_name,
+                        compression=compression,
+                        chunk_size=chunk_size,
+                        quote_identifiers=quote_identifiers,
+                        auto_create_table=auto_create_table,
+                        create_temp_table=create_temp_table,
+                        table_type=table_type,
+                    )
+            else:
+                success, nchunks, nrows, _ = write_pandas(
+                    cnx,
+                    sf_connector_version_df.get(),
+                    table_name,
+                    compression=compression,
+                    chunk_size=chunk_size,
+                    quote_identifiers=quote_identifiers,
+                    auto_create_table=auto_create_table,
+                    create_temp_table=create_temp_table,
+                    table_type=table_type,
+                )
 
             if num_of_chunks == 1:
                 # Note: since we used one chunk order is conserved
@@ -212,9 +229,15 @@ def test_write_pandas(
                     .execute(f"show tables like '{table_name}'")
                     .fetchall()
                 )
-                assert table_info[0]["kind"] == (
-                    "TEMPORARY" if create_temp_table else "TABLE"
-                )
+                if create_temp_table:
+                    expected_table_kind = "TEMPORARY"
+                elif not table_type:
+                    expected_table_kind = "TABLE"
+                elif table_type == "temp":
+                    expected_table_kind = "TEMPORARY"
+                else:
+                    expected_table_kind = table_type.upper()
+                assert table_info[0]["kind"] == expected_table_kind
         finally:
             cnx.execute_string(drop_sql)
 
