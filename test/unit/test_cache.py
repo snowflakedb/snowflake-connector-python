@@ -372,5 +372,8 @@ class TestSFDictFileCache:
         if IS_WINDOWS:
             pytest.skip("chmod does not work on Windows")
         os.chmod(tmpdir, stat.S_IRUSR | stat.S_IXUSR)
-        with pytest.raises(PermissionError):
+        with pytest.raises(
+            PermissionError,
+            match=f"Cache folder is not writeable: '{tmpdir}'",
+        ):
             cache.SFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))

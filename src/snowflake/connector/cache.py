@@ -360,17 +360,31 @@ class SFDictFileCache(SFDictCache):
         # Once we decided on where to put the file cache make sure that this
         #  place is readable/writable by us
         random_string = "".join(random.choice(string.ascii_letters) for _ in range(5))
-        tmp_file, tmp_file_path = tempfile.mkstemp(
-            dir=os.path.dirname(self.file_path),
-        )
+        cache_folder = os.path.dirname(self.file_path)
+        try:
+            tmp_file, tmp_file_path = tempfile.mkstemp(
+                dir=cache_folder,
+            )
+        except OSError as o_err:
+            raise PermissionError(
+                o_err.errno,
+                "Cache folder is not writeable",
+                cache_folder,
+            )
         try:
             with open(tmp_file, "w") as w_file:
-                # Might raise an OSError
+                # If mkstemp didn't fail this shouldn't throw an error
                 w_file.write(random_string)
-            with open(tmp_file_path) as r_file:
-                # Might raise an OSError
-                if r_file.read() != random_string:
-                    Exception("Temporary file just written has wrong content")
+            try:
+                with open(tmp_file_path) as r_file:
+                    if r_file.read() != random_string:
+                        Exception("Temporary file just written has wrong content")
+            except OSError as o_err:
+                raise PermissionError(
+                    o_err.errno,
+                    "Cache file is not readable",
+                    tmp_file_path,
+                )
         finally:
             if os.path.exists(tmp_file_path) and os.path.isfile(tmp_file_path):
                 os.unlink(tmp_file_path)
