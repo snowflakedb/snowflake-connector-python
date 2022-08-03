@@ -528,7 +528,7 @@ class SFDictFileCache(SFDictCache):
                 datetime.datetime.fromtimestamp(
                     os.path.getmtime(self.file_path),
                 )
-                >= self.last_loaded
+                > self.last_loaded
             )
         return False
 
