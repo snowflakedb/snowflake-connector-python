@@ -14,7 +14,7 @@ import string
 import tempfile
 from collections.abc import Iterator
 from threading import Lock
-from typing import Generic, TypeVar
+from typing import Generic, NoReturn, TypeVar
 
 from filelock import FileLock, Timeout
 from typing_extensions import NamedTuple, Self
@@ -91,9 +91,7 @@ class SFDictCache(Generic[K, V]):
             self._miss(k)
             raise
         if is_expired(t):
-            self._expiration(k)
-            self._delitem(k)
-            raise KeyError
+            self._expire(k)
         if should_record_hits:
             self._hit(k)
         return v
@@ -319,6 +317,12 @@ class SFDictCache(Generic[K, V]):
         """
         self.telemetry["expiration"] += 1
 
+    def _expire(self, k: K) -> NoReturn:
+        """Helper function to call _expiration and delete an item."""
+        self._expiration(k)
+        self._delitem(k)
+        raise KeyError
+
     def _add_or_remove(self) -> None:
         """This function gets called when an element is added, or removed.
 
@@ -437,9 +441,7 @@ class SFDictFileCache(SFDictCache):
                     if not is_expired(t):
                         expire_item = False
                 if expire_item:
-                    self._expiration(k)
-                    self._delitem(k)
-                    raise KeyError
+                    self._expire(k)
             self._hit(k)
             return v
         finally:
