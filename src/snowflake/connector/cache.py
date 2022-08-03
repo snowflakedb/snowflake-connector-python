@@ -411,24 +411,16 @@ class SFDictFileCache(SFDictCache):
         #  self._lock.acquire() and self._lock.release().
         currently_holding = True
         try:
-            try:
-                t, v = self._cache[k]
-            except KeyError:
-                # Load if we should and try to see if we can turn the miss into a hit
+            if k not in self._cache:
                 self._lock.release()
                 currently_holding = False
                 loaded = self._load_if_should()
                 self._lock.acquire()
                 currently_holding = True
-                if loaded:
-                    try:
-                        t, v = self._cache[k]
-                    except KeyError:
-                        self._miss(k)
-                        raise
-                else:
+                if (not loaded) or k not in self._cache:
                     self._miss(k)
-                    raise
+                    raise KeyError
+            t, v = self._cache[k]
             if is_expired(t):
                 self._lock.release()
                 currently_holding = False
@@ -438,9 +430,9 @@ class SFDictFileCache(SFDictCache):
                 expire_item = True
                 if loaded:
                     t, v = self._cache[k]
-                    if not is_expired(t):
-                        expire_item = False
+                    expire_item = is_expired(t)
                 if expire_item:
+                    # Raises KeyError
                     self._expire(k)
             self._hit(k)
             return v
