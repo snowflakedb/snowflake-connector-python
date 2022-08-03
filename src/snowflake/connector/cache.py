@@ -458,12 +458,13 @@ class SFDictFileCache(SFDictCache):
         except OSError:
             return False
 
-    def _save(self) -> bool:
+    def _save(self, load_first: bool = True) -> bool:
         """Save cache to disk if possible, returns whether it was able to save."""
         self._clear_expired_entries()
         try:
             with self._file_lock:
-                self._load_if_should()
+                if load_first:
+                    self._load_if_should()
                 _dir, fname = os.path.split(self.file_path)
                 try:
                     tmp_file, tmp_file_path = tempfile.mkstemp(
@@ -542,6 +543,14 @@ class SFDictFileCache(SFDictCache):
     def clear_expired_entries(self) -> None:
         super().clear_expired_entries()
         self._save_if_should()
+
+    def clear(self) -> None:
+        super().clear()
+        # This unlink prevents us from loading just before saving
+        with self._file_lock:
+            if os.path.exists(self.file_path) and os.path.isfile(self.file_path):
+                os.unlink(self.file_path)
+        self._save(load_first=False)
 
     # Custom pickling implementation
 

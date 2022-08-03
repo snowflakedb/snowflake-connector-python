@@ -377,3 +377,14 @@ class TestSFDictFileCache:
             match=f"Cache folder is not writeable: '{tmpdir}'",
         ):
             cache.SFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
+
+    def test_clear(self, tmpdir):
+        cache_path = os.path.join(tmpdir, "cache.txt")
+        c = AlwaysSaveSFDictFileCache(file_path=cache_path)
+        c.clear()
+        assert not c._cache
+        assert os.path.exists(cache_path)
+        # Make sure not existing cache file doesn't raise Exception during cache
+        os.unlink(cache_path)
+        c["a"] = 1
+        assert os.path.exists(cache_path)
