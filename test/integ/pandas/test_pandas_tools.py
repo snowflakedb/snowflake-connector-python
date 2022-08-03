@@ -242,6 +242,17 @@ def test_write_pandas(
             cnx.execute_string(drop_sql)
 
 
+def test_invalid_table_type_write_pandas(conn_cnx):
+    with conn_cnx() as cnx:
+        with pytest.raises(ValueError, match="Unsupported table type"):
+            write_pandas(
+                cnx,
+                sf_connector_version_df.get(),
+                "invalid_table_type",
+                table_type="invalid",
+            )
+
+
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with database, schema and table name."""
