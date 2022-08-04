@@ -139,10 +139,10 @@ def test_write_pandas_with_overwrite(
         "gzip",
     ],
 )
-@pytest.mark.parametrize("quote_identifiers", [True])
-@pytest.mark.parametrize("auto_create_table", [True])
-@pytest.mark.parametrize("create_temp_table", [True])
-@pytest.mark.parametrize("table_type", [""])
+@pytest.mark.parametrize("quote_identifiers", [True, False])
+@pytest.mark.parametrize("auto_create_table", [True, False])
+@pytest.mark.parametrize("create_temp_table", [True, False])
+@pytest.mark.parametrize("table_type", ["", "temp", "temporary", "transient"])
 def test_write_pandas(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     db_parameters: dict[str, str],

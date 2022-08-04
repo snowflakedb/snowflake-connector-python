@@ -12,7 +12,15 @@ import warnings
 from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Callable, Iterable, Iterator, Sequence, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Iterable,
+    Iterator,
+    Literal,
+    Sequence,
+    TypeVar,
+)
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
@@ -50,7 +58,7 @@ def write_pandas(
     auto_create_table: bool = False,
     create_temp_table: bool = False,
     overwrite: bool = False,
-    table_type: str = "",
+    table_type: Literal["", "temp", "temporary", "transient"] = "",
 ) -> tuple[
     bool,
     int,
