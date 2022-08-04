@@ -17,13 +17,13 @@ from unittest import mock
 import pytest
 
 from snowflake.connector import OperationalError
-from snowflake.connector.cache import SFDictFileCache
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer, SnowflakeOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 try:
+    from snowflake.connector.cache import SFDictFileCache
     from snowflake.connector.errorcode import (
         ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
         ER_OCSP_RESPONSE_FETCH_FAILURE,
