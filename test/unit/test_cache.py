@@ -8,7 +8,6 @@ import os
 import os.path
 import pickle
 import stat
-from time import sleep
 from unittest import mock
 
 import pytest
@@ -22,18 +21,6 @@ except ImportError:
 
 # Used to insert entries that expire instantaneously
 NO_LIFETIME = datetime.timedelta(seconds=0)
-
-
-def offset_file_modify_time(
-    path: str,
-    modify_by: datetime.timedelta,
-) -> None:
-    stats = os.stat(path)
-    orig_a_time = stats.st_atime
-    orig_m_time = stats.st_mtime
-    a_time = orig_a_time
-    m_time = (datetime.datetime.fromtimestamp(orig_m_time) + modify_by).timestamp()
-    os.utime(path=path, times=(a_time, m_time))
 
 
 class TestSFDictCache:
@@ -153,10 +140,16 @@ class TestSFDictCache:
     def test_update_newer(self):
         c = cache.SFDictCache()
         c.update({"a": 1})
-        sleep(0.01)
-        other = cache.SFDictCache.from_dict({"a": 2, "b": 4, "c": 2})
-        sleep(0.01)
-        c["b"] = 2
+        with mock.patch(
+            "snowflake.connector.cache.now",
+            lambda: datetime.datetime.now() + datetime.timedelta(seconds=1),
+        ):
+            other = cache.SFDictCache.from_dict({"a": 2, "b": 4, "c": 2})
+        with mock.patch(
+            "snowflake.connector.cache.now",
+            lambda: datetime.datetime.now() + datetime.timedelta(seconds=2),
+        ):
+            c["b"] = 2
         c.update_newer(other)
         assert c.items() == [("a", 2), ("b", 2), ("c", 2)]
         # Make sure that this filters out expired entries
@@ -285,9 +278,12 @@ class TestSFDictFileCache:
             {"a": 1, "b": 2}, file_path=os.path.join(tmpdir, "c.txt")
         )
         c2 = pickle.loads(pickle.dumps(c))
-        offset_file_modify_time(c.file_path, datetime.timedelta(seconds=-1))
         c2["c"] = 3
-        assert c["c"] == 3
+        with mock.patch(
+            "snowflake.connector.cache.getmtime",
+            lambda path: os.path.getmtime(path) + 1,
+        ):
+            assert c["c"] == 3
 
     def test_simple_expiration(self, tmpdir):
         """Check whether expiration triggers a load."""
@@ -297,9 +293,12 @@ class TestSFDictFileCache:
         c2 = pickle.loads(pickle.dumps(c))
         c2._entry_lifetime = NO_LIFETIME
         c2["c"] = 3
-        offset_file_modify_time(c.file_path, datetime.timedelta(seconds=-1))
         c["c"] = 3
-        assert c2["c"] == 3
+        with mock.patch(
+            "snowflake.connector.cache.getmtime",
+            lambda path: os.path.getmtime(path) + 1,
+        ):
+            assert c2["c"] == 3
 
     def test_filelock_hang(self, tmpdir, caplog):
         """Check whether if file lock is held save doesn't hang."""

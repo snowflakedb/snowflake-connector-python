@@ -22,6 +22,7 @@ from typing_extensions import NamedTuple, Self
 from . import constants
 
 now = datetime.datetime.now
+getmtime = os.path.getmtime
 
 T = TypeVar("T")
 
@@ -482,7 +483,7 @@ class SFDictFileCache(SFDictCache):
                 # We write to a tmp file and then move it to have atomic write
                 os.replace(tmp_file_path, self.file_path)
                 self.last_loaded = datetime.datetime.fromtimestamp(
-                    os.path.getmtime(self.file_path),
+                    getmtime(self.file_path),
                 )
                 return True
         except Timeout:
@@ -527,7 +528,7 @@ class SFDictFileCache(SFDictCache):
                 return True
             return (
                 datetime.datetime.fromtimestamp(
-                    os.path.getmtime(self.file_path),
+                    getmtime(self.file_path),
                 )
                 > self.last_loaded
             )
