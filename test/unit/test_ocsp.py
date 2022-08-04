@@ -12,6 +12,7 @@ import os
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from os import environ, path
+from unittest import mock
 
 import pytest
 
@@ -22,11 +23,25 @@ from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer, SnowflakeO
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 try:
+    from snowflake.connector.cache import SFDictFileCache
     from snowflake.connector.errorcode import (
         ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
         ER_OCSP_RESPONSE_FETCH_FAILURE,
     )
     from snowflake.connector.ocsp_snowflake import OCSP_CACHE
+
+    @pytest.fixture(autouse=True)
+    def overwrite_ocsp_cache(tmpdir):
+        """This fixture swaps out the actual OCSP cache for a temprary one."""
+        if OCSP_CACHE is not None:
+            tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
+            with mock.patch(
+                "snowflake.connector.ocsp_snowflake.OCSP_CACHE",
+                SFDictFileCache(file_path=tmp_cache_file),
+            ):
+                yield
+            os.unlink(tmp_cache_file)
+
 except ImportError:
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED = None
     ER_OCSP_RESPONSE_FETCH_FAILURE = None
@@ -46,11 +61,6 @@ TARGET_HOSTS = [
 ]
 
 THIS_DIR = path.dirname(path.realpath(__file__))
-
-
-@pytest.fixture(autouse=True)
-def reset_ocsp_cache():
-    OCSP_CACHE.clear()
 
 
 def test_ocsp():

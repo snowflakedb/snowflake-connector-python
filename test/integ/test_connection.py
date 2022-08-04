@@ -1092,3 +1092,18 @@ def test_connection_cant_be_reused(conn_cnx):
         )
         assert len(cursors[0]._result_set.batches) > 1  # We need to have remote results
     assert list(cursors[0])
+
+
+@pytest.mark.external
+@pytest.mark.skipolddriver
+def test_ocsp_cache_working(conn_cnx):
+    """Verifies that the OCSP cache is functioning.
+
+    The only way we can verify this is that the number of hits and misses increase.
+    """
+    from snowflake.connector.ocsp_snowflake import OCSP_CACHE
+
+    original_count = OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"]
+    with conn_cnx() as cnx:
+        assert cnx
+    assert OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"] > original_count
