@@ -4,6 +4,7 @@
 
 import datetime
 import logging
+import os
 import os.path
 import pickle
 import stat
@@ -21,6 +22,18 @@ except ImportError:
 
 # Used to insert entries that expire instantaneously
 NO_LIFETIME = datetime.timedelta(seconds=0)
+
+
+def offset_file_modify_time(
+    path: str,
+    modify_by: datetime.timedelta,
+) -> None:
+    stats = os.stat(path)
+    orig_a_time = stats.st_atime
+    orig_m_time = stats.st_mtime
+    a_time = orig_a_time
+    m_time = (datetime.datetime.fromtimestamp(orig_m_time) + modify_by).timestamp()
+    os.utime(path=path, times=(a_time, m_time))
 
 
 class TestSFDictCache:
@@ -272,7 +285,7 @@ class TestSFDictFileCache:
             {"a": 1, "b": 2}, file_path=os.path.join(tmpdir, "c.txt")
         )
         c2 = pickle.loads(pickle.dumps(c))
-        sleep(0.01)
+        offset_file_modify_time(c.file_path, datetime.timedelta(seconds=-1))
         c2["c"] = 3
         assert c["c"] == 3
 
@@ -284,7 +297,7 @@ class TestSFDictFileCache:
         c2 = pickle.loads(pickle.dumps(c))
         c2._entry_lifetime = NO_LIFETIME
         c2["c"] = 3
-        sleep(0.01)
+        offset_file_modify_time(c.file_path, datetime.timedelta(seconds=-1))
         c["c"] = 3
         assert c2["c"] == 3
 
