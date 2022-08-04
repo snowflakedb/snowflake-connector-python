@@ -7,6 +7,7 @@ import logging
 import os.path
 import pickle
 import stat
+from time import sleep
 from unittest import mock
 
 import pytest
@@ -139,7 +140,9 @@ class TestSFDictCache:
     def test_update_newer(self):
         c = cache.SFDictCache()
         c.update({"a": 1})
+        sleep(0.01)
         other = cache.SFDictCache.from_dict({"a": 2, "b": 4, "c": 2})
+        sleep(0.01)
         c["b"] = 2
         c.update_newer(other)
         assert c.items() == [("a", 2), ("b", 2), ("c", 2)]
@@ -269,6 +272,7 @@ class TestSFDictFileCache:
             {"a": 1, "b": 2}, file_path=os.path.join(tmpdir, "c.txt")
         )
         c2 = pickle.loads(pickle.dumps(c))
+        sleep(0.01)
         c2["c"] = 3
         assert c["c"] == 3
 
@@ -280,6 +284,7 @@ class TestSFDictFileCache:
         c2 = pickle.loads(pickle.dumps(c))
         c2._entry_lifetime = NO_LIFETIME
         c2["c"] = 3
+        sleep(0.01)
         c["c"] = 3
         assert c2["c"] == 3
 
