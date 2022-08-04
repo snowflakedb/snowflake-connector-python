@@ -1094,6 +1094,7 @@ def test_connection_cant_be_reused(conn_cnx):
     assert list(cursors[0])
 
 
+@pytest.mark.external
 @pytest.mark.skipolddriver
 def test_ocsp_cache_working(conn_cnx):
     """Verifies that the OCSP cache is functioning.
