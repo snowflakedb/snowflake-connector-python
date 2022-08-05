@@ -225,7 +225,7 @@ def test_write_pandas_table_type(
     table_type: str,
 ):
     with conn_cnx() as cnx:
-        table_name = "driver_versions"
+        table_name = f"driver_versions_{table_type}"
         drop_sql = f"DROP TABLE IF EXISTS {table_name}"
         try:
             success, _, _, _ = write_pandas(
@@ -240,6 +240,7 @@ def test_write_pandas_table_type(
                 .execute(f"show tables like '{table_name}'")
                 .fetchall()
             )
+            assert success
             if not table_type:
                 expected_table_kind = "TABLE"
             elif table_type == "temp":
@@ -266,6 +267,8 @@ def test_write_pandas_create_temp_table_deprecation_warning(
                     create_temp_table=True,
                     auto_create_table=True,
                 )
+
+            assert success
             table_info = (
                 cnx.cursor(DictCursor)
                 .execute(f"show tables like '{table_name}'")
