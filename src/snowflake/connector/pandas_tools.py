@@ -12,15 +12,9 @@ import warnings
 from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Iterable,
-    Iterator,
-    Literal,
-    Sequence,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Callable, Iterable, Iterator, Sequence, TypeVar
+
+from typing_extensions import Literal
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
