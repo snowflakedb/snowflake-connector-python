@@ -219,6 +219,79 @@ def test_write_pandas(
             cnx.execute_string(drop_sql)
 
 
+@pytest.mark.parametrize("table_type", ["", "temp", "temporary", "transient"])
+def test_write_pandas_table_type(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    table_type: str,
+):
+    with conn_cnx() as cnx:
+        table_name = random_string(5, "write_pandas_table_type_")
+        drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+        try:
+            success, _, _, _ = write_pandas(
+                cnx,
+                sf_connector_version_df.get(),
+                table_name,
+                table_type=table_type,
+                auto_create_table=True,
+            )
+            table_info = (
+                cnx.cursor(DictCursor)
+                .execute(f"show tables like '{table_name}'")
+                .fetchall()
+            )
+            assert success
+            if not table_type:
+                expected_table_kind = "TABLE"
+            elif table_type == "temp":
+                expected_table_kind = "TEMPORARY"
+            else:
+                expected_table_kind = table_type.upper()
+            assert table_info[0]["kind"] == expected_table_kind
+        finally:
+            cnx.execute_string(drop_sql)
+
+
+def test_write_pandas_create_temp_table_deprecation_warning(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+):
+    with conn_cnx() as cnx:
+        table_name = random_string(5, "driver_versions_")
+        drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+        try:
+            with pytest.deprecated_call(match="create_temp_table is deprecated"):
+                success, _, _, _ = write_pandas(
+                    cnx,
+                    sf_connector_version_df.get(),
+                    table_name,
+                    create_temp_table=True,
+                    auto_create_table=True,
+                )
+
+            assert success
+            table_info = (
+                cnx.cursor(DictCursor)
+                .execute(f"show tables like '{table_name}'")
+                .fetchall()
+            )
+            assert table_info[0]["kind"] == "TEMPORARY"
+        finally:
+            cnx.execute_string(drop_sql)
+
+
+def test_invalid_table_type_write_pandas(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+):
+    with conn_cnx() as cnx:
+        with pytest.raises(ValueError, match="Unsupported table type"):
+            write_pandas(
+                cnx,
+                sf_connector_version_df.get(),
+                "invalid_table_type",
+                table_type="invalid",
+            )
+
+
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with database, schema and table name."""
