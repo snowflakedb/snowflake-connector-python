@@ -225,7 +225,7 @@ def test_write_pandas_table_type(
     table_type: str,
 ):
     with conn_cnx() as cnx:
-        table_name = f"driver_versions_{table_type}"
+        table_name = random_string(5, "write_pandas_table_type_")
         drop_sql = f"DROP TABLE IF EXISTS {table_name}"
         try:
             success, _, _, _ = write_pandas(
@@ -256,7 +256,7 @@ def test_write_pandas_create_temp_table_deprecation_warning(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
 ):
     with conn_cnx() as cnx:
-        table_name = "driver_versions"
+        table_name = random_string(5, "driver_versions_")
         drop_sql = f"DROP TABLE IF EXISTS {table_name}"
         try:
             with pytest.deprecated_call(match="create_temp_table is deprecated"):
