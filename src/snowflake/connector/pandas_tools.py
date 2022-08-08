@@ -8,10 +8,13 @@ import collections.abc
 import os
 import random
 import string
+import warnings
 from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Callable, Iterable, Iterator, Sequence, TypeVar
+
+from typing_extensions import Literal
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
@@ -49,6 +52,7 @@ def write_pandas(
     auto_create_table: bool = False,
     create_temp_table: bool = False,
     overwrite: bool = False,
+    table_type: Literal["", "temp", "temporary", "transient"] = "",
 ) -> tuple[
     bool,
     int,
@@ -102,10 +106,12 @@ def write_pandas(
             I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
             the passed in DataFrame. The table will not be created if it already exists
-        create_temp_table: Will make the auto-created table as a temporary table
+        create_temp_table: (Deprecated) Will make the auto-created table as a temporary table
         overwrite: When true, and if auto_create_table is true, then it drops the table. Otherwise, it
         truncates the table. In both cases it will replace the existing contents of the table with that of the passed in
             Pandas DataFrame.
+        table_type: The table type of to-be-created table. The supported table types include ``temp``/``temporary``
+            and ``transient``. Empty means permanent table as per SQL convention.
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
@@ -124,6 +130,22 @@ def write_pandas(
                 compression, compression_map.keys()
             )
         )
+
+    if create_temp_table:
+        warnings.warn(
+            "create_temp_table is deprecated, we still respect this parameter when it is True but "
+            'please consider using `table_type="temp"` instead',
+            DeprecationWarning,
+            # warnings.warn -> write_pandas
+            stacklevel=2,
+        )
+        table_type = "temp"
+
+    if table_type and table_type.lower() not in ["temp", "temporary", "transient"]:
+        raise ValueError(
+            "Unsupported table type. Expected table types: temp/temporary, transient"
+        )
+
     if quote_identifiers:
         location = (
             (('"' + database + '".') if database else "")
@@ -224,7 +246,7 @@ def write_pandas(
             [f"{quote}{c}{quote} {column_type_mapping[c]}" for c in df.columns]
         )
         create_table_sql = (
-            f"CREATE {'TEMP ' if create_temp_table else ''}TABLE IF NOT EXISTS {location} "
+            f"CREATE {table_type.upper()} TABLE IF NOT EXISTS {location} "
             f"({create_table_columns})"
             f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         )
