@@ -49,6 +49,13 @@ repos:
     rev: 5.10.1
     hooks:
         - id: isort
+        - id: isort
+          name: insert future imports
+          args:
+              - -a
+              - from __future__ import annotations
+              - --append-only
+          files: ^src/snowflake/connector/.*\.py$
 -   repo: https://github.com/asottile/pyupgrade
     rev: v2.31.1
     hooks:
