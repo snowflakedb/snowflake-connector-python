@@ -159,7 +159,7 @@ class SnowflakeStorageClient(ABC):
                 meta.real_src_file_name,
                 tmp_dir=self.tmp_dir,
             )
-            meta.upload_size = os.path.getsize(self.data_file)
+            meta.upload_size = os.path.getsize(meta.real_src_file_name)
         else:
             encrypted_stream = BytesIO()
             src_stream = meta.src_stream or meta.intermediate_stream
@@ -168,8 +168,8 @@ class SnowflakeStorageClient(ABC):
                 meta.encryption_material, src_stream, encrypted_stream
             )
             src_stream.seek(0)
-            meta.upload_size = encrypted_stream.seek(0, os.SEEK_END)
-            encrypted_stream.seek(0)
+            meta.upload_size = src_stream.seek(0, os.SEEK_END)
+            src_stream.seek(0)
             if meta.src_stream is not None:
                 meta.src_stream.close()
             meta.src_stream = encrypted_stream
