@@ -667,3 +667,54 @@ def test_get_empty_file(tmp_path, conn_cnx):
             with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
                 cur.execute(f"GET @{stage_name}/foo.csv file://{tmp_path}")
             assert not empty_file.exists()
+
+
+def test_put_empty_file(tmp_path, conn_cnx):
+    """This test makes sure that putting an empty file outputs 0 as size."""
+    tmp_emptyfile = tmp_path / "test_put_empty_file.csv"
+    tmp_emptyfile.touch()
+    assert tmp_emptyfile.stat().st_size == 0
+    tmp_stage = random_string(5, "test_put_empty_file_")
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"CREATE TEMP STAGE {tmp_stage};")
+            cur.execute(
+                f"PUT file://{tmp_emptyfile.absolute()} "
+                f"@{tmp_stage} AUTO_COMPRESS=FALSE;"
+            )
+            assert cur.fetchall() == [
+                (
+                    tmp_emptyfile.name,
+                    tmp_emptyfile.name,
+                    0,
+                    0,
+                    "NONE",
+                    "NONE",
+                    "UPLOADED",
+                    "",
+                ),
+            ]
+
+
+def test_put_empty_stream(conn_cnx):
+    """This test makes sure that putting an empty stream outputs 0 as size."""
+    tmp_stage = random_string(5, "test_put_empty_stream_")
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"CREATE TEMP STAGE {tmp_stage};")
+            cur.execute(
+                f"PUT file://no_file.txt @{tmp_stage} AUTO_COMPRESS=FALSE;",
+                file_stream=BytesIO(),
+            )
+            assert cur.fetchall() == [
+                (
+                    "no_file.txt",
+                    "no_file.txt",
+                    0,
+                    0,
+                    "NONE",
+                    "NONE",
+                    "UPLOADED",
+                    "",
+                ),
+            ]
