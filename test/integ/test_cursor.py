@@ -1207,7 +1207,7 @@ def test_check_can_use_pandas(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_use_pandas_asynchronously(conn_cnx):
+def test_execute_async_and_fetch_pandas_batches(conn_cnx):
     """Test get pandas in an asynchronous way"""
 
     with conn_cnx() as cnx:
@@ -1220,6 +1220,8 @@ def test_use_pandas_asynchronously(conn_cnx):
             res_async = cur.fetch_pandas_batches()
 
             for r_sync, r_async in zip(res_sync, res_async):
+                assert r_sync is not None
+                assert r_async is not None
                 assert r_sync.values == r_async.values
 
 
