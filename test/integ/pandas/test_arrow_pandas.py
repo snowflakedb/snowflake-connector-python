@@ -964,6 +964,24 @@ def test_number_fetchbatches_retrieve_type(conn_cnx, use_decimal: bool, expected
                 )
 
 
+def test_execute_async_and_fetch_pandas_batches(conn_cnx):
+    """Test get pandas in an asynchronous way"""
+
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select 1/2")
+            res_sync = cur.fetch_pandas_batches()
+
+            result = cur.execute_async("select 1/2")
+            cur.get_results_from_sfqid(result["queryId"])
+            res_async = cur.fetch_pandas_batches()
+
+            assert res_sync is not None
+            assert res_async is not None
+            for r_sync, r_async in zip(res_sync, res_async):
+                assert r_sync.values == r_async.values
+
+
 def test_simple_async_arrow(conn_cnx):
     """Simple test to that shows the most simple usage of fire and forget.
 
