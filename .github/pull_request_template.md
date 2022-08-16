@@ -8,6 +8,7 @@ Please answer these questions before submitting your pull requests. Thanks!
 
    - [ ] I am adding a new automated test(s) to verify correctness of my new code
    - [ ] I am adding new logging messages
+   - [ ] I am adding a new telemetry message
    - [ ] I am modifying authorization mechanisms
    - [ ] I am adding new credentials
    - [ ] I am modifying OCSP code
