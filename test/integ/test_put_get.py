@@ -696,6 +696,7 @@ def test_put_empty_file(tmp_path, conn_cnx):
             ]
 
 
+@pytest.mark.skipolddriver
 def test_put_empty_stream(conn_cnx):
     """This test makes sure that putting an empty stream outputs 0 as size."""
     tmp_stage = random_string(5, "test_put_empty_stream_")
