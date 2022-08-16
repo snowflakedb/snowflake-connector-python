@@ -167,6 +167,8 @@ class SnowflakeStorageClient(ABC):
             self.encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
                 meta.encryption_material, src_stream, encrypted_stream
             )
+            # Reset streams
+            encrypted_stream.seek(0)
             src_stream.seek(0)
             meta.upload_size = src_stream.seek(0, os.SEEK_END)
             src_stream.seek(0)
