@@ -1207,25 +1207,6 @@ def test_check_can_use_pandas(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_execute_async_and_fetch_pandas_batches(conn_cnx):
-    """Test get pandas in an asynchronous way"""
-
-    with conn_cnx() as cnx:
-        with cnx.cursor() as cur:
-            cur.execute("select 1/2")
-            res_sync = cur.fetch_pandas_batches()
-
-            result = cur.execute_async("select 1/2")
-            cur.get_results_from_sfqid(result["queryId"])
-            res_async = cur.fetch_pandas_batches()
-
-            assert res_sync is not None
-            assert res_async is not None
-            for r_sync, r_async in zip(res_sync, res_async):
-                assert r_sync.values == r_async.values
-
-
-@pytest.mark.skipolddriver
 def test_check_cannot_use_pandas(conn_cnx):
     """Tests check_can_use_arrow_resultset has expected outcomes."""
     with conn_cnx() as cnx:
