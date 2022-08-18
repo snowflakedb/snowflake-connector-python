@@ -69,6 +69,7 @@ from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 from . import constants
 from .cache import SFDictCache, SFDictFileCache
+from .telemetry import generate_telemetry_data
 
 try:
     OCSP_CACHE: SFDictFileCache[
@@ -220,18 +221,21 @@ class OCSPTelemetryData:
 
     def generate_telemetry_data(self, event_type, urgent=False):
         _, exception, _ = sys.exc_info()
-        telemetry_data = {}
-        telemetry_data.update({"eventType": event_type})
-        telemetry_data.update({"eventSubType": self.event_sub_type})
-        telemetry_data.update({"sfcPeerHost": self.sfc_peer_host})
-        telemetry_data.update({"certId": self.cert_id})
-        telemetry_data.update({"ocspRequestBase64": self.ocsp_req})
-        telemetry_data.update({"ocspResponderURL": self.ocsp_url})
-        telemetry_data.update({"errorMessage": self.error_msg})
-        telemetry_data.update({"insecureMode": self.insecure_mode})
-        telemetry_data.update({"failOpen": self.fail_open})
-        telemetry_data.update({"cacheEnabled": self.cache_enabled})
-        telemetry_data.update({"cacheHit": self.cache_hit})
+        telemetry_data = generate_telemetry_data(
+            from_dict={
+                "eventType": event_type,
+                "eventSubType": self.event_sub_type,
+                "sfcPeerHost": self.sfc_peer_host,
+                "certId": self.cert_id,
+                "ocspRequestBase64": self.ocsp_req,
+                "ocspResponderURL": self.ocsp_url,
+                "errorMessage": self.error_msg,
+                "insecureMode": self.insecure_mode,
+                "failOpen": self.fail_open,
+                "cacheEnabled": self.cache_enabled,
+                "cacheHit": self.cache_hit,
+            }
+        )
 
         telemetry_client = TelemetryService.get_instance()
         telemetry_client.log_ocsp_exception(

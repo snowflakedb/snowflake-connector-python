@@ -15,6 +15,7 @@ from queue import Queue
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
+from .telemetry import generate_telemetry_data
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 from .vendored import requests
 
@@ -377,12 +378,15 @@ class TelemetryService:
             tags = dict()
         try:
             if self.enabled:
-                telemetry_data = dict()
                 response_status_code = -1
                 # This mimics the output of HttpRequestBase.toString() from JBDC
-                telemetry_data["request"] = f"{method} {url}"
-                telemetry_data["sqlState"] = sqlstate
-                telemetry_data["errorCode"] = errno
+                telemetry_data = generate_telemetry_data(
+                    from_dict={
+                        "request": f"{method} {url}",
+                        "sqlState": sqlstate,
+                        "errorCode": errno,
+                    }
+                )
                 if response:
                     telemetry_data["response"] = response.json()
                     telemetry_data["responseStatusLine"] = str(response.reason)

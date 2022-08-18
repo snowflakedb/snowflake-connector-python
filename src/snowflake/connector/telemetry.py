@@ -10,6 +10,7 @@ from enum import Enum, unique
 from threading import Lock
 from typing import TYPE_CHECKING
 
+from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 
@@ -46,6 +47,7 @@ class TelemetryField(Enum):
     KEY_ERROR_NUMBER = "ErrorNumber"
     KEY_STACKTRACE = "Stacktrace"
     KEY_EXCEPTION = "Exception"
+    KEY_VALUE = "value"
 
 
 class TelemetryData:
@@ -161,3 +163,16 @@ class TelemetryClient:
 
     def buffer_size(self):
         return len(self._log_batch)
+
+
+def generate_telemetry_data(from_dict: dict | None = None) -> dict:
+    """
+    Generate telemetry data with driver info. The method also takes an optional dict to update from.
+    """
+    dict = {
+        TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    }
+    if from_dict:
+        dict.update(from_dict)
+    return dict
