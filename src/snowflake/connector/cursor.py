@@ -399,7 +399,7 @@ class SnowflakeCursor:
                 return False
 
             with self._lock_canceling:
-                self.reset()
+                self.reset(closing=True)
                 self._connection = None
                 del self.messages[:]
                 return True
@@ -1175,15 +1175,18 @@ class SnowflakeCursor:
             },
         )
 
-    def reset(self):
+    def reset(self, closing=False):
         """Resets the result set."""
-        self._total_rowcount = -1  # reset the rowcount
+        # SNOW-647539: Do not erase the rowcount
+        # information when closing the cursor
+        if not closing:
+            self._total_rowcount = -1
         if self._result_state != ResultState.DEFAULT:
             self._result_state = ResultState.RESET
         if self._result is not None:
             self._result = None
         if self._inner_cursor is not None:
-            self._inner_cursor.reset()
+            self._inner_cursor.reset(closing=closing)
             self._result = None
             self._inner_cursor = None
         self._prefetch_hook = None

@@ -747,6 +747,9 @@ def test_closed_cursor(conn, db_parameters):
         with pytest.raises(InterfaceError, match="Cursor is closed in execute") as err:
             c.execute(f"select aa from {table_name}")
         assert err.value.errno == errorcode.ER_CURSOR_IS_CLOSED
+        assert (
+            c.rowcount == 5
+        ), "SNOW-647539: rowcount should remain available after cursor is closed"
 
 
 def test_fetchmany(conn, db_parameters):
@@ -1039,11 +1042,16 @@ def test_empty_execution(conn, sql):
     "reuse_results", (False, pytest.param(True, marks=pytest.mark.skipolddriver))
 )
 def test_reset_fetch(conn, reuse_results):
-    """Tests behavior after resetting the cursor."""
+    """Tests behavior after resetting an open cursor."""
     with conn(reuse_results=reuse_results) as cnx:
         with cnx.cursor() as cur:
             cur.execute("select 1")
+            assert cur.rowcount == 1
             cur.reset()
+            assert (
+                cur.rowcount is None
+            ), "calling reset on an open cursor should unset rowcount"
+            assert not cur.is_closed(), "calling reset should not close the cursor"
             if reuse_results:
                 assert cur.fetchone() == (1,)
             else:
