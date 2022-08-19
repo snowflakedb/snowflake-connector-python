@@ -8,6 +8,8 @@ from __future__ import annotations
 from unittest.mock import Mock
 
 import snowflake.connector.telemetry
+from snowflake.connector.description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
+from snowflake.connector.telemetry import TelemetryField, generate_telemetry_data
 
 
 def test_telemetry_data_to_dict():
@@ -132,3 +134,44 @@ def test_telemetry_send_batch_disabled():
     client.send_batch()
     assert client.buffer_size() == 1
     assert rest_call.call_count == 0
+
+
+def test_generate_telemetry_with_driver_info():
+    telemetry_data = generate_telemetry_data()
+    assert (
+        len(telemetry_data) == 2
+        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
+        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value]
+        == SNOWFLAKE_CONNECTOR_VERSION
+    )
+
+    telemetry_data = generate_telemetry_data(from_dict={})
+    assert (
+        len(telemetry_data) == 2
+        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
+        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value]
+        == SNOWFLAKE_CONNECTOR_VERSION
+    )
+
+    telemetry_data = generate_telemetry_data(from_dict={"key": "value"})
+    assert (
+        len(telemetry_data) == 3
+        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
+        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value]
+        == SNOWFLAKE_CONNECTOR_VERSION
+        and telemetry_data["key"] == "value"
+    )
+
+    telemetry_data = generate_telemetry_data(
+        from_dict={
+            TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
+            TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
+            "key": "value",
+        }
+    )
+    assert (
+        len(telemetry_data) == 3
+        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == "CUSTOM_CLIENT_NAME"
+        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value] == "1.2.3"
+        and telemetry_data["key"] == "value"
+    )
