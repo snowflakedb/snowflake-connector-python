@@ -545,6 +545,7 @@ class ArrowResultBatch(ResultBatch):
         self._context = context
         self._numpy = numpy
         self._number_to_decimal = number_to_decimal
+        self._dataframe = None
 
     def __repr__(self) -> str:
         return f"ArrowResultChunk({self.id})"
@@ -646,7 +647,7 @@ class ArrowResultBatch(ResultBatch):
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
 
     def _create_empty_table(self) -> Table:
-        """Returns emtpy Arrow table based on schema"""
+        """Returns empty Arrow table based on schema"""
         if installed_pandas:
             # initialize pyarrow type array corresponding to FIELD_TYPES
             FIELD_TYPE_TO_PA_TYPE = [e.pa_type() for e in FIELD_TYPES]
@@ -666,9 +667,13 @@ class ArrowResultBatch(ResultBatch):
         self, connection: SnowflakeConnection | None = None, **kwargs
     ) -> pandas.DataFrame:
         """Returns this batch as a pandas DataFrame"""
+        if self._dataframe is not None:
+            return self._dataframe
+
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
-        return table.to_pandas(**kwargs)
+        self._dataframe = table.to_pandas(**kwargs)
+        return self._dataframe
 
     def _get_pandas_iter(
         self, connection: SnowflakeConnection | None = None, **kwargs
