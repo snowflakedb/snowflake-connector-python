@@ -545,7 +545,6 @@ class ArrowResultBatch(ResultBatch):
         self._context = context
         self._numpy = numpy
         self._number_to_decimal = number_to_decimal
-        self._dataframe = None
 
     def __repr__(self) -> str:
         return f"ArrowResultChunk({self.id})"
@@ -667,13 +666,9 @@ class ArrowResultBatch(ResultBatch):
         self, connection: SnowflakeConnection | None = None, **kwargs
     ) -> pandas.DataFrame:
         """Returns this batch as a pandas DataFrame"""
-        if self._dataframe is not None:
-            return self._dataframe
-
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
-        self._dataframe = table.to_pandas(**kwargs)
-        return self._dataframe
+        return table.to_pandas(**kwargs)
 
     def _get_pandas_iter(
         self, connection: SnowflakeConnection | None = None, **kwargs
