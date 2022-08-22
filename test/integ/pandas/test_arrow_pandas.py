@@ -11,7 +11,6 @@ import time
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import List
 from unittest import mock
 
 import numpy
@@ -1170,7 +1169,7 @@ def assert_dtype_equal(a, b):
     )
 
 
-def assert_pandas_batch_types(batch: pandas.DataFrame, expected_types: List[type]) -> None:
+def assert_pandas_batch_types(batch: pandas.DataFrame, expected_types: list[type]) -> None:
     assert batch.dtypes is not None
 
     pandas_dtypes = batch.dtypes
