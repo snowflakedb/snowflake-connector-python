@@ -200,7 +200,7 @@ class AuthByOkta(AuthByPlugin):
             socket_timeout=self._rest._connection.login_timeout,
             catch_okta_unauthorized_error=True,
         )
-        one_time_token = ret.get("cookieToken")
+        one_time_token = ret.get("sessionToken", ret.get("cookieToken"))
         if not one_time_token:
             Error.errorhandler_wrapper(
                 self._rest._connection,
