@@ -200,24 +200,26 @@ class AuthByOkta(AuthByPlugin):
             socket_timeout=self._rest._connection.login_timeout,
             catch_okta_unauthorized_error=True,
         )
-        one_time_token = ret.get("cookieToken")
+        one_time_token = ret.get("sessionToken")
         if not one_time_token:
-            Error.errorhandler_wrapper(
-                self._rest._connection,
-                None,
-                DatabaseError,
-                {
-                    "msg": (
-                        "The authentication failed for {user} "
-                        "by {token_url}.".format(
-                            token_url=token_url,
-                            user=user,
-                        )
-                    ),
-                    "errno": ER_IDP_CONNECTION_ERROR,
-                    "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                },
-            )
+            one_time_token = ret.get("cookieToken")
+            if not one_time_token:
+                Error.errorhandler_wrapper(
+                    self._rest._connection,
+                    None,
+                    DatabaseError,
+                    {
+                        "msg": (
+                            "The authentication failed for {user} "
+                            "by {token_url}.".format(
+                                token_url=token_url,
+                                user=user,
+                            )
+                        ),
+                        "errno": ER_IDP_CONNECTION_ERROR,
+                        "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    },
+                )
         return one_time_token
 
     def _step4(self, one_time_token, sso_url):
