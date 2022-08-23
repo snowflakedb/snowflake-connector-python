@@ -345,7 +345,7 @@ class TelemetryService:
                     )
                 if stack_trace is not None:
                     telemetry_data[
-                        TelemetryField.KEY_EXCEPTION_STACKTRACE.value
+                        TelemetryField.KEY_EXCEPTION_STACK_TRACE.value
                     ] = stack_trace
 
                 if tags is None:
@@ -415,7 +415,7 @@ class TelemetryService:
                     )
                 if stack_trace:
                     telemetry_data[
-                        TelemetryField.KEY_EXCEPTION_STACKTRACE.value
+                        TelemetryField.KEY_EXCEPTION_STACK_TRACE.value
                     ] = stack_trace
 
                 if tags is None:

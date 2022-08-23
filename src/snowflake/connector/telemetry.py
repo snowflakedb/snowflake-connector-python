@@ -54,7 +54,7 @@ class TelemetryField(Enum):
     KEY_RETRY_COUNT = "RetryCount"
     KEY_EXCEPTION = "Exception"
     KEY_EXCEPTION_MESSAGE = "ExceptionMessage"
-    KEY_EXCEPTION_STACKTRACE = "ExceptionStackTrace"
+    KEY_EXCEPTION_STACK_TRACE = "ExceptionStackTrace"
     KEY_EVENT_TYPE = "EventType"
     KEY_EVENT_SUB_TYPE = "EventSubType"
     KEY_SFC_PEER_HOST = "SfcPeerHost"

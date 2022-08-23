@@ -122,7 +122,7 @@ class Error(BASE_EXCEPTION_CLASS):
 
         telemetry_data = generate_telemetry_data(
             from_dict={
-                TelemetryField.KEY_EXCEPTION_STACKTRACE.value: SecretDetector.mask_secrets(
+                TelemetryField.KEY_EXCEPTION_STACK_TRACE.value: SecretDetector.mask_secrets(
                     self.telemetry_traceback
                 )
             }
