@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+
+- v2.7.12(August 26,2022)
+
+   -  Release Notes
+
 - v2.7.12(unreleased)
 
    - Added in-file cache to OCSP requests
