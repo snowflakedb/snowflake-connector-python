@@ -69,7 +69,7 @@ from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 from . import constants
 from .cache import SFDictCache, SFDictFileCache
-from .telemetry import generate_telemetry_data
+from .telemetry import TelemetryField, generate_telemetry_data
 
 try:
     OCSP_CACHE: SFDictFileCache[
@@ -219,21 +219,21 @@ class OCSPTelemetryData:
     def set_insecure_mode(self, insecure_mode):
         self.insecure_mode = insecure_mode
 
-    def generate_telemetry_data(self, event_type, urgent=False):
+    def generate_telemetry_data(self, event_type: str, urgent: bool = False) -> dict:
         _, exception, _ = sys.exc_info()
         telemetry_data = generate_telemetry_data(
             from_dict={
-                "eventType": event_type,
-                "eventSubType": self.event_sub_type,
-                "sfcPeerHost": self.sfc_peer_host,
-                "certId": self.cert_id,
-                "ocspRequestBase64": self.ocsp_req,
-                "ocspResponderURL": self.ocsp_url,
-                "errorMessage": self.error_msg,
-                "insecureMode": self.insecure_mode,
-                "failOpen": self.fail_open,
-                "cacheEnabled": self.cache_enabled,
-                "cacheHit": self.cache_hit,
+                TelemetryField.KEY_EVENT_TYPE.value: event_type,
+                TelemetryField.KEY_EVENT_SUB_TYPE.value: self.event_sub_type,
+                TelemetryField.KEY_SFC_PEER_HOST.value: self.sfc_peer_host,
+                TelemetryField.KEY_CERT_ID.KEY_VALUE.value: self.cert_id,
+                TelemetryField.KEY_OCSP_REQUEST_BASE64.value: self.ocsp_req,
+                TelemetryField.KEY_OCSP_RESPONDER_URL.value: self.ocsp_url,
+                TelemetryField.KEY_EXCEPTION_MESSAGE.value: self.error_msg,
+                TelemetryField.KEY_INSECURE_MODE.value: self.insecure_mode,
+                TelemetryField.KEY_FAIL_OPEN.value: self.fail_open,
+                TelemetryField.KEY_CACHE_ENABLED.value: self.cache_enabled,
+                TelemetryField.KEY_CACHE_HIT.value: self.cache_hit,
             }
         )
 

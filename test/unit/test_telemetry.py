@@ -137,41 +137,30 @@ def test_telemetry_send_batch_disabled():
 
 
 def test_generate_telemetry_with_driver_info():
-    telemetry_data = generate_telemetry_data()
-    assert (
-        len(telemetry_data) == 2
-        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
-        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value]
-        == SNOWFLAKE_CONNECTOR_VERSION
-    )
+    assert generate_telemetry_data() == {
+        TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    }
 
-    telemetry_data = generate_telemetry_data(from_dict={})
-    assert (
-        len(telemetry_data) == 2
-        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
-        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value]
-        == SNOWFLAKE_CONNECTOR_VERSION
-    )
+    assert generate_telemetry_data(from_dict={}) == {
+        TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    }
 
-    telemetry_data = generate_telemetry_data(from_dict={"key": "value"})
-    assert (
-        len(telemetry_data) == 3
-        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
-        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value]
-        == SNOWFLAKE_CONNECTOR_VERSION
-        and telemetry_data["key"] == "value"
-    )
+    assert generate_telemetry_data(from_dict={"key": "value"}) == {
+        TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+        "key": "value",
+    }
 
-    telemetry_data = generate_telemetry_data(
+    assert generate_telemetry_data(
         from_dict={
             TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
             TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
             "key": "value",
         }
-    )
-    assert (
-        len(telemetry_data) == 3
-        and telemetry_data[TelemetryField.KEY_DRIVER_TYPE.value] == "CUSTOM_CLIENT_NAME"
-        and telemetry_data[TelemetryField.KEY_DRIVER_VERSION.value] == "1.2.3"
-        and telemetry_data["key"] == "value"
-    )
+    ) == {
+        TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
+        TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
+        "key": "value",
+    }

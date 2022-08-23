@@ -1222,7 +1222,7 @@ class SnowflakeCursor:
                             if self._connection
                             else CLIENT_NAME,
                             TelemetryField.KEY_SFQID.value: self._sfqid,
-                            TelemetryField.KEY_VALUE.value: int(value),
+                            TelemetryField.KEY_VALUE.value: value,
                         }
                     ),
                     ts,
