@@ -9,9 +9,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
-- v2.7.12(unreleased)
 
-   - Added in-file cache to OCSP requests
+- v2.7.12(August 26,2022)
+
+   - Fixed a bug where timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
+   - Added in-file caching for OCSP response caching
+   - The write_pandas function now supports transient tables through the new table_type argument which supersedes create_temp_table argument
+   - Fixed a bug where calling fetch_pandas_batches incorrectly raised NotSupportedError after an async query was executed
+   - Added support for OKTA Identity Engine
 
 - v2.7.11(July 26,2022)
 
