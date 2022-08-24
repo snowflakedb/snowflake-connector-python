@@ -12,8 +12,8 @@ from snowflake.connector.errorcode import ER_FAILED_TO_REQUEST
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from snowflake.connector.telemetry import TelemetryField
-from snowflake.connector.telemetry_oob import TelemetryService, generate_telemetry_data
+from snowflake.connector.telemetry import TelemetryField, generate_telemetry_data
+from snowflake.connector.telemetry_oob import TelemetryService
 
 DEV_CONFIG = {
     "host": "localhost",

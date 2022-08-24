@@ -9,7 +9,6 @@ from unittest.mock import Mock
 
 import snowflake.connector.telemetry
 from snowflake.connector.description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
-from snowflake.connector.telemetry import TelemetryField, generate_telemetry_data
 
 
 def test_telemetry_data_to_dict():
@@ -137,30 +136,32 @@ def test_telemetry_send_batch_disabled():
 
 
 def test_generate_telemetry_with_driver_info():
-    assert generate_telemetry_data() == {
-        TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
-        TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    assert snowflake.connector.telemetry.generate_telemetry_data() == {
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
     }
 
-    assert generate_telemetry_data(from_dict={}) == {
-        TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
-        TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    assert snowflake.connector.telemetry.generate_telemetry_data(from_dict={}) == {
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
     }
 
-    assert generate_telemetry_data(from_dict={"key": "value"}) == {
-        TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
-        TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    assert snowflake.connector.telemetry.generate_telemetry_data(
+        from_dict={"key": "value"}
+    ) == {
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
         "key": "value",
     }
 
-    assert generate_telemetry_data(
+    assert snowflake.connector.telemetry.generate_telemetry_data(
         from_dict={
-            TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
-            TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
+            snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
+            snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
             "key": "value",
         }
     ) == {
-        TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
-        TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
         "key": "value",
     }
