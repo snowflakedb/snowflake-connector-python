@@ -189,8 +189,7 @@ class ResultSet(Iterable[list]):
                 ignore_index=True,  # Don't keep in result batch indexes
                 **kwargs,
             )
-        # Empty dataframe
-        return self.batches[0].to_pandas()
+        return pandas.DataFrame(columns=self.batches[0].column_names)
 
     def _get_metrics(self) -> dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""

@@ -646,7 +646,7 @@ class ArrowResultBatch(ResultBatch):
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
 
     def _create_empty_table(self) -> Table:
-        """Returns empty Arrow table based on schema"""
+        """Returns emtpy Arrow table based on schema"""
         if installed_pandas:
             # initialize pyarrow type array corresponding to FIELD_TYPES
             FIELD_TYPE_TO_PA_TYPE = [e.pa_type() for e in FIELD_TYPES]
