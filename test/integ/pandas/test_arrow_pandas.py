@@ -1169,18 +1169,6 @@ def assert_dtype_equal(a, b):
     )
 
 
-def assert_pandas_batch_types(
-    batch: pandas.DataFrame, expected_types: list[type]
-) -> None:
-    assert batch.dtypes is not None
-
-    pandas_dtypes = batch.dtypes
-    # pd.string is represented as an np.object
-    # np.dtype string is not the same as pd.string (python)
-    for pandas_dtype, expected_type in zip(pandas_dtypes, expected_types):
-        assert_dtype_equal(pandas_dtype.type, numpy.dtype(expected_type).type)
-
-
 def test_pandas_dtypes(conn_cnx):
     with conn_cnx(
         session_parameters={
@@ -1191,12 +1179,18 @@ def test_pandas_dtypes(conn_cnx):
             cur.execute(
                 "select 1::integer, 2.3::double, 'foo'::string, current_timestamp()::timestamp where 1=0"
             )
-            expected_types = [numpy.int64, float, object, numpy.datetime64]
-            assert_pandas_batch_types(cur.fetch_pandas_all(), expected_types)
-
             batches = cur.get_result_batches()
+            batch = batches[0].to_pandas()
+
+            assert batch.dtypes is not None
             assert batches[0].to_arrow() is not True
-            assert_pandas_batch_types(batches[0].to_pandas(), expected_types)
+
+            pandas_dtypes = batch.dtypes
+            expected_types = [numpy.int64, float, object, numpy.datetime64]
+            # pd.string is represented as an np.object
+            # np.dtype string is not the same as pd.string (python)
+            for i, typ in enumerate(expected_types):
+                assert_dtype_equal(pandas_dtypes[i].type, numpy.dtype(typ).type)
 
 
 def test_timestamp_tz(conn_cnx):
