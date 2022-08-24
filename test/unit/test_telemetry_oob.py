@@ -7,11 +7,13 @@ from __future__ import annotations
 import pytest
 
 import snowflake.connector.errorcode
+from snowflake.connector.description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from snowflake.connector.errorcode import ER_FAILED_TO_REQUEST
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from snowflake.connector.telemetry_oob import TelemetryService
+from snowflake.connector.telemetry import TelemetryField
+from snowflake.connector.telemetry_oob import TelemetryService, generate_telemetry_data
 
 DEV_CONFIG = {
     "host": "localhost",
@@ -151,3 +153,36 @@ def test_telemetry_oob_http_log_urgent(telemetry_setup):
         urgent=True,
     )
     assert telemetry.size() == 0
+
+
+def test_generate_telemetry_with_driver_info():
+    assert generate_telemetry_data(is_oob_telemetry=True) == {
+        TelemetryField.KEY_OOB_DRIVER.value: CLIENT_NAME,
+        TelemetryField.KEY_OOB_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    }
+
+    assert generate_telemetry_data(from_dict={}, is_oob_telemetry=True) == {
+        TelemetryField.KEY_OOB_DRIVER.value: CLIENT_NAME,
+        TelemetryField.KEY_OOB_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    }
+
+    assert generate_telemetry_data(
+        from_dict={"key": "value"}, is_oob_telemetry=True
+    ) == {
+        TelemetryField.KEY_OOB_DRIVER.value: CLIENT_NAME,
+        TelemetryField.KEY_OOB_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+        "key": "value",
+    }
+
+    assert generate_telemetry_data(
+        from_dict={
+            TelemetryField.KEY_OOB_DRIVER.value: "CUSTOM_CLIENT_NAME",
+            TelemetryField.KEY_OOB_VERSION.value: "1.2.3",
+            "key": "value",
+        },
+        is_oob_telemetry=True,
+    ) == {
+        TelemetryField.KEY_OOB_DRIVER.value: "CUSTOM_CLIENT_NAME",
+        TelemetryField.KEY_OOB_VERSION.value: "1.2.3",
+        "key": "value",
+    }

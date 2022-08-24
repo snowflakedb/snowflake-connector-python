@@ -223,18 +223,19 @@ class OCSPTelemetryData:
         _, exception, _ = sys.exc_info()
         telemetry_data = generate_telemetry_data(
             from_dict={
-                TelemetryField.KEY_EVENT_TYPE.value: event_type,
-                TelemetryField.KEY_EVENT_SUB_TYPE.value: self.event_sub_type,
-                TelemetryField.KEY_SFC_PEER_HOST.value: self.sfc_peer_host,
-                TelemetryField.KEY_CERT_ID.KEY_VALUE.value: self.cert_id,
-                TelemetryField.KEY_OCSP_REQUEST_BASE64.value: self.ocsp_req,
-                TelemetryField.KEY_OCSP_RESPONDER_URL.value: self.ocsp_url,
-                TelemetryField.KEY_EXCEPTION_MESSAGE.value: self.error_msg,
-                TelemetryField.KEY_INSECURE_MODE.value: self.insecure_mode,
-                TelemetryField.KEY_FAIL_OPEN.value: self.fail_open,
-                TelemetryField.KEY_CACHE_ENABLED.value: self.cache_enabled,
-                TelemetryField.KEY_CACHE_HIT.value: self.cache_hit,
-            }
+                TelemetryField.KEY_OOB_EVENT_TYPE.value: event_type,
+                TelemetryField.KEY_OOB_EVENT_SUB_TYPE.value: self.event_sub_type,
+                TelemetryField.KEY_OOB_SFC_PEER_HOST.value: self.sfc_peer_host,
+                TelemetryField.KEY_OOB_CERT_ID.KEY_VALUE.value: self.cert_id,
+                TelemetryField.KEY_OOB_OCSP_REQUEST_BASE64.value: self.ocsp_req,
+                TelemetryField.KEY_OOB_OCSP_RESPONDER_URL.value: self.ocsp_url,
+                TelemetryField.KEY_OOB_ERROR_MESSAGE.value: self.error_msg,
+                TelemetryField.KEY_OOB_INSECURE_MODE.value: self.insecure_mode,
+                TelemetryField.KEY_OOB_FAIL_OPEN.value: self.fail_open,
+                TelemetryField.KEY_OOB_CACHE_ENABLED.value: self.cache_enabled,
+                TelemetryField.KEY_OOB_CACHE_HIT.value: self.cache_hit,
+            },
+            is_oob_telemetry=True,
         )
 
         telemetry_client = TelemetryService.get_instance()
