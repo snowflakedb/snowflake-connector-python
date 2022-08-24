@@ -393,7 +393,8 @@ class TelemetryService:
                         TelemetryField.KEY_OOB_REQUEST.value: f"{method} {url}",
                         TelemetryField.KEY_OOB_SQL_STATE.value: sqlstate,
                         TelemetryField.KEY_OOB_ERROR_CODE.value: errno,
-                    }
+                    },
+                    is_oob_telemetry=True,
                 )
                 if response:
                     telemetry_data[
