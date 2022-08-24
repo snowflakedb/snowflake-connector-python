@@ -226,7 +226,7 @@ class OCSPTelemetryData:
                 TelemetryField.KEY_OOB_EVENT_TYPE.value: event_type,
                 TelemetryField.KEY_OOB_EVENT_SUB_TYPE.value: self.event_sub_type,
                 TelemetryField.KEY_OOB_SFC_PEER_HOST.value: self.sfc_peer_host,
-                TelemetryField.KEY_OOB_CERT_ID.KEY_VALUE.value: self.cert_id,
+                TelemetryField.KEY_OOB_CERT_ID.value: self.cert_id,
                 TelemetryField.KEY_OOB_OCSP_REQUEST_BASE64.value: self.ocsp_req,
                 TelemetryField.KEY_OOB_OCSP_RESPONDER_URL.value: self.ocsp_url,
                 TelemetryField.KEY_OOB_ERROR_MESSAGE.value: self.error_msg,
