@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from enum import Enum, unique
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
@@ -195,7 +195,7 @@ class TelemetryClient:
 
 def generate_telemetry_data(
     from_dict: dict | None = None, is_oob_telemetry: bool = False
-) -> dict:
+) -> dict[str, Any]:
     """
     Generate telemetry data with driver info. The method also takes an optional dict to update from.
     """
