@@ -83,7 +83,7 @@ from .network import (
     SnowflakeRestful,
 )
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
-from .telemetry import TelemetryClient
+from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
@@ -192,6 +192,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), str),
     ),  # Path to connection diag whitelist json
+    "log_imported_packages_in_telemetry": (
+        None,
+        (type(None), bool),
+    ),  # Whether to log imported packages in telemetry
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -291,6 +295,9 @@ class SnowflakeConnection:
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
+
+        # get the imported modules from sys.modules
+        self._log_telemetry_imported_packages()
 
     def __del__(self):  # pragma: no cover
         try:
@@ -953,6 +960,13 @@ class SnowflakeConnection:
             )
             self._use_openssl_only = os.environ["SF_USE_OPENSSL_ONLY"] == "True"
 
+        if self._log_imported_packages_in_telemetry is None:
+            import snowflake.connector
+
+            self._log_imported_packages_in_telemetry = (
+                snowflake.connector.log_imported_packages_in_telemetry
+            )
+
     def cmd_query(
         self,
         sql: str,
@@ -1541,3 +1555,22 @@ class SnowflakeConnection:
             not self.is_still_running(self.get_query_status(q)) for q in queries
         )
         return all(finished_async_queries)
+
+    def _log_telemetry_imported_packages(self) -> None:
+        if self._log_imported_packages_in_telemetry:
+            # filter out duplicates caused by submodules
+            # and internal modules with names starting with an underscore
+            imported_modules = {
+                k.split(".", maxsplit=1)[0]
+                for k in sys.modules.keys()
+                if not k.startswith("_")
+            }
+            obj = {
+                TelemetryField.KEY_TYPE: TelemetryField.IMPORTED_PACKAGES.value,
+                TelemetryField.KEY_SOURCE: self.application
+                if self.application
+                else CLIENT_NAME,
+                "value": str(imported_modules),
+            }
+            ts = get_time_millis()
+            self._log_telemetry(TelemetryData(obj, ts))

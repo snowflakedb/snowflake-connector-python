@@ -35,6 +35,7 @@ from snowflake.connector.errorcode import (
 from snowflake.connector.errors import Error, ForbiddenError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
+from snowflake.connector.telemetry import TelemetryField
 
 try:  # pragma: no cover
     from parameters import CONNECTION_PARAMETERS_ADMIN
@@ -1107,3 +1108,43 @@ def test_ocsp_cache_working(conn_cnx):
     with conn_cnx() as cnx:
         assert cnx
     assert OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"] > original_count
+
+
+@pytest.mark.skipolddriver
+def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
+    try:
+        # these imports are not used but for testing
+        import html.parser  # noqa: F401
+        import json  # noqa: F401
+        import multiprocessing as mp  # noqa: F401
+        from datetime import date  # noqa: F401
+        from math import sqrt  # noqa: F401
+
+        with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
+            conn, False
+        ) as telemetry_test:
+            conn._log_telemetry_imported_packages()
+            assert len(telemetry_test.records) > 0
+            for t in telemetry_test.records:
+                if (
+                    t.message[TelemetryField.KEY_TYPE]
+                    == TelemetryField.IMPORTED_PACKAGES.value
+                ):
+                    assert "pytest" in t.message["value"]
+                    assert "unittest" in t.message["value"]
+                    assert "json" in t.message["value"]
+                    assert "multiprocessing" in t.message["value"]
+                    assert "html" in t.message["value"]
+                    assert "datetime" in t.message["value"]
+                    assert "math" in t.message["value"]
+                    assert "__main__" not in t.message["value"]
+
+        # opt out
+        snowflake.connector.log_imported_packages_in_telemetry = False
+        with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
+            conn, False
+        ) as telemetry_test:
+            conn._log_telemetry_imported_packages()
+            assert len(telemetry_test.records) == 0
+    finally:
+        snowflake.connector.log_imported_packages_in_telemetry = True
