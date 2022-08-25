@@ -1566,8 +1566,8 @@ class SnowflakeConnection:
                 if not k.startswith("_")
             }
             obj = {
-                TelemetryField.KEY_TYPE: TelemetryField.IMPORTED_PACKAGES.value,
-                TelemetryField.KEY_SOURCE: self.application
+                TelemetryField.KEY_TYPE.value: TelemetryField.IMPORTED_PACKAGES.value,
+                TelemetryField.KEY_SOURCE.value: self.application
                 if self.application
                 else CLIENT_NAME,
                 "value": str(imported_modules),
