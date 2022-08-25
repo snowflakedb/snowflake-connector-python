@@ -220,7 +220,7 @@ class OCSPTelemetryData:
     def set_insecure_mode(self, insecure_mode):
         self.insecure_mode = insecure_mode
 
-    def generate_telemetry_data(self, event_type: str, urgent: bool = False) -> dict:
+    def generate_telemetry_data(self, event_type: str, urgent: bool = False) -> dict[str, Any]:
         _, exception, _ = sys.exc_info()
         telemetry_data = generate_telemetry_data_base(
             from_dict={
