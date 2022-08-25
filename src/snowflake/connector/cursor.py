@@ -132,7 +132,7 @@ class ResultMetadata(NamedTuple):
             col["name"],
             FIELD_NAME_TO_ID[
                 col["extTypeName"].upper()
-                if "extTypeName" in col
+                if col.get("extTypeName")
                 else col["type"].upper()
             ],
             None,
