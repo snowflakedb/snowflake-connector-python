@@ -8,6 +8,7 @@ from __future__ import annotations
 from unittest.mock import Mock
 
 import snowflake.connector.telemetry
+from snowflake.connector.description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 
 
 def test_telemetry_data_to_dict():
@@ -132,3 +133,35 @@ def test_telemetry_send_batch_disabled():
     client.send_batch()
     assert client.buffer_size() == 1
     assert rest_call.call_count == 0
+
+
+def test_generate_telemetry_with_driver_info():
+    assert snowflake.connector.telemetry.generate_telemetry_data() == {
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    }
+
+    assert snowflake.connector.telemetry.generate_telemetry_data(from_dict={}) == {
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+    }
+
+    assert snowflake.connector.telemetry.generate_telemetry_data(
+        from_dict={"key": "value"}
+    ) == {
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+        "key": "value",
+    }
+
+    assert snowflake.connector.telemetry.generate_telemetry_data(
+        from_dict={
+            snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
+            snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
+            "key": "value",
+        }
+    ) == {
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: "CUSTOM_CLIENT_NAME",
+        snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_VERSION.value: "1.2.3",
+        "key": "value",
+    }

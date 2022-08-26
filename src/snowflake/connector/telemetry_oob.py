@@ -15,6 +15,7 @@ from queue import Queue
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
+from .telemetry import TelemetryField, generate_telemetry_data
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 from .vendored import requests
 
@@ -122,10 +123,14 @@ class TelemetryEvent(TelemetryEventBase):
 
         telemetry = TelemetryService.get_instance()
         # Add telemetry service generated tags
-        tags["driver"] = CLIENT_NAME
-        tags["version"] = str(SNOWFLAKE_CONNECTOR_VERSION)
-        tags["telemetryServerDeployment"] = telemetry.deployment.name
-        tags["connectionString"] = telemetry.get_connection_string()
+        tags[TelemetryField.KEY_OOB_DRIVER] = CLIENT_NAME
+        tags[TelemetryField.KEY_OOB_VERSION] = str(SNOWFLAKE_CONNECTOR_VERSION)
+        tags[
+            TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT
+        ] = telemetry.deployment.name
+        tags[
+            TelemetryField.KEY_OOB_CONNECTION_STRING
+        ] = telemetry.get_connection_string()
         if telemetry.context and len(telemetry.context) > 0:
             for k, v in telemetry.context.items():
                 if v is not None:
@@ -339,14 +344,18 @@ class TelemetryService:
             if self.enabled:
                 event_name = "OCSPException"
                 if exception is not None:
-                    telemetry_data["exceptionMessage"] = str(exception)
+                    telemetry_data[
+                        TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value
+                    ] = str(exception)
                 if stack_trace is not None:
-                    telemetry_data["exceptionStackTrace"] = stack_trace
+                    telemetry_data[
+                        TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
+                    ] = stack_trace
 
                 if tags is None:
                     tags = dict()
 
-                tags["eventType"] = event_type
+                tags[TelemetryField.KEY_OOB_EVENT_TYPE.value] = event_type
 
                 log_event = TelemetryLogEvent(
                     name=event_name, tags=tags, urgent=urgent, value=telemetry_data
@@ -377,33 +386,53 @@ class TelemetryService:
             tags = dict()
         try:
             if self.enabled:
-                telemetry_data = dict()
                 response_status_code = -1
                 # This mimics the output of HttpRequestBase.toString() from JBDC
-                telemetry_data["request"] = f"{method} {url}"
-                telemetry_data["sqlState"] = sqlstate
-                telemetry_data["errorCode"] = errno
+                telemetry_data = generate_telemetry_data(
+                    from_dict={
+                        TelemetryField.KEY_OOB_REQUEST.value: f"{method} {url}",
+                        TelemetryField.KEY_OOB_SQL_STATE.value: sqlstate,
+                        TelemetryField.KEY_OOB_ERROR_CODE.value: errno,
+                    },
+                    is_oob_telemetry=True,
+                )
                 if response:
-                    telemetry_data["response"] = response.json()
-                    telemetry_data["responseStatusLine"] = str(response.reason)
+                    telemetry_data[
+                        TelemetryField.KEY_OOB_RESPONSE.value
+                    ] = response.json()
+                    telemetry_data[
+                        TelemetryField.KEY_OOB_RESPONSE_STATUS_LINE.value
+                    ] = str(response.reason)
                     if response.status_code:
                         response_status_code = str(response.status_code)
-                        telemetry_data["responseStatusCode"] = response_status_code
+                        telemetry_data[
+                            TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value
+                        ] = response_status_code
                 if retry_timeout:
-                    telemetry_data["retryTimeout"] = str(retry_timeout)
+                    telemetry_data[TelemetryField.KEY_OOB_RETRY_TIMEOUT.value] = str(
+                        retry_timeout
+                    )
                 if retry_count:
-                    telemetry_data["retryCount"] = str(retry_count)
+                    telemetry_data[TelemetryField.KEY_OOB_RETRY_COUNT.value] = str(
+                        retry_count
+                    )
                 if exception:
-                    telemetry_data["exceptionMessage"] = str(exception)
+                    telemetry_data[
+                        TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value
+                    ] = str(exception)
                 if stack_trace:
-                    telemetry_data["exceptionStackTrace"] = stack_trace
+                    telemetry_data[
+                        TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
+                    ] = stack_trace
 
                 if tags is None:
                     tags = dict()
 
-                tags["responseStatusCode"] = response_status_code
-                tags["sqlState"] = str(sqlstate)
-                tags["errorCode"] = errno
+                tags[
+                    TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value
+                ] = response_status_code
+                tags[TelemetryField.KEY_OOB_SQL_STATE.value] = str(sqlstate)
+                tags[TelemetryField.KEY_OOB_ERROR_CODE.value] = errno
 
                 log_event = TelemetryLogEvent(
                     name=event_name, tags=tags, value=telemetry_data, urgent=urgent

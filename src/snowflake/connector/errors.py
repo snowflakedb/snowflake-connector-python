@@ -13,9 +13,8 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 from .compat import BASE_EXCEPTION_CLASS
-from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
-from .telemetry import TelemetryData, TelemetryField
+from .telemetry import TelemetryData, TelemetryField, generate_telemetry_data
 from .telemetry_oob import TelemetryService
 from .time_util import get_time_millis
 
@@ -121,10 +120,13 @@ class Error(BASE_EXCEPTION_CLASS):
     def generate_telemetry_exception_data(self) -> dict[str, str]:
         """Generate the data to send through telemetry."""
 
-        telemetry_data = {
-            TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
-            TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
-        }
+        telemetry_data = generate_telemetry_data(
+            from_dict={
+                TelemetryField.KEY_STACKTRACE.value: SecretDetector.mask_secrets(
+                    self.telemetry_traceback
+                )
+            }
+        )
         telemetry_msg = self.telemetry_msg()
         if self.sfqid:
             telemetry_data[TelemetryField.KEY_SFQID.value] = self.sfqid
@@ -134,10 +136,6 @@ class Error(BASE_EXCEPTION_CLASS):
             telemetry_data[TelemetryField.KEY_REASON.value] = telemetry_msg
         if self.errno:
             telemetry_data[TelemetryField.KEY_ERROR_NUMBER.value] = str(self.errno)
-
-        telemetry_data[
-            TelemetryField.KEY_STACKTRACE.value
-        ] = SecretDetector.mask_secrets(self.telemetry_traceback)
 
         return telemetry_data
 
