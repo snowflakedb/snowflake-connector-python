@@ -8,8 +8,9 @@ from __future__ import annotations
 import logging
 from enum import Enum, unique
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 
@@ -38,14 +39,43 @@ class TelemetryField(Enum):
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SOURCE = "source"
-    KEY_SFQID = "QueryID"
-    KEY_SQLSTATE = "SQLState"
-    KEY_DRIVER_TYPE = "DriverType"
-    KEY_DRIVER_VERSION = "DriverVersion"
+    KEY_SFQID = "query_id"
+    KEY_SQLSTATE = "sql_state"
+    KEY_DRIVER_TYPE = "driver_type"
+    KEY_DRIVER_VERSION = "driver_version"
     KEY_REASON = "reason"
+    KEY_VALUE = "value"
+    KEY_EXCEPTION = "exception"
+    # Reserved UpperCamelName keys
     KEY_ERROR_NUMBER = "ErrorNumber"
+    KEY_ERROR_MESSAGE = "ErrorMessage"
     KEY_STACKTRACE = "Stacktrace"
-    KEY_EXCEPTION = "Exception"
+    # OOB camelName keys
+    KEY_OOB_DRIVER = "driver"
+    KEY_OOB_VERSION = "version"
+    KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT = "telemetryServerDeployment"
+    KEY_OOB_CONNECTION_STRING = "connectionString"
+    KEY_OOB_EXCEPTION_MESSAGE = "exceptionMessage"
+    KEY_OOB_ERROR_MESSAGE = "errorMessage"
+    KEY_OOB_EXCEPTION_STACK_TRACE = "exceptionStackTrace"
+    KEY_OOB_EVENT_TYPE = "eventType"
+    KEY_OOB_ERROR_CODE = "errorCode"
+    KEY_OOB_SQL_STATE = "sqlState"
+    KEY_OOB_REQUEST = "request"
+    KEY_OOB_RESPONSE = "response"
+    KEY_OOB_RESPONSE_STATUS_LINE = "responseStatusLine"
+    KEY_OOB_RESPONSE_STATUS_CODE = "responseStatusCode"
+    KEY_OOB_RETRY_TIMEOUT = "retryTimeout"
+    KEY_OOB_RETRY_COUNT = "retryCount"
+    KEY_OOB_EVENT_SUB_TYPE = "eventSubType"
+    KEY_OOB_SFC_PEER_HOST = "sfcPeerHost"
+    KEY_OOB_CERT_ID = "certId"
+    KEY_OOB_OCSP_REQUEST_BASE64 = "ocspRequestBase64"
+    KEY_OOB_OCSP_RESPONDER_URL = "ocspResponderURL"
+    KEY_OOB_INSECURE_MODE = "insecureMode"
+    KEY_OOB_FAIL_OPEN = "failOpen"
+    KEY_OOB_CACHE_ENABLED = "cacheEnabled"
+    KEY_OOB_CACHE_HIT = "cacheHit"
 
 
 class TelemetryData:
@@ -161,3 +191,25 @@ class TelemetryClient:
 
     def buffer_size(self):
         return len(self._log_batch)
+
+
+def generate_telemetry_data(
+    from_dict: dict | None = None, is_oob_telemetry: bool = False
+) -> dict[str, Any]:
+    """
+    Generate telemetry data with driver info. The method also takes an optional dict to update from.
+    """
+    from_dict = from_dict or {}
+    return (
+        {
+            TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
+            TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+            **from_dict,
+        }
+        if not is_oob_telemetry
+        else {
+            TelemetryField.KEY_OOB_DRIVER.value: CLIENT_NAME,
+            TelemetryField.KEY_OOB_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+            **from_dict,
+        }
+    )
