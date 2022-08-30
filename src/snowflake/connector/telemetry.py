@@ -36,6 +36,8 @@ class TelemetryField(Enum):
     # fetch_arrow_* usage
     ARROW_FETCH_ALL = "client_fetch_arrow_all"
     ARROW_FETCH_BATCHES = "client_fetch_arrow_batches"
+    # write_pandas usage
+    PANDAS_WRITE = "client_write_pandas"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SOURCE = "source"

@@ -18,6 +18,7 @@ from typing_extensions import Literal
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
+from snowflake.connector.telemetry import TelemetryData, TelemetryField
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -279,6 +280,7 @@ def write_pandas(
     )
     logger.debug(f"copying into with '{copy_into_sql}'")
     copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
+    cursor._log_telemetry_job_data(TelemetryField.PANDAS_WRITE, TelemetryData.TRUE)
     cursor.close()
     return (
         all(e[1] == "LOADED" for e in copy_results),
