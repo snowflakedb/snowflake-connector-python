@@ -9,7 +9,6 @@ from __future__ import annotations
 apilevel = "2.0"
 threadsafety = 2
 paramstyle = "pyformat"
-log_imported_packages_in_telemetry = True
 
 import logging
 from logging import NullHandler
@@ -91,5 +90,4 @@ __all__ = [
     "ROWID",
     # Extended data type (experimental)
     "Json",
-    "log_imported_packages_in_telemetry",
 ]

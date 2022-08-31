@@ -198,8 +198,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), str),
     ),  # Path to connection diag whitelist json
     "log_imported_packages_in_telemetry": (
-        None,
-        (type(None), bool),
+        True,
+        bool,
     ),  # Whether to log imported packages in telemetry
 }
 
@@ -965,12 +965,10 @@ class SnowflakeConnection:
             )
             self._use_openssl_only = os.environ["SF_USE_OPENSSL_ONLY"] == "True"
 
-        if self._log_imported_packages_in_telemetry is None:
-            import snowflake.connector
-
-            self._log_imported_packages_in_telemetry = (
-                snowflake.connector.log_imported_packages_in_telemetry
-            )
+        if "log_imported_packages_in_telemetry" in kwargs:
+            self._log_imported_packages_in_telemetry = kwargs[
+                "log_imported_packages_in_telemetry"
+            ]
 
     def cmd_query(
         self,
