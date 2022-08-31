@@ -965,11 +965,6 @@ class SnowflakeConnection:
             )
             self._use_openssl_only = os.environ["SF_USE_OPENSSL_ONLY"] == "True"
 
-        if "log_imported_packages_in_telemetry" in kwargs:
-            self._log_imported_packages_in_telemetry = kwargs[
-                "log_imported_packages_in_telemetry"
-            ]
-
     def cmd_query(
         self,
         sql: str,
