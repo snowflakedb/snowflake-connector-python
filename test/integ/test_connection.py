@@ -35,6 +35,7 @@ from snowflake.connector.errorcode import (
 from snowflake.connector.errors import Error, ForbiddenError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
+from snowflake.connector.telemetry import TelemetryField
 
 try:  # pragma: no cover
     from parameters import CONNECTION_PARAMETERS_ADMIN
@@ -1107,3 +1108,80 @@ def test_ocsp_cache_working(conn_cnx):
     with conn_cnx() as cnx:
         assert cnx
     assert OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"] > original_count
+
+
+@pytest.mark.skipolddriver
+def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry, db_parameters):
+    # these imports are not used but for testing
+    import html.parser  # noqa: F401
+    import json  # noqa: F401
+    import multiprocessing as mp  # noqa: F401
+    from datetime import date  # noqa: F401
+    from math import sqrt  # noqa: F401
+
+    def check_packages(message: str, expected_packages: list[str]) -> bool:
+        return (
+            all([package in message for package in expected_packages])
+            and "__main__" not in message
+        )
+
+    packages = [
+        "pytest",
+        "unittest",
+        "json",
+        "multiprocessing",
+        "html",
+        "datetime",
+        "math",
+    ]
+
+    with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
+        conn, False
+    ) as telemetry_test:
+        conn._log_telemetry_imported_packages()
+        assert len(telemetry_test.records) > 0
+        assert any(
+            [
+                t.message[TelemetryField.KEY_TYPE.value]
+                == TelemetryField.IMPORTED_PACKAGES.value
+                and CLIENT_NAME == t.message[TelemetryField.KEY_SOURCE.value]
+                and check_packages(t.message["value"], packages)
+                for t in telemetry_test.records
+            ]
+        )
+
+    # test different application
+    new_application_name = "PythonSnowpark"
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "application": new_application_name,
+    }
+    with snowflake.connector.connect(
+        **config
+    ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
+        conn._log_telemetry_imported_packages()
+        assert len(telemetry_test.records) > 0
+        assert any(
+            [
+                t.message[TelemetryField.KEY_TYPE.value]
+                == TelemetryField.IMPORTED_PACKAGES.value
+                and new_application_name == t.message[TelemetryField.KEY_SOURCE.value]
+                for t in telemetry_test.records
+            ]
+        )
+
+    # test opt out
+    config["log_imported_packages_in_telemetry"] = False
+    with snowflake.connector.connect(
+        **config
+    ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
+        conn._log_telemetry_imported_packages()
+        assert len(telemetry_test.records) == 0
