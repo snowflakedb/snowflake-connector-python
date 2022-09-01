@@ -96,7 +96,7 @@ class TelemetryData:
         cls,
         from_dict: dict,
         timestamp: int,
-        connection: SnowflakeConnection = None,
+        connection: SnowflakeConnection | None = None,
         is_oob_telemetry: bool = False,
     ):
         """
