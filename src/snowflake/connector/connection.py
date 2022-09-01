@@ -83,12 +83,7 @@ from .network import (
     SnowflakeRestful,
 )
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
-from .telemetry import (
-    TelemetryClient,
-    TelemetryData,
-    TelemetryField,
-    generate_telemetry_data,
-)
+from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
@@ -1565,16 +1560,12 @@ class SnowflakeConnection:
             }
             ts = get_time_millis()
             self._log_telemetry(
-                TelemetryData(
-                    generate_telemetry_data(
-                        from_dict={
-                            TelemetryField.KEY_TYPE.value: TelemetryField.IMPORTED_PACKAGES.value,
-                            TelemetryField.KEY_SOURCE.value: self.application
-                            if self.application
-                            else CLIENT_NAME,
-                            TelemetryField.KEY_VALUE.value: str(imported_modules),
-                        }
-                    ),
-                    ts,
+                TelemetryData.from_telemetry_data_dict(
+                    from_dict={
+                        TelemetryField.KEY_TYPE.value: TelemetryField.IMPORTED_PACKAGES.value,
+                        TelemetryField.KEY_VALUE.value: str(imported_modules),
+                    },
+                    timestamp=ts,
+                    connection=self,
                 )
             )

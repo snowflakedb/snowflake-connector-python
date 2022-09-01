@@ -156,21 +156,21 @@ def test_telemetry_oob_http_log_urgent(telemetry_setup):
 
 
 def test_generate_telemetry_with_driver_info():
-    assert snowflake.connector.telemetry.generate_telemetry_data(
+    assert snowflake.connector.telemetry.generate_telemetry_data_dict(
         is_oob_telemetry=True
     ) == {
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_DRIVER.value: CLIENT_NAME,
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
     }
 
-    assert snowflake.connector.telemetry.generate_telemetry_data(
+    assert snowflake.connector.telemetry.generate_telemetry_data_dict(
         from_dict={}, is_oob_telemetry=True
     ) == {
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_DRIVER.value: CLIENT_NAME,
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
     }
 
-    assert snowflake.connector.telemetry.generate_telemetry_data(
+    assert snowflake.connector.telemetry.generate_telemetry_data_dict(
         from_dict={"key": "value"}, is_oob_telemetry=True
     ) == {
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_DRIVER.value: CLIENT_NAME,
@@ -178,7 +178,7 @@ def test_generate_telemetry_with_driver_info():
         "key": "value",
     }
 
-    assert snowflake.connector.telemetry.generate_telemetry_data(
+    assert snowflake.connector.telemetry.generate_telemetry_data_dict(
         from_dict={
             snowflake.connector.telemetry.TelemetryField.KEY_OOB_DRIVER.value: "CUSTOM_CLIENT_NAME",
             snowflake.connector.telemetry.TelemetryField.KEY_OOB_VERSION.value: "1.2.3",
