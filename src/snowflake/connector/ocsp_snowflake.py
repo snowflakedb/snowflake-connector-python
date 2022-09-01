@@ -70,8 +70,7 @@ from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 from . import constants
 from .cache import SFDictCache, SFDictFileCache
-from .telemetry import TelemetryField
-from .telemetry import generate_telemetry_data as generate_telemetry_data_base
+from .telemetry import TelemetryField, generate_telemetry_data_dict
 
 try:
     OCSP_CACHE: SFDictFileCache[
@@ -225,7 +224,7 @@ class OCSPTelemetryData:
         self, event_type: str, urgent: bool = False
     ) -> dict[str, Any]:
         _, exception, _ = sys.exc_info()
-        telemetry_data = generate_telemetry_data_base(
+        telemetry_data = generate_telemetry_data_dict(
             from_dict={
                 TelemetryField.KEY_OOB_EVENT_TYPE.value: event_type,
                 TelemetryField.KEY_OOB_EVENT_SUB_TYPE.value: self.event_sub_type,

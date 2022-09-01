@@ -15,7 +15,7 @@ from queue import Queue
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
-from .telemetry import TelemetryField, generate_telemetry_data
+from .telemetry import TelemetryField, generate_telemetry_data_dict
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 from .vendored import requests
 
@@ -388,7 +388,7 @@ class TelemetryService:
             if self.enabled:
                 response_status_code = -1
                 # This mimics the output of HttpRequestBase.toString() from JBDC
-                telemetry_data = generate_telemetry_data(
+                telemetry_data = generate_telemetry_data_dict(
                     from_dict={
                         TelemetryField.KEY_OOB_REQUEST.value: f"{method} {url}",
                         TelemetryField.KEY_OOB_SQL_STATE.value: sqlstate,
