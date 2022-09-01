@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from .compat import BASE_EXCEPTION_CLASS
 from .secret_detector import SecretDetector
-from .telemetry import TelemetryData, TelemetryField, generate_telemetry_data
+from .telemetry import TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
 from .time_util import get_time_millis
 
@@ -119,25 +119,22 @@ class Error(BASE_EXCEPTION_CLASS):
 
     def generate_telemetry_exception_data(self) -> dict[str, str]:
         """Generate the data to send through telemetry."""
-
-        telemetry_data = generate_telemetry_data(
-            from_dict={
-                TelemetryField.KEY_STACKTRACE.value: SecretDetector.mask_secrets(
-                    self.telemetry_traceback
-                )
-            }
-        )
+        telemetry_data_dict = {
+            TelemetryField.KEY_STACKTRACE.value: SecretDetector.mask_secrets(
+                self.telemetry_traceback
+            )
+        }
         telemetry_msg = self.telemetry_msg()
         if self.sfqid:
-            telemetry_data[TelemetryField.KEY_SFQID.value] = self.sfqid
+            telemetry_data_dict[TelemetryField.KEY_SFQID.value] = self.sfqid
         if self.sqlstate:
-            telemetry_data[TelemetryField.KEY_SQLSTATE.value] = self.sqlstate
+            telemetry_data_dict[TelemetryField.KEY_SQLSTATE.value] = self.sqlstate
         if telemetry_msg:
-            telemetry_data[TelemetryField.KEY_REASON.value] = telemetry_msg
+            telemetry_data_dict[TelemetryField.KEY_REASON.value] = telemetry_msg
         if self.errno:
-            telemetry_data[TelemetryField.KEY_ERROR_NUMBER.value] = str(self.errno)
+            telemetry_data_dict[TelemetryField.KEY_ERROR_NUMBER.value] = str(self.errno)
 
-        return telemetry_data
+        return telemetry_data_dict
 
     def send_exception_telemetry(
         self,
@@ -159,7 +156,11 @@ class Error(BASE_EXCEPTION_CLASS):
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             ts = get_time_millis()
             try:
-                connection._log_telemetry(TelemetryData(telemetry_data, ts))
+                connection._log_telemetry(
+                    TelemetryData.from_telemetry_data_dict(
+                        from_dict=telemetry_data, timestamp=ts, connection=connection
+                    )
+                )
             except AttributeError:
                 logger.debug("Cursor failed to log to telemetry.", exc_info=True)
         elif connection is None:
@@ -176,13 +177,13 @@ class Error(BASE_EXCEPTION_CLASS):
     ) -> None:
         """Main method to generate and send telemetry data for exceptions."""
         try:
-            telemetry_data = self.generate_telemetry_exception_data()
+            telemetry_data_dict = self.generate_telemetry_exception_data()
             if cursor is not None:
-                self.send_exception_telemetry(cursor.connection, telemetry_data)
+                self.send_exception_telemetry(cursor.connection, telemetry_data_dict)
             elif connection is not None:
-                self.send_exception_telemetry(connection, telemetry_data)
+                self.send_exception_telemetry(connection, telemetry_data_dict)
             else:
-                self.send_exception_telemetry(None, telemetry_data)
+                self.send_exception_telemetry(None, telemetry_data_dict)
         except Exception:
             # Do nothing but log if sending telemetry fails
             logger.debug("Sending exception telemetry failed")
