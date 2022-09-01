@@ -221,7 +221,7 @@ class TelemetryClient:
 
 def generate_telemetry_data_dict(
     from_dict: dict | None = None,
-    connection: SnowflakeConnection = None,
+    connection: SnowflakeConnection | None = None,
     is_oob_telemetry: bool = False,
 ) -> dict[str, Any]:
     """
