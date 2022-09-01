@@ -96,17 +96,20 @@ class TelemetryData:
         cls,
         from_dict: dict,
         timestamp: int,
-        is_oob_telemetry: bool = False,
         connection: SnowflakeConnection = None,
+        is_oob_telemetry: bool = False,
     ):
         """
-        Generate telemetry data with driver info. The method also takes an optional dict to update from.
+        Generate telemetry data with driver info from given dict and timestamp.
+        It takes an optional connection object to read data from.
+        It also takes a boolean is_oob_telemetry to indicate whether it's for out-of-band telemetry, as
+        naming of keys for driver and version is different from the ones of in-band telemetry.
         """
         return cls(
             generate_telemetry_data_dict(
                 from_dict=(from_dict or {}),
-                is_oob_telemetry=is_oob_telemetry,
                 connection=connection,
+                is_oob_telemetry=is_oob_telemetry,
             ),
             timestamp,
         )
@@ -218,14 +221,14 @@ class TelemetryClient:
 
 def generate_telemetry_data_dict(
     from_dict: dict | None = None,
-    is_oob_telemetry: bool = False,
     connection: SnowflakeConnection = None,
+    is_oob_telemetry: bool = False,
 ) -> dict[str, Any]:
     """
     Generate telemetry data with driver info.
     The method also takes an optional dict to update from and optional connection object to read data from.
-    It also takes a boolean is_oob_telemetry to indicate whether it's for out-of-band telemetry,
-    naming for driver and version is different and has no SnowflakeConnection.
+    It also takes a boolean is_oob_telemetry to indicate whether it's for out-of-band telemetry, as
+    naming of keys for driver and version is different from the ones of in-band telemetry.
     """
     from_dict = from_dict or {}
     return (
