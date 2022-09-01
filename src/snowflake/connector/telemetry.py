@@ -15,6 +15,7 @@ from .secret_detector import SecretDetector
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 
 if TYPE_CHECKING:
+    from .connection import SnowflakeConnection
     from .network import SnowflakeRestful
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,29 @@ class TelemetryData:
     def __init__(self, message, timestamp):
         self.message = message
         self.timestamp = timestamp
+
+    @classmethod
+    def from_telemetry_data_dict(
+        cls,
+        from_dict: dict,
+        timestamp: int,
+        connection: SnowflakeConnection | None = None,
+        is_oob_telemetry: bool = False,
+    ):
+        """
+        Generate telemetry data with driver info from given dict and timestamp.
+        It takes an optional connection object to read data from.
+        It also takes a boolean is_oob_telemetry to indicate whether it's for out-of-band telemetry, as
+        naming of keys for driver and version is different from the ones of in-band telemetry.
+        """
+        return cls(
+            generate_telemetry_data_dict(
+                from_dict=(from_dict or {}),
+                connection=connection,
+                is_oob_telemetry=is_oob_telemetry,
+            ),
+            timestamp,
+        )
 
     def to_dict(self):
         return {"message": self.message, "timestamp": str(self.timestamp)}
@@ -195,17 +219,25 @@ class TelemetryClient:
         return len(self._log_batch)
 
 
-def generate_telemetry_data(
-    from_dict: dict | None = None, is_oob_telemetry: bool = False
+def generate_telemetry_data_dict(
+    from_dict: dict | None = None,
+    connection: SnowflakeConnection | None = None,
+    is_oob_telemetry: bool = False,
 ) -> dict[str, Any]:
     """
-    Generate telemetry data with driver info. The method also takes an optional dict to update from.
+    Generate telemetry data with driver info.
+    The method also takes an optional dict to update from and optional connection object to read data from.
+    It also takes a boolean is_oob_telemetry to indicate whether it's for out-of-band telemetry, as
+    naming of keys for driver and version is different from the ones of in-band telemetry.
     """
     from_dict = from_dict or {}
     return (
         {
             TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
             TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
+            TelemetryField.KEY_SOURCE.value: connection.application
+            if connection
+            else CLIENT_NAME,
             **from_dict,
         }
         if not is_oob_telemetry

@@ -39,7 +39,6 @@ from .constants import (
     FileTransferType,
     QueryStatus,
 )
-from .description import CLIENT_NAME
 from .errorcode import (
     ER_CURSOR_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -62,7 +61,7 @@ from .errors import (
 from .file_transfer_agent import SnowflakeFileTransferAgent
 from .options import installed_pandas, pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
-from .telemetry import TelemetryData, TelemetryField, generate_telemetry_data
+from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -1214,18 +1213,14 @@ class SnowflakeCursor:
         ts = get_time_millis()
         try:
             self._connection._log_telemetry(
-                TelemetryData(
-                    generate_telemetry_data(
-                        from_dict={
-                            TelemetryField.KEY_TYPE.value: telemetry_field.value,
-                            TelemetryField.KEY_SOURCE.value: self._connection.application
-                            if self._connection
-                            else CLIENT_NAME,
-                            TelemetryField.KEY_SFQID.value: self._sfqid,
-                            TelemetryField.KEY_VALUE.value: value,
-                        }
-                    ),
-                    ts,
+                TelemetryData.from_telemetry_data_dict(
+                    from_dict={
+                        TelemetryField.KEY_TYPE.value: telemetry_field.value,
+                        TelemetryField.KEY_SFQID.value: self._sfqid,
+                        TelemetryField.KEY_VALUE.value: value,
+                    },
+                    timestamp=ts,
+                    connection=self._connection,
                 )
             )
         except AttributeError:
