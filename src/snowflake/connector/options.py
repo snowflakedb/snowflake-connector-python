@@ -8,11 +8,13 @@ import importlib
 import warnings
 from logging import getLogger
 from types import ModuleType
-from typing import Union
-
-import pkg_resources
+from typing import TYPE_CHECKING, Union
 
 from . import errors
+
+if TYPE_CHECKING:  # pragma: no cover
+    import pkg_resources
+
 
 logger = getLogger(__name__)
 
@@ -77,6 +79,9 @@ def _import_or_missing_pandas_option() -> tuple[
         from pandas import DataFrame  # NOQA
 
         pyarrow = importlib.import_module("pyarrow")
+
+        import pkg_resources
+
         # Check whether we have the currently supported pyarrow installed
         installed_packages = pkg_resources.working_set.by_key
         if all(
