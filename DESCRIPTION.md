@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v2.7.13(September 22,2022)
 
+  - Fixed a bug where rowcount was deleted when the cursor was closed
+  - Fixed a bug where extTypeName was used even when it was empty
+  - Updated how telemetry entries are constructed
+  - Added telemetry for imported root packages during run-time
+  - Added telemetry for using write_pandas
   - Fixed missing dtypes when calling fetch_pandas_all() on empty result
 
 - v2.7.12(August 26,2022)
