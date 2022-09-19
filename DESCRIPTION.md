@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v2.7.13 (Unreleased)
 
+- v2.7.13(September 22,2022)
+
+   -  Release Notes
+
+
   - Fixed missing dtypes when calling fetch_pandas_all() on empty result
 
 - v2.7.12(August 26,2022)
