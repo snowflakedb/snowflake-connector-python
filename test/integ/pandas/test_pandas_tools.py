@@ -45,10 +45,14 @@ sf_connector_version_df = LazyVar(
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 @pytest.mark.parametrize("auto_create_table", [True, False])
+@pytest.mark.parametrize("index", [True, False])
+@pytest.mark.parametrize("engine", ["auto", "pyarrow"])
 def test_write_pandas_with_overwrite(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     quote_identifiers: bool,
     auto_create_table: bool,
+    index: bool,
+    engine: str,
 ):
     """Tests whether overwriting table using a Pandas DataFrame works as expected."""
     random_table_name = random_string(5, "userspoints_")
@@ -89,6 +93,8 @@ def test_write_pandas_with_overwrite(
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
                 overwrite=True,
+                engine=engine,
+                index=index,
             )
             # Write dataframe with 1 row
             success, nchunks, nrows, _ = write_pandas(
@@ -98,6 +104,8 @@ def test_write_pandas_with_overwrite(
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
                 overwrite=True,
+                engine=engine,
+                index=index,
             )
             # Check write_pandas output
             assert success
@@ -116,6 +124,8 @@ def test_write_pandas_with_overwrite(
                     quote_identifiers=quote_identifiers,
                     auto_create_table=auto_create_table,
                     overwrite=True,
+                    engine=engine,
+                    index=index,
                 )
                 # Check write_pandas output
                 assert success
@@ -142,6 +152,8 @@ def test_write_pandas_with_overwrite(
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 @pytest.mark.parametrize("auto_create_table", [True, False])
 @pytest.mark.parametrize("create_temp_table", [True, False])
+@pytest.mark.parametrize("index", [True, False])
+@pytest.mark.parametrize("engine", ["auto", "pyarrow"])
 def test_write_pandas(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     db_parameters: dict[str, str],
@@ -150,6 +162,8 @@ def test_write_pandas(
     quote_identifiers: bool,
     auto_create_table: bool,
     create_temp_table: bool,
+    index: bool,
+    engine: str,
 ):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
 
@@ -185,6 +199,8 @@ def test_write_pandas(
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
                 create_temp_table=create_temp_table,
+                engine=engine,
+                index=index,
             )
 
             if num_of_chunks == 1:
