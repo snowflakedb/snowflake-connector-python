@@ -1583,3 +1583,29 @@ def test_null_connection(conn_cnx):
             status = con.get_query_status(cur.sfqid)
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
+
+
+@pytest.mark.skipolddriver
+def test_first_chunk_log(conn, db_parameters, caplog):
+    caplog.set_level(logging.INFO)
+    with conn() as cnx:
+        c = cnx.cursor()
+        c.execute("select 1")
+        assert "Number of results in first chunk: 1" in caplog.text
+
+        try:
+            c.execute(
+                "insert into {name}(aa) values(123456),"
+                "(98765),(65432)".format(name=db_parameters["name"])
+            )
+        finally:
+            c.close()
+
+        try:
+            c = cnx.cursor()
+            c.execute(
+                "select aa from {name} order by aa".format(name=db_parameters["name"])
+            )
+            assert "Number of results in first chunk: 3" in caplog.text
+        finally:
+            c.close()
