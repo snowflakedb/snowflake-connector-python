@@ -850,6 +850,11 @@ class SnowflakeCursor:
             self, self._query_result_format, data, self._description
         )
 
+        if not (is_dml or self.is_file_transfer):
+            logger.info(
+                "Number of results in first chunk: %s", result_chunks[0].rowcount
+            )
+
         self._result_set = ResultSet(
             self,
             result_chunks,
