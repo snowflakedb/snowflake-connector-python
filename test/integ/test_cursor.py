@@ -131,7 +131,8 @@ def _check_results(cursor, results):
     assert results[2] == 123456, "the third result was wrong"
 
 
-def test_insert_select(conn, db_parameters):
+@pytest.mark.skipolddriver
+def test_insert_select(conn, db_parameters, caplog):
     """Inserts and selects integer data."""
     with conn() as cnx:
         c = cnx.cursor()
@@ -157,10 +158,13 @@ def test_insert_select(conn, db_parameters):
             for rec in c:
                 results.append(rec[0])
             _check_results(c, results)
+            assert "Number of results in first chunk: 3" in caplog.text
         finally:
             c.close()
 
         with cnx.cursor(snowflake.connector.DictCursor) as c:
+            caplog.clear()
+            assert "Number of results in first chunk: 3" not in caplog.text
             c.execute(
                 "select aa from {name} order by aa".format(name=db_parameters["name"])
             )
@@ -168,9 +172,11 @@ def test_insert_select(conn, db_parameters):
             for rec in c:
                 results.append(rec["AA"])
             _check_results(c, results)
+            assert "Number of results in first chunk: 3" in caplog.text
 
 
-def test_insert_and_select_by_separate_connection(conn, db_parameters):
+@pytest.mark.skipolddriver
+def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
     """Inserts a record and select it by a separate connection."""
     with conn() as cnx:
         result = cnx.cursor().execute(
@@ -204,6 +210,7 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters):
         c.close()
         assert results[0] == 1234, "the first result was wrong"
         assert result.rowcount == 1, "wrong number of records were selected"
+        assert "Number of results in first chunk: 1" in caplog.text
     finally:
         cnx2.close()
 
@@ -752,7 +759,9 @@ def test_closed_cursor(conn, db_parameters):
         ), "SNOW-647539: rowcount should remain available after cursor is closed"
 
 
-def test_fetchmany(conn, db_parameters):
+@pytest.mark.skipolddriver
+def test_fetchmany(conn, db_parameters, caplog):
+
     table_name = random_string(5, "test_fetchmany_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -773,6 +782,7 @@ def test_fetchmany(conn, db_parameters):
 
         with cnx.cursor() as c:
             c.execute(f"select aa from {table_name} order by aa desc")
+            assert "Number of results in first chunk: 6" in caplog.text
 
             rows = c.fetchmany(2)
             assert len(rows) == 2, "The number of records"
@@ -1583,29 +1593,3 @@ def test_null_connection(conn_cnx):
             status = con.get_query_status(cur.sfqid)
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
-
-
-@pytest.mark.skipolddriver
-def test_first_chunk_log(conn, db_parameters, caplog):
-    caplog.set_level(logging.INFO)
-    with conn() as cnx:
-        c = cnx.cursor()
-        c.execute("select 1")
-        assert "Number of results in first chunk: 1" in caplog.text
-
-        try:
-            c.execute(
-                "insert into {name}(aa) values(123456),"
-                "(98765),(65432)".format(name=db_parameters["name"])
-            )
-        finally:
-            c.close()
-
-        try:
-            c = cnx.cursor()
-            c.execute(
-                "select aa from {name} order by aa".format(name=db_parameters["name"])
-            )
-            assert "Number of results in first chunk: 3" in caplog.text
-        finally:
-            c.close()
