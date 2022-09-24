@@ -12,7 +12,7 @@ import warnings
 from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Callable, Iterable, Iterator, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Sequence, TypeVar
 
 from typing_extensions import Literal
 
@@ -54,6 +54,7 @@ def write_pandas(
     create_temp_table: bool = False,
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
+    **kwargs: Any,
 ) -> tuple[
     bool,
     int,
@@ -184,7 +185,7 @@ def write_pandas(
         for i, chunk in chunk_helper(df, chunk_size):
             chunk_path = os.path.join(tmp_folder, f"file{i}.txt")
             # Dump chunk into parquet file
-            chunk.to_parquet(chunk_path, compression=compression)
+            chunk.to_parquet(chunk_path, compression=compression, **kwargs)
             # Upload parquet file
             upload_sql = (
                 "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
