@@ -292,6 +292,21 @@ def test_invalid_table_type_write_pandas(
             )
 
 
+def test_empty_dataframe_auto_create_table_write_pandas(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+):
+    table_name = random_string(5, "empty_dataframe_")
+    df = pandas.DataFrame([], columns=["name", "balance"])
+    with conn_cnx() as cnx:
+        try:
+            success, num_chunks, num_rows, _ = write_pandas(
+                cnx, df, table_name, auto_create_table=True
+            )
+            assert success and num_chunks == 1 and num_rows == 0
+        finally:
+            cnx.execute_string(f"DROP TABLE IF EXISTS {table_name}")
+
+
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with database, schema and table name."""
