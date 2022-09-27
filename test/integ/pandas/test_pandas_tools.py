@@ -300,7 +300,7 @@ def test_invalid_table_type_write_pandas(
             )
 
 
-def test_empty_dataframe_auto_create_table_write_pandas(
+def test_empty_dataframe_write_pandas(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
 ):
     table_name = random_string(5, "empty_dataframe_")
