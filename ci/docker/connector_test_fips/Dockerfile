@@ -12,6 +12,8 @@ RUN chmod 777 /home/user
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-RUN yum install -y redhat-rpm-config gcc libffi-devel openssl openssl-devel centos-release-scl
-RUN yum install -y rh-python38 rh-python38-python-devel
+RUN yum install -y redhat-rpm-config gcc libffi-devel openssl openssl-devel centos-release-scl && \
+    yum install -y rh-python38 rh-python38-python-devel && \
+    yum clean all && \
+    rm -rf /var/cache/yum
 RUN scl enable rh-python38 "python3.8 -m pip install --user --upgrade pip setuptools wheel"
