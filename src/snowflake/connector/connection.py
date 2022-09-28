@@ -51,7 +51,7 @@ from .constants import (
     QueryStatus,
 )
 from .converter import SnowflakeConverter
-from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
+from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, ListCursor
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -625,7 +625,7 @@ class SnowflakeConnection:
         self.cursor().execute("ROLLBACK")
 
     def cursor(
-        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
+        self, cursor_class: type[SnowflakeCursor] = ListCursor
     ) -> SnowflakeCursor:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")

@@ -15,6 +15,7 @@ import uuid
 from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
+from abc import ABC
 from typing import (
     IO,
     TYPE_CHECKING,
@@ -26,6 +27,7 @@ from typing import (
     NoReturn,
     Sequence,
     TypeVar,
+    Generic
 )
 
 from snowflake.connector.result_batch import create_batches_from_response
@@ -155,7 +157,10 @@ class ResultState(Enum):
     RESET = 3
 
 
-class SnowflakeCursor:
+T2 = TypeVar('T2', list, dict)
+
+
+class SnowflakeCursor(ABC, Generic[T2]):
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
     Attributes:
@@ -1085,9 +1090,7 @@ class SnowflakeCursor:
             self.execute(command, params=param, _do_reset=False, **kwargs)
         return self
 
-    def _result_iterator(
-        self,
-    ) -> Generator[dict, None, None] | Generator[tuple, None, None]:
+    def _result_iterator(self) -> Generator[T2, None, None]:
         """Yields the elements from _result and raises an exception when appropriate."""
         try:
             for _next in self._result:
@@ -1105,7 +1108,7 @@ class SnowflakeCursor:
             else:
                 yield None
 
-    def fetchone(self) -> dict | tuple | None:
+    def fetchone(self) -> T2 | None:
         """Fetches one row."""
         if self._prefetch_hook is not None:
             self._prefetch_hook()
@@ -1117,7 +1120,7 @@ class SnowflakeCursor:
         except StopIteration:
             return None
 
-    def fetchmany(self, size=None):
+    def fetchmany(self, size=None) -> list[T2]:
         """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
@@ -1143,7 +1146,7 @@ class SnowflakeCursor:
 
         return ret
 
-    def fetchall(self) -> list[tuple] | list[dict]:
+    def fetchall(self) -> list[T2]:
         """Fetches all of the results."""
         ret = []
         while True:
@@ -1197,7 +1200,7 @@ class SnowflakeCursor:
         if not self.connection._reuse_results:
             self._result_set = None
 
-    def __iter__(self) -> Iterator[dict] | Iterator[tuple]:
+    def __iter__(self) -> Iterator[T2]:
         """Iteration over the result set."""
         # set _result if _result_set is not None
         if self._result is None and self._result_set is not None:
@@ -1308,7 +1311,15 @@ class SnowflakeCursor:
         return self._result_set.batches
 
 
-class DictCursor(SnowflakeCursor):
+class ListCursor(SnowflakeCursor[list]):
+    def __init__(self, connection):
+        super().__init__(
+            connection,
+            use_dict_result=False,
+        )
+
+
+class DictCursor(SnowflakeCursor[dict]):
     """Cursor returning results in a dictionary."""
 
     def __init__(self, connection):
