@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from snowflake.connector.connection import SnowflakeConnection
-from snowflake.connector.cursor import SnowflakeCursor
+from snowflake.connector.cursor import SnowflakeCursor, ListCursor
 
 try:
     from snowflake.connector.constants import FileTransferType
@@ -38,5 +38,5 @@ def test_get_filetransfer_type(sql, _type):
 
 def test_cursor_attribute():
     fake_conn = FakeConnection()
-    cursor = SnowflakeCursor(fake_conn)
+    cursor = ListCursor(fake_conn)
     assert cursor.lastrowid is None
