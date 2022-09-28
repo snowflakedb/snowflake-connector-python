@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from snowflake.connector.connection import SnowflakeConnection
-from snowflake.connector.cursor import SnowflakeCursor, ListCursor
+from snowflake.connector.cursor import ListCursor, SnowflakeCursor
 
 try:
     from snowflake.connector.constants import FileTransferType

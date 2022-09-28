@@ -51,7 +51,7 @@ from .constants import (
     QueryStatus,
 )
 from .converter import SnowflakeConverter
-from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, ListCursor
+from .cursor import LOG_MAX_QUERY_LENGTH, ListCursor, SnowflakeCursor
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,

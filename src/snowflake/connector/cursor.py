@@ -12,22 +12,22 @@ import signal
 import sys
 import time
 import uuid
+from abc import ABC
 from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
-from abc import ABC
 from typing import (
     IO,
     TYPE_CHECKING,
     Any,
     Callable,
     Generator,
+    Generic,
     Iterator,
     NamedTuple,
     NoReturn,
     Sequence,
     TypeVar,
-    Generic
 )
 
 from snowflake.connector.result_batch import create_batches_from_response
@@ -157,7 +157,7 @@ class ResultState(Enum):
     RESET = 3
 
 
-T2 = TypeVar('T2', list, dict)
+T2 = TypeVar("T2", list, dict)
 
 
 class SnowflakeCursor(ABC, Generic[T2]):
