@@ -35,7 +35,7 @@ logger = getLogger(__name__)
 
 def chunk_helper(lst: T, n: int) -> Iterator[tuple[int, T]]:
     """Helper generator to chunk a sequence efficiently with current index like if enumerate was called on sequence."""
-    if n >= len(lst):
+    if len(lst) == 0:
         yield 0, lst
         return
     for i in range(0, len(lst), n):
