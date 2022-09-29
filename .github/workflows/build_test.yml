@@ -46,6 +46,25 @@ jobs:
       - name: Run fix_lint
         run: python -m tox -e fix_lint
 
+  dependency:
+    name: Check dependency
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.7", "3.8", "3.9", "3.10" ]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Install tox
+        run: python -m pip install tox tox-external-wheels
+      - name: Run tests
+        run: python -m tox -e dependency
+
   build:
     needs: lint
     strategy:
