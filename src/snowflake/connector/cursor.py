@@ -12,7 +12,6 @@ import signal
 import sys
 import time
 import uuid
-from abc import ABC
 from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
@@ -160,7 +159,7 @@ class ResultState(Enum):
 T2 = TypeVar("T2", tuple, dict)
 
 
-class SnowflakeCursor(ABC, Generic[T2]):
+class SnowflakeCursor(Generic[T2]):
     """Implementation of Cursor object that is returned from Connection.cursor() method.
 
     Attributes:
