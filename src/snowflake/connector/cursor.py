@@ -157,7 +157,7 @@ class ResultState(Enum):
     RESET = 3
 
 
-T2 = TypeVar("T2", list, dict)
+T2 = TypeVar("T2", tuple, dict)
 
 
 class SnowflakeCursor(ABC, Generic[T2]):
@@ -1311,7 +1311,7 @@ class SnowflakeCursor(ABC, Generic[T2]):
         return self._result_set.batches
 
 
-class ListCursor(SnowflakeCursor[list]):
+class TupleCursor(SnowflakeCursor[tuple]):
     def __init__(self, connection):
         super().__init__(
             connection,

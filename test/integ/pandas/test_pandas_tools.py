@@ -303,7 +303,7 @@ def test_invalid_table_type_write_pandas(
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with database, schema and table name."""
-    from snowflake.connector.cursor import ListCursor
+    from snowflake.connector.cursor import TupleCursor
 
     with conn_cnx() as cnx:
 
@@ -314,12 +314,12 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
                     assert location == '"database"."schema"."table"'
                 else:
                     assert location == "database.schema.table"
-            cur = ListCursor(cnx)
+            cur = TupleCursor(cnx)
             cur._result = iter([])
             return cur
 
         with mock.patch(
-            "snowflake.connector.cursor.ListCursor.execute",
+            "snowflake.connector.cursor.TupleCursor.execute",
             side_effect=mocked_execute,
         ) as m_execute:
             success, nchunks, nrows, _ = write_pandas(
@@ -338,7 +338,7 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_location_building_schema(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with schema and table name."""
-    from snowflake.connector.cursor import ListCursor
+    from snowflake.connector.cursor import TupleCursor
 
     with conn_cnx() as cnx:
 
@@ -349,12 +349,12 @@ def test_location_building_schema(conn_cnx, quote_identifiers: bool):
                     assert location == '"schema"."table"'
                 else:
                     assert location == "schema.table"
-            cur = ListCursor(cnx)
+            cur = TupleCursor(cnx)
             cur._result = iter([])
             return cur
 
         with mock.patch(
-            "snowflake.connector.cursor.ListCursor.execute",
+            "snowflake.connector.cursor.TupleCursor.execute",
             side_effect=mocked_execute,
         ) as m_execute:
             success, nchunks, nrows, _ = write_pandas(
@@ -372,7 +372,7 @@ def test_location_building_schema(conn_cnx, quote_identifiers: bool):
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_location_building(conn_cnx, quote_identifiers: bool):
     """This tests that write_pandas constructs location correctly with schema and table name."""
-    from snowflake.connector.cursor import ListCursor
+    from snowflake.connector.cursor import TupleCursor
 
     with conn_cnx() as cnx:
 
@@ -383,12 +383,12 @@ def test_location_building(conn_cnx, quote_identifiers: bool):
                     assert location == '"teble.table"'
                 else:
                     assert location == "teble.table"
-            cur = ListCursor(cnx)
+            cur = TupleCursor(cnx)
             cur._result = iter([])
             return cur
 
         with mock.patch(
-            "snowflake.connector.cursor.ListCursor.execute",
+            "snowflake.connector.cursor.TupleCursor.execute",
             side_effect=mocked_execute,
         ) as m_execute:
             success, nchunks, nrows, _ = write_pandas(
