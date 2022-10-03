@@ -84,7 +84,7 @@ try:
 
     CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
-    logger.debug(
+    logger.error(
         f"Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: {e}",
     )
     CAN_USE_ARROW_RESULT_FORMAT = False
