@@ -12,7 +12,6 @@ import sys
 import uuid
 import warnings
 import weakref
-from collections import OrderedDict
 from concurrent.futures.thread import ThreadPoolExecutor
 from difflib import get_close_matches
 from functools import partial
@@ -268,8 +267,8 @@ class SnowflakeConnection:
         self._errorhandler = Error.default_errorhandler
         self._lock_converter = Lock()
         self.messages = []
-        self._async_sfqids = OrderedDict()
-        self._done_async_sfqids = OrderedDict()
+        self._async_sfqids = {}
+        self._done_async_sfqids = {}
         self.telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
@@ -1545,7 +1544,7 @@ class SnowflakeConnection:
     def _all_async_queries_finished(self) -> bool:
         """Checks whether all async queries started by this Connection have finished executing."""
 
-        queries = list(self._async_sfqids.keys())
+        queries = list(reversed(self._async_sfqids.keys()))
         if not queries:
             return True
         num_workers = min(self.client_prefetch_threads, len(queries))
