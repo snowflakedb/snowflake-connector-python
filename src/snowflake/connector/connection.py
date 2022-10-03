@@ -1544,7 +1544,7 @@ class SnowflakeConnection:
     def _all_async_queries_finished(self) -> bool:
         """Checks whether all async queries started by this Connection have finished executing."""
 
-        queries = reversed(list(self._async_sfqids.keys()))
+        queries = list(reversed(list(self._async_sfqids.keys())))
         if not queries:
             return True
         num_workers = min(self.client_prefetch_threads, len(queries))
