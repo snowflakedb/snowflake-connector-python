@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 import os
 import re
@@ -13,6 +12,8 @@ import sys
 import uuid
 import warnings
 import weakref
+from collections import OrderedDict
+from concurrent.futures.thread import ThreadPoolExecutor
 from difflib import get_close_matches
 from functools import partial
 from io import StringIO
@@ -267,8 +268,8 @@ class SnowflakeConnection:
         self._errorhandler = Error.default_errorhandler
         self._lock_converter = Lock()
         self.messages = []
-        self._async_sfqids = set()
-        self._done_async_sfqids = set()
+        self._async_sfqids = OrderedDict()
+        self._done_async_sfqids = OrderedDict()
         self.telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
@@ -1459,8 +1460,10 @@ class SnowflakeConnection:
         status_ret = QueryStatus[status]
         # If query was started by us and it has finished let's cache this info
         if sf_qid in self._async_sfqids and not self.is_still_running(status_ret):
-            self._async_sfqids.remove(sf_qid)
-            self._done_async_sfqids.add(sf_qid)
+            self._async_sfqids.pop(
+                sf_qid, None
+            )  # Prevent KeyError when multiple threads try to remove the same query id
+            self._done_async_sfqids[sf_qid] = sf_qid
         return status_ret, status_resp
 
     def get_query_status(self, sf_qid: str) -> QueryStatus:
@@ -1492,7 +1495,7 @@ class SnowflakeConnection:
         queries = status_resp["data"]["queries"]
         if self.is_an_error(status):
             if sf_qid in self._async_sfqids:
-                self._async_sfqids.remove(sf_qid)
+                self._async_sfqids.pop(sf_qid, None)
             message = status_resp.get("message")
             if message is None:
                 message = ""
@@ -1541,13 +1544,27 @@ class SnowflakeConnection:
 
     def _all_async_queries_finished(self) -> bool:
         """Checks whether all async queries started by this Connection have finished executing."""
-        queries = copy.copy(
-            self._async_sfqids
-        )  # get_query_status might update _async_sfqids, let's copy the list
-        finished_async_queries = (
-            not self.is_still_running(self.get_query_status(q)) for q in queries
-        )
-        return all(finished_async_queries)
+
+        queries = list(self._async_sfqids.keys())
+        if not queries:
+            return True
+        num_workers = min(self.client_prefetch_threads, len(queries))
+        found_unfinished_query = False
+
+        def check_status_helper(
+            sfq_id: str,
+        ):  # We should upgrade to using cancel_futures=True once supporting 3.9+
+            nonlocal found_unfinished_query
+            if not found_unfinished_query and self.is_still_running(
+                self.get_query_status(sfq_id)
+            ):
+                found_unfinished_query = True
+
+        with ThreadPoolExecutor(max_workers=num_workers) as tpe:
+            for sfq_id in queries:
+                tpe.submit(check_status_helper, sfq_id)
+
+        return not found_unfinished_query
 
     def _log_telemetry_imported_packages(self) -> None:
         if self._log_imported_packages_in_telemetry:
