@@ -172,10 +172,22 @@ def write_pandas(
             stage_name = "".join(
                 random.choice(string.ascii_lowercase) for _ in range(5)
             )
+            if quote_identifiers:
+                stage_location = (
+                    (('"' + database + '".') if database else "")
+                    + (('"' + schema + '".') if schema else "")
+                    + ('"' + stage_name + '"')
+                )
+            else:
+                stage_location = (
+                    (database + "." if database else "")
+                    + (schema + "." if schema else "")
+                    + stage_name
+                )
             create_stage_sql = (
                 "create temporary stage /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                '"{stage_name}"'
-            ).format(stage_name=stage_name)
+                '{stage_location}'
+            ).format(stage_location=stage_location)
             logger.debug(f"creating stage with '{create_stage_sql}'")
             cursor.execute(create_stage_sql, _is_internal=True).fetchall()
             break
@@ -192,10 +204,10 @@ def write_pandas(
             # Upload parquet file
             upload_sql = (
                 "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' @\"{stage_name}\" PARALLEL={parallel}"
+                "'file://{path}' @{stage_location} PARALLEL={parallel}"
             ).format(
                 path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
-                stage_name=stage_name,
+                stage_location=stage_location,
                 parallel=parallel,
             )
             logger.debug(f"uploading files with '{upload_sql}'")
@@ -238,7 +250,7 @@ def write_pandas(
                 if pe.msg.endswith("already exists."):
                     continue
                 raise
-        infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@\"{stage_name}\"', file_format=>'{file_format_name}'))"
+        infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@{stage_location}', file_format=>'{file_format_name}'))"
         logger.debug(f"inferring schema with '{infer_schema_sql}'")
         column_type_mapping = dict(
             cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
@@ -271,14 +283,14 @@ def write_pandas(
     copy_into_sql = (
         "COPY INTO {location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         "({columns}) "
-        'FROM (SELECT {parquet_columns} FROM @"{stage_name}") '
+        'FROM (SELECT {parquet_columns} FROM @{stage_location}) '
         "FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}) "
         "PURGE=TRUE ON_ERROR={on_error}"
     ).format(
         location=location,
         columns=columns,
         parquet_columns=parquet_columns,
-        stage_name=stage_name,
+        stage_location=stage_location,
         compression=compression_map[compression],
         on_error=on_error,
     )
