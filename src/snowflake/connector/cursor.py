@@ -772,7 +772,7 @@ class SnowflakeCursor:
                 self._connection.converter.set_parameter(param, value)
 
             if _exec_async:
-                self.connection._async_sfqids[self._sfqid] = self._sfqid
+                self.connection._async_sfqids[self._sfqid] = None
             if _no_results:
                 self._total_rowcount = (
                     ret["data"]["total"]

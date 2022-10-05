@@ -1462,7 +1462,7 @@ class SnowflakeConnection:
             self._async_sfqids.pop(
                 sf_qid, None
             )  # Prevent KeyError when multiple threads try to remove the same query id
-            self._done_async_sfqids[sf_qid] = sf_qid
+            self._done_async_sfqids[sf_qid] = None
         return status_ret, status_resp
 
     def get_query_status(self, sf_qid: str) -> QueryStatus:
@@ -1544,13 +1544,13 @@ class SnowflakeConnection:
     def _all_async_queries_finished(self) -> bool:
         """Checks whether all async queries started by this Connection have finished executing."""
 
+        if not self._async_sfqids:
+            return True
+
         if sys.version_info >= (3, 8):
             queries = list(reversed(self._async_sfqids.keys()))
         else:
             queries = list(reversed(list(self._async_sfqids.keys())))
-
-        if not queries:
-            return True
 
         num_workers = min(self.client_prefetch_threads, len(queries))
         found_unfinished_query = False
