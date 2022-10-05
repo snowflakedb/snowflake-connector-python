@@ -235,3 +235,13 @@ def test_close_connection_with_running_async_queries(conn_cnx):
             cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
         assert not con._all_async_queries_finished()
     assert len(con._done_async_sfqids) < 2 and con.rest is None
+
+
+def test_close_connection_with_completed_async_queries(conn_cnx):
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute_async("select 1")
+            cur.execute_async("select 2")
+        time.sleep(5)
+        assert con._all_async_queries_finished()
+    assert len(con._done_async_sfqids) == 2 and con.rest is None

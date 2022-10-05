@@ -267,8 +267,8 @@ class SnowflakeConnection:
         self._errorhandler = Error.default_errorhandler
         self._lock_converter = Lock()
         self.messages = []
-        self._async_sfqids = {}
-        self._done_async_sfqids = {}
+        self._async_sfqids: dict[str, None] = {}
+        self._done_async_sfqids: dict[str, None] = {}
         self.telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
@@ -1544,9 +1544,14 @@ class SnowflakeConnection:
     def _all_async_queries_finished(self) -> bool:
         """Checks whether all async queries started by this Connection have finished executing."""
 
-        queries = list(reversed(list(self._async_sfqids.keys())))
+        if sys.version_info >= (3, 8):
+            queries = list(reversed(self._async_sfqids.keys()))
+        else:
+            queries = list(reversed(list(self._async_sfqids.keys())))
+
         if not queries:
             return True
+
         num_workers = min(self.client_prefetch_threads, len(queries))
         found_unfinished_query = False
 
@@ -1559,7 +1564,9 @@ class SnowflakeConnection:
             ):
                 found_unfinished_query = True
 
-        with ThreadPoolExecutor(max_workers=num_workers) as tpe:
+        with ThreadPoolExecutor(
+            max_workers=num_workers, thread_name_prefix="async_query_check_"
+        ) as tpe:
             for sfq_id in queries:
                 tpe.submit(check_status_helper, sfq_id)
 
