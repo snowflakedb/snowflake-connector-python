@@ -521,22 +521,22 @@ class SnowflakeConnection:
         self._arrow_number_to_decimal = value
 
     @property
-    def auth_class(self):
+    def auth_class(self) -> AuthByPlugin | None:
         return self._auth_class
 
     @auth_class.setter
-    def auth_class(self, value):
+    def auth_class(self, value) -> None:
         if isinstance(value, AuthByPlugin):
             self._auth_class = value
         else:
             raise TypeError("auth_class must subclass AuthByPlugin")
 
     @property
-    def reauth_class(self):
+    def reauth_class(self) -> ReauthByPlugin:
         return self._reauth_class
 
     @reauth_class.setter
-    def reauth_class(self, value):
+    def reauth_class(self, value) -> None:
         if isinstance(value, ReauthByPlugin):
             self._reauth_class = value
         else:

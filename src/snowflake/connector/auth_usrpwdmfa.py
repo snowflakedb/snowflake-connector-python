@@ -23,7 +23,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     def assertion_content(self):
         return "*********"
 
-    def __init__(self, password, mfa_token=None, rest=None):
+    def __init__(self, password: str, mfa_token: str | None = None, rest: SnowflakeRestful | None = None) - > None:
         """Initializes and instance with a password and a mfa token."""
         super().__init__()
         self._password = password

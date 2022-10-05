@@ -9,8 +9,6 @@ from snowflake.connector.reauth_by_plugin import ReauthByPlugin
 
 # By default, we don't allow reauth so this class just returns False
 class ReauthByDefault(ReauthByPlugin):
-    def __init__(self):
-        super().__init__()
 
     def reauthenticate(self) -> Dict[str, bool]:
         return {"success": False}
