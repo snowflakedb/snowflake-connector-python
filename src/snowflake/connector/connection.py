@@ -1460,7 +1460,7 @@ class SnowflakeConnection:
         status_ret = QueryStatus[status]
         return status_ret, status_resp
 
-    def _cache_query_status(self, sf_qid: str, status_ret: QueryStatus):
+    def _cache_query_status(self, sf_qid: str, status_ret: QueryStatus) -> None:
         # If query was started by us and it has finished let's cache this info
         if sf_qid in self._async_sfqids and not self.is_still_running(status_ret):
             self._async_sfqids.pop(
@@ -1562,7 +1562,7 @@ class SnowflakeConnection:
 
         def async_query_check_helper(
             sfq_id: str,
-        ) -> bool:  # We should upgrade to using cancel_futures=True once supporting 3.9+
+        ) -> bool:
             nonlocal found_unfinished_query
             return found_unfinished_query or self.is_still_running(
                 self.get_query_status(sfq_id)
@@ -1570,12 +1570,15 @@ class SnowflakeConnection:
 
         with ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="async_query_check_"
-        ) as tpe:
+        ) as tpe:  # We should upgrade to using cancel_futures=True once supporting 3.9+
 
             futures = (tpe.submit(async_query_check_helper, sfqid) for sfqid in queries)
-            for future in as_completed(futures):
-                if not found_unfinished_query and future.result():
+            for f in as_completed(futures):
+                if f.result():
                     found_unfinished_query = True
+                    break
+            for f in futures:
+                f.cancel()
 
         return not found_unfinished_query
 
