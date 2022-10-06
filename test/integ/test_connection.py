@@ -19,6 +19,7 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
+from snowflake.connector.auth_by_plugin import AuthByPlugin
 from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
@@ -957,14 +958,12 @@ def test_empty_response(conn_cnx, resp):
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.xfail(
-    reason="Mock changed and marks any method in Mock that starts with assert or assret as an AssertionError"
-)
 def test_authenticate_error(conn_cnx, caplog):
     """Test Reauthenticate error handling while authenticating."""
     # The docs say unsafe should make this test work, but
     # it doesn't seem to work on MagicMock
-    mock_auth = mock.MagicMock(unsafe=True)
+    mock_auth = mock.Mock(spec=AuthByPlugin, unsafe=True)
+    mock_auth.preprocess.return_value = mock_auth
     mock_auth.authenticate.side_effect = ReauthenticationRequest(None)
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
