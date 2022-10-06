@@ -12,6 +12,7 @@ import sys
 import uuid
 import warnings
 import weakref
+from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from difflib import get_close_matches
 from functools import partial
@@ -1457,13 +1458,15 @@ class SnowflakeConnection:
         if len(queries) > 0:
             status = queries[0]["status"]
         status_ret = QueryStatus[status]
+        return status_ret, status_resp
+
+    def _cache_query_status(self, sf_qid: str, status_ret: QueryStatus):
         # If query was started by us and it has finished let's cache this info
         if sf_qid in self._async_sfqids and not self.is_still_running(status_ret):
             self._async_sfqids.pop(
                 sf_qid, None
             )  # Prevent KeyError when multiple threads try to remove the same query id
             self._done_async_sfqids[sf_qid] = None
-        return status_ret, status_resp
 
     def get_query_status(self, sf_qid: str) -> QueryStatus:
         """Retrieves the status of query with sf_qid.
@@ -1477,6 +1480,7 @@ class SnowflakeConnection:
             ValueError: if sf_qid is not a valid UUID string.
         """
         status, _ = self._get_query_status(sf_qid)
+        self._cache_query_status(sf_qid, status)
         return status
 
     def get_query_status_throw_if_error(self, sf_qid: str) -> QueryStatus:
@@ -1491,6 +1495,7 @@ class SnowflakeConnection:
             ValueError: if sf_qid is not a valid UUID string.
         """
         status, status_resp = self._get_query_status(sf_qid)
+        self._cache_query_status(sf_qid, status)
         queries = status_resp["data"]["queries"]
         if self.is_an_error(status):
             if sf_qid in self._async_sfqids:
@@ -1555,20 +1560,22 @@ class SnowflakeConnection:
         num_workers = min(self.client_prefetch_threads, len(queries))
         found_unfinished_query = False
 
-        def check_status_helper(
+        def async_query_check_helper(
             sfq_id: str,
-        ):  # We should upgrade to using cancel_futures=True once supporting 3.9+
+        ) -> bool:  # We should upgrade to using cancel_futures=True once supporting 3.9+
             nonlocal found_unfinished_query
-            if not found_unfinished_query and self.is_still_running(
+            return found_unfinished_query or self.is_still_running(
                 self.get_query_status(sfq_id)
-            ):
-                found_unfinished_query = True
+            )
 
         with ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="async_query_check_"
         ) as tpe:
-            for sfq_id in queries:
-                tpe.submit(check_status_helper, sfq_id)
+
+            futures = (tpe.submit(async_query_check_helper, sfqid) for sfqid in queries)
+            for future in as_completed(futures):
+                if not found_unfinished_query and future.result():
+                    found_unfinished_query = True
 
         return not found_unfinished_query
 
