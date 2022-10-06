@@ -10,6 +10,7 @@ import logging
 from .auth_by_plugin import AuthByPlugin, AuthType
 from .errorcode import ER_NO_PASSWORD
 from .errors import ProgrammingError
+from .network import SnowflakeRestful
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,12 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     def assertion_content(self):
         return "*********"
 
-    def __init__(self, password: str, mfa_token: str | None = None, rest: SnowflakeRestful | None = None) - > None:
+    def __init__(
+        self,
+        password: str,
+        mfa_token: str | None = None,
+        rest: SnowflakeRestful | None = None,
+    ) -> None:
         """Initializes and instance with a password and a mfa token."""
         super().__init__()
         self._password = password

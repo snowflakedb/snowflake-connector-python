@@ -2,14 +2,14 @@
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
-from typing import Dict
+from __future__ import annotations
 
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.reauth_by_plugin import ReauthByPlugin
 
 
 class ReauthByWebBrowser(ReauthByPlugin):
-    def reauthenticate(self) -> Dict[str, bool]:
+    def reauthenticate(self) -> dict[str, bool]:
         auth_instance = AuthByWebBrowser(
             self.conn.rest,
             self.conn.application,

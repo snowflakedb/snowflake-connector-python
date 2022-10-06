@@ -79,18 +79,10 @@ class AuthByPlugin(ABC):
     """External Authenticator interface."""
 
     def __init__(self) -> None:
+        self.is_custom_auth = False
         self._retry_ctx = AuthRetryCtx()
-        self._is_custom_auth = False
         self._consent_cache_id_token = False
         self._timeout = 120
-
-    @property
-    def is_custom_auth(self) -> bool:
-        return self._is_custom_auth
-
-    @is_custom_auth.setter
-    def is_custom_auth(self, value) -> None:
-        self._is_custom_auth = bool(value)
 
     @property
     def consent_cache_id_token(self) -> bool:
@@ -132,7 +124,7 @@ class AuthByPlugin(ABC):
     ) -> str | None:
         raise NotImplementedError
 
-    def handle_failure(self, ret: dict[Any, Any]):
+    def handle_failure(self, ret: dict[Any, Any]) -> None:
         """Handles a failure when connecting to Snowflake."""
         Error.errorhandler_wrapper(
             self._rest._connection,
