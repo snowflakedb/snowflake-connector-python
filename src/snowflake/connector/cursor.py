@@ -27,6 +27,7 @@ from typing import (
     NoReturn,
     Sequence,
     TypeVar,
+    Union,
 )
 
 from snowflake.connector.result_batch import create_batches_from_response
@@ -156,7 +157,7 @@ class ResultState(Enum):
     RESET = 3
 
 
-T2 = TypeVar("T2", tuple, dict)
+T2 = TypeVar("T2", bound=Union[tuple, dict])
 
 
 class SnowflakeCursor(Generic[T2]):
