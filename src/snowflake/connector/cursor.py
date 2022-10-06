@@ -251,7 +251,7 @@ class SnowflakeCursor(Generic[T2]):
         self._time_output_format = None
         self._timezone = None
         self._binary_output_format = None
-        self._result: Iterator[tuple] | Iterator[dict] | None = None
+        self._result: Iterator[T2] | None = None
         self._result_set: ResultSet | None = None
         self._result_state: ResultState = ResultState.DEFAULT
         self._use_dict_result = use_dict_result
