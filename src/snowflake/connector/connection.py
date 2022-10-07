@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 import os
 import re
@@ -13,6 +12,8 @@ import sys
 import uuid
 import warnings
 import weakref
+from concurrent.futures import as_completed
+from concurrent.futures.thread import ThreadPoolExecutor
 from difflib import get_close_matches
 from functools import partial
 from io import StringIO
@@ -267,8 +268,8 @@ class SnowflakeConnection:
         self._errorhandler = Error.default_errorhandler
         self._lock_converter = Lock()
         self.messages = []
-        self._async_sfqids = set()
-        self._done_async_sfqids = set()
+        self._async_sfqids: dict[str, None] = {}
+        self._done_async_sfqids: dict[str, None] = {}
         self.telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
@@ -1457,11 +1458,15 @@ class SnowflakeConnection:
         if len(queries) > 0:
             status = queries[0]["status"]
         status_ret = QueryStatus[status]
+        return status_ret, status_resp
+
+    def _cache_query_status(self, sf_qid: str, status_ret: QueryStatus) -> None:
         # If query was started by us and it has finished let's cache this info
         if sf_qid in self._async_sfqids and not self.is_still_running(status_ret):
-            self._async_sfqids.remove(sf_qid)
-            self._done_async_sfqids.add(sf_qid)
-        return status_ret, status_resp
+            self._async_sfqids.pop(
+                sf_qid, None
+            )  # Prevent KeyError when multiple threads try to remove the same query id
+            self._done_async_sfqids[sf_qid] = None
 
     def get_query_status(self, sf_qid: str) -> QueryStatus:
         """Retrieves the status of query with sf_qid.
@@ -1475,6 +1480,7 @@ class SnowflakeConnection:
             ValueError: if sf_qid is not a valid UUID string.
         """
         status, _ = self._get_query_status(sf_qid)
+        self._cache_query_status(sf_qid, status)
         return status
 
     def get_query_status_throw_if_error(self, sf_qid: str) -> QueryStatus:
@@ -1489,10 +1495,11 @@ class SnowflakeConnection:
             ValueError: if sf_qid is not a valid UUID string.
         """
         status, status_resp = self._get_query_status(sf_qid)
+        self._cache_query_status(sf_qid, status)
         queries = status_resp["data"]["queries"]
         if self.is_an_error(status):
             if sf_qid in self._async_sfqids:
-                self._async_sfqids.remove(sf_qid)
+                self._async_sfqids.pop(sf_qid, None)
             message = status_resp.get("message")
             if message is None:
                 message = ""
@@ -1541,13 +1548,39 @@ class SnowflakeConnection:
 
     def _all_async_queries_finished(self) -> bool:
         """Checks whether all async queries started by this Connection have finished executing."""
-        queries = copy.copy(
-            self._async_sfqids
-        )  # get_query_status might update _async_sfqids, let's copy the list
-        finished_async_queries = (
-            not self.is_still_running(self.get_query_status(q)) for q in queries
-        )
-        return all(finished_async_queries)
+
+        if not self._async_sfqids:
+            return True
+
+        if sys.version_info >= (3, 8):
+            queries = list(reversed(self._async_sfqids.keys()))
+        else:
+            queries = list(reversed(list(self._async_sfqids.keys())))
+
+        num_workers = min(self.client_prefetch_threads, len(queries))
+        found_unfinished_query = False
+
+        def async_query_check_helper(
+            sfq_id: str,
+        ) -> bool:
+            nonlocal found_unfinished_query
+            return found_unfinished_query or self.is_still_running(
+                self.get_query_status(sfq_id)
+            )
+
+        with ThreadPoolExecutor(
+            max_workers=num_workers, thread_name_prefix="async_query_check_"
+        ) as tpe:  # We should upgrade to using cancel_futures=True once supporting 3.9+
+
+            futures = (tpe.submit(async_query_check_helper, sfqid) for sfqid in queries)
+            for f in as_completed(futures):
+                if f.result():
+                    found_unfinished_query = True
+                    break
+            for f in futures:
+                f.cancel()
+
+        return not found_unfinished_query
 
     def _log_telemetry_imported_packages(self) -> None:
         if self._log_imported_packages_in_telemetry:
