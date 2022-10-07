@@ -16,7 +16,7 @@ class AuthByOAuth(AuthByPlugin):
     """
 
     @property
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         return AuthType.OAUTH
 
     @property

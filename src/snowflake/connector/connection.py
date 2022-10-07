@@ -911,7 +911,7 @@ class SnowflakeConnection:
         # If using a custom auth class, we should set the authenticator
         # type to be the same as the custom auth class
         if self._auth_class:
-            self._authenticator = self._auth_class.type.value
+            self._authenticator = self._auth_class.type_.value
 
         if self._authenticator:
             # Only upper self._authenticator if it is a non-okta link

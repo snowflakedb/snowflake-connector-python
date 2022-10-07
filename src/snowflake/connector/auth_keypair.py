@@ -73,7 +73,7 @@ class AuthByKeyPair(AuthByPlugin):
         self._current_retry_count = 0
 
     @property
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         return AuthType.KEY_PAIR
 
     def authenticate(

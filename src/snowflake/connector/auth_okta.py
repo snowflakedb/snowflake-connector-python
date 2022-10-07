@@ -73,7 +73,7 @@ class AuthByOkta(AuthByPlugin):
         self._application = application
 
     @property
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         return AuthType.OKTA
 
     @property

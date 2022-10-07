@@ -12,7 +12,7 @@ class AuthByDefault(AuthByPlugin):
     """Default username and password authenticator."""
 
     @property
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         return AuthType.DEFAULT
 
     @property

@@ -98,7 +98,7 @@ class AuthByPlugin(ABC):
 
     @property
     @abstractmethod
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         raise NotImplementedError
 
     @property

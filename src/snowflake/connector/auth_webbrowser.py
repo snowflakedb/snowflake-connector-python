@@ -70,7 +70,7 @@ class AuthByWebBrowser(AuthByPlugin):
         self._origin = None
 
     @property
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         return AuthType.EXTERNAL_BROWSER
 
     def preprocess(self) -> AuthByPlugin:

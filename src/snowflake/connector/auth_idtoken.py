@@ -16,7 +16,7 @@ class AuthByIdToken(AuthByPlugin):
     """
 
     @property
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         return AuthType.ID_TOKEN
 
     @property

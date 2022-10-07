@@ -37,7 +37,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
         self._rest = rest
 
     @property
-    def type(self) -> AuthType:
+    def type_(self) -> AuthType:
         return AuthType.USR_PWD_MFA
 
     def preprocess(self) -> AuthByPlugin:
