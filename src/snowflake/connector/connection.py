@@ -525,7 +525,7 @@ class SnowflakeConnection:
         return self._auth_class
 
     @auth_class.setter
-    def auth_class(self, value) -> None:
+    def auth_class(self, value: AuthByPlugin) -> None:
         if isinstance(value, AuthByPlugin):
             self._auth_class = value
         else:
@@ -536,7 +536,7 @@ class SnowflakeConnection:
         return self._reauth_class
 
     @reauth_class.setter
-    def reauth_class(self, value) -> None:
+    def reauth_class(self, value: ReauthByPlugin) -> None:
         if isinstance(value, ReauthByPlugin):
             self._reauth_class = value
         else:
