@@ -163,13 +163,14 @@ class ResultSet(Iterable[list]):
         self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
 
-    def _fetch_arrow_all(self) -> Table | None:
+    def _fetch_arrow_all(self) -> Table:
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
         tables = list(self._fetch_arrow_batches())
         if tables:
             return concat_tables(tables)
         else:
-            return None
+            # Empty Arrow Table
+            return self.batches[0].to_arrow()
 
     def _fetch_pandas_batches(self, **kwargs) -> Iterator[pandas.DataFrame]:
         """Fetches Pandas dataframes in batches, where batch refers to Snowflake Chunk.
