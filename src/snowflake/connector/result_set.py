@@ -65,7 +65,13 @@ def result_set_iterator(
                 pool.submit(unfetched_batches.popleft().create_iter, **kw)
             )
 
-        yield from first_batch_iter
+        """
+        code change for pure arrow converter perf tests
+        to decouple result chunk download from arrow data conversion, download
+        all the arrow result chunks first, then iterate over the PyArrowIterators
+        """
+        # yield from first_batch_iter
+        result_batch_array = [first_batch_iter]
 
         i = 1
         while unconsumed_batches:
@@ -85,10 +91,23 @@ def result_set_iterator(
             batch_iterator = future.result()
 
             logger.debug(f"user began consuming result batch {i}")
-            yield from batch_iterator
+            """
+            code change for pure arrow converter perf tests
+            to decouple result chunk download from arrow data conversion, download
+            all the arrow result chunks first, then iterate over the PyArrowIterators
+            """
+            # yield from batch_iterator
+            result_batch_array.append(batch_iterator)
             logger.debug(f"user finished consuming result batch {i}")
-
             i += 1
+        print("*** all data chunks are downloaded")
+        """
+        code change for pure arrow converter perf tests
+        to decouple result chunk download from arrow data conversion, download
+        all the arrow result chunks first, then iterate over the PyArrowIterators
+        """
+        for py_iterator in result_batch_array:
+            yield from py_iterator
     final()
 
 
