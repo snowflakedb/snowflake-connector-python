@@ -430,7 +430,7 @@ def test_stage_location_building_db_schema(conn_cnx, quote_identifiers: bool, au
                 if args[0].lower().startswith('create temporary stage'):
                     stage_location = args[0].split(" ")[-1]
                 elif args[0].lower().startswith(('put', 'copy into')):
-                    stage_location = [arg for arg in args[0].split(" ") if arg.startswith('@')][0][1:]
+                    stage_location = [arg for arg in args[0].split(" ") if arg.startswith('@')][0].split(")")[0][1:]
                 elif args[0].lower().startswith('select'):
                     stage_location = [arg for arg in args[0].split("'") if arg.startswith('@')][0][1:]
                 stage_db_schema = ".".join(stage_location.split(".")[:-1])
@@ -442,7 +442,11 @@ def test_stage_location_building_db_schema(conn_cnx, quote_identifiers: bool, au
                 else:
                     assert stage_db_schema == "database.schema"
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            if args[0].lower().startswith('select'):
+                cur._rownumber = 0
+                cur._result = iter([(col, '') for col in sf_connector_version_df.get().columns])
+            else:
+                cur._result = iter([])
             return cur
 
         with mock.patch(
@@ -477,7 +481,7 @@ def test_stage_location_building_schema(conn_cnx, quote_identifiers: bool, auto_
                 if args[0].lower().startswith('create temporary stage'):
                     stage_location = args[0].split(" ")[-1]
                 elif args[0].lower().startswith(('put', 'copy into')):
-                    stage_location = [arg for arg in args[0].split(" ") if arg.startswith('@')][0][1:]
+                    stage_location = [arg for arg in args[0].split(" ") if arg.startswith('@')][0].split(")")[0][1:]
                 elif args[0].lower().startswith('select'):
                     stage_location = [arg for arg in args[0].split("'") if arg.startswith('@')][0][1:]
                 stage_schema = ".".join(stage_location.split(".")[:-1])
@@ -489,7 +493,11 @@ def test_stage_location_building_schema(conn_cnx, quote_identifiers: bool, auto_
                 else:
                     assert stage_schema == "schema"
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            if args[0].lower().startswith('select'):
+                cur._rownumber = 0
+                cur._result = iter([(col, '') for col in sf_connector_version_df.get().columns])
+            else:
+                cur._result = iter([])
             return cur
 
         with mock.patch(
@@ -523,7 +531,7 @@ def test_stage_location_building(conn_cnx, quote_identifiers: bool, auto_create_
                 if args[0].lower().startswith('create temporary stage'):
                     stage_location = args[0].split(" ")[-1]
                 elif args[0].lower().startswith(('put', 'copy into')):
-                    stage_location = [arg for arg in args[0].split(" ") if arg.startswith('@')][0][1:]
+                    stage_location = [arg for arg in args[0].split(" ") if arg.startswith('@')][0].split(")")[0][1:]
                 elif args[0].lower().startswith('select'):
                     stage_location = [arg for arg in args[0].split("'") if arg.startswith('@')][0][1:]
                 stage_name = stage_location.split(".")[-1]
@@ -532,7 +540,11 @@ def test_stage_location_building(conn_cnx, quote_identifiers: bool, auto_create_
                     assert stage_name.startswith('"')
                     assert stage_name.endswith('"')
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            if args[0].lower().startswith('select'):
+                cur._rownumber = 0
+                cur._result = iter([(col, '') for col in sf_connector_version_df.get().columns])
+            else:
+                cur._result = iter([])
             return cur
 
         with mock.patch(
@@ -564,7 +576,7 @@ def test_file_format_location_building_db_schema(conn_cnx, quote_identifiers: bo
                 if args[0].lower().startswith('create file format'):
                     file_format_location = args[0].split(" ")[3]
                 elif args[0].lower().startswith('drop file'):
-                    file_format_location = args[0].split("'")[-1]
+                    file_format_location = args[0].split(" ")[-1]
                 elif args[0].lower().startswith('select'):
                     file_format_location = args[0].split("'")[-2]
                 file_format_db_schema = ".".join(file_format_location.split(".")[:-1])
@@ -576,7 +588,11 @@ def test_file_format_location_building_db_schema(conn_cnx, quote_identifiers: bo
                 else:
                     assert file_format_db_schema == "database.schema"
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            if args[0].lower().startswith('select'):
+                cur._rownumber = 0
+                cur._result = iter([(col, '') for col in sf_connector_version_df.get().columns])
+            else:
+                cur._result = iter([])
             return cur
 
         with mock.patch(
@@ -610,7 +626,7 @@ def test_file_format_location_building_schema(conn_cnx, quote_identifiers: bool)
                 if args[0].lower().startswith('create file format'):
                     file_format_location = args[0].split(" ")[3]
                 elif args[0].lower().startswith('drop file'):
-                    file_format_location = args[0].split("'")[-1]
+                    file_format_location = args[0].split(" ")[-1]
                 elif args[0].lower().startswith('select'):
                     file_format_location = args[0].split("'")[-2]
                 file_format_schema = ".".join(file_format_location.split(".")[:-1])
@@ -622,7 +638,11 @@ def test_file_format_location_building_schema(conn_cnx, quote_identifiers: bool)
                 else:
                     assert file_format_schema == "schema"
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            if args[0].lower().startswith('select'):
+                cur._rownumber = 0
+                cur._result = iter([(col, '') for col in sf_connector_version_df.get().columns])
+            else:
+                cur._result = iter([])
             return cur
 
         with mock.patch(
@@ -655,7 +675,7 @@ def test_file_format_location_building(conn_cnx, quote_identifiers: bool):
                 if args[0].lower().startswith('create file format'):
                     file_format_location = args[0].split(" ")[3]
                 elif args[0].lower().startswith('drop file'):
-                    file_format_location = args[0].split("'")[-1]
+                    file_format_location = args[0].split(" ")[-1]
                 elif args[0].lower().startswith('select'):
                     file_format_location = args[0].split("'")[-2]
                 file_format_name = file_format_location.split(".")[-1]
@@ -664,7 +684,11 @@ def test_file_format_location_building(conn_cnx, quote_identifiers: bool):
                     assert file_format_name.startswith('"')
                     assert file_format_name.endswith('"')
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            if args[0].lower().startswith('select'):
+                cur._rownumber = 0
+                cur._result = iter([(col, '') for col in sf_connector_version_df.get().columns])
+            else:
+                cur._result = iter([])
             return cur
 
         with mock.patch(
