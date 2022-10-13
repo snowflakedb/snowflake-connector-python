@@ -1128,7 +1128,7 @@ def test_desc_rewrite(conn, caplog):
                 assert (
                     "snowflake.connector.cursor",
                     20,
-                    "query was rewritten: org=desc {table_name}, new=describe table {table_name}".format(
+                    "query was rewritten: org=desc {table_name}, new=describe table {table_name};".format(
                         table_name=table_name
                     ),
                 ) in caplog.record_tuples
@@ -1301,16 +1301,6 @@ def test_fetchmany_size_error(conn_cnx):
             ) as ie:
                 cur.fetchmany(-1)
                 assert ie.errno == ER_NOT_POSITIVE_SIZE
-
-
-def test_nextset(conn_cnx, caplog):
-    """Tests no op function nextset."""
-    caplog.set_level(logging.DEBUG, "snowflake.connector")
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            caplog.set_level(logging.DEBUG, "snowflake.connector")
-            assert cur.nextset() is None
-    assert ("snowflake.connector.cursor", logging.DEBUG, "nop") in caplog.record_tuples
 
 
 def test_scroll(conn_cnx):
