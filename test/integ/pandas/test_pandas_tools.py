@@ -314,16 +314,24 @@ def test_empty_dataframe_write_pandas(
         ), f"sucess: {success}, num_chunks: {num_chunks}, num_rows: {num_rows}"
 
 
-@pytest.mark.parametrize("database,schema,quote_identifiers,expected_location", [
-    ("database", "schema", True, '"database"."schema"."table"'),
-    ("database", "schema", False, "database.schema.table"),
-    (None, "schema", True, '"schema"."table"'),
-    (None, "schema", False, "schema.table"),
-    (None, None, True, '"table"'),
-    (None, None, False, "table"),
-])
-def test_table_location_building(conn_cnx, database: str | None, schema: str | None, quote_identifiers: bool,
-                                 expected_location: str):
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_location",
+    [
+        ("database", "schema", True, '"database"."schema"."table"'),
+        ("database", "schema", False, "database.schema.table"),
+        (None, "schema", True, '"schema"."table"'),
+        (None, "schema", False, "schema.table"),
+        (None, None, True, '"table"'),
+        (None, None, False, "table"),
+    ],
+)
+def test_table_location_building(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_location: str,
+):
     """This tests that write_pandas constructs table location correctly with database, schema, and table name."""
     from snowflake.connector.cursor import SnowflakeCursor
 
@@ -354,16 +362,24 @@ def test_table_location_building(conn_cnx, database: str | None, schema: str | N
             )
 
 
-@pytest.mark.parametrize("database,schema,quote_identifiers,expected_db_schema", [
-    ("database", "schema", True, '"database"."schema"'),
-    ("database", "schema", False, "database.schema"),
-    (None, "schema", True, '"schema"'),
-    (None, "schema", False, "schema"),
-    (None, None, True, ""),
-    (None, None, False, ""),
-])
-def test_stage_location_building(conn_cnx, database: str | None, schema: str | None, quote_identifiers: bool,
-                                 expected_db_schema: str):
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_db_schema",
+    [
+        ("database", "schema", True, '"database"."schema"'),
+        ("database", "schema", False, "database.schema"),
+        (None, "schema", True, '"schema"'),
+        (None, "schema", False, "schema"),
+        (None, None, True, ""),
+        (None, None, False, ""),
+    ],
+)
+def test_stage_location_building(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_db_schema: str,
+):
     """This tests that write_pandas constructs stage location correctly with database and schema."""
     from snowflake.connector.cursor import SnowflakeCursor
 
@@ -390,20 +406,31 @@ def test_stage_location_building(conn_cnx, database: str | None, schema: str | N
                 quote_identifiers=quote_identifiers,
             )
             assert m_execute.called and any(
-                map(lambda e: "create temporary stage" in str(e[0]), m_execute.call_args_list)
+                map(
+                    lambda e: "create temporary stage" in str(e[0]),
+                    m_execute.call_args_list,
+                )
             )
 
 
-@pytest.mark.parametrize("database,schema,quote_identifiers,expected_db_schema", [
-    ("database", "schema", True, '"database"."schema"'),
-    ("database", "schema", False, "database.schema"),
-    (None, "schema", True, '"schema"'),
-    (None, "schema", False, "schema"),
-    (None, None, True, ""),
-    (None, None, False, ""),
-])
-def test_file_format_location_building(conn_cnx, database: str | None, schema: str | None, quote_identifiers: bool,
-                                       expected_db_schema: str):
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_db_schema",
+    [
+        ("database", "schema", True, '"database"."schema"'),
+        ("database", "schema", False, "database.schema"),
+        (None, "schema", True, '"schema"'),
+        (None, "schema", False, "schema"),
+        (None, None, True, ""),
+        (None, None, False, ""),
+    ],
+)
+def test_file_format_location_building(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_db_schema: str,
+):
     """This tests that write_pandas constructs file format location correctly with database and schema."""
     from snowflake.connector.cursor import SnowflakeCursor
 
@@ -437,7 +464,10 @@ def test_file_format_location_building(conn_cnx, database: str | None, schema: s
                 auto_create_table=True,
             )
             assert m_execute.called and any(
-                map(lambda e: "CREATE FILE FORMAT" in str(e[0]), m_execute.call_args_list)
+                map(
+                    lambda e: "CREATE FILE FORMAT" in str(e[0]),
+                    m_execute.call_args_list,
+                )
             )
 
 
