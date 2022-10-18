@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+import inspect
 import time
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
 
 from snowflake.connector.auth import Auth
+from snowflake.connector.auth_by_plugin import AuthByPlugin
 from snowflake.connector.auth_default import AuthByDefault
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
@@ -214,3 +216,57 @@ def test_auth_password_change():
         auth_instance, account, user, password_callback=_password_callback
     )
     assert not rest._connection.errorhandler.called  # not error
+
+
+def test_authbyplugin_abc_api():
+    """This test verifies that the abstract function signatures have not changed."""
+    bc = AuthByPlugin
+
+    # Verify properties
+    assert inspect.isdatadescriptor(bc.consent_cache_id_token)
+    assert inspect.isdatadescriptor(bc.timeout)
+    assert inspect.isdatadescriptor(bc.type_)
+    assert inspect.isdatadescriptor(bc.assertion_content)
+
+    # Verify method signatures
+    # preprocess
+    assert inspect.isfunction(bc.preprocess)
+    assert str(inspect.signature(bc.preprocess).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">)])"
+    )
+
+    # update_body
+    assert inspect.isfunction(bc.update_body)
+    assert str(inspect.signature(bc.update_body).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('body', <Parameter \"body: 'dict[Any, Any]'\">)])"
+    )
+
+    # authenticate
+    assert inspect.isfunction(bc.authenticate)
+    assert str(inspect.signature(bc.authenticate).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('authenticator', <Parameter \"authenticator: 'str'\">), "
+        "('service_name', <Parameter \"service_name: 'str'\">), "
+        "('account', <Parameter \"account: 'str'\">), "
+        "('user', <Parameter \"user: 'str'\">), "
+        "('password', <Parameter \"password: 'str'\">)])"
+    )
+
+    # handle_failure
+    assert inspect.isfunction(bc.handle_failure)
+    assert str(inspect.signature(bc.handle_failure).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('ret', <Parameter \"ret: 'dict[Any, Any]'\">)])"
+    )
+
+    # handle_timeout
+    assert inspect.isfunction(bc.handle_timeout)
+    assert str(inspect.signature(bc.handle_timeout).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('authenticator', <Parameter \"authenticator: 'str'\">), "
+        "('service_name', <Parameter \"service_name: 'str | None'\">), "
+        "('account', <Parameter \"account: 'str'\">), "
+        "('user', <Parameter \"user: 'str'\">), "
+        "('password', <Parameter \"password: 'str'\">)])"
+    )

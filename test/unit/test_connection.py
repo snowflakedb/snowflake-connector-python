@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -15,14 +16,23 @@ import snowflake.connector
 from snowflake.connector.auth_default import AuthByDefault
 from snowflake.connector.auth_oauth import AuthByOAuth
 from snowflake.connector.auth_okta import AuthByOkta
-from snowflake.connector.auth_usrpwdmfa import AuthByUsrPwdMfa
 from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 
+if TYPE_CHECKING:
+    from snowflake.connector.network import SnowflakeRestful
+
 try:  # pragma: no cover
+    from snowflake.connector.auth_usrpwdmfa import AuthByUsrPwdMfa
     from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"
     QueryStatus = None
+
+    class AuthByUsrPwdMfa(AuthByDefault):
+        def __init__(
+            self, password: str, mfa_token: str, rest: SnowflakeRestful
+        ) -> None:
+            pass
 
 
 def fake_connector() -> snowflake.connector.SnowflakeConnection:
