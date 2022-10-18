@@ -79,7 +79,6 @@ class AuthByPlugin(ABC):
     """External Authenticator interface."""
 
     def __init__(self) -> None:
-        self.is_custom_auth = False
         self._retry_ctx = AuthRetryCtx()
         self._consent_cache_id_token = False
         self._timeout = 120

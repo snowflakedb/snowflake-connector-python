@@ -94,6 +94,16 @@ from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
+FIRST_PARTY_AUTHENTICATORS = frozenset(
+    (
+        AuthByDefault,
+        AuthByKeyPair,
+        AuthByOAuth,
+        AuthByOkta,
+        AuthByUsrPwdMfa,
+        AuthByWebBrowser,
+    )
+)
 
 
 def DefaultConverterClass():
@@ -751,7 +761,12 @@ class SnowflakeConnection:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
                 del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
-        if self.auth_class:
+        if self.auth_class is not None:
+            if type(self.auth_class) not in FIRST_PARTY_AUTHENTICATORS:
+                # Custom auth
+                if not issubclass(type(self.auth_class), AuthByKeyPair):
+                    raise TypeError("auth_class must be a child class of AuthByKeyPair")
+                # TODO: add telemetry for custom auth
             auth_instance = self.auth_class
         elif self._authenticator == DEFAULT_AUTHENTICATOR:
             auth_instance = AuthByDefault(self._password)
@@ -937,7 +952,7 @@ class SnowflakeConnection:
         if self._private_key:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if self._authenticator not in [
+        if self.auth_class is None and self._authenticator not in [
             # when self._authenticator would be in this list it is always upper'd before
             EXTERNAL_BROWSER_AUTHENTICATOR,
             OAUTH_AUTHENTICATOR,

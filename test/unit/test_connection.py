@@ -12,6 +12,11 @@ from unittest.mock import patch
 import pytest
 
 import snowflake.connector
+from snowflake.connector.auth_default import AuthByDefault
+from snowflake.connector.auth_oauth import AuthByOAuth
+from snowflake.connector.auth_okta import AuthByOkta
+from snowflake.connector.auth_usrpwdmfa import AuthByUsrPwdMfa
+from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 
 try:  # pragma: no cover
     from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
@@ -155,3 +160,41 @@ def test_imported_module(mock_post_requests):
     assert (
         mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
     )
+
+
+@pytest.mark.parametrize(
+    "auth_class",
+    (
+        pytest.param(
+            type("auth_class", (AuthByDefault,), {})("my_secret_password"),
+            id="AuthByDefault",
+        ),
+        pytest.param(
+            type("auth_class", (AuthByOAuth,), {})("my_token"),
+            id="AuthByOAuth",
+        ),
+        pytest.param(
+            type("auth_class", (AuthByOkta,), {})(None, None),
+            id="AuthByOkta",
+        ),
+        pytest.param(
+            type("auth_class", (AuthByUsrPwdMfa,), {})("password", "mfa_token", None),
+            id="AuthByUsrPwdMfa",
+        ),
+        pytest.param(
+            type("auth_class", (AuthByWebBrowser,), {})(None, None),
+            id="AuthByWebBrowser",
+        ),
+    ),
+)
+def test_negative_custom_auth(auth_class):
+    """Tests that non-AuthByKeyPair custom auth is not allowed."""
+    with pytest.raises(
+        TypeError,
+        match="auth_class must be a child class of AuthByKeyPair",
+    ):
+        snowflake.connector.connect(
+            account="account",
+            user="user",
+            auth_class=auth_class,
+        )
