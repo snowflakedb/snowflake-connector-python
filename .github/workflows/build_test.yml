@@ -26,9 +26,9 @@ jobs:
     name: Check linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.7'
       - name: Display Python version
@@ -39,7 +39,7 @@ jobs:
         run: python -m pip install tox
       - name: Set PY
         run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
-      - uses: actions/cache@v1
+      - uses: actions/cache@v3
         with:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -53,9 +53,9 @@ jobs:
       matrix:
         python-version: [ "3.7", "3.8", "3.9", "3.10" ]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -95,12 +95,12 @@ jobs:
         shell: bash
       - name: Set up QEMU
         if: ${{ matrix.os.id == 'manylinux_aarch64' }}
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
         with:
           platforms: all
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Building wheel
-        uses: pypa/cibuildwheel@v2.3.1
+        uses: pypa/cibuildwheel@v2.11.1
         env:
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
@@ -131,9 +131,9 @@ jobs:
         python-version: ["3.7", "3.8", "3.9", "3.10"]
         cloud-provider: [aws, azure, gcp]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -146,7 +146,7 @@ jobs:
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
       - name: Download wheel(s)
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
           path: dist
@@ -168,7 +168,7 @@ jobs:
       - name: Combine coverages
         run: python -m tox -e coverage --skip-missing-interpreters false
         shell: bash
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
@@ -188,9 +188,9 @@ jobs:
         python-version: [3.7]
         cloud-provider: [aws]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -223,7 +223,7 @@ jobs:
       matrix:
         cloud-provider: [aws]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup parameters file
         shell: bash
         env:
@@ -232,7 +232,7 @@ jobs:
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
       - name: Download wheel(s)
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: manylinux_x86_64_py3.7
           path: dist
@@ -247,7 +247,7 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: coverage_linux-fips-3.7-${{ matrix.cloud-provider }}
           path: |
@@ -260,12 +260,12 @@ jobs:
     needs: [test, test-fips]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v2
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
         with:
           path: artifacts
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.7'
       - name: Display Python version
@@ -290,15 +290,15 @@ jobs:
       - name: Combine coverages
         run: python -m tox -e coverage
       - name: Publish html coverage
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: overall_cov_html
           path: .tox/htmlcov
       - name: Publish xml coverage
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: overall_cov_xml
           path: .tox/coverage.xml
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v3
         with:
-          file: .tox/coverage.xml
+          files: .tox/coverage.xml
