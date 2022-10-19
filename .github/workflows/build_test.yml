@@ -257,7 +257,7 @@ jobs:
   combine-coverage:
     if: ${{ success() || failure() }}
     name: Combine coverage
-    needs: [test, test-fips]
+    needs: [lint, test, test-fips]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
