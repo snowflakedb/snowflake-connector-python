@@ -234,8 +234,6 @@ class SnowflakeCursor:
         self._sequence_counter = -1
         self._request_id = None
         self._is_file_transfer = False
-        self._is_multi_statement = False
-        self._is_multi_exec_async = False
         self._multi_statement_results = []
 
         self._timestamp_output_format = None
@@ -365,11 +363,6 @@ class SnowflakeCursor:
     def is_file_transfer(self):
         """Whether the command is PUT or GET."""
         return hasattr(self, "_is_file_transfer") and self._is_file_transfer
-
-    @property
-    def is_multi_statement(self):
-        """Whether the command is a multi-statement"""
-        return hasattr(self, "_is_multi_statement") and self._is_multi_statement
 
     @property
     def lastrowid(self) -> None:
@@ -738,18 +731,6 @@ class SnowflakeCursor:
         )
         logger.info("query execution done")
 
-        if "resultIds" in ret["data"]:
-            self._is_multi_statement = True
-            self._multi_statement_results = ret["data"]["resultIds"].split(",")
-            self._is_multi_exec_async = _exec_async
-            if self._is_file_transfer:
-                logger.warning(
-                    "PUT/GET commands are not supported for multi-statement queries and will be ignored."
-                )
-                self._is_file_transfer = False
-            self.nextset()
-            return self
-
         self._first_chunk_time = get_time_millis()
 
         # if server gives a send time, log the time it took to arrive
@@ -764,6 +745,10 @@ class SnowflakeCursor:
         if ret["success"]:
             logger.debug("SUCCESS")
             data = ret["data"]
+
+            if "resultIds" in data:
+                self._init_multi_statement_results(data)
+                return self
 
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
@@ -902,6 +887,15 @@ class SnowflakeCursor:
                 self._total_rowcount = updated_rows
             else:
                 self._total_rowcount += updated_rows
+
+    def _init_multi_statement_results(self, data):
+        self._multi_statement_results = data["resultIds"].split(",")
+        if self._is_file_transfer:
+            logger.warning(
+                "PUT/GET commands are not supported for multi-statement queries and will be ignored."
+            )
+            self._is_file_transfer = False
+        self.nextset()
 
     def check_can_use_arrow_resultset(self):
         global CAN_USE_ARROW_RESULT_FORMAT
@@ -1186,18 +1180,13 @@ class SnowflakeCursor:
         """
         self.reset()
         if self._multi_statement_results:
-            if self._is_multi_exec_async:
-                self.get_results_from_sfqid(self._multi_statement_results[0])
-            else:
-                self.query_result(self._multi_statement_results[0])
+            self.query_result(self._multi_statement_results[0])
             logger.info(
-                "Retrieving results for query ID: %s",
+                "Retrieved results for query ID: %s",
                 self._multi_statement_results.pop(0),
             )
             return self
 
-        self._is_multi_statement = False
-        self._is_multi_exec_async = False
         return None
 
     def setinputsizes(self, _):
@@ -1315,6 +1304,18 @@ class SnowflakeCursor:
                     )
                 )
             self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
+
+            if (
+                self._inner_cursor._total_rowcount == 1
+                and self._inner_cursor.fetchall()
+                == [("Multiple statements executed successfully.",)]
+            ):
+                url = f"/queries/{sfqid}/result"
+                ret = self._connection.rest.request(url=url, method="get")
+                if "data" in ret and "resultIds" in ret["data"]:
+                    self._init_multi_statement_results(ret["data"])
+                    return
+
             self._result = self._inner_cursor._result
             self._query_result_format = self._inner_cursor._query_result_format
             self._total_rowcount = self._inner_cursor._total_rowcount
