@@ -13,6 +13,7 @@ from unittest import mock
 import pytest
 
 from snowflake.connector import DictCursor
+from snowflake.connector.errors import ProgrammingError
 
 from ...lazy_var import LazyVar
 from ...randomize import random_string
@@ -60,6 +61,8 @@ def test_write_pandas_with_overwrite(
     df2 = pandas.DataFrame(df2_data, columns=["name", "points"])
     df3_data = [(2022, "Jan", 10000), (2022, "Feb", 10220)]
     df3 = pandas.DataFrame(df3_data, columns=["year", "month", "revenue"])
+    df4_data = [("Frank", 100)]
+    df4 = pandas.DataFrame(df4_data, columns=["name%", "points"])
 
     if quote_identifiers:
         table_name = '"' + random_table_name + '"'
@@ -131,6 +134,27 @@ def test_write_pandas_with_overwrite(
                     "year"
                     if quote_identifiers
                     else "YEAR" in [col.name for col in result[0].description]
+                )
+
+            if not quote_identifiers:
+                original_result = (
+                    cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+                )
+                # the column name contains special char which should fail
+                with pytest.raises(ProgrammingError, match="unexpected '%'"):
+                    write_pandas(
+                        cnx,
+                        df4,
+                        random_table_name,
+                        quote_identifiers=quote_identifiers,
+                        auto_create_table=auto_create_table,
+                        overwrite=True,
+                        index=index,
+                    )
+                # the original table shouldn't have any change
+                assert (
+                    original_result
+                    == cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
                 )
 
         finally:
