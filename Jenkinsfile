@@ -54,57 +54,17 @@ pipeline {
   options { timestamps() }
   environment {
     COMMIT_SHA_LONG = sh(returnStdout: true, script: "echo \$(git rev-parse " + "HEAD)").trim()
-    SEMGREP_DEPLOYMENT_ID = 1
-    INPUT_PUBLISHURL      = "https://semgrep.snowflake.com"
 
     // environment variables for semgrep_agent (for findings / analytics page)
     // remove .git at the end
-    SEMGREP_REPO_URL = env.GIT_URL.replaceFirst(/^(.*).git$/,'$1')
-    SEMGREP_BRANCH = "${CHANGE_BRANCH}"
-    SEMGREP_JOB_URL = "${BUILD_URL}"
     // remove SCM URL + .git at the end
-    SEMGREP_REPO_NAME = env.GIT_URL.replaceFirst(/^https:\/\/github.com\/(.*).git$/, '$1')
 
-    SEMGREP_COMMIT = "${GIT_COMMIT}"
-    SEMGREP_PR_ID = "${env.CHANGE_ID}"
     BASELINE_BRANCH = "${env.CHANGE_TARGET}"
   }
   stages {
     stage('Checkout') {
       steps {
         checkout scm
-      }
-    }
-    stage('Semgrep_agent') {
-      agent {
-        docker {
-          label 'parallelizable-c7'
-          image 'nexus.int.snowflakecomputing.com:8087/returntocorp/semgrep-agent:v1'
-          args '-u root'
-        }
-      }
-      when {
-        expression { env.CHANGE_ID && env.BRANCH_NAME.startsWith("PR-") }
-      }
-      steps{
-        wrap([$class: 'MaskPasswordsBuildWrapper']) {
-          withCredentials([
-            [$class: 'UsernamePasswordMultiBinding', credentialsId:
-                  'b4f59663-ae0a-4384-9fdc-c7f2fe1c4fca', usernameVariable:
-                  'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD'],
-            string(credentialsId:'SEMGREP_APP_TOKEN', variable: 'SEMGREP_APP_TOKEN'),
-
-          ]) {
-            script {
-              try {
-                sh 'export SEMGREP_DIR=semgrep-scan-$(pwd | rev | cut -d \'/\' -f1 | rev) && mkdir -p ../$SEMGREP_DIR && cp -R . ../$SEMGREP_DIR  && cd ../$SEMGREP_DIR && git fetch https://$GIT_USERNAME:$GIT_PASSWORD@github.com/$SEMGREP_REPO_NAME.git $BASELINE_BRANCH:refs/remotes/origin/$BASELINE_BRANCH && python -m semgrep_agent --baseline-ref $(git merge-base origin/$BASELINE_BRANCH HEAD) --publish-token $SEMGREP_APP_TOKEN --publish-deployment $SEMGREP_DEPLOYMENT_ID && cd ../ && rm -r $SEMGREP_DIR'
-                wgetUpdateGithub('success', 'semgrep', "${BUILD_URL}", '123')
-              } catch (err) {
-                wgetUpdateGithub('failure', 'semgrep', "${BUILD_URL}", '123')
-              }
-            }
-          }
-        }
       }
     }
   }
