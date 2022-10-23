@@ -92,7 +92,7 @@ class AuthByPlugin(ABC):
         return self._timeout
 
     @timeout.setter
-    def timeout(self, value) -> None:
+    def timeout(self, value: Any) -> None:
         self._timeout = int(value)
 
     @property
