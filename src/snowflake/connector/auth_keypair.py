@@ -162,10 +162,6 @@ class AuthByKeyPair(AuthByPlugin):
     def should_retry(self, count: int) -> bool:
         return count < self._jwt_retry_attempts
 
-    # Keep this API eventhough we have self.timeout to keep compatability
-    def get_timeout(self) -> int:
-        return self._timeout
-
     def handle_timeout(
         self,
         authenticator: str,
