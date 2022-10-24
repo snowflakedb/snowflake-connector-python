@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from .auth_by_plugin import AuthByPlugin, AuthType
-from .network import ID_TOKEN_AUTHENTICATOR
+from ..network import ID_TOKEN_AUTHENTICATOR
+from .by_plugin import AuthByPlugin, AuthType
 
 
 class AuthByIdToken(AuthByPlugin):
@@ -20,16 +20,22 @@ class AuthByIdToken(AuthByPlugin):
         return AuthType.ID_TOKEN
 
     @property
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         return self._id_token
 
-    def __init__(self, id_token):
+    def __init__(self, id_token) -> None:
         """Initialized an instance with an IdToken."""
         super().__init__()
         self._id_token = id_token
 
-    def authenticate(self, authenticator, service_name, account, user, password):
-        """Nothing to do here."""
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: str,
+        account: str,
+        user: str,
+        password: str,
+    ) -> None:
         pass
 
     def update_body(self, body):

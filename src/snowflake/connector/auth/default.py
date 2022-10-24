@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
-from .auth_by_plugin import AuthByPlugin, AuthType
+from typing import Any
+
+from .by_plugin import AuthByPlugin, AuthType
 
 
 class AuthByDefault(AuthByPlugin):
@@ -16,19 +18,25 @@ class AuthByDefault(AuthByPlugin):
         return AuthType.DEFAULT
 
     @property
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         return "*********"
 
-    def __init__(self, password):
+    def __init__(self, password) -> None:
         """Initializes an instance with a password."""
         super().__init__()
         self._password = password
 
-    def authenticate(self, authenticator, service_name, account, user, password):
-        """NOOP."""
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: str,
+        account: str,
+        user: str,
+        password: str,
+    ) -> None:
         pass
 
-    def update_body(self, body):
+    def update_body(self, body: dict[Any, Any]) -> None:
         """Sets the password if available."""
         if self._password:
             body["data"]["PASSWORD"] = self._password

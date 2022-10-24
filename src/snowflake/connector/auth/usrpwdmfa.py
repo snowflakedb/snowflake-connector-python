@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import logging
 
-from .auth_by_plugin import AuthByPlugin, AuthType
-from .errorcode import ER_NO_PASSWORD
-from .errors import ProgrammingError
-from .network import SnowflakeRestful
+from typing_extensions import Self
+
+from ..errorcode import ER_NO_PASSWORD
+from ..errors import ProgrammingError
+from ..network import SnowflakeRestful
+from .by_plugin import AuthByPlugin, AuthType
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     def type_(self) -> AuthType:
         return AuthType.USR_PWD_MFA
 
-    def preprocess(self) -> AuthByPlugin:
+    def preprocess(self) -> Self:
         if self._rest and self._rest.mfa_token:
             self.set_mfa_token(self._rest.mfa_token)
         return self
@@ -49,7 +51,6 @@ class AuthByUsrPwdMfa(AuthByPlugin):
         self._mfa_token = value
 
     def authenticate(self, authenticator, service_name, account, user, password):
-        """NOOP."""
         pass
 
     def update_body(self, body):

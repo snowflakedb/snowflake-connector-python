@@ -23,14 +23,17 @@ from time import strptime
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 
 from . import errors, proxy
-from .auth import Auth
-from .auth_by_plugin import AuthByPlugin
-from .auth_default import AuthByDefault
-from .auth_keypair import AuthByKeyPair
-from .auth_oauth import AuthByOAuth
-from .auth_okta import AuthByOkta
-from .auth_usrpwdmfa import AuthByUsrPwdMfa
-from .auth_webbrowser import AuthByWebBrowser
+from .auth import (
+    FIRST_PARTY_AUTHENTICATORS,
+    Auth,
+    AuthByDefault,
+    AuthByKeyPair,
+    AuthByOAuth,
+    AuthByOkta,
+    AuthByPlugin,
+    AuthByUsrPwdMfa,
+    AuthByWebBrowser,
+)
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .connection_diagnostic import ConnectionDiagnostic
@@ -94,16 +97,6 @@ from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
-FIRST_PARTY_AUTHENTICATORS = frozenset(
-    (
-        AuthByDefault,
-        AuthByKeyPair,
-        AuthByOAuth,
-        AuthByOkta,
-        AuthByUsrPwdMfa,
-        AuthByWebBrowser,
-    )
-)
 
 
 def DefaultConverterClass():

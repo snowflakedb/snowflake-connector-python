@@ -7,20 +7,25 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
-from .auth import Auth
-from .auth_by_plugin import AuthByPlugin, AuthType
-from .compat import unescape, urlencode, urlsplit
-from .constants import (
+from ..compat import unescape, urlencode, urlsplit
+from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
 )
-from .errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
-from .errors import DatabaseError, Error
-from .network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
-from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from ..errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
+from ..errors import DatabaseError, Error
+from ..network import (
+    CONTENT_TYPE_APPLICATION_JSON,
+    PYTHON_CONNECTOR_USER_AGENT,
+    SnowflakeRestful,
+)
+from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from . import Auth
+from .by_plugin import AuthByPlugin, AuthType
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +71,7 @@ def _get_post_back_url_from_html(html):
 class AuthByOkta(AuthByPlugin):
     """Authenticate user by OKTA."""
 
-    def __init__(self, rest, application):
+    def __init__(self, rest: SnowflakeRestful, application: str) -> None:
         super().__init__()
         self._rest = rest
         self._saml_response = None
@@ -77,13 +82,20 @@ class AuthByOkta(AuthByPlugin):
         return AuthType.OKTA
 
     @property
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         return self._saml_response
 
-    def update_body(self, body):
+    def update_body(self, body: dict[Any, Any]) -> None:
         body["data"]["RAW_SAML_RESPONSE"] = self._saml_response
 
-    def authenticate(self, authenticator, service_name, account, user, password):
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: str,
+        account: str,
+        user: str,
+        password: str,
+    ) -> None:
         """SAML Authentication.
 
         Steps are:

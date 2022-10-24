@@ -10,6 +10,7 @@ import hashlib
 import os
 from datetime import datetime, timedelta
 from logging import getLogger
+from typing import Any
 
 import jwt
 from cryptography.hazmat.backends import default_backend
@@ -20,14 +21,14 @@ from cryptography.hazmat.primitives.serialization import (
     load_der_private_key,
 )
 
-from .auth_by_plugin import AuthByPlugin, AuthType
-from .errorcode import (
+from ..errorcode import (
     ER_CONNECTION_TIMEOUT,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_PRIVATE_KEY,
 )
-from .errors import OperationalError, ProgrammingError
-from .network import KEY_PAIR_AUTHENTICATOR
+from ..errors import OperationalError, ProgrammingError
+from ..network import KEY_PAIR_AUTHENTICATOR
+from .by_plugin import AuthByPlugin, AuthType
 
 logger = getLogger(__name__)
 
@@ -44,7 +45,11 @@ class AuthByKeyPair(AuthByPlugin):
     DEFAULT_JWT_RETRY_ATTEMPTS = 10
     DEFAULT_JWT_CNXN_WAIT_TIME = 10
 
-    def __init__(self, private_key, lifetime_in_seconds: int = LIFETIME):
+    def __init__(
+        self,
+        private_key: bytes,
+        lifetime_in_seconds: int = LIFETIME,
+    ) -> None:
         """Inits AuthByKeyPair class with private key.
 
         Args:
@@ -99,17 +104,16 @@ class AuthByKeyPair(AuthByPlugin):
             )
         except Exception as e:
             raise ProgrammingError(
-                msg="Failed to load private key: {}\nPlease provide a valid unencrypted rsa private "
-                "key in DER format as bytes object".format(str(e)),
+                msg=f"Failed to load private key: {e}\nPlease provide a valid "
+                "unencrypted rsa private key in DER format as bytes object",
                 errno=ER_INVALID_PRIVATE_KEY,
             )
 
         if not isinstance(private_key, RSAPrivateKey):
             raise ProgrammingError(
-                msg="Private key type ({}) not supported.\nPlease provide a valid rsa private "
-                "key in DER format as bytes object".format(
-                    private_key.__class__.__name__
-                ),
+                msg=f"Private key type ({private_key.__class__.__name__}) not supported."
+                "\nPlease provide a valid rsa private key in DER format as bytes "
+                "object",
                 errno=ER_INVALID_PRIVATE_KEY,
             )
 
@@ -152,11 +156,11 @@ class AuthByKeyPair(AuthByPlugin):
 
         return public_key_fp
 
-    def update_body(self, body):
+    def update_body(self, body: dict[Any, Any]) -> None:
         body["data"]["AUTHENTICATOR"] = KEY_PAIR_AUTHENTICATOR
         body["data"]["TOKEN"] = self._jwt_token
 
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         return self._jwt_token
 
     def should_retry(self, count: int) -> bool:
@@ -186,7 +190,8 @@ class AuthByKeyPair(AuthByPlugin):
 
         self.authenticate(authenticator, service_name, account, user, password)
 
-    def can_handle_exception(self, op: OperationalError) -> bool:
+    @staticmethod
+    def can_handle_exception(op: OperationalError) -> bool:
         if op.errno is ER_CONNECTION_TIMEOUT:
             return True
         return False

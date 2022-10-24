@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 #
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
@@ -26,10 +25,9 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from .auth_keypair import AuthByKeyPair
-from .auth_usrpwdmfa import AuthByUsrPwdMfa
-from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
-from .constants import (
+from ..compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
+from ..constants import (
+    DAY_IN_SECONDS,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
@@ -37,15 +35,15 @@ from .constants import (
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
 )
-from .description import (
+from ..description import (
     COMPILER,
     IMPLEMENTATION,
     OPERATING_SYSTEM,
     PLATFORM,
     PYTHON_VERSION,
 )
-from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
-from .errors import (
+from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
+from ..errors import (
     BadGatewayError,
     DatabaseError,
     Error,
@@ -53,7 +51,7 @@ from .errors import (
     ProgrammingError,
     ServiceUnavailableError,
 )
-from .network import (
+from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
@@ -61,9 +59,9 @@ from .network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
-from .options import installed_keyring, keyring
-from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from .version import VERSION
+from ..options import installed_keyring, keyring
+from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from ..version import VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +376,9 @@ class Auth:
                     )
                 )
 
-            if type(auth_instance) is AuthByKeyPair:
+            from . import AuthByKeyPair
+
+            if isinstance(auth_instance, AuthByKeyPair):
                 logger.debug(
                     "JWT Token authentication failed. "
                     "Token expires at: %s. "
@@ -386,7 +386,9 @@ class Auth:
                     str(auth_instance._jwt_token_exp),
                     str(datetime.utcnow()),
                 )
-            if type(auth_instance) is AuthByUsrPwdMfa:
+            from . import AuthByUsrPwdMfa
+
+            if isinstance(auth_instance, AuthByUsrPwdMfa):
                 delete_temporary_credential(self._rest._host, user, MFA_TOKEN)
             Error.errorhandler_wrapper(
                 self._rest._connection,
@@ -701,7 +703,12 @@ def get_token_from_private_key(
         format=PrivateFormat.PKCS8,
         encryption_algorithm=NoEncryption(),
     )
-    auth_instance = AuthByKeyPair(private_key, 1440 * 60)  # token valid for 24 hours
+    from . import AuthByKeyPair
+
+    auth_instance = AuthByKeyPair(
+        private_key,
+        DAY_IN_SECONDS,
+    )  # token valid for 24 hours
     return auth_instance.authenticate(
         KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
     )
@@ -721,4 +728,6 @@ def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     private_key = load_der_private_key(
         data=private_key, password=None, backend=default_backend()
     )
+    from . import AuthByKeyPair
+
     return AuthByKeyPair.calculate_public_key_fingerprint(private_key)

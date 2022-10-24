@@ -36,11 +36,11 @@ def test_get_token_from_private_key(input_account, expected_account):
         current_dir, "..", "data", "rsa_keys", "rsa_key_encrypted.p8"
     )
     private_key_password = "test"
-    public_key_fingerprint = snowflake.connector.auth.get_public_key_fingerprint(
+    public_key_fingerprint = snowflake.connector.auth.auth.get_public_key_fingerprint(
         private_key_file_path, private_key_password
     )
     # generate the jwt token
-    jwt_token = snowflake.connector.auth.get_token_from_private_key(
+    jwt_token = snowflake.connector.auth.auth.get_token_from_private_key(
         test_user, input_account, private_key_file_path, private_key_password
     )
     # decode the token to get its fields (iss, sub, issue time, expiration time)

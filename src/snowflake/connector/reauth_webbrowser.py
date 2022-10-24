@@ -4,8 +4,9 @@
 #
 from __future__ import annotations
 
-from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 from snowflake.connector.reauth_by_plugin import ReauthByPlugin
+
+from .auth import AuthByWebBrowser
 
 
 class ReauthByWebBrowser(ReauthByPlugin):

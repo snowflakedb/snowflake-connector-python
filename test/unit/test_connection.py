@@ -13,16 +13,18 @@ from unittest.mock import patch
 import pytest
 
 import snowflake.connector
-from snowflake.connector.auth_default import AuthByDefault
-from snowflake.connector.auth_oauth import AuthByOAuth
-from snowflake.connector.auth_okta import AuthByOkta
-from snowflake.connector.auth_webbrowser import AuthByWebBrowser
+from snowflake.connector.auth import (
+    AuthByDefault,
+    AuthByOAuth,
+    AuthByOkta,
+    AuthByWebBrowser,
+)
 
 if TYPE_CHECKING:
     from snowflake.connector.network import SnowflakeRestful
 
 try:  # pragma: no cover
-    from snowflake.connector.auth_usrpwdmfa import AuthByUsrPwdMfa
+    from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"

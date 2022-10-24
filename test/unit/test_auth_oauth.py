@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from snowflake.connector.auth_oauth import AuthByOAuth
+from snowflake.connector.auth import AuthByOAuth
 
 
 def test_auth_oauth():

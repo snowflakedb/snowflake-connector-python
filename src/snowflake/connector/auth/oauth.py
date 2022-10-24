@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
-from .auth_by_plugin import AuthByPlugin, AuthType
-from .network import OAUTH_AUTHENTICATOR
+from typing import Any
+
+from ..network import OAUTH_AUTHENTICATOR
+from .by_plugin import AuthByPlugin, AuthType
 
 
 class AuthByOAuth(AuthByPlugin):
@@ -20,20 +22,27 @@ class AuthByOAuth(AuthByPlugin):
         return AuthType.OAUTH
 
     @property
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         """Returns the token."""
         return self._oauth_token
 
-    def __init__(self, oauth_token):
+    def __init__(self, oauth_token: str) -> None:
         """Initializes an instance with an OAuth Token."""
         super().__init__()
         self._oauth_token = oauth_token
 
-    def authenticate(self, authenticator, service_name, account, user, password):
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: str,
+        account: str,
+        user: str,
+        password: str,
+    ) -> None:
         """Nothing to do here, token should be obtained outside of the driver."""
         pass
 
-    def update_body(self, body):
+    def update_body(self, body: dict[Any, Any]) -> None:
         """Update some information required by OAuth.
 
         OAuth needs the authenticator and token attributes set, as well as loginname, which is set already in auth.py.

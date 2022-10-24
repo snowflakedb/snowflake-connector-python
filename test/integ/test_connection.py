@@ -19,8 +19,7 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
-from snowflake.connector.auth_by_plugin import AuthByPlugin
-from snowflake.connector.auth_okta import AuthByOkta
+from snowflake.connector.auth import AuthByOkta, AuthByPlugin
 from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     SnowflakeConnection,

@@ -11,28 +11,32 @@ import os
 import socket
 import time
 import webbrowser
+from typing import Any
 
-from .auth import Auth
-from .auth_by_plugin import AuthByPlugin, AuthType
-from .auth_idtoken import AuthByIdToken
-from .compat import parse_qs, urlparse, urlsplit
-from .constants import (
+from typing_extensions import Self
+
+from ..compat import parse_qs, urlparse, urlsplit
+from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
 )
-from .errorcode import (
+from ..errorcode import (
     ER_IDP_CONNECTION_ERROR,
     ER_NO_HOSTNAME_FOUND,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
-from .errors import OperationalError
-from .network import (
+from ..errors import OperationalError
+from ..network import (
     CONTENT_TYPE_APPLICATION_JSON,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     PYTHON_CONNECTOR_USER_AGENT,
+    SnowflakeRestful,
 )
+from . import Auth
+from .by_plugin import AuthByPlugin, AuthType
+from .idtoken import AuthByIdToken
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +52,14 @@ class AuthByWebBrowser(AuthByPlugin):
 
     def __init__(
         self,
-        rest,
-        application,
+        rest: SnowflakeRestful,
+        application: str,
         webbrowser_pkg=None,
         socket_pkg=None,
         protocol=None,
         host=None,
         port=None,
-    ):
+    ) -> None:
         super().__init__()
         self._rest = rest
         self._token = None
@@ -73,18 +77,18 @@ class AuthByWebBrowser(AuthByPlugin):
     def type_(self) -> AuthType:
         return AuthType.EXTERNAL_BROWSER
 
-    def preprocess(self) -> AuthByPlugin:
+    def preprocess(self) -> AuthByIdToken | Self:
         if self._rest.id_token is not None:
             return AuthByIdToken(self._rest.id_token)
         else:
             return self
 
     @property
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         """Returns the token."""
         return self._token
 
-    def update_body(self, body):
+    def update_body(self, body: dict[Any, Any]) -> None:
         """Used by Auth to update the request that gets sent to /v1/login-request.
 
         Args:
@@ -94,7 +98,14 @@ class AuthByWebBrowser(AuthByPlugin):
         body["data"]["TOKEN"] = self._token
         body["data"]["PROOF_KEY"] = self._proof_key
 
-    def authenticate(self, authenticator, service_name, account, user, password):
+    def authenticate(
+        self,
+        authenticator: str,
+        service_name: str,
+        account: str,
+        user: str,
+        password: str,
+    ) -> None:
         """Web Browser based Authentication."""
         logger.debug("authenticating by Web Browser")
 
@@ -164,7 +175,7 @@ class AuthByWebBrowser(AuthByPlugin):
         finally:
             socket_connection.close()
 
-    def _receive_saml_token(self, socket_connection):
+    def _receive_saml_token(self, socket_connection) -> None:
         """Receives SAML token from web browser."""
         while True:
             socket_client, _ = socket_connection.accept()

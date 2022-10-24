@@ -11,9 +11,7 @@ from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
 
-from snowflake.connector.auth import Auth
-from snowflake.connector.auth_by_plugin import AuthByPlugin
-from snowflake.connector.auth_default import AuthByDefault
+from snowflake.connector.auth import Auth, AuthByDefault, AuthByPlugin
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful

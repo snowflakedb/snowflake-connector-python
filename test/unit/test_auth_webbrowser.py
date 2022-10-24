@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
-from snowflake.connector.auth_webbrowser import AuthByWebBrowser
+from snowflake.connector.auth import AuthByWebBrowser
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR, SnowflakeRestful
