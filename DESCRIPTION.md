@@ -8,11 +8,22 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.8.4(unreleased)
+- v2.9.0(Unreleased)
+
   - Fixed a bug where the permission of the file downloaded via GET command is changed
   - Reworked authentication internals to allow users to plug custom key-pair authenticators
+  - Multi-statement query execution is now supported through `cursor.execute` and `cursor.executemany`
+    - The Snowflake parameter `MULTI_STATEMENT_COUNT` can be altered at the account, session, or statement level. An additional argument, `_num_statements`, can be provided to `execute` to use this parameter at the statement level. It *must* be provided to `executemany` to submit a multi-statement query through the method. Note that bulk insert optimizations available through `executemany` are not available when submitting multi-statement queries.
+      - By default the parameter is 1, meaning only a single query can be submitted at a time
+      - Set to 0 to submit any number of statements in a multi-statement query
+      - Set to >1 to submit the specified exact number of statements in a multi-statement query
+    - Bindings are accepted in the same way for multi-statements as they are for single statement queries
+    - Asynchronous multi-statement query execution is supported. Users should still use `get_results_from_sfqid` to retrieve results
+    - To access the results of each query, users can call `cursor.nextset()` as specified in the DB 2.0 API (PEP-249), to iterate through each statements results
+      - The first statement's results are accessible immediately after calling `execute` (or `get_results_from_sfqid` if asynchronous) through the existing `fetch*()` methods
 
 - v2.8.3(November 28,2022)
+
   - Bumped cryptography dependency from <39.0.0 to <41.0.0
   - Fixed a bug where expired OCSP response cache caused infinite recursion during cache loading
 

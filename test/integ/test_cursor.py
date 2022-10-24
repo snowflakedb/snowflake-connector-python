@@ -45,6 +45,14 @@ except ImportError:
         is_nullable: bool
 
 
+from snowflake.connector import network
+from snowflake.connector.description import (
+    CLIENT_NAME,
+    IMPLEMENTATION,
+    PLATFORM,
+    PYTHON_VERSION,
+    SNOWFLAKE_CONNECTOR_VERSION,
+)
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_NOT_POSITIVE_SIZE,
@@ -60,6 +68,7 @@ except ImportError:
 try:
     from snowflake.connector.constants import (
         FIELD_ID_TO_NAME,
+        PARAMETER_MULTI_STATEMENT_COUNT,
         PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     )
     from snowflake.connector.errorcode import (
@@ -1586,3 +1595,23 @@ def test_null_connection(conn_cnx):
             status = con.get_query_status(cur.sfqid)
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
+
+
+@pytest.mark.skipolddriver
+def test_multi_statement_failure(conn_cnx):
+    try:
+        network.PYTHON_CONNECTOR_USER_AGENT = (
+            f"{CLIENT_NAME}/2.8.1 ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
+        )
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                with pytest.raises(
+                    ProgrammingError,
+                    match="Multiple SQL statements in a single API call are not supported; use one API call per statement instead.",
+                ):
+                    cur.execute(
+                        f"alter session set {PARAMETER_MULTI_STATEMENT_COUNT}=0"
+                    )
+                    cur.execute("select 1; select 2; select 3;")
+    finally:
+        network.PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"

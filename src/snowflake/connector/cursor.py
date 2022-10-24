@@ -234,7 +234,8 @@ class SnowflakeCursor:
         self._sequence_counter = -1
         self._request_id = None
         self._is_file_transfer = False
-        self._multi_statement_results = []
+        self._multi_statement_resultIds: list[str] = []
+        self.multi_statement_savedIds: list[str] = []
 
         self._timestamp_output_format = None
         self._timestamp_ltz_output_format = None
@@ -562,6 +563,36 @@ class SnowflakeCursor:
         self._sequence_counter = -1
         return ret
 
+    def _preprocess_pyformat_query(self, command, params):
+        # pyformat/format paramstyle
+        # client side binding
+        processed_params = self._connection._process_params_pyformat(params, self)
+        # SNOW-513061 collect telemetry for empty sequence usage before we make the breaking change announcement
+        if params is not None and len(params) == 0:
+            self._log_telemetry_job_data(
+                TelemetryField.EMPTY_SEQ_INTERPOLATION,
+                TelemetryData.TRUE
+                if self.connection._interpolate_empty_sequences
+                else TelemetryData.FALSE,
+            )
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            logger.debug(
+                f"binding: [{self._format_query_for_log(command)}] "
+                f"with input=[{params}], "
+                f"processed=[{processed_params}]",
+            )
+        if (
+            self.connection._interpolate_empty_sequences
+            and processed_params is not None
+        ) or (
+            not self.connection._interpolate_empty_sequences
+            and len(processed_params) > 0
+        ):
+            query = command % processed_params
+        else:
+            query = command
+        return query
+
     def execute(
         self,
         command: str,
@@ -616,8 +647,8 @@ class SnowflakeCursor:
             _force_put_overwrite: If the SQL query is a PUT, then this flag can force overwriting of an already
                 existing file on stage.
             file_stream: File-like object to be uploaded with PUT
-            _num_statements: Query level parameter to submit in _statement_params constraining exact number of
-            statements being submitted if providing a multi-statement query.
+            _num_statements: Query level parameter submitted in _statement_params constraining exact number of
+            statements being submitted (or 0 if submitting an uncounted number) when using a multi-statement query.
 
         Returns:
             The cursor itself, or None if some error happened, or the response returned
@@ -642,7 +673,7 @@ class SnowflakeCursor:
             return
 
         if _num_statements:
-            if _statement_params:
+            if _statement_params is not None:
                 _statement_params["MULTI_STATEMENT_COUNT"] = _num_statements
             else:
                 _statement_params = {"MULTI_STATEMENT_COUNT": _num_statements}
@@ -658,33 +689,7 @@ class SnowflakeCursor:
         }
 
         if self._connection.is_pyformat:
-            # pyformat/format paramstyle
-            # client side binding
-            processed_params = self._connection._process_params_pyformat(params, self)
-            # SNOW-513061 collect telemetry for empty sequence usage before we make the breaking change announcement
-            if params is not None and len(params) == 0:
-                self._log_telemetry_job_data(
-                    TelemetryField.EMPTY_SEQ_INTERPOLATION,
-                    TelemetryData.TRUE
-                    if self.connection._interpolate_empty_sequences
-                    else TelemetryData.FALSE,
-                )
-            if logger.getEffectiveLevel() <= logging.DEBUG:
-                logger.debug(
-                    f"binding: [{self._format_query_for_log(command)}] "
-                    f"with input=[{params}], "
-                    f"processed=[{processed_params}]",
-                )
-            if (
-                self.connection._interpolate_empty_sequences
-                and processed_params is not None
-            ) or (
-                not self.connection._interpolate_empty_sequences
-                and len(processed_params) > 0
-            ):
-                query = command % processed_params
-            else:
-                query = command
+            query = self._preprocess_pyformat_query(command, params)
         else:
             # qmark and numeric paramstyle
             query = command
@@ -704,7 +709,7 @@ class SnowflakeCursor:
                     params, self
                 )
 
-        m = DESC_TABLE_RE.match(query)
+        m = DESC_TABLE_RE.search(query)
         if m:
             query1 = re.sub(DESC_TABLE_RE, r"describe table \1;", query)
             if logger.getEffectiveLevel() <= logging.WARNING:
@@ -723,7 +728,7 @@ class SnowflakeCursor:
             if "data" in ret and "queryId" in ret["data"]
             else None
         )
-        logger.debug("sfqid: %s", self.sfqid)
+        logger.debug(f"sfqid: {self.sfqid}")
         self._sqlstate = (
             ret["data"]["sqlState"]
             if "data" in ret and "sqlState" in ret["data"]
@@ -749,6 +754,8 @@ class SnowflakeCursor:
             if "resultIds" in data:
                 self._init_multi_statement_results(data)
                 return self
+            else:
+                self.multi_statement_savedIds = []
 
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
@@ -888,13 +895,19 @@ class SnowflakeCursor:
             else:
                 self._total_rowcount += updated_rows
 
-    def _init_multi_statement_results(self, data):
-        self._multi_statement_results = data["resultIds"].split(",")
+    def _init_multi_statement_results(self, data: dict):
+        self._multi_statement_resultIds = data["resultIds"].split(",")
+        self.multi_statement_savedIds = list(self._multi_statement_resultIds)
         if self._is_file_transfer:
-            logger.warning(
-                "PUT/GET commands are not supported for multi-statement queries and will be ignored."
+            Error.errorhandler_wrapper(
+                self.connection,
+                self,
+                ProgrammingError,
+                {
+                    "msg": "PUT/GET commands are not supported for multi-statement queries and cannot be executed.",
+                    "errno": ER_INVALID_VALUE,
+                },
             )
-            self._is_file_transfer = False
         self.nextset()
 
     def check_can_use_arrow_resultset(self):
@@ -1028,10 +1041,17 @@ class SnowflakeCursor:
         command = command.strip(" \t\n\r") if command else None
 
         if not seqparams:
+            logger.warning(
+                "No parameters provided to executymany, returning without doing anything."
+            )
             return self
 
-        if self.INSERT_SQL_RE.match(command):
+        if self.INSERT_SQL_RE.match(command) and (
+            "_num_statements" not in kwargs or kwargs["_num_statements"] == 1
+        ):
             if self._connection.is_pyformat:
+                # TODO - utilize multi-statement instead of rewriting the query and
+                #  accumulate results to mock the result from a single insert statement as formatted below
                 logger.debug("rewriting INSERT query")
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
                 m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
@@ -1100,8 +1120,26 @@ class SnowflakeCursor:
                 return self
 
         self.reset()
-        for param in seqparams:
-            self.execute(command, params=param, _do_reset=False, **kwargs)
+        if "_num_statements" not in kwargs:
+            for param in seqparams:
+                self.execute(command, params=param, _do_reset=False, **kwargs)
+        else:
+            command = command + ("; " if re.search(";/s*$", command) is None else " ")
+            if self._connection.is_pyformat:
+                processed_queries = [
+                    self._preprocess_pyformat_query(command, params)
+                    for params in seqparams
+                ]
+                query = "".join(processed_queries)
+                params = None
+            else:
+                query = command * len(seqparams)
+                params = [param for parameters in seqparams for param in parameters]
+
+            kwargs["_num_statements"] *= len(seqparams)
+
+            self.execute(query, params, _do_reset=False, **kwargs)
+
         return self
 
     def _result_iterator(
@@ -1179,11 +1217,11 @@ class SnowflakeCursor:
         query results are available.
         """
         self.reset()
-        if self._multi_statement_results:
-            self.query_result(self._multi_statement_results[0])
+        if self._multi_statement_resultIds:
+            self.query_result(self._multi_statement_resultIds[0])
             logger.info(
                 "Retrieved results for query ID: %s",
-                self._multi_statement_results.pop(0),
+                self._multi_statement_resultIds.pop(0),
             )
             return self
 
@@ -1304,6 +1342,15 @@ class SnowflakeCursor:
                     )
                 )
             self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
+            self._result = self._inner_cursor._result
+            self._query_result_format = self._inner_cursor._query_result_format
+            self._total_rowcount = self._inner_cursor._total_rowcount
+            self._description = self._inner_cursor._description
+            self._result_set = self._inner_cursor._result_set
+            self._result_state = ResultState.VALID
+            self._rownumber = 0
+            # Unset this function, so that we don't block anymore
+            self._prefetch_hook = None
 
             if (
                 self._inner_cursor._total_rowcount == 1
@@ -1314,17 +1361,6 @@ class SnowflakeCursor:
                 ret = self._connection.rest.request(url=url, method="get")
                 if "data" in ret and "resultIds" in ret["data"]:
                     self._init_multi_statement_results(ret["data"])
-                    return
-
-            self._result = self._inner_cursor._result
-            self._query_result_format = self._inner_cursor._query_result_format
-            self._total_rowcount = self._inner_cursor._total_rowcount
-            self._description = self._inner_cursor._description
-            self._result_set = self._inner_cursor._result_set
-            self._result_state = ResultState.VALID
-            self._rownumber = 0
-            # Unset this function, so that we don't block anymore
-            self._prefetch_hook = None
 
         self.connection.get_query_status_throw_if_error(
             sfqid
