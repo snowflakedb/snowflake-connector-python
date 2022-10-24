@@ -26,13 +26,20 @@ def test_error_classes(conn_cnx):
 
 def test_error_code(conn_cnx):
     """Error code is included in the exception."""
-    syntax_errno = 1003
-    syntax_sqlstate = "42000"
+    syntax_errno = 1494
+    syntax_errno_old = 1003
+    syntax_sqlstate = "42601"
+    syntax_sqlstate_old = "42000"
     with conn_cnx() as ctx:
         with pytest.raises(errors.ProgrammingError) as e:
             ctx.cursor().execute("SELECT * FROOOM TEST")
-        assert e.value.errno == syntax_errno, "Syntax error code"
-        assert e.value.sqlstate == syntax_sqlstate, "Syntax SQL state"
+        assert (
+            e.value.errno == syntax_errno or e.value.errno == syntax_errno_old
+        ), "Syntax error code"
+        assert (
+            e.value.sqlstate == syntax_sqlstate
+            or e.value.sqlstate == syntax_sqlstate_old
+        ), "Syntax SQL state"
         e.match(rf"^{syntax_errno:06d} \({syntax_sqlstate}\): ")
 
 
