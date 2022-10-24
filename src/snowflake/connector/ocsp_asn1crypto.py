@@ -45,7 +45,6 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
-from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
@@ -79,12 +78,6 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         "sha384": hashes.SHA3_384,
         "sha512": hashes.SHA3_512,
     }
-
-    WILDCARD_CERTID = None
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.WILDCARD_CERTID = self.encode_cert_id_key(ret_wildcard_hkey())
 
     def encode_cert_id_key(self, hkey):
         issuer_name_hash, issuer_key_hash, serial_number = hkey
