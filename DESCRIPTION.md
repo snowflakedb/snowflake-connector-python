@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v2.8.0(September 27,2022)
 
+- v2.8.1(October 28,2022)
+
+   -  Release Notes
+
+
   - Fixed a bug where rowcount was deleted when the cursor was closed
   - Fixed a bug where extTypeName was used even when it was empty
   - Updated how telemetry entries are constructed
