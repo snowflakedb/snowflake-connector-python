@@ -41,7 +41,7 @@ def test_error_code(conn_cnx):
             or e.value.sqlstate == syntax_sqlstate_old
         ), "Syntax SQL state"
         e.match(
-            rf"^({syntax_errno:06d}|{syntax_errno_old:06d}) \(({syntax_sqlstate}|{syntax_sqlstate_old})\): "
+            rf"^({syntax_errno:06d} \({syntax_sqlstate}\)|{syntax_errno_old:06d} \({syntax_sqlstate_old}\)): "
         )
 
 
