@@ -6,3 +6,5 @@ updates:
       interval: "daily"
     assignees:
       - "sfc-gh-mkeller"
+    reviewers:
+      - "snowflakedb/snowpark-python-api"
