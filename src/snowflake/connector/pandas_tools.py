@@ -366,8 +366,7 @@ def pd_writer(
     write_pandas(
         conn=sf_connection,
         df=df,
-        # Note: Our sqlalchemy connector creates tables case insensitively
-        table_name=table.name.upper(),
+        table_name=table.name,
         schema=table.schema,
         **kwargs,
     )
