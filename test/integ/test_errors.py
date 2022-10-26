@@ -40,7 +40,9 @@ def test_error_code(conn_cnx):
             e.value.sqlstate == syntax_sqlstate
             or e.value.sqlstate == syntax_sqlstate_old
         ), "Syntax SQL state"
-        e.match(rf"^{syntax_errno:06d} \({syntax_sqlstate}\): ")
+        e.match(
+            rf"^({syntax_errno:06d} \({syntax_sqlstate}\)|{syntax_errno_old:06d} \({syntax_sqlstate_old}\)): "
+        )
 
 
 @pytest.mark.skipolddriver
