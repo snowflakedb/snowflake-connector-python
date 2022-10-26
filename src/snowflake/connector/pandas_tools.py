@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import collections.abc
 import os
-import random
-import string
 import warnings
 from functools import partial
 from logging import getLogger
@@ -19,6 +17,7 @@ from typing_extensions import Literal
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
+from snowflake.connector.util_text import random_string
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -152,25 +151,19 @@ def write_pandas(
         )
 
     if quote_identifiers:
-        location = (('"' + database + '".') if database else "") + (
-            ('"' + schema + '".') if schema else ""
+        location = (f'"{database}".' if database else "") + (
+            f'"{schema}".' if schema else ""
         )
     else:
-        location = (database + "." if database else "") + (
-            schema + "." if schema else ""
+        location = (f"{database}." if database else "") + (
+            f"{schema}." if schema else ""
         )
     if chunk_size is None:
         chunk_size = len(df)
 
-    def random_name(length: int = 10) -> str:
-        return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
-
     cursor = conn.cursor()
-    stage_name = random_name()
-    create_stage_sql = (
-        "create temporary stage /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-        '"{stage_name}"'
-    ).format(stage_name=stage_name)
+    stage_name = random_string()
+    create_stage_sql = f'CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ "{stage_name}"'
     logger.debug(f"creating stage with '{create_stage_sql}'")
     cursor.execute(create_stage_sql, _is_internal=True).fetchall()
 
@@ -210,7 +203,7 @@ def write_pandas(
         cursor.execute(drop_sql, _is_internal=True)
 
     if auto_create_table or overwrite:
-        file_format_name = random_name()
+        file_format_name = random_string()
         file_format_sql = (
             f"CREATE TEMP FILE FORMAT {file_format_name} "
             f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
@@ -221,21 +214,18 @@ def write_pandas(
 
         infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@\"{stage_name}\"', file_format=>'{file_format_name}'))"
         logger.debug(f"inferring schema with '{infer_schema_sql}'")
-        try:
-            column_type_mapping = dict(
-                cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
-            )
-            # Infer schema can return the columns out of order depending on the chunking we do when uploading
-            # so we have to iterate through the dataframe columns to make sure we create the table with its
-            # columns in order
-            create_table_columns = ", ".join(
-                [f"{quote}{c}{quote} {column_type_mapping[c]}" for c in df.columns]
-            )
-        finally:
-            drop_object(file_format_name, "file format")
+        column_type_mapping = dict(
+            cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
+        )
+        # Infer schema can return the columns out of order depending on the chunking we do when uploading
+        # so we have to iterate through the dataframe columns to make sure we create the table with its
+        # columns in order
+        create_table_columns = ", ".join(
+            [f"{quote}{c}{quote} {column_type_mapping[c]}" for c in df.columns]
+        )
 
         target_table_name = (
-            f"{location}{quote}{random_name() if overwrite else table_name}{quote}"
+            f"{location}{quote}{random_string() if overwrite else table_name}{quote}"
         )
         create_table_sql = (
             f"CREATE {table_type.upper()} TABLE IF NOT EXISTS {target_table_name} "
@@ -261,13 +251,14 @@ def write_pandas(
         if overwrite:
             original_table_name = f"{location}{quote}{table_name}{quote}"
             drop_object(original_table_name, "table")
-            rename_table_sql = f"ALTER TABLE IF EXISTS {target_table_name} RENAME TO {original_table_name} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+            rename_table_sql = f"ALTER TABLE {target_table_name} RENAME TO {original_table_name} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
             logger.debug(f"rename table with '{rename_table_sql}'")
             cursor.execute(rename_table_sql, _is_internal=True)
-    finally:
-        drop_object(stage_name, "stage")
+    except ProgrammingError:
         if overwrite:
             drop_object(target_table_name, "table")
+        raise
+    finally:
         cursor._log_telemetry_job_data(TelemetryField.PANDAS_WRITE, TelemetryData.TRUE)
         cursor.close()
 
