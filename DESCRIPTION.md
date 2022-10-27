@@ -8,14 +8,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.8.0(September 27,2022)
+- v2.8.1(October 30,2022)
 
    - Bumped cryptography dependency from <37.0.0 to <39.0.0
    - Fixed a bug where write_pandas wouldn't write an empty DataFrame to Snowflake
    - When closing connection async query status checking is now parallelized
    - Fixed a bug where test logging would be enabled on Jenkins workers in non-Snowflake Jenkins machines
 
-- v2.8.1(October 30,2022)
+- v2.8.0(September 27,2022)
 
   - Fixed a bug where rowcount was deleted when the cursor was closed
   - Fixed a bug where extTypeName was used even when it was empty
