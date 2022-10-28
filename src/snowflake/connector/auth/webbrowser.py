@@ -175,6 +175,12 @@ class AuthByWebBrowser(AuthByPlugin):
         finally:
             socket_connection.close()
 
+    def reauthenticate(self) -> dict[str, bool]:
+        if self.conn is None:
+            raise Exception("Authentication object's conn parameter was never added")
+        self.conn._authenticate(self)
+        return {"success": False}
+
     def _receive_saml_token(self, socket_connection) -> None:
         """Receives SAML token from web browser."""
         while True:

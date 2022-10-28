@@ -42,6 +42,9 @@ class AuthByOAuth(AuthByPlugin):
         """Nothing to do here, token should be obtained outside of the driver."""
         pass
 
+    def reauthenticate(self) -> dict[str, bool]:
+        return {"success": False}
+
     def update_body(self, body: dict[Any, Any]) -> None:
         """Update some information required by OAuth.
 

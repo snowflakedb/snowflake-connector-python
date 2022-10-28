@@ -138,6 +138,9 @@ class AuthByKeyPair(AuthByPlugin):
 
         return self._jwt_token
 
+    def reauthenticate(self) -> dict[str, bool]:
+        return {"success": False}
+
     @staticmethod
     def calculate_public_key_fingerprint(private_key):
         # get public key bytes

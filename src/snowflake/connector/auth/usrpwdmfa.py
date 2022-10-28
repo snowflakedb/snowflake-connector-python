@@ -53,6 +53,9 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     def authenticate(self, authenticator, service_name, account, user, password):
         pass
 
+    def reauthenticate(self) -> dict[str, bool]:
+        return {"success": False}
+
     def update_body(self, body):
         """Sets the password and mfa_token if available.
 

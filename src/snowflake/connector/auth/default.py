@@ -36,6 +36,9 @@ class AuthByDefault(AuthByPlugin):
     ) -> None:
         pass
 
+    def reauthenticate(self) -> dict[str, bool]:
+        return {"success": False}
+
     def update_body(self, body: dict[Any, Any]) -> None:
         """Sets the password if available."""
         if self._password:

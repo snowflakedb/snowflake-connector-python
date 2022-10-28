@@ -38,6 +38,9 @@ class AuthByIdToken(AuthByPlugin):
     ) -> None:
         pass
 
+    def reauthenticate(self) -> dict[str, bool]:
+        return {"success": False}
+
     def update_body(self, body):
         """Idtoken needs the authenticator and token attributes set."""
         body["data"]["AUTHENTICATOR"] = ID_TOKEN_AUTHENTICATOR

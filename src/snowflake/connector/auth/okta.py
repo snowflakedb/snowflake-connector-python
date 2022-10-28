@@ -129,6 +129,9 @@ class AuthByOkta(AuthByPlugin):
         response_html = self._step4(one_time_token, sso_url)
         self._step5(response_html)
 
+    def reauthenticate(self) -> dict[str, bool]:
+        return {"success": False}
+
     def _step1(self, authenticator, service_name, account, user):
         logger.debug("step 1: query GS to obtain IDP token and SSO url")
 

@@ -10,12 +10,15 @@ import time
 from abc import ABC, abstractmethod
 from enum import Enum, unique
 from os import getenv
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import DatabaseError, Error, OperationalError
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..time_util import DecorrelateJitterBackoff
+
+if TYPE_CHECKING:
+    from .. import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,7 @@ class AuthByPlugin(ABC):
     """External Authenticator interface."""
 
     def __init__(self) -> None:
+        self._conn: SnowflakeConnection | None = None
         self._retry_ctx = AuthRetryCtx()
         self._consent_cache_id_token = False
         self._timeout = 120
@@ -105,6 +109,18 @@ class AuthByPlugin(ABC):
     def assertion_content(self) -> str:
         raise NotImplementedError
 
+    @property
+    def conn(self) -> SnowflakeConnection | None:
+        return getattr(self, "_conn", None)
+
+    @conn.setter
+    def conn(self, value: SnowflakeConnection) -> None:
+        from ..connection import SnowflakeConnection
+
+        if not isinstance(value, SnowflakeConnection):
+            raise TypeError("conn must subclass SnowflakeConnection")
+        self._conn = value
+
     def preprocess(self) -> AuthByPlugin:
         return self
 
@@ -121,6 +137,10 @@ class AuthByPlugin(ABC):
         user: str,
         password: str,
     ) -> str | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def reauthenticate(self) -> dict[str, bool]:
         raise NotImplementedError
 
     def handle_failure(self, ret: dict[Any, Any]) -> None:

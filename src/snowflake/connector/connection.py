@@ -86,9 +86,6 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
-from .reauth_by_plugin import ReauthByPlugin
-from .reauth_default import ReauthByDefault
-from .reauth_webbrowser import ReauthByWebBrowser
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
@@ -148,7 +145,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
-    "reauth_class": (ReauthByDefault(), (type(None), ReauthByPlugin)),
     "application": (CLIENT_NAME, (type(None), str)),
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
@@ -534,17 +530,6 @@ class SnowflakeConnection:
         else:
             raise TypeError("auth_class must subclass AuthByPlugin")
 
-    @property
-    def reauth_class(self) -> ReauthByPlugin:
-        return self._reauth_class
-
-    @reauth_class.setter
-    def reauth_class(self, value: ReauthByPlugin) -> None:
-        if isinstance(value, ReauthByPlugin):
-            self._reauth_class = value
-        else:
-            raise TypeError("reauth_class must subclass ReauthByPlugin")
-
     def connect(self, **kwargs):
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -771,7 +756,6 @@ class SnowflakeConnection:
                 host=self.host,
                 port=self.port,
             )
-            self._reauth_class = ReauthByWebBrowser(self)
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
             auth_instance = AuthByKeyPair(self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
@@ -904,9 +888,6 @@ class SnowflakeConnection:
 
         if self._auth_class and not isinstance(self._auth_class, AuthByPlugin):
             raise TypeError("auth_class must subclass AuthByPlugin")
-
-        if self._reauth_class and not isinstance(self._reauth_class, ReauthByPlugin):
-            raise TypeError("reauth_class must subclass ReauthByPlugin")
 
         if "account" in kwargs:
             if "host" not in kwargs:
@@ -1077,7 +1058,7 @@ class SnowflakeConnection:
         return ret
 
     def _reauthenticate(self):
-        return self._reauth_class.reauthenticate()
+        return self._auth_class.reauthenticate()
 
     def _authenticate(self, auth_instance):
         # make some changes if needed before real __authenticate
