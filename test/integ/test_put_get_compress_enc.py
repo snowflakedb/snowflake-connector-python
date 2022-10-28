@@ -11,8 +11,9 @@ from unittest.mock import patch
 
 import pytest
 
+from snowflake.connector.util_text import random_string
+
 from ..integ_helpers import put
-from ..randomize import random_string
 
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 

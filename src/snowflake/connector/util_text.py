@@ -6,8 +6,11 @@
 from __future__ import annotations
 
 import logging
+import random
 import re
+import string
 from io import StringIO
+from typing import Sequence
 
 COMMENT_PATTERN_RE = re.compile(r"^\s*\-\-")
 EMPTY_LINE_RE = re.compile(r"^\s*$")
@@ -254,3 +257,21 @@ def parse_account(account):
         parsed_account = account
 
     return parsed_account
+
+
+def random_string(
+    length: int = 10,
+    prefix: str = "",
+    suffix: str = "",
+    choices: Sequence[str] = string.ascii_lowercase,
+) -> str:
+    """Our convenience function to generate random string for object names.
+
+    Args:
+        length: How many random characters to choose from choices.
+        prefix: Prefix to add to random string generated.
+        suffix: Suffix to add to random string generated.
+        choices: A generator of things to choose from.
+    """
+    random_part = "".join([random.choice(choices) for _ in range(length)])
+    return "".join([prefix, random_part, suffix])

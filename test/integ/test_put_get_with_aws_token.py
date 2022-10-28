@@ -28,8 +28,9 @@ try:  # pragma: no cover
 except ImportError:
     pass
 
+from snowflake.connector.util_text import random_string
+
 from ..integ_helpers import put
-from ..randomize import random_string
 
 # Mark every test in this module as an aws test
 pytestmark = pytest.mark.aws
