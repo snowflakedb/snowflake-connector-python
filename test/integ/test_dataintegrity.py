@@ -18,8 +18,7 @@ from math import fabs
 import pytz
 
 from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFromTicks
-
-from ..randomize import random_string
+from snowflake.connector.util_text import random_string
 
 
 def table_exists(conn_cnx, name):

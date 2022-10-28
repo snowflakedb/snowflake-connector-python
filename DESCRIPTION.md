@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v2.9.0(Unreleased)
+
+  - Enhanced the atomicity of write_pandas when overwrite is set to True
+
 - v2.8.0(September 27,2022)
 
   - Fixed a bug where rowcount was deleted when the cursor was closed

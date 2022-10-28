@@ -17,8 +17,7 @@ import pytest
 import snowflake.connector
 import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
-
-from ..randomize import random_string
+from snowflake.connector.util_text import random_string
 
 TABLE1 = "dbapi_ddl1"
 TABLE2 = "dbapi_ddl2"
