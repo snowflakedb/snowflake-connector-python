@@ -59,6 +59,10 @@ class SFDictCache(Generic[K, V]):
         self._lock = Lock()
         self._reset_telemetry()
 
+    def __len__(self):
+        with self._lock:
+            return len(self._cache)
+
     @classmethod
     def from_dict(
         cls,
@@ -332,6 +336,9 @@ class SFDictCache(Generic[K, V]):
         """
         self.telemetry["size"] = len(self._cache)
 
+    def _save(self, load_first: bool = True) -> bool:
+        pass
+
 
 class SFDictFileCache(SFDictCache):
 
@@ -474,18 +481,21 @@ class SFDictFileCache(SFDictCache):
                     )
                     with open(tmp_file, "wb") as w_file:
                         pickle.dump(self, w_file)
+                    # We write to a tmp file and then move it to have atomic write
+                    os.replace(tmp_file_path, self.file_path)
+                    self.last_loaded = datetime.datetime.fromtimestamp(
+                        getmtime(self.file_path),
+                    )
+                    return True
                 except OSError as o_err:
                     raise PermissionError(
                         o_err.errno,
                         "Cache folder is not writeable",
                         _dir,
                     )
-                # We write to a tmp file and then move it to have atomic write
-                os.replace(tmp_file_path, self.file_path)
-                self.last_loaded = datetime.datetime.fromtimestamp(
-                    getmtime(self.file_path),
-                )
-                return True
+                finally:
+                    if os.path.exists(tmp_file_path) and os.path.isfile(tmp_file_path):
+                        os.unlink(tmp_file_path)
         except Timeout:
             logger.debug(
                 f"acquiring {self._file_lock_path} timed out, skipping saving..."
