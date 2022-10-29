@@ -115,17 +115,11 @@ class AuthByPlugin(ABC):
 
     @conn.setter
     def conn(self, value: SnowflakeConnection) -> None:
-        from ..connection import SnowflakeConnection
-
-        if not isinstance(value, SnowflakeConnection):
-            raise TypeError("conn must subclass SnowflakeConnection")
         self._conn = value
-
-    def preprocess(self) -> AuthByPlugin:
-        return self
 
     @abstractmethod
     def update_body(self, body: dict[Any, Any]) -> None:
+        """Update the body of the authentication request."""
         raise NotImplementedError
 
     @abstractmethod
@@ -136,23 +130,28 @@ class AuthByPlugin(ABC):
         account: str,
         user: str,
         password: str,
+        **kwargs: Any,
     ) -> str | None:
         raise NotImplementedError
 
     @abstractmethod
-    def reauthenticate(self) -> dict[str, bool]:
+    def reauthenticate(
+        self,
+        conn: SnowflakeConnection,
+        **kwargs: Any,
+    ) -> dict[str, bool]:
         raise NotImplementedError
 
     def handle_failure(self, ret: dict[Any, Any]) -> None:
         """Handles a failure when connecting to Snowflake."""
         Error.errorhandler_wrapper(
-            self._rest._connection,
+            self.conn,
             None,
             DatabaseError,
             {
-                "msg": ("Failed to connect to DB: {host}:{port}, " "{message}").format(
-                    host=self._rest._host,
-                    port=self._rest._port,
+                "msg": "Failed to connect to DB: {host}:{port}, {message}".format(
+                    host=self.conn._rest._host,
+                    port=self.conn._rest._port,
                     message=ret["message"],
                 ),
                 "errno": int(ret.get("code", -1)),

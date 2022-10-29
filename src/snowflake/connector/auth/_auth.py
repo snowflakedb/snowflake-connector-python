@@ -15,6 +15,7 @@ from datetime import datetime
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
+from typing import TYPE_CHECKING, Any, Callable
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
@@ -62,6 +63,9 @@ from ..network import (
 from ..options import installed_keyring, keyring
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..version import VERSION
+
+if TYPE_CHECKING:
+    from . import AuthByPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -151,18 +155,18 @@ class Auth:
 
     def authenticate(
         self,
-        auth_instance,
-        account,
-        user,
-        database=None,
-        schema=None,
-        warehouse=None,
-        role=None,
-        passcode=None,
+        auth_instance: AuthByPlugin,
+        account: str,
+        user: str,
+        database: str | None = None,
+        schema: str | None = None,
+        warehouse: str | None = None,
+        role: str | None = None,
+        passcode: str | None = None,
         passcode_in_password=False,
-        mfa_callback=None,
-        password_callback=None,
-        session_parameters=None,
+        mfa_callback: Callable[[], None] | None = None,
+        password_callback: Callable[[], str] | None = None,
+        session_parameters: dict[Any, Any] | None = None,
         timeout=120,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
@@ -479,11 +483,17 @@ class Auth:
 
     def read_temporary_credentials(self, host, user, session_parameters):
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
-            self._rest.id_token = self._read_temporary_credential(host, user, ID_TOKEN)
+            self._rest.id_token = self._read_temporary_credential(
+                host,
+                user,
+                ID_TOKEN,
+            )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
             self._rest.mfa_token = self._read_temporary_credential(
-                host, user, MFA_TOKEN
+                host,
+                user,
+                MFA_TOKEN,
             )
 
     def _write_temporary_credential(self, host, user, cred_type, cred):

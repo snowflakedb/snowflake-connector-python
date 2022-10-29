@@ -13,8 +13,6 @@ import time
 import webbrowser
 from typing import Any
 
-from typing_extensions import Self
-
 from ..compat import parse_qs, urlparse, urlsplit
 from ..constants import (
     HTTP_HEADER_ACCEPT,
@@ -36,7 +34,6 @@ from ..network import (
 )
 from . import Auth
 from .by_plugin import AuthByPlugin, AuthType
-from .idtoken import AuthByIdToken
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +73,6 @@ class AuthByWebBrowser(AuthByPlugin):
     @property
     def type_(self) -> AuthType:
         return AuthType.EXTERNAL_BROWSER
-
-    def preprocess(self) -> AuthByIdToken | Self:
-        if self._rest.id_token is not None:
-            return AuthByIdToken(self._rest.id_token)
-        else:
-            return self
 
     @property
     def assertion_content(self) -> str:
@@ -178,7 +169,7 @@ class AuthByWebBrowser(AuthByPlugin):
     def reauthenticate(self) -> dict[str, bool]:
         if self.conn is None:
             raise Exception("Authentication object's conn parameter was never added")
-        self.conn._authenticate(self)
+        self.conn.authenticate_with_retry(self)
         return {"success": False}
 
     def _receive_saml_token(self, socket_connection) -> None:

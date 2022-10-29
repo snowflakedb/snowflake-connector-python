@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import logging
 
-from typing_extensions import Self
-
 from ..errorcode import ER_NO_PASSWORD
 from ..errors import ProgrammingError
 from ..network import SnowflakeRestful
@@ -42,15 +40,9 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     def type_(self) -> AuthType:
         return AuthType.USR_PWD_MFA
 
-    def preprocess(self) -> Self:
-        if self._rest and self._rest.mfa_token:
-            self.set_mfa_token(self._rest.mfa_token)
-        return self
-
-    def set_mfa_token(self, value):
-        self._mfa_token = value
-
     def authenticate(self, authenticator, service_name, account, user, password):
+        if self._rest and self._rest.mfa_token:
+            self._mfa_token = self._rest.mfa_token
         pass
 
     def reauthenticate(self) -> dict[str, bool]:

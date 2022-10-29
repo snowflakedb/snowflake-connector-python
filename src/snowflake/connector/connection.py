@@ -34,6 +34,7 @@ from .auth import (
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
 )
+from .auth.idtoken import AuthByIdToken
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .connection_diagnostic import ConnectionDiagnostic
@@ -739,33 +740,6 @@ class SnowflakeConnection:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
                 del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
-        if self.auth_class is not None:
-            if type(self.auth_class) not in FIRST_PARTY_AUTHENTICATORS:
-                # Custom auth
-                if not issubclass(type(self.auth_class), AuthByKeyPair):
-                    raise TypeError("auth_class must be a child class of AuthByKeyPair")
-                # TODO: add telemetry for custom auth
-            auth_instance = self.auth_class
-        elif self._authenticator == DEFAULT_AUTHENTICATOR:
-            auth_instance = AuthByDefault(self._password)
-        elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
-            auth_instance = AuthByWebBrowser(
-                self.rest,
-                self.application,
-                protocol=self._protocol,
-                host=self.host,
-                port=self.port,
-            )
-        elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-            auth_instance = AuthByKeyPair(self._private_key)
-        elif self._authenticator == OAUTH_AUTHENTICATOR:
-            auth_instance = AuthByOAuth(self._token)
-        elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
-            auth_instance = AuthByUsrPwdMfa(self._password, rest=self.rest)
-        else:
-            # okta URL, e.g., https://<account>.okta.com/
-            auth_instance = AuthByOkta(self.rest, self.application)
-
         if self._session_parameters is None:
             self._session_parameters = {}
         if self._autocommit is not None:
@@ -795,23 +769,55 @@ class SnowflakeConnection:
                 PARAMETER_CLIENT_PREFETCH_THREADS
             ] = self._validate_client_prefetch_threads()
 
-        if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+        # Setup authenticator
+        auth = Auth(self.rest)
+        auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
+        if self.auth_class is not None:
+            if type(self.auth_class) not in FIRST_PARTY_AUTHENTICATORS:
+                # Custom auth
+                if not issubclass(type(self.auth_class), AuthByKeyPair):
+                    raise TypeError("auth_class must be a child class of AuthByKeyPair")
+                # TODO: add telemetry for custom auth
+            self.auth_class = self.auth_class
+        elif self._authenticator == DEFAULT_AUTHENTICATOR:
+            self.auth_class = AuthByDefault(self._password)
+        elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
                 self._client_store_temporary_credential if IS_LINUX else True
             )
+            # Depending on whether self._rest.id_token is available we do different
+            #  auth_instance
+            if self._rest.id_token is None:
+                self.auth_class = AuthByWebBrowser(
+                    self.rest,
+                    self.application,
+                    protocol=self._protocol,
+                    host=self.host,
+                    port=self.port,
+                )
+            else:
+                self.auth_class = AuthByIdToken(self._rest.id_token)
+
+        elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+            self.auth_class = AuthByKeyPair(self._private_key)
+        elif self._authenticator == OAUTH_AUTHENTICATOR:
+            self.auth_class = AuthByOAuth(self._token)
+        elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+            self.auth_class = AuthByUsrPwdMfa(self._password, rest=self.rest)
+        else:
+            # okta URL, e.g., https://<account>.okta.com/
+            self.auth_class = AuthByOkta(self.rest, self.application)
 
         if self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                 self._client_request_mfa_token if IS_LINUX else True
             )
 
-        auth = Auth(self.rest)
-        auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
-        self._authenticate(auth_instance)
+        self.auth_class.conn = self
+        self.authenticate_with_retry(self.auth_class)
 
         self._password = None  # ensure password won't persist
-        self._auth_class = None  # ensure custom auth class won't persist
 
         if self.client_session_keep_alive:
             # This will be called after the heartbeat frequency has actually been set.
@@ -1060,16 +1066,16 @@ class SnowflakeConnection:
     def _reauthenticate(self):
         return self._auth_class.reauthenticate()
 
-    def _authenticate(self, auth_instance):
+    def authenticate_with_retry(self, auth_instance):
         # make some changes if needed before real __authenticate
         try:
-            self.__authenticate(auth_instance.preprocess())
+            self._authenticate(auth_instance)
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            self.__authenticate(auth_instance.preprocess())
+            self._authenticate(auth_instance)
 
-    def __authenticate(self, auth_instance):
+    def _authenticate(self, auth_instance: AuthByPlugin):
         auth_instance.authenticate(
             authenticator=self._authenticator,
             service_name=self.service_name,

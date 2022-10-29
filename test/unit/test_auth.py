@@ -227,12 +227,6 @@ def test_authbyplugin_abc_api():
     assert inspect.isdatadescriptor(bc.assertion_content)
 
     # Verify method signatures
-    # preprocess
-    assert inspect.isfunction(bc.preprocess)
-    assert str(inspect.signature(bc.preprocess).parameters) == (
-        "OrderedDict([('self', <Parameter \"self\">)])"
-    )
-
     # update_body
     assert inspect.isfunction(bc.update_body)
     assert str(inspect.signature(bc.update_body).parameters) == (

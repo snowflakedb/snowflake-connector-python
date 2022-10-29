@@ -967,7 +967,7 @@ def test_authenticate_error(conn_cnx, caplog):
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):
-            conn._authenticate(mock_auth)
+            conn.authenticate_with_retry(mock_auth)
         assert (
             "snowflake.connector.connection",
             logging.DEBUG,
