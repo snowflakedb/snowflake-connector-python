@@ -22,9 +22,9 @@ timestamps {
         |./ci/build_docker.sh
         |cp dist/**/*.txt dist/repaired_wheels/
         |cp dist/*.tar.gz dist/repaired_wheels/
-        |aws s3 cp --only-show-errors ./dist/repaired_wheels/ s3://sfc-jenkins/repository/python_connector/linux/${GIT_BRANCH}/${GIT_COMMIT}/ --recursive --include '*'
+        |aws s3 cp --only-show-errors ./dist/repaired_wheels/ s3://sfc-eng-jenkins/repository/python_connector/linux/${GIT_BRANCH}/${GIT_COMMIT}/ --recursive --include '*'
         |echo ${GIT_COMMIT} > latest_commit
-        |aws s3 cp --only-show-errors latest_commit s3://sfc-jenkins/repository/python_connector/linux/${GIT_BRANCH}/
+        |aws s3 cp --only-show-errors latest_commit s3://sfc-eng-jenkins/repository/python_connector/linux/${GIT_BRANCH}/
         '''.stripMargin()
         }
       }

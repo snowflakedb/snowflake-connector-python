@@ -31,7 +31,7 @@ gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMETERS_DIR}/jenkins_test_parameters.py.gpg > ci/jenkins_test_parameters.py
 
 # Download artifacts made by build
-aws s3 cp --recursive --only-show-errors s3://sfc-jenkins/repository/python_connector/linux/${client_git_branch}/${client_git_commit}/ dist
+aws s3 cp --recursive --only-show-errors s3://sfc-eng-jenkins/repository/python_connector/linux/${client_git_branch}/${client_git_commit}/ dist
 
 # Run one of the tests
 if [ "${py_test_mode}" = "fips" ]; then
