@@ -719,7 +719,7 @@ def get_token_from_private_key(
         private_key,
         DAY_IN_SECONDS,
     )  # token valid for 24 hours
-    return auth_instance.authenticate(
+    return auth_instance.prepare(
         KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
     )
 

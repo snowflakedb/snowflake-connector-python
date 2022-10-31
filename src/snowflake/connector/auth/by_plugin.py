@@ -5,6 +5,13 @@
 
 from __future__ import annotations
 
+"""This module implements the base class for authenticator classes.
+
+Note:
+ **kwargs are added to most functions so that child classes can safely ignore extra in
+  arguments in case of a caller API change.
+"""
+
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -82,10 +89,14 @@ class AuthByPlugin(ABC):
     """External Authenticator interface."""
 
     def __init__(self) -> None:
-        self._conn: SnowflakeConnection | None = None
         self._retry_ctx = AuthRetryCtx()
         self._consent_cache_id_token = False
         self._timeout = 120
+
+    @abstractmethod
+    def reset_secrets(self) -> None:
+        """Reset secret members."""
+        raise NotImplementedError
 
     @property
     def consent_cache_id_token(self) -> bool:
@@ -102,20 +113,18 @@ class AuthByPlugin(ABC):
     @property
     @abstractmethod
     def type_(self) -> AuthType:
+        """Return the Snowflake friendly name of auth class."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def assertion_content(self) -> str:
+        """Return a safe version of the information used to authenticate with Snowflake.
+
+        This is used for logging, useful for printing temporary tokens, but make sure to
+        mask secrets.
+        """
         raise NotImplementedError
-
-    @property
-    def conn(self) -> SnowflakeConnection | None:
-        return getattr(self, "_conn", None)
-
-    @conn.setter
-    def conn(self, value: SnowflakeConnection) -> None:
-        self._conn = value
 
     @abstractmethod
     def update_body(self, body: dict[Any, Any]) -> None:
@@ -123,15 +132,21 @@ class AuthByPlugin(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def authenticate(
+    def prepare(
         self,
+        conn: SnowflakeConnection,
         authenticator: str,
-        service_name: str,
+        service_name: str | None,
         account: str,
         user: str,
-        password: str,
+        password: str | None,
         **kwargs: Any,
     ) -> str | None:
+        """Prepare for authentication.
+
+        This function is useful for situations where we need to reach out to a 3rd-party
+        service before authenticating with Snowflake.
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -140,18 +155,27 @@ class AuthByPlugin(ABC):
         conn: SnowflakeConnection,
         **kwargs: Any,
     ) -> dict[str, bool]:
+        """Re-perform authentication.
+
+        The difference between this and authentication is that secrets will be gone.
+        """
         raise NotImplementedError
 
-    def handle_failure(self, ret: dict[Any, Any]) -> None:
+    def handle_failure(
+        self,
+        conn: SnowflakeConnection,
+        ret: dict[Any, Any],
+        **kwargs: Any,
+    ) -> None:
         """Handles a failure when connecting to Snowflake."""
         Error.errorhandler_wrapper(
-            self.conn,
+            conn,
             None,
             DatabaseError,
             {
                 "msg": "Failed to connect to DB: {host}:{port}, {message}".format(
-                    host=self.conn._rest._host,
-                    port=self.conn._rest._port,
+                    host=conn._rest._host,
+                    port=conn._rest._port,
                     message=ret["message"],
                 ),
                 "errno": int(ret.get("code", -1)),
@@ -166,6 +190,7 @@ class AuthByPlugin(ABC):
         account: str,
         user: str,
         password: str,
+        **kwargs: Any,
     ) -> None:
         """Default timeout handler.
 

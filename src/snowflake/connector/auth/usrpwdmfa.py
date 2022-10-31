@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
 
 from ..errorcode import ER_NO_PASSWORD
 from ..errors import ProgrammingError
-from ..network import SnowflakeRestful
 from .by_plugin import AuthByPlugin, AuthType
+
+if TYPE_CHECKING:
+    from .. import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
 
@@ -28,27 +31,32 @@ class AuthByUsrPwdMfa(AuthByPlugin):
         self,
         password: str,
         mfa_token: str | None = None,
-        rest: SnowflakeRestful | None = None,
     ) -> None:
         """Initializes and instance with a password and a mfa token."""
         super().__init__()
-        self._password = password
-        self._mfa_token = mfa_token
-        self._rest = rest
+        self._password: str | None = password
+        self._mfa_token: str | None = mfa_token
+
+    def reset_secrets(self) -> None:
+        self._password = None
+        self._mfa_token = None
 
     @property
     def type_(self) -> AuthType:
         return AuthType.USR_PWD_MFA
 
-    def authenticate(self, authenticator, service_name, account, user, password):
-        if self._rest and self._rest.mfa_token:
-            self._mfa_token = self._rest.mfa_token
-        pass
+    def prepare(
+        self,
+        conn: SnowflakeConnection,
+        **kwargs: Any,
+    ) -> None:
+        if conn._rest and conn._rest.mfa_token:
+            self._mfa_token = conn._rest.mfa_token
 
-    def reauthenticate(self) -> dict[str, bool]:
+    def reauthenticate(self, **kwargs) -> dict[str, bool]:
         return {"success": False}
 
-    def update_body(self, body):
+    def update_body(self, body: dict[Any, Any]) -> None:
         """Sets the password and mfa_token if available.
 
         Don't set body['data']['AUTHENTICATOR'], since this is still snowflake default authenticator.

@@ -168,7 +168,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "paramstyle": (None, (type(None), str)),  # standard/snowflake
     "timezone": (None, (type(None), str)),  # snowflake
     "consent_cache_id_token": (True, bool),  # snowflake
-    "service_name": (None, (type(None), str)),  # snowflake,
+    "service_name": (None, (type(None), str)),  # snowflake
     "support_negative_year": (True, bool),  # snowflake
     "log_max_query_length": (LOG_MAX_QUERY_LENGTH, int),  # snowflake
     "disable_request_pooling": (False, bool),  # snowflake
@@ -287,7 +287,7 @@ class SnowflakeConnection:
 
         self._rest = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
-            setattr(self, "_" + name, value)
+            setattr(self, f"_{name}", value)
 
         self.heartbeat_thread = None
 
@@ -780,7 +780,7 @@ class SnowflakeConnection:
                 # TODO: add telemetry for custom auth
             self.auth_class = self.auth_class
         elif self._authenticator == DEFAULT_AUTHENTICATOR:
-            self.auth_class = AuthByDefault(self._password)
+            self.auth_class = AuthByDefault(password=self._password)
         elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             # enable storing temporary credential in a file
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
@@ -790,34 +790,31 @@ class SnowflakeConnection:
             #  auth_instance
             if self._rest.id_token is None:
                 self.auth_class = AuthByWebBrowser(
-                    self.rest,
-                    self.application,
+                    application=self.application,
                     protocol=self._protocol,
                     host=self.host,
                     port=self.port,
                 )
             else:
-                self.auth_class = AuthByIdToken(self._rest.id_token)
+                self.auth_class = AuthByIdToken(id_token=self._rest.id_token)
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-            self.auth_class = AuthByKeyPair(self._private_key)
+            self.auth_class = AuthByKeyPair(private_key=self._private_key)
         elif self._authenticator == OAUTH_AUTHENTICATOR:
-            self.auth_class = AuthByOAuth(self._token)
+            self.auth_class = AuthByOAuth(oauth_token=self._token)
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
-            self.auth_class = AuthByUsrPwdMfa(self._password, rest=self.rest)
-        else:
-            # okta URL, e.g., https://<account>.okta.com/
-            self.auth_class = AuthByOkta(self.rest, self.application)
-
-        if self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+            self.auth_class = AuthByUsrPwdMfa(password=self._password)
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                 self._client_request_mfa_token if IS_LINUX else True
             )
+        else:
+            # okta URL, e.g., https://<account>.okta.com/
+            self.auth_class = AuthByOkta(application=self.application)
 
-        self.auth_class.conn = self
         self.authenticate_with_retry(self.auth_class)
 
         self._password = None  # ensure password won't persist
+        self.auth_class.reset_secrets()
 
         if self.client_session_keep_alive:
             # This will be called after the heartbeat frequency has actually been set.
@@ -1064,7 +1061,7 @@ class SnowflakeConnection:
         return ret
 
     def _reauthenticate(self):
-        return self._auth_class.reauthenticate()
+        return self._auth_class.reauthenticate(self)
 
     def authenticate_with_retry(self, auth_instance):
         # make some changes if needed before real __authenticate
@@ -1076,7 +1073,8 @@ class SnowflakeConnection:
             self._authenticate(auth_instance)
 
     def _authenticate(self, auth_instance: AuthByPlugin):
-        auth_instance.authenticate(
+        auth_instance.prepare(
+            conn=self,
             authenticator=self._authenticator,
             service_name=self.service_name,
             account=self.account,
@@ -1103,7 +1101,7 @@ class SnowflakeConnection:
                 password_callback=self._password_callback,
                 session_parameters=self._session_parameters,
             )
-        except OperationalError:
+        except OperationalError as e:
             logger.debug(
                 "Operational Error raised at authentication"
                 f"for authenticator: {type(auth_instance).__name__}"
@@ -1134,7 +1132,7 @@ class SnowflakeConnection:
                     )
                 except OperationalError as auth_op:
                     if auth_op.errno == ER_FAILED_TO_CONNECT_TO_DB:
-                        raise auth_op
+                        raise auth_op from e
                     logger.debug("Continuing authenticator specific timeout handling")
                     continue
                 break

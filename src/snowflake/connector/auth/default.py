@@ -21,25 +21,20 @@ class AuthByDefault(AuthByPlugin):
     def assertion_content(self) -> str:
         return "*********"
 
-    def __init__(self, password) -> None:
+    def __init__(self, password: str) -> None:
         """Initializes an instance with a password."""
         super().__init__()
-        self._password = password
+        self._password: str | None = password
 
-    def authenticate(
-        self,
-        authenticator: str,
-        service_name: str,
-        account: str,
-        user: str,
-        password: str,
-    ) -> None:
+    def reset_secrets(self) -> None:
+        self._password = None
+
+    def prepare(self, **kwargs: Any) -> None:
         pass
 
-    def reauthenticate(self) -> dict[str, bool]:
+    def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
         return {"success": False}
 
     def update_body(self, body: dict[Any, Any]) -> None:
         """Sets the password if available."""
-        if self._password:
-            body["data"]["PASSWORD"] = self._password
+        body["data"]["PASSWORD"] = self._password

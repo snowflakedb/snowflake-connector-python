@@ -12,7 +12,6 @@ def test_auth_oauth():
     """Simple OAuth test."""
     token = "oAuthToken"
     auth = AuthByOAuth(token)
-    auth.authenticate(None, None, None, None, None)
     body = {"data": {}}
     auth.update_body(body)
     assert body["data"]["TOKEN"] == token, body

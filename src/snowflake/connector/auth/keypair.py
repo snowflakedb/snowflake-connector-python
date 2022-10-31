@@ -57,7 +57,7 @@ class AuthByKeyPair(AuthByPlugin):
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         super().__init__()
-        self._private_key = private_key
+        self._private_key: bytes | None = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -77,17 +77,18 @@ class AuthByKeyPair(AuthByPlugin):
         ).seconds
         self._current_retry_count = 0
 
+    def reset_secrets(self) -> None:
+        self._private_key = None
+
     @property
     def type_(self) -> AuthType:
         return AuthType.KEY_PAIR
 
-    def authenticate(
+    def prepare(
         self,
-        authenticator: str,
-        service_name: str | None,
         account: str,
         user: str,
-        password: str | None,
+        **kwargs: Any,
     ) -> str:
         if ".global" in account:
             account = account.partition("-")[0]
@@ -100,7 +101,9 @@ class AuthByKeyPair(AuthByPlugin):
 
         try:
             private_key = load_der_private_key(
-                data=self._private_key, password=None, backend=default_backend()
+                data=self._private_key,
+                password=None,
+                backend=default_backend(),
             )
         except Exception as e:
             raise ProgrammingError(
@@ -138,7 +141,7 @@ class AuthByKeyPair(AuthByPlugin):
 
         return self._jwt_token
 
-    def reauthenticate(self) -> dict[str, bool]:
+    def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
         return {"success": False}
 
     @staticmethod
@@ -176,6 +179,7 @@ class AuthByKeyPair(AuthByPlugin):
         account: str,
         user: str,
         password: str | None,
+        **kwargs: Any,
     ) -> None:
         if self._retry_ctx.get_current_retry_count() > self._jwt_retry_attempts:
             logger.debug("Exhausted max login attempts. Aborting connection")
@@ -191,7 +195,7 @@ class AuthByKeyPair(AuthByPlugin):
             )
             self._retry_ctx.increment_retry()
 
-        self.authenticate(authenticator, service_name, account, user, password)
+        self.prepare(account, user)
 
     @staticmethod
     def can_handle_exception(op: OperationalError) -> bool:

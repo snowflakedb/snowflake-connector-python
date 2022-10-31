@@ -235,21 +235,25 @@ def test_authbyplugin_abc_api():
     )
 
     # authenticate
-    assert inspect.isfunction(bc.authenticate)
-    assert str(inspect.signature(bc.authenticate).parameters) == (
+    assert inspect.isfunction(bc.prepare)
+    assert str(inspect.signature(bc.prepare).parameters) == (
         "OrderedDict([('self', <Parameter \"self\">), "
+        "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
         "('authenticator', <Parameter \"authenticator: 'str'\">), "
         "('service_name', <Parameter \"service_name: 'str'\">), "
         "('account', <Parameter \"account: 'str'\">), "
         "('user', <Parameter \"user: 'str'\">), "
-        "('password', <Parameter \"password: 'str'\">)])"
+        "('password', <Parameter \"password: 'str | None'\">), "
+        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
     )
 
     # handle_failure
     assert inspect.isfunction(bc.handle_failure)
     assert str(inspect.signature(bc.handle_failure).parameters) == (
         "OrderedDict([('self', <Parameter \"self\">), "
-        "('ret', <Parameter \"ret: 'dict[Any, Any]'\">)])"
+        "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
+        "('ret', <Parameter \"ret: 'dict[Any, Any]'\">), "
+        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
     )
 
     # handle_timeout
@@ -260,5 +264,6 @@ def test_authbyplugin_abc_api():
         "('service_name', <Parameter \"service_name: 'str | None'\">), "
         "('account', <Parameter \"account: 'str'\">), "
         "('user', <Parameter \"user: 'str'\">), "
-        "('password', <Parameter \"password: 'str'\">)])"
+        "('password', <Parameter \"password: 'str'\">), "
+        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
     )

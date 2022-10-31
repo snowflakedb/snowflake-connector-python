@@ -29,20 +29,19 @@ class AuthByOAuth(AuthByPlugin):
     def __init__(self, oauth_token: str) -> None:
         """Initializes an instance with an OAuth Token."""
         super().__init__()
-        self._oauth_token = oauth_token
+        self._oauth_token: str | None = oauth_token
 
-    def authenticate(
+    def reset_secrets(self) -> None:
+        self._oauth_token = None
+
+    def prepare(
         self,
-        authenticator: str,
-        service_name: str,
-        account: str,
-        user: str,
-        password: str,
+        **kwargs: Any,
     ) -> None:
-        """Nothing to do here, token should be obtained outside of the driver."""
+        """Nothing to do here, token should be obtained outside the driver."""
         pass
 
-    def reauthenticate(self) -> dict[str, bool]:
+    def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
         return {"success": False}
 
     def update_body(self, body: dict[Any, Any]) -> None:

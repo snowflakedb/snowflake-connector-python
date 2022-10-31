@@ -57,9 +57,18 @@ def test_auth_webbrowser_get():
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
     body = {"data": {}}
@@ -99,9 +108,18 @@ def test_auth_webbrowser_post():
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
     body = {"data": {}}
@@ -143,10 +161,19 @@ def test_auth_webbrowser_fail_webbrowser(
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
     with patch("builtins.input", return_value=input_text):
-        auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
     captured = capsys.readouterr()
     assert captured.out == (
         "Initiating login request with your identity provider. A browser window "
@@ -189,9 +216,18 @@ def test_auth_webbrowser_fail_webserver(capsys):
 
     # case 1: invalid HTTP request
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
     captured = capsys.readouterr()
     assert captured.out == (
         "Initiating login request with your identity provider. A browser window "
@@ -233,4 +269,5 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
     rest._post_request = post_request
+    connection._rest = rest
     return rest

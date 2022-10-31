@@ -15,7 +15,7 @@ import time
 import traceback
 import uuid
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
 
@@ -756,7 +756,15 @@ class SnowflakeRestful:
 
         return ret
 
-    def fetch(self, method, full_url, headers, data=None, timeout=None, **kwargs):
+    def fetch(
+        self,
+        method: str,
+        full_url: str,
+        headers: dict[str, Any],
+        data: dict[str, Any] | None = None,
+        timeout: int | None = None,
+        **kwargs,
+    ) -> dict[Any, Any]:
         """Carry out API request with session management."""
 
         class RetryCtx:
