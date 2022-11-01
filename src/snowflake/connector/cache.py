@@ -336,9 +336,6 @@ class SFDictCache(Generic[K, V]):
         """
         self.telemetry["size"] = len(self._cache)
 
-    def _save(self, load_first: bool = True) -> bool:
-        pass
-
 
 class SFDictFileCache(SFDictCache):
 

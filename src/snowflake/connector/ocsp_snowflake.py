@@ -586,7 +586,8 @@ class OCSPCache:
             2. ocsp_response_cache.json, the file in the same format as the one downloaded from snowflake cache service
         """
         if OCSPCache.CACHE_UPDATED:
-            OCSP_RESPONSE_VALIDATION_CACHE._save()
+            if isinstance(OCSP_RESPONSE_VALIDATION_CACHE, SFDictFileCache):
+                OCSP_RESPONSE_VALIDATION_CACHE._save()
             OCSPCache.update_ocsp_response_cache_file(
                 ocsp, OCSPCache.OCSP_RESPONSE_CACHE_URI
             )
@@ -716,7 +717,7 @@ class OCSPCache:
                 else:
                     OCSPCache.delete_cache(ocsp, cert_id, cache_key=cache_key)
             except Exception as ex:
-                logger.debug("Could not validate cache entry %s %s", cert_id, ex)
+                logger.debug(f"Could not validate cache entry {cert_id} {ex}")
             OCSPCache.CACHE_UPDATED = True
         if subject_name:
             logger.debug("not hit cache for subject: %s", subject_name)
