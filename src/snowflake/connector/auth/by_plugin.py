@@ -90,17 +90,13 @@ class AuthByPlugin(ABC):
 
     def __init__(self) -> None:
         self._retry_ctx = AuthRetryCtx()
-        self._consent_cache_id_token = False
+        self.consent_cache_id_token = False
         self._timeout = 120
 
     @abstractmethod
     def reset_secrets(self) -> None:
         """Reset secret members."""
         raise NotImplementedError
-
-    @property
-    def consent_cache_id_token(self) -> bool:
-        return self._consent_cache_id_token
 
     @property
     def timeout(self) -> int:

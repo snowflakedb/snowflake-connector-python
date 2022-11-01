@@ -221,7 +221,6 @@ def test_authbyplugin_abc_api():
     bc = AuthByPlugin
 
     # Verify properties
-    assert inspect.isdatadescriptor(bc.consent_cache_id_token)
     assert inspect.isdatadescriptor(bc.timeout)
     assert inspect.isdatadescriptor(bc.type_)
     assert inspect.isdatadescriptor(bc.assertion_content)
