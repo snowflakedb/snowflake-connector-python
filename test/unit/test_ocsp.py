@@ -20,7 +20,6 @@ from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ocsp_snowflake import (
     OCSPCache,
-    OCSPResponseValidationMetadata,
     OCSPResponseValidationResult,
     OCSPServer,
     SnowflakeOCSP,
@@ -227,7 +226,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
     current_time = int(time.time())
     for k, _ in cache_data.items():
         cache_data[k] = OCSPResponseValidationResult(
-            OCSPResponseValidationMetadata(ocsp_response=b"bogus"),
+            ocsp_response=b"bogus",
             ts=current_time,
             validated=True,
         )
@@ -261,9 +260,7 @@ def test_ocsp_with_outdated_cache(tmpdir):
     current_time = int(time.time())
     for k, v in cache_data.items():
         cache_data[k] = OCSPResponseValidationResult(
-            OCSPResponseValidationMetadata(
-                ocsp_response=v.ocsp_response_validation_metadata.ocsp_response
-            ),
+            ocsp_response=v.ocsp_response,
             ts=current_time - 144 * 60 * 60,
             validated=True,
         )

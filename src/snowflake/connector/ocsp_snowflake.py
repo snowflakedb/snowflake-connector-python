@@ -342,7 +342,7 @@ class OCSPServer:
             ):
                 # only if custom OCSP cache server is used.
                 parsed_url = urlsplit(self.CACHE_SERVER_URL)
-                self.OCSP_RETRY_URL = f"{urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))}/retry/{{0}}{{1}}"
+                self.OCSP_RETRY_URL = f"{urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))}/retry/{{0}}/{{1}}"
         logger.debug("OCSP dynamic cache server RETRY URL: %s", self.OCSP_RETRY_URL)
 
     def download_cache_from_server(self, ocsp):
