@@ -96,7 +96,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         )
         return cert_id
 
-    def decode_cert_id_key(self, cert_id):
+    def decode_cert_id_key(self, cert_id: CertId) -> tuple[bytes, bytes, bytes]:
         return generate_cache_key(cert_id)
 
     def decode_cert_id_base64(self, cert_id_base64):

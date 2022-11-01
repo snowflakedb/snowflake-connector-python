@@ -59,7 +59,7 @@ class SFDictCache(Generic[K, V]):
         self._lock = Lock()
         self._reset_telemetry()
 
-    def __len__(self):
+    def __len__(self) -> int:
         with self._lock:
             return len(self._cache)
 
