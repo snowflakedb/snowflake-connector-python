@@ -150,9 +150,9 @@ class AuthByWebBrowser(AuthByPlugin):
                 if not self._token:
                     # Input contained no token, either URL was incorrectly pasted,
                     # empty or just wrong
-                    self.handle_failure(
-                        conn,
-                        {
+                    self._handle_failure(
+                        conn=conn,
+                        ret={
                             "code": ER_UNABLE_TO_OPEN_BROWSER,
                             "message": (
                                 "Unable to open a browser in this environment and "
@@ -317,9 +317,9 @@ You can close this window now and go back where you started from.
             if line.startswith("POST "):
                 break
         else:
-            self.handle_failure(
-                conn,
-                {
+            self._handle_failure(
+                conn=conn,
+                ret={
                     "code": ER_IDP_CONNECTION_ERROR,
                     "message": "Invalid HTTP request from web browser. Idp "
                     "authentication could have failed.",
@@ -389,7 +389,7 @@ You can close this window now and go back where you started from.
             socket_timeout=conn._rest._connection.login_timeout,
         )
         if not ret["success"]:
-            self.handle_failure(conn, ret)
+            self._handle_failure(conn=conn, ret=ret)
         data = ret["data"]
         sso_url = data["ssoUrl"]
         self._proof_key = data["proofKey"]

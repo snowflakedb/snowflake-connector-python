@@ -183,7 +183,7 @@ class AuthByOkta(AuthByPlugin):
         )
 
         if not ret["success"]:
-            self.handle_failure(conn, ret)
+            self._handle_failure(conn=conn, ret=ret)
 
         data = ret["data"]
         token_url = data["tokenUrl"]

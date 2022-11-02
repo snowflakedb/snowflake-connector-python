@@ -9,7 +9,8 @@ from __future__ import annotations
 
 Note:
  **kwargs are added to most functions so that child classes can safely ignore extra in
-  arguments in case of a caller API change.
+  arguments in case of a caller API change and named arguments are enforced to prevent
+  issues with argument being sent in out of order.
 """
 
 import logging
@@ -93,11 +94,6 @@ class AuthByPlugin(ABC):
         self.consent_cache_id_token = False
         self._timeout = 120
 
-    @abstractmethod
-    def reset_secrets(self) -> None:
-        """Reset secret members."""
-        raise NotImplementedError
-
     @property
     def timeout(self) -> int:
         return self._timeout
@@ -123,13 +119,9 @@ class AuthByPlugin(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def update_body(self, body: dict[Any, Any]) -> None:
-        """Update the body of the authentication request."""
-        raise NotImplementedError
-
-    @abstractmethod
     def prepare(
         self,
+        *,
         conn: SnowflakeConnection,
         authenticator: str,
         service_name: str | None,
@@ -146,24 +138,42 @@ class AuthByPlugin(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def update_body(self, body: dict[Any, Any]) -> None:
+        """Update the body of the authentication request."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def reset_secrets(self) -> None:
+        """Reset secret members."""
+        raise NotImplementedError
+
+    @abstractmethod
     def reauthenticate(
         self,
+        *,
         conn: SnowflakeConnection,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Re-perform authentication.
 
-        The difference between this and authentication is that secrets will be gone.
+        The difference between this and authentication is that secrets will be removed
+        from memory by the time this gets called.
         """
         raise NotImplementedError
 
-    def handle_failure(
+    def _handle_failure(
         self,
+        *,
         conn: SnowflakeConnection,
         ret: dict[Any, Any],
         **kwargs: Any,
     ) -> None:
-        """Handles a failure when connecting to Snowflake."""
+        """Handles a failure when an issue happens while connecting to Snowflake.
+
+        If the user returns from this function execution will continue. The argument
+        data can be manipulated from within this function and so recovery is possible
+        from here.
+        """
         Error.errorhandler_wrapper(
             conn,
             None,
@@ -181,6 +191,7 @@ class AuthByPlugin(ABC):
 
     def handle_timeout(
         self,
+        *,
         authenticator: str,
         service_name: str | None,
         account: str,

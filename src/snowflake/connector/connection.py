@@ -1061,7 +1061,7 @@ class SnowflakeConnection:
         return ret
 
     def _reauthenticate(self):
-        return self._auth_class.reauthenticate(self)
+        return self._auth_class.reauthenticate(conn=self)
 
     def authenticate_with_retry(self, auth_instance):
         # make some changes if needed before real __authenticate

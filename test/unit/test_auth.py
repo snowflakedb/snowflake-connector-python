@@ -239,7 +239,7 @@ def test_authbyplugin_abc_api():
         "OrderedDict([('self', <Parameter \"self\">), "
         "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
         "('authenticator', <Parameter \"authenticator: 'str'\">), "
-        "('service_name', <Parameter \"service_name: 'str'\">), "
+        "('service_name', <Parameter \"service_name: 'str | None'\">), "
         "('account', <Parameter \"account: 'str'\">), "
         "('user', <Parameter \"user: 'str'\">), "
         "('password', <Parameter \"password: 'str | None'\">), "
@@ -247,8 +247,8 @@ def test_authbyplugin_abc_api():
     )
 
     # handle_failure
-    assert inspect.isfunction(bc.handle_failure)
-    assert str(inspect.signature(bc.handle_failure).parameters) == (
+    assert inspect.isfunction(bc._handle_failure)
+    assert str(inspect.signature(bc._handle_failure).parameters) == (
         "OrderedDict([('self', <Parameter \"self\">), "
         "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
         "('ret', <Parameter \"ret: 'dict[Any, Any]'\">), "
