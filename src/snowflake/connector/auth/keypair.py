@@ -74,7 +74,7 @@ class AuthByKeyPair(AuthByPlugin):
                     "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
                 )
             )
-        ).seconds
+        ). total_seconds()
         self._current_retry_count = 0
 
     def reset_secrets(self) -> None:
