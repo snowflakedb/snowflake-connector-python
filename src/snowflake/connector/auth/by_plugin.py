@@ -154,7 +154,7 @@ class AuthByPlugin(ABC):
         self,
         conn: SnowflakeConnection,
         **kwargs: Any,
-    ) -> dict[str, bool]:
+    ) -> dict[str, Any]:
         """Re-perform authentication.
 
         The difference between this and authentication is that secrets will be gone.
