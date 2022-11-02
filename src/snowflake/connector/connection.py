@@ -1550,6 +1550,7 @@ class SnowflakeConnection:
         """Checks whether all async queries started by this Connection have finished executing."""
 
         if not self._async_sfqids:
+            logger.info("No async queries are found")
             return True
 
         if sys.version_info >= (3, 8):
@@ -1564,9 +1565,16 @@ class SnowflakeConnection:
             sfq_id: str,
         ) -> bool:
             nonlocal found_unfinished_query
-            return found_unfinished_query or self.is_still_running(
-                self.get_query_status(sfq_id)
-            )
+            if found_unfinished_query:
+                logger.info(
+                    f"Already found unfinished async query, skipping status check for query {sfq_id}"
+                )
+                return True
+            if self.is_still_running(self.get_query_status(sfq_id)):
+                logger.info(f"Async query {sfq_id} is found still running")
+                return True
+            logger.info(f"Async query {sfq_id} is finished")
+            return False
 
         with ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="async_query_check_"
