@@ -173,7 +173,7 @@ class AuthByWebBrowser(AuthByPlugin):
         **kwargs: Any,
     ) -> dict[str, bool]:
         conn.authenticate_with_retry(self)
-        return {"success": False}
+        return {"success": True}
 
     def _receive_saml_token(self, conn: SnowflakeConnection, socket_connection) -> None:
         """Receives SAML token from web browser."""
