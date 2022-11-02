@@ -1125,6 +1125,7 @@ def test_execute_helper_params_error(conn_testaccount):
             cur._execute_helper("select %()s", statement_params="1")
 
 
+@pytest.mark.skipolddriver
 def test_desc_rewrite(conn, caplog):
     """Tests whether describe queries are rewritten as expected and this action is logged."""
     with conn() as cnx:

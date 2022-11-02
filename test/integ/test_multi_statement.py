@@ -26,7 +26,10 @@ try:  # pragma: no cover
 except ImportError:
     QueryStatus = None
 
-from snowflake.connector.util_text import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 
 def test_multi_statement_wrong_count(conn_cnx):
