@@ -410,8 +410,12 @@ class SnowflakeFileTransferAgent:
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
-        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        preprocess_tpe = ThreadPoolExecutor(
+            min(len(metas), len(os.sched_getaffinity(0)))
+        )
+        postprocess_tpe = ThreadPoolExecutor(
+            min(len(metas), len(os.sched_getaffinity(0)))
+        )
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
