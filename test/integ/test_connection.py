@@ -1102,12 +1102,19 @@ def test_ocsp_cache_working(conn_cnx):
 
     The only way we can verify this is that the number of hits and misses increase.
     """
-    from snowflake.connector.ocsp_snowflake import OCSP_CACHE
+    from snowflake.connector.ocsp_snowflake import OCSP_RESPONSE_VALIDATION_CACHE
 
-    original_count = OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"]
+    original_count = (
+        OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
+        + OCSP_RESPONSE_VALIDATION_CACHE.telemetry["miss"]
+    )
     with conn_cnx() as cnx:
         assert cnx
-    assert OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"] > original_count
+    assert (
+        OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
+        + OCSP_RESPONSE_VALIDATION_CACHE.telemetry["miss"]
+        > original_count
+    )
 
 
 @pytest.mark.skipolddriver
