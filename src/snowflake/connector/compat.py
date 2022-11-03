@@ -53,6 +53,7 @@ urlsplit = urllib.parse.urlsplit
 urlunsplit = urllib.parse.urlunsplit
 parse_qs = urllib.parse.parse_qs
 urlparse = urllib.parse.urlparse
+urlunparse = urllib.parse.urlunparse
 
 NUM_DATA_TYPES += (int, float, decimal.Decimal)
 
