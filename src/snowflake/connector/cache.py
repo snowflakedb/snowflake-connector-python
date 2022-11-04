@@ -86,7 +86,6 @@ class SFDictCache(Generic[K, V]):
         should_record_hits: bool = True,
     ) -> V:
         """Non-locking version of __getitem__.
-
         This should only be used by internal functions when already
         holding self._lock.
         """
@@ -187,17 +186,27 @@ class SFDictCache(Generic[K, V]):
         with self._lock:
             self._delitem(key)
 
+    def _contains(
+        self,
+        key: K,
+    ) -> bool:
+        """non-locking version of __contains__
+        This should only be used by internal functions when already
+        holding self._lock.
+        """
+        try:
+            self._getitem(key, should_record_hits=True)
+            return True
+        except KeyError:
+            # Fall through
+            return False
+
     def __contains__(
         self,
         key: K,
     ) -> bool:
         with self._lock:
-            try:
-                self._getitem(key, should_record_hits=True)
-                return True
-            except KeyError:
-                # Fall through
-                return False
+            return self._contains(key)
 
     def _update(
         self,
@@ -406,6 +415,34 @@ class SFDictFileCache(SFDictCache):
         self.last_loaded: datetime.datetime | None = None
         if os.path.exists(self.file_path):
             self._load()
+
+    def _getitem(
+        self,
+        k: K,
+        *,
+        should_record_hits: bool = True,
+    ) -> V:
+        """non-locking version of __getitem__
+        This should only be used by internal functions when already
+        holding self._lock.
+        """
+        if k not in self._cache:
+            loaded = self._load_if_should()
+            if (not loaded) or k not in self._cache:
+                self._miss(k)
+                raise KeyError
+        t, v = self._cache[k]
+        if is_expired(t):
+            loaded = self._load_if_should()
+            expire_item = True
+            if loaded:
+                t, v = self._cache[k]
+                expire_item = is_expired(t)
+            if expire_item:
+                # Raises KeyError
+                self._expire(k)
+        self._hit(k)
+        return v
 
     def __getitem__(self, k: K) -> V:
         """Returns an element if it hasn't expired yet in a thread-safe way."""
