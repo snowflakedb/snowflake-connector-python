@@ -1138,7 +1138,7 @@ def test_desc_rewrite(conn, caplog):
                 assert (
                     "snowflake.connector.cursor",
                     20,
-                    "query was rewritten: org=desc {table_name}, new=describe table {table_name};".format(
+                    "query was rewritten: org=desc {table_name}, new=describe table {table_name}".format(
                         table_name=table_name
                     ),
                 ) in caplog.record_tuples
@@ -1600,6 +1600,11 @@ def test_null_connection(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_multi_statement_failure(conn_cnx):
+    """
+    This test mocks the driver version sent to Snowflake to be 2.8.1, which does not support multi-statement.
+    The backend should not allow multi-statements to be submitted for versions older than 2.9.0 and should raise an
+    error when a multi-statement is submitted, regardless of the MULTI_STATEMENT_COUNT parameter.
+    """
     try:
         network.PYTHON_CONNECTOR_USER_AGENT = (
             f"{CLIENT_NAME}/2.8.1 ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"

@@ -13,7 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where the permission of the file downloaded via GET command is changed
   - Reworked authentication internals to allow users to plug custom key-pair authenticators
   - Multi-statement query execution is now supported through `cursor.execute` and `cursor.executemany`
-    - The Snowflake parameter `MULTI_STATEMENT_COUNT` can be altered at the account, session, or statement level. An additional argument, `_num_statements`, can be provided to `execute` to use this parameter at the statement level. It *must* be provided to `executemany` to submit a multi-statement query through the method. Note that bulk insert optimizations available through `executemany` are not available when submitting multi-statement queries.
+    - The Snowflake parameter `MULTI_STATEMENT_COUNT` can be altered at the account, session, or statement level. An additional argument, `num_statements`, can be provided to `execute` to use this parameter at the statement level. It *must* be provided to `executemany` to submit a multi-statement query through the method. Note that bulk insert optimizations available through `executemany` are not available when submitting multi-statement queries.
       - By default the parameter is 1, meaning only a single query can be submitted at a time
       - Set to 0 to submit any number of statements in a multi-statement query
       - Set to >1 to submit the specified exact number of statements in a multi-statement query
