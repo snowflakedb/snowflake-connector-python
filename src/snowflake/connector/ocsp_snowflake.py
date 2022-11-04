@@ -741,18 +741,15 @@ class OCSPCache:
         ts: int,
         **kwargs: Any,
     ) -> None:
-        lock_cache = kwargs.get("lock_cache", True)
         try:
             current_time = int(time.time())
-            found, _ = OCSPCache.find_cache(ocsp, cert_id, None, lock_cache=lock_cache)
+            found, _ = OCSPCache.find_cache(ocsp, cert_id, None, **kwargs)
             if current_time - OCSPCache.CACHE_EXPIRATION <= ts:
                 # creation time must be new enough
-                OCSPCache.update_cache(
-                    ocsp, cert_id, ocsp_response, lock_cache=lock_cache
-                )
+                OCSPCache.update_cache(ocsp, cert_id, ocsp_response, **kwargs)
             elif found:
                 # invalidate the cache if exists
-                OCSPCache.delete_cache(ocsp, cert_id, lock_cache=lock_cache)
+                OCSPCache.delete_cache(ocsp, cert_id, **kwargs)
         except Exception as ex:
             logger.debug("Caught here > %s", ex)
             raise ex
@@ -767,16 +764,24 @@ class OCSPCache:
             "cache_key", ocsp.decode_cert_id_key(cert_id)
         )
         lock_cache = kwargs.get("lock_cache", True)
+        try_saving_cache = kwargs.get("try_saving_cache", True)
         ocsp_response_validation_result = OCSPResponseValidationResult(
             ocsp_response=ocsp_response,
             ts=int(time.time()),
             validated=False,
         )
         if lock_cache:
-            OCSP_RESPONSE_VALIDATION_CACHE[cache_key] = ocsp_response_validation_result
+            with OCSP_RESPONSE_VALIDATION_CACHE._lock:
+                OCSP_RESPONSE_VALIDATION_CACHE._setitem(
+                    cache_key,
+                    ocsp_response_validation_result,
+                    try_saving_cache=try_saving_cache,
+                )
         else:
             OCSP_RESPONSE_VALIDATION_CACHE._setitem(
-                cache_key, ocsp_response_validation_result
+                cache_key,
+                ocsp_response_validation_result,
+                try_saving_cache=try_saving_cache,
             )
         OCSPCache.CACHE_UPDATED = True
 
@@ -1635,8 +1640,17 @@ class SnowflakeOCSP:
                     cert_id = self.decode_cert_id_base64(cert_id_base64)
                     if not self.is_valid_time(cert_id, b64decode(ocsp_response)):
                         continue
+                    # To improve performance, we try not to perform random writing as there will be hundreds of items
+                    # which will trigger unnecessary writes.
+                    # Besides, after validation, SnowflakeOCSP.OCSP_CACHE.update_file(self)
+                    # will be called to save cache to in-memory files.
                     SnowflakeOCSP.OCSP_CACHE.update_or_delete_cache(
-                        self, cert_id, b64decode(ocsp_response), ts, lock_cache=False
+                        self,
+                        cert_id,
+                        b64decode(ocsp_response),
+                        ts,
+                        lock_cache=False,
+                        try_saving_cache=False,
                     )
         except Exception as ex:
             logger.debug("Caught here - %s", ex)

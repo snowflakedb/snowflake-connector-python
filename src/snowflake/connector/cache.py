@@ -14,7 +14,7 @@ import string
 import tempfile
 from collections.abc import Iterator
 from threading import Lock
-from typing import Generic, NoReturn, TypeVar
+from typing import Any, Generic, NoReturn, TypeVar
 
 from filelock import FileLock, Timeout
 from typing_extensions import NamedTuple, Self
@@ -100,11 +100,7 @@ class SFDictCache(Generic[K, V]):
             self._hit(k)
         return v
 
-    def _setitem(
-        self,
-        k: K,
-        v: V,
-    ) -> None:
+    def _setitem(self, k: K, v: V, **kwargs: Any) -> None:
         """Non-locking version of __setitem__.
 
         This should only be used by internal functions when already
@@ -482,9 +478,10 @@ class SFDictFileCache(SFDictCache):
             if currently_holding:
                 self._lock.release()
 
-    def _setitem(self, k: K, v: V) -> None:
+    def _setitem(self, k: K, v: V, *, try_saving_cache: bool = True) -> None:
         super()._setitem(k, v)
-        self._save_if_should()
+        if try_saving_cache:
+            self._save_if_should()
 
     def _load(self) -> bool:
         """Load cache from disk if possible, returns whether it was able to load."""
