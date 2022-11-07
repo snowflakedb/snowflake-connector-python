@@ -766,6 +766,10 @@ class SnowflakeCursor:
             else:
                 self.multi_statement_savedIds = []
 
+            self._is_file_transfer = "command" in data and data["command"] in (
+                "UPLOAD",
+                "DOWNLOAD",
+            )
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
                 # Decide whether to use the old, or new code path
@@ -899,6 +903,7 @@ class SnowflakeCursor:
                 self._total_rowcount += updated_rows
 
     def _init_multi_statement_results(self, data: dict):
+        self._log_telemetry_job_data(TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE)
         self.multi_statement_savedIds = data["resultIds"].split(",")
         self._multi_statement_resultIds = deque(self.multi_statement_savedIds)
         if self._is_file_transfer:
@@ -1045,7 +1050,7 @@ class SnowflakeCursor:
 
         if not seqparams:
             logger.warning(
-                "No parameters provided to executymany, returning without doing anything."
+                "No parameters provided to executemany, returning without doing anything."
             )
             return self
 

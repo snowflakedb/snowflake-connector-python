@@ -24,6 +24,7 @@ from snowflake.connector import (
     InterfaceError,
     NotSupportedError,
     ProgrammingError,
+    connection,
     constants,
     errorcode,
     errors,
@@ -45,14 +46,7 @@ except ImportError:
         is_nullable: bool
 
 
-from snowflake.connector import network
-from snowflake.connector.description import (
-    CLIENT_NAME,
-    IMPLEMENTATION,
-    PLATFORM,
-    PYTHON_VERSION,
-    SNOWFLAKE_CONNECTOR_VERSION,
-)
+from snowflake.connector.description import CLIENT_VERSION
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_NOT_POSITIVE_SIZE,
@@ -1606,8 +1600,9 @@ def test_multi_statement_failure(conn_cnx):
     error when a multi-statement is submitted, regardless of the MULTI_STATEMENT_COUNT parameter.
     """
     try:
-        network.PYTHON_CONNECTOR_USER_AGENT = (
-            f"{CLIENT_NAME}/2.8.1 ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
+        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+            "2.8.1",
+            (type(None), str),
         )
         with conn_cnx() as con:
             with con.cursor() as cur:
@@ -1620,4 +1615,7 @@ def test_multi_statement_failure(conn_cnx):
                     )
                     cur.execute("select 1; select 2; select 3;")
     finally:
-        network.PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
+        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+            CLIENT_VERSION,
+            (type(None), str),
+        )

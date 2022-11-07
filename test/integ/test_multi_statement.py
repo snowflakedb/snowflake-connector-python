@@ -4,12 +4,6 @@
 
 import pytest
 
-import snowflake.connector.cursor
-from snowflake.connector import ProgrammingError, errors
-from snowflake.connector.test_util import (
-    _wait_until_query_success,
-    _wait_while_query_running,
-)
 from snowflake.connector.version import VERSION
 
 pytestmark = [
@@ -19,6 +13,13 @@ pytestmark = [
         reason="Multi-statement support not available until connector version 2.9.0.",
     ),
 ]
+
+import snowflake.connector.cursor
+from snowflake.connector import ProgrammingError, errors
+from snowflake.connector.test_util import (
+    _wait_until_query_success,
+    _wait_while_query_running,
+)
 
 try:  # pragma: no cover
     from snowflake.connector.constants import (
@@ -164,11 +165,14 @@ def test_async_error_multi(conn_cnx):
     Runs a query that will fail to execute and then tests that if we tried to get results for the query
     then that would raise an exception. It also tests QueryStatus related functionality too.
     """
-    with conn_cnx() as con:
+    with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 0}) as con:
         with con.cursor() as cur:
             sql = "select 1; select * from nonexistentTable"
             q_id = cur.execute_async(sql).get("queryId")
-            with pytest.raises(ProgrammingError) as sync_error:
+            with pytest.raises(
+                ProgrammingError,
+                match="SQL compilation error:\nObject 'NONEXISTENTTABLE' does not exist or not authorized.",
+            ) as sync_error:
                 cur.execute(sql)
             _wait_while_query_running(con, q_id, sleep_time=1)
             assert con.get_query_status(q_id) == QueryStatus.FAILED_WITH_ERROR
