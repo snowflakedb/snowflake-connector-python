@@ -18,12 +18,7 @@ import snowflake.connector.ocsp_snowflake
 from snowflake.connector import OperationalError
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
-from snowflake.connector.ocsp_snowflake import (
-    OCSPCache,
-    OCSPResponseValidationResult,
-    OCSPServer,
-    SnowflakeOCSP,
-)
+from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer, SnowflakeOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 try:
@@ -213,7 +208,10 @@ def test_ocsp_with_file_cache(tmpdir):
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
+@pytest.mark.skipolddriver
 def test_ocsp_with_bogus_cache_files(tmpdir):
+    from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
+
     """Attempts to use bogus OCSP response data."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
@@ -245,7 +243,10 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
         )
 
 
+@pytest.mark.skipolddriver
 def test_ocsp_with_outdated_cache(tmpdir):
+    from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
+
     """Attempts to use outdated OCSP response cache file."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
