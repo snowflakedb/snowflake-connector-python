@@ -16,10 +16,14 @@ pytestmark = [
 
 import snowflake.connector.cursor
 from snowflake.connector import ProgrammingError, errors
-from snowflake.connector.test_util import (
-    _wait_until_query_success,
-    _wait_while_query_running,
-)
+
+try:
+    from snowflake.connector.test_util import (
+        _wait_until_query_success,
+        _wait_while_query_running,
+    )
+except ModuleNotFoundError:
+    pass
 
 try:  # pragma: no cover
     from snowflake.connector.constants import (
