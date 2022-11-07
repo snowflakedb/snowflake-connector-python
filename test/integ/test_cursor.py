@@ -51,7 +51,11 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
-from snowflake.connector.util_text import random_string
+
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import (

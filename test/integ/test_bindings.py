@@ -20,7 +20,11 @@ import pytz
 
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ForbiddenError, ProgrammingError
-from snowflake.connector.util_text import random_string
+
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 tempfile.gettempdir()
 
