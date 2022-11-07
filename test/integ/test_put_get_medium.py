@@ -23,7 +23,11 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeProgressPercentage,
     SnowflakeS3ProgressPercentage,
 )
-from snowflake.connector.util_text import random_string
+
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put

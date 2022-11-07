@@ -14,7 +14,11 @@ import pytest
 
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import SHA256_DIGEST, ResultStatus
-from snowflake.connector.util_text import random_string
+
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 try:
     from snowflake.connector.errors import RequestExceedMaxRetryError

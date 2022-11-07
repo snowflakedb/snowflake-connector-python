@@ -14,7 +14,11 @@ import pytest
 
 from snowflake.connector import DictCursor
 from snowflake.connector.errors import ProgrammingError
-from snowflake.connector.util_text import random_string
+
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ...randomize import random_string
 
 from ...lazy_var import LazyVar
 
