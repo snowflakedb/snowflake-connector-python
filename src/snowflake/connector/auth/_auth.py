@@ -481,7 +481,12 @@ class Auth:
             logger.debug("OS not supported for Local Secure Storage")
         return cred
 
-    def read_temporary_credentials(self, host, user, session_parameters):
+    def read_temporary_credentials(
+        self,
+        host: str,
+        user: str,
+        session_parameters: dict[str, Any],
+    ) -> None:
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
             self._rest.id_token = self._read_temporary_credential(
                 host,
@@ -496,7 +501,13 @@ class Auth:
                 MFA_TOKEN,
             )
 
-    def _write_temporary_credential(self, host, user, cred_type, cred):
+    def _write_temporary_credential(
+        self,
+        host: str,
+        user: str,
+        cred_type: str,
+        cred: str | None,
+    ) -> None:
         if not cred:
             logger.debug(
                 "no credential is given when try to store temporary credential"
@@ -526,7 +537,13 @@ class Auth:
         else:
             logger.debug("OS not supported for Local Secure Storage")
 
-    def write_temporary_credentials(self, host, user, session_parameters, response):
+    def write_temporary_credentials(
+        self,
+        host: str,
+        user: str,
+        session_parameters: dict[str, Any],
+        response: dict[str, Any],
+    ) -> None:
         if self._rest._connection.consent_cache_id_token and session_parameters.get(
             PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False
         ):
@@ -538,10 +555,9 @@ class Auth:
             self._write_temporary_credential(
                 host, user, MFA_TOKEN, response["data"].get("mfaToken")
             )
-        return
 
 
-def flush_temporary_credentials():
+def flush_temporary_credentials() -> None:
     """Flush temporary credentials in memory into disk. Need to hold TEMPORARY_CREDENTIAL_LOCK."""
     global TEMPORARY_CREDENTIAL
     global TEMPORARY_CREDENTIAL_FILE
@@ -570,7 +586,7 @@ def flush_temporary_credentials():
         unlock_temporary_credential_file()
 
 
-def write_temporary_credential_file(host, cred_name, cred):
+def write_temporary_credential_file(host, cred_name, cred) -> None:
     """Writes temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -585,7 +601,7 @@ def write_temporary_credential_file(host, cred_name, cred):
         flush_temporary_credentials()
 
 
-def read_temporary_credential_file():
+def read_temporary_credential_file() -> None:
     """Reads temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -620,10 +636,9 @@ def read_temporary_credential_file():
             )
         finally:
             unlock_temporary_credential_file()
-    return None
 
 
-def lock_temporary_credential_file():
+def lock_temporary_credential_file() -> bool:
     global TEMPORARY_CREDENTIAL_FILE_LOCK
     try:
         mkdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
@@ -636,7 +651,7 @@ def lock_temporary_credential_file():
         return False
 
 
-def unlock_temporary_credential_file():
+def unlock_temporary_credential_file() -> bool:
     global TEMPORARY_CREDENTIAL_FILE_LOCK
     try:
         rmdir(TEMPORARY_CREDENTIAL_FILE_LOCK)

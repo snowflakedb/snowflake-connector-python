@@ -771,7 +771,6 @@ class SnowflakeConnection:
 
         # Setup authenticator
         auth = Auth(self.rest)
-        auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
         if self.auth_class is not None:
             if type(self.auth_class) not in FIRST_PARTY_AUTHENTICATORS:
                 # Custom auth
@@ -782,9 +781,13 @@ class SnowflakeConnection:
         elif self._authenticator == DEFAULT_AUTHENTICATOR:
             self.auth_class = AuthByDefault(password=self._password)
         elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
-            # enable storing temporary credential in a file
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
                 self._client_store_temporary_credential if IS_LINUX else True
+            )
+            auth.read_temporary_credentials(
+                self.host,
+                self.user,
+                self._session_parameters,
             )
             # Depending on whether self._rest.id_token is available we do different
             #  auth_instance
@@ -929,21 +932,21 @@ class SnowflakeConnection:
         if self._private_key:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if self.auth_class is None and self._authenticator not in [
-            # when self._authenticator would be in this list it is always upper'd before
-            EXTERNAL_BROWSER_AUTHENTICATOR,
-            OAUTH_AUTHENTICATOR,
-            KEY_PAIR_AUTHENTICATOR,
-        ]:
-            # authentication is done by the browser if the authenticator
-            # is externalbrowser
-            if not self._password:
-                Error.errorhandler_wrapper(
-                    self,
-                    None,
-                    ProgrammingError,
-                    {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
-                )
+        if (
+            self.auth_class is None
+            and self._authenticator
+            in [
+                DEFAULT_AUTHENTICATOR,
+                USR_PWD_MFA_AUTHENTICATOR,
+            ]
+            and not self._password
+        ):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
+            )
 
         if not self._account:
             Error.errorhandler_wrapper(
