@@ -100,7 +100,7 @@ jobs:
           platforms: all
       - uses: actions/checkout@v2
       - name: Building wheel
-        uses: pypa/cibuildwheel@v2.3.1
+        uses: pypa/cibuildwheel@v2.11.2
         env:
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
