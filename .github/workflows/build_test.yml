@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.7", "3.8", "3.9", "3.10" ]
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -80,7 +80,7 @@ jobs:
             id: macosx_x86_64
           - image: macos-latest
             id: macosx_arm64
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
         exclude:
           - os:
               id: macosx_arm64
@@ -128,7 +128,7 @@ jobs:
            download_name: macosx_x86_64
          - image_name: windows-2019
            download_name: win_amd64
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
         cloud-provider: [aws, azure, gcp]
     steps:
       - uses: actions/checkout@v2
