@@ -29,8 +29,16 @@ class FakeConnection(SnowflakeConnection):
     (
         ("", None),
         ("select 1;", None),
+        ("//comment\nput file://asd.csv @~", FileTransferType.PUT),
+        ("--comment\nput file://asd.csv @~", FileTransferType.PUT),
         ("PUT file:///tmp/data/mydata.csv @my_int_stage;", FileTransferType.PUT),
         ("GET @%mytable file:///tmp/data/;", FileTransferType.GET),
+        (
+            "/**/ -- this is another comment\n//yet another comment\n// get should not be "
+            "recognized here\n /**/\n/* --\n*/PUT file:///tmp/data/mydata.csva "
+            "@my_int_stage;",
+            FileTransferType.PUT,
+        ),
         ("/**/PUT file:///tmp/data/mydata.csv @my_int_stage;", FileTransferType.PUT),
         ("/**/ GET @%mytable file:///tmp/data/;", FileTransferType.GET),
         pytest.param(

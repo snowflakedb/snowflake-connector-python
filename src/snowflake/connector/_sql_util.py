@@ -11,7 +11,9 @@ from .constants import FileTransferType
 COMMENT_START_SQL_RE = re.compile(
     r"""
                                   ^\s*(?:
-                                      /\*[\w\W]*?\*/
+                                      /\*[\w\W]*?\*/ |
+                                      --.* |
+                                      //.*
                                   )""",
     re.VERBOSE,
 )

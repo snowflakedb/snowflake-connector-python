@@ -16,7 +16,6 @@ from typing import IO, TYPE_CHECKING
 import pytest
 import pytz
 
-from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
 from snowflake.connector.file_transfer_agent import (
     SnowflakeAzureProgressPercentage,
@@ -757,17 +756,6 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src)
         ret = run(cnx, "RM @~/{name}")
         assert ret[0].endswith(os.path.basename(file_name) + ".gz"), "RM filename"
 
-        # PUT detection failure
-        with pytest.raises(ProgrammingError):
-            put(
-                cnx.cursor(),
-                file_name,
-                f"~/{db_parameters['name']}",
-                from_path,
-                commented=True,
-                file_stream=file_stream,
-            )
-
         # PUT with hint
         ret = put(
             cnx.cursor(),
@@ -783,9 +771,6 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src)
         commented_get_sql = """
 --- test comments
 GET @~/{name} file://{local_dir}"""
-
-        with pytest.raises(ProgrammingError):
-            run(cnx, commented_get_sql)
 
         # GET with hint
         ret = run(cnx, commented_get_sql, _is_put_get=True)
