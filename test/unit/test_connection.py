@@ -13,12 +13,18 @@ from unittest.mock import patch
 import pytest
 
 import snowflake.connector
-from snowflake.connector.auth import (
-    AuthByDefault,
-    AuthByOAuth,
-    AuthByOkta,
-    AuthByWebBrowser,
-)
+
+try:
+    from snowflake.connector.auth import (
+        AuthByDefault,
+        AuthByOAuth,
+        AuthByOkta,
+        AuthByWebBrowser,
+    )
+except ImportError:
+    from unittest.mock import MagicMock
+
+    AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 if TYPE_CHECKING:
     from snowflake.connector.network import SnowflakeRestful

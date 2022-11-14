@@ -19,7 +19,6 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
-from snowflake.connector.auth import AuthByOkta, AuthByPlugin
 from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     SnowflakeConnection,
@@ -39,8 +38,11 @@ from snowflake.connector.telemetry import TelemetryField
 
 try:  # pragma: no cover
     from parameters import CONNECTION_PARAMETERS_ADMIN
+    from snowflake.connector.auth import AuthByOkta, AuthByPlugin
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
+    from snowflake.connector.auth_by_plugin import AuthByPlugin
+    from snowflake.connector.auth_okta import AuthByOkta
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK

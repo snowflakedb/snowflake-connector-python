@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
-from snowflake.connector.auth import AuthByOAuth
+try:  # pragma: no cover
+    from snowflake.connector.auth import AuthByOAuth
+except ImportError:
+    from snowflake.connector.auth_oauth import AuthByOAuth
 
 
 def test_auth_oauth():

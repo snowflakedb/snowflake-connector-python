@@ -7,10 +7,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, Mock, PropertyMock
 
-from snowflake.connector.auth import AuthByOkta
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+
+try:  # pragma: no cover
+    from snowflake.connector.auth import AuthByOkta
+except ImportError:
+    from snowflake.connector.auth_okta import AuthByOkta
 
 
 def test_auth_okta():
