@@ -544,8 +544,11 @@ class Auth:
         session_parameters: dict[str, Any],
         response: dict[str, Any],
     ) -> None:
-        if self._rest._connection.consent_cache_id_token and session_parameters.get(
-            PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False
+        if (
+            self._rest._connection.auth_class.consent_cache_id_token
+            and session_parameters.get(
+                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False
+            )
         ):
             self._write_temporary_credential(
                 host, user, ID_TOKEN, response["data"].get("idToken")

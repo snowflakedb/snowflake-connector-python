@@ -935,9 +935,10 @@ class SnowflakeConnection:
         if (
             self.auth_class is None
             and self._authenticator
-            in [
-                DEFAULT_AUTHENTICATOR,
-                USR_PWD_MFA_AUTHENTICATOR,
+            not in [
+                EXTERNAL_BROWSER_AUTHENTICATOR,
+                OAUTH_AUTHENTICATOR,
+                KEY_PAIR_AUTHENTICATOR,
             ]
             and not self._password
         ):

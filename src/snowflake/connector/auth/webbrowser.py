@@ -59,8 +59,8 @@ class AuthByWebBrowser(AuthByPlugin):
         port=None,
     ) -> None:
         super().__init__()
+        self.consent_cache_id_token = True
         self._token: str | None = None
-        self._consent_cache_id_token = True
         self._application = application
         self._proof_key = None
         self._webbrowser = webbrowser if webbrowser_pkg is None else webbrowser_pkg
@@ -248,7 +248,7 @@ class AuthByWebBrowser(AuthByPlugin):
             "Content-Type: text/html",
         ]
         if self._origin:
-            data = {"consent": self._consent_cache_id_token}
+            data = {"consent": self.consent_cache_id_token}
             msg = json.dumps(data)
             content.append(f"Access-Control-Allow-Origin: {self._origin}")
             content.append("Vary: Accept-Encoding, Origin")
@@ -332,7 +332,7 @@ You can close this window now and go back where you started from.
             # parse the response as JSON
             payload = json.loads(data[-1])
             self._token = payload.get("token")
-            self._consent_cache_id_token = payload.get("consent", True)
+            self.consent_cache_id_token = payload.get("consent", True)
         except Exception:
             # key=value form.
             self._token = parse_qs(data[-1])["token"][0]
