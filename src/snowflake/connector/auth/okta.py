@@ -91,6 +91,7 @@ class AuthByOkta(AuthByPlugin):
 
     def prepare(
         self,
+        *,
         conn: SnowflakeConnection,
         authenticator: str,
         service_name: str | None,

@@ -47,6 +47,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
 
     def prepare(
         self,
+        *,
         conn: SnowflakeConnection,
         **kwargs: Any,
     ) -> None:

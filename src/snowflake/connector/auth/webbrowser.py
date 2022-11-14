@@ -94,6 +94,7 @@ class AuthByWebBrowser(AuthByPlugin):
 
     def prepare(
         self,
+        *,
         conn: SnowflakeConnection,
         authenticator: str,
         service_name: str | None,
@@ -169,6 +170,7 @@ class AuthByWebBrowser(AuthByPlugin):
 
     def reauthenticate(
         self,
+        *,
         conn: SnowflakeConnection,
         **kwargs: Any,
     ) -> dict[str, bool]:

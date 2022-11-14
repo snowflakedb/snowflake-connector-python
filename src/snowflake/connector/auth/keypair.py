@@ -86,6 +86,7 @@ class AuthByKeyPair(AuthByPlugin):
 
     def prepare(
         self,
+        *,
         account: str,
         user: str,
         **kwargs: Any,
@@ -174,6 +175,7 @@ class AuthByKeyPair(AuthByPlugin):
 
     def handle_timeout(
         self,
+        *,
         authenticator: str,
         service_name: str | None,
         account: str,
