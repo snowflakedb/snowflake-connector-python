@@ -192,7 +192,7 @@ def test_imported_module(mock_post_requests):
             id="AuthByOAuth",
         ),
         pytest.param(
-            type("auth_class", (AuthByOkta,), {})(None, None),
+            type("auth_class", (AuthByOkta,), {})("Python connector"),
             id="AuthByOkta",
         ),
         pytest.param(
