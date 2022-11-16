@@ -697,7 +697,7 @@ class OCSPCache:
     @staticmethod
     def find_cache(
         ocsp: SnowflakeOCSP, cert_id: CertId, subject: Certificate | None, **kwargs: Any
-    ):
+    ) -> tuple[bool, bytes | None]:
         subject_name = ocsp.subject_name(subject) if subject else None
         current_time = int(time.time())
         cache_key: tuple[bytes, bytes, bytes] = kwargs.get(
@@ -732,58 +732,6 @@ class OCSPCache:
             if subject_name:
                 logger.debug("not hit cache for subject: %s", subject_name)
         return False, None
-
-    @staticmethod
-    def update_or_delete_cache(
-        ocsp: SnowflakeOCSP,
-        cert_id: CertId,
-        ocsp_response: bytes,
-        ts: int,
-        **kwargs: Any,
-    ) -> None:
-        try:
-            current_time = int(time.time())
-            found, _ = OCSPCache.find_cache(ocsp, cert_id, None, **kwargs)
-            if current_time - OCSPCache.CACHE_EXPIRATION <= ts:
-                # creation time must be new enough
-                OCSPCache.update_cache(ocsp, cert_id, ocsp_response, **kwargs)
-            elif found:
-                # invalidate the cache if exists
-                OCSPCache.delete_cache(ocsp, cert_id, **kwargs)
-        except Exception as ex:
-            logger.debug("Caught here > %s", ex)
-            raise ex
-
-    @staticmethod
-    def update_cache(
-        ocsp: SnowflakeOCSP, cert_id: CertId, ocsp_response, **kwargs: Any
-    ):
-        # Every time this is called the in memory cache will
-        # be updated and written to disk.
-        cache_key: tuple[bytes, bytes, bytes] = kwargs.get(
-            "cache_key", ocsp.decode_cert_id_key(cert_id)
-        )
-        lock_cache = kwargs.get("lock_cache", True)
-        try_saving_cache = kwargs.get("try_saving_cache", True)
-        ocsp_response_validation_result = OCSPResponseValidationResult(
-            ocsp_response=ocsp_response,
-            ts=int(time.time()),
-            validated=False,
-        )
-        if lock_cache:
-            with OCSP_RESPONSE_VALIDATION_CACHE._lock:
-                OCSP_RESPONSE_VALIDATION_CACHE._setitem(
-                    cache_key,
-                    ocsp_response_validation_result,
-                    try_saving_cache=try_saving_cache,
-                )
-        else:
-            OCSP_RESPONSE_VALIDATION_CACHE._setitem(
-                cache_key,
-                ocsp_response_validation_result,
-                try_saving_cache=try_saving_cache,
-            )
-        OCSPCache.CACHE_UPDATED = True
 
     @staticmethod
     def delete_cache(ocsp: SnowflakeOCSP, cert_id: CertId, **kwargs: Any):
@@ -1633,6 +1581,7 @@ class SnowflakeOCSP:
         """Decodes OCSP response cache from JSON."""
         try:
             with OCSP_RESPONSE_VALIDATION_CACHE._lock:
+                new_cache_dict = {}
                 for cert_id_base64, (
                     ts,
                     ocsp_response,
@@ -1640,18 +1589,25 @@ class SnowflakeOCSP:
                     cert_id = self.decode_cert_id_base64(cert_id_base64)
                     if not self.is_valid_time(cert_id, b64decode(ocsp_response)):
                         continue
-                    # To improve performance, we try not to perform random writing as there will be hundreds of items
-                    # which will trigger unnecessary writes.
-                    # Besides, after validation, SnowflakeOCSP.OCSP_CACHE.update_file(self)
-                    # will be called to save cache to in-memory files.
-                    SnowflakeOCSP.OCSP_CACHE.update_or_delete_cache(
-                        self,
-                        cert_id,
-                        b64decode(ocsp_response),
-                        ts,
-                        lock_cache=False,
-                        try_saving_cache=False,
+                    current_time = int(time.time())
+                    cache_key: tuple[bytes, bytes, bytes] = self.decode_cert_id_key(
+                        cert_id
                     )
+                    found, _ = OCSPCache.find_cache(
+                        self, cert_id, None, cache_key=cache_key, lock_cache=False
+                    )
+                    if OCSPCache.is_cache_fresh(current_time, ts):
+                        new_cache_dict[cache_key] = OCSPResponseValidationResult(
+                            ocsp_response=ocsp_response,
+                            ts=current_time,
+                            validated=False,
+                        )
+                        OCSPCache.CACHE_UPDATED = True
+                    elif found:
+                        OCSPCache.delete_cache(
+                            self, cert_id, cache_key=cache_key, lock_cache=False
+                        )
+                    OCSP_RESPONSE_VALIDATION_CACHE._update(new_cache_dict)
         except Exception as ex:
             logger.debug("Caught here - %s", ex)
             ermsg = "Exception raised while decoding OCSP Response Cache {}".format(

@@ -14,7 +14,7 @@ import string
 import tempfile
 from collections.abc import Iterator
 from threading import Lock
-from typing import Any, Generic, NoReturn, TypeVar
+from typing import Generic, NoReturn, TypeVar
 
 from filelock import FileLock, Timeout
 from typing_extensions import NamedTuple, Self
@@ -86,6 +86,7 @@ class SFDictCache(Generic[K, V]):
         should_record_hits: bool = True,
     ) -> V:
         """Non-locking version of __getitem__.
+
         This should only be used by internal functions when already
         holding self._lock.
         """
@@ -100,7 +101,7 @@ class SFDictCache(Generic[K, V]):
             self._hit(k)
         return v
 
-    def _setitem(self, k: K, v: V, **kwargs: Any) -> None:
+    def _setitem(self, k: K, v: V) -> None:
         """Non-locking version of __setitem__.
 
         This should only be used by internal functions when already
@@ -182,27 +183,17 @@ class SFDictCache(Generic[K, V]):
         with self._lock:
             self._delitem(key)
 
-    def _contains(
-        self,
-        key: K,
-    ) -> bool:
-        """non-locking version of __contains__
-        This should only be used by internal functions when already
-        holding self._lock.
-        """
-        try:
-            self._getitem(key, should_record_hits=True)
-            return True
-        except KeyError:
-            # Fall through
-            return False
-
     def __contains__(
         self,
         key: K,
     ) -> bool:
         with self._lock:
-            return self._contains(key)
+            try:
+                self._getitem(key, should_record_hits=True)
+                return True
+            except KeyError:
+                # Fall through
+                return False
 
     def _update(
         self,
@@ -418,7 +409,8 @@ class SFDictFileCache(SFDictCache):
         *,
         should_record_hits: bool = True,
     ) -> V:
-        """non-locking version of __getitem__
+        """Non-locking version of __getitem__.
+
         This should only be used by internal functions when already
         holding self._lock.
         """
@@ -478,10 +470,9 @@ class SFDictFileCache(SFDictCache):
             if currently_holding:
                 self._lock.release()
 
-    def _setitem(self, k: K, v: V, *, try_saving_cache: bool = True) -> None:
+    def _setitem(self, k: K, v: V) -> None:
         super()._setitem(k, v)
-        if try_saving_cache:
-            self._save_if_should()
+        self._save_if_should()
 
     def _load(self) -> bool:
         """Load cache from disk if possible, returns whether it was able to load."""
