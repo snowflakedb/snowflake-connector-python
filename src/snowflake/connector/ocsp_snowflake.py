@@ -703,7 +703,7 @@ class OCSPCache:
         cache_key: tuple[bytes, bytes, bytes] = kwargs.get(
             "cache_key", ocsp.decode_cert_id_key(cert_id)
         )
-        lock_cache = kwargs.get("lock_cache", True)
+        lock_cache: bool = kwargs.get("lock_cache", True)
         try:
             ocsp_response_validation_result = (
                 OCSP_RESPONSE_VALIDATION_CACHE[cache_key]
@@ -738,7 +738,7 @@ class OCSPCache:
         cache_key: tuple[bytes, bytes, bytes] = kwargs.get(
             "cache_key", ocsp.decode_cert_id_key(cert_id)
         )
-        lock_cache = kwargs.get("lock_cache", True)
+        lock_cache: bool = kwargs.get("lock_cache", True)
         try:
             if lock_cache:
                 del OCSP_RESPONSE_VALIDATION_CACHE[cache_key]
@@ -1602,12 +1602,13 @@ class SnowflakeOCSP:
                             ts=current_time,
                             validated=False,
                         )
-                        OCSPCache.CACHE_UPDATED = True
                     elif found:
                         OCSPCache.delete_cache(
                             self, cert_id, cache_key=cache_key, lock_cache=False
                         )
-                    OCSP_RESPONSE_VALIDATION_CACHE._update(new_cache_dict)
+            if new_cache_dict:
+                OCSP_RESPONSE_VALIDATION_CACHE._update(new_cache_dict)
+                OCSPCache.CACHE_UPDATED = True
         except Exception as ex:
             logger.debug("Caught here - %s", ex)
             ermsg = "Exception raised while decoding OCSP Response Cache {}".format(
