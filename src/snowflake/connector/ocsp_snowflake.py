@@ -730,7 +730,7 @@ class OCSPCache:
             OCSPCache.CACHE_UPDATED = True
         except KeyError:
             if subject_name:
-                logger.debug("not hit cache for subject: %s", subject_name)
+                logger.debug(f"cache miss for subject: '{subject_name}'")
         return False, None
 
     @staticmethod
