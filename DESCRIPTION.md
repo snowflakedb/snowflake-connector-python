@@ -41,6 +41,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
    - When closing connection async query status checking is now parallelized
    - Fixed a bug where test logging would be enabled on Jenkins workers in non-Snowflake Jenkins machines
    - Enhanced the atomicity of write_pandas when overwrite is set to True
+  - Enhanced the atomicity of write_pandas when overwrite is set to True
+  - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.0,<10.1.0
 
 - v2.8.0(September 27,2022)
 
