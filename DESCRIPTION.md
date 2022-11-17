@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v2.8.2(Unreleased)
 
   - Improved performance of OCSP response caching
+  - Improved performance of regexes used for PUT/GET SQL statement detection
 
 - v2.8.1(October 30,2022)
 
