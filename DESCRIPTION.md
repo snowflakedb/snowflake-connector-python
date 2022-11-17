@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v2.9.0(Unreleased)
 
   - Enhanced the atomicity of write_pandas when overwrite is set to True
+  - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.0,<10.1.0
 
 - v2.8.0(September 27,2022)
 
