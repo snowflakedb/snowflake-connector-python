@@ -29,7 +29,6 @@ timestamps {
         }
       }
       params = [
-        string(name: 'svn_revision', value: 'main'),
         string(name: 'branch', value: 'main'),
         string(name: 'client_git_commit', value: scmInfo.GIT_COMMIT),
         string(name: 'client_git_branch', value: scmInfo.GIT_BRANCH),
@@ -37,6 +36,16 @@ timestamps {
         string(name: 'parent_build_number', value: env.BUILD_NUMBER)
       ]
       stage('Test') {
+          try {
+          def commit_hash = "main" // default which we want to override
+          def bptp_tag = "bptp-built"
+          def response = authenticatedGithubCall("https://api.github.com/repos/snowflakedb/snowflake/git/ref/tags/${bptp_tag}")
+          commit_hash = response.object.sha
+          // Append the bptp-built commit sha to params
+          params += [string(name: 'svn_revision', value: commit_hash)]
+          } catch(Exception e) {
+          println("Exception computing commit hash from: ${response}")
+          }
         parallel (
           'Test Python 37': { build job: 'RT-PyConnector37-PC',parameters: params},
           'Test Python 38': { build job: 'RT-PyConnector38-PC',parameters: params},
@@ -106,6 +115,32 @@ pipeline {
           }
         }
       }
+    }
+  }
+}
+
+def authenticatedGithubCall(url) {
+  withCredentials([
+        usernamePassword(credentialsId: 'jenkins-snowflakedb-github-app',
+          usernameVariable: 'GITHUB_USER',
+          passwordVariable: 'GITHUB_TOKEN'),
+      ]) {
+    try {
+      def encodedAuth = Base64.getEncoder().encodeToString(
+        "${GITHUB_USER}:${GITHUB_TOKEN}".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+      )
+      def authHeaderValue = "Basic ${encodedAuth}"
+      def connection = new URL(url).openConnection()
+      connection.setRequestProperty("Authorization", authHeaderValue)
+      if (connection.getResponseCode() >= 300) {
+        println("ERROR: Status fetch from ${url} returned ${connection.getResponseCode()}")
+        println(connection.getErrorStream().getText())
+        return null
+      }
+      return new groovy.json.JsonSlurperClassic().parseText(connection.getInputStream().getText())
+    } catch(Exception e) {
+      println("Exception fetching ${url}: ${e}")
+      return null
     }
   }
 }
