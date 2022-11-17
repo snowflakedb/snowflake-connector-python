@@ -1587,7 +1587,8 @@ class SnowflakeOCSP:
                     ocsp_response,
                 ) in ocsp_response_cache_json.items():
                     cert_id = self.decode_cert_id_base64(cert_id_base64)
-                    if not self.is_valid_time(cert_id, b64decode(ocsp_response)):
+                    b64decoded_ocsp_response = b64decode(ocsp_response)
+                    if not self.is_valid_time(cert_id, b64decoded_ocsp_response):
                         continue
                     current_time = int(time.time())
                     cache_key: tuple[bytes, bytes, bytes] = self.decode_cert_id_key(
@@ -1598,7 +1599,7 @@ class SnowflakeOCSP:
                     )
                     if OCSPCache.is_cache_fresh(current_time, ts):
                         new_cache_dict[cache_key] = OCSPResponseValidationResult(
-                            ocsp_response=ocsp_response,
+                            ocsp_response=b64decoded_ocsp_response,
                             ts=current_time,
                             validated=False,
                         )
