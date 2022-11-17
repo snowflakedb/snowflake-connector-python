@@ -28,7 +28,10 @@ try:  # pragma: no cover
 except ImportError:
     pass
 
-from snowflake.connector.util_text import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 from ..integ_helpers import put
 

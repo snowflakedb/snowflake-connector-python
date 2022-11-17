@@ -8,10 +8,19 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.9.0(Unreleased)
+- v2.8.2(Unreleased)
 
-  - Enhanced the atomicity of write_pandas when overwrite is set to True
+  - Improved performance of OCSP response caching
   - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.0,<10.1.0
+
+- v2.8.1(October 30,2022)
+
+   - Bumped cryptography dependency from <37.0.0 to <39.0.0
+   - Bumped pandas dependency from <1.5.0 to <1.6.0
+   - Fixed a bug where write_pandas wouldn't write an empty DataFrame to Snowflake
+   - When closing connection async query status checking is now parallelized
+   - Fixed a bug where test logging would be enabled on Jenkins workers in non-Snowflake Jenkins machines
+   - Enhanced the atomicity of write_pandas when overwrite is set to True
 
 - v2.8.0(September 27,2022)
 
