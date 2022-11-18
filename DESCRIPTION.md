@@ -11,7 +11,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v2.8.2(November 18,2022)
 
   - Improved performance of OCSP response caching
-  - Improved performance of regexes used for PUT/GET SQL statement detection
+  - During the execution of GET commands we no longer resolve target location on the local machine
+  - Improved performance of regexes used for PUT/GET SQL statement detection. CVE-2022-42965
 
 - v2.8.1(October 30,2022)
 
