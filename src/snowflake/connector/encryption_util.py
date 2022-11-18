@@ -239,9 +239,9 @@ class SnowflakeEncryptionUtil:
         Returns:
             The decrypted file's location.
         """
-        temp_output_file = os.path.join(
-            tmp_dir, f"{os.path.basename(in_filename)}#{random_string()}"
-        )
+        temp_output_file = f"{os.path.basename(in_filename)}#{random_string()}"
+        if tmp_dir:
+            temp_output_file = os.path.join(tmp_dir, temp_output_file)
 
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
         with open(in_filename, "rb") as infile:
