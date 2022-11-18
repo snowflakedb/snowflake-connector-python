@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
 from .constants import UTF8, EncryptionMetadata, MaterialDescriptor, kilobyte
+from .util_text import random_string
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
@@ -238,12 +239,13 @@ class SnowflakeEncryptionUtil:
         Returns:
             The decrypted file's location.
         """
-        temp_output_fd, temp_output_file = tempfile.mkstemp(
-            text=False, dir=tmp_dir, prefix=os.path.basename(in_filename) + "#"
+        temp_output_file = os.path.join(
+            tmp_dir, f"{os.path.basename(in_filename)}#{random_string()}"
         )
+
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
         with open(in_filename, "rb") as infile:
-            with os.fdopen(temp_output_fd, "wb") as outfile:
+            with open(temp_output_file, "wb") as outfile:
                 SnowflakeEncryptionUtil.decrypt_stream(
                     metadata, encryption_material, infile, outfile, chunk_size
                 )
