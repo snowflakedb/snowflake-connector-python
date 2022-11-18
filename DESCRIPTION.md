@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v2.8.2(November 18,2022)
 
   - Improved performance of OCSP response caching
+  - Fixed a bug where the permission of the file downloaded via GET is changed
 
 - v2.8.1(October 30,2022)
 
