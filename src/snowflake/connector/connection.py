@@ -12,6 +12,7 @@ import sys
 import uuid
 import warnings
 import weakref
+import webbrowser
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from difflib import get_close_matches
@@ -83,6 +84,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .protocols import BrowserProtocol
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
@@ -197,6 +199,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Whether to log imported packages in telemetry
+    "authenticator_browser": (
+        webbrowser,
+        BrowserProtocol
+    ),  # Alternative browser object to open URLs for authentication
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -730,6 +736,7 @@ class SnowflakeConnection:
             auth_instance = AuthByWebBrowser(
                 self.rest,
                 self.application,
+                webbrowser_pkg=self._authenticator_browser,
                 protocol=self._protocol,
                 host=self.host,
                 port=self.port,
