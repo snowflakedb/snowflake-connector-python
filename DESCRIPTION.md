@@ -8,10 +8,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v2.8.3(Unreleased)
+  - Fixed a bug where the permission of the file downloaded via GET command is changed
+
 - v2.8.2(November 18,2022)
 
   - Improved performance of OCSP response caching
-  - Fixed a bug where the permission of the file downloaded via GET is changed
+  - During the execution of GET commands we no longer resolve target location on the local machine
+  - Improved performance of regexes used for PUT/GET SQL statement detection. CVE-2022-42965
 
 - v2.8.1(October 30,2022)
 
