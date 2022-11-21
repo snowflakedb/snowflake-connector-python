@@ -191,7 +191,7 @@ class SnowflakeCursor:
         r".*VALUES\s*(\(.*\)).*", re.IGNORECASE | re.MULTILINE | re.DOTALL
     )
     ALTER_SESSION_RE = re.compile(
-        r"alter\s+session\s+set\s+(.*?)\s*=\s*\'?([^\']+?)\'?\s*(?:;|$)",
+        r"alter\s+session\s+set\s+(\w*?)\s*=\s*\'?([^\']+?)\'?\s*(?:;|$)",
         flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
     )
 
@@ -233,7 +233,7 @@ class SnowflakeCursor:
         self._sequence_counter = -1
         self._request_id = None
         self._is_file_transfer = False
-        self._multi_statement_resultIds: deque[str] = deque([])
+        self._multi_statement_resultIds: deque[str] = deque()
         self.multi_statement_savedIds: list[str] = []
 
         self._timestamp_output_format = None
@@ -1233,8 +1233,7 @@ class SnowflakeCursor:
         if self._multi_statement_resultIds:
             self.query_result(self._multi_statement_resultIds[0])
             logger.info(
-                "Retrieved results for query ID: %s",
-                self._multi_statement_resultIds.popleft(),
+                f"Retrieved results for query ID: {self._multi_statement_resultIds.popleft()}"
             )
             return self
 

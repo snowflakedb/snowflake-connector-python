@@ -38,11 +38,11 @@ if ENABLE_TELEMETRY_LOG:
 
 
 def _wait_while_query_running(
-    con: snowflake.connector.connection,
+    con: snowflake.connector.connection.SnowflakeConnection,
     sfqid: str,
     sleep_time: int,
     dont_cache: bool = False,
-):
+) -> None:
     """
     Checks if the provided still returns that it is still running, and if so,
     sleeps for the specified time in a while loop.
@@ -53,11 +53,11 @@ def _wait_while_query_running(
 
 
 def _wait_until_query_success(
-    con: snowflake.connector.connection,
+    con: snowflake.connector.connection.SnowflakeConnection,
     sfqid: str,
     num_checks: int,
     sleep_per_check: int,
-):
+) -> None:
     for _ in range(num_checks):
         status = con.get_query_status(sfqid)
         if status == QueryStatus.SUCCESS:
@@ -65,7 +65,7 @@ def _wait_until_query_success(
         time.sleep(sleep_per_check)
     else:
         pytest.fail(
-            f"We should have broke out of wait loop for query success."
+            "We should have broke out of wait loop for query success."
             f"Query ID: {sfqid}"
             f"Final query status: {status}"
         )
