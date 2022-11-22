@@ -37,10 +37,13 @@ from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 try:  # pragma: no cover
-    from parameters import CONNECTION_PARAMETERS_ADMIN
-    from snowflake.connector.auth import AuthByOkta, AuthByPlugin
+    from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
+
+try:  # pragma: no cover
+    from snowflake.connector.auth import AuthByOkta, AuthByPlugin
+except ImportError:
     from snowflake.connector.auth_by_plugin import AuthByPlugin
     from snowflake.connector.auth_okta import AuthByOkta
 

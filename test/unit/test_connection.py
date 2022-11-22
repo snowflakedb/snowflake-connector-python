@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -26,9 +25,6 @@ except ImportError:
 
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
-if TYPE_CHECKING:
-    from snowflake.connector.network import SnowflakeRestful
-
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
@@ -37,9 +33,7 @@ except ImportError:
     QueryStatus = None
 
     class AuthByUsrPwdMfa(AuthByDefault):
-        def __init__(
-            self, password: str, mfa_token: str, rest: SnowflakeRestful
-        ) -> None:
+        def __init__(self, password: str, mfa_token: str) -> None:
             pass
 
 
@@ -196,7 +190,7 @@ def test_imported_module(mock_post_requests):
             id="AuthByOkta",
         ),
         pytest.param(
-            type("auth_class", (AuthByUsrPwdMfa,), {})("password", "mfa_token", None),
+            type("auth_class", (AuthByUsrPwdMfa,), {})("password", "mfa_token"),
             id="AuthByUsrPwdMfa",
         ),
         pytest.param(
