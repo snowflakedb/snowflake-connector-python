@@ -671,3 +671,27 @@ def test_get_empty_file(tmp_path, conn_cnx):
             with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
                 cur.execute(f"GET @{stage_name}/foo.csv file://{tmp_path}")
             assert not empty_file.exists()
+
+
+@pytest.mark.skipolddriver
+def test_get_file_permission(tmp_path, conn_cnx):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_empty_file_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}",
+            )
+
+            cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            # get the default mask, usually it is 0o022
+            default_mask = os.umask(0)
+            os.umask(default_mask)
+            # files by default are given the permission 644 (Octal)
+            # umask is for denial, we need to negate
+            assert (
+                oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
+            )
