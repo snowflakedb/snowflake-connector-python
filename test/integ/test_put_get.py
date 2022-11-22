@@ -687,8 +687,11 @@ def test_get_file_permission(tmp_path, conn_cnx):
             )
 
             cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
-            # get the default mask
+            # get the default mask, usually it is 0o022
             default_mask = os.umask(0)
             os.umask(default_mask)
             # files by default are given the permission 644 (Octal)
-            assert oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
+            # umask is for denial, we need to negate
+            assert (
+                oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
+            )
