@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v2.8.3(Unreleased)
   - Bumped cryptography dependency from <39.0.0 to <41.0.0
+  - Fixed a bug where the permission of the file downloaded via GET command is changed
 
 - v2.8.2(November 18,2022)
 
