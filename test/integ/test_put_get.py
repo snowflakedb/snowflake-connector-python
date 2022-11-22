@@ -690,5 +690,5 @@ def test_get_file_permission(tmp_path, conn_cnx):
             # get the default mask
             default_mask = os.umask(0)
             os.umask(default_mask)
-            # 438 Decimal  == 666 Octal, files by default are given the permission 644 (Octal)
-            assert oct(os.stat(test_file).st_mode)[-3:] == oct(438 & ~default_mask)[-3:]
+            # files by default are given the permission 644 (Octal)
+            assert oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
