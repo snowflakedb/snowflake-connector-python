@@ -8,7 +8,6 @@ import os
 import os.path
 import pickle
 import stat
-import time
 from unittest import mock
 
 import pytest
@@ -418,11 +417,12 @@ class TestSFDictFileCache:
         c1._save()
 
         # load cache
-        c2 = cache.SFDictFileCache(file_path=cache_path, entry_lifetime=1)
+        c2 = cache.SFDictFileCache(
+            file_path=cache_path, entry_lifetime=int(NO_LIFETIME.total_seconds())
+        )
         c2["b"] = 2
         c2["c"] = 3
         # let the cache expire so that when loading again, clearning cache logic will be triggered
-        time.sleep(1)
         # load will trigger clear expired entries, and then further call _getitem
         c2._load()
 
