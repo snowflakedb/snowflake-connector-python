@@ -32,6 +32,7 @@ from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
 
 from . import compat
+from ._sql_util import get_file_transfer_type
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
     FIELD_NAME_TO_ID,
@@ -183,8 +184,6 @@ class SnowflakeCursor:
         Calling a function is expensive in Python and most of these getters are unnecessary.
     """
 
-    PUT_SQL_RE = re.compile(r"^(?:/\*.*\*/\s*)*put\s+", flags=re.IGNORECASE)
-    GET_SQL_RE = re.compile(r"^(?:/\*.*\*/\s*)*get\s+", flags=re.IGNORECASE)
     INSERT_SQL_RE = re.compile(r"^insert\s+into", flags=re.IGNORECASE)
     COMMENT_SQL_RE = re.compile(r"/\*.*\*/")
     INSERT_SQL_VALUES_RE = re.compile(
@@ -202,11 +201,7 @@ class SnowflakeCursor:
         None is returned if the SQL isn't a file transfer so that this function can be
         used in an if-statement.
         """
-        if SnowflakeCursor.PUT_SQL_RE.match(sql):
-            return FileTransferType.PUT
-        elif SnowflakeCursor.GET_SQL_RE.match(sql):
-            return FileTransferType.GET
-        return None
+        return get_file_transfer_type(sql)
 
     def __init__(
         self,
@@ -464,9 +459,7 @@ class SnowflakeCursor:
             self._is_file_transfer = _is_put_get
         else:
             # or detect it.
-            self._is_file_transfer = self.PUT_SQL_RE.match(
-                query
-            ) or self.GET_SQL_RE.match(query)
+            self._is_file_transfer = get_file_transfer_type(query) is not None
         logger.debug("is_file_transfer: %s", self._is_file_transfer is not None)
 
         real_timeout = (

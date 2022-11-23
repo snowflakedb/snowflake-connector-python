@@ -10,6 +10,7 @@ import os
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from ._sql_util import is_put_statement
 from .compat import quote
 from .constants import (
     FILE_PROTOCOL,
@@ -269,9 +270,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             The local file path.
         """
         command = self._command
-        if FILE_PROTOCOL not in self._command or not self._cursor.PUT_SQL_RE.match(
-            command
-        ):
+        if FILE_PROTOCOL not in self._command or not is_put_statement(command):
             return None
 
         file_path_begin_index = command.find(FILE_PROTOCOL)

@@ -8,10 +8,16 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.8.2(Unreleased)
+- v2.8.3(Unreleased)
+  - Bumped cryptography dependency from <39.0.0 to <41.0.0
+  - Fixed a bug where the permission of the file downloaded via GET command is changed
+  - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.0,<10.1.0
+
+- v2.8.2(November 18,2022)
 
   - Improved performance of OCSP response caching
-  - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.0,<10.1.0
+  - During the execution of GET commands we no longer resolve target location on the local machine
+  - Improved performance of regexes used for PUT/GET SQL statement detection. CVE-2022-42965
 
 - v2.8.1(October 30,2022)
 
