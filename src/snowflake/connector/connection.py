@@ -772,10 +772,12 @@ class SnowflakeConnection:
         # Setup authenticator
         auth = Auth(self.rest)
         if self.auth_class is not None:
-            if type(self.auth_class) not in FIRST_PARTY_AUTHENTICATORS:
-                # Custom auth
-                if not issubclass(type(self.auth_class), AuthByKeyPair):
-                    raise TypeError("auth_class must be a child class of AuthByKeyPair")
+            if type(
+                self.auth_class
+            ) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
+                type(self.auth_class), AuthByKeyPair
+            ):
+                raise TypeError("auth_class must be a child class of AuthByKeyPair")
                 # TODO: add telemetry for custom auth
             self.auth_class = self.auth_class
         elif self._authenticator == DEFAULT_AUTHENTICATOR:

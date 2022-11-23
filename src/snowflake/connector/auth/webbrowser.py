@@ -11,6 +11,7 @@ import os
 import socket
 import time
 import webbrowser
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 from ..compat import parse_qs, urlparse, urlsplit
@@ -52,19 +53,23 @@ class AuthByWebBrowser(AuthByPlugin):
     def __init__(
         self,
         application: str,
-        webbrowser_pkg=None,
-        socket_pkg=None,
-        protocol=None,
-        host=None,
-        port=None,
+        webbrowser_pkg: ModuleType | None = None,
+        socket_pkg: type[socket.socket] | None = None,
+        protocol: str | None = None,
+        host: str | None = None,
+        port: str | None = None,
     ) -> None:
         super().__init__()
         self.consent_cache_id_token = True
         self._token: str | None = None
         self._application = application
         self._proof_key = None
-        self._webbrowser = webbrowser if webbrowser_pkg is None else webbrowser_pkg
-        self._socket = socket.socket if socket_pkg is None else socket_pkg
+        self._webbrowser: ModuleType = (
+            webbrowser if webbrowser_pkg is None else webbrowser_pkg
+        )
+        self._socket: type[socket.socket] = (
+            socket.socket if socket_pkg is None else socket_pkg
+        )
         self._protocol = protocol
         self._host = host
         self._port = port
