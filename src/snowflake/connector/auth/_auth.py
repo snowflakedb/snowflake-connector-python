@@ -163,11 +163,11 @@ class Auth:
         warehouse: str | None = None,
         role: str | None = None,
         passcode: str | None = None,
-        passcode_in_password=False,
+        passcode_in_password: bool = False,
         mfa_callback: Callable[[], None] | None = None,
         password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        timeout=120,
+        timeout: int = 120,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 
