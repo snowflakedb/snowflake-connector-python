@@ -144,9 +144,9 @@ class AuthByOkta(AuthByPlugin):
         self,
         conn: SnowflakeConnection,
         authenticator: str,
-        service_name,
-        account,
-        user,
+        service_name: str | None,
+        account: str,
+        user: str,
     ) -> tuple[dict[str, str], str, str]:
         logger.debug("step 1: query GS to obtain IDP token and SSO url")
 

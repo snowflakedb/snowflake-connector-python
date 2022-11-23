@@ -56,7 +56,6 @@ from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
-    KEY_PAIR_AUTHENTICATOR,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -737,9 +736,7 @@ def get_token_from_private_key(
         private_key,
         DAY_IN_SECONDS,
     )  # token valid for 24 hours
-    return auth_instance.prepare(
-        KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
-    )
+    return auth_instance.prepare(account=account, user=user)
 
 
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:

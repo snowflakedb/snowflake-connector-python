@@ -30,11 +30,11 @@ def test_auth_okta():
     ref_token_url = "https://testsso.snowflake.net/token"
     rest = _init_rest(ref_sso_url, ref_token_url)
 
-    auth = AuthByOkta(rest, application)
+    auth = AuthByOkta(application)
 
     # step 1
     headers, sso_url, token_url = auth._step1(
-        authenticator, service_name, account, user
+        rest._connection, authenticator, service_name, account, user
     )
     assert not rest._connection.errorhandler.called  # no error
     assert headers.get("accept") is not None
@@ -44,7 +44,7 @@ def test_auth_okta():
     assert token_url == ref_token_url
 
     # step 2
-    auth._step2(authenticator, sso_url, token_url)
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
     assert not rest._connection.errorhandler.called  # no error
 
     # step 3
@@ -56,7 +56,7 @@ def test_auth_okta():
         }
 
     rest.fetch = fake_fetch
-    one_time_token = auth._step3(headers, token_url, user, password)
+    one_time_token = auth._step3(rest._connection, headers, token_url, user, password)
     assert not rest._connection.errorhandler.called  # no error
     assert one_time_token == ref_one_time_token
 
@@ -71,14 +71,14 @@ def test_auth_okta():
         return ref_response_html
 
     rest.fetch = fake_fetch
-    response_html = auth._step4(one_time_token, sso_url)
+    response_html = auth._step4(rest._connection, one_time_token, sso_url)
     assert response_html == response_html
 
     # step 5
     rest._protocol = "https"
     rest._host = f"{account}.snowflakecomputing.com"
     rest._port = 443
-    auth._step5(ref_response_html)
+    auth._step5(rest._connection, ref_response_html)
     assert not rest._connection.errorhandler.called  # no error
     assert ref_response_html == auth._saml_response
 
@@ -95,9 +95,9 @@ def test_auth_okta_step1_negative():
     ref_sso_url = "https://testsso.snowflake.net/sso"
     ref_token_url = "https://testsso.snowflake.net/token"
     rest = _init_rest(ref_sso_url, ref_token_url, success=False, message="error")
-    auth = AuthByOkta(rest, application)
+    auth = AuthByOkta(application)
     # step 1
-    _, _, _ = auth._step1(authenticator, service_name, account, user)
+    _, _, _ = auth._step1(rest._connection, authenticator, service_name, account, user)
     assert rest._connection.errorhandler.called  # error should be raised
 
 
@@ -114,13 +114,13 @@ def test_auth_okta_step2_negative():
     ref_token_url = "https://testsso.snowflake.net/token"
     rest = _init_rest(ref_sso_url, ref_token_url)
 
-    auth = AuthByOkta(rest, application)
+    auth = AuthByOkta(application)
     # step 1
     headers, sso_url, token_url = auth._step1(
-        authenticator, service_name, account, user
+        rest._connection, authenticator, service_name, account, user
     )
     # step 2
-    auth._step2(authenticator, sso_url, token_url)
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
     assert rest._connection.errorhandler.called  # error
 
     # invalid TOKEN URL
@@ -128,13 +128,13 @@ def test_auth_okta_step2_negative():
     ref_token_url = "https://testssoinvalid.snowflake.net/token"
     rest = _init_rest(ref_sso_url, ref_token_url)
 
-    auth = AuthByOkta(rest, application)
+    auth = AuthByOkta(application)
     # step 1
     headers, sso_url, token_url = auth._step1(
-        authenticator, service_name, account, user
+        rest._connection, authenticator, service_name, account, user
     )
     # step 2
-    auth._step2(authenticator, sso_url, token_url)
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
     assert rest._connection.errorhandler.called  # error
 
 
@@ -151,13 +151,13 @@ def test_auth_okta_step3_negative():
     ref_token_url = "https://testsso.snowflake.net/token"
     rest = _init_rest(ref_sso_url, ref_token_url)
 
-    auth = AuthByOkta(rest, application)
+    auth = AuthByOkta(application)
     # step 1
     headers, sso_url, token_url = auth._step1(
-        authenticator, service_name, account, user
+        rest._connection, authenticator, service_name, account, user
     )
     # step 2
-    auth._step2(authenticator, sso_url, token_url)
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
     assert not rest._connection.errorhandler.called  # no error
 
     # step 3: authentication by IdP failed.
@@ -167,7 +167,7 @@ def test_auth_okta_step3_negative():
         }
 
     rest.fetch = fake_fetch
-    _ = auth._step3(headers, token_url, user, password)
+    _ = auth._step3(rest._connection, headers, token_url, user, password)
     assert rest._connection.errorhandler.called  # auth failure error
 
 
@@ -184,14 +184,14 @@ def test_auth_okta_step5_negative():
     ref_token_url = "https://testsso.snowflake.net/token"
     rest = _init_rest(ref_sso_url, ref_token_url)
 
-    auth = AuthByOkta(rest, application)
+    auth = AuthByOkta(application)
     # step 1
     headers, sso_url, token_url = auth._step1(
-        authenticator, service_name, account, user
+        rest._connection, authenticator, service_name, account, user
     )
     assert not rest._connection.errorhandler.called  # no error
     # step 2
-    auth._step2(authenticator, sso_url, token_url)
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
     assert not rest._connection.errorhandler.called  # no error
     # step 3
     ref_one_time_token = "1token1"
@@ -202,7 +202,7 @@ def test_auth_okta_step5_negative():
         }
 
     rest.fetch = fake_fetch
-    one_time_token = auth._step3(headers, token_url, user, password)
+    one_time_token = auth._step3(rest._connection, headers, token_url, user, password)
     assert not rest._connection.errorhandler.called  # no error
 
     # step 4
@@ -218,14 +218,14 @@ def test_auth_okta_step5_negative():
         return ref_response_html
 
     rest.fetch = fake_fetch
-    response_html = auth._step4(one_time_token, sso_url)
+    response_html = auth._step4(rest._connection, one_time_token, sso_url)
     assert response_html == ref_response_html
 
     # step 5
     rest._protocol = "https"
     rest._host = f"{account}.snowflakecomputing.com"
     rest._port = 443
-    auth._step5(ref_response_html)
+    auth._step5(rest._connection, ref_response_html)
     assert rest._connection.errorhandler.called  # error
 
 
@@ -258,5 +258,6 @@ def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
     rest = SnowflakeRestful(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
+    connection._rest = rest
     rest._post_request = post_request
     return rest
