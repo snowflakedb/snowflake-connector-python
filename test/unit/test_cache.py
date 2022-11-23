@@ -422,7 +422,8 @@ class TestSFDictFileCache:
         )
         c2["b"] = 2
         c2["c"] = 3
-        # let the cache expire so that when loading again, clearning cache logic will be triggered
+        # cache will expire immediately due to the NO_LIFETIME setting
+        # when loading again, clearing cache logic will be triggered
         # load will trigger clear expired entries, and then further call _getitem
         c2._load()
 
