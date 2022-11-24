@@ -104,6 +104,7 @@ class TestSFDictCache:
         c._entry_lifetime = NO_LIFETIME
         c["d"] = 4
         assert c.get("d") is None
+        assert c._getitem_non_locking(1) == "a"
 
     def test_items(self):
         c = cache.SFDictCache()
@@ -405,3 +406,25 @@ class TestSFDictFileCache:
         os.unlink(cache_path)
         c["a"] = 1
         assert os.path.exists(cache_path)
+
+    def test_load_with_expired_entries(self, tmpdir):
+        # Test: https://snowflakecomputing.atlassian.net/browse/SNOW-698526
+
+        # create cache first
+        cache_path = os.path.join(tmpdir, "cache.txt")
+        c1 = cache.SFDictFileCache(file_path=cache_path)
+        c1["a"] = 1
+        c1._save()
+
+        # load cache
+        c2 = cache.SFDictFileCache(
+            file_path=cache_path, entry_lifetime=int(NO_LIFETIME.total_seconds())
+        )
+        c2["b"] = 2
+        c2["c"] = 3
+        # cache will expire immediately due to the NO_LIFETIME setting
+        # when loading again, clearing cache logic will be triggered
+        # load will trigger clear expired entries, and then further call _getitem
+        c2._load()
+
+        assert len(c2) == 1 and c2["a"] == 1 and c2._getitem_non_locking("a") == 1
