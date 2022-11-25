@@ -106,7 +106,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             ],
             "win32": [
                 "arrow.lib",
-                "arrow_dataset.dll",
+                "arrow_dataset.lib",
                 "arrow_python.lib",
                 "parquet.lib"
             ],
