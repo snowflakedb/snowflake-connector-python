@@ -168,9 +168,11 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         def _copy_arrow_lib(self):
             libs_to_bundle = self.arrow_libs_to_copy[sys.platform]
 
+            build_dir = os.path.join(self.build_lib, "snowflake", "connector")
+            os.makedirs(build_dir, exist_ok=True)
+
             for lib in libs_to_bundle:
                 source = f"{self._get_arrow_lib_dir()}/{lib}"
-                build_dir = os.path.join(self.build_lib, "snowflake", "connector")
                 copy(source, build_dir)
 
         def _get_arrow_lib_as_linker_input(self):
