@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v2.9.1(unreleased)
+
+  - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.1,<10.1.0
+
 - v2.9.0(December 9, 2022)
 
   - Fixed a bug where the permission of the file downloaded via GET command is changed
