@@ -58,6 +58,8 @@ class SFDictCache(Generic[K, V]):
         self._cache: dict[K, CacheEntry[V]] = {}
         self._lock = Lock()
         self._reset_telemetry()
+        # aliasing _getitem to unify the api with SFDictFileCache
+        self._getitem_non_locking = self._getitem
 
     def __len__(self) -> int:
         with self._lock:
@@ -403,16 +405,20 @@ class SFDictFileCache(SFDictCache):
         if os.path.exists(self.file_path):
             self._load()
 
-    def _getitem(
+    def _getitem_non_locking(
         self,
         k: K,
         *,
         should_record_hits: bool = True,
     ) -> V:
-        """Non-locking version of __getitem__.
+        """Non-locking version of __getitem__ of SFDictFileCache.
 
         This should only be used by internal functions when already
         holding self._lock.
+
+        Note that we do not overwrite _getitem because _getitem is used by
+        self._load to clear in-memory expired caches. Overwriting would cause
+        infinite recursive call.
         """
         if k not in self._cache:
             loaded = self._load_if_should()

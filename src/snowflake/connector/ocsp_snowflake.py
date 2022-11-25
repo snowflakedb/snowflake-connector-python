@@ -708,7 +708,7 @@ class OCSPCache:
             ocsp_response_validation_result = (
                 OCSP_RESPONSE_VALIDATION_CACHE[cache_key]
                 if lock_cache
-                else OCSP_RESPONSE_VALIDATION_CACHE._getitem(cache_key)
+                else OCSP_RESPONSE_VALIDATION_CACHE._getitem_non_locking(cache_key)
             )
             try:
                 # is_valid_time can raise exception if the cache

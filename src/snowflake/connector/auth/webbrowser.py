@@ -11,27 +11,32 @@ import os
 import socket
 import time
 import webbrowser
+from types import ModuleType
+from typing import TYPE_CHECKING, Any
 
-from .auth import Auth
-from .auth_by_plugin import AuthByPlugin
-from .compat import parse_qs, urlparse, urlsplit
-from .constants import (
+from ..compat import parse_qs, urlparse, urlsplit
+from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
 )
-from .errorcode import (
+from ..errorcode import (
     ER_IDP_CONNECTION_ERROR,
     ER_NO_HOSTNAME_FOUND,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
-from .errors import OperationalError
-from .network import (
+from ..errors import OperationalError
+from ..network import (
     CONTENT_TYPE_APPLICATION_JSON,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     PYTHON_CONNECTOR_USER_AGENT,
 )
+from . import Auth
+from .by_plugin import AuthByPlugin, AuthType
+
+if TYPE_CHECKING:
+    from .. import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
 
@@ -47,37 +52,42 @@ class AuthByWebBrowser(AuthByPlugin):
 
     def __init__(
         self,
-        rest,
-        application,
-        webbrowser_pkg=None,
-        socket_pkg=None,
-        protocol=None,
-        host=None,
-        port=None,
-    ):
+        application: str,
+        webbrowser_pkg: ModuleType | None = None,
+        socket_pkg: type[socket.socket] | None = None,
+        protocol: str | None = None,
+        host: str | None = None,
+        port: str | None = None,
+    ) -> None:
         super().__init__()
-        self._rest = rest
-        self._token = None
-        self._consent_cache_id_token = True
+        self.consent_cache_id_token = True
+        self._token: str | None = None
         self._application = application
         self._proof_key = None
-        self._webbrowser = webbrowser if webbrowser_pkg is None else webbrowser_pkg
-        self._socket = socket.socket if socket_pkg is None else socket_pkg
+        self._webbrowser: ModuleType = (
+            webbrowser if webbrowser_pkg is None else webbrowser_pkg
+        )
+        self._socket: type[socket.socket] = (
+            socket.socket if socket_pkg is None else socket_pkg
+        )
         self._protocol = protocol
         self._host = host
         self._port = port
         self._origin = None
 
-    @property
-    def consent_cache_id_token(self):
-        return self._consent_cache_id_token
+    def reset_secrets(self) -> None:
+        self._token = None
 
     @property
-    def assertion_content(self):
+    def type_(self) -> AuthType:
+        return AuthType.EXTERNAL_BROWSER
+
+    @property
+    def assertion_content(self) -> str:
         """Returns the token."""
         return self._token
 
-    def update_body(self, body):
+    def update_body(self, body: dict[Any, Any]) -> None:
         """Used by Auth to update the request that gets sent to /v1/login-request.
 
         Args:
@@ -87,13 +97,18 @@ class AuthByWebBrowser(AuthByPlugin):
         body["data"]["TOKEN"] = self._token
         body["data"]["PROOF_KEY"] = self._proof_key
 
-    def authenticate(self, authenticator, service_name, account, user, password):
+    def prepare(
+        self,
+        *,
+        conn: SnowflakeConnection,
+        authenticator: str,
+        service_name: str | None,
+        account: str,
+        user: str,
+        **kwargs: Any,
+    ) -> None:
         """Web Browser based Authentication."""
         logger.debug("authenticating by Web Browser")
-
-        # ignore password. user is still needed by GS to verify
-        # the assertion.
-        _ = password
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -125,7 +140,7 @@ class AuthByWebBrowser(AuthByPlugin):
 
             logger.debug("step 1: query GS to obtain SSO url")
             sso_url = self._get_sso_url(
-                authenticator, service_name, account, callback_port, user
+                conn, authenticator, service_name, account, callback_port, user
             )
 
             logger.debug("step 2: open a browser")
@@ -141,23 +156,33 @@ class AuthByWebBrowser(AuthByPlugin):
                 if not self._token:
                     # Input contained no token, either URL was incorrectly pasted,
                     # empty or just wrong
-                    self.handle_failure(
-                        {
+                    self._handle_failure(
+                        conn=conn,
+                        ret={
                             "code": ER_UNABLE_TO_OPEN_BROWSER,
                             "message": (
                                 "Unable to open a browser in this environment and "
                                 "SSO URL contained no token"
                             ),
-                        }
+                        },
                     )
                     return
             else:
                 logger.debug("step 3: accept SAML token")
-                self._receive_saml_token(socket_connection)
+                self._receive_saml_token(conn, socket_connection)
         finally:
             socket_connection.close()
 
-    def _receive_saml_token(self, socket_connection):
+    def reauthenticate(
+        self,
+        *,
+        conn: SnowflakeConnection,
+        **kwargs: Any,
+    ) -> dict[str, bool]:
+        conn.authenticate_with_retry(self)
+        return {"success": True}
+
+    def _receive_saml_token(self, conn: SnowflakeConnection, socket_connection) -> None:
         """Receives SAML token from web browser."""
         while True:
             socket_client, _ = socket_connection.accept()
@@ -166,13 +191,13 @@ class AuthByWebBrowser(AuthByPlugin):
                 data = socket_client.recv(BUF_SIZE).decode("utf-8").split("\r\n")
 
                 if not self._process_options(data, socket_client):
-                    self._process_receive_saml_token(data, socket_client)
+                    self._process_receive_saml_token(conn, data, socket_client)
                     break
             finally:
                 socket_client.shutdown(socket.SHUT_RDWR)
                 socket_client.close()
 
-    def _process_options(self, data, socket_client):
+    def _process_options(self, data: list[str], socket_client: socket.socket) -> bool:
         """Allows JS Ajax access to this endpoint."""
         for line in data:
             if line.startswith("OPTIONS "):
@@ -205,7 +230,7 @@ class AuthByWebBrowser(AuthByPlugin):
         socket_client.sendall("\r\n".join(content).encode("utf-8"))
         return True
 
-    def _validate_origin(self, requested_origin):
+    def _validate_origin(self, requested_origin: str) -> bool:
         ret = urlsplit(requested_origin)
         netloc = ret.netloc.split(":")
         host_got = netloc[0]
@@ -219,8 +244,10 @@ class AuthByWebBrowser(AuthByPlugin):
             and port_got == self._port
         )
 
-    def _process_receive_saml_token(self, data, socket_client):
-        if not self._process_get(data) and not self._process_post(data):
+    def _process_receive_saml_token(
+        self, conn: SnowflakeConnection, data: list[str], socket_client: socket.socket
+    ) -> None:
+        if not self._process_get(data) and not self._process_post(conn, data):
             return  # error
 
         content = [
@@ -228,7 +255,7 @@ class AuthByWebBrowser(AuthByPlugin):
             "Content-Type: text/html",
         ]
         if self._origin:
-            data = {"consent": self._consent_cache_id_token}
+            data = {"consent": self.consent_cache_id_token}
             msg = json.dumps(data)
             content.append(f"Access-Control-Allow-Origin: {self._origin}")
             content.append("Vary: Accept-Encoding, Origin")
@@ -248,7 +275,7 @@ You can close this window now and go back where you started from.
 
         socket_client.sendall("\r\n".join(content).encode("utf-8"))
 
-    def _check_post_requested(self, data):
+    def _check_post_requested(self, data: list[str]) -> tuple[str | None, str | None]:
         request_line = None
         header_line = None
         origin_line = None
@@ -275,13 +302,11 @@ You can close this window now and go back where you started from.
 
     def _process_get_url(self, url: str) -> None:
         parsed = parse_qs(urlparse(url).query)
-        if "token" not in parsed:
-            return
-        if not parsed["token"][0]:
+        if "token" not in parsed or not parsed["token"][0]:
             return
         self._token = parsed["token"][0]
 
-    def _process_get(self, data):
+    def _process_get(self, data: list[str]) -> bool:
         for line in data:
             if line.startswith("GET "):
                 target_line = line
@@ -294,17 +319,18 @@ You can close this window now and go back where you started from.
         self._process_get_url(url)
         return True
 
-    def _process_post(self, data):
+    def _process_post(self, conn: SnowflakeConnection, data: list[str]) -> bool:
         for line in data:
             if line.startswith("POST "):
                 break
         else:
-            self.handle_failure(
-                {
+            self._handle_failure(
+                conn=conn,
+                ret={
                     "code": ER_IDP_CONNECTION_ERROR,
                     "message": "Invalid HTTP request from web browser. Idp "
                     "authentication could have failed.",
-                }
+                },
             )
             return False
 
@@ -313,13 +339,13 @@ You can close this window now and go back where you started from.
             # parse the response as JSON
             payload = json.loads(data[-1])
             self._token = payload.get("token")
-            self._consent_cache_id_token = payload.get("consent", True)
+            self.consent_cache_id_token = payload.get("consent", True)
         except Exception:
             # key=value form.
             self._token = parse_qs(data[-1])["token"][0]
         return True
 
-    def _get_user_agent(self, data):
+    def _get_user_agent(self, data: list[str]) -> None:
         for line in data:
             if line.lower().startswith("user-agent"):
                 logger.debug(line)
@@ -327,7 +353,15 @@ You can close this window now and go back where you started from.
         else:
             logger.debug("No User-Agent")
 
-    def _get_sso_url(self, authenticator, service_name, account, callback_port, user):
+    def _get_sso_url(
+        self,
+        conn: SnowflakeConnection,
+        authenticator: str,
+        service_name: str | None,
+        account: str,
+        callback_port: int,
+        user: str,
+    ) -> str:
         """Gets SSO URL from Snowflake."""
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
@@ -341,12 +375,12 @@ You can close this window now and go back where you started from.
         body = Auth.base_auth_data(
             user,
             account,
-            self._rest._connection.application,
-            self._rest._connection._internal_application_name,
-            self._rest._connection._internal_application_version,
-            self._rest._connection._ocsp_mode(),
-            self._rest._connection._login_timeout,
-            self._rest._connection._network_timeout,
+            conn._rest._connection.application,
+            conn._rest._connection._internal_application_name,
+            conn._rest._connection._internal_application_version,
+            conn._rest._connection._ocsp_mode(),
+            conn._rest._connection._login_timeout,
+            conn._rest._connection._network_timeout,
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator
@@ -354,15 +388,15 @@ You can close this window now and go back where you started from.
         logger.debug(
             "account=%s, authenticator=%s, user=%s", account, authenticator, user
         )
-        ret = self._rest._post_request(
+        ret = conn._rest._post_request(
             url,
             headers,
             json.dumps(body),
-            timeout=self._rest._connection.login_timeout,
-            socket_timeout=self._rest._connection.login_timeout,
+            timeout=conn._rest._connection.login_timeout,
+            socket_timeout=conn._rest._connection.login_timeout,
         )
         if not ret["success"]:
-            self.handle_failure(ret)
+            self._handle_failure(conn=conn, ret=ret)
         data = ret["data"]
         sso_url = data["ssoUrl"]
         self._proof_key = data["proofKey"]
