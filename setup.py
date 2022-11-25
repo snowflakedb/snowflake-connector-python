@@ -73,25 +73,34 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         arrow_libs_to_copy = {
             "linux": [
                 "libarrow.so.1000",
+                "libarrow_dataset.so.1000",
                 "libarrow_python.so.1000",
                 "libparquet.so.1000",
             ],
             "darwin": [
                 "libarrow.1000.dylib",
+                "libarrow_dataset.1000.dylib",
                 "libarrow_python.1000.dylib",
                 "libparquet.1000.dylib",
             ],
-            "win32": ["arrow.dll", "arrow_python.dll", "parquet.dll"],
+            "win32": [
+                "arrow.dll",
+                "arrow_dataset.dll",
+                "arrow_python.dll",
+                "parquet.dll"
+            ],
         }
 
         arrow_libs_to_link = {
             "linux": [
                 "libarrow.so.1000",
+                "libarrow_dataset.so.1000",
                 "libarrow_python.so.1000",
                 "libparquet.so.1000",
             ],
             "darwin": [
                 "libarrow.1000.dylib",
+                "libarrow_dataset.1000.dylib",
                 "libarrow_python.1000.dylib",
                 "libparquet.1000.dylib",
             ],
