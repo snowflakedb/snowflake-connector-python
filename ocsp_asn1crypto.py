@@ -190,9 +190,8 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     :return True/False depending on time validity within the response
     """
     def is_valid_time(self, cert_id, ocsp_response):
-        res = OCSPResponse.load(ocsp_response)
-
         try:
+            res = OCSPResponse.load(ocsp_response)
             if res['response_status'].native != 'successful':
                 raise RevocationCheckError(
                     msg="Invalid Status: {}".format(res['response_status'].native),
