@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.8.3(Unreleased)
+- v2.8.3(November 28,2022)
   - Bumped cryptography dependency from <39.0.0 to <41.0.0
   - Fixed a bug where expired OCSP response cache caused infinite recursion during cache loading
 
