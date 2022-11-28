@@ -23,18 +23,14 @@ from time import strptime
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 
 from . import errors, proxy
-from .auth import (
-    FIRST_PARTY_AUTHENTICATORS,
-    Auth,
-    AuthByDefault,
-    AuthByKeyPair,
-    AuthByOAuth,
-    AuthByOkta,
-    AuthByPlugin,
-    AuthByUsrPwdMfa,
-    AuthByWebBrowser,
-)
-from .auth.idtoken import AuthByIdToken
+from .auth import Auth
+from .auth_default import AuthByDefault
+from .auth_idtoken import AuthByIdToken
+from .auth_keypair import AuthByKeyPair
+from .auth_oauth import AuthByOAuth
+from .auth_okta import AuthByOkta
+from .auth_usrpwdmfa import AuthByUsrPwdMfa
+from .auth_webbrowser import AuthByWebBrowser
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .connection_diagnostic import ConnectionDiagnostic
@@ -145,7 +141,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
-    "auth_class": (None, (type(None), AuthByPlugin)),
     "application": (CLIENT_NAME, (type(None), str)),
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
@@ -168,7 +163,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "paramstyle": (None, (type(None), str)),  # standard/snowflake
     "timezone": (None, (type(None), str)),  # snowflake
     "consent_cache_id_token": (True, bool),  # snowflake
-    "service_name": (None, (type(None), str)),  # snowflake
+    "service_name": (None, (type(None), str)),  # snowflake,
     "support_negative_year": (True, bool),  # snowflake
     "log_max_query_length": (LOG_MAX_QUERY_LENGTH, int),  # snowflake
     "disable_request_pooling": (False, bool),  # snowflake
@@ -287,7 +282,7 @@ class SnowflakeConnection:
 
         self._rest = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
-            setattr(self, f"_{name}", value)
+            setattr(self, "_" + name, value)
 
         self.heartbeat_thread = None
 
@@ -520,17 +515,6 @@ class SnowflakeConnection:
     def arrow_number_to_decimal_setter(self, value: bool):
         self._arrow_number_to_decimal = value
 
-    @property
-    def auth_class(self) -> AuthByPlugin | None:
-        return self._auth_class
-
-    @auth_class.setter
-    def auth_class(self, value: AuthByPlugin) -> None:
-        if isinstance(value, AuthByPlugin):
-            self._auth_class = value
-        else:
-            raise TypeError("auth_class must subclass AuthByPlugin")
-
     def connect(self, **kwargs):
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -740,6 +724,26 @@ class SnowflakeConnection:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
                 del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
+        if self._authenticator == DEFAULT_AUTHENTICATOR:
+            auth_instance = AuthByDefault(self._password)
+        elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+            auth_instance = AuthByWebBrowser(
+                self.rest,
+                self.application,
+                protocol=self._protocol,
+                host=self.host,
+                port=self.port,
+            )
+        elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+            auth_instance = AuthByKeyPair(self._private_key)
+        elif self._authenticator == OAUTH_AUTHENTICATOR:
+            auth_instance = AuthByOAuth(self._token)
+        elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+            auth_instance = AuthByUsrPwdMfa(self._password)
+        else:
+            # okta URL, e.g., https://<account>.okta.com/
+            auth_instance = AuthByOkta(self.rest, self.application)
+
         if self._session_parameters is None:
             self._session_parameters = {}
         if self._autocommit is not None:
@@ -769,63 +773,37 @@ class SnowflakeConnection:
                 PARAMETER_CLIENT_PREFETCH_THREADS
             ] = self._validate_client_prefetch_threads()
 
-        # Setup authenticator
-        auth = Auth(self.rest)
-        if self.auth_class is not None:
-            if type(
-                self.auth_class
-            ) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
-                type(self.auth_class), AuthByKeyPair
-            ):
-                raise TypeError("auth_class must be a child class of AuthByKeyPair")
-                # TODO: add telemetry for custom auth
-            self.auth_class = self.auth_class
-        elif self._authenticator == DEFAULT_AUTHENTICATOR:
-            self.auth_class = AuthByDefault(password=self._password)
-        elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+        if self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+            # enable storing temporary credential in a file
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
                 self._client_store_temporary_credential if IS_LINUX else True
             )
-            auth.read_temporary_credentials(
-                self.host,
-                self.user,
-                self._session_parameters,
-            )
-            # Depending on whether self._rest.id_token is available we do different
-            #  auth_instance
-            if self._rest.id_token is None:
-                self.auth_class = AuthByWebBrowser(
-                    application=self.application,
-                    protocol=self._protocol,
-                    host=self.host,
-                    port=self.port,
-                )
-            else:
-                self.auth_class = AuthByIdToken(id_token=self._rest.id_token)
 
-        elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-            self.auth_class = AuthByKeyPair(private_key=self._private_key)
-        elif self._authenticator == OAUTH_AUTHENTICATOR:
-            self.auth_class = AuthByOAuth(oauth_token=self._token)
-        elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
-            self.auth_class = AuthByUsrPwdMfa(password=self._password)
+        if self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                 self._client_request_mfa_token if IS_LINUX else True
             )
-        else:
-            # okta URL, e.g., https://<account>.okta.com/
-            self.auth_class = AuthByOkta(application=self.application)
 
-        self.authenticate_with_retry(self.auth_class)
+        auth = Auth(self.rest)
+        auth.read_temporary_credentials(self.host, self.user, self._session_parameters)
+        self._authenticate(auth_instance)
 
         self._password = None  # ensure password won't persist
-        self.auth_class.reset_secrets()
 
         if self.client_session_keep_alive:
             # This will be called after the heartbeat frequency has actually been set.
             # By this point it should have been decided if the heartbeat has to be enabled
             # and what would the heartbeat frequency be
             self._add_heartbeat()
+
+    def __preprocess_auth_instance(self, auth_instance):
+        if type(auth_instance) is AuthByWebBrowser:
+            if self._rest.id_token is not None:
+                return AuthByIdToken(self._rest.id_token)
+        if type(auth_instance) is AuthByUsrPwdMfa:
+            if self._rest.mfa_token is not None:
+                auth_instance.set_mfa_token(self._rest.mfa_token)
+        return auth_instance
 
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
@@ -894,9 +872,6 @@ class SnowflakeConnection:
                 msg="Invalid paramstyle is specified", errno=ER_INVALID_VALUE
             )
 
-        if self._auth_class and not isinstance(self._auth_class, AuthByPlugin):
-            raise TypeError("auth_class must subclass AuthByPlugin")
-
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
@@ -904,11 +879,6 @@ class SnowflakeConnection:
                 self._port = "443"
             if "protocol" not in kwargs:
                 self._protocol = "https"
-
-        # If using a custom auth class, we should set the authenticator
-        # type to be the same as the custom auth class
-        if self._auth_class:
-            self._authenticator = self._auth_class.type_.value
 
         if self._authenticator:
             # Only upper self._authenticator if it is a non-okta link
@@ -934,22 +904,21 @@ class SnowflakeConnection:
         if self._private_key:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if (
-            self.auth_class is None
-            and self._authenticator
-            not in [
-                EXTERNAL_BROWSER_AUTHENTICATOR,
-                OAUTH_AUTHENTICATOR,
-                KEY_PAIR_AUTHENTICATOR,
-            ]
-            and not self._password
-        ):
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
-            )
+        if self._authenticator not in [
+            # when self._authenticator would be in this list it is always upper'd before
+            EXTERNAL_BROWSER_AUTHENTICATOR,
+            OAUTH_AUTHENTICATOR,
+            KEY_PAIR_AUTHENTICATOR,
+        ]:
+            # authentication is done by the browser if the authenticator
+            # is externalbrowser
+            if not self._password:
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
+                )
 
         if not self._account:
             Error.errorhandler_wrapper(
@@ -1066,21 +1035,28 @@ class SnowflakeConnection:
 
         return ret
 
-    def _reauthenticate(self):
-        return self._auth_class.reauthenticate(conn=self)
+    def _reauthenticate_by_webbrowser(self):
+        auth_instance = AuthByWebBrowser(
+            self.rest,
+            self.application,
+            protocol=self._protocol,
+            host=self.host,
+            port=self.port,
+        )
+        self._authenticate(auth_instance)
+        return {"success": True}
 
-    def authenticate_with_retry(self, auth_instance):
+    def _authenticate(self, auth_instance):
         # make some changes if needed before real __authenticate
         try:
-            self._authenticate(auth_instance)
+            self.__authenticate(self.__preprocess_auth_instance(auth_instance))
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            self._authenticate(auth_instance)
+            self.__authenticate(self.__preprocess_auth_instance(auth_instance))
 
-    def _authenticate(self, auth_instance: AuthByPlugin):
-        auth_instance.prepare(
-            conn=self,
+    def __authenticate(self, auth_instance):
+        auth_instance.authenticate(
             authenticator=self._authenticator,
             service_name=self.service_name,
             account=self.account,
@@ -1107,7 +1083,7 @@ class SnowflakeConnection:
                 password_callback=self._password_callback,
                 session_parameters=self._session_parameters,
             )
-        except OperationalError as e:
+        except OperationalError:
             logger.debug(
                 "Operational Error raised at authentication"
                 f"for authenticator: {type(auth_instance).__name__}"
@@ -1138,7 +1114,7 @@ class SnowflakeConnection:
                     )
                 except OperationalError as auth_op:
                     if auth_op.errno == ER_FAILED_TO_CONNECT_TO_DB:
-                        raise auth_op from e
+                        raise auth_op
                     logger.debug("Continuing authenticator specific timeout handling")
                     continue
                 break

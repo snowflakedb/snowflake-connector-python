@@ -13,28 +13,11 @@ import pytest
 
 import snowflake.connector
 
-try:
-    from snowflake.connector.auth import (
-        AuthByDefault,
-        AuthByOAuth,
-        AuthByOkta,
-        AuthByWebBrowser,
-    )
-except ImportError:
-    from unittest.mock import MagicMock
-
-    AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
-
 try:  # pragma: no cover
-    from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"
     QueryStatus = None
-
-    class AuthByUsrPwdMfa(AuthByDefault):
-        def __init__(self, password: str, mfa_token: str) -> None:
-            pass
 
 
 def fake_connector() -> snowflake.connector.SnowflakeConnection:
@@ -172,41 +155,3 @@ def test_imported_module(mock_post_requests):
     assert (
         mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
     )
-
-
-@pytest.mark.parametrize(
-    "auth_class",
-    (
-        pytest.param(
-            type("auth_class", (AuthByDefault,), {})("my_secret_password"),
-            id="AuthByDefault",
-        ),
-        pytest.param(
-            type("auth_class", (AuthByOAuth,), {})("my_token"),
-            id="AuthByOAuth",
-        ),
-        pytest.param(
-            type("auth_class", (AuthByOkta,), {})("Python connector"),
-            id="AuthByOkta",
-        ),
-        pytest.param(
-            type("auth_class", (AuthByUsrPwdMfa,), {})("password", "mfa_token"),
-            id="AuthByUsrPwdMfa",
-        ),
-        pytest.param(
-            type("auth_class", (AuthByWebBrowser,), {})(None, None),
-            id="AuthByWebBrowser",
-        ),
-    ),
-)
-def test_negative_custom_auth(auth_class):
-    """Tests that non-AuthByKeyPair custom auth is not allowed."""
-    with pytest.raises(
-        TypeError,
-        match="auth_class must be a child class of AuthByKeyPair",
-    ):
-        snowflake.connector.connect(
-            account="account",
-            user="user",
-            auth_class=auth_class,
-        )

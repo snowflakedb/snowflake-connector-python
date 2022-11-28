@@ -5,28 +5,14 @@
 
 from __future__ import annotations
 
-"""This module implements the base class for authenticator classes.
-
-Note:
- **kwargs are added to most functions so that child classes can safely ignore extra in
-  arguments in case of a caller API change and named arguments are enforced to prevent
-  issues with argument being sent in out of order.
-"""
-
 import logging
 import time
-from abc import ABC, abstractmethod
-from enum import Enum, unique
 from os import getenv
-from typing import TYPE_CHECKING, Any
 
-from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
-from ..errors import DatabaseError, Error, OperationalError
-from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from ..time_util import DecorrelateJitterBackoff
-
-if TYPE_CHECKING:
-    from .. import SnowflakeConnection
+from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
+from .errors import DatabaseError, Error, OperationalError
+from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from .time_util import DecorrelateJitterBackoff
 
 logger = logging.getLogger(__name__)
 
@@ -75,113 +61,32 @@ class AuthRetryCtx:
         self._current_sleep_time = 1
 
 
-@unique
-class AuthType(Enum):
-    DEFAULT = "SNOWFLAKE"  # default authenticator name
-    EXTERNAL_BROWSER = "EXTERNALBROWSER"
-    KEY_PAIR = "SNOWFLAKE_JWT"
-    OAUTH = "OAUTH"
-    ID_TOKEN = "ID_TOKEN"
-    USR_PWD_MFA = "USERNAME_PASSWORD_MFA"
-    OKTA = "OKTA"
-
-
-class AuthByPlugin(ABC):
+class AuthByPlugin:
     """External Authenticator interface."""
 
     def __init__(self) -> None:
         self._retry_ctx = AuthRetryCtx()
-        self.consent_cache_id_token = False
-        self._timeout = 120
 
     @property
-    def timeout(self) -> int:
-        return self._timeout
-
-    @timeout.setter
-    def timeout(self, value: Any) -> None:
-        self._timeout = int(value)
-
-    @property
-    @abstractmethod
-    def type_(self) -> AuthType:
-        """Return the Snowflake friendly name of auth class."""
+    def assertion_content(self):
         raise NotImplementedError
 
-    @property
-    @abstractmethod
-    def assertion_content(self) -> str:
-        """Return a safe version of the information used to authenticate with Snowflake.
-
-        This is used for logging, useful for printing temporary tokens, but make sure to
-        mask secrets.
-        """
+    def update_body(self, body):
         raise NotImplementedError
 
-    @abstractmethod
-    def prepare(
-        self,
-        *,
-        conn: SnowflakeConnection,
-        authenticator: str,
-        service_name: str | None,
-        account: str,
-        user: str,
-        password: str | None,
-        **kwargs: Any,
-    ) -> str | None:
-        """Prepare for authentication.
-
-        This function is useful for situations where we need to reach out to a 3rd-party
-        service before authenticating with Snowflake.
-        """
+    def authenticate(self, authenticator, service_name, account, user, password):
         raise NotImplementedError
 
-    @abstractmethod
-    def update_body(self, body: dict[Any, Any]) -> None:
-        """Update the body of the authentication request."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def reset_secrets(self) -> None:
-        """Reset secret members."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def reauthenticate(
-        self,
-        *,
-        conn: SnowflakeConnection,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Re-perform authentication.
-
-        The difference between this and authentication is that secrets will be removed
-        from memory by the time this gets called.
-        """
-        raise NotImplementedError
-
-    def _handle_failure(
-        self,
-        *,
-        conn: SnowflakeConnection,
-        ret: dict[Any, Any],
-        **kwargs: Any,
-    ) -> None:
-        """Handles a failure when an issue happens while connecting to Snowflake.
-
-        If the user returns from this function execution will continue. The argument
-        data can be manipulated from within this function and so recovery is possible
-        from here.
-        """
+    def handle_failure(self, ret):
+        """Handles a failure when connecting to Snowflake."""
         Error.errorhandler_wrapper(
-            conn,
+            self._rest._connection,
             None,
             DatabaseError,
             {
-                "msg": "Failed to connect to DB: {host}:{port}, {message}".format(
-                    host=conn._rest._host,
-                    port=conn._rest._port,
+                "msg": ("Failed to connect to DB: {host}:{port}, " "{message}").format(
+                    host=self._rest._host,
+                    port=self._rest._port,
                     message=ret["message"],
                 ),
                 "errno": int(ret.get("code", -1)),
@@ -191,13 +96,11 @@ class AuthByPlugin(ABC):
 
     def handle_timeout(
         self,
-        *,
         authenticator: str,
         service_name: str | None,
         account: str,
         user: str,
         password: str,
-        **kwargs: Any,
     ) -> None:
         """Default timeout handler.
 

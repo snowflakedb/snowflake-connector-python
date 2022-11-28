@@ -15,7 +15,7 @@ import time
 import traceback
 import uuid
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import OpenSSL.SSL
 
@@ -671,7 +671,7 @@ class SnowflakeRestful:
             except ReauthenticationRequest as ex:
                 if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
                     raise ex.cause
-                ret = self._connection._reauthenticate()
+                ret = self._connection._reauthenticate_by_webbrowser()
             logger.debug(
                 "ret[code] = {code} after renew_session".format(
                     code=(ret.get("code", "N/A"))
@@ -724,7 +724,7 @@ class SnowflakeRestful:
             except ReauthenticationRequest as ex:
                 if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
                     raise ex.cause
-                ret = self._connection._reauthenticate()
+                ret = self._connection._reauthenticate_by_webbrowser()
             logger.debug(
                 "ret[code] = {code} after renew_session".format(
                     code=(ret.get("code", "N/A"))
@@ -756,15 +756,7 @@ class SnowflakeRestful:
 
         return ret
 
-    def fetch(
-        self,
-        method: str,
-        full_url: str,
-        headers: dict[str, Any],
-        data: dict[str, Any] | None = None,
-        timeout: int | None = None,
-        **kwargs,
-    ) -> dict[Any, Any]:
+    def fetch(self, method, full_url, headers, data=None, timeout=None, **kwargs):
         """Carry out API request with session management."""
 
         class RetryCtx:

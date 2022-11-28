@@ -10,7 +10,6 @@ import hashlib
 import os
 from datetime import datetime, timedelta
 from logging import getLogger
-from typing import Any
 
 import jwt
 from cryptography.hazmat.backends import default_backend
@@ -21,14 +20,14 @@ from cryptography.hazmat.primitives.serialization import (
     load_der_private_key,
 )
 
-from ..errorcode import (
+from .auth_by_plugin import AuthByPlugin
+from .errorcode import (
     ER_CONNECTION_TIMEOUT,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_PRIVATE_KEY,
 )
-from ..errors import OperationalError, ProgrammingError
-from ..network import KEY_PAIR_AUTHENTICATOR
-from .by_plugin import AuthByPlugin, AuthType
+from .errors import OperationalError, ProgrammingError
+from .network import KEY_PAIR_AUTHENTICATOR
 
 logger = getLogger(__name__)
 
@@ -45,11 +44,7 @@ class AuthByKeyPair(AuthByPlugin):
     DEFAULT_JWT_RETRY_ATTEMPTS = 10
     DEFAULT_JWT_CNXN_WAIT_TIME = 10
 
-    def __init__(
-        self,
-        private_key: bytes,
-        lifetime_in_seconds: int = LIFETIME,
-    ) -> None:
+    def __init__(self, private_key, lifetime_in_seconds: int = LIFETIME):
         """Inits AuthByKeyPair class with private key.
 
         Args:
@@ -57,7 +52,7 @@ class AuthByKeyPair(AuthByPlugin):
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         super().__init__()
-        self._private_key: bytes | None = private_key
+        self._private_key = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -68,28 +63,22 @@ class AuthByKeyPair(AuthByPlugin):
                 "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
             )
         )
-        self._timeout = timedelta(
+        self._jwt_cnxn_wait_time = timedelta(
             seconds=int(
                 os.getenv(
                     "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
                 )
             )
-        ).total_seconds()
+        )
         self._current_retry_count = 0
 
-    def reset_secrets(self) -> None:
-        self._private_key = None
-
-    @property
-    def type_(self) -> AuthType:
-        return AuthType.KEY_PAIR
-
-    def prepare(
+    def authenticate(
         self,
-        *,
+        authenticator: str,
+        service_name: str | None,
         account: str,
         user: str,
-        **kwargs: Any,
+        password: str | None,
     ) -> str:
         if ".global" in account:
             account = account.partition("-")[0]
@@ -102,22 +91,21 @@ class AuthByKeyPair(AuthByPlugin):
 
         try:
             private_key = load_der_private_key(
-                data=self._private_key,
-                password=None,
-                backend=default_backend(),
+                data=self._private_key, password=None, backend=default_backend()
             )
         except Exception as e:
             raise ProgrammingError(
-                msg=f"Failed to load private key: {e}\nPlease provide a valid "
-                "unencrypted rsa private key in DER format as bytes object",
+                msg="Failed to load private key: {}\nPlease provide a valid unencrypted rsa private "
+                "key in DER format as bytes object".format(str(e)),
                 errno=ER_INVALID_PRIVATE_KEY,
             )
 
         if not isinstance(private_key, RSAPrivateKey):
             raise ProgrammingError(
-                msg=f"Private key type ({private_key.__class__.__name__}) not supported."
-                "\nPlease provide a valid rsa private key in DER format as bytes "
-                "object",
+                msg="Private key type ({}) not supported.\nPlease provide a valid rsa private "
+                "key in DER format as bytes object".format(
+                    private_key.__class__.__name__
+                ),
                 errno=ER_INVALID_PRIVATE_KEY,
             )
 
@@ -142,9 +130,6 @@ class AuthByKeyPair(AuthByPlugin):
 
         return self._jwt_token
 
-    def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
-        return {"success": False}
-
     @staticmethod
     def calculate_public_key_fingerprint(private_key):
         # get public key bytes
@@ -163,25 +148,26 @@ class AuthByKeyPair(AuthByPlugin):
 
         return public_key_fp
 
-    def update_body(self, body: dict[Any, Any]) -> None:
+    def update_body(self, body):
         body["data"]["AUTHENTICATOR"] = KEY_PAIR_AUTHENTICATOR
         body["data"]["TOKEN"] = self._jwt_token
 
-    def assertion_content(self) -> str:
+    def assertion_content(self):
         return self._jwt_token
 
     def should_retry(self, count: int) -> bool:
         return count < self._jwt_retry_attempts
 
+    def get_timeout(self) -> int:
+        return self._jwt_cnxn_wait_time.seconds
+
     def handle_timeout(
         self,
-        *,
         authenticator: str,
         service_name: str | None,
         account: str,
         user: str,
         password: str | None,
-        **kwargs: Any,
     ) -> None:
         if self._retry_ctx.get_current_retry_count() > self._jwt_retry_attempts:
             logger.debug("Exhausted max login attempts. Aborting connection")
@@ -197,10 +183,9 @@ class AuthByKeyPair(AuthByPlugin):
             )
             self._retry_ctx.increment_retry()
 
-        self.prepare(account, user)
+        self.authenticate(authenticator, service_name, account, user, password)
 
-    @staticmethod
-    def can_handle_exception(op: OperationalError) -> bool:
+    def can_handle_exception(self, op: OperationalError) -> bool:
         if op.errno is ER_CONNECTION_TIMEOUT:
             return True
         return False

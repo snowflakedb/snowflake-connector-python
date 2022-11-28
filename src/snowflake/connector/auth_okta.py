@@ -7,24 +7,20 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
 
-from ..compat import unescape, urlencode, urlsplit
-from ..constants import (
+from .auth import Auth
+from .auth_by_plugin import AuthByPlugin
+from .compat import unescape, urlencode, urlsplit
+from .constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
 )
-from ..errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
-from ..errors import DatabaseError, Error
-from ..network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
-from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from . import Auth
-from .by_plugin import AuthByPlugin, AuthType
-
-if TYPE_CHECKING:
-    from .. import SnowflakeConnection
+from .errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
+from .errors import DatabaseError, Error
+from .network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
+from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +51,7 @@ def _is_prefix_equal(url1, url2):
 def _get_post_back_url_from_html(html):
     """Gets the post back URL.
 
-    Since the HTML is not well-formed, minidom cannot be used to convert to
+    Since the HTML is not well formed, minidom cannot be used to convert to
     DOM. The first discovered form is assumed to be the form to post back
     and the URL is taken from action attributes.
     """
@@ -70,36 +66,20 @@ def _get_post_back_url_from_html(html):
 class AuthByOkta(AuthByPlugin):
     """Authenticate user by OKTA."""
 
-    def __init__(self, application: str) -> None:
+    def __init__(self, rest, application):
         super().__init__()
+        self._rest = rest
         self._saml_response = None
         self._application = application
 
-    def reset_secrets(self) -> None:
-        pass
-
     @property
-    def type_(self) -> AuthType:
-        return AuthType.OKTA
-
-    @property
-    def assertion_content(self) -> str:
+    def assertion_content(self):
         return self._saml_response
 
-    def update_body(self, body: dict[Any, Any]) -> None:
+    def update_body(self, body):
         body["data"]["RAW_SAML_RESPONSE"] = self._saml_response
 
-    def prepare(
-        self,
-        *,
-        conn: SnowflakeConnection,
-        authenticator: str,
-        service_name: str | None,
-        account: str,
-        user: str,
-        password: str,
-        **kwargs: Any,
-    ) -> None:
+    def authenticate(self, authenticator, service_name, account, user, password):
         """SAML Authentication.
 
         Steps are:
@@ -126,28 +106,14 @@ class AuthByOkta(AuthByPlugin):
         """
         logger.debug("authenticating by SAML")
         headers, sso_url, token_url = self._step1(
-            conn,
-            authenticator,
-            service_name,
-            account,
-            user,
+            authenticator, service_name, account, user
         )
-        self._step2(conn, authenticator, sso_url, token_url)
-        one_time_token = self._step3(conn, headers, token_url, user, password)
-        response_html = self._step4(conn, one_time_token, sso_url)
-        self._step5(conn, response_html)
+        self._step2(authenticator, sso_url, token_url)
+        one_time_token = self._step3(headers, token_url, user, password)
+        response_html = self._step4(one_time_token, sso_url)
+        self._step5(response_html)
 
-    def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
-        return {"success": False}
-
-    def _step1(
-        self,
-        conn: SnowflakeConnection,
-        authenticator: str,
-        service_name: str | None,
-        account: str,
-        user: str,
-    ) -> tuple[dict[str, str], str, str]:
+    def _step1(self, authenticator, service_name, account, user):
         logger.debug("step 1: query GS to obtain IDP token and SSO url")
 
         headers = {
@@ -161,12 +127,12 @@ class AuthByOkta(AuthByPlugin):
         body = Auth.base_auth_data(
             user,
             account,
-            conn.application,
-            conn._internal_application_name,
-            conn._internal_application_version,
-            conn._ocsp_mode(),
-            conn._login_timeout,
-            conn._network_timeout,
+            self._rest._connection.application,
+            self._rest._connection._internal_application_name,
+            self._rest._connection._internal_application_version,
+            self._rest._connection._ocsp_mode(),
+            self._rest._connection._login_timeout,
+            self._rest._connection._network_timeout,
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator
@@ -175,58 +141,49 @@ class AuthByOkta(AuthByPlugin):
             account,
             authenticator,
         )
-        ret = conn._rest._post_request(
+        ret = self._rest._post_request(
             url,
             headers,
             json.dumps(body),
-            timeout=conn._rest._connection.login_timeout,
-            socket_timeout=conn._rest._connection.login_timeout,
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout,
         )
 
         if not ret["success"]:
-            self._handle_failure(conn=conn, ret=ret)
+            self.handle_failure(ret)
 
         data = ret["data"]
         token_url = data["tokenUrl"]
         sso_url = data["ssoUrl"]
         return headers, sso_url, token_url
 
-    def _step2(
-        self,
-        conn: SnowflakeConnection,
-        authenticator: str,
-        sso_url: str,
-        token_url: str,
-    ) -> None:
+    def _step2(self, authenticator, sso_url, token_url):
         logger.debug(
-            "step 2: validate Token and SSO URL has the same prefix as authenticator"
+            "step 2: validate Token and SSO URL has the same prefix " "as authenticator"
         )
         if not _is_prefix_equal(authenticator, token_url) or not _is_prefix_equal(
             authenticator, sso_url
         ):
             Error.errorhandler_wrapper(
-                conn._rest._connection,
+                self._rest._connection,
                 None,
                 DatabaseError,
                 {
                     "msg": (
                         "The specified authenticator is not supported: "
-                        f"{authenticator}, token_url: {token_url}, "
-                        f"sso_url: {sso_url}"
+                        "{authenticator}, token_url: {token_url}, "
+                        "sso_url: {sso_url}".format(
+                            authenticator=authenticator,
+                            token_url=token_url,
+                            sso_url=sso_url,
+                        )
                     ),
                     "errno": ER_IDP_CONNECTION_ERROR,
                     "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 },
             )
 
-    @staticmethod
-    def _step3(
-        conn: SnowflakeConnection,
-        headers: dict[str, str],
-        token_url: str,
-        user: str,
-        password: str,
-    ) -> str:
+    def _step3(self, headers, token_url, user, password):
         logger.debug(
             "step 3: query IDP token url to authenticate and " "retrieve access token"
         )
@@ -234,19 +191,19 @@ class AuthByOkta(AuthByPlugin):
             "username": user,
             "password": password,
         }
-        ret = conn._rest.fetch(
+        ret = self._rest.fetch(
             "post",
             token_url,
             headers,
             data=json.dumps(data),
-            timeout=conn._rest._connection.login_timeout,
-            socket_timeout=conn._rest._connection.login_timeout,
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout,
             catch_okta_unauthorized_error=True,
         )
         one_time_token = ret.get("sessionToken", ret.get("cookieToken"))
         if not one_time_token:
             Error.errorhandler_wrapper(
-                conn._rest._connection,
+                self._rest._connection,
                 None,
                 DatabaseError,
                 {
@@ -263,12 +220,7 @@ class AuthByOkta(AuthByPlugin):
             )
         return one_time_token
 
-    @staticmethod
-    def _step4(
-        conn: SnowflakeConnection,
-        one_time_token: str,
-        sso_url: str,
-    ):
+    def _step4(self, one_time_token, sso_url):
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
         url_parameters = {
             "RelayState": "/some/deep/link",
@@ -278,31 +230,27 @@ class AuthByOkta(AuthByPlugin):
         headers = {
             HTTP_HEADER_ACCEPT: "*/*",
         }
-        response_html = conn._rest.fetch(
+        response_html = self._rest.fetch(
             "get",
             sso_url,
             headers,
-            timeout=conn.login_timeout,
-            socket_timeout=conn.login_timeout,
+            timeout=self._rest._connection.login_timeout,
+            socket_timeout=self._rest._connection.login_timeout,
             is_raw_text=True,
         )
         return response_html
 
-    def _step5(
-        self,
-        conn: SnowflakeConnection,
-        response_html: str,
-    ) -> None:
+    def _step5(self, response_html):
         logger.debug("step 5: validate post_back_url matches Snowflake URL")
         post_back_url = _get_post_back_url_from_html(response_html)
         full_url = "{protocol}://{host}:{port}".format(
-            protocol=conn._rest._protocol,
-            host=conn._rest._host,
-            port=conn._rest._port,
+            protocol=self._rest._protocol,
+            host=self._rest._host,
+            port=self._rest._port,
         )
         if not _is_prefix_equal(post_back_url, full_url):
             Error.errorhandler_wrapper(
-                conn._rest._connection,
+                self._rest._connection,
                 None,
                 DatabaseError,
                 {
