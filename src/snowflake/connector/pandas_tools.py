@@ -112,8 +112,8 @@ def write_pandas(
             the passed in DataFrame. The table will not be created if it already exists
         create_temp_table: (Deprecated) Will make the auto-created table as a temporary table
         overwrite: When true, and if auto_create_table is true, then it drops the table. Otherwise, it
-        truncates the table. In both cases it will replace the existing contents of the table with that of the passed in
-            Pandas DataFrame.
+            truncates the table. In both cases it will replace the existing contents of the table with
+            that of the passed in Pandas DataFrame.
         table_type: The table type of to-be-created table. The supported table types include ``temp``/``temporary``
             and ``transient``. Empty means permanent table as per SQL convention.
 
