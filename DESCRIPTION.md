@@ -19,7 +19,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
       - Set to >1 to submit the specified exact number of statements in a multi-statement query
     - Bindings are accepted in the same way for multi-statements as they are for single statement queries
     - Asynchronous multi-statement query execution is supported. Users should still use `get_results_from_sfqid` to retrieve results
-    - To access the results of each query, users can call `cursor.nextset()` as specified in the DB 2.0 API (PEP-249), to iterate through each statements results
+    - To access the results of each query, users can call `SnowflakeCursor.nextset()` as specified in the DB 2.0 API (PEP-249), to iterate through each statements results
       - The first statement's results are accessible immediately after calling `execute` (or `get_results_from_sfqid` if asynchronous) through the existing `fetch*()` methods
 
 - v2.8.3(November 28,2022)
