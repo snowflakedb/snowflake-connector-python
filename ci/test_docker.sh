@@ -22,10 +22,10 @@ CONTAINER_NAME=test_pyconnector
 echo "[Info] Building docker image"
 if [[ "$arch" == "aarch64" ]]; then
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014AARCH64
-  GOSU_URL=https://github.com/tianon/gosu/releases/download/1.11/gosu-arm64
+  GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-arm64
 else
   BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014
-  GOSU_URL=https://github.com/tianon/gosu/releases/download/1.11/gosu-amd64
+  GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
 fi
 
 docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE --build-arg GOSU_URL="$GOSU_URL" . -f Dockerfile
