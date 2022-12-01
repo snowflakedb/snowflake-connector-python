@@ -7,12 +7,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
-
-import pytest
-
-import snowflake.connector.connection
-from snowflake.connector.constants import QueryStatus
 
 from .compat import IS_LINUX
 
@@ -35,37 +29,3 @@ if ENABLE_TELEMETRY_LOG:
         )
     )
     rt_plain_logger.addHandler(ch)
-
-
-def _wait_while_query_running(
-    con: snowflake.connector.connection.SnowflakeConnection,
-    sfqid: str,
-    sleep_time: int,
-    dont_cache: bool = False,
-) -> None:
-    """
-    Checks if the provided still returns that it is still running, and if so,
-    sleeps for the specified time in a while loop.
-    """
-    query_status = con._get_query_status if dont_cache else con.get_query_status
-    while con.is_still_running(query_status(sfqid)):
-        time.sleep(sleep_time)
-
-
-def _wait_until_query_success(
-    con: snowflake.connector.connection.SnowflakeConnection,
-    sfqid: str,
-    num_checks: int,
-    sleep_per_check: int,
-) -> None:
-    for _ in range(num_checks):
-        status = con.get_query_status(sfqid)
-        if status == QueryStatus.SUCCESS:
-            break
-        time.sleep(sleep_per_check)
-    else:
-        pytest.fail(
-            "We should have broke out of wait loop for query success."
-            f"Query ID: {sfqid}"
-            f"Final query status: {status}"
-        )
