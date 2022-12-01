@@ -5,13 +5,15 @@
 from __future__ import annotations
 
 import time
-from typing import Pattern, Sequence
+from typing import TYPE_CHECKING, Pattern, Sequence
 from unittest.mock import Mock
 
 import pytest
 
-import snowflake.connector.connection
 from snowflake.connector.compat import OK
+
+if TYPE_CHECKING:
+    import snowflake.connector.connection
 
 try:
     from snowflake.connector.constants import QueryStatus
