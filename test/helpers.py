@@ -12,7 +12,11 @@ import pytest
 
 import snowflake.connector.connection
 from snowflake.connector.compat import OK
-from snowflake.connector.constants import QueryStatus
+
+try:
+    from snowflake.connector.constants import QueryStatus
+except ImportError:
+    QueryStatus = None
 
 
 def create_mock_response(status_code: int) -> Mock:
