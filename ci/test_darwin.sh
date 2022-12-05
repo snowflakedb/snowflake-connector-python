@@ -5,7 +5,7 @@
 #   - Versions to be tested should be passed in as the first argument, e.g: "3.7 3.8". If omitted 3.7-3.10 will be assumed.
 #   - This script uses .. to download the newest wheel files from S3
 
-PYTHON_VERSIONS="${1:-3.7 3.8 3.9 3.10}"
+PYTHON_VERSIONS="${1:-3.7 3.8 3.9 3.10 3.11}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/public"
