@@ -30,7 +30,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
+          python-version: '3.8'
       - name: Display Python version
         run: python -c "import sys; import os; print(\"\n\".join(os.environ[\"PATH\"].split(os.pathsep))); print(sys.version); print(sys.executable);"
       - name: Upgrade setuptools, pip and wheel
