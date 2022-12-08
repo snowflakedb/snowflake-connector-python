@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import binascii
 import decimal
+import json
 import time
 from datetime import date, datetime
 from datetime import time as dt_t
@@ -308,12 +309,16 @@ class SnowflakeConverter:
 
         return conv if scale > 6 else conv0
 
-    def _VARIANT_to_python(self, _):
+    def _VARIANT_to_python(self, _) -> Callable[[str, ...], Any]:
+        """Try using json format to load row value"""
+        return json.loads
+
+    def _ARRAY_to_python(self, _) -> Callable[[str, ...], Any]:
+        """Try using json format to load row value"""
+        return json.loads
+
+    def _OBJECT_to_python(self, _):
         return None  # skip conv
-
-    _OBJECT_to_python = _VARIANT_to_python
-
-    _ARRAY_to_python = _VARIANT_to_python
 
     def _BOOLEAN_to_python(self, ctx):
         return lambda value: value in ("1", "TRUE")
