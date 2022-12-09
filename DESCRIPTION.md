@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.9.0(December 7, 2022)
+- v2.9.0(December 9, 2022)
 
   - Fixed a bug where the permission of the file downloaded via GET command is changed
   - Reworked authentication internals to allow users to plug custom key-pair authenticators
