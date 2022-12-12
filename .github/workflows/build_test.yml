@@ -109,7 +109,7 @@ jobs:
       - name: Show wheels generated
         run: ls -lh dist
         shell: bash
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.os.id }}_py${{ matrix.python-version }}
           path: dist/
