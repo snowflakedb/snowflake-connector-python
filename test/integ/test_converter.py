@@ -596,8 +596,9 @@ def test_receive_array_json(conn_cnx):
                 select array_construct(10, 20, 30);
                 select array_construct(-1, parse_json('[1.2, 28.9, 2.188]'), false);
                 select array_construct(parse_json('{"x": "abc"}'), parse_json('{"y": false}'), parse_json('{"z": 10}'));
+                select array_construct(null, parse_json('null'));
                 """,
-                num_statements=4,
+                num_statements=5,
             )
             array1 = c.fetchall()[0][0]
             _check_result_types(array1, types=[str, float, int, int])
@@ -610,3 +611,5 @@ def test_receive_array_json(conn_cnx):
             assert isinstance(array4[0].get("x"), str)
             assert isinstance(array4[1].get("y"), bool)
             assert isinstance(array4[2].get("z"), int)
+            array5 = c.nextset().fetchall()[0][0]
+            _check_result_types(array5, types=[type(None), type(None)])
