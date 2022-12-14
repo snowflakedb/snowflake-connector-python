@@ -22,6 +22,7 @@ import pytz
 from .compat import IS_BINARY, IS_NUMERIC
 from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
+from .json_decoder import SnowflakeJSONDecoder
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
@@ -309,13 +310,13 @@ class SnowflakeConverter:
 
         return conv if scale > 6 else conv0
 
-    def _VARIANT_to_python(self, _) -> Callable[[str, ...], Any]:
+    def _VARIANT_to_python(self, _) -> Callable[[str], Any]:
         """Try using json format to load row value"""
-        return json.loads
+        return partial(json.loads, cls=SnowflakeJSONDecoder)
 
-    def _ARRAY_to_python(self, _) -> Callable[[str, ...], Any]:
+    def _ARRAY_to_python(self, _) -> Callable[[str], Any]:
         """Try using json format to load row value"""
-        return json.loads
+        return partial(json.loads, cls=SnowflakeJSONDecoder)
 
     def _OBJECT_to_python(self, _):
         return None  # skip conv
