@@ -11,9 +11,15 @@ import pytest
 import pytz
 
 from snowflake.connector.compat import IS_WINDOWS
-from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
+
+try:
+    from snowflake.connector.constants import (
+        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+    )
+except ImportError:
+    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
 
 
 def _compose_tz(dt, tzinfo):
