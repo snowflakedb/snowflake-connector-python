@@ -87,7 +87,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 "arrow.dll",
                 "arrow_dataset.dll",
                 "arrow_python.dll",
-                "parquet.dll"
+                "parquet.dll",
             ],
         }
 
@@ -108,7 +108,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 "arrow.lib",
                 "arrow_dataset.lib",
                 "arrow_python.lib",
-                "parquet.lib"
+                "parquet.lib",
             ],
         }
 
