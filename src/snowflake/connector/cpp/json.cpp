@@ -808,6 +808,7 @@ scan_once_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_
                 PyUnicode_READ(kind, str, idx + 7) == 'e' &&
                 PyUnicode_READ(kind, str, idx + 8) == 'd') {
                 *next_idx_ptr = idx + 9;
+                // TODO: Return a special singleton type for undefined rather than None
                 Py_RETURN_NONE;
             }
         case 'n':
