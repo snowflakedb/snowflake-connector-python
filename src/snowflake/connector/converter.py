@@ -311,15 +311,16 @@ class SnowflakeConverter:
         return conv if scale > 6 else conv0
 
     def _VARIANT_to_python(self, _) -> Callable[[str], Any]:
-        """Try using json format to load row value"""
+        """Use a custom json decoder (accepts undefined) to load row value"""
         return partial(json.loads, cls=SnowflakeJSONDecoder)
 
     def _ARRAY_to_python(self, _) -> Callable[[str], Any]:
-        """Try using json format to load row value"""
+        """Use a custom json decoder (accepts undefined) to load row value"""
         return partial(json.loads, cls=SnowflakeJSONDecoder)
 
     def _OBJECT_to_python(self, _):
-        return None  # skip conv
+        """Use a custom json decoder (accepts undefined) to load row value"""
+        return partial(json.loads, cls=SnowflakeJSONDecoder)
 
     def _BOOLEAN_to_python(self, ctx):
         return lambda value: value in ("1", "TRUE")

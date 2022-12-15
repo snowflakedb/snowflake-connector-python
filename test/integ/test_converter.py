@@ -619,3 +619,40 @@ def test_receive_array_json(conn_cnx):
             assert isinstance(array4[2].get("z"), int)
             array5 = c.nextset().fetchall()[0][0]
             _check_result_types(array5, types=[type(None), type(None)])
+
+
+@pytest.mark.skipolddriver
+def test_receive_object_json(conn_cnx):
+    with conn_cnx(
+        session_parameters={PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "JSON"}
+    ) as cnx:
+        with cnx.cursor() as c:
+            c.execute(
+                """
+                select object_construct(
+                    '1', null,
+                    '2', 'null',
+                    '3', true,
+                    '4', -17,
+                    '5', 123.12,
+                    '6', 1.912e2,
+                    '7', 'Om ara pa ca na dhih',
+                    '8', array_construct(-1, 12, 289, 2188, false),
+                    '9', object_construct('x', 'abc', 'y', false, 'z', 10)
+                );
+                """
+            )
+            result = c.fetchall()[0][0]
+            assert isinstance(result, dict)
+            for index, typ in zip(
+                range(1, 10),
+                [type(None), str, bool, int, float, float, str, list, dict],
+            ):
+                res = result.get(str(index))
+                assert isinstance(res, typ)
+                if index == 8:
+                    _check_result_types(res, [int, int, int, int, bool])
+                elif index == 9:
+                    assert isinstance(res.get("x"), str)
+                    assert isinstance(res.get("y"), bool)
+                    assert isinstance(res.get("z"), int)
