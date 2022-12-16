@@ -17,6 +17,7 @@ from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 try:
     from snowflake.connector.constants import (
         PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+        UNDEFINED,
     )
 except ImportError:
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
@@ -554,9 +555,12 @@ def _check_result_types(results: list, types: list) -> None:
 
 
 @pytest.mark.skipolddriver
-def test_receive_variant_json(conn_cnx):
+@pytest.mark.parametrize("query_result_format", ["JSON", "ARROW_FORCE"])
+def test_receive_variant(conn_cnx, query_result_format: str):
     with conn_cnx(
-        session_parameters={PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "JSON"}
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: query_result_format
+        }
     ) as cnx:
         with cnx.cursor() as c:
             c.execute(
@@ -591,9 +595,12 @@ def test_receive_variant_json(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_receive_array_json(conn_cnx):
+@pytest.mark.parametrize("query_result_format", ["JSON", "ARROW_FORCE"])
+def test_receive_array(conn_cnx, query_result_format):
     with conn_cnx(
-        session_parameters={PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "JSON"}
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: query_result_format
+        }
     ) as cnx:
         with cnx.cursor() as c:
             c.execute(
@@ -618,13 +625,16 @@ def test_receive_array_json(conn_cnx):
             assert isinstance(array4[1].get("y"), bool)
             assert isinstance(array4[2].get("z"), int)
             array5 = c.nextset().fetchall()[0][0]
-            _check_result_types(array5, types=[type(None), type(None)])
+            _check_result_types(array5, types=[type(UNDEFINED), type(None)])
 
 
 @pytest.mark.skipolddriver
-def test_receive_object_json(conn_cnx):
+@pytest.mark.parametrize("query_result_format", ["JSON", "ARROW_FORCE"])
+def test_receive_object(conn_cnx, query_result_format):
     with conn_cnx(
-        session_parameters={PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "JSON"}
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: query_result_format
+        }
     ) as cnx:
         with cnx.cursor() as c:
             c.execute(

@@ -8,9 +8,11 @@ import json
 from typing import Any, Callable
 
 try:
+    from snowflake.connector.constants import UNDEFINED
     from snowflake.connector.json import make_scanner as c_make_scanner
 except ImportError:
     c_make_scanner = None
+    UNDEFINED = None
 
 
 def py_make_scanner(context: json.JSONDecoder) -> Callable[[str, int], Any]:
@@ -44,8 +46,7 @@ def py_make_scanner(context: json.JSONDecoder) -> Callable[[str, int], Any]:
         elif nextchar == "[":
             return parse_array((string, idx + 1), _scan_once)
         elif nextchar == "u" and string[idx : idx + 9] == "undefined":
-            # TODO: Return a special singleton type for undefined rather than None
-            return None, idx + 9
+            return UNDEFINED, idx + 9
         elif nextchar == "n" and string[idx : idx + 4] == "null":
             return None, idx + 4
         elif nextchar == "t" and string[idx : idx + 4] == "true":

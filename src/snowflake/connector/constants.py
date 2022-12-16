@@ -308,3 +308,16 @@ DAY_IN_SECONDS = 60 * 60 * 24
 
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"
+
+
+class undefined:
+    __slots__ = ()
+    _instance = None
+
+    def __new__(cls: type[undefined]) -> undefined:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+
+UNDEFINED = undefined()

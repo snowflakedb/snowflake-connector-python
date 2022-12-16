@@ -23,6 +23,7 @@ typedef struct _PyScannerObject {
     PyObject *parse_int;
     PyObject *parse_constant;
     PyObject *memo;
+    PyObject *undefined;
 } PyScannerObject;
 
 static PyMemberDef scanner_members[] = {
@@ -32,6 +33,7 @@ static PyMemberDef scanner_members[] = {
     {"parse_float", T_OBJECT, offsetof(PyScannerObject, parse_float), READONLY, "parse_float"},
     {"parse_int", T_OBJECT, offsetof(PyScannerObject, parse_int), READONLY, "parse_int"},
     {"parse_constant", T_OBJECT, offsetof(PyScannerObject, parse_constant), READONLY, "parse_constant"},
+    {"undefined", T_OBJECT, offsetof(PyScannerObject, undefined), READONLY, "undefined"},
     {NULL}
 };
 
@@ -372,6 +374,7 @@ scanner_traverse(PyObject *self, visitproc visit, void *arg)
     Py_VISIT(s->parse_float);
     Py_VISIT(s->parse_int);
     Py_VISIT(s->parse_constant);
+    Py_VISIT(s->undefined);
     return 0;
 }
 
@@ -387,6 +390,7 @@ scanner_clear(PyObject *self)
     Py_CLEAR(s->parse_int);
     Py_CLEAR(s->parse_constant);
     Py_CLEAR(s->memo);
+    Py_CLEAR(s->undefined);
     return 0;
 }
 
@@ -808,8 +812,7 @@ scan_once_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_
                 PyUnicode_READ(kind, str, idx + 7) == 'e' &&
                 PyUnicode_READ(kind, str, idx + 8) == 'd') {
                 *next_idx_ptr = idx + 9;
-                // TODO: Return a special singleton type for undefined rather than None
-                Py_RETURN_NONE;
+                return s->undefined;
             }
         case 'n':
             /* null */
@@ -918,6 +921,7 @@ scanner_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     PyScannerObject *s;
     PyObject *ctx;
     PyObject *strict;
+    PyObject *constants;
     static char *kwlist[] = {"context", NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O:make_scanner", kwlist, &ctx))
@@ -927,6 +931,14 @@ scanner_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (s == NULL) {
         return NULL;
     }
+
+    constants = PyImport_ImportModule("snowflake.connector.constants");
+    if (constants == NULL)
+        goto bail;
+    s->undefined = PyObject_GetAttrString(constants, "UNDEFINED");
+    Py_DECREF(constants);
+    if (s->undefined == NULL)
+        goto bail;
 
     s->memo = PyDict_New();
     if (s->memo == NULL)

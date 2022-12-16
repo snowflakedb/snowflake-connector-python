@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 import random
 from datetime import datetime, timedelta
 
@@ -13,7 +12,6 @@ import numpy
 import pytest
 
 import snowflake.connector
-from snowflake.connector.json_decoder import SnowflakeJSONDecoder
 
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
@@ -643,10 +641,6 @@ def iterate_over_test_chunk(
                             and eps is not None
                         ):
                             assert abs(json_res[j] - arrow_res[j]) <= eps
-                        elif test_name == "struct":
-                            assert json_res[j] == json.loads(
-                                arrow_res[j], cls=SnowflakeJSONDecoder
-                            )
                         else:
                             assert json_res[j] == arrow_res[j]
             else:
