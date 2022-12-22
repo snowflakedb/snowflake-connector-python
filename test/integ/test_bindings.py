@@ -107,7 +107,7 @@ insert into {name} values(
         "str1",
         1.2,
         # Py2 has bytes in str type, so Python Connector
-        bytes(b"abc"),
+        b"abc",
         bytearray(b"def"),
         current_utctime,
         current_localtime,

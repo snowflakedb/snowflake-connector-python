@@ -1,4 +1,6 @@
 point_of_contact: @snowflakedb/client
 production: true
 code_owners_file_present: true
+release_branches:
+  - main
 jira_area: Snowpark: Application Development Ecosystem
