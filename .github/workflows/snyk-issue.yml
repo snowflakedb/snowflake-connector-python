@@ -17,7 +17,7 @@ jobs:
         token: ${{ secrets.whitesource_action_token }}
         path: whitesource-actions
     - name: Set Env
-      run: echo "repo=$(basename $GITHUB_REPOSITORY)" >> $github_env
+      run: echo "repo=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
     - name: Jira Creation
       uses: ./whitesource-actions/snyk-issue
       with:

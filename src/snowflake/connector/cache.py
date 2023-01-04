@@ -58,6 +58,12 @@ class SFDictCache(Generic[K, V]):
         self._cache: dict[K, CacheEntry[V]] = {}
         self._lock = Lock()
         self._reset_telemetry()
+        # aliasing _getitem to unify the api with SFDictFileCache
+        self._getitem_non_locking = self._getitem
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
 
     @classmethod
     def from_dict(
@@ -97,11 +103,7 @@ class SFDictCache(Generic[K, V]):
             self._hit(k)
         return v
 
-    def _setitem(
-        self,
-        k: K,
-        v: V,
-    ) -> None:
+    def _setitem(self, k: K, v: V) -> None:
         """Non-locking version of __setitem__.
 
         This should only be used by internal functions when already
@@ -403,6 +405,39 @@ class SFDictFileCache(SFDictCache):
         if os.path.exists(self.file_path):
             self._load()
 
+    def _getitem_non_locking(
+        self,
+        k: K,
+        *,
+        should_record_hits: bool = True,
+    ) -> V:
+        """Non-locking version of __getitem__ of SFDictFileCache.
+
+        This should only be used by internal functions when already
+        holding self._lock.
+
+        Note that we do not overwrite _getitem because _getitem is used by
+        self._load to clear in-memory expired caches. Overwriting would cause
+        infinite recursive call.
+        """
+        if k not in self._cache:
+            loaded = self._load_if_should()
+            if (not loaded) or k not in self._cache:
+                self._miss(k)
+                raise KeyError
+        t, v = self._cache[k]
+        if is_expired(t):
+            loaded = self._load_if_should()
+            expire_item = True
+            if loaded:
+                t, v = self._cache[k]
+                expire_item = is_expired(t)
+            if expire_item:
+                # Raises KeyError
+                self._expire(k)
+        self._hit(k)
+        return v
+
     def __getitem__(self, k: K) -> V:
         """Returns an element if it hasn't expired yet in a thread-safe way."""
         self._lock.acquire()
@@ -474,18 +509,21 @@ class SFDictFileCache(SFDictCache):
                     )
                     with open(tmp_file, "wb") as w_file:
                         pickle.dump(self, w_file)
+                    # We write to a tmp file and then move it to have atomic write
+                    os.replace(tmp_file_path, self.file_path)
+                    self.last_loaded = datetime.datetime.fromtimestamp(
+                        getmtime(self.file_path),
+                    )
+                    return True
                 except OSError as o_err:
                     raise PermissionError(
                         o_err.errno,
                         "Cache folder is not writeable",
                         _dir,
                     )
-                # We write to a tmp file and then move it to have atomic write
-                os.replace(tmp_file_path, self.file_path)
-                self.last_loaded = datetime.datetime.fromtimestamp(
-                    getmtime(self.file_path),
-                )
-                return True
+                finally:
+                    if os.path.exists(tmp_file_path) and os.path.isfile(tmp_file_path):
+                        os.unlink(tmp_file_path)
         except Timeout:
             logger.debug(
                 f"acquiring {self._file_lock_path} timed out, skipping saving..."

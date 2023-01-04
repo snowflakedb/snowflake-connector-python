@@ -21,7 +21,10 @@ import pytz
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ForbiddenError, ProgrammingError
 
-from ..randomize import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 tempfile.gettempdir()
 
@@ -104,7 +107,7 @@ insert into {name} values(
         "str1",
         1.2,
         # Py2 has bytes in str type, so Python Connector
-        bytes(b"abc"),
+        b"abc",
         bytearray(b"def"),
         current_utctime,
         current_localtime,

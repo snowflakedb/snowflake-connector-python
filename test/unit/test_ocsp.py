@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import codecs
-import json
 import logging
 import os
 import time
@@ -16,6 +14,7 @@ from unittest import mock
 
 import pytest
 
+import snowflake.connector.ocsp_snowflake
 from snowflake.connector import OperationalError
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
@@ -209,19 +208,26 @@ def test_ocsp_with_file_cache(tmpdir):
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
+@pytest.mark.skipolddriver
 def test_ocsp_with_bogus_cache_files(tmpdir):
+    from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
+
     """Attempts to use bogus OCSP response data."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
     ocsp = SFOCSP()
     OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
-    cache_data = OCSPCache.CACHE
+    cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
     assert cache_data, "more than one cache entries should be stored."
 
     # setting bogus data
     current_time = int(time.time())
     for k, _ in cache_data.items():
-        cache_data[k] = (current_time, b"bogus")
+        cache_data[k] = OCSPResponseValidationResult(
+            ocsp_response=b"bogus",
+            ts=current_time,
+            validated=True,
+        )
 
     # write back the cache file
     OCSPCache.CACHE = cache_data
@@ -237,7 +243,10 @@ def test_ocsp_with_bogus_cache_files(tmpdir):
         )
 
 
+@pytest.mark.skipolddriver
 def test_ocsp_with_outdated_cache(tmpdir):
+    from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
+
     """Attempts to use outdated OCSP response cache file."""
     cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
@@ -245,13 +254,17 @@ def test_ocsp_with_outdated_cache(tmpdir):
 
     # reading cache file
     OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
-    cache_data = OCSPCache.CACHE
+    cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
     assert cache_data, "more than one cache entries should be stored."
 
     # setting outdated data
     current_time = int(time.time())
     for k, v in cache_data.items():
-        cache_data[k] = (current_time - 144 * 60 * 60, v[1])
+        cache_data[k] = OCSPResponseValidationResult(
+            ocsp_response=v.ocsp_response,
+            ts=current_time - 144 * 60 * 60,
+            validated=True,
+        )
 
     # write back the cache file
     OCSPCache.CACHE = cache_data
@@ -353,70 +366,9 @@ def test_ocsp_incomplete_chain():
     assert "CA certificate is NOT found" in ex.value.msg
 
 
-def test_ocsp_cache_merge(tmpdir):
-    """
-    Merges two OCSP response cache files.
-
-    First create the entire cache for all hosts.
-    Split the created cache into two caches
-    Merge the two caches.
-    This is to prevent us from doing multiple cache
-    creations as the results are not predictable
-    due to OCSP responder shenanigans
-    """
-    cache_folder = tmpdir.mkdir("caches")
-    cache_filename, _ = _store_cache_in_file(cache_folder, target_hosts=TARGET_HOSTS)
-
-    previous_folder = tmpdir.mkdir("previous")
-    previous_cache_filename = path.join(
-        str(previous_folder), "ocsp_response_cache.json"
-    )
-
-    current_folder = tmpdir.mkdir("current")
-    current_cache_filename = path.join(str(current_folder), "ocsp_response_cache.json")
-
-    prev_cache = {}
-    current_cache = {}
-    with codecs.open(cache_filename) as cf:
-        orig_cache = json.load(cf)
-        counter = 0
-        for certid, arr in orig_cache.items():
-            if counter < 1:
-                prev_cache.update({certid: arr})
-            else:
-                current_cache.update({certid: arr})
-            counter += 1
-
-    with open(previous_cache_filename, "w") as prev_cache_fp:
-        json.dump(prev_cache, prev_cache_fp)
-
-    with open(current_cache_filename, "w") as curr_cache_fp:
-        json.dump(current_cache, curr_cache_fp)
-
-    latest_folder = tmpdir.mkdir("latest")
-    latest_cache_filename = path.join(str(latest_folder), "cache_file.txt")
-
-    SnowflakeOCSP.clear_cache()  # reset the memory cache
-    ocsp = SFOCSP()
-    OCSPCache.merge_cache(
-        ocsp, previous_cache_filename, current_cache_filename, latest_cache_filename
-    )
-
-    with codecs.open(previous_cache_filename) as f:
-        prev = json.load(f)
-    with codecs.open(current_cache_filename) as f:
-        curr = json.load(f)
-    with codecs.open(latest_cache_filename) as f:
-        latest = json.load(f)
-
-    assert len(latest) > len(prev)
-    assert len(latest) > len(curr)
-
-
 def test_building_retry_url():
     # privatelink retry url
     OCSP_SERVER = OCSPServer()
-    OCSPCache.ACTIVATE_SSD = False
     OCSP_SERVER.OCSP_RETRY_URL = None
     OCSP_SERVER.CACHE_SERVER_URL = (
         "http://ocsp.us-east-1.snowflakecomputing.com/ocsp_response_cache.json"
@@ -428,7 +380,6 @@ def test_building_retry_url():
     )
 
     # privatelink retry url with port
-    OCSPCache.ACTIVATE_SSD = False
     OCSP_SERVER.OCSP_RETRY_URL = None
     OCSP_SERVER.CACHE_SERVER_URL = (
         "http://ocsp.us-east-1.snowflakecomputing.com:80/ocsp_response_cache" ".json"
@@ -440,7 +391,6 @@ def test_building_retry_url():
     )
 
     # non-privatelink retry url
-    OCSPCache.ACTIVATE_SSD = False
     OCSP_SERVER.OCSP_RETRY_URL = None
     OCSP_SERVER.CACHE_SERVER_URL = (
         "http://ocsp.snowflakecomputing.com/ocsp_response_cache.json"
@@ -449,61 +399,16 @@ def test_building_retry_url():
     assert OCSP_SERVER.OCSP_RETRY_URL is None
 
     # non-privatelink retry url with port
-    OCSPCache.ACTIVATE_SSD = False
     OCSP_SERVER.OCSP_RETRY_URL = None
     OCSP_SERVER.CACHE_SERVER_URL = (
         "http://ocsp.snowflakecomputing.com:80/ocsp_response_cache.json"
     )
     OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
     assert OCSP_SERVER.OCSP_RETRY_URL is None
-
-    # ssd enabled for privatelink retry url
-    OCSPCache.ACTIVATE_SSD = True
-    OCSP_SERVER.OCSP_RETRY_URL = None
-    OCSP_SERVER.CACHE_SERVER_URL = (
-        "http://ocsp.us-east-1.snowflakecomputing.com/ocsp_response_cache.json"
-    )
-    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
-    assert (
-        OCSP_SERVER.OCSP_RETRY_URL
-        == "http://ocsp.us-east-1.snowflakecomputing.com/retry"
-    )
-
-    # ssd enabled for privatelink retry url with port
-    OCSPCache.ACTIVATE_SSD = True
-    OCSP_SERVER.OCSP_RETRY_URL = None
-    OCSP_SERVER.CACHE_SERVER_URL = (
-        "http://ocsp.us-east-1.snowflakecomputing.com:80/ocsp_response_cache" ".json"
-    )
-    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
-    assert (
-        OCSP_SERVER.OCSP_RETRY_URL
-        == "http://ocsp.us-east-1.snowflakecomputing.com:80/retry"
-    )
-
-    # ssd enabled for non-privatelink
-    OCSPCache.ACTIVATE_SSD = True
-    OCSP_SERVER.OCSP_RETRY_URL = None
-    OCSP_SERVER.CACHE_SERVER_URL = (
-        "http://ocsp.snowflakecomputing.com/ocsp_response_cache.json"
-    )
-    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
-    assert OCSP_SERVER.OCSP_RETRY_URL is None
-
-    # ssd enabled for non-privatelink with port
-    OCSPCache.ACTIVATE_SSD = True
-    OCSP_SERVER.OCSP_RETRY_URL = None
-    OCSP_SERVER.CACHE_SERVER_URL = (
-        "http://ocsp.snowflakecomputing.com:80/ocsp_response_cache.json"
-    )
-    OCSP_SERVER.reset_ocsp_dynamic_cache_server_url(None)
-    assert OCSP_SERVER.OCSP_RETRY_URL is None
-    # Once SSD is active we would use hostname specific OCSP Endpoints.
 
 
 def test_building_new_retry():
     OCSP_SERVER = OCSPServer()
-    OCSPCache.ACTIVATE_SSD = False
     OCSP_SERVER.OCSP_RETRY_URL = None
     hname = "a1.us-east-1.snowflakecomputing.com"
     os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "true"

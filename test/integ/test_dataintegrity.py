@@ -19,7 +19,10 @@ import pytz
 
 from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFromTicks
 
-from ..randomize import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 
 def table_exists(conn_cnx, name):

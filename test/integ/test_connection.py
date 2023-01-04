@@ -19,7 +19,6 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
-from snowflake.connector.auth_okta import AuthByOkta
 from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     SnowflakeConnection,
@@ -38,9 +37,15 @@ from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 try:  # pragma: no cover
-    from parameters import CONNECTION_PARAMETERS_ADMIN
+    from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
+
+try:  # pragma: no cover
+    from snowflake.connector.auth import AuthByOkta, AuthByPlugin
+except ImportError:
+    from snowflake.connector.auth_by_plugin import AuthByPlugin
+    from snowflake.connector.auth_okta import AuthByOkta
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
@@ -646,7 +651,7 @@ class ExecPrivatelinkThread(threading.Thread):
 
 
 @pytest.mark.skipolddriver
-def test_okta_url(db_parameters):
+def test_okta_url(conn_cnx):
     orig_authenticator = "https://someaccount.okta.com/snowflake/oO56fExYCGnfV83/2345"
 
     def mock_auth(self, auth_instance):
@@ -654,18 +659,10 @@ def test_okta_url(db_parameters):
         assert self._authenticator == orig_authenticator
 
     with mock.patch(
-        "snowflake.connector.connection.SnowflakeConnection._SnowflakeConnection__authenticate",
+        "snowflake.connector.connection.SnowflakeConnection._authenticate",
         mock_auth,
     ):
-        cnx = snowflake.connector.connect(
-            user=db_parameters["user"],
-            password=db_parameters["password"],
-            host=db_parameters["host"],
-            port=db_parameters["port"],
-            account=db_parameters["account"],
-            schema=db_parameters["schema"],
-            database=db_parameters["database"],
-            protocol=db_parameters["protocol"],
+        cnx = conn_cnx(
             timezone="UTC",
             authenticator=orig_authenticator,
         )
@@ -959,12 +956,15 @@ def test_empty_response(conn_cnx, resp):
 @pytest.mark.skipolddriver
 def test_authenticate_error(conn_cnx, caplog):
     """Test Reauthenticate error handling while authenticating."""
-    mock_auth = mock.MagicMock()
-    mock_auth.authenticate.side_effect = ReauthenticationRequest(None)
+    # The docs say unsafe should make this test work, but
+    # it doesn't seem to work on MagicMock
+    mock_auth = mock.Mock(spec=AuthByPlugin, unsafe=True)
+    mock_auth.prepare.return_value = mock_auth
+    mock_auth.update_body.side_effect = ReauthenticationRequest(None)
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):
-            conn._authenticate(mock_auth)
+            conn.authenticate_with_retry(mock_auth)
         assert (
             "snowflake.connector.connection",
             logging.DEBUG,
@@ -1102,12 +1102,19 @@ def test_ocsp_cache_working(conn_cnx):
 
     The only way we can verify this is that the number of hits and misses increase.
     """
-    from snowflake.connector.ocsp_snowflake import OCSP_CACHE
+    from snowflake.connector.ocsp_snowflake import OCSP_RESPONSE_VALIDATION_CACHE
 
-    original_count = OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"]
+    original_count = (
+        OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
+        + OCSP_RESPONSE_VALIDATION_CACHE.telemetry["miss"]
+    )
     with conn_cnx() as cnx:
         assert cnx
-    assert OCSP_CACHE.telemetry["hit"] + OCSP_CACHE.telemetry["miss"] > original_count
+    assert (
+        OCSP_RESPONSE_VALIDATION_CACHE.telemetry["hit"]
+        + OCSP_RESPONSE_VALIDATION_CACHE.telemetry["miss"]
+        > original_count
+    )
 
 
 @pytest.mark.skipolddriver

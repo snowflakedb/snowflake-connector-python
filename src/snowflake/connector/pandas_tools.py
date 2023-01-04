@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import collections.abc
 import os
-import random
-import string
 import warnings
 from functools import partial
 from logging import getLogger
@@ -19,6 +17,7 @@ from typing_extensions import Literal
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
+from snowflake.connector.util_text import random_string
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -168,40 +167,19 @@ def write_pandas(
             "Unsupported table type. Expected table types: temp/temporary, transient"
         )
 
-    table_location = build_location_helper(
-        database=database,
-        schema=schema,
-        name=table_name,
-        quote_identifiers=quote_identifiers,
-    )
-
     if chunk_size is None:
         chunk_size = len(df)
-    cursor = conn.cursor()
-    stage_location = None  # Forward declaration
-    while True:
-        try:
-            stage_name = "".join(
-                random.choice(string.ascii_lowercase) for _ in range(5)
-            )
-            stage_location = build_location_helper(
-                database=database,
-                schema=schema,
-                name=stage_name,
-                quote_identifiers=quote_identifiers,
-            )
 
-            create_stage_sql = (
-                f"create temporary stage /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                f"{stage_location}"
-            )
-            logger.debug(f"creating stage with '{create_stage_sql}'")
-            cursor.execute(create_stage_sql, _is_internal=True).fetchall()
-            break
-        except ProgrammingError as pe:
-            if pe.msg.endswith("already exists."):
-                continue
-            raise
+    cursor = conn.cursor()
+    stage_location = build_location_helper(
+        database=database,
+        schema=schema,
+        name=random_string(),
+        quote_identifiers=quote_identifiers,
+    )
+    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location}"
+    logger.debug(f"creating stage with '{create_stage_sql}'")
+    cursor.execute(create_stage_sql, _is_internal=True).fetchall()
 
     with TemporaryDirectory() as tmp_folder:
         for i, chunk in chunk_helper(df, chunk_size):
@@ -221,46 +199,38 @@ def write_pandas(
             cursor.execute(upload_sql, _is_internal=True)
             # Remove chunk file
             os.remove(chunk_path)
+
+    # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
+    # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
     if quote_identifiers:
+        quote = '"'
         columns = '"' + '","'.join(list(df.columns)) + '"'
+        parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in df.columns)
     else:
+        quote = ""
         columns = ",".join(list(df.columns))
+        parquet_columns = "$1:" + ",$1:".join(df.columns)
 
-    if overwrite:
-        if auto_create_table:
-            drop_table_sql = f"DROP TABLE IF EXISTS {table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-            logger.debug(f"dropping table with '{drop_table_sql}'")
-            cursor.execute(drop_table_sql, _is_internal=True)
-        else:
-            truncate_table_sql = f"TRUNCATE TABLE IF EXISTS {table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-            logger.debug(f"truncating table with '{truncate_table_sql}'")
-            cursor.execute(truncate_table_sql, _is_internal=True)
+    def drop_object(name: str, object_type: str) -> None:
+        drop_sql = f"DROP {object_type.upper()} IF EXISTS {name} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+        logger.debug(f"dropping {object_type} with '{drop_sql}'")
+        cursor.execute(drop_sql, _is_internal=True)
 
-    if auto_create_table:
-        file_format_location = None
-        while True:
-            try:
-                file_format_name = "".join(
-                    random.choice(string.ascii_lowercase) for _ in range(5)
-                )
-                file_format_location = build_location_helper(
-                    database=database,
-                    schema=schema,
-                    name=file_format_name,
-                    quote_identifiers=quote_identifiers,
-                )
-                file_format_sql = (
-                    f"CREATE FILE FORMAT {file_format_location} "
-                    f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                    f"TYPE=PARQUET COMPRESSION={compression_map[compression]}"
-                )
-                logger.debug(f"creating file format with '{file_format_sql}'")
-                cursor.execute(file_format_sql, _is_internal=True)
-                break
-            except ProgrammingError as pe:
-                if pe.msg.endswith("already exists."):
-                    continue
-                raise
+    if auto_create_table or overwrite:
+        file_format_location = build_location_helper(
+            database=database,
+            schema=schema,
+            name=random_string(),
+            quote_identifiers=quote_identifiers,
+        )
+        file_format_sql = (
+            f"CREATE TEMP FILE FORMAT {file_format_location} "
+            f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            f"TYPE=PARQUET COMPRESSION={compression_map[compression]}"
+        )
+        logger.debug(f"creating file format with '{file_format_sql}'")
+        cursor.execute(file_format_sql, _is_internal=True)
+
         infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@{stage_location}', file_format=>'{file_format_location}'))"
         logger.debug(f"inferring schema with '{infer_schema_sql}'")
         column_type_mapping = dict(
@@ -269,39 +239,62 @@ def write_pandas(
         # Infer schema can return the columns out of order depending on the chunking we do when uploading
         # so we have to iterate through the dataframe columns to make sure we create the table with its
         # columns in order
-        quote = '"' if quote_identifiers else ""
         create_table_columns = ", ".join(
             [f"{quote}{c}{quote} {column_type_mapping[c]}" for c in df.columns]
         )
+
+        target_table_location = build_location_helper(
+            database,
+            schema,
+            random_string() if overwrite else table_name,
+            quote_identifiers,
+        )
+
         create_table_sql = (
-            f"CREATE {table_type.upper()} TABLE IF NOT EXISTS {table_location} "
+            f"CREATE {table_type.upper()} TABLE IF NOT EXISTS {target_table_location} "
             f"({create_table_columns})"
             f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         )
         logger.debug(f"auto creating table with '{create_table_sql}'")
         cursor.execute(create_table_sql, _is_internal=True)
-        drop_file_format_sql = f"DROP FILE FORMAT IF EXISTS {file_format_location}"
-        logger.debug(f"dropping file format with '{drop_file_format_sql}'")
-        cursor.execute(drop_file_format_sql, _is_internal=True)
-
-    # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
-    # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
-    if quote_identifiers:
-        parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in df.columns)
     else:
-        parquet_columns = "$1:" + ",$1:".join(df.columns)
+        target_table_location = build_location_helper(
+            database=database,
+            schema=schema,
+            name=table_name,
+            quote_identifiers=quote_identifiers,
+        )
 
-    copy_into_sql = (
-        f"COPY INTO {table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-        f"({columns}) "
-        f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
-        f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}) "
-        f"PURGE=TRUE ON_ERROR={on_error}"
-    )
-    logger.debug(f"copying into with '{copy_into_sql}'")
-    copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
-    cursor._log_telemetry_job_data(TelemetryField.PANDAS_WRITE, TelemetryData.TRUE)
-    cursor.close()
+    try:
+        copy_into_sql = (
+            f"COPY INTO {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            f"({columns}) "
+            f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
+            f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}) "
+            f"PURGE=TRUE ON_ERROR={on_error}"
+        )
+        logger.debug(f"copying into with '{copy_into_sql}'")
+        copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
+
+        if overwrite:
+            original_table_location = build_location_helper(
+                database=database,
+                schema=schema,
+                name=table_name,
+                quote_identifiers=quote_identifiers,
+            )
+            drop_object(original_table_location, "table")
+            rename_table_sql = f"ALTER TABLE {target_table_location} RENAME TO {original_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+            logger.debug(f"rename table with '{rename_table_sql}'")
+            cursor.execute(rename_table_sql, _is_internal=True)
+    except ProgrammingError:
+        if overwrite:
+            drop_object(target_table_location, "table")
+        raise
+    finally:
+        cursor._log_telemetry_job_data(TelemetryField.PANDAS_WRITE, TelemetryData.TRUE)
+        cursor.close()
+
     return (
         all(e[1] == "LOADED" for e in copy_results),
         len(copy_results),

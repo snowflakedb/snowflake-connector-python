@@ -89,10 +89,8 @@ class SnowflakeStorageClient(ABC):
         )
         # DOWNLOAD
         self.full_dst_file_name: str | None = (
-            os.path.realpath(
-                os.path.join(
-                    self.meta.local_location, os.path.basename(self.meta.dst_file_name)
-                )
+            os.path.join(
+                self.meta.local_location, os.path.basename(self.meta.dst_file_name)
             )
             if self.meta.local_location
             else None
@@ -419,19 +417,19 @@ class SnowflakeStorageClient(ABC):
 
     # Override in GCS
     def _update_presigned_url(self) -> None:
-        pass
+        return
 
     # Override in S3
     def _initiate_multipart_upload(self) -> None:
-        pass
+        return
 
     # Override in S3
     def _complete_multipart_upload(self) -> None:
-        pass
+        return
 
     # Override in S3
     def _abort_multipart_upload(self) -> None:
-        pass
+        return
 
     def delete_client_data(self) -> None:
         """Deletes the tmp_dir and closes the source stream belonging to this client.
