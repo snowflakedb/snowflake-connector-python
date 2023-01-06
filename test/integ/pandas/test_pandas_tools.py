@@ -342,9 +342,25 @@ def test_empty_dataframe_write_pandas(
         ), f"sucess: {success}, num_chunks: {num_chunks}, num_rows: {num_rows}"
 
 
-@pytest.mark.parametrize("quote_identifiers", [True, False])
-def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
-    """This tests that write_pandas constructs location correctly with database, schema and table name."""
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_location",
+    [
+        ("database", "schema", True, '"database"."schema"."table"'),
+        ("database", "schema", False, "database.schema.table"),
+        (None, "schema", True, '"schema"."table"'),
+        (None, "schema", False, "schema.table"),
+        (None, None, True, '"table"'),
+        (None, None, False, "table"),
+    ],
+)
+def test_table_location_building(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_location: str,
+):
+    """This tests that write_pandas constructs table location correctly with database, schema, and table name."""
     from snowflake.connector.cursor import SnowflakeCursor
 
     with conn_cnx() as cnx:
@@ -352,10 +368,7 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
                 location = args[0].split(" ")[2]
-                if quote_identifiers:
-                    assert location == '"database"."schema"."table"'
-                else:
-                    assert location == "database.schema.table"
+                assert location == expected_location
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
@@ -368,8 +381,8 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
                 cnx,
                 sf_connector_version_df.get(),
                 "table",
-                database="database",
-                schema="schema",
+                database=database,
+                schema=schema,
                 quote_identifiers=quote_identifiers,
             )
             assert m_execute.called and any(
@@ -377,20 +390,33 @@ def test_location_building_db_schema(conn_cnx, quote_identifiers: bool):
             )
 
 
-@pytest.mark.parametrize("quote_identifiers", [True, False])
-def test_location_building_schema(conn_cnx, quote_identifiers: bool):
-    """This tests that write_pandas constructs location correctly with schema and table name."""
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_db_schema",
+    [
+        ("database", "schema", True, '"database"."schema"'),
+        ("database", "schema", False, "database.schema"),
+        (None, "schema", True, '"schema"'),
+        (None, "schema", False, "schema"),
+        (None, None, True, ""),
+        (None, None, False, ""),
+    ],
+)
+def test_stage_location_building(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_db_schema: str,
+):
+    """This tests that write_pandas constructs stage location correctly with database and schema."""
     from snowflake.connector.cursor import SnowflakeCursor
 
     with conn_cnx() as cnx:
 
         def mocked_execute(*args, **kwargs):
-            if len(args) >= 1 and args[0].startswith("COPY INTO"):
-                location = args[0].split(" ")[2]
-                if quote_identifiers:
-                    assert location == '"schema"."table"'
-                else:
-                    assert location == "schema.table"
+            if len(args) >= 1 and args[0].startswith("create temporary stage"):
+                db_schema = ".".join(args[0].split(" ")[-1].split(".")[:-1])
+                assert db_schema == expected_db_schema
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
@@ -403,30 +429,53 @@ def test_location_building_schema(conn_cnx, quote_identifiers: bool):
                 cnx,
                 sf_connector_version_df.get(),
                 "table",
-                schema="schema",
+                database=database,
+                schema=schema,
                 quote_identifiers=quote_identifiers,
             )
             assert m_execute.called and any(
-                map(lambda e: "COPY INTO" in str(e[0]), m_execute.call_args_list)
+                map(
+                    lambda e: "CREATE TEMP STAGE" in str(e[0]),
+                    m_execute.call_args_list,
+                )
             )
 
 
-@pytest.mark.parametrize("quote_identifiers", [True, False])
-def test_location_building(conn_cnx, quote_identifiers: bool):
-    """This tests that write_pandas constructs location correctly with schema and table name."""
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_db_schema",
+    [
+        ("database", "schema", True, '"database"."schema"'),
+        ("database", "schema", False, "database.schema"),
+        (None, "schema", True, '"schema"'),
+        (None, "schema", False, "schema"),
+        (None, None, True, ""),
+        (None, None, False, ""),
+    ],
+)
+def test_file_format_location_building(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_db_schema: str,
+):
+    """This tests that write_pandas constructs file format location correctly with database and schema."""
     from snowflake.connector.cursor import SnowflakeCursor
 
     with conn_cnx() as cnx:
 
         def mocked_execute(*args, **kwargs):
-            if len(args) >= 1 and args[0].startswith("COPY INTO"):
-                location = args[0].split(" ")[2]
-                if quote_identifiers:
-                    assert location == '"teble.table"'
-                else:
-                    assert location == "teble.table"
+            if len(args) >= 1 and args[0].startswith("CREATE FILE FORMAT"):
+                db_schema = ".".join(args[0].split(" ")[3].split(".")[:-1])
+                assert db_schema == expected_db_schema
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            if args[0].startswith("SELECT"):
+                cur._rownumber = 0
+                cur._result = iter(
+                    [(col, "") for col in sf_connector_version_df.get().columns]
+                )
+            else:
+                cur._result = iter([])
             return cur
 
         with mock.patch(
@@ -436,11 +485,17 @@ def test_location_building(conn_cnx, quote_identifiers: bool):
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
-                "teble.table",
+                "table",
+                database=database,
+                schema=schema,
                 quote_identifiers=quote_identifiers,
+                auto_create_table=True,
             )
             assert m_execute.called and any(
-                map(lambda e: "COPY INTO" in str(e[0]), m_execute.call_args_list)
+                map(
+                    lambda e: "CREATE TEMP FILE FORMAT" in str(e[0]),
+                    m_execute.call_args_list,
+                )
             )
 
 

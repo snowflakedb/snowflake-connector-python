@@ -24,6 +24,7 @@ from snowflake.connector import (
     InterfaceError,
     NotSupportedError,
     ProgrammingError,
+    connection,
     constants,
     errorcode,
     errors,
@@ -45,6 +46,7 @@ except ImportError:
         is_nullable: bool
 
 
+from snowflake.connector.description import CLIENT_VERSION
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_NOT_POSITIVE_SIZE,
@@ -60,6 +62,7 @@ except ImportError:
 try:
     from snowflake.connector.constants import (
         FIELD_ID_TO_NAME,
+        PARAMETER_MULTI_STATEMENT_COUNT,
         PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     )
     from snowflake.connector.errorcode import (
@@ -1303,16 +1306,6 @@ def test_fetchmany_size_error(conn_cnx):
                 assert ie.errno == ER_NOT_POSITIVE_SIZE
 
 
-def test_nextset(conn_cnx, caplog):
-    """Tests no op function nextset."""
-    caplog.set_level(logging.DEBUG, "snowflake.connector")
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            caplog.set_level(logging.DEBUG, "snowflake.connector")
-            assert cur.nextset() is None
-    assert ("snowflake.connector.cursor", logging.DEBUG, "nop") in caplog.record_tuples
-
-
 def test_scroll(conn_cnx):
     """Tests if scroll returns a NotSupported exception."""
     with conn_cnx() as con:
@@ -1596,3 +1589,32 @@ def test_null_connection(conn_cnx):
             status = con.get_query_status(cur.sfqid)
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
+
+
+@pytest.mark.skipolddriver
+def test_multi_statement_failure(conn_cnx):
+    """
+    This test mocks the driver version sent to Snowflake to be 2.8.1, which does not support multi-statement.
+    The backend should not allow multi-statements to be submitted for versions older than 2.9.0 and should raise an
+    error when a multi-statement is submitted, regardless of the MULTI_STATEMENT_COUNT parameter.
+    """
+    try:
+        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+            "2.8.1",
+            (type(None), str),
+        )
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                with pytest.raises(
+                    ProgrammingError,
+                    match="Multiple SQL statements in a single API call are not supported; use one API call per statement instead.",
+                ):
+                    cur.execute(
+                        f"alter session set {PARAMETER_MULTI_STATEMENT_COUNT}=0"
+                    )
+                    cur.execute("select 1; select 2; select 3;")
+    finally:
+        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+            CLIENT_VERSION,
+            (type(None), str),
+        )

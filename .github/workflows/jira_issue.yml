@@ -12,7 +12,7 @@ jobs:
     if: ((github.event_name == 'issue_comment' && github.event.comment.body == 'recreate jira' && github.event.comment.user.login == 'sfc-gh-mkeller') || (github.event_name == 'issues' && github.event.pull_request.user.login != 'whitesource-for-github-com[bot]'))
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: snowflakedb/gh-actions
           ref: jira_v1
@@ -28,7 +28,7 @@ jobs:
 
       - name: Create JIRA Ticket
         id: create
-        uses: atlassian/gajira-create@v2.0.1
+        uses: atlassian/gajira-create@v3.0.1
         with:
           project: SNOW
           issuetype: Bug
