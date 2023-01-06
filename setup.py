@@ -148,6 +148,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ext.include_dirs.append(LOGGING_SRC_DIR)
 
                 if sys.platform == "win32":
+                    if not any("/std" not in s for s in ext.extra_compile_args):
+                        ext.extra_compile_args.append("/std:c++17")
                     ext.include_dirs.append(pyarrow.get_include())
                     ext.include_dirs.append(numpy.get_include())
                 elif sys.platform == "linux" or sys.platform == "darwin":
