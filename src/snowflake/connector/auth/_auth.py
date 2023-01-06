@@ -450,7 +450,7 @@ class Auth:
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
-    def _read_temporary_credential(self, host, user, cred_type):
+    def _read_temporary_credential(self, host, user, cred_type) -> str | None:
         cred = None
         if IS_MACOS or IS_WINDOWS:
             if not installed_keyring:
