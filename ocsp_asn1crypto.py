@@ -164,23 +164,27 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         return revocation_time, revocation_reason
 
     def check_cert_time_validity(self, cur_time, ocsp_cert):
+        try:
+            val_start = ocsp_cert['tbs_certificate']['validity']['not_before'].native
+            val_end = ocsp_cert['tbs_certificate']['validity']['not_after'].native
 
-        val_start = ocsp_cert['tbs_certificate']['validity']['not_before'].native
-        val_end = ocsp_cert['tbs_certificate']['validity']['not_after'].native
+            if cur_time > val_end or \
+                    cur_time < val_start:
+                debug_msg = "Certificate attached to OCSP response is invalid. OCSP response " \
+                            "current time - {} certificate not before time - {} certificate " \
+                            "not after time - {}. Consider running curl -o ocsp.der {}". \
+                            format(cur_time,
+                                   val_start,
+                                   val_end,
+                                   self.debug_ocsp_failure_url
+                                   )
 
-        if cur_time > val_end or \
-                cur_time < val_start:
-            debug_msg = "Certificate attached to OCSP response is invalid. OCSP response " \
-                        "current time - {} certificate not before time - {} certificate " \
-                        "not after time - {}. Consider running curl -o ocsp.der {}". \
-                        format(cur_time,
-                               val_start,
-                               val_end,
-                               super(SnowflakeOCSPAsn1Crypto, self).debug_ocsp_failure_url)
-
-            return False, debug_msg
-        else:
-            return True, None
+                return False, debug_msg
+            else:
+                return True, None
+        except Exception as ex:
+            logger.debug("Failed to check cert time validity %s", ex)
+            return False, "Failed to check cert time validity."
 
     """
     is_valid_time - checks various components of the OCSP Response
