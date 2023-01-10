@@ -18,7 +18,7 @@ PyObject* BinaryConverter::toPyObject(int64_t rowIndex) const
 {
   if (m_array->IsValid(rowIndex))
   {
-    arrow::util::string_view sv = m_array->GetView(rowIndex);
+    std::string_view sv = m_array->GetView(rowIndex);
     return PyByteArray_FromStringAndSize(sv.data(), sv.size());
   }
   else
