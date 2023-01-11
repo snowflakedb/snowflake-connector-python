@@ -87,7 +87,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 "arrow.dll",
                 "arrow_dataset.dll",
                 "arrow_python.dll",
-                "parquet.dll"
+                "parquet.dll",
             ],
         }
 
@@ -104,7 +104,12 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 "libarrow_python.1000.dylib",
                 "libparquet.1000.dylib",
             ],
-            "win32": ["arrow.lib", "arrow_python.lib", "parquet.lib"],
+            "win32": [
+                "arrow.lib",
+                "arrow_dataset.lib",
+                "arrow_python.lib",
+                "parquet.lib",
+            ],
         }
 
         def build_extension(self, ext):
@@ -143,6 +148,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ext.include_dirs.append(LOGGING_SRC_DIR)
 
                 if sys.platform == "win32":
+                    if not any("/std" not in s for s in ext.extra_compile_args):
+                        ext.extra_compile_args.append("/std:c++17")
                     ext.include_dirs.append(pyarrow.get_include())
                     ext.include_dirs.append(numpy.get_include())
                 elif sys.platform == "linux" or sys.platform == "darwin":

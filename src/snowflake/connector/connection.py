@@ -808,9 +808,18 @@ class SnowflakeConnection:
         elif self._authenticator == OAUTH_AUTHENTICATOR:
             self.auth_class = AuthByOAuth(oauth_token=self._token)
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
-            self.auth_class = AuthByUsrPwdMfa(password=self._password)
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                 self._client_request_mfa_token if IS_LINUX else True
+            )
+            if self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN]:
+                auth.read_temporary_credentials(
+                    self.host,
+                    self.user,
+                    self._session_parameters,
+                )
+            self.auth_class = AuthByUsrPwdMfa(
+                password=self._password,
+                mfa_token=self.rest.mfa_token,
             )
         else:
             # okta URL, e.g., https://<account>.okta.com/

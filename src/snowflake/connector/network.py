@@ -30,6 +30,7 @@ from .compat import (
     OK,
     REQUEST_TIMEOUT,
     SERVICE_UNAVAILABLE,
+    TOO_MANY_REQUESTS,
     UNAUTHORIZED,
     BadStatusLine,
     IncompleteRead,
@@ -181,6 +182,7 @@ def is_retryable_http_code(code: int) -> bool:
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
         REQUEST_TIMEOUT,  # 408
+        TOO_MANY_REQUESTS,  # 429
     )
 
 
@@ -401,11 +403,11 @@ class SnowflakeRestful:
         self._id_token = value
 
     @property
-    def mfa_token(self):
+    def mfa_token(self) -> str | None:
         return getattr(self, "_mfa_token", None)
 
     @mfa_token.setter
-    def mfa_token(self, value):
+    def mfa_token(self, value: str) -> None:
         self._mfa_token = value
 
     def close(self):
