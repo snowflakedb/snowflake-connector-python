@@ -38,7 +38,7 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: str | None = None
 log = logging.getLogger(__name__)
 
 
-def inject_into_urllib3():
+def inject_into_urllib3() -> None:
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
     log.debug("Injecting ssl_wrap_socket_with_ocsp")
     connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp

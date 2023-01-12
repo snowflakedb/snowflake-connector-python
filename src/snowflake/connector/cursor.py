@@ -16,6 +16,7 @@ from collections import deque
 from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
+from types import TracebackType
 from typing import (
     IO,
     TYPE_CHECKING,
@@ -341,7 +342,7 @@ class SnowflakeCursor:
         return self._arraysize
 
     @arraysize.setter
-    def arraysize(self, value):
+    def arraysize(self, value) -> None:
         self._arraysize = int(value)
 
     @property
@@ -852,13 +853,13 @@ class SnowflakeCursor:
     def _format_query_for_log(self, query):
         return self._connection._format_query_for_log(query)
 
-    def _is_dml(self, data):
+    def _is_dml(self, data) -> bool:
         return (
             "statementTypeId" in data
             and int(data["statementTypeId"]) in STATEMENT_TYPE_ID_DML_SET
         )
 
-    def _init_result_and_meta(self, data):
+    def _init_result_and_meta(self, data) -> None:
         is_dml = self._is_dml(data)
         self._query_result_format = data.get("queryResultFormat", "json")
         logger.debug("Query result format: %s", self._query_result_format)
@@ -902,7 +903,7 @@ class SnowflakeCursor:
             else:
                 self._total_rowcount += updated_rows
 
-    def _init_multi_statement_results(self, data: dict):
+    def _init_multi_statement_results(self, data: dict) -> None:
         self._log_telemetry_job_data(TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE)
         self.multi_statement_savedIds = data["resultIds"].split(",")
         self._multi_statement_resultIds = deque(self.multi_statement_savedIds)
@@ -918,7 +919,7 @@ class SnowflakeCursor:
             )
         self.nextset()
 
-    def check_can_use_arrow_resultset(self):
+    def check_can_use_arrow_resultset(self) -> None:
         global CAN_USE_ARROW_RESULT_FORMAT
 
         if not CAN_USE_ARROW_RESULT_FORMAT:
@@ -939,7 +940,7 @@ class SnowflakeCursor:
                 },
             )
 
-    def check_can_use_pandas(self):
+    def check_can_use_pandas(self) -> None:
         if not installed_pandas:
             msg = (
                 "Optional dependency: 'pandas' is not installed, please see the following link for install "
@@ -1243,16 +1244,16 @@ class SnowflakeCursor:
 
         return None
 
-    def setinputsizes(self, _):
+    def setinputsizes(self, _) -> None:
         """Not supported."""
         logger.debug("nop")
 
-    def setoutputsize(self, _, column=None):
+    def setoutputsize(self, _, column=None) -> None:
         """Not supported."""
         del column
         logger.debug("nop")
 
-    def scroll(self, value, mode="relative"):
+    def scroll(self, value, mode: str = "relative") -> None:
         Error.errorhandler_wrapper(
             self.connection,
             self,
@@ -1264,7 +1265,7 @@ class SnowflakeCursor:
             },
         )
 
-    def reset(self, closing=False):
+    def reset(self, closing: bool = False) -> None:
         """Resets the result set."""
         # SNOW-647539: Do not erase the rowcount
         # information when closing the cursor
@@ -1290,7 +1291,7 @@ class SnowflakeCursor:
             self._result_state = ResultState.VALID
         return self._result_iterator()
 
-    def __cancel_query(self, query):
+    def __cancel_query(self, query) -> None:
         if self._sequence_counter >= 0 and not self.is_closed():
             logger.debug("canceled. %s, request_id: %s", query, self._request_id)
             with self._lock_canceling:
@@ -1323,11 +1324,16 @@ class SnowflakeCursor:
         """Context manager."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager with commit or rollback."""
         self.close()
 
-    def get_results_from_sfqid(self, sfqid: str):
+    def get_results_from_sfqid(self, sfqid: str) -> None:
         """Gets the results from previously ran query."""
 
         def wait_until_ready():
@@ -1406,7 +1412,7 @@ class SnowflakeCursor:
 class DictCursor(SnowflakeCursor):
     """Cursor returning results in a dictionary."""
 
-    def __init__(self, connection):
+    def __init__(self, connection) -> None:
         super().__init__(
             connection,
             use_dict_result=True,

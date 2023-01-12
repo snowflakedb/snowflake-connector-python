@@ -12,10 +12,10 @@ from os import path
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 
-def main():
+def main() -> None:
     """Internal Tool: Extract certificate files in PEM."""
 
-    def help():
+    def help() -> None:
         print(
             "Extract certificate file. The target file can be a single file "
             "or a directory including multiple certificates. The certificate "
@@ -44,7 +44,7 @@ Usage: {}  <input file/dir>
         extract_certificate_file(f)
 
 
-def extract_certificate_file(input_filename):
+def extract_certificate_file(input_filename) -> None:
     ocsp = SnowflakeOCSPAsn1Crypto()
     cert_map = {}
     ocsp.read_cert_bundle(input_filename, cert_map)

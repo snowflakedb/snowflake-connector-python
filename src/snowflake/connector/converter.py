@@ -138,7 +138,7 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> tzinfo:
 
 
 class SnowflakeConverter:
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         self._parameters: dict[str, str | int | bool] = {}
         self._use_numpy = kwargs.get("use_numpy", False) and numpy is not None
 

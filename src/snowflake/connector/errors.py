@@ -41,7 +41,7 @@ class Error(BASE_EXCEPTION_CLASS):
         done_format_msg: bool | None = None,
         connection: SnowflakeConnection | None = None,
         cursor: SnowflakeCursor | None = None,
-    ):
+    ) -> None:
         super().__init__(msg)
         self.msg = msg
         self.raw_msg = msg
@@ -80,10 +80,10 @@ class Error(BASE_EXCEPTION_CLASS):
         self.telemetry_traceback = self.generate_telemetry_stacktrace()
         self.exception_telemetry(msg, cursor, connection)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.msg
 
     @staticmethod
@@ -412,7 +412,7 @@ class RevocationCheckError(OperationalError):
     """Exception for errors during certificate revocation check."""
 
     # We already send OCSP exception events
-    def exception_telemetry(self, msg, cursor, connection):
+    def exception_telemetry(self, msg, cursor, connection) -> None:
         pass
 
 
@@ -420,7 +420,7 @@ class RevocationCheckError(OperationalError):
 class InternalServerError(Error):
     """Exception for 500 HTTP code for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 500: Internal Server Error",
@@ -433,7 +433,7 @@ class InternalServerError(Error):
 class ServiceUnavailableError(Error):
     """Exception for 503 HTTP code for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 503: Service Unavailable",
@@ -446,7 +446,7 @@ class ServiceUnavailableError(Error):
 class GatewayTimeoutError(Error):
     """Exception for 504 HTTP error for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 504: Gateway Timeout",
@@ -459,7 +459,7 @@ class GatewayTimeoutError(Error):
 class ForbiddenError(Error):
     """Exception for 403 HTTP error for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 403: Forbidden",
@@ -472,7 +472,7 @@ class ForbiddenError(Error):
 class RequestTimeoutError(Error):
     """Exception for 408 HTTP error for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 408: Request Timeout",
@@ -485,7 +485,7 @@ class RequestTimeoutError(Error):
 class BadRequest(Error):
     """Exception for 400 HTTP error for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 400: Bad Request",
@@ -498,7 +498,7 @@ class BadRequest(Error):
 class BadGatewayError(Error):
     """Exception for 502 HTTP error for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 502: Bad Gateway",
@@ -511,7 +511,7 @@ class BadGatewayError(Error):
 class MethodNotAllowed(Error):
     """Exception for 405 HTTP error for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 405: Method not allowed",
@@ -524,7 +524,7 @@ class MethodNotAllowed(Error):
 class OtherHTTPRetryableError(Error):
     """Exception for other HTTP error for retry."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         code = kwargs.get("code", "n/a")
         Error.__init__(
             self,
@@ -538,7 +538,7 @@ class OtherHTTPRetryableError(Error):
 class MissingDependencyError(Error):
     """Exception for missing extras dependencies."""
 
-    def __init__(self, dependency: str):
+    def __init__(self, dependency: str) -> None:
         super().__init__(msg=f"Missing optional dependency: {dependency}")
 
 

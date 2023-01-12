@@ -217,7 +217,7 @@ class ResultBatch(abc.ABC):
         remote_chunk_info: RemoteChunkInfo | None,
         schema: Sequence[ResultMetadata],
         use_dict_result: bool,
-    ):
+    ) -> None:
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
@@ -389,7 +389,7 @@ class JSONResultBatch(ResultBatch):
         schema: Sequence[ResultMetadata],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
-    ):
+    ) -> None:
         super().__init__(
             rowcount,
             chunk_headers,
@@ -534,7 +534,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
-    ):
+    ) -> None:
         super().__init__(
             rowcount,
             chunk_headers,

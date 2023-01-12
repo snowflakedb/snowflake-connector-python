@@ -53,7 +53,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         stage_info: dict[str, Any],
         cnx: SnowflakeConnection,
         command: str,
-        use_s3_regional_url=False,
+        use_s3_regional_url: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 

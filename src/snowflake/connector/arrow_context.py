@@ -42,7 +42,7 @@ class ArrowConverterContext:
     def __init__(
         self,
         session_parameters: dict[str, str | int | bool] | None = None,
-    ):
+    ) -> None:
         if session_parameters is None:
             session_parameters = {}
         self._timezone = (
@@ -56,7 +56,7 @@ class ArrowConverterContext:
         return self._timezone
 
     @timezone.setter
-    def timezone(self, tz):
+    def timezone(self, tz) -> None:
         self._timezone = tz
 
     def _get_session_tz(self):

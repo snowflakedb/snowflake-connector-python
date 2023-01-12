@@ -166,7 +166,7 @@ class OCSPTelemetryData:
         ER_INVALID_SSD: OCSP_RESPONSE_INVALID_SSD,
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.event_sub_type = None
         self.ocsp_connection_method = None
         self.cert_id = None
@@ -197,36 +197,36 @@ class OCSPTelemetryData:
     def set_ocsp_connection_method(self, ocsp_conn_method: str) -> None:
         self.ocsp_connection_method = ocsp_conn_method
 
-    def set_cert_id(self, cert_id):
+    def set_cert_id(self, cert_id) -> None:
         self.cert_id = cert_id
 
-    def set_sfc_peer_host(self, sfc_peer_host):
+    def set_sfc_peer_host(self, sfc_peer_host) -> None:
         self.sfc_peer_host = sfc_peer_host
 
-    def set_ocsp_url(self, ocsp_url):
+    def set_ocsp_url(self, ocsp_url) -> None:
         self.ocsp_url = ocsp_url
 
-    def set_ocsp_req(self, ocsp_req):
+    def set_ocsp_req(self, ocsp_req) -> None:
         self.ocsp_req = ocsp_req
 
-    def set_error_msg(self, error_msg):
+    def set_error_msg(self, error_msg) -> None:
         self.error_msg = error_msg
 
-    def set_cache_enabled(self, cache_enabled):
+    def set_cache_enabled(self, cache_enabled) -> None:
         self.cache_enabled = cache_enabled
         if not cache_enabled:
             self.cache_hit = False
 
-    def set_cache_hit(self, cache_hit):
+    def set_cache_hit(self, cache_hit) -> None:
         if not self.cache_enabled:
             self.cache_hit = False
         else:
             self.cache_hit = cache_hit
 
-    def set_fail_open(self, fail_open):
+    def set_fail_open(self, fail_open) -> None:
         self.fail_open = fail_open
 
-    def set_insecure_mode(self, insecure_mode):
+    def set_insecure_mode(self, insecure_mode) -> None:
         self.insecure_mode = insecure_mode
 
     def generate_telemetry_data(
@@ -268,7 +268,7 @@ class OCSPTelemetryData:
 class OCSPServer:
     MAX_RETRY = int(os.getenv("OCSP_MAX_RETRY", "3"))
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
         """
         The following will change to something like
@@ -300,7 +300,7 @@ class OCSPServer:
         """Checks if new OCSP Endpoint has been enabled."""
         return os.getenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "false").lower() == "true"
 
-    def reset_ocsp_endpoint(self, hname):
+    def reset_ocsp_endpoint(self, hname) -> None:
         """Resets current object members CACHE_SERVER_URL and RETRY_URL_PATTERN.
 
         They will point at the new OCSP Fetch and Retry endpoints respectively. The new OCSP Endpoint address is based
@@ -321,7 +321,7 @@ class OCSPServer:
         self.CACHE_SERVER_URL = "".join([temp_ocsp_endpoint, "fetch"])
         self.OCSP_RETRY_URL = "".join([temp_ocsp_endpoint, "retry"])
 
-    def reset_ocsp_dynamic_cache_server_url(self, use_ocsp_cache_server):
+    def reset_ocsp_dynamic_cache_server_url(self, use_ocsp_cache_server) -> None:
         """Resets OCSP dynamic cache server url pattern.
 
         This is used only when OCSP cache server is updated.
@@ -375,7 +375,7 @@ class OCSPServer:
                 raise
 
     @staticmethod
-    def _download_ocsp_response_cache(ocsp, url, do_retry=True):
+    def _download_ocsp_response_cache(ocsp, url, do_retry: bool = True) -> bool:
         """Downloads OCSP response cache from the cache server."""
         headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
         sf_timeout = SnowflakeOCSP.OCSP_CACHE_SERVER_CONNECTION_TIMEOUT
@@ -467,7 +467,7 @@ class OCSPCache:
     CACHE_DIR = None
 
     @staticmethod
-    def reset_cache_dir():
+    def reset_cache_dir() -> None:
         # Cache directory
         OCSPCache.CACHE_DIR = os.getenv("SF_OCSP_RESPONSE_CACHE_DIR")
         if OCSPCache.CACHE_DIR is None:
@@ -496,7 +496,7 @@ class OCSPCache:
                 OCSPCache.CACHE_DIR = None
 
     @staticmethod
-    def del_cache_file():
+    def del_cache_file() -> None:
         """Deletes the OCSP response cache file if exists."""
         cache_file = path.join(
             OCSPCache.CACHE_DIR, OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME
@@ -506,7 +506,7 @@ class OCSPCache:
             os.unlink(cache_file)
 
     @staticmethod
-    def reset_ocsp_response_cache_uri(ocsp_response_cache_uri):
+    def reset_ocsp_response_cache_uri(ocsp_response_cache_uri) -> None:
         if ocsp_response_cache_uri is None and OCSPCache.CACHE_DIR is not None:
             OCSPCache.OCSP_RESPONSE_CACHE_URI = "file://" + path.join(
                 OCSPCache.CACHE_DIR, OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME
@@ -578,7 +578,7 @@ class OCSPCache:
             raise ex
 
     @staticmethod
-    def update_file(ocsp):
+    def update_file(ocsp) -> None:
         """
         Updates OCSP Response Cache file.
         Two file shall be updated/saved:
@@ -594,7 +594,7 @@ class OCSPCache:
             OCSPCache.CACHE_UPDATED = False
 
     @staticmethod
-    def update_ocsp_response_cache_file(ocsp, ocsp_response_cache_uri):
+    def update_ocsp_response_cache_file(ocsp, ocsp_response_cache_uri) -> None:
         """Updates OCSP Response Cache."""
         if ocsp_response_cache_uri is not None:
             try:
@@ -628,7 +628,7 @@ class OCSPCache:
                 )
 
     @staticmethod
-    def write_ocsp_response_cache_file(ocsp, filename):
+    def write_ocsp_response_cache_file(ocsp, filename) -> None:
         """Writes OCSP Response Cache."""
         logger.debug(f"writing OCSP response cache file to {filename}")
         file_cache_data = {}
@@ -637,7 +637,7 @@ class OCSPCache:
             json.dump(file_cache_data, f)
 
     @staticmethod
-    def check_ocsp_response_cache_lock_dir(filename):
+    def check_ocsp_response_cache_lock_dir(filename) -> bool:
         """Checks if the lock directory exists.
 
         Returns:
@@ -734,7 +734,7 @@ class OCSPCache:
         return False, None
 
     @staticmethod
-    def delete_cache(ocsp: SnowflakeOCSP, cert_id: CertId, **kwargs: Any):
+    def delete_cache(ocsp: SnowflakeOCSP, cert_id: CertId, **kwargs: Any) -> None:
         cache_key: tuple[bytes, bytes, bytes] = kwargs.get(
             "cache_key", ocsp.decode_cert_id_key(cert_id)
         )
@@ -762,7 +762,7 @@ class OCSPCache:
         return ts
 
     @staticmethod
-    def lock_cache_file(fname):
+    def lock_cache_file(fname) -> bool:
         """Locks a cache file by creating a directory."""
         try:
             os.mkdir(fname)
@@ -771,7 +771,7 @@ class OCSPCache:
             return False
 
     @staticmethod
-    def unlock_cache_file(fname):
+    def unlock_cache_file(fname) -> bool:
         """Unlocks a cache file by deleting a directory."""
         try:
             os.rmdir(fname)
@@ -780,7 +780,7 @@ class OCSPCache:
             return False
 
     @staticmethod
-    def delete_cache_file():
+    def delete_cache_file() -> None:
         """Deletes the cache file. Used by tests only."""
         parsed_url = urlsplit(OCSPCache.OCSP_RESPONSE_CACHE_URI)
         fname = path.join(parsed_url.netloc, parsed_url.path)
@@ -792,7 +792,7 @@ class OCSPCache:
             OCSPCache.unlock_cache_file(fname)
 
     @staticmethod
-    def clear_cache():
+    def clear_cache() -> None:
         """Clears cache."""
         OCSP_RESPONSE_VALIDATION_CACHE.clear()
 
@@ -867,9 +867,9 @@ class SnowflakeOCSP:
         self,
         ocsp_response_cache_uri=None,
         use_ocsp_cache_server=None,
-        use_post_method=True,
-        use_fail_open=True,
-    ):
+        use_post_method: bool = True,
+        use_fail_open: bool = True,
+    ) -> None:
 
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
 
@@ -919,7 +919,7 @@ class SnowflakeOCSP:
         if not OCSP_RESPONSE_VALIDATION_CACHE:
             SnowflakeOCSP.OCSP_CACHE.read_file(self)
 
-    def validate_certfile(self, cert_filename, no_exception=False):
+    def validate_certfile(self, cert_filename, no_exception: bool = False):
         """Validates that the certificate is NOT revoked."""
         cert_map = {}
         telemetry_data = OCSPTelemetryData()
@@ -1054,7 +1054,7 @@ class SnowflakeOCSP:
         return self.FAIL_OPEN
 
     @staticmethod
-    def print_fail_open_warning(ocsp_log):
+    def print_fail_open_warning(ocsp_log) -> None:
         static_warning = (
             "WARNING!!! Using fail-open to connect. Driver is connecting to an "
             "HTTPS endpoint without OCSP based Certificate Revocation checking "
@@ -1235,7 +1235,7 @@ class SnowflakeOCSP:
         if not in_cache:
             self.OCSP_CACHE_SERVER.download_cache_from_server(self)
 
-    def _lazy_read_ca_bundle(self):
+    def _lazy_read_ca_bundle(self) -> None:
         """Reads the local cabundle file and cache it in memory."""
         with SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK:
             if SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
@@ -1326,7 +1326,7 @@ class SnowflakeOCSP:
         )
 
     @staticmethod
-    def _validity_error_message(current_time, this_update, next_update):
+    def _validity_error_message(current_time, this_update, next_update) -> str:
         tolerable_validity = SnowflakeOCSP._calculate_tolerable_validity(
             this_update, next_update
         )
@@ -1348,7 +1348,7 @@ class SnowflakeOCSP:
         )
 
     @staticmethod
-    def clear_cache():
+    def clear_cache() -> None:
         SnowflakeOCSP.OCSP_CACHE.clear_cache()
 
     @staticmethod
@@ -1356,7 +1356,7 @@ class SnowflakeOCSP:
         return SnowflakeOCSP.OCSP_CACHE.cache_size()
 
     @staticmethod
-    def delete_cache_file():
+    def delete_cache_file() -> None:
         SnowflakeOCSP.OCSP_CACHE.delete_cache_file()
 
     @staticmethod
@@ -1372,7 +1372,7 @@ class SnowflakeOCSP:
         cert_id,
         telemetry_data,
         hostname=None,
-        do_retry=True,
+        do_retry: bool = True,
     ):
         """Fetches OCSP response using OCSPRequest."""
         sf_timeout = SnowflakeOCSP.CA_OCSP_RESPONDER_CONNECTION_TIMEOUT
@@ -1619,7 +1619,7 @@ class SnowflakeOCSP:
                 msg=ermsg, errno=ER_OCSP_RESPONSE_CACHE_DECODE_FAILED
             )
 
-    def encode_ocsp_response_cache(self, ocsp_response_cache_json):
+    def encode_ocsp_response_cache(self, ocsp_response_cache_json) -> None:
         """Encodes OCSP response cache to JSON."""
         logger.debug("encoding OCSP response cache to JSON")
         for (

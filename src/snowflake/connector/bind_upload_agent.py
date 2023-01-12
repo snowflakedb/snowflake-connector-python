@@ -30,7 +30,7 @@ class BindUploadAgent:
         cursor: SnowflakeCursor,
         rows: list[bytes],
         stream_buffer_size: int = 1024 * 1024 * 10,
-    ):
+    ) -> None:
         """Construct an agent that uploads binding parameters as CSV files to a temporary stage.
 
         Args:
@@ -43,7 +43,7 @@ class BindUploadAgent:
         self._stream_buffer_size = stream_buffer_size
         self.stage_path = f"@{self._STAGE_NAME}/{uuid.uuid4().hex}"
 
-    def _create_stage(self):
+    def _create_stage(self) -> None:
         self.cursor.execute(self._CREATE_STAGE_STMT)
 
     def upload(self):

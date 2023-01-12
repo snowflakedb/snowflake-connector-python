@@ -70,7 +70,7 @@ class AuthRetryCtx:
         logger.debug(f"Sleeping for {self._current_sleep_time} seconds")
         return self._current_sleep_time
 
-    def reset(self):
+    def reset(self) -> None:
         self._current_retry_count = 0
         self._current_sleep_time = 1
 

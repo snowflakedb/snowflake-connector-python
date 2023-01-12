@@ -25,7 +25,7 @@ def binary_to_snowflake(binary_value) -> bytes | bytearray:
 class SnowflakeBinaryFormat:
     """Formats binary values ("bytes" objects) in hex or base64."""
 
-    def __init__(self, name):
+    def __init__(self, name) -> None:
         name = name.upper()
         if name == "HEX":
             self._encode = b16encode

@@ -126,11 +126,11 @@ class SnowflakeDateTimeFormat:
     def __init__(
         self,
         sql_format,
-        data_type="TIMESTAMP_NTZ",
+        data_type: str = "TIMESTAMP_NTZ",
         datetime_class=datetime,
-        support_negative_year=True,
-        inject_fraction=True,
-    ):
+        support_negative_year: bool = True,
+        inject_fraction: bool = True,
+    ) -> None:
         self._sql_format = sql_format
         self._ignore_tz = data_type in ("TIMESTAMP_NTZ", "DATE")
         if datetime_class == datetime:
@@ -176,7 +176,7 @@ class SnowflakeDateTimeFormat:
             return value.isoformat()
         return value.strftime(fmt)
 
-    def _match_token(self, sql_fmt, candidates, ignore=False):
+    def _match_token(self, sql_fmt, candidates, ignore: bool = False):
         for c in candidates:
             if sql_fmt.startswith(c[0]):
                 if not ignore:
@@ -185,10 +185,12 @@ class SnowflakeDateTimeFormat:
         self._add_raw_char(sql_fmt[0])
         return 1
 
-    def _add_raw_char(self, ch):
+    def _add_raw_char(self, ch) -> None:
         self._elements.append((_inject_others, "%%" if ch == "%" else ch))
 
-    def _compile(self, support_negative_year=True, inject_fraction=True):
+    def _compile(
+        self, support_negative_year: bool = True, inject_fraction: bool = True
+    ) -> None:
         self._elements = []
         idx = 0
         u_sql_format = self._sql_format.upper()
@@ -315,7 +317,7 @@ class SnowflakeDateTimeFormat:
                 idx += 1
             self._optimize_elements()
 
-    def _optimize_elements(self):
+    def _optimize_elements(self) -> None:
         if len(self._elements) < 2:
             return
         last_element = self._elements[-1]
@@ -332,7 +334,7 @@ class SnowflakeDateTimeFormat:
 
 
 class SnowflakeDateFormat(SnowflakeDateTimeFormat):
-    def __init__(self, sql_format, **kwargs):
+    def __init__(self, sql_format, **kwargs) -> None:
         kwargs["inject_fraction"] = False  # no fraction
         super().__init__(sql_format, **kwargs)
 

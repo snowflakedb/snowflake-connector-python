@@ -111,7 +111,7 @@ class ResultSet(Iterable[list]):
         cursor: SnowflakeCursor,
         result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
-    ):
+    ) -> None:
         self.batches = result_chunks
         self._cursor = cursor
         self.prefetch_thread_num = prefetch_thread_num
@@ -141,7 +141,7 @@ class ResultSet(Iterable[list]):
                 metrics.get(DownloadMetrics.parse.value),
             )
 
-    def _finish_iterating(self):
+    def _finish_iterating(self) -> None:
         """Used for any cleanup after the result set iterator is done."""
 
         self._report_metrics()

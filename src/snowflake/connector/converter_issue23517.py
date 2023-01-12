@@ -22,7 +22,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
     This is to address http://bugs.python.org/issue23517
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         logger.debug("initialized")
 

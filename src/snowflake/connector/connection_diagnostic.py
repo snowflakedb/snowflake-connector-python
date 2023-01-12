@@ -313,7 +313,7 @@ class ConnectionDiagnostic:
 
     def __https_host_report(
         self, host: str, port: int = 443, host_type: str = "SNOWFLAKE_URL"
-    ):
+    ) -> None:
         try:
             certificate = self.__test_socket_get_cert(
                 host, port=port, host_type=host_type

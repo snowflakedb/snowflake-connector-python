@@ -40,7 +40,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     Python objects.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._support_negative_year = kwargs.get("support_negative_year", True)
 

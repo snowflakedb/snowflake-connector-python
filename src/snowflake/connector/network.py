@@ -271,14 +271,14 @@ class RetryRequest(Exception):
 class ReauthenticationRequest(Exception):
     """Signal to reauthenticate."""
 
-    def __init__(self, cause):
+    def __init__(self, cause) -> None:
         self.cause = cause
 
 
 class SnowflakeAuth(AuthBase):
     """Attaches HTTP Authorization header for Snowflake."""
 
-    def __init__(self, token):
+    def __init__(self, token) -> None:
         # setup any auth-related data here
         self.token = token
 
@@ -294,7 +294,7 @@ class SnowflakeAuth(AuthBase):
 
 
 class SessionPool:
-    def __init__(self, rest: SnowflakeRestful):
+    def __init__(self, rest: SnowflakeRestful) -> None:
         # A stack of the idle sessions
         self._idle_sessions: list[Session] = []
         self._active_sessions: set[Session] = set()
@@ -317,7 +317,7 @@ class SessionPool:
             logger.debug("session doesn't exist in the active session pool. Ignored...")
         self._idle_sessions.append(session)
 
-    def __str__(self):
+    def __str__(self) -> str:
         total_sessions = len(self._active_sessions) + len(self._idle_sessions)
         return (
             f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
@@ -341,12 +341,12 @@ class SnowflakeRestful:
 
     def __init__(
         self,
-        host="127.0.0.1",
-        port=8080,
-        protocol="http",
-        inject_client_pause=0,
+        host: str = "127.0.0.1",
+        port: int = 8080,
+        protocol: str = "http",
+        inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
-    ):
+    ) -> None:
         self._host = host
         self._port = port
         self._protocol = protocol
@@ -389,7 +389,7 @@ class SnowflakeRestful:
         )
 
     @master_validity_in_seconds.setter
-    def master_validity_in_seconds(self, value):
+    def master_validity_in_seconds(self, value) -> None:
         self._master_validity_in_seconds = (
             value if value else DEFAULT_MASTER_VALIDITY_IN_SECONDS
         )
@@ -399,7 +399,7 @@ class SnowflakeRestful:
         return getattr(self, "_id_token", None)
 
     @id_token.setter
-    def id_token(self, value):
+    def id_token(self, value) -> None:
         self._id_token = value
 
     @property
@@ -410,7 +410,7 @@ class SnowflakeRestful:
     def mfa_token(self, value: str) -> None:
         self._mfa_token = value
 
-    def close(self):
+    def close(self) -> None:
         if hasattr(self, "_token"):
             del self._token
         if hasattr(self, "_master_token"):
@@ -427,12 +427,12 @@ class SnowflakeRestful:
         self,
         url,
         body=None,
-        method="post",
-        client="sfsql",
-        _no_results=False,
+        method: str = "post",
+        client: str = "sfsql",
+        _no_results: bool = False,
         timeout=None,
-        _include_retry_params=False,
-        _no_retry=False,
+        _include_retry_params: bool = False,
+        _no_retry: bool = False,
     ):
         if body is None:
             body = {}
@@ -484,7 +484,7 @@ class SnowflakeRestful:
         master_validity_in_seconds=None,
         id_token=None,
         mfa_token=None,
-    ):
+    ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
             self._token = session_token
@@ -569,7 +569,7 @@ class SnowflakeRestful:
                 },
             )
 
-    def _heartbeat(self):
+    def _heartbeat(self) -> None:
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -590,7 +590,7 @@ class SnowflakeRestful:
         if not ret.get("success"):
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
 
-    def delete_session(self, retry=False):
+    def delete_session(self, retry: bool = False) -> None:
         """Deletes the session."""
         if self.master_token is None:
             Error.errorhandler_wrapper(
@@ -691,10 +691,10 @@ class SnowflakeRestful:
         body,
         token=None,
         timeout=None,
-        _no_results=False,
-        no_retry=False,
+        _no_results: bool = False,
+        no_retry: bool = False,
         socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
-        _include_retry_params=False,
+        _include_retry_params: bool = False,
     ):
         full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
         if self._connection._probe_connection:
@@ -770,7 +770,7 @@ class SnowflakeRestful:
         """Carry out API request with session management."""
 
         class RetryCtx:
-            def __init__(self, timeout, _include_retry_params=False):
+            def __init__(self, timeout, _include_retry_params: bool = False) -> None:
                 self.total_timeout = timeout
                 self.timeout = timeout
                 self.cnt = 0
@@ -828,7 +828,7 @@ class SnowflakeRestful:
         headers,
         data,
         retry_ctx,
-        no_retry=False,
+        no_retry: bool = False,
         token=NO_TOKEN,
         **kwargs,
     ):
@@ -956,7 +956,7 @@ class SnowflakeRestful:
         else:
             self.handle_invalid_certificate_error(conn, full_url, cause)
 
-    def handle_invalid_certificate_error(self, conn, full_url, cause):
+    def handle_invalid_certificate_error(self, conn, full_url, cause) -> None:
         # all other errors raise exception
         Error.errorhandler_wrapper(
             conn,
@@ -968,7 +968,7 @@ class SnowflakeRestful:
             },
         )
 
-    def _handle_unknown_error(self, method, full_url, headers, data, conn):
+    def _handle_unknown_error(self, method, full_url, headers, data, conn) -> None:
         """Handles unknown errors."""
         if data:
             try:
@@ -1002,9 +1002,9 @@ class SnowflakeRestful:
         headers,
         data,
         token,
-        catch_okta_unauthorized_error=False,
-        is_raw_text=False,
-        is_raw_binary=False,
+        catch_okta_unauthorized_error: bool = False,
+        is_raw_text: bool = False,
+        is_raw_binary: bool = False,
         binary_data_handler=None,
         socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
     ):

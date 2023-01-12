@@ -21,7 +21,7 @@ from .mixin import UnicodeMixin
 
 
 class _DBAPITypeObject:
-    def __init__(self, *values):
+    def __init__(self, *values) -> None:
         self.values = values
 
     def __cmp__(self, other):
@@ -62,10 +62,10 @@ ROWID = _DBAPITypeObject()
 class Json(UnicodeMixin):
     """JSON adapter."""
 
-    def __init__(self, value):
+    def __init__(self, value) -> None:
         self._value = json.dump(value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
     def __unicode__(self):

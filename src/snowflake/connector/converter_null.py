@@ -9,7 +9,7 @@ from .converter import SnowflakeConverter
 
 
 class SnowflakeNoConverterToPython(SnowflakeConverter):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
     def to_python_method(self, type_name, column):

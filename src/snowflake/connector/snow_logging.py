@@ -22,16 +22,16 @@ class SnowLogger(logging.LoggerAdapter):
     used in Cython code (.pyx).
     """
 
-    def debug(self, msg, path_name=None, func_name=None, *args, **kwargs):
+    def debug(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
         self.log(logging.DEBUG, msg, path_name, func_name, *args, **kwargs)
 
-    def info(self, msg, path_name=None, func_name=None, *args, **kwargs):
+    def info(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
         self.log(logging.INFO, msg, path_name, func_name, *args, **kwargs)
 
-    def warning(self, msg, path_name=None, func_name=None, *args, **kwargs):
+    def warning(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
         self.log(logging.WARNING, msg, path_name, func_name, *args, **kwargs)
 
-    def warn(self, msg, path_name=None, func_name=None, *args, **kwargs):
+    def warn(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
         warnings.warn(
             "The 'warn' method is deprecated, " "use 'warning' instead",
             DeprecationWarning,
@@ -39,16 +39,22 @@ class SnowLogger(logging.LoggerAdapter):
         )
         self.warning(msg, path_name, func_name, *args, **kwargs)
 
-    def error(self, msg, path_name=None, func_name=None, *args, **kwargs):
+    def error(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
         self.log(logging.ERROR, msg, path_name, func_name, *args, **kwargs)
 
     def exception(
-        self, msg, path_name=None, func_name=None, *args, exc_info=True, **kwargs
-    ):
+        self,
+        msg,
+        path_name=None,
+        func_name=None,
+        *args,
+        exc_info: bool = True,
+        **kwargs,
+    ) -> None:
         """Convenience method for logging an ERROR with exception information."""
         self.error(msg, path_name, func_name, *args, exc_info=exc_info, **kwargs)
 
-    def critical(self, msg, path_name=None, func_name=None, *args, **kwargs):
+    def critical(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
         self.log(logging.CRITICAL, msg, path_name, func_name, *args, **kwargs)
 
     fatal = critical

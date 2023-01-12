@@ -91,7 +91,7 @@ class TelemetryData:
     TRUE = 1
     FALSE = 0
 
-    def __init__(self, message, timestamp):
+    def __init__(self, message, timestamp) -> None:
         self.message = message
         self.timestamp = timestamp
 
@@ -121,7 +121,7 @@ class TelemetryData:
     def to_dict(self):
         return {"message": self.message, "timestamp": str(self.timestamp)}
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.to_dict())
 
 
@@ -131,7 +131,7 @@ class TelemetryClient:
     SF_PATH_TELEMETRY = "/telemetry/send"
     DEFAULT_FORCE_FLUSH_SIZE = 100
 
-    def __init__(self, rest: SnowflakeRestful, flush_size=None):
+    def __init__(self, rest: SnowflakeRestful, flush_size=None) -> None:
         self._rest: SnowflakeRestful | None = rest
         self._log_batch = []
         self._flush_size = flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
@@ -203,17 +203,17 @@ class TelemetryClient:
             logger.debug("Failed to upload metrics to telemetry.", exc_info=True)
 
     @property
-    def is_closed(self):
+    def is_closed(self) -> bool:
         return self._rest is None
 
-    def close(self, send_on_close=True):
+    def close(self, send_on_close: bool = True) -> None:
         if not self.is_closed:
             logger.debug("Closing telemetry client.")
             if send_on_close:
                 self.send_batch()
             self._rest = None
 
-    def disable(self):
+    def disable(self) -> None:
         self._enabled = False
 
     def is_enabled(self):

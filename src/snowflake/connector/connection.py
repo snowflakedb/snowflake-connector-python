@@ -20,6 +20,7 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from time import strptime
+from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 
 from . import errors, proxy
@@ -267,7 +268,7 @@ class SnowflakeConnection:
 
     OCSP_ENV_LOCK = Lock()
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
@@ -305,7 +306,7 @@ class SnowflakeConnection:
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
 
-    def __del__(self):  # pragma: no cover
+    def __del__(self) -> None:  # pragma: no cover
         try:
             self.close(retry=False)
         except Exception:
@@ -401,7 +402,7 @@ class SnowflakeConnection:
         return self._client_session_keep_alive
 
     @client_session_keep_alive.setter
-    def client_session_keep_alive(self, value):
+    def client_session_keep_alive(self, value) -> None:
         self._client_session_keep_alive = value
 
     @property
@@ -409,7 +410,7 @@ class SnowflakeConnection:
         return self._client_session_keep_alive_heartbeat_frequency
 
     @client_session_keep_alive_heartbeat_frequency.setter
-    def client_session_keep_alive_heartbeat_frequency(self, value):
+    def client_session_keep_alive_heartbeat_frequency(self, value) -> None:
         self._client_session_keep_alive_heartbeat_frequency = value
         self._validate_client_session_keep_alive_heartbeat_frequency()
 
@@ -422,7 +423,7 @@ class SnowflakeConnection:
         )
 
     @client_prefetch_threads.setter
-    def client_prefetch_threads(self, value):
+    def client_prefetch_threads(self, value) -> None:
         self._client_prefetch_threads = value
         self._validate_client_prefetch_threads()
 
@@ -453,7 +454,7 @@ class SnowflakeConnection:
         return self._validate_default_parameters
 
     @property
-    def is_pyformat(self):
+    def is_pyformat(self) -> bool:
         return self._paramstyle in ("pyformat", "format")
 
     @property
@@ -465,7 +466,7 @@ class SnowflakeConnection:
         return self._telemetry_enabled
 
     @telemetry_enabled.setter
-    def telemetry_enabled(self, value):
+    def telemetry_enabled(self, value) -> None:
         self._telemetry_enabled = True if value else False
 
     @property
@@ -473,7 +474,7 @@ class SnowflakeConnection:
         return self._service_name
 
     @service_name.setter
-    def service_name(self, value):
+    def service_name(self, value) -> None:
         self._service_name = value
 
     @property
@@ -485,7 +486,7 @@ class SnowflakeConnection:
         return self._disable_request_pooling
 
     @disable_request_pooling.setter
-    def disable_request_pooling(self, value):
+    def disable_request_pooling(self, value) -> None:
         self._disable_request_pooling = True if value else False
 
     @property
@@ -501,7 +502,7 @@ class SnowflakeConnection:
         return self._enable_stage_s3_privatelink_for_us_east_1
 
     @enable_stage_s3_privatelink_for_us_east_1.setter
-    def enable_stage_s3_privatelink_for_us_east_1(self, value):
+    def enable_stage_s3_privatelink_for_us_east_1(self, value) -> None:
         self._enable_stage_s3_privatelink_for_us_east_1 = True if value else False
 
     @property
@@ -517,7 +518,7 @@ class SnowflakeConnection:
         return self._connection_diag_whitelist_path
 
     @arrow_number_to_decimal.setter
-    def arrow_number_to_decimal_setter(self, value: bool):
+    def arrow_number_to_decimal_setter(self, value: bool) -> None:
         self._arrow_number_to_decimal = value
 
     @property
@@ -531,7 +532,7 @@ class SnowflakeConnection:
         else:
             raise TypeError("auth_class must subclass AuthByPlugin")
 
-    def connect(self, **kwargs):
+    def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
         if len(kwargs) > 0:
@@ -565,7 +566,7 @@ class SnowflakeConnection:
         else:
             self.__open_connection()
 
-    def close(self, retry=True):
+    def close(self, retry: bool = True) -> None:
         """Closes the connection."""
         try:
             if not self.rest:
@@ -598,11 +599,11 @@ class SnowflakeConnection:
                 "Exception encountered in closing connection. ignoring...: %s", e
             )
 
-    def is_closed(self):
+    def is_closed(self) -> bool:
         """Checks whether the connection has been closed."""
         return self.rest is None
 
-    def autocommit(self, mode):
+    def autocommit(self, mode) -> None:
         """Sets autocommit mode to True, or False. Defaults to True."""
         if not self.rest:
             Error.errorhandler_wrapper(
@@ -633,11 +634,11 @@ class SnowflakeConnection:
                     "Autocommit feature is not enabled for this " "connection. Ignored"
                 )
 
-    def commit(self):
+    def commit(self) -> None:
         """Commits the current transaction."""
         self.cursor().execute("COMMIT")
 
-    def rollback(self):
+    def rollback(self) -> None:
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
@@ -693,7 +694,7 @@ class SnowflakeConnection:
             cur.execute(sql, _is_put_get=is_put_or_get, **kwargs)
             yield cur
 
-    def __set_error_attributes(self):
+    def __set_error_attributes(self) -> None:
         for m in [
             method for method in dir(errors) if callable(getattr(errors, method))
         ]:
@@ -702,7 +703,7 @@ class SnowflakeConnection:
             setattr(self, name, getattr(errors, m))
 
     @staticmethod
-    def setup_ocsp_privatelink(app, hostname):
+    def setup_ocsp_privatelink(app, hostname) -> None:
         SnowflakeConnection.OCSP_ENV_LOCK.acquire()
         ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
         os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
@@ -1078,7 +1079,7 @@ class SnowflakeConnection:
     def _reauthenticate(self):
         return self._auth_class.reauthenticate(conn=self)
 
-    def authenticate_with_retry(self, auth_instance):
+    def authenticate_with_retry(self, auth_instance) -> None:
         # make some changes if needed before real __authenticate
         try:
             self._authenticate(auth_instance)
@@ -1343,12 +1344,12 @@ class SnowflakeConnection:
             logger.debug("sequence counter: %s", self.sequence_counter)
             return self.sequence_counter
 
-    def _log_telemetry(self, telemetry_data):
+    def _log_telemetry(self, telemetry_data) -> None:
         """Logs data to telemetry."""
         if self.telemetry_enabled:
             self._telemetry.try_add_log_to_batch(telemetry_data)
 
-    def _add_heartbeat(self):
+    def _add_heartbeat(self) -> None:
         """Add an hourly heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
             self._validate_client_session_keep_alive_heartbeat_frequency()
@@ -1366,7 +1367,7 @@ class SnowflakeConnection:
             self.heartbeat_thread.start()
             logger.debug("started heartbeat")
 
-    def _cancel_heartbeat(self):
+    def _cancel_heartbeat(self) -> None:
         """Cancel a heartbeat thread."""
         if self.heartbeat_thread:
             self.heartbeat_thread.cancel()
@@ -1374,7 +1375,7 @@ class SnowflakeConnection:
             self.heartbeat_thread = None
             logger.debug("stopped heartbeat")
 
-    def _heartbeat_tick(self):
+    def _heartbeat_tick(self) -> None:
         """Execute a hearbeat if connection isn't closed yet."""
         if not self.is_closed():
             logger.debug("heartbeating!")
@@ -1452,7 +1453,12 @@ class SnowflakeConnection:
         """Context manager."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager with commit or rollback teardown."""
         if not self._session_parameters.get("AUTOCOMMIT", False):
             # Either AUTOCOMMIT is turned off, or is not set so we default to old behavior

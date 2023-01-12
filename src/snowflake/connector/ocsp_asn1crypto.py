@@ -105,7 +105,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     def encode_cert_id_base64(self, hkey):
         return b64encode(self.encode_cert_id_key(hkey).dump()).decode("ascii")
 
-    def read_cert_bundle(self, ca_bundle_file, storage=None):
+    def read_cert_bundle(self, ca_bundle_file, storage=None) -> None:
         """Reads a certificate file including certificates in PEM format."""
         if storage is None:
             storage = SnowflakeOCSP.ROOT_CERTIFICATES_DICT
@@ -212,7 +212,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     :return True/False depending on time validity within the response
     """
 
-    def is_valid_time(self, cert_id, ocsp_response):
+    def is_valid_time(self, cert_id, ocsp_response) -> bool:
         res = OCSPResponse.load(ocsp_response)
 
         if res["response_status"].native != "successful":
