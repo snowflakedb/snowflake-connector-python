@@ -144,7 +144,7 @@ class AuthByWebBrowser(AuthByPlugin):
             )
 
             logger.debug("step 2: open a browser")
-            print(f"URL: {sso_url}")
+            print(f"Going to open: {sso_url} to authenticate...")
             if not self._webbrowser.open_new(sso_url):
                 print(
                     "We were unable to open a browser window for you, "
