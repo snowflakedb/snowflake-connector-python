@@ -27,7 +27,7 @@ from typing import Any, NamedTuple
 # part of the code where we want to call out to check for revoked certificates,
 # we don't want to use our hardened version of requests.
 import requests as generic_requests
-from asn1crypto.ocsp import CertId, OCSPRequest
+from asn1crypto.ocsp import CertId, OCSPRequest, SingleResponse
 from asn1crypto.x509 import Certificate
 from OpenSSL.SSL import Connection
 
@@ -296,7 +296,7 @@ class OCSPServer:
         self.OCSP_RETRY_URL = None
 
     @staticmethod
-    def is_enabled_new_ocsp_endpoint():
+    def is_enabled_new_ocsp_endpoint() -> bool:
         """Checks if new OCSP Endpoint has been enabled."""
         return os.getenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "false").lower() == "true"
 
@@ -691,7 +691,7 @@ class OCSPCache:
         return False
 
     @staticmethod
-    def is_cache_fresh(current_time, ts):
+    def is_cache_fresh(current_time: int, ts: int) -> bool:
         return current_time - OCSPCache.CACHE_EXPIRATION <= ts
 
     @staticmethod
@@ -1014,7 +1014,7 @@ class SnowflakeOCSP:
         return results
 
     @staticmethod
-    def get_ocsp_retry_choice():
+    def get_ocsp_retry_choice() -> bool:
         return os.getenv("SF_OCSP_DO_RETRY", "true") == "true"
 
     def is_cert_id_in_cache(
@@ -1050,7 +1050,7 @@ class SnowflakeOCSP:
             acc_name = split_hname[0]
         return acc_name
 
-    def is_enabled_fail_open(self):
+    def is_enabled_fail_open(self) -> bool:
         return self.FAIL_OPEN
 
     @staticmethod
@@ -1300,7 +1300,7 @@ class SnowflakeOCSP:
                 )
 
     @staticmethod
-    def _calculate_tolerable_validity(this_update, next_update):
+    def _calculate_tolerable_validity(this_update: float, next_update: float) -> int:
         return max(
             int(
                 SnowflakeOCSP.TOLERABLE_VALIDITY_RANGE_RATIO
@@ -1310,7 +1310,12 @@ class SnowflakeOCSP:
         )
 
     @staticmethod
-    def _is_validaity_range(current_time, this_update, next_update, test_mode=None):
+    def _is_validaity_range(
+        current_time: int,
+        this_update: float,
+        next_update: float,
+        test_mode: Any | None = None,
+    ) -> bool:
         if test_mode is not None:
             force_validity_fail = os.getenv("SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY")
             if force_validity_fail is not None:
@@ -1503,7 +1508,9 @@ class SnowflakeOCSP:
 
         return ret
 
-    def _process_good_status(self, single_response, cert_id, ocsp_response):
+    def _process_good_status(
+        self, single_response: SingleResponse, cert_id: CertId, ocsp_response: bytes
+    ) -> None:
         """Processes GOOD status."""
         current_time = int(time.time())
         this_update_native, next_update_native = self.extract_good_status(

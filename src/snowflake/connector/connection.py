@@ -22,6 +22,7 @@ from threading import Lock
 from time import strptime
 from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
+from uuid import UUID
 
 from . import errors, proxy
 from .auth import (
@@ -98,7 +99,7 @@ DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
 
 
-def DefaultConverterClass():
+def DefaultConverterClass() -> type:
     if IS_WINDOWS:
         from .converter_issue23517 import SnowflakeConverterIssue23517
 
@@ -330,23 +331,23 @@ class SnowflakeConnection:
             return OCSPMode.FAIL_CLOSED
 
     @property
-    def session_id(self):
+    def session_id(self) -> int:
         return self._session_id
 
     @property
-    def user(self):
+    def user(self) -> str:
         return self._user
 
     @property
-    def host(self):
+    def host(self) -> str:
         return self._host
 
     @property
-    def port(self):
+    def port(self) -> int | str:  # TODO: shouldn't be a string
         return self._port
 
     @property
-    def region(self):
+    def region(self) -> str | None:
         warnings.warn(
             "Region has been deprecated and will be removed in the near future",
             PendingDeprecationWarning,
@@ -354,51 +355,51 @@ class SnowflakeConnection:
         return self._region
 
     @property
-    def proxy_host(self):
+    def proxy_host(self) -> str | None:
         return self._proxy_host
 
     @property
-    def proxy_port(self):
+    def proxy_port(self) -> str | None:
         return self._proxy_port
 
     @property
-    def proxy_user(self):
+    def proxy_user(self) -> str | None:
         return self._proxy_user
 
     @property
-    def proxy_password(self):
+    def proxy_password(self) -> str | None:
         return self._proxy_password
 
     @property
-    def account(self):
+    def account(self) -> str:
         return self._account
 
     @property
-    def database(self):
+    def database(self) -> str | None:
         return self._database
 
     @property
-    def schema(self):
+    def schema(self) -> str | None:
         return self._schema
 
     @property
-    def warehouse(self):
+    def warehouse(self) -> str | None:
         return self._warehouse
 
     @property
-    def role(self):
+    def role(self) -> str | None:
         return self._role
 
     @property
-    def login_timeout(self):
+    def login_timeout(self) -> int | None:
         return int(self._login_timeout) if self._login_timeout is not None else None
 
     @property
-    def network_timeout(self):
+    def network_timeout(self) -> int | None:
         return int(self._network_timeout) if self._network_timeout is not None else None
 
     @property
-    def client_session_keep_alive(self):
+    def client_session_keep_alive(self) -> bool | None:
         return self._client_session_keep_alive
 
     @client_session_keep_alive.setter
@@ -406,7 +407,7 @@ class SnowflakeConnection:
         self._client_session_keep_alive = value
 
     @property
-    def client_session_keep_alive_heartbeat_frequency(self):
+    def client_session_keep_alive_heartbeat_frequency(self) -> int | None:
         return self._client_session_keep_alive_heartbeat_frequency
 
     @client_session_keep_alive_heartbeat_frequency.setter
@@ -415,7 +416,7 @@ class SnowflakeConnection:
         self._validate_client_session_keep_alive_heartbeat_frequency()
 
     @property
-    def client_prefetch_threads(self):
+    def client_prefetch_threads(self) -> int:
         return (
             self._client_prefetch_threads
             if self._client_prefetch_threads
@@ -428,29 +429,30 @@ class SnowflakeConnection:
         self._validate_client_prefetch_threads()
 
     @property
-    def rest(self):
+    def rest(self) -> SnowflakeRestful | None:
         return self._rest
 
     @property
-    def application(self):
+    def application(self) -> str:
         return self._application
 
     @property
-    def errorhandler(self):
+    def errorhandler(self) -> Callable:  # TODO: callable args
         return self._errorhandler
 
     @errorhandler.setter
-    def errorhandler(self, value):
+    # Note: Callable doesn't implement operator|
+    def errorhandler(self, value: Callable | None) -> None:
         if value is None:
             raise ProgrammingError("None errorhandler is specified")
         self._errorhandler = value
 
     @property
-    def converter_class(self):
+    def converter_class(self) -> type[SnowflakeConverter]:
         return self._converter_class
 
     @property
-    def validate_default_parameters(self):
+    def validate_default_parameters(self) -> bool:
         return self._validate_default_parameters
 
     @property
@@ -462,7 +464,7 @@ class SnowflakeConnection:
         return self._consent_cache_id_token
 
     @property
-    def telemetry_enabled(self):
+    def telemetry_enabled(self) -> bool:
         return self._telemetry_enabled
 
     @telemetry_enabled.setter
@@ -470,7 +472,7 @@ class SnowflakeConnection:
         self._telemetry_enabled = True if value else False
 
     @property
-    def service_name(self):
+    def service_name(self) -> str | None:
         return self._service_name
 
     @service_name.setter
@@ -478,11 +480,11 @@ class SnowflakeConnection:
         self._service_name = value
 
     @property
-    def log_max_query_length(self):
+    def log_max_query_length(self) -> int:
         return self._log_max_query_length
 
     @property
-    def disable_request_pooling(self):
+    def disable_request_pooling(self) -> bool:
         return self._disable_request_pooling
 
     @disable_request_pooling.setter
@@ -490,7 +492,7 @@ class SnowflakeConnection:
         self._disable_request_pooling = True if value else False
 
     @property
-    def use_openssl_only(self):
+    def use_openssl_only(self) -> bool:
         return self._use_openssl_only
 
     @property
@@ -498,7 +500,7 @@ class SnowflakeConnection:
         return self._arrow_number_to_decimal
 
     @property
-    def enable_stage_s3_privatelink_for_us_east_1(self):
+    def enable_stage_s3_privatelink_for_us_east_1(self) -> bool:
         return self._enable_stage_s3_privatelink_for_us_east_1
 
     @enable_stage_s3_privatelink_for_us_east_1.setter
@@ -506,7 +508,7 @@ class SnowflakeConnection:
         self._enable_stage_s3_privatelink_for_us_east_1 = True if value else False
 
     @property
-    def enable_connection_diag(self):
+    def enable_connection_diag(self) -> bool:
         return self._enable_connection_diag
 
     @property
@@ -1324,7 +1326,7 @@ class SnowflakeConnection:
         _quote = self.converter.quote
         return _quote(escape(to_snowflake(param)))
 
-    def _cancel_query(self, sql, request_id):
+    def _cancel_query(self, sql: str, request_id: UUID) -> dict[str, bool | None]:
         """Cancels the query with the exact SQL query and requestId."""
         logger.debug("_cancel_query sql=[%s], request_id=[%s]", sql, request_id)
         url_parameters = {REQUEST_ID: str(uuid.uuid4())}
@@ -1337,7 +1339,7 @@ class SnowflakeConnection:
             },
         )
 
-    def _next_sequence_counter(self):
+    def _next_sequence_counter(self) -> int:
         """Gets next sequence counter. Used internally."""
         with self._lock_sequence_counter:
             self.sequence_counter += 1
@@ -1399,7 +1401,7 @@ class SnowflakeConnection:
         )
         return self.client_session_keep_alive_heartbeat_frequency
 
-    def _validate_client_prefetch_threads(self):
+    def _validate_client_prefetch_threads(self) -> int:
         if self.client_prefetch_threads <= 0:
             self._client_prefetch_threads = 1
         elif self.client_prefetch_threads > MAX_CLIENT_PREFETCH_THREADS:
@@ -1441,7 +1443,7 @@ class SnowflakeConnection:
             elif PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 == name:
                 self.enable_stage_s3_privatelink_for_us_east_1 = value
 
-    def _format_query_for_log(self, query):
+    def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))
         return (
             ret
@@ -1449,7 +1451,7 @@ class SnowflakeConnection:
             else ret[0 : self.log_max_query_length] + "..."
         )
 
-    def __enter__(self):
+    def __enter__(self) -> SnowflakeConnection:
         """Context manager."""
         return self
 

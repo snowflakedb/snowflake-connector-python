@@ -118,7 +118,7 @@ class TelemetryData:
             timestamp,
         )
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return {"message": self.message, "timestamp": str(self.timestamp)}
 
     def __repr__(self) -> str:
@@ -157,7 +157,7 @@ class TelemetryClient:
         except Exception:
             logger.warning("Failed to add log to telemetry.", exc_info=True)
 
-    def send_batch(self):
+    def send_batch(self) -> None:
         if self.is_closed:
             raise Exception("Attempted to send batch when TelemetryClient is closed")
         elif not self._enabled:

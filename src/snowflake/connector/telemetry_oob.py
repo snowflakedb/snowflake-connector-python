@@ -11,6 +11,7 @@ import logging
 import uuid
 from collections import namedtuple
 from queue import Queue
+from typing import Any
 
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
@@ -153,7 +154,7 @@ class TelemetryService:
     __instance = None
 
     @staticmethod
-    def get_instance():
+    def get_instance() -> TelemetryService:
         """Static access method."""
         if TelemetryService.__instance is None:
             TelemetryService()
@@ -183,7 +184,7 @@ class TelemetryService:
             pass
 
     @property
-    def enabled(self):
+    def enabled(self) -> bool:
         """Whether the Telemetry service is enabled or not."""
         return self._enabled
 
@@ -201,7 +202,7 @@ class TelemetryService:
         return self._queue
 
     @property
-    def context(self):
+    def context(self) -> dict[str, Any]:
         """Returns the context of the current connection."""
         return self._context
 
@@ -211,7 +212,7 @@ class TelemetryService:
         self._context = value
 
     @property
-    def connection_params(self):
+    def connection_params(self) -> dict[str, Any]:
         """Returns the connection parameters from the current connection."""
         return self._connection_params
 
@@ -231,7 +232,7 @@ class TelemetryService:
         self._batch_size = value
 
     @property
-    def num_of_retry_to_trigger_telemetry(self):
+    def num_of_retry_to_trigger_telemetry(self) -> int:
         """Returns the number of HTTP retries before we submit a telemetry event."""
         return self._num_of_retry_to_trigger_telemetry
 
@@ -241,7 +242,7 @@ class TelemetryService:
         self._num_of_retry_to_trigger_telemetry = value
 
     @property
-    def deployment(self):
+    def deployment(self: TelemetryServer) -> Any | None:
         """Returns the deployment that we are sending the telemetry information to."""
         return self._deployment
 

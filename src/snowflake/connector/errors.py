@@ -404,7 +404,7 @@ class NotSupportedError(DatabaseError):
     """Exception for errors when an unsupported database feature was used."""
 
     # Not supported errors do not have any PII in their
-    def telemetry_msg(self):
+    def telemetry_msg(self) -> str:
         return self.msg
 
 

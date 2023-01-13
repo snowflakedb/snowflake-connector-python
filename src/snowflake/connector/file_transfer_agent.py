@@ -66,7 +66,7 @@ INJECT_WAIT_IN_PUT = 0
 logger = getLogger(__name__)
 
 
-def result_text_column_desc(name):
+def result_text_column_desc(name: str) -> dict[str, Any]:
     return {
         "name": name,
         "type": "text",
@@ -77,7 +77,7 @@ def result_text_column_desc(name):
     }
 
 
-def result_fixed_column_desc(name):
+def result_fixed_column_desc(name: str) -> dict[str, Any]:
     return {
         "name": name,
         "type": "fixed",
@@ -668,7 +668,7 @@ class SnowflakeFileTransferAgent:
             client = self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
 
-    def result(self):
+    def result(self) -> dict[str, Any]:
         converter_class = self._cursor._connection.converter_class
         rowset = []
         if self._command_type == CMD_TYPE_UPLOAD:
@@ -792,7 +792,7 @@ class SnowflakeFileTransferAgent:
                 "rowset": sorted(rowset),
             }
 
-    def _expand_filenames(self, locations):
+    def _expand_filenames(self, locations: list[str]) -> list[str]:
         canonical_locations = []
         for file_name in locations:
             if self._command_type == CMD_TYPE_UPLOAD:

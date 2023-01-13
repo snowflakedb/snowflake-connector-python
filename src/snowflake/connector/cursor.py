@@ -30,6 +30,8 @@ from typing import (
     TypeVar,
 )
 
+from typing_extensions import Self
+
 from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
 
@@ -278,15 +280,15 @@ class SnowflakeCursor:
         return self._description
 
     @property
-    def rowcount(self):
+    def rowcount(self) -> int | None:
         return self._total_rowcount if self._total_rowcount >= 0 else None
 
     @property
-    def rownumber(self):
+    def rownumber(self) -> int | None:
         return self._rownumber if self._rownumber >= 0 else None
 
     @property
-    def sfqid(self):
+    def sfqid(self) -> str | None:
         return self._sfqid
 
     @property
@@ -294,11 +296,11 @@ class SnowflakeCursor:
         return self._sqlstate
 
     @property
-    def timestamp_output_format(self):
+    def timestamp_output_format(self) -> str | None:
         return self._timestamp_output_format
 
     @property
-    def timestamp_ltz_output_format(self):
+    def timestamp_ltz_output_format(self) -> str | None:
         return (
             self._timestamp_ltz_output_format
             if self._timestamp_ltz_output_format
@@ -306,7 +308,7 @@ class SnowflakeCursor:
         )
 
     @property
-    def timestamp_tz_output_format(self):
+    def timestamp_tz_output_format(self) -> str | None:
         return (
             self._timestamp_tz_output_format
             if self._timestamp_tz_output_format
@@ -314,7 +316,7 @@ class SnowflakeCursor:
         )
 
     @property
-    def timestamp_ntz_output_format(self):
+    def timestamp_ntz_output_format(self) -> str | None:
         return (
             self._timestamp_ntz_output_format
             if self._timestamp_ntz_output_format
@@ -322,23 +324,23 @@ class SnowflakeCursor:
         )
 
     @property
-    def date_output_format(self):
+    def date_output_format(self) -> str | None:
         return self._date_output_format
 
     @property
-    def time_output_format(self):
+    def time_output_format(self) -> str | None:
         return self._time_output_format
 
     @property
-    def timezone(self):
+    def timezone(self) -> str | None:
         return self._timezone
 
     @property
-    def binary_output_format(self):
+    def binary_output_format(self) -> str | None:
         return self._binary_output_format
 
     @property
-    def arraysize(self):
+    def arraysize(self) -> int:
         return self._arraysize
 
     @arraysize.setter
@@ -346,22 +348,22 @@ class SnowflakeCursor:
         self._arraysize = int(value)
 
     @property
-    def connection(self):
+    def connection(self) -> SnowflakeConnection:
         return self._connection
 
     @property
-    def errorhandler(self):
+    def errorhandler(self) -> Callable:
         return self._errorhandler
 
     @errorhandler.setter
-    def errorhandler(self, value):
+    def errorhandler(self, value: Callable | None) -> None:
         logger.debug("setting errorhandler: %s", value)
         if value is None:
             raise ProgrammingError("Invalid errorhandler is specified")
         self._errorhandler = value
 
     @property
-    def is_file_transfer(self):
+    def is_file_transfer(self) -> bool:
         """Whether the command is PUT or GET."""
         return hasattr(self, "_is_file_transfer") and self._is_file_transfer
 
@@ -404,7 +406,7 @@ class SnowflakeCursor:
         except Exception:
             pass
 
-    def is_closed(self):
+    def is_closed(self) -> bool:
         return self._connection is None or self._connection.is_closed()
 
     def _execute_helper(
@@ -828,7 +830,7 @@ class SnowflakeCursor:
             Error.errorhandler_wrapper(self.connection, self, error_class, errvalue)
         return self
 
-    def execute_async(self, *args, **kwargs):
+    def execute_async(self, *args: str, **kwargs: Any) -> dict[str, Any]:
         """Convenience function to execute a query without waiting for results (asynchronously).
 
         This function takes the same arguments as execute, please refer to that function
@@ -850,7 +852,7 @@ class SnowflakeCursor:
         self.execute(*args, **kwargs)
         return self._description
 
-    def _format_query_for_log(self, query):
+    def _format_query_for_log(self, query: str) -> str:
         return self._connection._format_query_for_log(query)
 
     def _is_dml(self, data) -> bool:
@@ -958,7 +960,7 @@ class SnowflakeCursor:
                 },
             )
 
-    def query_result(self, qid):
+    def query_result(self, qid: str) -> SnowflakeCursor:
         url = f"/queries/{qid}/result"
         ret = self._connection.rest.request(url=url, method="get")
         self._sfqid = (
@@ -1038,7 +1040,7 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_pandas_all(**kwargs)
 
-    def abort_query(self, qid):
+    def abort_query(self, qid: str) -> bool:
         url = f"/queries/{qid}/abort-request"
         ret = self._connection.rest.request(url=url, method="post")
         return ret.get("success")
@@ -1192,7 +1194,7 @@ class SnowflakeCursor:
         except StopIteration:
             return None
 
-    def fetchmany(self, size=None):
+    def fetchmany(self, size: int | None = None) -> list[dict | tuple | None]:
         """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
@@ -1218,7 +1220,7 @@ class SnowflakeCursor:
 
         return ret
 
-    def fetchall(self) -> list[tuple] | list[dict]:
+    def fetchall(self) -> list[dict | tuple | None]:
         """Fetches all of the results."""
         ret = []
         while True:
@@ -1228,7 +1230,7 @@ class SnowflakeCursor:
             ret.append(row)
         return ret
 
-    def nextset(self):
+    def nextset(self) -> SnowflakeCursor | None:
         """
         Fetches the next set of results if the previously executed query was multi-statement so that subsequent calls
         to any of the fetch*() methods will return rows from the next query's set of results. Returns None if no more
@@ -1320,7 +1322,7 @@ class SnowflakeCursor:
                 exc_info=True,
             )
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         """Context manager."""
         return self
 
@@ -1336,7 +1338,7 @@ class SnowflakeCursor:
     def get_results_from_sfqid(self, sfqid: str) -> None:
         """Gets the results from previously ran query."""
 
-        def wait_until_ready():
+        def wait_until_ready() -> None:
             """Makes sure query has finished executing and once it has retrieves results."""
             no_data_counter = 0
             retry_pattern_pos = 0

@@ -46,7 +46,7 @@ class BindUploadAgent:
     def _create_stage(self) -> None:
         self.cursor.execute(self._CREATE_STAGE_STMT)
 
-    def upload(self):
+    def upload(self) -> None:
         try:
             self._create_stage()
         except Error as err:

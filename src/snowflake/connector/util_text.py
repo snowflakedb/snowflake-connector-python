@@ -206,7 +206,9 @@ def split_statements(
         yield _concatenate_statements(statement)
 
 
-def _concatenate_statements(statement_list):
+def _concatenate_statements(
+    statement_list: list[tuple[str, bool]]
+) -> tuple[str, bool | None]:
     """Concatenate statements.
 
     Each statement should be a tuple of statement and is_put_or_get.
@@ -229,7 +231,7 @@ def _concatenate_statements(statement_list):
     return "".join(valid_statement_list).strip(), is_put_or_get
 
 
-def construct_hostname(region, account):
+def construct_hostname(region: str | None, account: str) -> str:
     """Constructs hostname from region and account."""
     if region == "us-west-2":
         region = ""

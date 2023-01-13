@@ -23,6 +23,7 @@ from asn1crypto.ocsp import (
     OCSPResponse,
     Request,
     Requests,
+    SingleResponse,
     TBSRequest,
     Version,
 )
@@ -34,6 +35,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
+from OpenSSL.SSL import Connection
 
 from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
@@ -169,7 +171,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         b64data = b64encode(data).decode("ascii")
         return b64data
 
-    def extract_good_status(self, single_response):
+    def extract_good_status(
+        self, single_response: SingleResponse
+    ) -> tuple[datetime, datetime]:
         """Extracts GOOD status."""
         this_update_native = single_response["this_update"].native
         next_update_native = single_response["next_update"].native
@@ -183,7 +187,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         revocation_reason = revoked_info.native["revocation_reason"]
         return revocation_time, revocation_reason
 
-    def check_cert_time_validity(self, cur_time, ocsp_cert):
+    def check_cert_time_validity(
+        self, cur_time: datetime, ocsp_cert: Certificate
+    ) -> tuple[bool, str | None]:
 
         val_start = ocsp_cert["tbs_certificate"]["validity"]["not_before"].native
         val_end = ocsp_cert["tbs_certificate"]["validity"]["not_after"].native
@@ -419,7 +425,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             except InvalidSignature:
                 raise RevocationCheckError(msg="Failed to verify the signature")
 
-    def extract_certificate_chain(self, connection):
+    def extract_certificate_chain(
+        self, connection: Connection
+    ) -> list[tuple[Certificate, Certificate]]:
         """Gets certificate chain and extract the key info from OpenSSL connection."""
         from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
@@ -436,7 +444,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         return self.create_pair_issuer_subject(cert_map)
 
-    def create_pair_issuer_subject(self, cert_map):
+    def create_pair_issuer_subject(
+        self, cert_map: OrderedDict
+    ) -> list[tuple[Certificate, Certificate]]:
         """Creates pairs of issuer and subject certificates."""
         issuer_subject = []
         for subject_der in cert_map:
@@ -464,5 +474,5 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             issuer_subject.append((issuer, subject))
         return issuer_subject
 
-    def subject_name(self, subject):
+    def subject_name(self, subject: Certificate) -> OrderedDict:
         return subject.subject.native

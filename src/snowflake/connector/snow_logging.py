@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import logging
 import warnings
+from typing import Any
 
 
-def getSnowLogger(name=None, extra=None):
+def getSnowLogger(name: str | None = None, extra: Any | None = None) -> SnowLogger:
     if name:
         logger = logging.getLogger(name)
         return SnowLogger(logger, extra)

@@ -38,15 +38,15 @@ Time = datetime.time
 Timestamp = datetime.datetime
 
 
-def DateFromTicks(ticks):
+def DateFromTicks(ticks: float) -> datetime.date:
     return Date(*time.localtime(ticks)[:3])
 
 
-def TimeFromTicks(ticks):
+def TimeFromTicks(ticks: float) -> datetime.time:
     return Time(*time.localtime(ticks)[3:6])
 
 
-def TimestampFromTicks(ticks):
+def TimestampFromTicks(ticks: float) -> datetime.datetime:
     return Timestamp(*time.localtime(ticks)[:6])
 
 

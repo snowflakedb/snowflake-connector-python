@@ -14,10 +14,17 @@ import logging
 import time
 import traceback
 import uuid
+from collections import OrderedDict
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
+
+from snowflake.connector.vendored.requests.models import PreparedRequest
+from snowflake.connector.vendored.urllib3.connectionpool import (
+    HTTPConnectionPool,
+    HTTPSConnectionPool,
+)
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -237,7 +244,9 @@ def raise_failed_request_error(
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
-    def get_connection(self, url, proxies=None):
+    def get_connection(
+        self, url: str, proxies: OrderedDict | None = None
+    ) -> HTTPConnectionPool | HTTPSConnectionPool:
         proxy = select_proxy(url, proxies)
         parsed_url = urlparse(url)
 
@@ -282,7 +291,7 @@ class SnowflakeAuth(AuthBase):
         # setup any auth-related data here
         self.token = token
 
-    def __call__(self, r):
+    def __call__(self, r: PreparedRequest) -> PreparedRequest:
         """Modifies and returns the request."""
         if HEADER_AUTHORIZATION_KEY in r.headers:
             del r.headers[HEADER_AUTHORIZATION_KEY]
@@ -372,15 +381,15 @@ class SnowflakeRestful:
         _ = "dummy".encode("idna").decode("utf-8")
 
     @property
-    def token(self):
+    def token(self) -> str | None:
         return self._token if hasattr(self, "_token") else None
 
     @property
-    def master_token(self):
+    def master_token(self) -> str | None:
         return self._master_token if hasattr(self, "_master_token") else None
 
     @property
-    def master_validity_in_seconds(self):
+    def master_validity_in_seconds(self) -> int:
         return (
             self._master_validity_in_seconds
             if hasattr(self, "_master_validity_in_seconds")
@@ -647,12 +656,12 @@ class SnowflakeRestful:
 
     def _get_request(
         self,
-        url,
-        headers,
-        token=None,
-        timeout=None,
-        socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
-    ):
+        url: str,
+        headers: dict[str, str],
+        token: str = None,
+        timeout: int | None = None,
+        socket_timeout: int = DEFAULT_SOCKET_CONNECT_TIMEOUT,
+    ) -> dict[str, Any]:
         if "Content-Encoding" in headers:
             del headers["Content-Encoding"]
         if "Content-Length" in headers:
@@ -780,13 +789,13 @@ class SnowflakeRestful:
                 # backoff between 1 and 16 seconds
                 self._backoff = DecorrelateJitterBackoff(1, 16)
 
-            def next_sleep(self):
+            def next_sleep(self) -> int:
                 self.sleeping_time = self._backoff.next_sleep(
                     self.cnt, self.sleeping_time
                 )
                 return self.sleeping_time
 
-            def add_retry_params(self, full_url):
+            def add_retry_params(self, full_url: str) -> str:
                 if self._include_retry_params and self.cnt > 0:
                     suffix = urlencode(
                         {"clientStartTime": self.start_time, "retryCount": self.cnt}
@@ -808,7 +817,7 @@ class SnowflakeRestful:
                     return ret
 
     @staticmethod
-    def add_request_guid(full_url):
+    def add_request_guid(full_url: str) -> str:
         """Adds request_guid parameter for HTTP request tracing."""
         parsed_url = urlparse(full_url)
         if not parsed_url.hostname.endswith(SNOWFLAKE_HOST_SUFFIX):
@@ -1125,7 +1134,7 @@ class SnowflakeRestful:
             )
             raise err
 
-    def make_requests_session(self):
+    def make_requests_session(self) -> Session:
         s = requests.Session()
         s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))

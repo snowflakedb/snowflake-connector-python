@@ -6,9 +6,15 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 
-def set_proxies(proxy_host, proxy_port, proxy_user=None, proxy_password=None):
+def set_proxies(
+    proxy_host: str | None,
+    proxy_port: str | None,
+    proxy_user: Any | None = None,
+    proxy_password: Any | None = None,
+) -> dict[str, str] | None:
     """Sets proxy dict for requests."""
     PREFIX_HTTP = "http://"
     PREFIX_HTTPS = "https://"

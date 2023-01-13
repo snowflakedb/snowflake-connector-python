@@ -28,7 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = getLogger(__name__)
 
 
-def matdesc_to_unicode(matdesc):
+def matdesc_to_unicode(matdesc: MaterialDescriptor) -> str:
     """Convert Material Descriptor to Unicode String."""
     return str(
         json.dumps(
