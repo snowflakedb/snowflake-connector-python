@@ -831,7 +831,7 @@ class SnowflakeCursor:
         """Convenience function to execute a query without waiting for results (asynchronously).
 
         This function takes the same arguments as execute, please refer to that function
-        for documentation.
+        for documentation. Please note that PUT and GET statements are not supported by this method.
         """
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
