@@ -1064,11 +1064,11 @@ class SnowflakeConnection:
             ret["data"] = {}
         if _update_current_object:
             data = ret["data"]
-            if "finalDatabaseName" in data:
+            if "finalDatabaseName" in data and data["finalDatabaseName"] is not None:
                 self._database = data["finalDatabaseName"]
-            if "finalSchemaName" in data:
+            if "finalSchemaName" in data and data["finalSchemaName"] is not None:
                 self._schema = data["finalSchemaName"]
-            if "finalWarehouseName" in data:
+            if "finalWarehouseName" in data and data["finalWarehouseName"] is not None:
                 self._warehouse = data["finalWarehouseName"]
             if "finalRoleName" in data:
                 self._role = data["finalRoleName"]
