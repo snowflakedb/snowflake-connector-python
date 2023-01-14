@@ -536,7 +536,7 @@ class SnowflakeCursor:
         if "data" in ret and "parameters" in ret["data"]:
             parameters = ret["data"]["parameters"]
             # Set session parameters for cursor object
-            if parameters:
+            if parameters is not None:
                 for kv in parameters:
                     if "TIMESTAMP_OUTPUT_FORMAT" in kv["name"]:
                         self._timestamp_output_format = kv["value"]

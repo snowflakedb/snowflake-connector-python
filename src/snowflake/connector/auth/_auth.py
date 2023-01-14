@@ -443,7 +443,7 @@ class Auth:
                 self._rest._connection._schema = session_info.get("schemaName")
                 self._rest._connection._warehouse = session_info.get("warehouseName")
                 self._rest._connection._role = session_info.get("roleName")
-            if "parameters" in ret["data"]:
+            if "parameters" in ret["data"] and ret["data"]["parameters"] is not None:
                 session_parameters.update(
                     {p["name"]: p["value"] for p in ret["data"]["parameters"]}
                 )
