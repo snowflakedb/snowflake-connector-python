@@ -32,7 +32,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from . import errors, proxy
+from . import errors
 from ._query_context_cache import QueryContextCache
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -927,16 +927,16 @@ class SnowflakeConnection:
             use_numpy=self._numpy, support_negative_year=self._support_negative_year
         )
 
-        proxy.set_proxies(
-            self.proxy_host, self.proxy_port, self.proxy_user, self.proxy_password
-        )
-
         self._rest = SnowflakeRestful(
             host=self.host,
             port=self.port,
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
+            proxy_host=self.proxy_host,
+            proxy_port=self.proxy_port,
+            proxy_user=self.proxy_user,
+            proxy_password=self.proxy_password,
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 

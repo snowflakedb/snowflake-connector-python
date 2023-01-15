@@ -14,30 +14,18 @@ import pytest
 import snowflake.connector
 from snowflake.connector.errors import OperationalError
 
+def test_get_proxy_url():
+    from snowflake.connector.proxy import get_proxy_url
 
-def test_set_proxies():
-    from snowflake.connector.proxy import set_proxies
+    assert get_proxy_url("host", "port", "user", "password") == (
+        "http://user:password@host:port"
+    )
+    assert get_proxy_url("host", "port") == "http://host:port"
 
-    assert set_proxies("proxyhost", "8080") == {
-        "http": "http://proxyhost:8080",
-        "https": "http://proxyhost:8080",
-    }
-    assert set_proxies("http://proxyhost", "8080") == {
-        "http": "http://proxyhost:8080",
-        "https": "http://proxyhost:8080",
-    }
-    assert set_proxies("http://proxyhost", "8080", "testuser", "testpass") == {
-        "http": "http://testuser:testpass@proxyhost:8080",
-        "https": "http://testuser:testpass@proxyhost:8080",
-    }
-    assert set_proxies("proxyhost", "8080", "testuser", "testpass") == {
-        "http": "http://testuser:testpass@proxyhost:8080",
-        "https": "http://testuser:testpass@proxyhost:8080",
-    }
-
-    # NOTE environment variable is set if the proxy parameter is specified.
-    del os.environ["HTTP_PROXY"]
-    del os.environ["HTTPS_PROXY"]
+    assert get_proxy_url("http://host", "port") == "http://host:port"
+    assert get_proxy_url("https://host", "port", "user", "password") == (
+        "http://user:password@host:port"
+    )
 
 
 @pytest.mark.skipolddriver
