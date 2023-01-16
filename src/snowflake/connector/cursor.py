@@ -995,6 +995,8 @@ class SnowflakeCursor:
 
     def fetch_arrow_batches(self) -> Iterator[Table]:
         self.check_can_use_arrow_resultset()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(
@@ -1004,6 +1006,8 @@ class SnowflakeCursor:
 
     def fetch_arrow_all(self) -> Table | None:
         self.check_can_use_arrow_resultset()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)

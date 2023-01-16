@@ -982,7 +982,25 @@ def test_execute_async_and_fetch_pandas_batches(conn_cnx):
                 assert r_sync.values == r_async.values
 
 
-def test_simple_async_arrow(conn_cnx):
+def test_execute_async_and_fetch_arrow_batches(conn_cnx):
+    """Test get arrow batches in an asynchronous way"""
+
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute("select 1/2")
+            res_sync = cur.fetch_arrow_batches()
+
+            result = cur.execute_async("select 1/2")
+            cur.get_results_from_sfqid(result["queryId"])
+            res_async = cur.fetch_arrow_batches()
+
+            assert res_sync is not None
+            assert res_async is not None
+            for r_sync, r_async in zip(res_sync, res_async):
+                assert r_sync == r_async
+
+
+def test_simple_async_pandas(conn_cnx):
     """Simple test to that shows the most simple usage of fire and forget.
 
     This test also makes sure that wait_until_ready function's sleeping is tested and
@@ -993,6 +1011,17 @@ def test_simple_async_arrow(conn_cnx):
             cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             cur.get_results_from_sfqid(cur.sfqid)
             assert len(cur.fetch_pandas_all()) == 1
+            assert cur.rowcount
+            assert cur.description
+
+
+def test_simple_async_arrow(conn_cnx):
+    """Simple test for async fetch_arrow_all"""
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
+            cur.get_results_from_sfqid(cur.sfqid)
+            assert len(cur.fetch_arrow_all()) == 1
             assert cur.rowcount
             assert cur.description
 
