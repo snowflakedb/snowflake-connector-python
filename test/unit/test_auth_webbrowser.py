@@ -183,9 +183,9 @@ def test_auth_webbrowser_fail_webbrowser(
         "Initiating login request with your identity provider. A browser window "
         "should have opened for you to complete the login. If you can't see it, "
         "check existing browser windows, or your OS settings. Press CTRL+C to "
-        "abort and try again...\nWe were unable to open a browser window for "
-        "you, please open the following url manually then paste the URL you "
-        f"are redirected to into the terminal.\nURL: {REF_SSO_URL}\n"
+        f"abort and try again...\nGoing to open: {REF_SSO_URL} to authenticate...\nWe were unable to open a browser window for "
+        "you, please open the url above manually then paste the URL you "
+        "are redirected to into the terminal.\n"
     )
     if expected_error:
         assert rest._connection.errorhandler.called  # an error
@@ -237,7 +237,7 @@ def test_auth_webbrowser_fail_webserver(capsys):
         "Initiating login request with your identity provider. A browser window "
         "should have opened for you to complete the login. If you can't see it, "
         "check existing browser windows, or your OS settings. Press CTRL+C to "
-        "abort and try again...\n"
+        f"abort and try again...\nGoing to open: {REF_SSO_URL} to authenticate...\n"
     )
     assert rest._connection.errorhandler.called  # an error
     assert auth.assertion_content is None

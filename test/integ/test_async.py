@@ -245,10 +245,10 @@ def test_close_connection_with_completed_async_queries(conn_cnx):
             cur.execute_async("select 2")
             qid2 = cur.sfqid
         while con.is_still_running(
-            con._get_query_status(qid1)
+            con._get_query_status(qid1)[0]
         ):  # use _get_query_status to avoid caching
             time.sleep(1)
-        while con.is_still_running(con._get_query_status(qid2)):
+        while con.is_still_running(con._get_query_status(qid2)[0]):
             time.sleep(1)
         assert con._all_async_queries_finished()
     assert len(con._done_async_sfqids) == 2 and con.rest is None
