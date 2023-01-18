@@ -8,9 +8,16 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.9.1(unreleased)
+- v2.9.1(January 23, 2023)
 
+  - Fixed a bug where write_pandas did not use the schema and database provided to it
+  - Fixed a bug where HTTP response code of 429 were not retried
+  - Fixed a bug where MFA token caching was not working
   - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.1,<10.1.0
+  - Bumped pyOpenSSL dependency from <23.0.0 to <24.0.0
+  - We now print the SSO url before attempting to open it, just in case opening the link fails
+  - Updated the level of a log for when ArrowResult cannot be imported
+  - Added a minimum MacOS version check when compiling C-extensions
 
 - v2.9.0(December 9, 2022)
 
