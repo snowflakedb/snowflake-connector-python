@@ -115,3 +115,70 @@ def set_backend_client_session_keep_alive(
         db_parameters["account"], db_parameters["user"], str(val)
     )
     admin_cnx.cursor().execute(query)
+
+
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN,
+    reason="Snowflake admin required to setup parameter.",
+)
+def test_htap_optimizations(db_parameters: object) -> None:
+    # alter account ENABLE_SNOW_654741_FOR_TESTING=true
+    admin_cnx = snowflake.connector.connect(
+        protocol=db_parameters["sf_protocol"],
+        account=db_parameters["sf_account"],
+        user=db_parameters["sf_user"],
+        password=db_parameters["sf_password"],
+        host=db_parameters["sf_host"],
+        port=db_parameters["sf_port"],
+        warehouse=db_parameters["sf_warehouse"],
+        database=db_parameters["sf_database"],
+        schema=db_parameters["sf_schema"],
+    )
+    try:
+        query = "alter account {} set ENABLE_SNOW_654741_FOR_TESTING=true".format(
+            db_parameters["sf_account"]
+        )
+        admin_cnx.cursor().execute(query)
+
+        # assert wh, db, schema match conn params
+        assert admin_cnx._warehouse.lower() == db_parameters["sf_warehouse"].lower()
+        assert admin_cnx._database.lower() == db_parameters["sf_database"].lower()
+        assert admin_cnx._schema.lower() == db_parameters["sf_schema"].lower()
+
+        # alter session set TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FFTZH'
+        admin_cnx.cursor().execute(
+            "alter session set TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FFTZH'"
+        )
+
+        # create or replace table
+        admin_cnx.cursor().execute(
+            "create or replace table testtable1 (cola string, colb int)"
+        )
+        # insert into table 3 vals
+        admin_cnx.cursor().execute(
+            "insert into testtable1 values ('row1', 1), ('row2', 2), ('row3', 3)"
+        )
+        # select * from table
+        ret = admin_cnx.cursor().execute("select * from testtable1").fetchall()
+        # assert we get 3 results
+        assert len(ret) == 3
+
+        # assert wh, db, schema
+        assert admin_cnx._warehouse.lower() == db_parameters["sf_warehouse"].lower()
+        assert admin_cnx._database.lower() == db_parameters["sf_database"].lower()
+        assert admin_cnx._schema.lower() == db_parameters["sf_schema"].lower()
+        # assert TIMESTAMP_OUTPUT_FORMAT == 'YYYY-MM-DD HH24:MI:SS.FFTZH'
+        assert (
+            admin_cnx._session_parameters["TIMESTAMP_OUTPUT_FORMAT"]
+            == "YYYY-MM-DD HH24:MI:SS.FFTZH"
+        )
+
+        # alter session unset TIMESTAMP_OUTPUT_FORMAT
+        admin_cnx.cursor().execute("alter session unset TIMESTAMP_OUTPUT_FORMAT")
+    finally:
+        # alter account unset ENABLE_SNOW_654741_FOR_TESTING
+        query = "alter account {} unset ENABLE_SNOW_654741_FOR_TESTING".format(
+            db_parameters["sf_account"]
+        )
+        admin_cnx.cursor().execute(query)
+        admin_cnx.close()
