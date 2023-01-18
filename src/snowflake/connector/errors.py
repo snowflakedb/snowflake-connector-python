@@ -10,7 +10,7 @@ import os
 import re
 import traceback
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .compat import BASE_EXCEPTION_CLASS
 from .secret_detector import SecretDetector
@@ -117,9 +117,11 @@ class Error(BASE_EXCEPTION_CLASS):
         else:
             return None
 
-    def generate_telemetry_exception_data(self) -> dict[str, str]:
+    def generate_telemetry_exception_data(
+        self,
+    ) -> dict[str, tuple[bool, str, str] | str]:
         """Generate the data to send through telemetry."""
-        telemetry_data_dict = {
+        telemetry_data_dict: dict[str, tuple[bool, str, str] | str] = {
             TelemetryField.KEY_STACKTRACE.value: SecretDetector.mask_secrets(
                 self.telemetry_traceback
             )
@@ -139,7 +141,7 @@ class Error(BASE_EXCEPTION_CLASS):
     def send_exception_telemetry(
         self,
         connection: SnowflakeConnection | None,
-        telemetry_data: dict[str, str],
+        telemetry_data: dict[str, Any],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
 
@@ -179,9 +181,15 @@ class Error(BASE_EXCEPTION_CLASS):
         try:
             telemetry_data_dict = self.generate_telemetry_exception_data()
             if cursor is not None:
-                self.send_exception_telemetry(cursor.connection, telemetry_data_dict)
+                self.send_exception_telemetry(
+                    cursor.connection,
+                    telemetry_data_dict,
+                )
             elif connection is not None:
-                self.send_exception_telemetry(connection, telemetry_data_dict)
+                self.send_exception_telemetry(
+                    connection,
+                    telemetry_data_dict,
+                )
             else:
                 self.send_exception_telemetry(None, telemetry_data_dict)
         except Exception:
@@ -206,12 +214,16 @@ class Error(BASE_EXCEPTION_CLASS):
         Raises:
             A Snowflake error.
         """
+        errno = error_value.get("errno")
+        done_format_msg = error_value.get("done_format_msg")
         raise error_class(
             msg=error_value.get("msg"),
-            errno=error_value.get("errno"),
+            errno=None if errno is None else int(errno),
             sqlstate=error_value.get("sqlstate"),
             sfqid=error_value.get("sfqid"),
-            done_format_msg=error_value.get("done_format_msg"),
+            done_format_msg=(
+                None if done_format_msg is None else bool(done_format_msg)
+            ),
             connection=connection,
             cursor=cursor,
         )
@@ -254,7 +266,7 @@ class Error(BASE_EXCEPTION_CLASS):
         connection: SnowflakeConnection | None,
         cursor: SnowflakeCursor | None,
         error_class: type[Error] | type[Exception],
-        error_value: dict[str, str | bool | int],
+        error_value: dict[str, Any],
     ) -> None:
         """Error handler wrapper that calls the errorhandler method.
 

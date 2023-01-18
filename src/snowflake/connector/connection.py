@@ -1018,7 +1018,7 @@ class SnowflakeConnection:
         _no_results: bool = False,
         _update_current_object: bool = True,
         _no_retry: bool = False,
-    ):
+    ) -> dict[str, Any]:
         """Executes a query with a sequence counter."""
         logger.debug("_cmd_query")
         data = {

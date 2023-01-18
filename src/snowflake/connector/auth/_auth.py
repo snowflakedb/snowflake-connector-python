@@ -91,7 +91,7 @@ if not path.exists(CACHE_DIR):
 logger.debug("cache directory: %s", CACHE_DIR)
 
 # temporary credential cache
-TEMPORARY_CREDENTIAL = {}
+TEMPORARY_CREDENTIAL: dict[str, dict[str, str | None]] = {}
 
 TEMPORARY_CREDENTIAL_LOCK = Lock()
 
@@ -450,7 +450,12 @@ class Auth:
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
-    def _read_temporary_credential(self, host, user, cred_type) -> str | None:
+    def _read_temporary_credential(
+        self,
+        host: str,
+        user: str,
+        cred_type: str,
+    ) -> str | None:
         cred = None
         if IS_MACOS or IS_WINDOWS:
             if not installed_keyring:
@@ -460,7 +465,7 @@ class Auth:
                     "this please install keyring module using the following command : pip install "
                     "snowflake-connector-python[secure-local-storage]"
                 )
-                return
+                return None
             try:
                 cred = keyring.get_password(
                     build_temporary_credential_name(host, user, cred_type), user.upper()
@@ -588,7 +593,7 @@ def flush_temporary_credentials() -> None:
         unlock_temporary_credential_file()
 
 
-def write_temporary_credential_file(host, cred_name, cred) -> None:
+def write_temporary_credential_file(host: str, cred_name: str, cred) -> None:
     """Writes temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -603,7 +608,7 @@ def write_temporary_credential_file(host, cred_name, cred) -> None:
         flush_temporary_credentials()
 
 
-def read_temporary_credential_file() -> None:
+def read_temporary_credential_file():
     """Reads temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled

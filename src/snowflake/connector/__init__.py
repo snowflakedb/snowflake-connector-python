@@ -24,7 +24,6 @@ from .dbapi import (
     Binary,
     Date,
     DateFromTicks,
-    Json,
     Time,
     TimeFromTicks,
     Timestamp,
@@ -89,5 +88,4 @@ __all__ = [
     "DATETIME",
     "ROWID",
     # Extended data type (experimental)
-    "Json",
 ]

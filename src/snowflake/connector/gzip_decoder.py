@@ -9,7 +9,7 @@ import io
 import subprocess
 import zlib
 from logging import getLogger
-from typing import IO
+from typing import IO, Generator
 
 CHUNK_SIZE = 16384
 MAGIC_NUMBER = 16  # magic number from .vendored.requests/packages/urllib3/response.py
@@ -65,7 +65,9 @@ def decompress_raw_data_by_zcat(raw_data_fd: IO, add_bracket: bool = True) -> by
     return writer.getvalue()
 
 
-def decompress_raw_data_to_unicode_stream(raw_data_fd: IO) -> str:
+def decompress_raw_data_to_unicode_stream(
+    raw_data_fd: IO,
+) -> Generator[str, None, None]:
     """Decompresses a raw data in file like object and yields a Unicode string.
 
     Args:

@@ -8,8 +8,12 @@ from __future__ import annotations
 import os
 import sys
 from os import path
+from typing import TYPE_CHECKING
 
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
+
+if TYPE_CHECKING:
+    from asn1crypto.x509 import Certificate
 
 
 def main() -> None:
@@ -46,7 +50,7 @@ Usage: {}  <input file/dir>
 
 def extract_certificate_file(input_filename) -> None:
     ocsp = SnowflakeOCSPAsn1Crypto()
-    cert_map = {}
+    cert_map: dict[bytes, Certificate] = {}
     ocsp.read_cert_bundle(input_filename, cert_map)
 
     for cert in cert_map.values():

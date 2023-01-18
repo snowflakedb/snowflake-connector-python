@@ -413,9 +413,6 @@ class ConnectionDiagnostic:
             logger.warning(f"Connectivity Test Exception in https_host_report: {e}")
 
     def __get_issuer_string(self, issuer: dict[bytes, bytes]) -> str:
-        issuer: dict[str, str] = {
-            y.decode("ascii"): issuer.get(y).decode("ascii") for y in issuer.keys()
-        }
         issuer_str: str = (
             re.sub('[{}"]', "", json.dumps(issuer)).replace(": ", "=").replace(",", ";")
         )

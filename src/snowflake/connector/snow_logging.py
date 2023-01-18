@@ -9,10 +9,9 @@ import warnings
 from typing import Any
 
 
-def getSnowLogger(name: str | None = None, extra: Any | None = None) -> SnowLogger:
-    if name:
-        logger = logging.getLogger(name)
-        return SnowLogger(logger, extra)
+def getSnowLogger(name: str, *a: Any, **kw: Any) -> SnowLogger:
+    logger = logging.getLogger(name)
+    return SnowLogger(logger, *a, **kw)
 
 
 class SnowLogger(logging.LoggerAdapter):
@@ -23,16 +22,44 @@ class SnowLogger(logging.LoggerAdapter):
     used in Cython code (.pyx).
     """
 
-    def debug(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
+    def debug(  # type: ignore[override]
+        self,
+        msg: str,
+        path_name: str | None = None,
+        func_name: str | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         self.log(logging.DEBUG, msg, path_name, func_name, *args, **kwargs)
 
-    def info(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
+    def info(  # type: ignore[override]
+        self,
+        msg: str,
+        path_name: str | None = None,
+        func_name: str | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         self.log(logging.INFO, msg, path_name, func_name, *args, **kwargs)
 
-    def warning(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
+    def warning(  # type: ignore[override]
+        self,
+        msg: str,
+        path_name: str | None = None,
+        func_name: str | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         self.log(logging.WARNING, msg, path_name, func_name, *args, **kwargs)
 
-    def warn(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
+    def warn(  # type: ignore[override]
+        self,
+        msg: str,
+        path_name: str | None = None,
+        func_name: str | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         warnings.warn(
             "The 'warn' method is deprecated, " "use 'warning' instead",
             DeprecationWarning,
@@ -40,36 +67,50 @@ class SnowLogger(logging.LoggerAdapter):
         )
         self.warning(msg, path_name, func_name, *args, **kwargs)
 
-    def error(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
+    def error(  # type: ignore[override]
+        self,
+        msg: str,
+        path_name: str | None = None,
+        func_name: str | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         self.log(logging.ERROR, msg, path_name, func_name, *args, **kwargs)
 
-    def exception(
+    def exception(  # type: ignore[override]
         self,
-        msg,
-        path_name=None,
-        func_name=None,
-        *args,
+        msg: str,
+        path_name: str | None = None,
+        func_name: str | None = None,
+        *args: Any,
         exc_info: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Convenience method for logging an ERROR with exception information."""
         self.error(msg, path_name, func_name, *args, exc_info=exc_info, **kwargs)
 
-    def critical(self, msg, path_name=None, func_name=None, *args, **kwargs) -> None:
+    def critical(  # type: ignore[override]
+        self,
+        msg: str,
+        path_name: str | None = None,
+        func_name: str | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         self.log(logging.CRITICAL, msg, path_name, func_name, *args, **kwargs)
 
     fatal = critical
 
-    def log(
+    def log(  # type: ignore[override]
         self,
         level: int,
         msg: str,
         path_name: str | None = None,
         func_name: str | None = None,
         line_num: int = 0,
-        *args,
-        **kwargs,
-    ):
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         """Generalized log method of SnowLogger wrapper.
 
         Args:

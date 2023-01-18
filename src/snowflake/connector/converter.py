@@ -14,6 +14,7 @@ from datetime import timedelta, timezone, tzinfo
 from functools import partial
 from logging import getLogger
 from math import ceil
+from time import struct_time
 from typing import Any, Callable, NoReturn
 
 import pytz
@@ -253,7 +254,11 @@ class SnowflakeConverter:
             else:
                 return timezone.utc
 
-    def _pre_TIMESTAMP_LTZ_to_python(self, value, ctx) -> datetime:
+    def _pre_TIMESTAMP_LTZ_to_python(
+        self,
+        value,
+        ctx,
+    ) -> tuple[datetime, int] | tuple[struct_time, int]:
         """Converts TIMESTAMP LTZ to datetime.
 
         This takes consideration of the session parameter TIMEZONE if available. If not, tzlocal is used.
@@ -304,7 +309,7 @@ class SnowflakeConverter:
         def conv0(value: str) -> time:
             return datetime.utcfromtimestamp(float(value)).time()
 
-        def conv(value: str) -> time:
+        def conv(value: str) -> dt_t:
             microseconds = float(value[0 : -scale + 6])
             return datetime.utcfromtimestamp(microseconds).time()
 
@@ -362,7 +367,7 @@ class SnowflakeConverter:
         # milliseconds
         return _convert_date_to_epoch_milliseconds(value)
 
-    def _time_to_snowflake_bindings(self, _, value: time) -> str:
+    def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
         return _convert_time_to_epoch_nanoseconds(value)
 
@@ -544,7 +549,7 @@ class SnowflakeConverter:
             year=value.year, month=value.month, day=value.day
         )
 
-    def _time_to_snowflake(self, value: time) -> str:
+    def _time_to_snowflake(self, value: dt_t) -> str:
         if value.microsecond:
             return value.strftime("%H:%M:%S.%%06d") % value.microsecond
         return value.strftime("%H:%M:%S")
@@ -634,7 +639,7 @@ class SnowflakeConverter:
             else:
                 val = self.to_snowflake_bindings(_type, val)
         else:
-            if isinstance(value, (time, timedelta)):
+            if isinstance(value, (dt_t, timedelta)):
                 val = self.to_snowflake(value)
             else:
                 _type = self.snowflake_type(value)

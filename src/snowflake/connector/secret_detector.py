@@ -85,7 +85,7 @@ class SecretDetector(logging.Formatter):
         )
 
     @staticmethod
-    def mask_secrets(text: str) -> tuple[bool, str, str]:
+    def mask_secrets(text: str) -> tuple[bool, str, str | None]:
         """Masks any secrets. This is the method that should be used by outside classes.
 
         Args:

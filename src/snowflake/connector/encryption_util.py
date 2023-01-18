@@ -138,7 +138,7 @@ class SnowflakeEncryptionUtil:
         encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
-        tmp_dir: str = None,
+        tmp_dir: str | None = None,
     ) -> tuple[EncryptionMetadata, str]:
         """Encrypts a file in a temporary directory.
 
