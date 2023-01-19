@@ -15,7 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where MFA token caching was not working
   - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.1,<10.1.0
   - Bumped pyOpenSSL dependency from <23.0.0 to <24.0.0
-  - In browser-based authentication, we now print the SSO url before attempting to open it in the browser, just in case opening the link fails
+  - During browser-based authentication, the SSO url is now printed before opening it in the browser
   - Increased the level of a log for when ArrowResult cannot be imported
   - Added a minimum MacOS version check when compiling C-extensions
 
