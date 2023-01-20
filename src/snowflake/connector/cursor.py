@@ -534,9 +534,9 @@ class SnowflakeCursor:
                 logger.debug("cancelled timebomb in finally")
 
         if "data" in ret and "parameters" in ret["data"]:
-            parameters = ret["data"]["parameters"]
+            parameters = ret["data"].get("parameters", list())
             # Set session parameters for cursor object
-            if parameters is not None and len(parameters) > 0:
+            if parameters:
                 for kv in parameters:
                     if "TIMESTAMP_OUTPUT_FORMAT" in kv["name"]:
                         self._timestamp_output_format = kv["value"]
