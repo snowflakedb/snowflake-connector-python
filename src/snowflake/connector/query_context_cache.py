@@ -230,19 +230,22 @@ class QueryContextCache:
 
         try:
             stream = BytesIO()
+            id_vals = []
+            timestamp_vals = []
+            priority_vals = []
+            context_vals = []
+            for qce in self._treeset:
+                id_vals.append(qce.id)
+                timestamp_vals.append(qce.read_timestamp)
+                priority_vals.append(qce.priority)
+                context_vals.append(qce.context)
             with pa.ipc.RecordBatchStreamWriter(
                 stream, self.QUERY_CONTEXT_SCHEMA
             ) as writer:
-                id_array = pa.array([qce.id for qce in self._treeset], type=pa.int64())
-                timestamp_array = pa.array(
-                    [qce.read_timestamp for qce in self._treeset], type=pa.int64()
-                )
-                priority_array = pa.array(
-                    [qce.priority for qce in self._treeset], type=pa.int64()
-                )
-                context_array = pa.array(
-                    [qce.context for qce in self._treeset], type=pa.binary()
-                )
+                id_array = pa.array(id_vals, type=pa.int64())
+                timestamp_array = pa.array(timestamp_vals, type=pa.int64())
+                priority_array = pa.array(priority_vals, type=pa.int64())
+                context_array = pa.array(context_vals, type=pa.binary())
                 record_batch = pa.record_batch(
                     [id_array, timestamp_array, priority_array, context_array],
                     schema=self.QUERY_CONTEXT_SCHEMA,
