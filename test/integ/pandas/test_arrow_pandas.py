@@ -983,7 +983,7 @@ def test_execute_async_and_fetch_pandas_batches(conn_cnx):
 
 
 def test_execute_async_and_fetch_arrow_batches(conn_cnx):
-    """Test get arrow batches in an asynchronous way"""
+    """Test fetching result of an asynchronous query as batches of arrow tables"""
 
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
