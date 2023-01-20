@@ -604,6 +604,7 @@ class SnowflakeConnection:
                 )
             self.rest.close()
             self._rest = None
+            self.query_context_cache.clear_cache()
             del self.messages[:]
             logger.debug("Session is closed")
         except Exception as e:
