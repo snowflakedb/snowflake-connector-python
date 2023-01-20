@@ -28,5 +28,11 @@ def test_serialization_deserialization():
     qcc.deserialize_from_arrow_base64(data)
 
     assert qcc.get_size() == 3
-    last_qce = qcc._last()
-    assert last_qce == qce3
+    assert qcc._last() == qce3
+    qcc._remove_qce(qcc._last())
+    assert qcc._last() == qce2
+    qcc._remove_qce(qcc._last())
+    assert qcc._last() == qce1
+    qcc._remove_qce(qcc._last())
+
+    assert qcc.get_size() == 0
