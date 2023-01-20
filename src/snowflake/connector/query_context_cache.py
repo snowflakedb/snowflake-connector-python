@@ -9,6 +9,7 @@ from functools import total_ordering
 from hashlib import md5
 from io import BytesIO
 from logging import DEBUG, getLogger
+from threading import Lock
 
 import pyarrow as pa
 from sortedcontainers import SortedSet
@@ -21,6 +22,7 @@ class QueryContextElement:
     def __init__(self, id: int, read_timestamp: int, priority: int, context: bytearray):
         self._id = id
         self._read_timestamp = read_timestamp
+        # priority values are 0..N with 0 being the highest priority
         self._priority = priority
         if context is None:
             self._context = bytearray(b"")
@@ -86,13 +88,6 @@ class QueryContextElement:
 
 
 class QueryContextCache:
-    # '/////1gBAAAQAAAAAAAKAA4ABgANAAgACgAAAAAABAAQAAAAAAEKAAwAAAAIAAQACgAAAAgAAAAIAAAAAAAAAAQAAADgAAAAkAAAAFAAAAAYAAAAAAASABgAFAATABIADAAAAAgABAASAAAAFAAAABQAAAAYAAAAAAAEARQAAAAAAAAAAAAAAAQABAAEAAAABwAAAGNvbnRleHQAiv///xQAAAAUAAAAFAAAAAAAAAIYAAAAAAAAAAAAAAB4////AAAAAUAAAAAIAAAAcHJpb3JpdHkAAAAAxv///xQAAAAUAAAAFAAAAAAAAAIYAAAAAAAAAAAAAAC0////AAAAAUAAAAAJAAAAdGltZXN0YW1wABIAGAAUAAAAEwAMAAAACAAEABIAAAAUAAAAFAAAABwAAAAAAAACIAAAAAAAAAAAAAAACAAMAAgABwAIAAAAAAAAAUAAAAACAAAAaWQAAP////8oAQAAFAAAAAAAAAAMABYADgAVABAABAAMAAAAQAAAAAAAAAAAAAQAEAAAAAADCgAYAAwACAAEAAoAAAAUAAAAqAAAAAEAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAAEAAAAAAAAACAAAAAAAAAAIAAAAAAAAABAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAgAAAAAAAAAIAAAAAAAAAABAAAAAAAAACgAAAAAAAAACAAAAAAAAAAwAAAAAAAAAAEAAAAAAAAAOAAAAAAAAAAIAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAADDr4ByRgEAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/////wAAAAA='
-    # '/////ygBAAAQAAAAAAAKAAwABgAFAAgACgAAAAABBAAMAAAACAAIAAAABAAIAAAABAAAAAQAAADEAAAAfAAAAEQAAAAUAAAAEAAUAAgABgAHAAwAAAAQABAAAAAAAAEEEAAAABwAAAAEAAAAAAAAAAcAAABjb250ZXh0AAQABAAEAAAAmP///wAAAAIQAAAAHAAAAAQAAAAAAAAACAAAAHByaW9yaXR5AAAAAJD///8AAAABQAAAAMz///8AAAACEAAAABwAAAAEAAAAAAAAAAkAAAB0aW1lc3RhbXAAAADE////AAAAAUAAAAAQABQACAAAAAcADAAAABAAEAAAAAAAAAIQAAAAHAAAAAQAAAAAAAAAAgAAAGlkAAAIAAwACAAHAAgAAAAAAAABQAAAAP////8oAQAAFAAAAAAAAAAMABYABgAFAAgADAAMAAAAAAMEABgAAACIAAAAAAAAAAAACgAYAAwABAAIAAoAAACsAAAAEAAAAAMAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAYAAAAAAAAABgAAAAAAAAAMAAAAAAAAAAAAAAAAAAAADAAAAAAAAAAGAAAAAAAAABIAAAAAAAAAAAAAAAAAAAASAAAAAAAAAAQAAAAAAAAAFgAAAAAAAAALQAAAAAAAAAAAAAABAAAAAMAAAAAAAAAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAkAAAAAAAAAAQAAAAAAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAAAAAADAAAAAAAAAAQAAAAAAAAABQAAAAAAAAAAAAAAAAAAABcAAAAtAAAAc2ZjMDAxMzM0MzQzLCAxMTk5I2ZhMDBxdWVyeV9jb250ZXh0X2VsZW1lbnQyAAAA'
-    ID_POS = 0
-    TIMESTAMP_POS = 1
-    PRIORITY_POS = 2
-    CONTEXT_POS = 3
-
     QUERY_CONTEXT_SCHEMA = pa.schema(
         [
             pa.field("id", pa.int64(), nullable=False),
@@ -106,7 +101,10 @@ class QueryContextCache:
         self._capacity = capacity
         self._id_map: dict[int, QueryContextElement] = {}
         self._priority_map: dict[int, QueryContextElement] = {}
+        # stores elements sorted by priority. Element with
+        # least priority value has the highest priority
         self._treeset: set[QueryContextElement] = SortedSet()
+        self._lock = Lock()
 
     @property
     def capacity(self) -> int:
@@ -160,6 +158,7 @@ class QueryContextCache:
         )
 
         while len(self._treeset) > self.capacity:
+            # remove the qce with highest priority value => element with least priority
             qce = self._treeset[-1]
             self._remove_qce(qce)
 
@@ -180,37 +179,37 @@ class QueryContextCache:
         return self._treeset[-1]
 
     def deserialize_from_arrow_base64(self, data: str) -> None:
-        # TODO: synchronize the block
-        logger.debug(
-            f"deserialize_from_arrow_base64() called: data from server: {data}"
-        )
-        self.log_cache_entries()
+        with self._lock:
+            logger.debug(
+                f"deserialize_from_arrow_base64() called: data from server: {data}"
+            )
+            self.log_cache_entries()
 
-        if data is None or len(data) == 0:
-            self.clear_cache()
+            if data is None or len(data) == 0:
+                self.clear_cache()
+                logger.debug("deserialize_from_arrow_base64() returns")
+                self.log_cache_entries()
+                return
+
+            decoded_data = b64decode(data)
+            input = BytesIO(decoded_data)
+            try:
+                with pa.ipc.open_stream(input) as reader:
+                    for record_batch in reader:
+                        record_dict = record_batch.to_pydict()
+                        for i in range(len(record_batch)):
+                            qce = self._deserialize_entry(record_dict, i)
+                            self.merge(
+                                qce.id, qce.read_timestamp, qce.priority, qce.context
+                            )
+            except Exception as e:
+                logger.debug(f"deserialize_from_arrow_base64: Exception = {e}")
+                # clear cache due to incomplete merge
+                self.clear_cache()
+
+            self.check_cache_capacity()
             logger.debug("deserialize_from_arrow_base64() returns")
             self.log_cache_entries()
-            return
-
-        decoded_data = b64decode(data)
-        input = BytesIO(decoded_data)
-        try:
-            with pa.ipc.open_stream(input) as reader:
-                for record_batch in reader:
-                    record_dict = record_batch.to_pydict()
-                    for i in range(len(record_batch)):
-                        qce = self._deserialize_entry(record_dict, i)
-                        self.merge(
-                            qce.id, qce.read_timestamp, qce.priority, qce.context
-                        )
-        except Exception as e:
-            logger.debug(f"deserialize_from_arrow_base64: Exception = {e}")
-            # clear cache due to incomplete merge
-            self.clear_cache()
-
-        self.check_cache_capacity()
-        logger.debug("deserialize_from_arrow_base64() returns")
-        self.log_cache_entries()
 
     def _deserialize_entry(self, record_dict: dict, idx: int) -> QueryContextElement:
         id = record_dict["id"][idx]
@@ -220,48 +219,50 @@ class QueryContextCache:
         return QueryContextElement(id, read_timestamp, priority, context)
 
     def serialize_to_arrow_base64(self) -> str:
-        # TODO: synchronize the block
-        logger.debug("serialize_to_arrow_base64() called")
-        self.log_cache_entries()
+        with self._lock:
+            logger.debug("serialize_to_arrow_base64() called")
+            self.log_cache_entries()
 
-        if len(self._treeset) == 0:
-            # TODO: should this be ""
-            return None
+            if len(self._treeset) == 0:
+                # TODO: should this be ""
+                return None
 
-        try:
-            stream = BytesIO()
-            id_vals = []
-            timestamp_vals = []
-            priority_vals = []
-            context_vals = []
-            for qce in self._treeset:
-                id_vals.append(qce.id)
-                timestamp_vals.append(qce.read_timestamp)
-                priority_vals.append(qce.priority)
-                context_vals.append(qce.context)
-            with pa.ipc.RecordBatchStreamWriter(
-                stream, self.QUERY_CONTEXT_SCHEMA
-            ) as writer:
-                id_array = pa.array(id_vals, type=pa.int64())
-                timestamp_array = pa.array(timestamp_vals, type=pa.int64())
-                priority_array = pa.array(priority_vals, type=pa.int64())
-                context_array = pa.array(context_vals, type=pa.binary())
-                record_batch = pa.record_batch(
-                    [id_array, timestamp_array, priority_array, context_array],
-                    schema=self.QUERY_CONTEXT_SCHEMA,
+            try:
+                stream = BytesIO()
+                id_vals = []
+                timestamp_vals = []
+                priority_vals = []
+                context_vals = []
+                for qce in self._treeset:
+                    id_vals.append(qce.id)
+                    timestamp_vals.append(qce.read_timestamp)
+                    priority_vals.append(qce.priority)
+                    context_vals.append(qce.context)
+                with pa.ipc.RecordBatchStreamWriter(
+                    stream, self.QUERY_CONTEXT_SCHEMA
+                ) as writer:
+                    id_array = pa.array(id_vals, type=pa.int64())
+                    timestamp_array = pa.array(timestamp_vals, type=pa.int64())
+                    priority_array = pa.array(priority_vals, type=pa.int64())
+                    context_array = pa.array(context_vals, type=pa.binary())
+                    record_batch = pa.record_batch(
+                        [id_array, timestamp_array, priority_array, context_array],
+                        schema=self.QUERY_CONTEXT_SCHEMA,
+                    )
+                    writer.write_batch(record_batch)
+
+                stream.seek(0)
+                data = b64encode(stream.read())
+                stream.close()
+
+                logger.debug(
+                    f"serialize_to_arrow_base64(): data to send to server {data}"
                 )
-                writer.write_batch(record_batch)
-
-            stream.seek(0)
-            data = b64encode(stream.read())
-            stream.close()
-
-            logger.debug(f"serialize_to_arrow_base64(): data to send to server {data}")
-            return data
-        except Exception as e:
-            logger.debug(f"serialize_to_arrow_base64(): Exception {e}")
-            # TODO: should this be ""
-            return None
+                return data
+            except Exception as e:
+                logger.debug(f"serialize_to_arrow_base64(): Exception {e}")
+                # TODO: should this be ""
+                return None
 
     def log_cache_entries(self) -> None:
         if logger.level == DEBUG:
