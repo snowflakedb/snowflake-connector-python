@@ -247,13 +247,14 @@ class QueryContextCache:
                     writer.write_batch(record_batch)
 
                 stream.seek(0)
-                data = b64encode(stream.read())
+                # use same encoding use on jdbc driver
+                data = b64encode(stream.read()).decode("iso-8859-1")
                 stream.close()
 
                 logger.debug(
                     f"serialize_to_arrow_base64(): data to send to server {data}"
                 )
-                return data
+                return data.decode("utf-8")
             except Exception as e:
                 logger.debug(f"serialize_to_arrow_base64(): Exception {e}")
                 # TODO: should this be ""
