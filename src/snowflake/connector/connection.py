@@ -1579,7 +1579,7 @@ class SnowflakeConnection:
             )
         return status
 
-    def initialize_query_context_class(self) -> None:
+    def initialize_query_context_cache(self) -> None:
         self.query_context_cache = QueryContextCache(self._query_context_cache_size)
 
     def get_query_context(self) -> str:
