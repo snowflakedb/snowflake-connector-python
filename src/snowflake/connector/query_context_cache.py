@@ -198,9 +198,11 @@ class QueryContextCache:
                     for record_batch in reader:
                         record_dict = record_batch.to_pydict()
                         for i in range(len(record_batch)):
-                            qce = self._deserialize_entry(record_dict, i)
                             self.merge(
-                                qce.id, qce.read_timestamp, qce.priority, qce.context
+                                record_dict["id"][i],
+                                record_dict["timestamp"][i],
+                                record_dict["priority"][i],
+                                record_dict["context"][i],
                             )
             except Exception as e:
                 logger.debug(f"deserialize_from_arrow_base64: Exception = {e}")
@@ -210,13 +212,6 @@ class QueryContextCache:
             self.check_cache_capacity()
             logger.debug("deserialize_from_arrow_base64() returns")
             self.log_cache_entries()
-
-    def _deserialize_entry(self, record_dict: dict, idx: int) -> QueryContextElement:
-        id = record_dict["id"][idx]
-        read_timestamp = record_dict["timestamp"][idx]
-        priority = record_dict["priority"][idx]
-        context = record_dict["context"][idx]
-        return QueryContextElement(id, read_timestamp, priority, context)
 
     def serialize_to_arrow_base64(self) -> str:
         with self._lock:
