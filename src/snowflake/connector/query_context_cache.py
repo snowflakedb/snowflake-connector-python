@@ -224,15 +224,13 @@ class QueryContextCache:
 
             try:
                 stream = BytesIO()
-                id_vals = []
-                timestamp_vals = []
-                priority_vals = []
-                context_vals = []
-                for qce in self._treeset:
-                    id_vals.append(qce.id)
-                    timestamp_vals.append(qce.read_timestamp)
-                    priority_vals.append(qce.priority)
-                    context_vals.append(qce.context)
+                size = self.get_size()
+                id_vals = [None] * size
+                timestamp_vals = [None] * size
+                priority_vals = [None] * size
+                context_vals = [None] * size
+                self.get_elements(id_vals, timestamp_vals, priority_vals, context_vals)
+
                 with pa.ipc.RecordBatchStreamWriter(
                     stream, self.QUERY_CONTEXT_SCHEMA
                 ) as writer:
@@ -254,7 +252,7 @@ class QueryContextCache:
                 logger.debug(
                     f"serialize_to_arrow_base64(): data to send to server {data}"
                 )
-                return data.decode("utf-8")
+                return data
             except Exception as e:
                 logger.debug(f"serialize_to_arrow_base64(): Exception {e}")
                 # TODO: should this be ""
@@ -269,3 +267,10 @@ class QueryContextCache:
 
     def get_size(self) -> int:
         return len(self._treeset)
+
+    def get_elements(self, ids, timestamps, priorities, contexts) -> None:
+        for idx, qce in enumerate(self._treeset):
+            ids[idx] = qce.id
+            timestamps[idx] = qce.read_timestamp
+            priorities[idx] = qce.priority
+            contexts[idx] = qce.context
