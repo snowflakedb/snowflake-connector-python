@@ -11,8 +11,9 @@ from io import BytesIO
 from logging import DEBUG, getLogger
 from threading import Lock
 
-import pyarrow as pa
 from sortedcontainers import SortedSet
+
+from .options import pyarrow as pa
 
 logger = getLogger(__name__)
 
