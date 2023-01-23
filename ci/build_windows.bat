@@ -22,6 +22,12 @@ if %errorlevel% neq 0 goto :error
 python -m pip install --upgrade pip setuptools wheel
 if %errorlevel% neq 0 goto :error
 
+pip install --upgrade --user awscli
+if %errorlevel% neq 0 goto :error
+
+pip install awscli
+if %errorlevel% neq 0 goto :error
+
 (for %%v in (%python_versions%) do (
    call :build_wheel_file %%v || goto :error
 ))
