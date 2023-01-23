@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v2.9.2(unreleased)
+
+  - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
+
 - v2.9.1(unreleased)
 
   - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.1,<10.1.0
