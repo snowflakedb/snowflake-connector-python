@@ -13,9 +13,23 @@ from threading import Lock
 
 from sortedcontainers import SortedSet
 
+from .options import installed_pandas
 from .options import pyarrow as pa
 
 logger = getLogger(__name__)
+
+
+if installed_pandas:
+    QUERY_CONTEXT_SCHEMA = pa.schema(
+        [
+            pa.field("id", pa.int64(), nullable=False),
+            pa.field("timestamp", pa.int64(), nullable=False),
+            pa.field("priority", pa.int64(), nullable=False),
+            pa.field("context", pa.binary(), nullable=True),
+        ]
+    )
+else:
+    QUERY_CONTEXT_SCHEMA = None
 
 
 @total_ordering
@@ -85,23 +99,15 @@ class QueryContextElement:
 
 
 class QueryContextCache:
-    QUERY_CONTEXT_SCHEMA = pa.schema(
-        [
-            pa.field("id", pa.int64(), nullable=False),
-            pa.field("timestamp", pa.int64(), nullable=False),
-            pa.field("priority", pa.int64(), nullable=False),
-            pa.field("context", pa.binary(), nullable=True),
-        ]
-    )
-
     def __init__(self, capacity: int):
         self._capacity = capacity
         self._id_map: dict[int, QueryContextElement] = {}
         self._priority_map: dict[int, QueryContextElement] = {}
         # stores elements sorted by priority. Element with
         # least priority value has the highest priority
-        self._treeset: set[QueryContextElement] = SortedSet()
+        self._tree_set: set[QueryContextElement] = SortedSet()
         self._lock = Lock()
+        self._data: str = None
 
     @property
     def capacity(self) -> int:
@@ -110,12 +116,12 @@ class QueryContextCache:
     def _add_qce(self, qce: QueryContextElement) -> None:
         self._id_map[qce.id] = qce
         self._priority_map[qce.priority] = qce
-        self._treeset.add(qce)
+        self._tree_set.add(qce)
 
     def _remove_qce(self, qce: QueryContextElement) -> None:
         self._id_map.pop(qce.id)
         self._priority_map.pop(qce.priority)
-        self._treeset.remove(qce)
+        self._tree_set.remove(qce)
 
     def _replace_qce(
         self, old_qce: QueryContextElement, new_qce: QueryContextElement
@@ -151,31 +157,35 @@ class QueryContextCache:
 
     def check_cache_capacity(self) -> None:
         logger.debug(
-            f"check_cache_capacity() called. treeSet size is {len(self._treeset)} and cache capacity is {self.capacity}"
+            f"check_cache_capacity() called. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
         )
 
-        while len(self._treeset) > self.capacity:
+        while len(self._tree_set) > self.capacity:
             # remove the qce with highest priority value => element with least priority
-            qce = self._treeset[-1]
+            qce = self._tree_set[-1]
             self._remove_qce(qce)
 
         logger.debug(
-            f"check_cache_capacity() returns. treeSet size is {len(self._treeset)} and cache capacity is {self.capacity}"
+            f"check_cache_capacity() returns. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
         )
 
     def clear_cache(self) -> None:
         logger.debug("clear_cache() called")
         self._id_map.clear()
         self._priority_map.clear()
-        self._treeset.clear()
+        self._tree_set.clear()
 
     def _get_elements(self) -> set[QueryContextElement]:
-        return self._treeset
+        return self._tree_set
 
     def _last(self) -> QueryContextElement:
-        return self._treeset[-1]
+        return self._tree_set[-1]
 
     def deserialize_from_arrow_base64(self, data: str) -> None:
+        if not installed_pandas:
+            self._data = data
+            return
+
         with self._lock:
             logger.debug(
                 f"deserialize_from_arrow_base64() called: data from server: {data}"
@@ -211,11 +221,14 @@ class QueryContextCache:
             self.log_cache_entries()
 
     def serialize_to_arrow_base64(self) -> str:
+        if not installed_pandas:
+            return self._data
+
         with self._lock:
             logger.debug("serialize_to_arrow_base64() called")
             self.log_cache_entries()
 
-            if len(self._treeset) == 0:
+            if len(self._tree_set) == 0:
                 return None
 
             try:
@@ -228,7 +241,7 @@ class QueryContextCache:
                 self.get_elements(id_vals, timestamp_vals, priority_vals, context_vals)
 
                 with pa.ipc.RecordBatchStreamWriter(
-                    stream, self.QUERY_CONTEXT_SCHEMA
+                    stream, QUERY_CONTEXT_SCHEMA
                 ) as writer:
                     id_array = pa.array(id_vals, type=pa.int64())
                     timestamp_array = pa.array(timestamp_vals, type=pa.int64())
@@ -236,7 +249,7 @@ class QueryContextCache:
                     context_array = pa.array(context_vals, type=pa.binary())
                     record_batch = pa.record_batch(
                         [id_array, timestamp_array, priority_array, context_array],
-                        schema=self.QUERY_CONTEXT_SCHEMA,
+                        schema=QUERY_CONTEXT_SCHEMA,
                     )
                     writer.write_batch(record_batch)
 
@@ -255,16 +268,16 @@ class QueryContextCache:
 
     def log_cache_entries(self) -> None:
         if logger.level == DEBUG:
-            for qce in self._treeset:
+            for qce in self._tree_set:
                 logger.debug(
                     f"Cache Entry: id: {qce.id}, read_timestamp: {qce.read_timestamp}, priority: {qce.priority}"
                 )
 
     def get_size(self) -> int:
-        return len(self._treeset)
+        return len(self._tree_set)
 
     def get_elements(self, ids, timestamps, priorities, contexts) -> None:
-        for idx, qce in enumerate(self._treeset):
+        for idx, qce in enumerate(self._tree_set):
             ids[idx] = qce.id
             timestamps[idx] = qce.read_timestamp
             priorities[idx] = qce.priority
