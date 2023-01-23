@@ -24,10 +24,7 @@ class QueryContextElement:
         self._read_timestamp = read_timestamp
         # priority values are 0..N with 0 being the highest priority
         self._priority = priority
-        if context is None:
-            self._context = bytearray(b"")
-        else:
-            self._context = context
+        self._context = context
 
     @property
     def id(self) -> int:
@@ -51,10 +48,7 @@ class QueryContextElement:
 
     @context.setter
     def context(self, ctx: bytearray) -> None:
-        if ctx is None:
-            self._context = bytearray(b"")
-        else:
-            self._context = ctx
+        self._context = ctx
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, QueryContextElement):
@@ -80,7 +74,10 @@ class QueryContextElement:
         _hash = _hash * 31 + self._id
         _hash += (_hash * 31) + self._read_timestamp
         _hash += (_hash * 31) + self._priority
-        _hash += (_hash * 31) + int.from_bytes(md5(self._context).digest(), "big")
+        if self._context:
+            _hash += (_hash * 31) + int.from_bytes(md5(self._context).digest(), "big")
+        else:
+            _hash += _hash * 31
         return _hash
 
     def __str__(self) -> str:
