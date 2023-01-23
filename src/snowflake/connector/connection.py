@@ -22,8 +22,6 @@ from threading import Lock
 from time import strptime
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 
-from snowflake.connector.query_context_cache import QueryContextCache
-
 from . import errors, proxy
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -90,6 +88,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .query_context_cache import QueryContextCache
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService

@@ -53,7 +53,6 @@ class QueryContextElement:
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, QueryContextElement):
-            # TODO:
             return False
         return (
             self._id == other.id
@@ -217,7 +216,6 @@ class QueryContextCache:
             self.log_cache_entries()
 
             if len(self._treeset) == 0:
-                # TODO: should this be ""
                 return None
 
             try:
@@ -253,7 +251,6 @@ class QueryContextCache:
                 return data
             except Exception as e:
                 logger.debug(f"serialize_to_arrow_base64(): Exception {e}")
-                # TODO: should this be ""
                 return None
 
     def log_cache_entries(self) -> None:
