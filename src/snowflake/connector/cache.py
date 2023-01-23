@@ -58,8 +58,6 @@ class SFDictCache(Generic[K, V]):
         self._cache: dict[K, CacheEntry[V]] = {}
         self._lock = Lock()
         self._reset_telemetry()
-        # aliasing _getitem to unify the api with SFDictFileCache
-        self._getitem_non_locking = self._getitem
 
     def __len__(self) -> int:
         with self._lock:
@@ -102,6 +100,15 @@ class SFDictCache(Generic[K, V]):
         if should_record_hits:
             self._hit(k)
         return v
+
+    def _getitem_non_locking(
+        self,
+        k: K,
+        *,
+        should_record_hits: bool = True,
+    ) -> V:
+        # aliasing _getitem to unify the api with SFDictFileCache
+        return self._getitem(k, should_record_hits=should_record_hits)
 
     def _setitem(self, k: K, v: V) -> None:
         """Non-locking version of __setitem__.
@@ -339,6 +346,15 @@ class SFDictFileCache(SFDictCache):
 
     # This number decides the chance of saving after writing (probability: 1/n+1)
     MAX_RAND_INT = 9
+    _ATTRIBUTES_TO_PICKLE = [
+        "_entry_lifetime",
+        "_cache",
+        "telemetry",
+        "file_path",
+        "file_timeout",
+        "_file_lock_path",
+        "last_loaded",
+    ]
 
     def __init__(
         self,
@@ -491,7 +507,8 @@ class SFDictFileCache(SFDictCache):
             )
             self.last_loaded = now()
             return True
-        except OSError:
+        except Exception as e:
+            logger.debug("Fail to read cache from disk due to error: %s", e)
             return False
 
     def _save(self, load_first: bool = True) -> bool:
@@ -528,6 +545,8 @@ class SFDictFileCache(SFDictCache):
             logger.debug(
                 f"acquiring {self._file_lock_path} timed out, skipping saving..."
             )
+        except Exception as e:
+            logger.debug("Fail to write cache to disk due to error: %s", e)
         return False
 
     def _save_if_should(self) -> bool:
@@ -595,8 +614,9 @@ class SFDictFileCache(SFDictCache):
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
-        del state["_lock"]
-        del state["_file_lock"]
+        for k in list(state.keys()):
+            if k not in SFDictFileCache._ATTRIBUTES_TO_PICKLE:
+                del state[k]
         return state
 
     def __setstate__(self, state: dict) -> None:
