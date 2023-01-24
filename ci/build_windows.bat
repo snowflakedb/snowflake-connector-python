@@ -19,10 +19,7 @@ if %errorlevel% neq 0 goto :error
 call %venv_dir%\scripts\activate
 if %errorlevel% neq 0 goto :error
 
-python -m pip install --upgrade pip setuptools wheel
-if %errorlevel% neq 0 goto :error
-
-pip install --upgrade --user awscli
+python -m pip install --upgrade pip awscli setuptools wheel
 if %errorlevel% neq 0 goto :error
 
 (for %%v in (%python_versions%) do (
