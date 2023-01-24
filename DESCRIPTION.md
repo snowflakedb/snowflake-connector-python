@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.9.1(January 23, 2023)
+- v3.0.0(January 26, 2023)
 
   - Fixed a bug where write_pandas did not use user-specified schema and database to create intermediate objects
   - Fixed a bug where HTTP response code of 429 were not retried
