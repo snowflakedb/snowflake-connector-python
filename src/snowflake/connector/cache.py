@@ -613,11 +613,11 @@ class SFDictFileCache(SFDictCache):
     # Custom pickling implementation
 
     def __getstate__(self) -> dict:
-        state = self.__dict__.copy()
-        for k in list(state.keys()):
-            if k not in SFDictFileCache._ATTRIBUTES_TO_PICKLE:
-                del state[k]
-        return state
+        return {
+            k: v
+            for k, v in self.__dict__.items()
+            if k in SFDictFileCache._ATTRIBUTES_TO_PICKLE
+        }
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
