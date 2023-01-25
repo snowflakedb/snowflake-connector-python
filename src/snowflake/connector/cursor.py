@@ -534,29 +534,30 @@ class SnowflakeCursor:
                 logger.debug("cancelled timebomb in finally")
 
         if "data" in ret and "parameters" in ret["data"]:
-            parameters = ret["data"]["parameters"]
+            parameters = ret["data"].get("parameters", list())
             # Set session parameters for cursor object
-            for kv in parameters:
-                if "TIMESTAMP_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_output_format = kv["value"]
-                if "TIMESTAMP_NTZ_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_ntz_output_format = kv["value"]
-                if "TIMESTAMP_LTZ_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_ltz_output_format = kv["value"]
-                if "TIMESTAMP_TZ_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_tz_output_format = kv["value"]
-                if "DATE_OUTPUT_FORMAT" in kv["name"]:
-                    self._date_output_format = kv["value"]
-                if "TIME_OUTPUT_FORMAT" in kv["name"]:
-                    self._time_output_format = kv["value"]
-                if "TIMEZONE" in kv["name"]:
-                    self._timezone = kv["value"]
-                if "BINARY_OUTPUT_FORMAT" in kv["name"]:
-                    self._binary_output_format = kv["value"]
-            # Set session parameters for connection object
-            self._connection._update_parameters(
-                {p["name"]: p["value"] for p in parameters}
-            )
+            if parameters:
+                for kv in parameters:
+                    if "TIMESTAMP_OUTPUT_FORMAT" in kv["name"]:
+                        self._timestamp_output_format = kv["value"]
+                    if "TIMESTAMP_NTZ_OUTPUT_FORMAT" in kv["name"]:
+                        self._timestamp_ntz_output_format = kv["value"]
+                    if "TIMESTAMP_LTZ_OUTPUT_FORMAT" in kv["name"]:
+                        self._timestamp_ltz_output_format = kv["value"]
+                    if "TIMESTAMP_TZ_OUTPUT_FORMAT" in kv["name"]:
+                        self._timestamp_tz_output_format = kv["value"]
+                    if "DATE_OUTPUT_FORMAT" in kv["name"]:
+                        self._date_output_format = kv["value"]
+                    if "TIME_OUTPUT_FORMAT" in kv["name"]:
+                        self._time_output_format = kv["value"]
+                    if "TIMEZONE" in kv["name"]:
+                        self._timezone = kv["value"]
+                    if "BINARY_OUTPUT_FORMAT" in kv["name"]:
+                        self._binary_output_format = kv["value"]
+                # Set session parameters for connection object
+                self._connection._update_parameters(
+                    {p["name"]: p["value"] for p in parameters}
+                )
 
         self.query = query
         self._sequence_counter = -1

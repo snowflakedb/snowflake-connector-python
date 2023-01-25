@@ -1103,7 +1103,10 @@ def test_values_set(conn):
         with cnx.cursor() as cur:
             for property in properties:
                 assert getattr(cur, property) is None
-            assert cur.execute("select 1").fetchone() == (1,)
+            # use a statement that alters session parameters due to HTAP optimization
+            assert cur.execute(
+                "alter session set TIMEZONE='America/Los_Angeles'"
+            ).fetchone() == ("Statement executed successfully.",)
             # The default values might change in future, so let's just check that they aren't None anymore
             for property in properties:
                 assert getattr(cur, property) is not None
