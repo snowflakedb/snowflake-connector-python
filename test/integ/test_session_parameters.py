@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from test.integ.conftest import TEST_SCHEMA
+from .conftest import TEST_SCHEMA
 
 import pytest
 
