@@ -6,7 +6,7 @@
 SET SCRIPT_DIR=%~dp0
 SET CONNECTOR_DIR=%~dp0\..\
 
-set python_versions= 3.7 3.8 3.9 3.10
+set python_versions= 3.7 3.8 3.9 3.10 3.11
 
 cd %CONNECTOR_DIR%
 
@@ -19,7 +19,7 @@ if %errorlevel% neq 0 goto :error
 call %venv_dir%\scripts\activate
 if %errorlevel% neq 0 goto :error
 
-python -m pip install --upgrade pip setuptools wheel
+python -m pip install --upgrade pip awscli setuptools wheel
 if %errorlevel% neq 0 goto :error
 
 (for %%v in (%python_versions%) do (

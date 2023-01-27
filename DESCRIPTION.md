@@ -8,13 +8,21 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.9.2(unreleased)
+- v3.0.1(unreleased)
 
   - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
 
-- v2.9.1(unreleased)
+- v3.0.0(January 26, 2023)
 
+  - Fixed a bug where write_pandas did not use user-specified schema and database to create intermediate objects
+  - Fixed a bug where HTTP response code of 429 were not retried
+  - Fixed a bug where MFA token caching was not working
   - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.1,<10.1.0
+  - Bumped pyOpenSSL dependency from <23.0.0 to <24.0.0
+  - During browser-based authentication, the SSO url is now printed before opening it in the browser
+  - Increased the level of a log for when ArrowResult cannot be imported
+  - Added a minimum MacOS version check when compiling C-extensions
+  - Enabled `fetch_arrow_all` and `fetch_arrow_batches` to handle async query results
 
 - v2.9.0(December 9, 2022)
 
