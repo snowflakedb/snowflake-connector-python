@@ -204,6 +204,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Whether to log imported packages in telemetry
+    "disable_query_context_cache": (
+        False,
+        bool,
+    ),  # Disable query context cache
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -543,6 +547,10 @@ class SnowflakeConnection:
     def query_context_cache_size(self, size: int) -> None:
         self._query_context_cache_size = size
 
+    @property
+    def is_query_context_cache_disabled(self) -> bool:
+        return self._disable_query_context_cache
+
     def connect(self, **kwargs):
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -603,7 +611,8 @@ class SnowflakeConnection:
                 )
             self.rest.close()
             self._rest = None
-            self.query_context_cache.clear_cache()
+            if self.query_context_cache:
+                self.query_context_cache.clear_cache()
             del self.messages[:]
             logger.debug("Session is closed")
         except Exception as e:
@@ -1579,13 +1588,17 @@ class SnowflakeConnection:
         return status
 
     def initialize_query_context_cache(self) -> None:
-        self.query_context_cache = QueryContextCache(self._query_context_cache_size)
+        if not self.is_query_context_cache_disabled:
+            self.query_context_cache = QueryContextCache(self._query_context_cache_size)
 
     def get_query_context(self) -> str:
-        return self.query_context_cache.serialize_to_arrow_base64()
+        if not self.is_query_context_cache_disabled:
+            return self.query_context_cache.serialize_to_arrow_base64()
+        return None
 
     def set_query_context(self, data) -> None:
-        self.query_context_cache.deserialize_from_arrow_base64(data)
+        if not self.is_query_context_cache_disabled:
+            self.query_context_cache.deserialize_from_arrow_base64(data)
 
     @staticmethod
     def is_still_running(status: QueryStatus) -> bool:

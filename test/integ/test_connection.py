@@ -1192,3 +1192,12 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry, db_paramete
     ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
         conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) == 0
+
+
+def test_disable_query_context_cache(conn_cnx) -> None:
+    with conn_cnx(disable_query_context_cache=True) as conn:
+        # check that connector function correctly when query context
+        # cache is disabled
+        ret = conn.cursor().execute("select 1").fetchone()
+        assert ret == (1,)
+        assert conn.query_context_cache is None
