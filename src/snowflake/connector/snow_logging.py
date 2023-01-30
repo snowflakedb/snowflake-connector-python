@@ -6,12 +6,16 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections.abc import Mapping
 from typing import Any
 
 
-def getSnowLogger(name: str, *a: Any, **kw: Any) -> SnowLogger:
+def getSnowLogger(
+    name: str,
+    extra: Mapping[str, object] | None = None,
+) -> SnowLogger:
     logger = logging.getLogger(name)
-    return SnowLogger(logger, *a, **kw)
+    return SnowLogger(logger, extra)  # type:ignore[arg-type]
 
 
 class SnowLogger(logging.LoggerAdapter):
