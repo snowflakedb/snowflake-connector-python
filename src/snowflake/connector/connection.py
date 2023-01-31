@@ -50,6 +50,7 @@ from .constants import (
     PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
+    PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
     OCSPMode,
@@ -87,6 +88,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .query_context_cache import QueryContextCache
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
@@ -202,6 +204,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Whether to log imported packages in telemetry
+    "disable_query_context_cache": (
+        False,
+        bool,
+    ),  # Disable query context cache
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -298,6 +304,8 @@ class SnowflakeConnection:
                 kwargs["application"] = "streamlit"
 
         self.converter = None
+        self.query_context_cache: QueryContextCache = None
+        self._query_context_cache_size = 5
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
@@ -531,6 +539,18 @@ class SnowflakeConnection:
         else:
             raise TypeError("auth_class must subclass AuthByPlugin")
 
+    @property
+    def query_context_cache_size(self) -> int:
+        return self._query_context_cache_size
+
+    @query_context_cache_size.setter
+    def query_context_cache_size(self, size: int) -> None:
+        self._query_context_cache_size = size
+
+    @property
+    def is_query_context_cache_disabled(self) -> bool:
+        return self._disable_query_context_cache
+
     def connect(self, **kwargs):
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -591,6 +611,8 @@ class SnowflakeConnection:
                 )
             self.rest.close()
             self._rest = None
+            if self.query_context_cache:
+                self.query_context_cache.clear_cache()
             del self.messages[:]
             logger.debug("Session is closed")
         except Exception as e:
@@ -830,6 +852,8 @@ class SnowflakeConnection:
         self._password = None  # ensure password won't persist
         self.auth_class.reset_secrets()
 
+        self.initialize_query_context_cache()
+
         if self.client_session_keep_alive:
             # This will be called after the heartbeat frequency has actually been set.
             # By this point it should have been decided if the heartbeat has to be enabled
@@ -1036,6 +1060,9 @@ class SnowflakeConnection:
         if binding_params is not None:
             # binding parameters. This is for qmarks paramstyle.
             data["bindings"] = binding_params
+        if not _no_results:
+            # not an async query
+            data["queryContext"] = self.get_query_context()
 
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
@@ -1072,6 +1099,8 @@ class SnowflakeConnection:
                 self._warehouse = data["finalWarehouseName"]
             if "finalRoleName" in data:
                 self._role = data["finalRoleName"]
+            if "queryContext" in data and not _no_results:
+                self.set_query_context(data["queryContext"])
 
         return ret
 
@@ -1439,6 +1468,8 @@ class SnowflakeConnection:
                 self.client_prefetch_threads = value
             elif PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 == name:
                 self.enable_stage_s3_privatelink_for_us_east_1 = value
+            elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
+                self.query_context_cache_size = value
 
     def _format_query_for_log(self, query):
         ret = " ".join(line.strip() for line in query.split("\n"))
@@ -1555,6 +1586,19 @@ class SnowflakeConnection:
                 },
             )
         return status
+
+    def initialize_query_context_cache(self) -> None:
+        if not self.is_query_context_cache_disabled:
+            self.query_context_cache = QueryContextCache(self._query_context_cache_size)
+
+    def get_query_context(self) -> str:
+        if not self.is_query_context_cache_disabled:
+            return self.query_context_cache.serialize_to_arrow_base64()
+        return None
+
+    def set_query_context(self, data) -> None:
+        if not self.is_query_context_cache_disabled:
+            self.query_context_cache.deserialize_from_arrow_base64(data)
 
     @staticmethod
     def is_still_running(status: QueryStatus) -> bool:
