@@ -204,8 +204,6 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 t = ZERO_EPOCH + timedelta(seconds=(microseconds))
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
-        from datetime import time as time
-
         return conv
 
     _TIME_to_python = _TIMESTAMP_NTZ_to_python

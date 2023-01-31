@@ -10,7 +10,7 @@ import decimal
 import time
 from datetime import date, datetime
 from datetime import time as dt_t
-from datetime import timedelta, timezone, tzinfo
+from datetime import timedelta, tzinfo
 from functools import partial
 from logging import getLogger
 from math import ceil
@@ -252,7 +252,7 @@ class SnowflakeConverter:
             if tzlocal is not None:
                 return tzlocal.get_localzone()
             else:
-                return timezone.utc
+                return datetime.timezone.utc
 
     def _pre_TIMESTAMP_LTZ_to_python(
         self,
