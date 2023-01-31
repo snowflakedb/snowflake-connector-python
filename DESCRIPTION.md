@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.0.1(unreleased)
+
+  - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
+
 - v3.0.0(January 26, 2023)
 
   - Fixed a bug where write_pandas did not use user-specified schema and database to create intermediate objects
