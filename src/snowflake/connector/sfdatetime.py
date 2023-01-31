@@ -83,11 +83,14 @@ def _support_negative_year_date(value, year_len):
     return _build_year_format(value, year_len)
 
 
-def _inject_fraction(value: SnowflakeDateTime, fraction_len: int) -> str:
+def _inject_fraction(value: SnowflakeDateTime | datetime, fraction_len: int) -> str:
     # if FF is included
     nano_str = "{:09d}"
 
-    if hasattr(value, "nanosecond"):
+    if hasattr(value, "microsecond"):
+        nano_str = "{:06d}"
+        fraction = value.microsecond
+    elif hasattr(value, "nanosecond"):
         fraction = value.nanosecond
     else:
         nano_str = "{:01d}"
