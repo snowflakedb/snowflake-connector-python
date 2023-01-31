@@ -76,7 +76,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeProgressPercentage
     from .result_batch import ResultBatch
 
-T = TypeVar("T")
+T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 
