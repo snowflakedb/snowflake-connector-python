@@ -346,7 +346,7 @@ class SFDictFileCache(SFDictCache):
 
     # This number decides the chance of saving after writing (probability: 1/n+1)
     MAX_RAND_INT = 9
-    _ATTRIBUTES_TO_PICKLE = [
+    _ATTRIBUTES_TO_PICKLE = (
         "_entry_lifetime",
         "_cache",
         "telemetry",
@@ -354,7 +354,7 @@ class SFDictFileCache(SFDictCache):
         "file_timeout",
         "_file_lock_path",
         "last_loaded",
-    ]
+    )
 
     def __init__(
         self,
