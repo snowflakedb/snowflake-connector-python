@@ -344,8 +344,8 @@ class SFDictCache(Generic[K, V]):
 
 class SFDictFileCache(SFDictCache):
 
-    # This number decides the chance of saving after writing (probability: 1/n+1)
-    MAX_RAND_INT = 9
+    # This number decides the chance of saving after writing (probability: 1/(MAX_RAND_INT/2**cache_not_saved_times))
+    MAX_RAND_INT = 16
     _ATTRIBUTES_TO_PICKLE = (
         "_entry_lifetime",
         "_cache",
@@ -420,6 +420,8 @@ class SFDictFileCache(SFDictCache):
         self.last_loaded: datetime.datetime | None = None
         if os.path.exists(self.file_path):
             self._load()
+        self._cache_entry_updated = False
+        self._cache_not_saved_times = 0
 
     def _getitem_non_locking(
         self,
@@ -494,6 +496,7 @@ class SFDictFileCache(SFDictCache):
 
     def _setitem(self, k: K, v: V) -> None:
         super()._setitem(k, v)
+        self._cache_entry_updated = True
         self._save_if_should()
 
     def _load(self) -> bool:
@@ -539,6 +542,7 @@ class SFDictFileCache(SFDictCache):
                         _dir,
                     )
                 finally:
+                    self._cache_entry_updated = False
                     if os.path.exists(tmp_file_path) and os.path.isfile(tmp_file_path):
                         os.unlink(tmp_file_path)
         except Timeout:
@@ -573,7 +577,14 @@ class SFDictFileCache(SFDictCache):
         This is a simple random number generator to randomize writes across processes
         that are possibly saving the same values in this cache.
         """
-        return random.randint(0, self.MAX_RAND_INT) == 0
+        denominator = int(
+            SFDictFileCache.MAX_RAND_INT / (2**self._cache_not_saved_times)
+        )
+        should_save = bool(int(random.randint(0, denominator)) == 0)
+        self._cache_not_saved_times = (
+            0 if should_save else (self._cache_not_saved_times + 1)
+        )
+        return should_save
 
     def _should_load(self) -> bool:
         """Decide whether we should load.
@@ -593,14 +604,17 @@ class SFDictFileCache(SFDictCache):
 
     def __del__(self) -> None:
         try:
-            self._save()
+            with self._lock:
+                if self._cache_entry_updated:
+                    self._save()
         except Exception:
             # At tear-down time builtins module might be already gone, ignore every error
             pass
 
     def clear_expired_entries(self) -> None:
         super().clear_expired_entries()
-        self._save_if_should()
+        with self._lock:
+            self._save_if_should()
 
     def clear(self) -> None:
         super().clear()
@@ -623,3 +637,5 @@ class SFDictFileCache(SFDictCache):
         self.__dict__.update(state)
         self._lock = Lock()
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
+        self._cache_entry_updated = False
+        self._cache_not_saved_times = 0
