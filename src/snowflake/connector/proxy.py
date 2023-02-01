@@ -12,8 +12,8 @@ from typing import Any
 def set_proxies(
     proxy_host: str | None,
     proxy_port: str | None,
-    proxy_user: Any | None = None,
-    proxy_password: Any | None = None,
+    proxy_user: str | None = None,
+    proxy_password: str | None = None,
 ) -> dict[str, str] | None:
     """Sets proxy dict for requests."""
     PREFIX_HTTP = "http://"
