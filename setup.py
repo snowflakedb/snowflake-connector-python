@@ -61,6 +61,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 name="snowflake.connector.arrow_iterator",
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
             ),
+            Extension(
+                name="snowflake.connector.json",
+                sources=[os.path.join(CONNECTOR_SRC_DIR, "cpp", "json.cpp")],
+            ),
         ],
         compile_time_env=dict(ARROW_LESS_THAN_8=pyarrow_version < (8,)),
     )

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import binascii
 import decimal
+import json
 import time
 from datetime import date, datetime
 from datetime import time as dt_t
@@ -21,6 +22,7 @@ import pytz
 from .compat import IS_BINARY, IS_NUMERIC
 from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
+from .json_decoder import SnowflakeJSONDecoder
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
@@ -308,12 +310,17 @@ class SnowflakeConverter:
 
         return conv if scale > 6 else conv0
 
-    def _VARIANT_to_python(self, _):
-        return None  # skip conv
+    def _VARIANT_to_python(self, _) -> Callable[[str], Any]:
+        """Use a custom json decoder (accepts undefined) to load row value"""
+        return partial(json.loads, cls=SnowflakeJSONDecoder)
 
-    _OBJECT_to_python = _VARIANT_to_python
+    def _ARRAY_to_python(self, _) -> Callable[[str], Any]:
+        """Use a custom json decoder (accepts undefined) to load row value"""
+        return partial(json.loads, cls=SnowflakeJSONDecoder)
 
-    _ARRAY_to_python = _VARIANT_to_python
+    def _OBJECT_to_python(self, _):
+        """Use a custom json decoder (accepts undefined) to load row value"""
+        return partial(json.loads, cls=SnowflakeJSONDecoder)
 
     def _BOOLEAN_to_python(self, ctx):
         return lambda value: value in ("1", "TRUE")
