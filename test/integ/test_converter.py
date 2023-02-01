@@ -14,6 +14,14 @@ from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
+try:
+    from snowflake.connector.constants import (
+        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+        UNDEFINED,
+    )
+except ImportError:
+    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
+
 
 def _compose_tz(dt, tzinfo):
     ret = ZERO_EPOCH + timedelta(seconds=float(dt))
@@ -539,3 +547,122 @@ ALTER SESSION SET
         assert ret[9] == "2100-01-01 05:00:00.012000000"
         assert ret[10] == "1970-01-01 00:00:00.000000000 +0000"
         assert ret[11] == "1970-01-01 00:00:00.000000000"
+
+
+def _check_result_types(results: list, types: list) -> None:
+    for r, t in zip(results, types):
+        assert isinstance(r, t)
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("query_result_format", ["JSON", "ARROW_FORCE"])
+def test_receive_variant(conn_cnx, query_result_format: str):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: query_result_format
+        }
+    ) as cnx:
+        with cnx.cursor() as c:
+            c.execute(
+                """
+                select parse_json(*)
+                from values ('null'),
+                            (null),
+                            ('true'),
+                            ('-17'),
+                            ('123.12'),
+                            ('1.912e2'),
+                            ('"Om ara pa ca na dhih"  '),
+                            ('[-1, 12, 289, 2188, false]'),
+                            ('{ "x" : "abc", "y" : false, "z": 10} ');
+            """
+            )
+            results = [row[0] for row in c.fetchall()]
+            _check_result_types(
+                results,
+                types=[
+                    type(None),
+                    type(None),
+                    bool,
+                    int,
+                    float,
+                    float,
+                    str,
+                    list,
+                    dict,
+                ],
+            )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("query_result_format", ["JSON", "ARROW_FORCE"])
+def test_receive_array(conn_cnx, query_result_format):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: query_result_format
+        }
+    ) as cnx:
+        with cnx.cursor() as c:
+            c.execute(
+                """
+                select array_construct('hello', 3::double, 4, -5);
+                select array_construct(10, 20, 30);
+                select array_construct(-1, parse_json('[1.2, 28.9, 2.188]'), false);
+                select array_construct(parse_json('{"x": "abc"}'), parse_json('{"y": false}'), parse_json('{"z": 10}'));
+                select array_construct(null, parse_json('null'));
+                """,
+                num_statements=5,
+            )
+            array1 = c.fetchall()[0][0]
+            _check_result_types(array1, types=[str, float, int, int])
+            array2 = c.nextset().fetchall()[0][0]
+            _check_result_types(array2, types=[int, int, int])
+            array3 = c.nextset().fetchall()[0][0]
+            _check_result_types(array3, types=[int, list, bool])
+            array4 = c.nextset().fetchall()[0][0]
+            _check_result_types(array4, types=[dict, dict, dict])
+            assert isinstance(array4[0].get("x"), str)
+            assert isinstance(array4[1].get("y"), bool)
+            assert isinstance(array4[2].get("z"), int)
+            array5 = c.nextset().fetchall()[0][0]
+            _check_result_types(array5, types=[type(UNDEFINED), type(None)])
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("query_result_format", ["JSON", "ARROW_FORCE"])
+def test_receive_object(conn_cnx, query_result_format):
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: query_result_format
+        }
+    ) as cnx:
+        with cnx.cursor() as c:
+            c.execute(
+                """
+                select object_construct(
+                    '1', null,
+                    '2', 'null',
+                    '3', true,
+                    '4', -17,
+                    '5', 123.12,
+                    '6', 1.912e2,
+                    '7', 'Om ara pa ca na dhih',
+                    '8', array_construct(-1, 12, 289, 2188, false),
+                    '9', object_construct('x', 'abc', 'y', false, 'z', 10)
+                );
+                """
+            )
+            result = c.fetchall()[0][0]
+            assert isinstance(result, dict)
+            for index, typ in zip(
+                range(1, 10),
+                [type(None), str, bool, int, float, float, str, list, dict],
+            ):
+                res = result.get(str(index))
+                assert isinstance(res, typ)
+                if index == 8:
+                    _check_result_types(res, [int, int, int, int, bool])
+                elif index == 9:
+                    assert isinstance(res.get("x"), str)
+                    assert isinstance(res.get("y"), bool)
+                    assert isinstance(res.get("z"), int)

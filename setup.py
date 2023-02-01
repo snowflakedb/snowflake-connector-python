@@ -61,6 +61,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 name="snowflake.connector.arrow_iterator",
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
             ),
+            Extension(
+                name="snowflake.connector.json",
+                sources=[os.path.join(CONNECTOR_SRC_DIR, "cpp", "json.cpp")],
+            ),
         ],
         compile_time_env=dict(ARROW_LESS_THAN_8=pyarrow_version < (8,)),
     )
@@ -139,6 +143,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "StringConverter.cpp"),
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "TimeConverter.cpp"),
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "TimeStampConverter.cpp"),
+                    os.path.join(ARROW_ITERATOR_SRC_DIR, "VariantConverter.cpp"),
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "Python", "Common.cpp"),
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"),
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),

@@ -13,6 +13,7 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
+#include "VariantConverter.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -192,12 +193,18 @@ void CArrowChunkIterator::initColumnConverters()
         break;
       }
 
-      case SnowflakeType::Type::ANY:
-      case SnowflakeType::Type::CHAR:
       case SnowflakeType::Type::OBJECT:
       case SnowflakeType::Type::VARIANT:
-      case SnowflakeType::Type::TEXT:
       case SnowflakeType::Type::ARRAY:
+      {
+        m_currentBatchConverters.push_back(
+            std::make_shared<sf::VariantConverter>(columnArray));
+        break;
+      }
+
+      case SnowflakeType::Type::ANY:
+      case SnowflakeType::Type::CHAR:
+      case SnowflakeType::Type::TEXT:
       {
         m_currentBatchConverters.push_back(
             std::make_shared<sf::StringConverter>(columnArray));

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import decimal
-import json
 import logging
 import os
 import pickle
@@ -575,7 +574,6 @@ created_at timestamp, data variant)
                 f"select created_at, data from {name_variant}"
             )
             _, data = result.fetchone()
-            data = json.loads(data)
             assert data["SESSION-PARAMETERS"]["SPECIAL_FLAG"], (
                 "JSON data should be parsed properly. " "Invalid JSON data"
             )
@@ -610,7 +608,7 @@ def test_geography(conn_cnx):
             assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
             data = result.fetchall()
             for raw_data in data:
-                row = json.loads(raw_data[0])
+                row = raw_data[0]
                 assert row in expected_data
 
 
