@@ -75,6 +75,7 @@ from .errors import (
     ProgrammingError,
     ServiceUnavailableError,
 )
+from .proxy import get_proxy_url
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -346,9 +347,14 @@ class SnowflakeRestful:
         protocol="http",
         inject_client_pause=0,
         connection: SnowflakeConnection | None = None,
+        proxy_host: str | None = None,
+        proxy_port: str | None = None,
+        proxy_user: str | None = None,
+        proxy_password: str | None = None,
     ):
         self._host = host
         self._port = port
+        self._proxy = get_proxy_url(proxy_host, proxy_port, proxy_user, proxy_password)
         self._protocol = protocol
         self._inject_client_pause = inject_client_pause
         self._connection = connection
@@ -1130,6 +1136,7 @@ class SnowflakeRestful:
         s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         s._reuse_count = itertools.count()
+        s.proxies = {"http": self._proxy, "https": self._proxy}
         return s
 
     @contextlib.contextmanager
