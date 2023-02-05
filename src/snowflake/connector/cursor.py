@@ -24,6 +24,7 @@ from typing import (
     Iterator,
     NamedTuple,
     NoReturn,
+    Optional,
     Sequence,
     TypeVar,
     overload,
@@ -123,10 +124,10 @@ ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 class ResultMetadata(NamedTuple):
     name: str
     type_code: int
-    display_size: int
-    internal_size: int
-    precision: int
-    scale: int
+    display_size: Optional[int]
+    internal_size: Optional[int]
+    precision: Optional[int]
+    scale: Optional[int]
     is_nullable: bool
 
     @classmethod
