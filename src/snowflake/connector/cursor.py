@@ -412,7 +412,7 @@ class SnowflakeCursor:
                 del self.messages[:]
                 return True
         except Exception:
-            return False
+            return None
 
     def is_closed(self) -> bool:
         return self._connection is None or self._connection.is_closed()

@@ -14,7 +14,6 @@ import platform
 import queue
 import urllib.parse
 import urllib.request
-from types import ModuleType
 from typing import Any
 
 from . import constants
@@ -24,11 +23,9 @@ IS_WINDOWS = platform.system() == "Windows"
 IS_MACOS = platform.system() == "Darwin"
 
 NUM_DATA_TYPES: tuple[type, ...] = ()
-numpy: ModuleType | None
 try:
-    import numpy  # type: ignore
+    import numpy
 
-    assert isinstance(numpy, ModuleType)
     NUM_DATA_TYPES = (
         numpy.int8,
         numpy.int16,
