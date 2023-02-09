@@ -5,13 +5,13 @@
 
 from __future__ import annotations
 
+import collections
 import logging
 import re
 import signal
 import sys
 import time
 import uuid
-from collections import deque
 from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
@@ -237,7 +237,7 @@ class SnowflakeCursor:
         self._sequence_counter = -1
         self._request_id: uuid.UUID | None = None
         self._is_file_transfer = False
-        self._multi_statement_resultIds: deque[str] = deque()
+        self._multi_statement_resultIds: collections.deque[str] = collections.deque()
         self.multi_statement_savedIds: list[str] = []
 
         self._timestamp_output_format = None
@@ -916,7 +916,9 @@ class SnowflakeCursor:
     def _init_multi_statement_results(self, data: dict) -> None:
         self._log_telemetry_job_data(TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE)
         self.multi_statement_savedIds = data["resultIds"].split(",")
-        self._multi_statement_resultIds = deque(self.multi_statement_savedIds)
+        self._multi_statement_resultIds = collections.deque(
+            self.multi_statement_savedIds
+        )
         if self._is_file_transfer:
             Error.errorhandler_wrapper(
                 self.connection,
