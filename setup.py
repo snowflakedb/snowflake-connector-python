@@ -11,6 +11,7 @@ from shutil import copy
 from setuptools import Extension, setup
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
+NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "cpp", "ArrowIterator")
 
 VERSION = (1, 1, 1, None)  # Default
 try:
@@ -143,6 +144,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"),
                     os.path.join(ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),
                     LOGGING_SRC_DIR + "/logging.cpp",
+                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow.c"),
                 ]
                 ext.include_dirs.append(ARROW_ITERATOR_SRC_DIR)
                 ext.include_dirs.append(LOGGING_SRC_DIR)
