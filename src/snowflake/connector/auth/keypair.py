@@ -68,13 +68,15 @@ class AuthByKeyPair(AuthByPlugin):
                 "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
             )
         )
-        self._timeout = timedelta(
-            seconds=int(
-                os.getenv(
-                    "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+        self._timeout = int(
+            timedelta(
+                seconds=int(
+                    os.getenv(
+                        "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+                    )
                 )
-            )
-        ).total_seconds()
+            ).total_seconds()
+        )
         self._current_retry_count = 0
 
     def reset_secrets(self) -> None:

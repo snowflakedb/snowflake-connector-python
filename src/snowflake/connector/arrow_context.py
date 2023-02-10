@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import decimal
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from logging import getLogger
 
 import pytz
+from numpy import datetime64, float64, int64
+from pytz import UTC
 
 from .constants import PARAMETER_TIMEZONE
 from .converter import _generate_tzinfo_from_tzoffset
@@ -42,7 +44,7 @@ class ArrowConverterContext:
     def __init__(
         self,
         session_parameters: dict[str, str | int | bool] | None = None,
-    ):
+    ) -> None:
         if session_parameters is None:
             session_parameters = {}
         self._timezone = (
@@ -52,14 +54,14 @@ class ArrowConverterContext:
         )
 
     @property
-    def timezone(self):
+    def timezone(self) -> str:
         return self._timezone
 
     @timezone.setter
-    def timezone(self, tz):
+    def timezone(self, tz) -> None:
         self._timezone = tz
 
-    def _get_session_tz(self):
+    def _get_session_tz(self) -> tzinfo | UTC:
         """Get the session timezone or use the local computer's timezone."""
         try:
             tz = "UTC" if not self.timezone else self.timezone
@@ -119,22 +121,26 @@ class ArrowConverterContext:
             )
             return time.localtime(microseconds)
 
-    def REAL_to_numpy_float64(self, py_double):
+    def REAL_to_numpy_float64(self, py_double: float) -> float64:
         return numpy.float64(py_double)
 
-    def FIXED_to_numpy_int64(self, py_long):
+    def FIXED_to_numpy_int64(self, py_long: int) -> int64:
         return numpy.int64(py_long)
 
-    def FIXED_to_numpy_float64(self, py_long, scale):
+    def FIXED_to_numpy_float64(self, py_long: int, scale: int) -> float64:
         return numpy.float64(decimal.Decimal(py_long).scaleb(-scale))
 
-    def DATE_to_numpy_datetime64(self, py_days):
+    def DATE_to_numpy_datetime64(self, py_days: int) -> datetime64:
         return numpy.datetime64(py_days, "D")
 
-    def TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64(self, value, scale):
+    def TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64(
+        self, value: int, scale: int
+    ) -> datetime64:
         nanoseconds = int(decimal.Decimal(value).scaleb(9 - scale))
         return numpy.datetime64(nanoseconds, "ns")
 
-    def TIMESTAMP_NTZ_TWO_FIELD_to_numpy_datetime64(self, epoch, fraction):
+    def TIMESTAMP_NTZ_TWO_FIELD_to_numpy_datetime64(
+        self, epoch: int, fraction: int
+    ) -> datetime64:
         nanoseconds = int(decimal.Decimal(epoch).scaleb(9) + decimal.Decimal(fraction))
         return numpy.datetime64(nanoseconds, "ns")

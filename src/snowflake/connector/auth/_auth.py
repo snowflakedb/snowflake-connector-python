@@ -91,7 +91,7 @@ if not path.exists(CACHE_DIR):
 logger.debug("cache directory: %s", CACHE_DIR)
 
 # temporary credential cache
-TEMPORARY_CREDENTIAL = {}
+TEMPORARY_CREDENTIAL: dict[str, dict[str, str | None]] = {}
 
 TEMPORARY_CREDENTIAL_LOCK = Lock()
 
@@ -116,7 +116,7 @@ MFA_TOKEN = "MFATOKEN"
 class Auth:
     """Snowflake Authenticator."""
 
-    def __init__(self, rest):
+    def __init__(self, rest) -> None:
         self._rest = rest
 
     @staticmethod
@@ -290,7 +290,7 @@ class Auth:
             body["data"]["EXT_AUTHN_DUO_METHOD"] = "push"
             self.ret = {"message": "Timeout", "data": {}}
 
-            def post_request_wrapper(self, url, headers, body):
+            def post_request_wrapper(self, url, headers, body) -> None:
                 # get the MFA response
                 self.ret = self._rest._post_request(
                     url, headers, body, timeout=self._rest._connection.login_timeout
@@ -450,7 +450,12 @@ class Auth:
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
-    def _read_temporary_credential(self, host, user, cred_type) -> str | None:
+    def _read_temporary_credential(
+        self,
+        host: str,
+        user: str,
+        cred_type: str,
+    ) -> str | None:
         cred = None
         if IS_MACOS or IS_WINDOWS:
             if not installed_keyring:
@@ -460,7 +465,7 @@ class Auth:
                     "this please install keyring module using the following command : pip install "
                     "snowflake-connector-python[secure-local-storage]"
                 )
-                return
+                return None
             try:
                 cred = keyring.get_password(
                     build_temporary_credential_name(host, user, cred_type), user.upper()
@@ -588,7 +593,7 @@ def flush_temporary_credentials() -> None:
         unlock_temporary_credential_file()
 
 
-def write_temporary_credential_file(host, cred_name, cred) -> None:
+def write_temporary_credential_file(host: str, cred_name: str, cred) -> None:
     """Writes temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -603,7 +608,7 @@ def write_temporary_credential_file(host, cred_name, cred) -> None:
         flush_temporary_credentials()
 
 
-def read_temporary_credential_file() -> None:
+def read_temporary_credential_file():
     """Reads temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -663,7 +668,7 @@ def unlock_temporary_credential_file() -> bool:
         return False
 
 
-def delete_temporary_credential(host, user, cred_type):
+def delete_temporary_credential(host, user, cred_type) -> None:
     if (IS_MACOS or IS_WINDOWS) and installed_keyring:
         try:
             keyring.delete_password(
@@ -675,7 +680,7 @@ def delete_temporary_credential(host, user, cred_type):
         temporary_credential_file_delete_password(host, user, cred_type)
 
 
-def temporary_credential_file_delete_password(host, user, cred_type):
+def temporary_credential_file_delete_password(host, user, cred_type) -> None:
     """Remove credential from temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -693,7 +698,7 @@ def temporary_credential_file_delete_password(host, user, cred_type):
         flush_temporary_credentials()
 
 
-def delete_temporary_credential_file():
+def delete_temporary_credential_file() -> None:
     """Deletes temporary credential file and its lock file."""
     global TEMPORARY_CREDENTIAL_FILE
     try:
@@ -710,7 +715,7 @@ def delete_temporary_credential_file():
         logger.debug("Failed to delete credential lock file: err=[%s]", ex)
 
 
-def build_temporary_credential_name(host, user, cred_type):
+def build_temporary_credential_name(host, user, cred_type) -> str:
     return "{host}:{user}:{driver}:{cred}".format(
         host=host.upper(), user=user.upper(), driver=KEYRING_DRIVER_NAME, cred=cred_type
     )

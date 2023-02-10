@@ -60,7 +60,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         stage_info: dict[str, Any],
         chunk_size: int,
         use_accelerate_endpoint: bool | None = None,
-        use_s3_regional_url=False,
+        use_s3_regional_url: bool = False,
     ) -> None:
         """Rest client for S3 storage.
 

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import datetime
-import json
 import time
 
 from .constants import (
@@ -17,11 +16,10 @@ from .constants import (
     get_string_types,
     get_timestamp_types,
 )
-from .mixin import UnicodeMixin
 
 
 class _DBAPITypeObject:
-    def __init__(self, *values):
+    def __init__(self, *values) -> None:
         self.values = values
 
     def __cmp__(self, other):
@@ -38,15 +36,15 @@ Time = datetime.time
 Timestamp = datetime.datetime
 
 
-def DateFromTicks(ticks):
+def DateFromTicks(ticks: float) -> datetime.date:
     return Date(*time.localtime(ticks)[:3])
 
 
-def TimeFromTicks(ticks):
+def TimeFromTicks(ticks: float) -> datetime.time:
     return Time(*time.localtime(ticks)[3:6])
 
 
-def TimestampFromTicks(ticks):
+def TimestampFromTicks(ticks: float) -> datetime.datetime:
     return Timestamp(*time.localtime(ticks)[:6])
 
 
@@ -57,16 +55,3 @@ BINARY = _DBAPITypeObject(get_binary_types())
 NUMBER = _DBAPITypeObject(get_number_types())
 DATETIME = _DBAPITypeObject(get_timestamp_types())
 ROWID = _DBAPITypeObject()
-
-
-class Json(UnicodeMixin):
-    """JSON adapter."""
-
-    def __init__(self, value):
-        self._value = json.dump(value)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __unicode__(self):
-        return self._value

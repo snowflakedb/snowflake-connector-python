@@ -53,39 +53,39 @@ class SecretDetector(logging.Formatter):
     )
 
     @staticmethod
-    def mask_connection_token(text):
+    def mask_connection_token(text: str) -> str:
         return SecretDetector.CONNECTION_TOKEN_PATTERN.sub(r"\1\2****", text)
 
     @staticmethod
-    def mask_password(text):
+    def mask_password(text: str) -> str:
         return SecretDetector.PASSWORD_PATTERN.sub(r"\1\2****", text)
 
     @staticmethod
-    def mask_aws_keys(text):
+    def mask_aws_keys(text: str) -> str:
         return SecretDetector.AWS_KEY_PATTERN.sub(r"\1='****'", text)
 
     @staticmethod
-    def mask_sas_tokens(text):
+    def mask_sas_tokens(text: str) -> str:
         return SecretDetector.SAS_TOKEN_PATTERN.sub(r"\1=****", text)
 
     @staticmethod
-    def mask_aws_tokens(text):
+    def mask_aws_tokens(text: str) -> str:
         return SecretDetector.AWS_TOKEN_PATTERN.sub(r'\1":"XXXX"', text)
 
     @staticmethod
-    def mask_private_key(text):
+    def mask_private_key(text: str) -> str:
         return SecretDetector.PRIVATE_KEY_PATTERN.sub(
             "-----BEGIN PRIVATE KEY-----\\\\nXXXX\\\\n-----END PRIVATE KEY-----", text
         )
 
     @staticmethod
-    def mask_private_key_data(text):
+    def mask_private_key_data(text: str) -> str:
         return SecretDetector.PRIVATE_KEY_DATA_PATTERN.sub(
             '"privateKeyData": "XXXX"', text
         )
 
     @staticmethod
-    def mask_secrets(text: str) -> tuple[bool, str, str]:
+    def mask_secrets(text: str) -> tuple[bool, str, str | None]:
         """Masks any secrets. This is the method that should be used by outside classes.
 
         Args:

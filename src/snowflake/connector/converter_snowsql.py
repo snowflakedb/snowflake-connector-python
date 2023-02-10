@@ -8,6 +8,8 @@ from __future__ import annotations
 import time
 from datetime import date, datetime, timedelta
 from logging import getLogger
+from time import struct_time
+from typing import Any, Callable
 
 import pytz
 
@@ -26,7 +28,9 @@ from .sfdatetime import SnowflakeDateFormat, SnowflakeDateTime, SnowflakeDateTim
 logger = getLogger(__name__)
 
 
-def format_sftimestamp(ctx, value, franction_of_nanoseconds):
+def format_sftimestamp(
+    ctx: dict[str, Any], value: datetime | struct_time, franction_of_nanoseconds: int
+) -> str:
     sf_datetime = SnowflakeDateTime(
         datetime=value, nanosecond=franction_of_nanoseconds, scale=ctx.get("scale")
     )
@@ -40,11 +44,11 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     Python objects.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._support_negative_year = kwargs.get("support_negative_year", True)
 
-    def _get_format(self, type_name):
+    def _get_format(self, type_name: str) -> str:
         """Gets the format."""
         fmt = None
         if type_name == "DATE":
@@ -64,7 +68,10 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     #
     # FROM Snowflake to Python objects
     #
-    def to_python_method(self, type_name, column):
+    # Note: Callable doesn't implement operator|
+    def to_python_method(
+        self, type_name: str, column: dict[str, Any]
+    ) -> Callable | None:
         ctx = column.copy()
         if ctx.get("scale") is not None:
             ctx["max_fraction"] = int(10 ** ctx["scale"])
@@ -113,13 +120,13 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """BINARY to a string formatted by BINARY_OUTPUT_FORMAT."""
         return lambda value: ctx["fmt"].format(binary_to_python(value))
 
-    def _DATE_to_python(self, ctx):
+    def _DATE_to_python(self, ctx: dict[str, str | None]) -> Callable:
         """Converts DATE to struct_time/date.
 
         No timezone is attached.
         """
 
-        def conv(value):
+        def conv(value: str) -> str:
             return ctx["fmt"].format(time.gmtime(int(value) * (24 * 60 * 60)))
 
         def conv_windows(value):
@@ -128,7 +135,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
 
         return conv if not IS_WINDOWS else conv_windows
 
-    def _TIMESTAMP_TZ_to_python(self, ctx):
+    def _TIMESTAMP_TZ_to_python(self, ctx: dict[str, Any]) -> Callable:
         """Converts TIMESTAMP TZ to datetime.
 
         The timezone offset is piggybacked.
@@ -136,7 +143,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         scale = ctx["scale"]
         max_fraction = ctx.get("max_fraction")
 
-        def conv0(encoded_value):
+        def conv0(encoded_value: str) -> str:
             value, tz = encoded_value.split()
             microseconds = float(value)
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
@@ -154,7 +161,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
 
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
-        def conv(encoded_value):
+        def conv(encoded_value: str) -> str:
             value, tz = encoded_value.split()
             microseconds = float(value[0 : -scale + 6])
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
@@ -175,20 +182,20 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
 
         return conv if scale > 6 else conv0
 
-    def _TIMESTAMP_LTZ_to_python(self, ctx):
-        def conv(value):
+    def _TIMESTAMP_LTZ_to_python(self, ctx: dict[str, Any]) -> Callable:
+        def conv(value: str) -> str:
             t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         return conv
 
-    def _TIMESTAMP_NTZ_to_python(self, ctx):
+    def _TIMESTAMP_NTZ_to_python(self, ctx: dict[str, Any]) -> Callable:
         """Converts TIMESTAMP NTZ to Snowflake Formatted String.
 
         No timezone info is attached.
         """
 
-        def conv(value):
+        def conv(value: str) -> str:
             microseconds, fraction_of_nanoseconds = _extract_timestamp(value, ctx)
             try:
                 t = time.gmtime(microseconds)

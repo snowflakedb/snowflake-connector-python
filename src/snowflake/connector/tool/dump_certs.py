@@ -8,14 +8,18 @@ from __future__ import annotations
 import os
 import sys
 from os import path
+from typing import TYPE_CHECKING
 
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
+if TYPE_CHECKING:
+    from asn1crypto.x509 import Certificate
 
-def main():
+
+def main() -> None:
     """Internal Tool: Extract certificate files in PEM."""
 
-    def help():
+    def help() -> None:
         print(
             "Extract certificate file. The target file can be a single file "
             "or a directory including multiple certificates. The certificate "
@@ -44,9 +48,9 @@ Usage: {}  <input file/dir>
         extract_certificate_file(f)
 
 
-def extract_certificate_file(input_filename):
+def extract_certificate_file(input_filename) -> None:
     ocsp = SnowflakeOCSPAsn1Crypto()
-    cert_map = {}
+    cert_map: dict[bytes, Certificate] = {}
     ocsp.read_cert_bundle(input_filename, cert_map)
 
     for cert in cert_map.values():

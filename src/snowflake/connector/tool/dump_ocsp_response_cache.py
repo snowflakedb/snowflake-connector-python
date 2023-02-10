@@ -24,10 +24,10 @@ ZERO_EPOCH = datetime.utcfromtimestamp(0)
 OCSP_CACHE_SERVER_INTERVAL = 20 * 60 * 60  # seconds
 
 
-def main():
+def main() -> None:
     """Internal Tool: Dump OCSP response cache file."""
 
-    def help():
+    def help() -> None:
         print(
             "Dump OCSP Response cache. This tools extracts OCSP response "
             "cache file, i.e., ~/.cache/snowflake/ocsp_response_cache. "
@@ -95,7 +95,7 @@ def raise_outdated_validity_exception(
 
 def dump_ocsp_response_cache(
     ocsp_response_cache_file, hostname_file, cert_glob_pattern
-):
+) -> None:
     """Dump OCSP response cache contents.
 
     Show the subject name as well if the subject is included in the certificate files.

@@ -5,17 +5,17 @@
 
 from __future__ import annotations
 
-import collections.abc
+import collections
 import logging
 import re
 import signal
 import sys
 import time
 import uuid
-from collections import deque
 from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
+from types import TracebackType
 from typing import (
     IO,
     TYPE_CHECKING,
@@ -27,7 +27,10 @@ from typing import (
     NoReturn,
     Sequence,
     TypeVar,
+    overload,
 )
+
+from typing_extensions import Self
 
 from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
@@ -61,12 +64,14 @@ from .errors import (
     ProgrammingError,
 )
 from .file_transfer_agent import SnowflakeFileTransferAgent
-from .options import installed_pandas, pandas
+from .options import installed_pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
+    from pandas import DataFrame
+
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
     from .result_batch import ResultBatch
@@ -226,14 +231,13 @@ class SnowflakeCursor:
         ] = []
         self._timebomb: Timer | None = None  # must be here for abort_exit method
         self._description: list[ResultMetadata] | None = None
-        self._column_idx_to_name = None
-        self._sfqid = None
+        self._sfqid: str | None = None
         self._sqlstate = None
         self._total_rowcount = -1
         self._sequence_counter = -1
-        self._request_id = None
+        self._request_id: uuid.UUID | None = None
         self._is_file_transfer = False
-        self._multi_statement_resultIds: deque[str] = deque()
+        self._multi_statement_resultIds: collections.deque[str] = collections.deque()
         self.multi_statement_savedIds: list[str] = []
 
         self._timestamp_output_format = None
@@ -277,15 +281,15 @@ class SnowflakeCursor:
         return self._description
 
     @property
-    def rowcount(self):
+    def rowcount(self) -> int | None:
         return self._total_rowcount if self._total_rowcount >= 0 else None
 
     @property
-    def rownumber(self):
+    def rownumber(self) -> int | None:
         return self._rownumber if self._rownumber >= 0 else None
 
     @property
-    def sfqid(self):
+    def sfqid(self) -> str | None:
         return self._sfqid
 
     @property
@@ -293,11 +297,11 @@ class SnowflakeCursor:
         return self._sqlstate
 
     @property
-    def timestamp_output_format(self):
+    def timestamp_output_format(self) -> str | None:
         return self._timestamp_output_format
 
     @property
-    def timestamp_ltz_output_format(self):
+    def timestamp_ltz_output_format(self) -> str | None:
         return (
             self._timestamp_ltz_output_format
             if self._timestamp_ltz_output_format
@@ -305,7 +309,7 @@ class SnowflakeCursor:
         )
 
     @property
-    def timestamp_tz_output_format(self):
+    def timestamp_tz_output_format(self) -> str | None:
         return (
             self._timestamp_tz_output_format
             if self._timestamp_tz_output_format
@@ -313,7 +317,7 @@ class SnowflakeCursor:
         )
 
     @property
-    def timestamp_ntz_output_format(self):
+    def timestamp_ntz_output_format(self) -> str | None:
         return (
             self._timestamp_ntz_output_format
             if self._timestamp_ntz_output_format
@@ -321,46 +325,46 @@ class SnowflakeCursor:
         )
 
     @property
-    def date_output_format(self):
+    def date_output_format(self) -> str | None:
         return self._date_output_format
 
     @property
-    def time_output_format(self):
+    def time_output_format(self) -> str | None:
         return self._time_output_format
 
     @property
-    def timezone(self):
+    def timezone(self) -> str | None:
         return self._timezone
 
     @property
-    def binary_output_format(self):
+    def binary_output_format(self) -> str | None:
         return self._binary_output_format
 
     @property
-    def arraysize(self):
+    def arraysize(self) -> int:
         return self._arraysize
 
     @arraysize.setter
-    def arraysize(self, value):
+    def arraysize(self, value) -> None:
         self._arraysize = int(value)
 
     @property
-    def connection(self):
+    def connection(self) -> SnowflakeConnection:
         return self._connection
 
     @property
-    def errorhandler(self):
+    def errorhandler(self) -> Callable:
         return self._errorhandler
 
     @errorhandler.setter
-    def errorhandler(self, value):
+    def errorhandler(self, value: Callable | None) -> None:
         logger.debug("setting errorhandler: %s", value)
         if value is None:
             raise ProgrammingError("Invalid errorhandler is specified")
         self._errorhandler = value
 
     @property
-    def is_file_transfer(self):
+    def is_file_transfer(self) -> bool:
         """Whether the command is PUT or GET."""
         return hasattr(self, "_is_file_transfer") and self._is_file_transfer
 
@@ -369,7 +373,15 @@ class SnowflakeCursor:
         """Snowflake does not support lastrowid in which case None should be returned as per PEP249."""
         return None
 
-    def callproc(self, procname: str, args: T = ()) -> T:
+    @overload
+    def callproc(self, procname: str) -> tuple:
+        ...
+
+    @overload
+    def callproc(self, procname: str, args: T) -> T:
+        ...
+
+    def callproc(self, procname: str, args=tuple()):
         """Call a stored procedure.
 
         Args:
@@ -394,16 +406,15 @@ class SnowflakeCursor:
         try:
             if self.is_closed():
                 return False
-
             with self._lock_canceling:
                 self.reset(closing=True)
                 self._connection = None
                 del self.messages[:]
                 return True
         except Exception:
-            pass
+            return None
 
-    def is_closed(self):
+    def is_closed(self) -> bool:
         return self._connection is None or self._connection.is_closed()
 
     def _execute_helper(
@@ -418,7 +429,7 @@ class SnowflakeCursor:
         _no_results: bool = False,
         _is_put_get=None,
         _no_retry: bool = False,
-    ):
+    ) -> dict[str, Any]:
         del self.messages[:]
 
         if statement_params is not None and not isinstance(statement_params, dict):
@@ -506,7 +517,7 @@ class SnowflakeCursor:
             logger.debug(
                 "Failed to set SIGINT handler. " "Not in main thread. Ignored..."
             )
-        ret = {"data": {}}
+        ret: dict[str, Any] = {"data": {}}
         try:
             ret = self._connection.cmd_query(
                 query,
@@ -621,7 +632,7 @@ class SnowflakeCursor:
         _force_put_overwrite: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
-    ) -> SnowflakeCursor | None:
+    ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
 
         Args:
@@ -673,7 +684,7 @@ class SnowflakeCursor:
         command = command.strip(" \t\n\r") if command else None
         if not command:
             logger.warning("execute: no query is given to execute")
-            return
+            return None
 
         if _statement_params is None:
             _statement_params = dict()
@@ -681,7 +692,7 @@ class SnowflakeCursor:
         if num_statements:
             _statement_params["MULTI_STATEMENT_COUNT"] = num_statements
 
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "timeout": timeout,
             "statement_params": _statement_params,
             "is_internal": _is_internal,
@@ -827,7 +838,7 @@ class SnowflakeCursor:
             Error.errorhandler_wrapper(self.connection, self, error_class, errvalue)
         return self
 
-    def execute_async(self, *args, **kwargs):
+    def execute_async(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Convenience function to execute a query without waiting for results (asynchronously).
 
         This function takes the same arguments as execute, please refer to that function
@@ -836,7 +847,7 @@ class SnowflakeCursor:
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
-    def describe(self, *args, **kwargs) -> list[ResultMetadata]:
+    def describe(self, *args: Any, **kwargs: Any) -> list[ResultMetadata]:
         """Obtain the schema of the result without executing the query.
 
         This function takes the same arguments as execute, please refer to that function
@@ -849,16 +860,16 @@ class SnowflakeCursor:
         self.execute(*args, **kwargs)
         return self._description
 
-    def _format_query_for_log(self, query):
+    def _format_query_for_log(self, query: str) -> str:
         return self._connection._format_query_for_log(query)
 
-    def _is_dml(self, data):
+    def _is_dml(self, data: dict[Any, Any]) -> bool:
         return (
             "statementTypeId" in data
             and int(data["statementTypeId"]) in STATEMENT_TYPE_ID_DML_SET
         )
 
-    def _init_result_and_meta(self, data):
+    def _init_result_and_meta(self, data: dict[Any, Any]) -> None:
         is_dml = self._is_dml(data)
         self._query_result_format = data.get("queryResultFormat", "json")
         logger.debug("Query result format: %s", self._query_result_format)
@@ -902,10 +913,12 @@ class SnowflakeCursor:
             else:
                 self._total_rowcount += updated_rows
 
-    def _init_multi_statement_results(self, data: dict):
+    def _init_multi_statement_results(self, data: dict) -> None:
         self._log_telemetry_job_data(TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE)
         self.multi_statement_savedIds = data["resultIds"].split(",")
-        self._multi_statement_resultIds = deque(self.multi_statement_savedIds)
+        self._multi_statement_resultIds = collections.deque(
+            self.multi_statement_savedIds
+        )
         if self._is_file_transfer:
             Error.errorhandler_wrapper(
                 self.connection,
@@ -918,7 +931,7 @@ class SnowflakeCursor:
             )
         self.nextset()
 
-    def check_can_use_arrow_resultset(self):
+    def check_can_use_arrow_resultset(self) -> None:
         global CAN_USE_ARROW_RESULT_FORMAT
 
         if not CAN_USE_ARROW_RESULT_FORMAT:
@@ -939,7 +952,7 @@ class SnowflakeCursor:
                 },
             )
 
-    def check_can_use_pandas(self):
+    def check_can_use_pandas(self) -> None:
         if not installed_pandas:
             msg = (
                 "Optional dependency: 'pandas' is not installed, please see the following link for install "
@@ -957,7 +970,7 @@ class SnowflakeCursor:
                 },
             )
 
-    def query_result(self, qid):
+    def query_result(self, qid: str) -> SnowflakeCursor:
         url = f"/queries/{qid}/result"
         ret = self._connection.rest.request(url=url, method="get")
         self._sfqid = (
@@ -1013,7 +1026,7 @@ class SnowflakeCursor:
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
         return self._result_set._fetch_arrow_all()
 
-    def fetch_pandas_batches(self, **kwargs) -> Iterator[pandas.DataFrame]:
+    def fetch_pandas_batches(self, **kwargs: Any) -> Iterator[DataFrame]:
         """Fetches a single Arrow Table."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
@@ -1025,7 +1038,7 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_pandas_batches(**kwargs)
 
-    def fetch_pandas_all(self, **kwargs) -> pandas.DataFrame:
+    def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
         """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
@@ -1037,7 +1050,7 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_pandas_all(**kwargs)
 
-    def abort_query(self, qid):
+    def abort_query(self, qid: str) -> bool:
         url = f"/queries/{qid}/abort-request"
         ret = self._connection.rest.request(url=url, method="post")
         return ret.get("success")
@@ -1046,7 +1059,7 @@ class SnowflakeCursor:
         self,
         command: str,
         seqparams: Sequence[Any] | dict[str, Any],
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> SnowflakeCursor:
         """Executes a command/query with the given set of parameters sequentially."""
         logger.debug("executing many SQLs/commands")
@@ -1191,7 +1204,7 @@ class SnowflakeCursor:
         except StopIteration:
             return None
 
-    def fetchmany(self, size=None):
+    def fetchmany(self, size: int | None = None) -> list[dict | tuple | None]:
         """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
@@ -1217,7 +1230,7 @@ class SnowflakeCursor:
 
         return ret
 
-    def fetchall(self) -> list[tuple] | list[dict]:
+    def fetchall(self) -> list[dict | tuple | None]:
         """Fetches all of the results."""
         ret = []
         while True:
@@ -1227,7 +1240,7 @@ class SnowflakeCursor:
             ret.append(row)
         return ret
 
-    def nextset(self):
+    def nextset(self) -> SnowflakeCursor | None:
         """
         Fetches the next set of results if the previously executed query was multi-statement so that subsequent calls
         to any of the fetch*() methods will return rows from the next query's set of results. Returns None if no more
@@ -1243,16 +1256,16 @@ class SnowflakeCursor:
 
         return None
 
-    def setinputsizes(self, _):
+    def setinputsizes(self, _) -> None:
         """Not supported."""
         logger.debug("nop")
 
-    def setoutputsize(self, _, column=None):
+    def setoutputsize(self, _, column=None) -> None:
         """Not supported."""
         del column
         logger.debug("nop")
 
-    def scroll(self, value, mode="relative"):
+    def scroll(self, value, mode: str = "relative") -> None:
         Error.errorhandler_wrapper(
             self.connection,
             self,
@@ -1264,7 +1277,7 @@ class SnowflakeCursor:
             },
         )
 
-    def reset(self, closing=False):
+    def reset(self, closing: bool = False) -> None:
         """Resets the result set."""
         # SNOW-647539: Do not erase the rowcount
         # information when closing the cursor
@@ -1290,7 +1303,7 @@ class SnowflakeCursor:
             self._result_state = ResultState.VALID
         return self._result_iterator()
 
-    def __cancel_query(self, query):
+    def __cancel_query(self, query) -> None:
         if self._sequence_counter >= 0 and not self.is_closed():
             logger.debug("canceled. %s, request_id: %s", query, self._request_id)
             with self._lock_canceling:
@@ -1319,18 +1332,23 @@ class SnowflakeCursor:
                 exc_info=True,
             )
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         """Context manager."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager with commit or rollback."""
         self.close()
 
-    def get_results_from_sfqid(self, sfqid: str):
+    def get_results_from_sfqid(self, sfqid: str) -> None:
         """Gets the results from previously ran query."""
 
-        def wait_until_ready():
+        def wait_until_ready() -> None:
             """Makes sure query has finished executing and once it has retrieves results."""
             no_data_counter = 0
             retry_pattern_pos = 0
@@ -1406,7 +1424,7 @@ class SnowflakeCursor:
 class DictCursor(SnowflakeCursor):
     """Cursor returning results in a dictionary."""
 
-    def __init__(self, connection):
+    def __init__(self, connection) -> None:
         super().__init__(
             connection,
             use_dict_result=True,

@@ -24,7 +24,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     """Username & password & mfa authenticator."""
 
     @property
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         return "*********"
 
     def __init__(

@@ -58,15 +58,15 @@ urlunparse = urllib.parse.urlunparse
 NUM_DATA_TYPES += (int, float, decimal.Decimal)
 
 
-def PKCS5_UNPAD(v):
+def PKCS5_UNPAD(v: bytes) -> bytes:
     return v[0 : -v[-1]]
 
 
-def PKCS5_OFFSET(v):
+def PKCS5_OFFSET(v: bytes) -> int:
     return v[-1]
 
 
-def IS_BINARY(v):
+def IS_BINARY(v: bytearray | bytes | str) -> bool:
     return isinstance(v, (bytes, bytearray))
 
 

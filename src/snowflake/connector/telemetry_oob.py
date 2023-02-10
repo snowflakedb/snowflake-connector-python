@@ -11,6 +11,7 @@ import logging
 import uuid
 from collections import namedtuple
 from queue import Queue
+from typing import Any
 
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
@@ -140,12 +141,12 @@ class TelemetryEvent(TelemetryEventBase):
 
 
 class TelemetryLogEvent(TelemetryEvent):
-    def get_type(self):
+    def get_type(self) -> str:
         return "Log"
 
 
 class TelemetryMetricEvent(TelemetryEvent):
-    def get_type(self):
+    def get_type(self) -> str:
         return "Metric"
 
 
@@ -153,13 +154,13 @@ class TelemetryService:
     __instance = None
 
     @staticmethod
-    def get_instance():
+    def get_instance() -> TelemetryService:
         """Static access method."""
         if TelemetryService.__instance is None:
             TelemetryService()
         return TelemetryService.__instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Virtually private constructor."""
         if TelemetryService.__instance is not None:
             raise Exception("This class is a singleton!")
@@ -175,7 +176,7 @@ class TelemetryService:
         self.connection_params = dict()
         self.deployment = TelemetryServerDeployments.PROD
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Tries to flush all events left in the queue. Ignores all exceptions."""
         try:
             self.close()
@@ -183,15 +184,15 @@ class TelemetryService:
             pass
 
     @property
-    def enabled(self):
+    def enabled(self) -> bool:
         """Whether the Telemetry service is enabled or not."""
         return self._enabled
 
-    def enable(self):
+    def enable(self) -> None:
         """Enable Telemetry Service."""
         self._enabled = True
 
-    def disable(self):
+    def disable(self) -> None:
         """Disable Telemetry Service."""
         self._enabled = False
 
@@ -201,22 +202,22 @@ class TelemetryService:
         return self._queue
 
     @property
-    def context(self):
+    def context(self) -> dict[str, Any]:
         """Returns the context of the current connection."""
         return self._context
 
     @context.setter
-    def context(self, value):
+    def context(self, value) -> None:
         """Sets the context of the current connection."""
         self._context = value
 
     @property
-    def connection_params(self):
+    def connection_params(self) -> dict[str, Any]:
         """Returns the connection parameters from the current connection."""
         return self._connection_params
 
     @connection_params.setter
-    def connection_params(self, value):
+    def connection_params(self, value) -> None:
         """Sets the connection parameters from the current connection."""
         self._connection_params = value
 
@@ -226,31 +227,31 @@ class TelemetryService:
         return self._batch_size
 
     @batch_size.setter
-    def batch_size(self, value):
+    def batch_size(self, value) -> None:
         """Sets the batch size for uploading results."""
         self._batch_size = value
 
     @property
-    def num_of_retry_to_trigger_telemetry(self):
+    def num_of_retry_to_trigger_telemetry(self) -> int:
         """Returns the number of HTTP retries before we submit a telemetry event."""
         return self._num_of_retry_to_trigger_telemetry
 
     @num_of_retry_to_trigger_telemetry.setter
-    def num_of_retry_to_trigger_telemetry(self, value):
+    def num_of_retry_to_trigger_telemetry(self, value) -> None:
         """Sets the number of HTTP retries before we submit a telemetry event."""
         self._num_of_retry_to_trigger_telemetry = value
 
     @property
-    def deployment(self):
+    def deployment(self: TelemetryServer) -> Any | None:
         """Returns the deployment that we are sending the telemetry information to."""
         return self._deployment
 
     @deployment.setter
-    def deployment(self, value):
+    def deployment(self, value) -> None:
         """Sets the deployment that we are sending the telemetry information to."""
         self._deployment = value
 
-    def is_deployment_enabled(self):
+    def is_deployment_enabled(self) -> bool:
         """Returns whether or not this deployment is enabled."""
         return self.deployment.name in ENABLED_DEPLOYMENTS
 
@@ -264,7 +265,7 @@ class TelemetryService:
             + str(self.connection_params.get("port", ""))
         )
 
-    def add(self, event):
+    def add(self, event) -> None:
         """Adds a telemetry event to the queue. If the event is urgent, upload all telemetry events right away."""
         if not self.enabled:
             return
@@ -276,7 +277,7 @@ class TelemetryService:
                 return
             self._upload_payload(payload)
 
-    def flush(self):
+    def flush(self) -> None:
         """Flushes all telemetry events in the queue and submit them to the back-end."""
         if not self.enabled:
             return
@@ -287,7 +288,7 @@ class TelemetryService:
                 return
             self._upload_payload(payload)
 
-    def update_context(self, connection_params):
+    def update_context(self, connection_params) -> None:
         """Updates the telemetry service context. Remove any passwords or credentials."""
         self.configure_deployment(connection_params)
         self.context = dict()
@@ -300,7 +301,7 @@ class TelemetryService:
             ):
                 self.context[key] = value
 
-    def configure_deployment(self, connection_params):
+    def configure_deployment(self, connection_params) -> None:
         """Determines which deployment we are sending Telemetry OOB messages to."""
         self.connection_params = connection_params
         account = (
@@ -335,8 +336,8 @@ class TelemetryService:
         exception=None,
         stack_trace=None,
         tags=None,
-        urgent=False,
-    ):
+        urgent: bool = False,
+    ) -> None:
         """Logs an OCSP Exception and adds it to the queue to be uploaded."""
         if tags is None:
             tags = dict()
@@ -379,8 +380,8 @@ class TelemetryService:
         exception=None,
         stack_trace=None,
         tags=None,
-        urgent=False,
-    ):
+        urgent: bool = False,
+    ) -> None:
         """Logs an HTTP Request error and adds it to the queue to be uploaded."""
         if tags is None:
             tags = dict()
@@ -449,7 +450,7 @@ class TelemetryService:
         telemetry_data: dict,
         tags: dict | None = None,
         urgent: bool | None = False,
-    ):
+    ) -> None:
         """Sends any type of exception through OOB telemetry."""
         if tags is None:
             tags = dict()
@@ -463,7 +464,7 @@ class TelemetryService:
             # Do nothing on exception, just log
             logger.debug("Failed to log general exception", exc_info=True)
 
-    def _upload_payload(self, payload):
+    def _upload_payload(self, payload) -> None:
         """Uploads the JSON-formatted string payload to the telemetry backend.
 
         Ignore any exceptions that may arise.
@@ -530,7 +531,7 @@ class TelemetryService:
         _, masked_text, _ = SecretDetector.mask_secrets(payload)
         return masked_text
 
-    def close(self):
+    def close(self) -> None:
         """Closes the telemetry service."""
         self.flush()
         self.disable()

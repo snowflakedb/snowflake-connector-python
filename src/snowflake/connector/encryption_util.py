@@ -28,7 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = getLogger(__name__)
 
 
-def matdesc_to_unicode(matdesc):
+def matdesc_to_unicode(matdesc: MaterialDescriptor) -> str:
     """Convert Material Descriptor to Unicode String."""
     return str(
         json.dumps(
@@ -138,7 +138,7 @@ class SnowflakeEncryptionUtil:
         encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
-        tmp_dir: str = None,
+        tmp_dir: str | None = None,
     ) -> tuple[EncryptionMetadata, str]:
         """Encrypts a file in a temporary directory.
 
