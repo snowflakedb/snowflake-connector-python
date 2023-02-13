@@ -9,13 +9,17 @@ import decimal
 import time
 from datetime import datetime, timedelta, tzinfo
 from logging import getLogger
+from typing import TYPE_CHECKING
 
 import pytz
-from numpy import datetime64, float64, int64
 from pytz import UTC
 
 from .constants import PARAMETER_TIMEZONE
 from .converter import _generate_tzinfo_from_tzoffset
+
+if TYPE_CHECKING:
+    from numpy import datetime64, float64, int64
+
 
 try:
     import numpy
