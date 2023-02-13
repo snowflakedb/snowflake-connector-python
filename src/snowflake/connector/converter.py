@@ -15,10 +15,9 @@ from functools import partial
 from logging import getLogger
 from math import ceil
 from time import struct_time
-from typing import Any, Callable, NoReturn
+from typing import TYPE_CHECKING, Any, Callable, NoReturn
 
 import pytz
-from numpy import int64
 from pytz import UTC
 
 from .compat import IS_BINARY, IS_NUMERIC
@@ -26,6 +25,9 @@ from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
+
+if TYPE_CHECKING:
+    from numpy import int64
 
 try:
     import numpy
