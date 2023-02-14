@@ -830,6 +830,7 @@ class SnowflakeCursor:
                 "errno": int(code),
                 "sqlstate": self._sqlstate,
                 "sfqid": self._sfqid,
+                "query": query,
             }
             is_integrity_error = (
                 code == "100072"
