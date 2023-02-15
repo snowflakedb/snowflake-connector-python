@@ -199,7 +199,7 @@ class AuthByKeyPair(AuthByPlugin):
             )
             self._retry_ctx.increment_retry()
 
-        self.prepare(account, user)
+        self.prepare(account=account, user=user)
 
     @staticmethod
     def can_handle_exception(op: OperationalError) -> bool:
