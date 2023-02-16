@@ -30,9 +30,10 @@ def test_error_code(conn_cnx):
     syntax_errno_old = 1003
     syntax_sqlstate = "42601"
     syntax_sqlstate_old = "42000"
+    query = "SELECT * FROOOM TEST"
     with conn_cnx() as ctx:
         with pytest.raises(errors.ProgrammingError) as e:
-            ctx.cursor().execute("SELECT * FROOOM TEST")
+            ctx.cursor().execute(query)
         assert (
             e.value.errno == syntax_errno or e.value.errno == syntax_errno_old
         ), "Syntax error code"
@@ -40,6 +41,7 @@ def test_error_code(conn_cnx):
             e.value.sqlstate == syntax_sqlstate
             or e.value.sqlstate == syntax_sqlstate_old
         ), "Syntax SQL state"
+        assert e.value.query == query, "Query mismatch"
         e.match(
             rf"^({syntax_errno:06d} \({syntax_sqlstate}\)|{syntax_errno_old:06d} \({syntax_sqlstate_old}\)): "
         )
