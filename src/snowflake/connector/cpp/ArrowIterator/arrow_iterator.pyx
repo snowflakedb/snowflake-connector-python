@@ -5,6 +5,17 @@
 # distutils: language = c++
 # cython: language_level=3
 
+
+from libc.stdint cimport uint8_t, uintptr_t
+from nanoarrow_c cimport *
+
+import numpy as np
+
+cimport numpy as cnp
+
+cnp.import_array()
+
+
 from cpython.ref cimport PyObject
 from cython.operator cimport dereference
 from libcpp.memory cimport shared_ptr
@@ -39,7 +50,7 @@ from .snow_logging import getSnowLogger
 snow_logger = getSnowLogger(__name__)
 
 
-cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
+cdef extern from "CArrowIterator.hpp" namespace "sf":
     cdef cppclass ReturnVal:
         PyObject * successObj;
 
@@ -49,7 +60,7 @@ cdef extern from "cpp/ArrowIterator/CArrowIterator.hpp" namespace "sf":
         shared_ptr[ReturnVal] next() except +;
 
 
-cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
+cdef extern from "CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator(CArrowIterator):
         CArrowChunkIterator(
                 PyObject* context,
@@ -65,7 +76,7 @@ cdef extern from "cpp/ArrowIterator/CArrowChunkIterator.hpp" namespace "sf":
         ) except +
 
 
-cdef extern from "cpp/ArrowIterator/CArrowTableIterator.hpp" namespace "sf":
+cdef extern from "CArrowTableIterator.hpp" namespace "sf":
     cdef cppclass CArrowTableIterator(CArrowIterator):
         CArrowTableIterator(
             PyObject* context,
@@ -216,17 +227,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             &self.batches,
             self.number_to_decimal,
         )
-
-
-from libc.stdint cimport uint8_t, uintptr_t
-from nanoarrow_c cimport *
-
-import numpy as np
-
-cimport numpy as cnp
-
-cnp.import_array()
-
 
 cdef dict _numpy_type_map = {
     NANOARROW_TYPE_UINT8: cnp.NPY_UINT8,

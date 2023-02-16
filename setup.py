@@ -60,7 +60,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         [
             Extension(
                 name="snowflake.connector.arrow_iterator",
-                sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
+                sources=[os.path.join(NANOARROW_SRC_DIR, "arrow_iterator.pyx")],
+                language="c++",
             ),
         ],
         compile_time_env=dict(ARROW_LESS_THAN_8=pyarrow_version < (8,)),
@@ -148,6 +149,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ]
                 ext.include_dirs.append(ARROW_ITERATOR_SRC_DIR)
                 ext.include_dirs.append(LOGGING_SRC_DIR)
+                ext.include_dirs.append(numpy.get_include())
 
                 if sys.platform == "win32":
                     if not any("/std" not in s for s in ext.extra_compile_args):
@@ -178,7 +180,23 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     # fyi, https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
                     ext.extra_link_args += ["-rpath", "@loader_path"]
 
-            build_ext.build_extension(self, ext)
+            original__compile = self.compiler._compile
+
+            def new__compile(obj, src: str, ext, cc_args, extra_postargs, pp_opts):
+                if src.endswith("nanoarrow.c"):
+                    extra_postargs = [s for s in extra_postargs if s != "-std=c++17"]
+                return original__compile(
+                    obj, src, ext, cc_args, extra_postargs, pp_opts
+                )
+
+            self.compiler._compile = new__compile
+
+            try:
+                build_ext.build_extension(self, ext)
+            finally:
+                del self.compiler._compile
+                self.compiler._compile = original__compile
+            # build_ext.build_extension(self, ext)
 
         def _get_arrow_lib_dir(self):
             if "SF_ARROW_LIBDIR" in os.environ:
