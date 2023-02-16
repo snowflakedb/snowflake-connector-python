@@ -351,6 +351,7 @@ class SnowflakeConnection:
         warnings.warn(
             "Region has been deprecated and will be removed in the near future",
             PendingDeprecationWarning,
+            stacklevel=2,
         )
         return self._region
 
@@ -872,7 +873,8 @@ class SnowflakeConnection:
                     warnings.warn(
                         "'{}' is an unknown connection parameter{}".format(
                             name, f", did you mean '{guess}'?" if guess else ""
-                        )
+                        ),
+                        stacklevel=4,
                     )
                 elif not isinstance(value, DEFAULT_CONFIGURATION[name][1]):
                     accepted_types = DEFAULT_CONFIGURATION[name][1]
@@ -885,7 +887,8 @@ class SnowflakeConnection:
                             if isinstance(accepted_types, tuple)
                             else accepted_types.__name__,
                             type(value).__name__,
-                        )
+                        ),
+                        stacklevel=4,
                     )
             setattr(self, "_" + name, value)
 
