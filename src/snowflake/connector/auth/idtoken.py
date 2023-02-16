@@ -8,8 +8,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..network import ID_TOKEN_AUTHENTICATOR
-from . import AuthByWebBrowser
 from .by_plugin import AuthByPlugin, AuthType
+from .webbrowser import AuthByWebBrowser
 
 if TYPE_CHECKING:
     from ..connection import SnowflakeConnection

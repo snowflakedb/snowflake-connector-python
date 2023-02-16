@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 import pytest
 
 from snowflake.connector import SnowflakeConnection
-from snowflake.connector.auth.idtoken import AuthByIdToken
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import (
@@ -290,6 +289,8 @@ def test_idtoken_reauth():
     This happens when the initial connection fails. Such as when the saved ID
     token has expired.
     """
+    from snowflake.connector.auth.idtoken import AuthByIdToken
+
     auth_inst = AuthByIdToken(
         id_token="token",
         application="application",
