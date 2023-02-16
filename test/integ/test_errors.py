@@ -24,6 +24,7 @@ def test_error_classes(conn_cnx):
         assert ctx.ProgrammingError == errors.ProgrammingError
 
 
+@pytest.mark.skipolddriver
 def test_error_code(conn_cnx):
     """Error code is included in the exception."""
     syntax_errno = 1494
