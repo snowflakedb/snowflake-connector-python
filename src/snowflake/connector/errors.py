@@ -68,9 +68,9 @@ class Error(BASE_EXCEPTION_CLASS):
             if self.sqlstate != "n/a":
                 if not already_formatted_msg:
                     if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
-                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.sfqid}: {self.query}: {self.msg}"
+                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.sfqid}: {self.msg}: {self.query}"
                     else:
-                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.query}: {self.msg}"
+                        self.msg = f"{self.errno:06d} ({self.sqlstate}): {self.msg}: {self.query}"
             else:
                 if not already_formatted_msg:
                     if logger.getEffectiveLevel() in (logging.INFO, logging.DEBUG):
