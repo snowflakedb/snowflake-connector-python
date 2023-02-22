@@ -38,6 +38,7 @@ class Error(BASE_EXCEPTION_CLASS):
         errno: int | None = None,
         sqlstate: str | None = None,
         sfqid: str | None = None,
+        query: str | None = None,
         done_format_msg: bool | None = None,
         connection: SnowflakeConnection | None = None,
         cursor: SnowflakeCursor | None = None,
@@ -48,6 +49,7 @@ class Error(BASE_EXCEPTION_CLASS):
         self.errno = errno or -1
         self.sqlstate = sqlstate or "n/a"
         self.sfqid = sfqid
+        self.query = query
 
         if self.msg:
             # TODO: If there's a message then check to see if errno (and maybe sqlstate)
@@ -221,6 +223,7 @@ class Error(BASE_EXCEPTION_CLASS):
             errno=None if errno is None else int(errno),
             sqlstate=error_value.get("sqlstate"),
             sfqid=error_value.get("sfqid"),
+            query=error_value.get("query"),
             done_format_msg=(
                 None if done_format_msg is None else bool(done_format_msg)
             ),

@@ -12,6 +12,7 @@ from snowflake.connector import errors
 
 def test_detecting_duplicate_detail_insertion():
     sfqid = str(uuid.uuid4())
+    query = "select something_really_buggy from buggy_table"
     sqlstate = "24000"
     errno = 123456
     msg = "Some error happened"
@@ -19,6 +20,7 @@ def test_detecting_duplicate_detail_insertion():
     original_ex = errors.ProgrammingError(
         sqlstate=sqlstate,
         sfqid=sfqid,
+        query=query,
         errno=errno,
         msg=msg,
     )
