@@ -84,19 +84,29 @@ def _import_or_missing_pandas_option() -> tuple[
 
         pyarrow = importlib.import_module("pyarrow")
         # Check whether we have the currently supported pyarrow installed
-        installed_packages = {package.metadata["Name"]: package for package in distributions()}
-        if all(k in installed_packages for k in ("snowflake-connector-python", "pyarrow")):
-            dependencies = installed_packages["snowflake-connector-python"].metadata.get_all("Requires-Dist", [])
+        installed_packages = {
+            package.metadata["Name"]: package for package in distributions()
+        }
+        if {"pyarrow", "snowflake-connector-python"} <= installed_packages.keys():
+            dependencies = installed_packages[
+                "snowflake-connector-python"
+            ].metadata.get_all("Requires-Dist", [])
             pandas_pyarrow_extra = None
             for dependency in dependencies:
                 dep = Requirement(dependency)
-                if dep.marker is not None and dep.marker.evaluate({"extra": "pandas"}) and dep.name == "pyarrow":
+                if (
+                    dep.marker is not None
+                    and dep.marker.evaluate({"extra": "pandas"})
+                    and dep.name == "pyarrow"
+                ):
                     pandas_pyarrow_extra = dep
                     break
 
             installed_pyarrow_version = installed_packages["pyarrow"].version
             if not pandas_pyarrow_extra.specifier.contains(installed_pyarrow_version):
-                warn_incompatible_dep("pyarrow", installed_pyarrow_version, pandas_pyarrow_extra)
+                warn_incompatible_dep(
+                    "pyarrow", installed_pyarrow_version, pandas_pyarrow_extra
+                )
 
         else:
             logger.info(
