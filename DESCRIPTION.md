@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
   - Fixed a bug where `AuthByKeyPair.handle_timeout` should pass keyword arguments instead of positional arguments when calling `AuthByKeyPair.prepare`. PR #1440 (@emilhe)
+  - Fixed a bug where MFA token caching would refuse to work until restarted instead of reauthenticating
 
 - v3.0.0(January 26, 2023)
 
