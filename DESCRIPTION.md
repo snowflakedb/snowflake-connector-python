@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.0.1(unreleased)
 
   - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
+  - Replaced dependency on setuptools in favor of packaging
 
 - v3.0.0(January 26, 2023)
 
