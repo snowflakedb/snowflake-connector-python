@@ -5,13 +5,19 @@
 
 from __future__ import annotations
 
+from unittest import mock
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
+from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
-from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR, SnowflakeRestful
+from snowflake.connector.network import (
+    EXTERNAL_BROWSER_AUTHENTICATOR,
+    ReauthenticationRequest,
+    SnowflakeRestful,
+)
 
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByWebBrowser
@@ -275,3 +281,40 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
     rest._post_request = post_request
     connection._rest = rest
     return rest
+
+
+def test_idtoken_reauth():
+    """This test makes sure that AuthByIdToken reverts to AuthByWebBrowser.
+
+    This happens when the initial connection fails. Such as when the saved ID
+    token has expired.
+    """
+    from snowflake.connector.auth.idtoken import AuthByIdToken
+
+    auth_inst = AuthByIdToken(
+        id_token="token",
+        application="application",
+        protocol="protocol",
+        host="host",
+        port="port",
+    )
+
+    # We'll use this Exception to make sure AuthByWebBrowser authentication
+    #  flow is called as expected
+    class StopExecuting(Exception):
+        pass
+
+    with mock.patch(
+        "snowflake.connector.auth.idtoken.AuthByIdToken.prepare",
+        side_effect=ReauthenticationRequest(Exception()),
+    ):
+        with mock.patch(
+            "snowflake.connector.auth.webbrowser.AuthByWebBrowser.prepare",
+            side_effect=StopExecuting(),
+        ):
+            with pytest.raises(StopExecuting):
+                SnowflakeConnection(
+                    user="user",
+                    account="account",
+                    auth_class=auth_inst,
+                )

@@ -7,6 +7,7 @@ from __future__ import annotations
 from ._auth import Auth, get_public_key_fingerprint, get_token_from_private_key
 from .by_plugin import AuthByPlugin, AuthType
 from .default import AuthByDefault
+from .idtoken import AuthByIdToken
 from .keypair import AuthByKeyPair
 from .oauth import AuthByOAuth
 from .okta import AuthByOkta
@@ -21,6 +22,7 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
         AuthByOkta,
         AuthByUsrPwdMfa,
         AuthByWebBrowser,
+        AuthByIdToken,
     )
 )
 
