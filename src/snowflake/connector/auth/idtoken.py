@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..network import ID_TOKEN_AUTHENTICATOR
 from .by_plugin import AuthByPlugin, AuthType
+from .webbrowser import AuthByWebBrowser
+
+if TYPE_CHECKING:
+    from ..connection import SnowflakeConnection
 
 
 class AuthByIdToken(AuthByPlugin):
@@ -25,10 +29,21 @@ class AuthByIdToken(AuthByPlugin):
     def assertion_content(self) -> str:
         return self._id_token
 
-    def __init__(self, id_token: str) -> None:
+    def __init__(
+        self,
+        id_token: str,
+        application: str,
+        protocol: str | None,
+        host: str | None,
+        port: str | None,
+    ) -> None:
         """Initialized an instance with an IdToken."""
         super().__init__()
         self._id_token: str | None = id_token
+        self._application = application
+        self._protocol = protocol
+        self._host = host
+        self._port = port
 
     def reset_secrets(self) -> None:
         self._id_token = None
@@ -36,8 +51,21 @@ class AuthByIdToken(AuthByPlugin):
     def prepare(self, **kwargs: Any) -> None:
         pass
 
-    def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
-        return {"success": False}
+    def reauthenticate(
+        self,
+        *,
+        conn: SnowflakeConnection,
+        **kwargs: Any,
+    ) -> dict[str, bool]:
+        conn.auth_class = AuthByWebBrowser(
+            application=self._application,
+            protocol=self._protocol,
+            host=self._host,
+            port=self._port,
+        )
+        conn._authenticate(conn.auth_class)
+        conn._auth_class.reset_secrets()
+        return {"success": True}
 
     def update_body(self, body: dict[Any, Any]) -> None:
         """Idtoken needs the authenticator and token attributes set."""
