@@ -10,12 +10,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.0.1(February 28, 2023)
 
-  - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization
-  - Updated async_executes method's doc-string
-  - Errors raised now have a query field that contains the SQL query that caused them when available
-  - Fixed a bug where MFA token caching would refuse to work until restarted instead of reauthenticating
-  - Replaced the dependency on setuptools in favor of packaging
-  - Fixed a bug where `AuthByKeyPair.handle_timeout` should pass keyword arguments instead of positional arguments when calling `AuthByKeyPair.prepare`
+  - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
+  - Updated async_executes method's doc-string.
+  - Errors raised now have a query field that contains the SQL query that caused them when available.
+  - Fixed a bug where MFA token caching would refuse to work until restarted instead of reauthenticating.
+  - Replaced the dependency on setuptools in favor of packaging.
+  - Fixed a bug where `AuthByKeyPair.handle_timeout` should pass keyword arguments instead of positional arguments when calling `AuthByKeyPair.prepare`.
 
 - v3.0.0(January 26, 2023)
 
