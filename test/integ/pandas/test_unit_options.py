@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import logging
-from copy import deepcopy
+import sys
 from unittest import mock
 
 import pytest
-from pkg_resources import working_set
 
 try:
     from snowflake.connector.options import (
@@ -18,6 +17,11 @@ try:
 except ImportError:
     MissingPandas = None
     _import_or_missing_pandas_option = None
+
+if sys.version_info >= (3, 8):
+    from importlib.metadata import distributions
+else:
+    from importlib_metadata import distributions
 
 
 @pytest.mark.skipif(
@@ -29,10 +33,19 @@ def test_pandas_option_reporting(caplog):
 
     This issue was brought to attention in: https://github.com/snowflakedb/snowflake-connector-python/issues/412
     """
-    modified_by_key = deepcopy(working_set.by_key)
-    modified_by_key.pop("snowflake-connector-python")
-    modified_by_key.pop("pyarrow")
-    with mock.patch.object(working_set, "by_key", modified_by_key):
+    modified_distributions = list(
+        d
+        for d in distributions()
+        if d.metadata["Name"]
+        not in (
+            "pyarrow",
+            "snowflake-connecctor-python",
+        )
+    )
+    with mock.patch(
+        "snowflake.connector.options.distributions",
+        return_value=modified_distributions,
+    ):
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
         assert installed_pandas
@@ -40,5 +53,5 @@ def test_pandas_option_reporting(caplog):
         assert not isinstance(pyarrow, MissingPandas)
         assert (
             "Cannot determine if compatible pyarrow is installed because of missing package(s) "
-            "from dict_keys(["
+            "from "
         ) in caplog.text
