@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.1(February 24, 2023)
+- v3.0.1(February 28, 2023)
 
   - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization
   - Updated async_executes method's doc-string
