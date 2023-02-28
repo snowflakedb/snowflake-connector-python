@@ -981,11 +981,12 @@ class SnowflakeRestful:
         """Handles unknown errors."""
         if data:
             try:
+                # masking the secret credentials
                 decoded_data = json.loads(data)
-                if decoded_data.get("data") and decoded_data["data"].get("PASSWORD"):
-                    # masking the password
-                    decoded_data["data"]["PASSWORD"] = "********"
-                    data = json.dumps(decoded_data)
+                for secret_name in ("PASSWORD", "TOKEN"):
+                    if decoded_data.get("data") and decoded_data["data"].get(secret_name):
+                        decoded_data["data"][secret_name] = "********"
+                        data = json.dumps(decoded_data)
             except Exception:
                 logger.info("data is not JSON")
         logger.error(
