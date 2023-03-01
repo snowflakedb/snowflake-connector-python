@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import errno
+import logging
 import os
 import time
 from unittest.mock import MagicMock, Mock, PropertyMock
@@ -217,3 +218,40 @@ def test_fetch():
     assert ret == {}
     assert cnt.c == 1  # failed on first call - did not retry
     assert rest._connection.errorhandler.called  # error
+
+
+def test_secret_masking(caplog):
+    connection = MagicMock()
+    connection.errorhandler = Mock(return_value=None)
+
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    data = (
+        '{"code": 12345,'
+        ' "data": {"TOKEN": "_Y1ZNETTn5/qfUWj3Jedb", "PASSWORD": "dummy_pass"}'
+        "}"
+    )
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": data,
+    }
+
+    class NotRetryableException(Exception):
+        pass
+
+    def fake_request_exec(**kwargs):
+        return None
+
+    # inject a fake method
+    rest._request_exec = fake_request_exec
+
+    # first two attempts will fail but third will success
+    with caplog.at_level(logging.ERROR):
+        ret = rest.fetch(timeout=10, **default_parameters)
+    assert '"TOKEN": "****' in caplog.text
+    assert '"PASSWORD": "****' in caplog.text
+    assert ret == {}

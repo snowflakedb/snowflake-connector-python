@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
 
+from snowflake.connector.secret_detector import SecretDetector
 from snowflake.connector.vendored.requests.models import PreparedRequest
 from snowflake.connector.vendored.urllib3.connectionpool import (
     HTTPConnectionPool,
@@ -980,15 +981,9 @@ class SnowflakeRestful:
     def _handle_unknown_error(self, method, full_url, headers, data, conn) -> None:
         """Handles unknown errors."""
         if data:
-            try:
-                # masking the secret credentials
-                decoded_data = json.loads(data)
-                for secret_name in ("PASSWORD", "TOKEN"):
-                    if decoded_data.get("data") and decoded_data["data"].get(secret_name):
-                        decoded_data["data"][secret_name] = "********"
-                        data = json.dumps(decoded_data)
-            except Exception:
-                logger.info("data is not JSON")
+            _, masked_data, err_str = SecretDetector.mask_secrets(data)
+            if err_str is None:
+                data = masked_data
         logger.error(
             f"Failed to get the response. Hanging? "
             f"method: {method}, url: {full_url}, headers:{headers}, "
