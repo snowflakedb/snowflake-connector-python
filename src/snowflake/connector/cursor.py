@@ -1205,7 +1205,7 @@ class SnowflakeCursor:
         except StopIteration:
             return None
 
-    def fetchmany(self, size: int | None = None) -> list[dict | tuple | None]:
+    def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
         """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
@@ -1231,7 +1231,7 @@ class SnowflakeCursor:
 
         return ret
 
-    def fetchall(self) -> list[dict | tuple | None]:
+    def fetchall(self) -> list[tuple] | list[dict]:
         """Fetches all of the results."""
         ret = []
         while True:
