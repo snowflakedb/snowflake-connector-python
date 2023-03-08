@@ -6,6 +6,7 @@
 #define PC_INTCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
+#include "nanoarrow.h"
 #include <memory>
 
 namespace sf
@@ -15,8 +16,13 @@ template <typename T>
 class IntConverter : public IColumnConverter
 {
 public:
-  explicit IntConverter(std::shared_ptr<arrow::Array> array)
-  : m_array(std::dynamic_pointer_cast<T>(array))
+//  explicit IntConverter(std::shared_ptr<arrow::Array> array)
+//  : m_array(std::dynamic_pointer_cast<T>(array))
+//  {
+//  }
+
+  explicit IntConverter(std::shared_ptr<ArrowArrayView> array)
+  : m_nanoarrowArrayView(array)
   {
   }
 
@@ -34,20 +40,17 @@ public:
 
 private:
   std::shared_ptr<T> m_array;
+  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
 };
 
 template <typename T>
 PyObject* IntConverter<T>::toPyObject(int64_t rowIndex) const
 {
-  if (m_array->IsValid(rowIndex))
-  {
-    // TODO : this forward function need to be tested in Win64
-    return pyLongForward(m_array->Value(rowIndex));
-  }
-  else
-  {
+  if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
     Py_RETURN_NONE;
   }
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_nanoarrowArrayView.get(), rowIndex);
+  return pyLongForward(val);
 }
 
 template <typename T>
@@ -60,10 +63,17 @@ public:
   {
   }
 
+  explicit NumpyIntConverter(std::shared_ptr<ArrowArrayView> array, PyObject * context)
+  : m_nanoarrowArrayView(array),
+    m_context(context)
+  {
+  }
+
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<T> m_array;
+  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
 
   PyObject * m_context;
 };
@@ -71,15 +81,11 @@ private:
 template <typename T>
 PyObject* NumpyIntConverter<T>::toPyObject(int64_t rowIndex) const
 {
-  if (m_array->IsValid(rowIndex))
-  {
-    int64_t val = m_array->Value(rowIndex);
-    return PyObject_CallMethod(m_context, "FIXED_to_numpy_int64", "L", val);
+  if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
+      Py_RETURN_NONE;
   }
-  else
-  {
-    Py_RETURN_NONE;
-  }
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_nanoarrowArrayView.get(), rowIndex);
+  return PyObject_CallMethod(m_context, "FIXED_to_numpy_int64", "L", val);
 }
 
 }  // namespace sf
