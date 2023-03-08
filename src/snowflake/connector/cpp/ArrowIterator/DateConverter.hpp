@@ -8,6 +8,7 @@
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
 #include "logging.hpp"
+#include "nanoarrow.h"
 #include <memory>
 
 namespace sf
@@ -16,14 +17,14 @@ namespace sf
 class DateConverter : public IColumnConverter
 {
 public:
-  explicit DateConverter(std::shared_ptr<arrow::Array> array);
+  explicit DateConverter(std::shared_ptr<ArrowArrayView> array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   static py::UniqueRef& initPyDatetimeDate();
 
-  std::shared_ptr<arrow::Date32Array> m_array;
+  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
 
   /** from Python Ordinal to 1970-01-01 */
   static constexpr int epochDay = 719163;
@@ -36,12 +37,12 @@ private:
 class NumpyDateConverter : public IColumnConverter
 {
 public:
-  explicit NumpyDateConverter(std::shared_ptr<arrow::Array> array, PyObject * context);
+  explicit NumpyDateConverter(std::shared_ptr<ArrowArrayView> array, PyObject * context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<arrow::Date32Array> m_array;
+  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
 
   PyObject * m_context;
 };
