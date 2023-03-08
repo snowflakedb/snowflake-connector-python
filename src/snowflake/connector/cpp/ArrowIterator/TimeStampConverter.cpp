@@ -58,51 +58,44 @@ TimeStampBaseConverter::TimeStampBaseConverter(PyObject* context, int32_t scale)
 }
 
 OneFieldTimeStampNTZConverter::OneFieldTimeStampNTZConverter(
-    std::shared_ptr<arrow::Array> array, int32_t scale, PyObject* context)
+    std::shared_ptr<ArrowArrayView> array, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
-  m_array(std::dynamic_pointer_cast<arrow::Int64Array>(array))
+  m_array(array)
 {
 }
 
 PyObject* OneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if (m_array->IsValid(rowIndex))
-  {
-    internal::TimeSpec ts(m_array->Value(rowIndex), m_scale);
-
-    static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
-#ifdef _WIN32
-    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python_windows", format.format,
-                               ts.seconds, ts.microseconds);
-#else
-    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python", format.format,
-                               ts.seconds, ts.microseconds);
-#endif
-  }
-  else
-  {
+  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
     Py_RETURN_NONE;
   }
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
+  internal::TimeSpec ts(val, m_scale);
+
+  static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
+#ifdef _WIN32
+  return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python_windows", format.format,
+                               ts.seconds, ts.microseconds);
+#else
+  return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_to_python", format.format,
+                               ts.seconds, ts.microseconds);
+#endif
 }
 
 NumpyOneFieldTimeStampNTZConverter::NumpyOneFieldTimeStampNTZConverter(
-    std::shared_ptr<arrow::Array> array, int32_t scale, PyObject* context)
+    std::shared_ptr<ArrowArrayView> array, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
-  m_array(std::dynamic_pointer_cast<arrow::Int64Array>(array))
+  m_array(array)
 {
 }
 
 PyObject* NumpyOneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if (m_array->IsValid(rowIndex))
-  {
-    int64_t val = m_array->Value(rowIndex);
-    return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64", "Li", val, m_scale);
-  }
-  else
-  {
+  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
     Py_RETURN_NONE;
   }
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
+  return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64", "Li", val, m_scale);
 }
 
 TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
@@ -165,30 +158,29 @@ PyObject* NumpyTwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 
 
 OneFieldTimeStampLTZConverter::OneFieldTimeStampLTZConverter(
-    std::shared_ptr<arrow::Array> array, int32_t scale, PyObject* context)
+    std::shared_ptr<ArrowArrayView> array, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
-  m_array(std::dynamic_pointer_cast<arrow::Int64Array>(array))
+  m_array(array)
 {
 }
 
 PyObject* OneFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if (m_array->IsValid(rowIndex))
-  {
-    internal::TimeSpec ts(m_array->Value(rowIndex), m_scale);
+  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+    Py_RETURN_NONE;
+  }
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
+  internal::TimeSpec ts(val, m_scale);
 
-    static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
+  static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
 
 #ifdef _WIN32
-        return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows", format.format,
+      return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python_windows", format.format,
                                    ts.seconds, ts.microseconds);
 #else
-        return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", format.format,
+      return PyObject_CallMethod(m_context, "TIMESTAMP_LTZ_to_python", format.format,
                                    ts.seconds, ts.microseconds);
 #endif
-  }
-
-  Py_RETURN_NONE;
 }
 
 TwoFieldTimeStampLTZConverter::TwoFieldTimeStampLTZConverter(

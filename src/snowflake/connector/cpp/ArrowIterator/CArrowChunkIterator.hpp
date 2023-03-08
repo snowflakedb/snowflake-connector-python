@@ -10,6 +10,7 @@
 #include "Python/Common.hpp"
 #include <memory>
 #include <vector>
+#include "nanoarrow.h"
 
 namespace sf
 {
@@ -48,7 +49,6 @@ protected:
 
   /** list of column converters*/
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
-
   /** row index inside current record batch (start from 0) */
   int m_rowIndexInBatch;
 

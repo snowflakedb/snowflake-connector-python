@@ -10,6 +10,7 @@
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
 #include <memory>
+#include "nanoarrow.h"
 
 namespace sf
 {
@@ -32,25 +33,25 @@ protected:
 class OneFieldTimeStampNTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit OneFieldTimeStampNTZConverter(std::shared_ptr<arrow::Array> array,
+  explicit OneFieldTimeStampNTZConverter(std::shared_ptr<ArrowArrayView> array,
                                          int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<arrow::Int64Array> m_array;
+  std::shared_ptr<ArrowArrayView> m_array;
 };
 
 class NumpyOneFieldTimeStampNTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit NumpyOneFieldTimeStampNTZConverter(std::shared_ptr<arrow::Array> array,
+  explicit NumpyOneFieldTimeStampNTZConverter(std::shared_ptr<ArrowArrayView> array,
                                               int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<arrow::Int64Array> m_array;
+  std::shared_ptr<ArrowArrayView> m_array;
 };
 
 class TwoFieldTimeStampNTZConverter : public TimeStampBaseConverter
@@ -85,13 +86,13 @@ private:
 class OneFieldTimeStampLTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit OneFieldTimeStampLTZConverter(std::shared_ptr<arrow::Array> array,
+  explicit OneFieldTimeStampLTZConverter(std::shared_ptr<ArrowArrayView> array,
                                          int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<arrow::Int64Array> m_array;
+  std::shared_ptr<ArrowArrayView> m_array;
 };
 
 class TwoFieldTimeStampLTZConverter : public TimeStampBaseConverter

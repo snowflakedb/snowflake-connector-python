@@ -10,6 +10,7 @@
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
 #include <memory>
+#include "nanoarrow.h"
 
 namespace sf
 {
@@ -18,8 +19,8 @@ template <typename T>
 class TimeConverter : public IColumnConverter
 {
 public:
-  explicit TimeConverter(std::shared_ptr<arrow::Array> array, int32_t scale)
-  : m_array(std::dynamic_pointer_cast<T>(array)), m_scale(scale)
+  explicit TimeConverter(std::shared_ptr<ArrowArrayView> array, int32_t scale)
+  : m_array(array), m_scale(scale)
   {
   }
 
@@ -27,7 +28,7 @@ public:
 
 private:
   /** can be arrow::Int32Array and arrow::Int64Array */
-  std::shared_ptr<T> m_array;
+  std::shared_ptr<ArrowArrayView> m_array;
 
   int32_t m_scale;
 
@@ -37,9 +38,11 @@ private:
 template <typename T>
 PyObject* TimeConverter<T>::toPyObject(int64_t rowIndex) const
 {
-  if (m_array->IsValid(rowIndex))
-  {
-    int64_t seconds = m_array->Value(rowIndex);
+    if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+    Py_RETURN_NONE;
+    }
+
+    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
     using namespace internal;
     py::PyUniqueLock lock;
     return PyObject_CallFunction(m_pyDatetimeTime().get(), "iiii",
@@ -47,11 +50,6 @@ PyObject* TimeConverter<T>::toPyObject(int64_t rowIndex) const
                                  getMinuteFromSeconds(seconds, m_scale),
                                  getSecondFromSeconds(seconds, m_scale),
                                  getMicrosecondFromSeconds(seconds, m_scale));
-  }
-  else
-  {
-    Py_RETURN_NONE;
-  }
 }
 
 template <typename T>

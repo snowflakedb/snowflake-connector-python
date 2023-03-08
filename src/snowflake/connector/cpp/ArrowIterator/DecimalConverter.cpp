@@ -31,32 +31,30 @@ py::UniqueRef& DecimalBaseConverter::initPyDecimalConstructor()
 }
 
 DecimalFromDecimalConverter::DecimalFromDecimalConverter(
-    std::shared_ptr<arrow::Array> array, int scale)
-: m_array(std::dynamic_pointer_cast<arrow::Decimal128Array>(array)),
+    std::shared_ptr<ArrowArrayView> array, int scale)
+: m_nanoarrowArrayView(array),
   m_scale(scale)
 {
 }
 
 PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const
 {
-  if (m_array->IsValid(rowIndex))
-  {
-    std::string formatDecimalString = m_array->FormatValue(rowIndex);
-    if (m_scale == 0)
-    {
-      return PyLong_FromString(formatDecimalString.c_str(), nullptr, 0);
-    }
-
-    /** the reason we use c_str() instead of std::string here is that we may
-     * meet some encoding problem with std::string */
-    return PyObject_CallFunction(m_pyDecimalConstructor.get(), "s#",
-                                 formatDecimalString.c_str(),
-                                 static_cast<Py_ssize_t>(formatDecimalString.size()));
-  }
-  else
-  {
+  if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
     Py_RETURN_NONE;
   }
+  // TODO: FormatValue equivalent in nanoarrow?
+  //std::string formatDecimalString = m_array->FormatValue(rowIndex);
+  std::string formatDecimalString = "";
+  if (m_scale == 0)
+  {
+    return PyLong_FromString(formatDecimalString.c_str(), nullptr, 0);
+  }
+
+  /** the reason we use c_str() instead of std::string here is that we may
+   * meet some encoding problem with std::string */
+  return PyObject_CallFunction(m_pyDecimalConstructor.get(), "s#",
+                               formatDecimalString.c_str(),
+                               static_cast<Py_ssize_t>(formatDecimalString.size()));
 }
 
 }  // namespace sf
