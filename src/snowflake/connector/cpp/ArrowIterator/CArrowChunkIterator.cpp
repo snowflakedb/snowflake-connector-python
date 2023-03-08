@@ -13,9 +13,12 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
+#include "nanoarrow.h"
+#include "arrow/c/bridge.h"
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #define SF_CHECK_PYTHON_ERR() \
   if (py::checkPyError())\
@@ -105,45 +108,80 @@ void CArrowChunkIterator::initColumnConverters()
   std::shared_ptr<arrow::RecordBatch> currentBatch =
       (*m_cRecordBatches)[m_currentBatchIndex];
   m_currentSchema = currentBatch->schema();
+
+  ArrowSchema nanoarrowSchema;
+  // TODO: Export is not needed when using nanoarrow IPC to read schema
+  arrow::ExportSchema(*m_currentSchema, &nanoarrowSchema);
+
   for (int i = 0; i < currentBatch->num_columns(); i++)
   {
     std::shared_ptr<arrow::Array> columnArray = currentBatch->column(i);
     std::shared_ptr<arrow::DataType> dt = m_currentSchema->field(i)->type();
     std::shared_ptr<const arrow::KeyValueMetadata> metaData =
         m_currentSchema->field(i)->metadata();
+
+    ArrowSchema nanoarrowColumnSchema = *nanoarrowSchema.children[i];
+    ArrowSchemaView nanoarrowColumnSchemaView;
+    ArrowError error;
+    ArrowSchemaViewInit(&nanoarrowColumnSchemaView, &nanoarrowColumnSchema, &error);
+
+    std::shared_ptr<ArrowArray> nanoarrowColumnArrowArray = std::make_shared<ArrowArray>();
+    std::shared_ptr<ArrowArrayView> nanoarrowColumnArrowArrayViewInstance = std::make_shared<ArrowArrayView>();
+    arrow::ExportArray(*columnArray, nanoarrowColumnArrowArray.get());
+
+    int res = 0;
+    res = ArrowArrayViewInitFromSchema(nanoarrowColumnArrowArrayViewInstance.get(), &nanoarrowColumnSchema, &error);
+    if(res != NANOARROW_OK) {
+        std::string errorInfo = Logger::formatString("ArrowArrayViewInitFromSchema failure");
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+    }
+    res = ArrowArrayViewSetArray(nanoarrowColumnArrowArrayViewInstance.get(), nanoarrowColumnArrowArray.get(), &error);
+    if(res != NANOARROW_OK) {
+        std::string errorInfo = Logger::formatString("ArrowArrayViewSetArray failure");
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+    }
+    ArrowStringView snowflakeLogicalType;
+    const char* metadata = nanoarrowSchema.children[i]->metadata;
+    ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
     SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
-        metaData->value(metaData->FindKey("logicalType")));
+        std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
+    );
 
     switch (st)
     {
       case SnowflakeType::Type::FIXED:
       {
-        int scale = metaData
-                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
-                        : 0;
-        int precision =
-            metaData
-                ? std::stoi(metaData->value(metaData->FindKey("precision")))
-                : 38;
-        switch (dt->id())
-        {
+        ArrowStringView scaleString;
+        ArrowStringView precisionString;
+        int scale = 0;
+        int precision = 38;
+        if(metadata != nullptr) {
+            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            ArrowMetadataGetValue(metadata, ArrowCharView("precision"), &precisionString);
+            scale = std::stoi(scaleString.data);
+            precision = std::stoi(precisionString.data);
+        }
 
-#define _SF_INIT_FIXED_CONVERTER(ARROW_TYPE, ARROW_ARRAY_TYPE) \
-          case arrow::Type::type::ARROW_TYPE: \
+        switch(nanoarrowColumnSchemaView.type)
+        {
+#define _SF_INIT_FIXED_CONVERTER(ARROW_TYPE) \
+          case ArrowType::ARROW_TYPE: \
           {\
             if (scale > 0)\
             {\
               if (m_useNumpy)\
               {\
                 m_currentBatchConverters.push_back(std::make_shared<\
-                    sf::NumpyDecimalConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
-                    columnArray, precision, scale, m_context));\
+                    sf::NumpyDecimalConverter<ArrowArrayView>>(\
+                    nanoarrowColumnArrowArrayViewInstance, precision, scale, m_context));\
               }\
               else\
               {\
                 m_currentBatchConverters.push_back(std::make_shared<\
-                    sf::DecimalFromIntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
-                    columnArray, precision, scale));\
+                    sf::DecimalFromIntConverter<ArrowArrayView>>(\
+                    nanoarrowColumnArrowArrayViewInstance, precision, scale));\
               }\
             }\
             else\
@@ -151,29 +189,29 @@ void CArrowChunkIterator::initColumnConverters()
               if (m_useNumpy)\
               {\
                 m_currentBatchConverters.push_back(\
-                    std::make_shared<sf::NumpyIntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
-                    columnArray, m_context));\
+                    std::make_shared<sf::NumpyIntConverter<ArrowArrayView>>(\
+                    nanoarrowColumnArrowArrayViewInstance, m_context));\
               }\
               else\
               {\
                 m_currentBatchConverters.push_back(\
-                    std::make_shared<sf::IntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
-                    columnArray));\
+                    std::make_shared<sf::IntConverter<ArrowArrayView>>(\
+                    nanoarrowColumnArrowArrayViewInstance));\
               }\
             }\
             break;\
           }
 
-          _SF_INIT_FIXED_CONVERTER(INT8, Int8)
-          _SF_INIT_FIXED_CONVERTER(INT16, Int16)
-          _SF_INIT_FIXED_CONVERTER(INT32, Int32)
-          _SF_INIT_FIXED_CONVERTER(INT64, Int64)
+          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT8)
+          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT16)
+          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT32)
+          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT64)
 #undef _SF_INIT_FIXED_CONVERTER
 
-          case arrow::Type::type::DECIMAL:
+          case ArrowType::NANOARROW_TYPE_DECIMAL128:
           {
             m_currentBatchConverters.push_back(
-                std::make_shared<sf::DecimalFromDecimalConverter>(columnArray,
+                std::make_shared<sf::DecimalFromDecimalConverter>(nanoarrowColumnArrowArrayViewInstance,
                                                                   scale));
             break;
           }
@@ -200,14 +238,14 @@ void CArrowChunkIterator::initColumnConverters()
       case SnowflakeType::Type::ARRAY:
       {
         m_currentBatchConverters.push_back(
-            std::make_shared<sf::StringConverter>(columnArray));
+            std::make_shared<sf::StringConverter>(nanoarrowColumnArrowArrayViewInstance));
         break;
       }
 
       case SnowflakeType::Type::BOOLEAN:
       {
         m_currentBatchConverters.push_back(
-            std::make_shared<sf::BooleanConverter>(columnArray));
+            std::make_shared<sf::BooleanConverter>(nanoarrowColumnArrowArrayViewInstance));
         break;
       }
 
@@ -216,12 +254,12 @@ void CArrowChunkIterator::initColumnConverters()
         if (m_useNumpy)
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::NumpyFloat64Converter>(columnArray, m_context));
+              std::make_shared<sf::NumpyFloat64Converter>(nanoarrowColumnArrowArrayViewInstance, m_context));
         }
         else
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::FloatConverter>(columnArray));
+              std::make_shared<sf::FloatConverter>(nanoarrowColumnArrowArrayViewInstance));
         }
         break;
       }
@@ -231,12 +269,12 @@ void CArrowChunkIterator::initColumnConverters()
         if (m_useNumpy)
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::NumpyDateConverter>(columnArray, m_context));
+              std::make_shared<sf::NumpyDateConverter>(nanoarrowColumnArrowArrayViewInstance, m_context));
         }
         else
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::DateConverter>(columnArray));
+              std::make_shared<sf::DateConverter>(nanoarrowColumnArrowArrayViewInstance));
         }
         break;
       }
@@ -244,30 +282,26 @@ void CArrowChunkIterator::initColumnConverters()
       case SnowflakeType::Type::BINARY:
       {
         m_currentBatchConverters.push_back(
-            std::make_shared<sf::BinaryConverter>(columnArray));
+            std::make_shared<sf::BinaryConverter>(nanoarrowColumnArrowArrayViewInstance));
         break;
       }
 
       case SnowflakeType::Type::TIME:
       {
-        int scale = metaData
-                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
-                        : 9;
-        switch (dt->id())
+        int scale = 9;
+        if(metadata != nullptr) {
+            ArrowStringView scaleString;
+            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            scale = std::stoi(scaleString.data);
+        }
+        switch (nanoarrowColumnSchemaView.type)
         {
-          case arrow::Type::type::INT32:
+          case NANOARROW_TYPE_INT32:
+          case NANOARROW_TYPE_INT64:
           {
             m_currentBatchConverters.push_back(
-                std::make_shared<sf::TimeConverter<arrow::Int32Array>>(
-                    columnArray, scale));
-            break;
-          }
-
-          case arrow::Type::type::INT64:
-          {
-            m_currentBatchConverters.push_back(
-                std::make_shared<sf::TimeConverter<arrow::Int64Array>>(
-                    columnArray, scale));
+                std::make_shared<sf::TimeConverter<ArrowArrayView>>(
+                    nanoarrowColumnArrowArrayViewInstance, scale));
             break;
           }
 
@@ -287,29 +321,32 @@ void CArrowChunkIterator::initColumnConverters()
 
       case SnowflakeType::Type::TIMESTAMP_NTZ:
       {
-        int scale = metaData
-                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
-                        : 9;
-        switch (dt->id())
+        int scale = 9;
+        if(metadata != nullptr) {
+            ArrowStringView scaleString;
+            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            scale = std::stoi(scaleString.data);
+        }
+        switch (nanoarrowColumnSchemaView.type)
         {
-          case arrow::Type::type::INT64:
+          case NANOARROW_TYPE_INT64:
           {
             if (m_useNumpy)
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::NumpyOneFieldTimeStampNTZConverter>(
-                      columnArray, scale, m_context));
+                      nanoarrowColumnArrowArrayViewInstance, scale, m_context));
             }
             else
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::OneFieldTimeStampNTZConverter>(
-                      columnArray, scale, m_context));
+                      nanoarrowColumnArrowArrayViewInstance, scale, m_context));
             }
             break;
           }
 
-          case arrow::Type::type::STRUCT:
+          case NANOARROW_TYPE_STRUCT:
           {
             if (m_useNumpy)
             {
@@ -351,7 +388,7 @@ void CArrowChunkIterator::initColumnConverters()
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::OneFieldTimeStampLTZConverter>(
-                    columnArray, scale, m_context));
+                    nanoarrowColumnArrowArrayViewInstance, scale, m_context));
             break;
           }
 
