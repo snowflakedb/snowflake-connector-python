@@ -1,10 +1,8 @@
 name: Close Stale Issues
-description: "Close issues with no recent activity"
 on:
   workflow_dispatch:
     inputs:
       staleDays:
-        description: "Days before an issue being marked as stale and closed"
         required: true
 
 
