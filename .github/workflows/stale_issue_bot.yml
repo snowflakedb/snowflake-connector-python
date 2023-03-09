@@ -20,3 +20,5 @@ jobs:
           # Stale issues are closed immediately
           days-before-issue-close: 0
           days-before-pr-close: -1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
