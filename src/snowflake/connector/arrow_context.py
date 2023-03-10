@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timedelta, tzinfo
 from logging import getLogger
 from typing import TYPE_CHECKING
+from sys import byteorder
 
 import pytz
 from pytz import UTC
@@ -148,3 +149,11 @@ class ArrowConverterContext:
     ) -> datetime64:
         nanoseconds = int(decimal.Decimal(epoch).scaleb(9) + decimal.Decimal(fraction))
         return numpy.datetime64(nanoseconds, "ns")
+
+    def DECIMAL128_to_decimal(self, int128_bytes: bytes, scale: int):
+        int128 = int.from_bytes(int128_bytes, byteorder=byteorder, signed=True)
+        if scale == 0:
+            return int128
+        digits = [int(digit) for digit in str(int128) if digit != '-']
+        sign = int128 < 0
+        return decimal.Decimal((sign, digits, -scale))

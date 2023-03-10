@@ -29,14 +29,14 @@ private:
 class DecimalFromDecimalConverter : public DecimalBaseConverter
 {
 public:
-  explicit DecimalFromDecimalConverter(std::shared_ptr<ArrowArrayView> array,
+  explicit DecimalFromDecimalConverter(PyObject* context, std::shared_ptr<ArrowArrayView> array,
                                        int scale);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
-
+    PyObject* m_context;
   int m_scale;
   /** no need for this converter to store precision*/
 };
