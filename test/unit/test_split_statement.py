@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from io import StringIO
+from textwrap import dedent
 
 import pytest
 
@@ -495,6 +496,31 @@ select 1;
     with StringIO(s) as f:
         itr = split_statements(f, remove_comments=False)
         assert next(itr) == ("--test ;\n" "select 1;", False)
+        with pytest.raises(StopIteration):
+            next(itr)
+
+
+@pytest.mark.skipif(split_statements is None, reason="No split_statements is available")
+def test_remove_comments_end_of_line():
+    with StringIO(
+        dedent(
+            """\
+           select L_ORDERKEY,
+           L_SHIPINSTRUCT-- this is a comment
+           from lineitem
+           where L_ORDERKEY=5795896006;
+           """
+        )
+    ) as f:
+        itr = split_statements(f, remove_comments=True)
+        expected_sql = dedent(
+            """\
+        select L_ORDERKEY,
+        L_SHIPINSTRUCT
+        from lineitem
+        where L_ORDERKEY=5795896006;"""
+        )
+        assert next(itr) == (expected_sql, False)
         with pytest.raises(StopIteration):
             next(itr)
 
