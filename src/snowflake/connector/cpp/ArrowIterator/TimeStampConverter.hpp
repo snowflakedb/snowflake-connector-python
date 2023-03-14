@@ -57,13 +57,12 @@ private:
 class TwoFieldTimeStampNTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit TwoFieldTimeStampNTZConverter(std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema,
+  explicit TwoFieldTimeStampNTZConverter(std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema,
                                          int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowSchemaView> m_schema;
   std::shared_ptr<ArrowArrayView> m_array;
   std::shared_ptr<ArrowArrayView> m_epoch;
   std::shared_ptr<ArrowArrayView> m_fraction;
@@ -73,13 +72,12 @@ private:
 class NumpyTwoFieldTimeStampNTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit NumpyTwoFieldTimeStampNTZConverter(std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema,
+  explicit NumpyTwoFieldTimeStampNTZConverter(std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema,
                                               int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowSchemaView> m_schema;
   std::shared_ptr<ArrowArrayView> m_array;
   std::shared_ptr<ArrowArrayView> m_epoch;
   std::shared_ptr<ArrowArrayView> m_fraction;
@@ -100,13 +98,12 @@ private:
 class TwoFieldTimeStampLTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit TwoFieldTimeStampLTZConverter(std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema,
+  explicit TwoFieldTimeStampLTZConverter(std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema,
                                          int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowSchemaView> m_schema;
   std::shared_ptr<ArrowArrayView> m_array;
   std::shared_ptr<ArrowArrayView> m_epoch;
   std::shared_ptr<ArrowArrayView> m_fraction;
@@ -115,13 +112,12 @@ private:
 class TwoFieldTimeStampTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit TwoFieldTimeStampTZConverter(std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema,
+  explicit TwoFieldTimeStampTZConverter(std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema,
                                         int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowSchemaView> m_schema;
   std::shared_ptr<ArrowArrayView> m_array;
   std::shared_ptr<ArrowArrayView> m_epoch;
   std::shared_ptr<ArrowArrayView> m_timezone;
@@ -130,13 +126,12 @@ private:
 class ThreeFieldTimeStampTZConverter : public TimeStampBaseConverter
 {
 public:
-  explicit ThreeFieldTimeStampTZConverter(std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema,
+  explicit ThreeFieldTimeStampTZConverter(std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema,
                                           int32_t scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowSchemaView> m_schema;
   std::shared_ptr<ArrowArrayView> m_array;
   std::shared_ptr<ArrowArrayView> m_epoch;
   std::shared_ptr<ArrowArrayView> m_fraction;

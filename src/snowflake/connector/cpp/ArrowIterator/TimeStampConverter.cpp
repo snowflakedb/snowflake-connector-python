@@ -99,15 +99,14 @@ PyObject* NumpyOneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
-    std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema, int32_t scale, PyObject* context)
-: TimeStampBaseConverter(context, scale),
-  m_schema(schema), m_array(array)
+    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+: TimeStampBaseConverter(context, scale), m_array(array)
 {
-    if (m_schema->schema->n_children != 2) {
+    if (schema->schema->n_children != 2) {
         // TODO raise error
     }
-    for(int i = 0; i < m_schema->schema->n_children; i += 1) {
-        ArrowSchema* c_schema = m_schema->schema->children[i];
+    for(int i = 0; i < schema->schema->n_children; i += 1) {
+        ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
             m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
@@ -137,15 +136,14 @@ PyObject* TwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 NumpyTwoFieldTimeStampNTZConverter::NumpyTwoFieldTimeStampNTZConverter(
-    std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema, int32_t scale, PyObject* context)
-: TimeStampBaseConverter(context, scale),
-  m_schema(schema), m_array(array)
+    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+: TimeStampBaseConverter(context, scale), m_array(array)
 {
-    if (m_schema->schema->n_children != 2) {
+    if (schema->schema->n_children != 2) {
         // TODO raise error
     }
-    for(int i = 0; i < m_schema->schema->n_children; i += 1) {
-        ArrowSchema* c_schema = m_schema->schema->children[i];
+    for(int i = 0; i < schema->schema->n_children; i += 1) {
+        ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
             m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
@@ -194,15 +192,15 @@ PyObject* OneFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 TwoFieldTimeStampLTZConverter::TwoFieldTimeStampLTZConverter(
-    std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema, int32_t scale, PyObject* context)
+    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
-  m_schema(schema), m_array(array)
+  m_array(array)
 {
-    if (m_schema->schema->n_children != 2) {
+    if (schema->schema->n_children != 2) {
         // TODO raise error
     }
-    for(int i = 0; i < m_schema->schema->n_children; i += 1) {
-        ArrowSchema* c_schema = m_schema->schema->children[i];
+    for(int i = 0; i < schema->schema->n_children; i += 1) {
+        ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
             m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
@@ -232,15 +230,14 @@ PyObject* TwoFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 TwoFieldTimeStampTZConverter::TwoFieldTimeStampTZConverter(
-    std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema, int32_t scale, PyObject* context)
-: TimeStampBaseConverter(context, scale),
-  m_schema(schema), m_array(array)
+    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+: TimeStampBaseConverter(context, scale), m_array(array)
 {
-    if (m_schema->schema->n_children != 2) {
+    if (schema->schema->n_children != 2) {
         // TODO raise error
     }
-    for(int i = 0; i < m_schema->schema->n_children; i += 1) {
-        ArrowSchema* c_schema = m_schema->schema->children[i];
+    for(int i = 0; i < schema->schema->n_children; i += 1) {
+        ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
             m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_TIME_ZONE.c_str()) == 0){
@@ -271,15 +268,14 @@ PyObject* TwoFieldTimeStampTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 ThreeFieldTimeStampTZConverter::ThreeFieldTimeStampTZConverter(
-    std::shared_ptr<ArrowArrayView> array, std::shared_ptr<ArrowSchemaView> schema, int32_t scale, PyObject* context)
-: TimeStampBaseConverter(context, scale),
-  m_schema(schema), m_array(array)
+    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+: TimeStampBaseConverter(context, scale), m_array(array)
 {
-    if (m_schema->schema->n_children != 3) {
+    if (schema->schema->n_children != 3) {
         // TODO raise error
     }
-    for(int i = 0; i < m_schema->schema->n_children; i += 1) {
-        ArrowSchema* c_schema = m_schema->schema->children[i];
+    for(int i = 0; i < schema->schema->n_children; i += 1) {
+        ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
             m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_TIME_ZONE.c_str()) == 0){

@@ -20,6 +20,48 @@
 #include <vector>
 #include <iostream>
 
+static const char* NANOARROW_TYPE_ENUM_STRING[] = {
+    "NANOARROW_TYPE_UNINITIALIZED",
+    "NANOARROW_TYPE_NA",
+    "NANOARROW_TYPE_BOOL",
+    "NANOARROW_TYPE_UINT8",
+    "NANOARROW_TYPE_INT8",
+    "NANOARROW_TYPE_UINT16",
+    "NANOARROW_TYPE_INT16",
+    "NANOARROW_TYPE_UINT32",
+    "NANOARROW_TYPE_INT32",
+    "NANOARROW_TYPE_UINT64",
+    "NANOARROW_TYPE_INT64",
+    "NANOARROW_TYPE_HALF_FLOAT",
+    "NANOARROW_TYPE_FLOAT",
+    "NANOARROW_TYPE_DOUBLE",
+    "NANOARROW_TYPE_STRING",
+    "NANOARROW_TYPE_BINARY",
+    "NANOARROW_TYPE_FIXED_SIZE_BINARY",
+    "NANOARROW_TYPE_DATE32",
+    "NANOARROW_TYPE_DATE64",
+    "NANOARROW_TYPE_TIMESTAMP",
+    "NANOARROW_TYPE_TIME32",
+    "NANOARROW_TYPE_TIME64",
+    "NANOARROW_TYPE_INTERVAL_MONTHS",
+    "NANOARROW_TYPE_INTERVAL_DAY_TIME",
+    "NANOARROW_TYPE_DECIMAL128",
+    "NANOARROW_TYPE_DECIMAL256",
+    "NANOARROW_TYPE_LIST",
+    "NANOARROW_TYPE_STRUCT",
+    "NANOARROW_TYPE_SPARSE_UNION",
+    "NANOARROW_TYPE_DENSE_UNION",
+    "NANOARROW_TYPE_DICTIONARY",
+    "NANOARROW_TYPE_MAP",
+    "NANOARROW_TYPE_EXTENSION",
+    "NANOARROW_TYPE_FIXED_SIZE_LIST",
+    "NANOARROW_TYPE_DURATION",
+    "NANOARROW_TYPE_LARGE_STRING",
+    "NANOARROW_TYPE_LARGE_BINARY",
+    "NANOARROW_TYPE_LARGE_LIST",
+    "NANOARROW_TYPE_INTERVAL_MONTH_DAY_NANO"
+};
+
 #define SF_CHECK_PYTHON_ERR() \
   if (py::checkPyError())\
   {\
@@ -109,41 +151,51 @@ void CArrowChunkIterator::initColumnConverters()
       (*m_cRecordBatches)[m_currentBatchIndex];
   m_currentSchema = currentBatch->schema();
 
-  ArrowSchema nanoarrowSchema;
+  nanoarrow::UniqueSchema nanoarrowSchema;
   // TODO: Export is not needed when using nanoarrow IPC to read schema
-  arrow::ExportSchema(*m_currentSchema, &nanoarrowSchema);
+  arrow::ExportSchema(*m_currentSchema, nanoarrowSchema.get());
 
   for (int i = 0; i < currentBatch->num_columns(); i++)
   {
     std::shared_ptr<arrow::Array> columnArray = currentBatch->column(i);
-    std::shared_ptr<arrow::DataType> dt = m_currentSchema->field(i)->type();
-    std::shared_ptr<const arrow::KeyValueMetadata> metaData =
-        m_currentSchema->field(i)->metadata();
 
-    ArrowSchema* nanoarrowColumnSchema = nanoarrowSchema.children[i];
-    std::shared_ptr<ArrowSchemaView> nanoarrowColumnSchemaView = std::make_shared<ArrowSchemaView>();
+    nanoarrow::UniqueSchema nanoarrowColumnSchemaUnique(nanoarrowSchema->children[i]);
+    ArrowSchemaView nanoarrowColumnSchemaView;
     ArrowError error;
-    ArrowSchemaViewInit(nanoarrowColumnSchemaView.get(), nanoarrowColumnSchema, &error);
+    ArrowSchemaViewInit(&nanoarrowColumnSchemaView, nanoarrowColumnSchemaUnique.get(), &error);
 
-    std::shared_ptr<ArrowArray> nanoarrowColumnArrowArray = std::make_shared<ArrowArray>();
-    std::shared_ptr<ArrowArrayView> nanoarrowColumnArrowArrayViewInstance = std::make_shared<ArrowArrayView>();
-    arrow::ExportArray(*columnArray, nanoarrowColumnArrowArray.get());
+    std::shared_ptr<ArrowArray> nanoarrowUniqueColumnArrowArray = std::make_shared<ArrowArray>();
+    std::shared_ptr<ArrowArrayView> nanoarrowUniqueColumnArrowArrayView = std::make_shared<ArrowArrayView>();
+
+    //nanoarrow::UniqueArray nanoarrowUniqueColumnArrowArray;
+    //nanoarrow::UniqueArrayView nanoarrowUniqueColumnArrowArrayView;
+
+    arrow::ExportArray(*columnArray, nanoarrowUniqueColumnArrowArray.get());
 
     int res = 0;
-    res = ArrowArrayViewInitFromSchema(nanoarrowColumnArrowArrayViewInstance.get(), nanoarrowColumnSchema, &error);
+    res = ArrowArrayViewInitFromSchema(nanoarrowUniqueColumnArrowArrayView.get(), nanoarrowColumnSchemaUnique.get(), &error);
     if(res != NANOARROW_OK) {
         std::string errorInfo = Logger::formatString("ArrowArrayViewInitFromSchema failure");
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     }
-    res = ArrowArrayViewSetArray(nanoarrowColumnArrowArrayViewInstance.get(), nanoarrowColumnArrowArray.get(), &error);
+
+    res = ArrowArrayViewSetArray(nanoarrowUniqueColumnArrowArrayView.get(), nanoarrowUniqueColumnArrowArray.get(), &error);
     if(res != NANOARROW_OK) {
         std::string errorInfo = Logger::formatString("ArrowArrayViewSetArray failure");
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     }
+
+//    std::shared_ptr<ArrowArrayView> nanoarrowColumnArrowArrayViewInstance = std::shared_ptr<ArrowArrayView>(nanoarrowUniqueColumnArrowArrayView.get());
+    std::shared_ptr<ArrowArrayView> nanoarrowColumnArrowArrayViewInstance = nanoarrowUniqueColumnArrowArrayView;
+//    m_uniqueColumnArrowArrays.push_back(nanoarrowUniqueColumnArrowArray.get());
+//    m_uniqueColumnArrowArrayViews.push_back(nanoarrowUniqueColumnArrowArrayView.get());
+    m_arrays.push_back(nanoarrowUniqueColumnArrowArray);
+    m_arrayViews.push_back(nanoarrowUniqueColumnArrowArrayView);
+
     ArrowStringView snowflakeLogicalType;
-    const char* metadata = nanoarrowSchema.children[i]->metadata;
+    const char* metadata = nanoarrowSchema->children[i]->metadata;
     ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
     SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
         std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
@@ -164,7 +216,7 @@ void CArrowChunkIterator::initColumnConverters()
             precision = std::stoi(precisionString.data);
         }
 
-        switch(nanoarrowColumnSchemaView->type)
+        switch(nanoarrowColumnSchemaView.type)
         {
 #define _SF_INIT_FIXED_CONVERTER(ARROW_TYPE) \
           case ArrowType::ARROW_TYPE: \
@@ -222,7 +274,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for FIXED data",
-                dt->id());
+                NANOARROW_TYPE_ENUM_STRING[nanoarrowColumnSchemaView.type]);
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -295,7 +347,7 @@ void CArrowChunkIterator::initColumnConverters()
             ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
             scale = std::stoi(scaleString.data);
         }
-        switch (nanoarrowColumnSchemaView->type)
+        switch (nanoarrowColumnSchemaView.type)
         {
           case NANOARROW_TYPE_INT32:
           case NANOARROW_TYPE_INT64:
@@ -311,7 +363,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIME data",
-                dt->id());
+                NANOARROW_TYPE_ENUM_STRING[nanoarrowColumnSchemaView.type]);
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -328,7 +380,7 @@ void CArrowChunkIterator::initColumnConverters()
             ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
             scale = std::stoi(scaleString.data);
         }
-        switch (nanoarrowColumnSchemaView->type)
+        switch (nanoarrowColumnSchemaView.type)
         {
           case NANOARROW_TYPE_INT64:
           {
@@ -353,13 +405,13 @@ void CArrowChunkIterator::initColumnConverters()
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::NumpyTwoFieldTimeStampNTZConverter>(
-                      nanoarrowColumnArrowArrayViewInstance, nanoarrowColumnSchemaView, scale, m_context));
+                      nanoarrowColumnArrowArrayViewInstance, &nanoarrowColumnSchemaView, scale, m_context));
             }
             else
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::TwoFieldTimeStampNTZConverter>(
-                      nanoarrowColumnArrowArrayViewInstance, nanoarrowColumnSchemaView, scale, m_context));
+                      nanoarrowColumnArrowArrayViewInstance, &nanoarrowColumnSchemaView, scale, m_context));
             }
             break;
           }
@@ -369,7 +421,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIMESTAMP_NTZ data",
-                dt->id());
+                NANOARROW_TYPE_ENUM_STRING[nanoarrowColumnSchemaView.type]);
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -386,7 +438,7 @@ void CArrowChunkIterator::initColumnConverters()
             ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
             scale = std::stoi(scaleString.data);
         }
-        switch (nanoarrowColumnSchemaView->type)
+        switch (nanoarrowColumnSchemaView.type)
         {
           case NANOARROW_TYPE_INT64:
           {
@@ -400,7 +452,7 @@ void CArrowChunkIterator::initColumnConverters()
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::TwoFieldTimeStampLTZConverter>(
-                    nanoarrowColumnArrowArrayViewInstance, nanoarrowColumnSchemaView, scale, m_context));
+                    nanoarrowColumnArrowArrayViewInstance, &nanoarrowColumnSchemaView, scale, m_context));
             break;
           }
 
@@ -409,7 +461,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIMESTAMP_LTZ data",
-                dt->id());
+                NANOARROW_TYPE_ENUM_STRING[nanoarrowColumnSchemaView.type]);
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -420,20 +472,23 @@ void CArrowChunkIterator::initColumnConverters()
 
       case SnowflakeType::Type::TIMESTAMP_TZ:
       {
-        int scale = metaData
-                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
-                        : 9;
-        int byteLength =
-            metaData
-                ? std::stoi(metaData->value(metaData->FindKey("byteLength")))
-                : 16;
+        ArrowStringView scaleString;
+        ArrowStringView byteLengthString;
+        int scale = 9;
+        int byteLength = 16;
+        if(metadata != nullptr) {
+            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            ArrowMetadataGetValue(metadata, ArrowCharView("byteLength"), &byteLengthString);
+            scale = std::stoi(scaleString.data);
+            byteLength = std::stoi(byteLengthString.data);
+        }
         switch (byteLength)
         {
           case 8:
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::TwoFieldTimeStampTZConverter>(
-                    nanoarrowColumnArrowArrayViewInstance, nanoarrowColumnSchemaView, scale, m_context));
+                    nanoarrowColumnArrowArrayViewInstance, &nanoarrowColumnSchemaView, scale, m_context));
             break;
           }
 
@@ -441,7 +496,7 @@ void CArrowChunkIterator::initColumnConverters()
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::ThreeFieldTimeStampTZConverter>(
-                    nanoarrowColumnArrowArrayViewInstance, nanoarrowColumnSchemaView, scale, m_context));
+                    nanoarrowColumnArrowArrayViewInstance, &nanoarrowColumnSchemaView, scale, m_context));
             break;
           }
 
@@ -450,7 +505,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIMESTAMP_TZ data",
-                dt->id());
+                NANOARROW_TYPE_ENUM_STRING[nanoarrowColumnSchemaView.type]);
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -464,7 +519,7 @@ void CArrowChunkIterator::initColumnConverters()
       {
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] unknown snowflake data type : %s",
-            metaData->value(metaData->FindKey("logicalType")).c_str());
+            snowflakeLogicalType.data);
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
