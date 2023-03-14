@@ -14,6 +14,11 @@ StringConverter::StringConverter(std::shared_ptr<ArrowArrayView> array)
 {
 }
 
+StringConverter::StringConverter(ArrowArrayView* array)
+: m_uniqueArray(array)
+{
+}
+
 PyObject* StringConverter::toPyObject(int64_t rowIndex) const
 {
   if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
