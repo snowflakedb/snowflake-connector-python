@@ -7,6 +7,7 @@
 
 #include "IColumnConverter.hpp"
 #include "nanoarrow.h"
+#include "nanoarrow.hpp"
 #include <memory>
 
 namespace sf
@@ -16,13 +17,18 @@ template <typename T>
 class IntConverter : public IColumnConverter
 {
 public:
-//  explicit IntConverter(std::shared_ptr<arrow::Array> array)
-//  : m_array(std::dynamic_pointer_cast<T>(array))
-//  {
-//  }
+  explicit IntConverter(std::shared_ptr<arrow::Array> array)
+  : m_array(std::dynamic_pointer_cast<T>(array))
+  {
+  }
 
   explicit IntConverter(std::shared_ptr<ArrowArrayView> array)
   : m_nanoarrowArrayView(array)
+  {
+  }
+
+  explicit IntConverter(nanoarrow::UniqueArrayView array)
+  : m_uniqueArray(array.get())
   {
   }
 
@@ -39,6 +45,7 @@ public:
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
+  nanoarrow::UniqueArrayView m_uniqueArray;
   std::shared_ptr<T> m_array;
   std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
 };
@@ -69,11 +76,18 @@ public:
   {
   }
 
+  explicit NumpyIntConverter(nanoarrow::UniqueArrayView array, PyObject * context)
+  : m_uniqueArray(array.get()),
+    m_context(context)
+  {
+  }
+
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
   std::shared_ptr<T> m_array;
   std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
+  nanoarrow::UniqueArrayView m_uniqueArray;
 
   PyObject * m_context;
 };
