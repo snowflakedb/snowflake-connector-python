@@ -30,9 +30,9 @@ public:
   CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> * batches, PyObject *use_numpy);
 
   /**
-   * Desctructor
+   * Destructor
    */
-  virtual ~CArrowChunkIterator() = default;
+  virtual ~CArrowChunkIterator();
 
   /**
    * @return a python tuple object which contains all data in current row
@@ -50,8 +50,6 @@ protected:
 
   /** list of column converters*/
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
-  std::vector<nanoarrow::UniqueArray> m_uniqueColumnArrowArrays;
-  std::vector<nanoarrow::UniqueArrayView> m_uniqueColumnArrowArrayViews;
   std::vector<std::shared_ptr<ArrowArray>> m_arrays;
   std::vector<std::shared_ptr<ArrowArrayView>> m_arrayViews;
   /** row index inside current record batch (start from 0) */
