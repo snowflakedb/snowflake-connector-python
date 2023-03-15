@@ -96,6 +96,14 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, std::vector<std::sha
                m_columnCount, m_useNumpy);
 }
 
+CArrowChunkIterator::~CArrowChunkIterator()
+{
+    for(int i = 0; i < m_arrays.size(); i += 1) {
+        m_arrays[i]->release(m_arrays[i].get());
+        ArrowArrayViewReset(m_arrayViews[i].get());
+    }
+}
+
 std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
 {
   m_rowIndexInBatch++;
@@ -167,9 +175,6 @@ void CArrowChunkIterator::initColumnConverters()
     std::shared_ptr<ArrowArray> nanoarrowUniqueColumnArrowArray = std::make_shared<ArrowArray>();
     std::shared_ptr<ArrowArrayView> nanoarrowUniqueColumnArrowArrayView = std::make_shared<ArrowArrayView>();
 
-    //nanoarrow::UniqueArray nanoarrowUniqueColumnArrowArray;
-    //nanoarrow::UniqueArrayView nanoarrowUniqueColumnArrowArrayView;
-
     arrow::ExportArray(*columnArray, nanoarrowUniqueColumnArrowArray.get());
 
     int res = 0;
@@ -187,10 +192,7 @@ void CArrowChunkIterator::initColumnConverters()
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     }
 
-//    std::shared_ptr<ArrowArrayView> nanoarrowColumnArrowArrayViewInstance = std::shared_ptr<ArrowArrayView>(nanoarrowUniqueColumnArrowArrayView.get());
     std::shared_ptr<ArrowArrayView> nanoarrowColumnArrowArrayViewInstance = nanoarrowUniqueColumnArrowArrayView;
-//    m_uniqueColumnArrowArrays.push_back(nanoarrowUniqueColumnArrowArray.get());
-//    m_uniqueColumnArrowArrayViews.push_back(nanoarrowUniqueColumnArrowArrayView.get());
     m_arrays.push_back(nanoarrowUniqueColumnArrowArray);
     m_arrayViews.push_back(nanoarrowUniqueColumnArrowArrayView);
 
