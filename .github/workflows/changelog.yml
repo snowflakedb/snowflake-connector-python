@@ -16,5 +16,5 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Ensure CHANGELOG.md is updated
+    - name: Ensure DESCRIPTION.md is updated
       run: git diff --name-only --diff-filter=ACMRT ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -wq "DESCRIPTION.md"
