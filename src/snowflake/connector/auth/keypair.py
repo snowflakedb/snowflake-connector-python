@@ -47,17 +47,18 @@ class AuthByKeyPair(AuthByPlugin):
 
     def __init__(
         self,
-        private_key: bytes,
+        private_key: bytes | RSAPrivateKey,
         lifetime_in_seconds: int = LIFETIME,
     ) -> None:
         """Inits AuthByKeyPair class with private key.
 
         Args:
-            private_key: a byte array of der formats of private key
+            private_key: a byte array of der formats of private key, or an
+                object that implements the `RSAPrivateKey` interface.
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         super().__init__()
-        self._private_key: bytes | None = private_key
+        self._private_key: bytes | RSAPrivateKey | None = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -102,28 +103,32 @@ class AuthByKeyPair(AuthByPlugin):
 
         now = datetime.utcnow()
 
-        try:
-            private_key = load_der_private_key(
-                data=self._private_key,
-                password=None,
-                backend=default_backend(),
-            )
-        except Exception as e:
-            raise ProgrammingError(
-                msg=f"Failed to load private key: {e}\nPlease provide a valid "
-                "unencrypted rsa private key in DER format as bytes object",
-                errno=ER_INVALID_PRIVATE_KEY,
-            )
+        if isinstance(self._private_key, bytes):
+            try:
+                private_key = load_der_private_key(
+                    data=self._private_key,
+                    password=None,
+                    backend=default_backend(),
+                )
+            except Exception as e:
+                raise ProgrammingError(
+                    msg=f"Failed to load private key: {e}\nPlease provide a valid "
+                    "unencrypted rsa private key in DER format as bytes object",
+                    errno=ER_INVALID_PRIVATE_KEY,
+                )
 
-        if not isinstance(private_key, RSAPrivateKey):
-            raise ProgrammingError(
-                msg=f"Private key type ({private_key.__class__.__name__}) not supported."
-                "\nPlease provide a valid rsa private key in DER format as bytes "
-                "object",
-                errno=ER_INVALID_PRIVATE_KEY,
-            )
+            if not isinstance(private_key, RSAPrivateKey):
+                raise ProgrammingError(
+                    msg=f"Private key type ({private_key.__class__.__name__}) not supported."
+                    "\nPlease provide a valid rsa private key in DER format as bytes "
+                    "object",
+                    errno=ER_INVALID_PRIVATE_KEY,
+                )
+        else:
+            private_key = self._private_key
 
-        public_key_fp = self.calculate_public_key_fingerprint(private_key)
+        public_key = private_key.public_key()
+        public_key_fp = self.calculate_public_key_fingerprint(public_key)
 
         self._jwt_token_exp = now + self._lifetime
         payload = {
@@ -148,9 +153,9 @@ class AuthByKeyPair(AuthByPlugin):
         return {"success": False}
 
     @staticmethod
-    def calculate_public_key_fingerprint(private_key):
+    def calculate_public_key_fingerprint(public_key):
         # get public key bytes
-        public_key_der = private_key.public_key().public_bytes(
+        public_key_der = public_key.public_bytes(
             Encoding.DER, PublicFormat.SubjectPublicKeyInfo
         )
 
