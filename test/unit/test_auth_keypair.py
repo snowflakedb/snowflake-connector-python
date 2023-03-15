@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, Mock, PropertyMock
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.serialization import load_der_private_key
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.constants import OCSPMode
@@ -42,6 +44,39 @@ def test_auth_keypair():
     account = "testaccount"
     user = "testuser"
     auth_instance = AuthByKeyPair(private_key=private_key_der)
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    # success test case
+    rest = _init_rest(application, _create_mock_auth_keypair_rest_response())
+    auth = Auth(rest)
+    auth.authenticate(auth_instance, account, user)
+    assert not rest._connection.errorhandler.called  # not error
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
+
+
+def test_auth_keypair_abc():
+    """Simple Key Pair test using abstraction layer."""
+    private_key_der, public_key_der_encoded = generate_key_pair(2048)
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+
+    private_key = load_der_private_key(
+        data=private_key_der,
+        password=None,
+        backend=default_backend(),
+    )
+
+    assert isinstance(private_key, RSAPrivateKey)
+
+    auth_instance = AuthByKeyPair(private_key=private_key)
     auth_instance.handle_timeout(
         authenticator="SNOWFLAKE_JWT",
         service_name=None,
