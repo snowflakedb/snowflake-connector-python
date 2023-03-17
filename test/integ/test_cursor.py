@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
 
 import pytest
-
 import pytz
+
 import snowflake.connector
 from snowflake.connector import (
     DictCursor,

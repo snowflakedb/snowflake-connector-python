@@ -16,9 +16,8 @@ from collections.abc import Iterator
 from threading import Lock
 from typing import Generic, NoReturn, TypeVar
 
-from typing_extensions import NamedTuple, Self
-
 from filelock import FileLock, Timeout
+from typing_extensions import NamedTuple, Self
 
 from . import constants
 

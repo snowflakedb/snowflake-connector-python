@@ -18,9 +18,8 @@ from inspect import getfullargspec as get_args
 from socket import socket
 from typing import Any
 
-import OpenSSL.SSL
-
 import certifi
+import OpenSSL.SSL
 
 from .constants import OCSPMode
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED

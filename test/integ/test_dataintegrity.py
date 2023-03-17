@@ -16,6 +16,7 @@ import time
 from math import fabs
 
 import pytz
+
 from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFromTicks
 
 try:

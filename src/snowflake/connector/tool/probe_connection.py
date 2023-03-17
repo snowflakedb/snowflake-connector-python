@@ -6,9 +6,8 @@ from __future__ import annotations
 
 from socket import gaierror, gethostbyname_ex
 
-from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
-
 from asn1crypto import ocsp
+from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
 from ..compat import urlsplit
 from ..ssl_wrap_socket import _openssl_connect

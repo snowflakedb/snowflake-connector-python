@@ -16,9 +16,8 @@ from unittest import mock
 
 import numpy
 import pytest
-from numpy.testing import assert_equal
-
 import pytz
+from numpy.testing import assert_equal
 
 try:
     from snowflake.connector.constants import (

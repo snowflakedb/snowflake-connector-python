@@ -12,8 +12,8 @@ import random
 from io import BytesIO
 
 import pytest
-
 import pytz
+
 from snowflake.connector.arrow_context import ArrowConverterContext
 
 try:

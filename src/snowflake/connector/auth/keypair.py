@@ -12,10 +12,9 @@ from datetime import datetime, timedelta
 from logging import getLogger
 from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-
 import jwt
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
