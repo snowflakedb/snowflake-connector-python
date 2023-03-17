@@ -42,7 +42,4 @@ class SnowflakeURLUtil:
         Returns:
             URL encoded string
         """
-        if target is None:
-            logger.debug("The string to be URL encoded is None")
-            return ""
         return urllib.parse.quote_plus(target, safe="")
