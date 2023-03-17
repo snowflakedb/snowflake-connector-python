@@ -1,18 +1,24 @@
 #
+# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+#
+
+#
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
-from logging import getLogger
 import re
 import urllib.parse
+from logging import getLogger
 
 logger = getLogger(__name__)
 
+
 class SnowflakeURLUtil:
     url_validator = re.compile(
-        "^http(s?)\\:\\/\\/[0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z@:])*(:(0-9)*)*(\\/?)([a-zA-Z0-9\\-\\.\\?\\,\\&\\(\\)\\/\\\\\\+&%\\$#_=@]*)?$")
+        "^http(s?)\\:\\/\\/[0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z@:])*(:(0-9)*)*(\\/?)([a-zA-Z0-9\\-\\.\\?\\,\\&\\(\\)\\/\\\\\\+&%\\$#_=@]*)?$"
+    )
 
     @staticmethod
     def is_valid_url(url: str) -> bool:
@@ -28,7 +34,7 @@ class SnowflakeURLUtil:
 
     @staticmethod
     def url_encode_str(target: str) -> str:
-        """ Converts a target string into escaped URL safe string
+        """Converts a target string into escaped URL safe string
 
         Args:
             target: string to be URL encoded
@@ -39,4 +45,4 @@ class SnowflakeURLUtil:
         if target is None:
             logger.debug("The string to be URL encoded is None")
             return ""
-        return urllib.parse.quote_plus(target, safe='')
+        return urllib.parse.quote_plus(target, safe="")
