@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -14,6 +14,9 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from logging import getLogger
 from os import getenv
+
+from cryptography.exceptions import InvalidSignature
+from OpenSSL.SSL import Connection
 
 from asn1crypto.algos import DigestAlgorithm
 from asn1crypto.core import Integer, OctetString
@@ -31,12 +34,9 @@ from asn1crypto.x509 import Certificate
 from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Signature import PKCS1_v1_5
-from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
-from OpenSSL.SSL import Connection
-
 from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
     ER_OCSP_RESPONSE_ATTACHED_CERT_INVALID,

@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 from __future__ import annotations
 
 import decimal
@@ -15,8 +16,9 @@ from unittest import mock
 
 import numpy
 import pytest
-import pytz
 from numpy.testing import assert_equal
+
+import pytz
 
 try:
     from snowflake.connector.constants import (

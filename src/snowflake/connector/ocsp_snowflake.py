@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -23,14 +23,14 @@ from threading import Lock, RLock
 from time import gmtime, strftime
 from typing import Any, NamedTuple
 
+from OpenSSL.SSL import Connection
+
 # We use regular requests and urlib3 when we reach out to do OCSP checks, basically in this very narrow
 # part of the code where we want to call out to check for revoked certificates,
 # we don't want to use our hardened version of requests.
 import requests as generic_requests
 from asn1crypto.ocsp import CertId, OCSPRequest, SingleResponse
 from asn1crypto.x509 import Certificate
-from OpenSSL.SSL import Connection
-
 from snowflake.connector.compat import OK, urlsplit, urlunparse
 from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
 from snowflake.connector.errorcode import (

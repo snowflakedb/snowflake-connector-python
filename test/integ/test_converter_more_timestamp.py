@@ -1,14 +1,14 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import pytz
 from dateutil.parser import parse
 
+import pytz
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -8,8 +8,8 @@ from __future__ import annotations
 from datetime import time, timedelta
 
 import pytest
-import pytz
 
+import pytz
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL

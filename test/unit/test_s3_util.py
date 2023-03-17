@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ try:
 except ImportError:
     # Compatibility for olddriver tests
     from requests import HTTPError, Response
-
     from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED  # NOQA
 
     SnowflakeFileMeta = dict

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from logging import getLogger
 from typing import IO, TYPE_CHECKING
 
 import pytest
-import pytz
 
+import pytz
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
 from snowflake.connector.file_transfer_agent import (

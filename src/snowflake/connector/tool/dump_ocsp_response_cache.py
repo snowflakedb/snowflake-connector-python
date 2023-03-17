@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ from glob import glob
 from os import path
 from time import gmtime, strftime, time
 
-from asn1crypto import core, ocsp
-from asn1crypto.x509 import Certificate
 from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
+from asn1crypto import core, ocsp
+from asn1crypto.x509 import Certificate
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 

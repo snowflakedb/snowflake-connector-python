@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -9,13 +9,13 @@ import uuid
 from datetime import datetime, timedelta
 from os import path
 
-import jwt
 import pytest
+
+import jwt
+import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, rsa
-
-import snowflake.connector
 
 
 @pytest.mark.skipolddriver
