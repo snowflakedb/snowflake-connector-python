@@ -14,8 +14,8 @@ from logging import getLogger
 from typing import IO, TYPE_CHECKING
 
 import pytest
-
 import pytz
+
 from snowflake.connector import ProgrammingError
 from snowflake.connector.cursor import DictCursor
 from snowflake.connector.file_transfer_agent import (

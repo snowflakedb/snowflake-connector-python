@@ -7,10 +7,11 @@ This sample shows how to implement a key pair authentication plugin
 which reads private key from a file
 """
 
-import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from snowflake.connector.auth.keypair import AuthByKeyPair
+
+import snowflake.connector
 
 PRIVATE_KEY_PASSPHRASE = (
     None  # change to your private key passphrase if it is set, else leave it None

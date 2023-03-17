@@ -36,6 +36,7 @@ try:
 except ImportError:
     # Compatibility for olddriver tests
     from requests import HTTPError, Response
+
     from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED  # NOQA
 
     SnowflakeFileMeta = dict

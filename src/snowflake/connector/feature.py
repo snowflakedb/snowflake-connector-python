@@ -2,7 +2,6 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
-
 # Feature flags
 
 feature_use_pyopenssl = True  # use pyopenssl API or openssl command

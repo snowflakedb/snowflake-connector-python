@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, Mock, PropertyMock
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+
 from snowflake.connector.auth import Auth
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
