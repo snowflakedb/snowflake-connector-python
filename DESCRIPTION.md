@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.0.2(Unreleased)
+
+  - Fixed a memory leak in the logging module of the Cython extension
+
 - v3.0.1(February 28, 2023)
 
   - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
