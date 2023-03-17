@@ -9,9 +9,9 @@ which reads private key from a file
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from snowflake.connector.auth.keypair import AuthByKeyPair
 
 import snowflake.connector
+from snowflake.connector.auth.keypair import AuthByKeyPair
 
 PRIVATE_KEY_PASSPHRASE = (
     None  # change to your private key passphrase if it is set, else leave it None
