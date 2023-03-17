@@ -30,7 +30,7 @@ class SnowflakeURLUtil:
         Returns:
             true/ false depending on whether the URL is valid or not
         """
-        return SnowflakeURLUtil.url_validator.match(url)
+        return bool(SnowflakeURLUtil.url_validator.match(url))
 
     @staticmethod
     def url_encode_str(target: str) -> str:
