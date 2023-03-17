@@ -15,31 +15,33 @@ from logging import getLogger
 logger = getLogger(__name__)
 
 
-class SnowflakeURLUtil:
-    url_validator = re.compile(
-        "^http(s?)\\:\\/\\/[0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z@:])*(:(0-9)*)*(\\/?)([a-zA-Z0-9\\-\\.\\?\\,\\&\\(\\)\\/\\\\\\+&%\\$#_=@]*)?$"
-    )
+URL_VALIDATOR = re.compile(
+    "^http(s?)\\:\\/\\/[0-9a-zA-Z]([-.\\w]*[0-9a-zA-Z@:])*(:(0-9)*)*(\\/?)([a-zA-Z0-9\\-\\.\\?\\,\\&\\(\\)\\/\\\\\\+&%\\$#_=@]*)?$"
+)
 
-    @staticmethod
-    def is_valid_url(url: str) -> bool:
-        """Confirms if the provided URL is a valid HTTP/ HTTPs URL
 
-        Args:
-            url: the URL that needs to be validated
+def is_valid_url(url: str) -> bool:
+    """Confirms if the provided URL is a valid HTTP/ HTTPs URL
 
-        Returns:
-            true/ false depending on whether the URL is valid or not
-        """
-        return bool(SnowflakeURLUtil.url_validator.match(url))
+    Args:
+        url: the URL that needs to be validated
 
-    @staticmethod
-    def url_encode_str(target: str) -> str:
-        """Converts a target string into escaped URL safe string
+    Returns:
+        true/ false depending on whether the URL is valid or not
+    """
+    return bool(URL_VALIDATOR.match(url))
 
-        Args:
-            target: string to be URL encoded
 
-        Returns:
-            URL encoded string
-        """
-        return urllib.parse.quote_plus(target, safe="")
+def url_encode_str(target: str) -> str:
+    """Converts a target string into escaped URL safe string
+
+    Args:
+        target: string to be URL encoded
+
+    Returns:
+        URL encoded string
+    """
+    if target is None:
+        logger.debug("The string to be URL encoded is None")
+        return ""
+    return urllib.parse.quote_plus(target, safe="")

@@ -6,19 +6,19 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-from snowflake.connector.url_util import SnowflakeURLUtil
+from snowflake.connector.url_util import is_valid_url, url_encode_str
 
 
 def test_url_validator():
-    assert SnowflakeURLUtil.is_valid_url("https://ssoTestURL.okta.com")
-    assert SnowflakeURLUtil.is_valid_url("https://ssoTestURL.okta.com:8080")
-    assert SnowflakeURLUtil.is_valid_url("https://ssoTestURL.okta.com/testpathvalue")
+    assert is_valid_url("https://ssoTestURL.okta.com")
+    assert is_valid_url("https://ssoTestURL.okta.com:8080")
+    assert is_valid_url("https://ssoTestURL.okta.com/testpathvalue")
 
-    assert not SnowflakeURLUtil.is_valid_url("-a Calculator")
-    assert not SnowflakeURLUtil.is_valid_url("This is a random text")
-    assert not SnowflakeURLUtil.is_valid_url("file://TestForFile")
+    assert not is_valid_url("-a Calculator")
+    assert not is_valid_url("This is a random text")
+    assert not is_valid_url("file://TestForFile")
 
 
 def test_encoder():
-    assert SnowflakeURLUtil.url_encode_str("Hello @World") == "Hello+%40World"
-    assert SnowflakeURLUtil.url_encode_str("Test//String") == "Test%2F%2FString"
+    assert url_encode_str("Hello @World") == "Hello+%40World"
+    assert url_encode_str("Test//String") == "Test%2F%2FString"
