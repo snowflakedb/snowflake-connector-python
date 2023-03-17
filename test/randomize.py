@@ -1,6 +1,7 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 """
 This module was added back to the repository for compatibility with the old driver tests that
 rely on random_string from this file for functionality.
