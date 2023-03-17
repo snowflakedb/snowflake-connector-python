@@ -98,6 +98,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, std::vector<std::sha
 
 CArrowChunkIterator::~CArrowChunkIterator()
 {
+    // TODO: signal 6: SIGABRT free already deallocated memory
     for(int i = 0; i < m_arrays.size(); i += 1) {
         m_arrays[i]->release(m_arrays[i].get());
         ArrowArrayViewReset(m_arrayViews[i].get());

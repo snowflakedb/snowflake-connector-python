@@ -46,11 +46,17 @@ void Logger::log(int level, const char *path_name, const char *func_name, int li
   py::UniqueRef call_log(PyObject_GetAttrString(logger, "log"));
 
   // prepare keyword args for snow_logger
-  PyDict_SetItemString(keywords.get(), "level", Py_BuildValue("i", level));
-  PyDict_SetItemString(keywords.get(), "path_name", Py_BuildValue("s", path_name));
-  PyDict_SetItemString(keywords.get(), "func_name", Py_BuildValue("s", func_name));
-  PyDict_SetItemString(keywords.get(), "line_num", Py_BuildValue("i", line_num));
-  PyDict_SetItemString(keywords.get(), "msg", Py_BuildValue("s", msg));
+  py::UniqueRef level_ref(Py_BuildValue("i", level));
+  py::UniqueRef path_name_ref(Py_BuildValue("s", path_name));
+  py::UniqueRef func_name_ref(Py_BuildValue("s", func_name));
+  py::UniqueRef line_num_ref(Py_BuildValue("i", line_num));
+  py::UniqueRef msg_ref(Py_BuildValue("s", msg));
+
+  PyDict_SetItemString(keywords.get(), "level", level_ref.get());
+  PyDict_SetItemString(keywords.get(), "path_name", path_name_ref.get());
+  PyDict_SetItemString(keywords.get(), "func_name", func_name_ref.get());
+  PyDict_SetItemString(keywords.get(), "line_num", line_num_ref.get());
+  PyDict_SetItemString(keywords.get(), "msg", msg_ref.get());
 
   // call snow_logging.SnowLogger.log()
   PyObject_Call(call_log.get(), Py_BuildValue("()"), keywords.get());
