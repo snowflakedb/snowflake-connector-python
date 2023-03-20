@@ -56,6 +56,14 @@ ratio number(6,2))
                 "snowflake.connector.cursor.SnowflakeFileTransferAgent",
                 side_effect=mocked_file_agent,
             ):
+                # upload with auto compress = True
+                cnx.cursor().execute(
+                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=True",
+                )
+                assert mocked_file_agent.agent._multipart_threshold == 10000
+                cnx.cursor().execute(f"remove @%{db_parameters['name']}")
+
+                # upload with auto compress = False
                 cnx.cursor().execute(
                     f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
                 )
@@ -63,7 +71,7 @@ ratio number(6,2))
 
                 # Upload again. There was a bug when a large file is uploaded again while it already exists in a stage.
                 # Refer to preprocess(self) of storage_client.py.
-                # self.get_digest() needs to be called before self.get_file_header(meta.dst_file_name)
+                # self.get_digest() needs to be called before self.get_file_header(meta.dst_file_name).
                 # SNOW-749141
                 cnx.cursor().execute(
                     f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
