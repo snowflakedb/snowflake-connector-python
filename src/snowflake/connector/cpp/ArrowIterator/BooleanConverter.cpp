@@ -8,18 +8,18 @@
 namespace sf
 {
 
-BooleanConverter::BooleanConverter(std::shared_ptr<ArrowArrayView> array)
-: m_nanoarrowArrayView(array)
+BooleanConverter::BooleanConverter(ArrowArrayView* array)
+: m_array(array)
 {
 }
 
 PyObject* BooleanConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
 
-  if(ArrowArrayViewGetIntUnsafe(m_nanoarrowArrayView.get(), rowIndex)) {
+  if(ArrowArrayViewGetIntUnsafe(m_array, rowIndex)) {
     Py_RETURN_TRUE;
   } else {
     Py_RETURN_FALSE;
