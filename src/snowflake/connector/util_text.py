@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -146,6 +146,8 @@ def split_statements(
                     if not remove_comments:
                         # keep the comment
                         statement.append((line[col:], False))
+                    else:
+                        statement.append(("\n", True))
                     col = len_line + 1
                     col0 = col
                 elif line[col:].startswith("/*") and not line[col0:].startswith(
