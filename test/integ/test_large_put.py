@@ -61,12 +61,13 @@ ratio number(6,2))
                 )
                 assert mocked_file_agent.agent._multipart_threshold == 10000
 
-                # Upload again. There was a bug when a large file is uploaded again while it aready exists in a stage.
+                # Upload again. There was a bug when a large file is uploaded again while it already exists in a stage.
                 # Refer to preprocess(self) of storage_client.py.
                 # self.get_digest() needs to be called before self.get_file_header(meta.dst_file_name)
+                # SNOW-749141
                 cnx.cursor().execute(
                     f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
-                )
+                )  # do not add `overwrite=True` because overwrite will skip the code path to extract file header.
 
             c = cnx.cursor()
             try:
