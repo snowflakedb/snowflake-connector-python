@@ -15,23 +15,23 @@ namespace sf
 class FloatConverter : public IColumnConverter
 {
 public:
-  explicit FloatConverter(std::shared_ptr<ArrowArrayView> array);
+  explicit FloatConverter(ArrowArrayView *array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
+  ArrowArrayView* m_array;
 };
 
 class NumpyFloat64Converter : public IColumnConverter
 {
 public:
-  explicit NumpyFloat64Converter(std::shared_ptr<ArrowArrayView> array, PyObject * context);
+  explicit NumpyFloat64Converter(ArrowArrayView* array, PyObject * context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
+  ArrowArrayView* m_array;
 
   PyObject * m_context;
 };
