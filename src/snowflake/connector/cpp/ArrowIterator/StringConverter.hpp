@@ -17,15 +17,11 @@ namespace sf
 class StringConverter : public IColumnConverter
 {
 public:
-  explicit StringConverter(std::shared_ptr<ArrowArrayView> array);
   explicit StringConverter(ArrowArrayView* array);
-  explicit StringConverter(nanoarrow::UniqueArrayView array);
-
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
-  ArrowArrayView* m_uniqueArray;
+  ArrowArrayView* m_array;
 
   static Logger* logger;
 };
