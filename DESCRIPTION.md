@@ -12,6 +12,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Fixed a memory leak in the logging module of the Cython extension.
   - Fixed a bug where the `put` command on AWS raised `AttributeError` when the file size was larger than 200M.
+  - Validate SSO URL before accessing
+  - Add support for URL Encoding
 
 - v3.0.1(February 28, 2023)
 
