@@ -57,9 +57,16 @@ ratio number(6,2))
                 side_effect=mocked_file_agent,
             ):
                 cnx.cursor().execute(
-                    f"put 'file://{files}' @%{db_parameters['name']}",
+                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
                 )
                 assert mocked_file_agent.agent._multipart_threshold == 10000
+
+                # Upload again. There was a bug when a large file is uploaded again while it aready exists in a stage.
+                # Refer to preprocess(self) of storage_client.py.
+                # self.get_digest() needs to be called before self.get_file_header(meta.dst_file_name)
+                cnx.cursor().execute(
+                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
+                )
 
             c = cnx.cursor()
             try:
