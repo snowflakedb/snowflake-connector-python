@@ -15,12 +15,12 @@ namespace sf
 class BooleanConverter : public IColumnConverter
 {
 public:
-  explicit BooleanConverter(std::shared_ptr<ArrowArrayView> array);
+  explicit BooleanConverter(ArrowArrayView* array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
+  ArrowArrayView* m_array;
 };
 
 }  // namespace sf

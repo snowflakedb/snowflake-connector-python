@@ -16,12 +16,12 @@ namespace sf
 class BinaryConverter : public IColumnConverter
 {
 public:
-  explicit BinaryConverter(std::shared_ptr<ArrowArrayView> array);
+  explicit BinaryConverter(ArrowArrayView* array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<ArrowArrayView> m_array;
+  ArrowArrayView* m_array;
 
   static Logger* logger;
 };

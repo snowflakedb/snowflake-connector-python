@@ -32,7 +32,7 @@ public:
   /**
    * Destructor
    */
-  virtual ~CArrowChunkIterator();
+  virtual ~CArrowChunkIterator() = default;
 
   /**
    * @return a python tuple object which contains all data in current row
@@ -50,13 +50,19 @@ protected:
 
   /** list of column converters*/
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
-  std::vector<std::shared_ptr<ArrowArray>> m_arrays;
+  //std::vector<std::shared_ptr<ArrowArray>> m_arrays;
   std::vector<std::shared_ptr<ArrowArrayView>> m_arrayViews;
   /** row index inside current record batch (start from 0) */
   int m_rowIndexInBatch;
 
+
   /** schema of current record batch */
   std::shared_ptr<arrow::Schema> m_currentSchema;
+
+  /** nanoarrow data */
+  nanoarrow::UniqueSchema m_arrowSchema;
+  nanoarrow::UniqueArray m_arrowArray;
+  nanoarrow::UniqueArrayView m_arrowArrayView;
 
 private:
   /** number of columns */

@@ -19,7 +19,7 @@ template <typename T>
 class TimeConverter : public IColumnConverter
 {
 public:
-  explicit TimeConverter(std::shared_ptr<ArrowArrayView> array, int32_t scale)
+  explicit TimeConverter(ArrowArrayView* array, int32_t scale)
   : m_array(array), m_scale(scale)
   {
   }
@@ -28,7 +28,7 @@ public:
 
 private:
   /** can be arrow::Int32Array and arrow::Int64Array */
-  std::shared_ptr<ArrowArrayView> m_array;
+  ArrowArrayView* m_array;
 
   int32_t m_scale;
 
@@ -38,11 +38,11 @@ private:
 template <typename T>
 PyObject* TimeConverter<T>::toPyObject(int64_t rowIndex) const
 {
-    if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+    if(ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
     }
 
-    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
+    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
     using namespace internal;
     py::PyUniqueLock lock;
     return PyObject_CallFunction(m_pyDatetimeTime().get(), "iiii",

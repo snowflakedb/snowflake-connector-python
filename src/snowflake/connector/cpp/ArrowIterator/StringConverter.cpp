@@ -9,22 +9,17 @@ namespace sf
 {
 Logger* StringConverter::logger = new Logger("snowflake.connector.StringConverter");
 
-StringConverter::StringConverter(std::shared_ptr<ArrowArrayView> array)
-: m_nanoarrowArrayView(array)
-{
-}
-
 StringConverter::StringConverter(ArrowArrayView* array)
-: m_uniqueArray(array)
+: m_array(array)
 {
 }
 
 PyObject* StringConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
-  ArrowStringView stringView = ArrowArrayViewGetStringUnsafe(m_nanoarrowArrayView.get(), rowIndex);
+  ArrowStringView stringView = ArrowArrayViewGetStringUnsafe(m_array, rowIndex);
   return PyUnicode_FromStringAndSize(stringView.data, stringView.size_bytes);
 }
 

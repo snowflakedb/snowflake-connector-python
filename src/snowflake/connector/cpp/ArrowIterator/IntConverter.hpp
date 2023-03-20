@@ -17,18 +17,8 @@ template <typename T>
 class IntConverter : public IColumnConverter
 {
 public:
-  explicit IntConverter(std::shared_ptr<arrow::Array> array)
-  : m_array(std::dynamic_pointer_cast<T>(array))
-  {
-  }
-
-  explicit IntConverter(std::shared_ptr<ArrowArrayView> array)
-  : m_nanoarrowArrayView(array)
-  {
-  }
-
-  explicit IntConverter(nanoarrow::UniqueArrayView array)
-  : m_uniqueArray(array.get())
+  explicit IntConverter(ArrowArrayView* array)
+  : m_array(array)
   {
   }
 
@@ -45,18 +35,16 @@ public:
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  nanoarrow::UniqueArrayView m_uniqueArray;
-  std::shared_ptr<T> m_array;
-  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
+  ArrowArrayView* m_array;
 };
 
 template <typename T>
 PyObject* IntConverter<T>::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_nanoarrowArrayView.get(), rowIndex);
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
   return pyLongForward(val);
 }
 
@@ -64,20 +52,8 @@ template <typename T>
 class NumpyIntConverter : public IColumnConverter
 {
 public:
-  explicit NumpyIntConverter(std::shared_ptr<arrow::Array> array, PyObject * context)
-  : m_array(std::dynamic_pointer_cast<T>(array)),
-    m_context(context)
-  {
-  }
-
-  explicit NumpyIntConverter(std::shared_ptr<ArrowArrayView> array, PyObject * context)
-  : m_nanoarrowArrayView(array),
-    m_context(context)
-  {
-  }
-
-  explicit NumpyIntConverter(nanoarrow::UniqueArrayView array, PyObject * context)
-  : m_uniqueArray(array.get()),
+  explicit NumpyIntConverter(ArrowArrayView* array, PyObject * context)
+  : m_array(array),
     m_context(context)
   {
   }
@@ -85,9 +61,7 @@ public:
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  std::shared_ptr<T> m_array;
-  std::shared_ptr<ArrowArrayView> m_nanoarrowArrayView;
-  nanoarrow::UniqueArrayView m_uniqueArray;
+  ArrowArrayView* m_array;
 
   PyObject * m_context;
 };
@@ -95,10 +69,10 @@ private:
 template <typename T>
 PyObject* NumpyIntConverter<T>::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_nanoarrowArrayView.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
       Py_RETURN_NONE;
   }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_nanoarrowArrayView.get(), rowIndex);
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
   return PyObject_CallMethod(m_context, "FIXED_to_numpy_int64", "L", val);
 }
 
