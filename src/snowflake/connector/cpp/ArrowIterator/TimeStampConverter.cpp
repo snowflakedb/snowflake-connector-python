@@ -58,7 +58,7 @@ TimeStampBaseConverter::TimeStampBaseConverter(PyObject* context, int32_t scale)
 }
 
 OneFieldTimeStampNTZConverter::OneFieldTimeStampNTZConverter(
-    std::shared_ptr<ArrowArrayView> array, int32_t scale, PyObject* context)
+    ArrowArrayView* array, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
   m_array(array)
 {
@@ -66,10 +66,10 @@ OneFieldTimeStampNTZConverter::OneFieldTimeStampNTZConverter(
 
 PyObject* OneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
   internal::TimeSpec ts(val, m_scale);
 
   static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
@@ -83,7 +83,7 @@ PyObject* OneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 NumpyOneFieldTimeStampNTZConverter::NumpyOneFieldTimeStampNTZConverter(
-    std::shared_ptr<ArrowArrayView> array, int32_t scale, PyObject* context)
+    ArrowArrayView* array, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
   m_array(array)
 {
@@ -91,15 +91,15 @@ NumpyOneFieldTimeStampNTZConverter::NumpyOneFieldTimeStampNTZConverter(
 
 PyObject* NumpyOneFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
   return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_ONE_FIELD_to_numpy_datetime64", "Li", val, m_scale);
 }
 
 TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
-    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+    ArrowArrayView* array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 2) {
@@ -108,9 +108,9 @@ TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-            m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_epoch = m_array->children[i];
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
-            m_fraction = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_fraction = m_array->children[i];
         } else {
             //TODO raise error: unrecognized fields
         }
@@ -119,11 +119,11 @@ TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
 
 PyObject* TwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
       Py_RETURN_NONE;
   }
-    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_epoch.get(), rowIndex);
-    int64_t microseconds = ArrowArrayViewGetIntUnsafe(m_fraction.get(), rowIndex) / 1000;
+    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_epoch, rowIndex);
+    int64_t microseconds = ArrowArrayViewGetIntUnsafe(m_fraction, rowIndex) / 1000;
 
     static constexpr FormatArgs2<decltype(seconds), decltype(microseconds)> format;
 #ifdef _WIN32
@@ -136,7 +136,7 @@ PyObject* TwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 NumpyTwoFieldTimeStampNTZConverter::NumpyTwoFieldTimeStampNTZConverter(
-    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+    ArrowArrayView* array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 2) {
@@ -145,9 +145,9 @@ NumpyTwoFieldTimeStampNTZConverter::NumpyTwoFieldTimeStampNTZConverter(
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-            m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_epoch = m_array->children[i];
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
-            m_fraction = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_fraction = m_array->children[i];
         } else {
             //TODO raise error: unrecognized fields
         }
@@ -156,17 +156,17 @@ NumpyTwoFieldTimeStampNTZConverter::NumpyTwoFieldTimeStampNTZConverter(
 
 PyObject* NumpyTwoFieldTimeStampNTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
       Py_RETURN_NONE;
   }
-    int64_t epoch = ArrowArrayViewGetIntUnsafe(m_epoch.get(), rowIndex);
-    int32_t frac = ArrowArrayViewGetIntUnsafe(m_fraction.get(), rowIndex);
+    int64_t epoch = ArrowArrayViewGetIntUnsafe(m_epoch, rowIndex);
+    int32_t frac = ArrowArrayViewGetIntUnsafe(m_fraction, rowIndex);
     return PyObject_CallMethod(m_context, "TIMESTAMP_NTZ_TWO_FIELD_to_numpy_datetime64", "Li", epoch, frac);
 }
 
 
 OneFieldTimeStampLTZConverter::OneFieldTimeStampLTZConverter(
-    std::shared_ptr<ArrowArrayView> array, int32_t scale, PyObject* context)
+    ArrowArrayView* array, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
   m_array(array)
 {
@@ -174,10 +174,10 @@ OneFieldTimeStampLTZConverter::OneFieldTimeStampLTZConverter(
 
 PyObject* OneFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_array.get(), rowIndex);
+  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
   internal::TimeSpec ts(val, m_scale);
 
   static constexpr FormatArgs2<decltype(ts.seconds), decltype(ts.microseconds)> format;
@@ -192,7 +192,7 @@ PyObject* OneFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 TwoFieldTimeStampLTZConverter::TwoFieldTimeStampLTZConverter(
-    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+    ArrowArrayView* array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale),
   m_array(array)
 {
@@ -202,9 +202,9 @@ TwoFieldTimeStampLTZConverter::TwoFieldTimeStampLTZConverter(
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-            m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_epoch = m_array->children[i];
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
-            m_fraction = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_fraction = m_array->children[i];
         } else {
             //TODO raise error: unrecognized fields
         }
@@ -213,11 +213,11 @@ TwoFieldTimeStampLTZConverter::TwoFieldTimeStampLTZConverter(
 
 PyObject* TwoFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
       Py_RETURN_NONE;
   }
-    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_epoch.get(), rowIndex);
-    int64_t microseconds = ArrowArrayViewGetIntUnsafe(m_fraction.get(), rowIndex) / 1000;
+    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_epoch, rowIndex);
+    int64_t microseconds = ArrowArrayViewGetIntUnsafe(m_fraction, rowIndex) / 1000;
 
     static constexpr FormatArgs2<decltype(seconds), decltype(microseconds)> format;
 #ifdef _WIN32
@@ -230,7 +230,7 @@ PyObject* TwoFieldTimeStampLTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 TwoFieldTimeStampTZConverter::TwoFieldTimeStampTZConverter(
-    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+    ArrowArrayView* array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 2) {
@@ -239,9 +239,9 @@ TwoFieldTimeStampTZConverter::TwoFieldTimeStampTZConverter(
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-            m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_epoch = m_array->children[i];
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_TIME_ZONE.c_str()) == 0){
-            m_timezone = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_timezone = m_array->children[i];
         } else {
             //TODO raise error: unrecognized fields
         }
@@ -250,12 +250,12 @@ TwoFieldTimeStampTZConverter::TwoFieldTimeStampTZConverter(
 
 PyObject* TwoFieldTimeStampTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
       Py_RETURN_NONE;
   }
 
-    int32_t timezone = ArrowArrayViewGetIntUnsafe(m_timezone.get(), rowIndex);
-    internal::TimeSpec ts(ArrowArrayViewGetIntUnsafe(m_epoch.get(), rowIndex), m_scale);
+    int32_t timezone = ArrowArrayViewGetIntUnsafe(m_timezone, rowIndex);
+    internal::TimeSpec ts(ArrowArrayViewGetIntUnsafe(m_epoch, rowIndex), m_scale);
 
     static constexpr FormatArgs3<decltype(ts.seconds), decltype(ts.microseconds), decltype(timezone)> format;
 #if _WIN32
@@ -268,7 +268,7 @@ PyObject* TwoFieldTimeStampTZConverter::toPyObject(int64_t rowIndex) const
 }
 
 ThreeFieldTimeStampTZConverter::ThreeFieldTimeStampTZConverter(
-    std::shared_ptr<ArrowArrayView> array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
+    ArrowArrayView* array, ArrowSchemaView* schema, int32_t scale, PyObject* context)
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 3) {
@@ -277,11 +277,11 @@ ThreeFieldTimeStampTZConverter::ThreeFieldTimeStampTZConverter(
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
         if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-            m_epoch = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_epoch = m_array->children[i];
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_TIME_ZONE.c_str()) == 0){
-            m_timezone = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_timezone = m_array->children[i];
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
-            m_fraction = std::shared_ptr<ArrowArrayView>(m_array->children[i]);
+            m_fraction = m_array->children[i];
         } else {
             //TODO raise error: unrecognized fields
         }
@@ -290,13 +290,13 @@ ThreeFieldTimeStampTZConverter::ThreeFieldTimeStampTZConverter(
 
 PyObject* ThreeFieldTimeStampTZConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array.get(), rowIndex)) {
+  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
       Py_RETURN_NONE;
   }
 
-    int32_t timezone = ArrowArrayViewGetIntUnsafe(m_timezone.get(), rowIndex);
-    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_epoch.get(), rowIndex);
-    int64_t microseconds = ArrowArrayViewGetIntUnsafe(m_fraction.get(), rowIndex) / 1000;
+    int32_t timezone = ArrowArrayViewGetIntUnsafe(m_timezone, rowIndex);
+    int64_t seconds = ArrowArrayViewGetIntUnsafe(m_epoch, rowIndex);
+    int64_t microseconds = ArrowArrayViewGetIntUnsafe(m_fraction, rowIndex) / 1000;
 
     static constexpr FormatArgs3<decltype(seconds), decltype(microseconds), decltype(timezone)> format;
 #ifdef _WIN32
