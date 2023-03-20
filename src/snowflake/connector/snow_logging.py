@@ -67,7 +67,7 @@ class SnowLogger(logging.LoggerAdapter):
         warnings.warn(
             "The 'warn' method is deprecated, " "use 'warning' instead",
             DeprecationWarning,
-            2,
+            stacklevel=2,
         )
         self.warning(msg, path_name, func_name, *args, **kwargs)
 
