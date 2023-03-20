@@ -10,7 +10,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.0.2(Unreleased)
 
-  - Fixed a memory leak in the logging module of the Cython extension
+  - Fixed a memory leak in the logging module of the Cython extension.
+  - Fixed a bug where the `put` command on AWS raised `AttributeError` when the file size was larger than 200M.
 
 - v3.0.1(February 28, 2023)
 
