@@ -8,10 +8,10 @@
 #include "CArrowIterator.hpp"
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
-#include <memory>
-#include <vector>
 #include "nanoarrow.h"
 #include "nanoarrow.hpp"
+#include <memory>
+#include <vector>
 
 namespace sf
 {
@@ -50,8 +50,6 @@ protected:
 
   /** list of column converters*/
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
-  //std::vector<std::shared_ptr<ArrowArray>> m_arrays;
-  std::vector<std::shared_ptr<ArrowArrayView>> m_arrayViews;
   /** row index inside current record batch (start from 0) */
   int m_rowIndexInBatch;
 
