@@ -6,8 +6,8 @@
 #define PC_BOOLEANCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
-#include <memory>
 #include "nanoarrow.h"
+#include <memory>
 
 namespace sf
 {

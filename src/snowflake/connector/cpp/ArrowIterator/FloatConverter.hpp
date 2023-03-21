@@ -6,8 +6,8 @@
 #define PC_FLOATCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
-#include <memory>
 #include "nanoarrow.h"
+#include <memory>
 
 namespace sf
 {
