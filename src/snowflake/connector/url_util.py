@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def is_valid_url(url: str) -> bool:
     return bool(URL_VALIDATOR.match(url))
 
 
-def url_encode_str(target: str) -> Optional[str]:
+def url_encode_str(target: str | None) -> Optional[str]:
     """Converts a target string into escaped URL safe string
 
     Args:
