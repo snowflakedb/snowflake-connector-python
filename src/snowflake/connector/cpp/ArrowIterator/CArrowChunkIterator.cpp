@@ -226,13 +226,13 @@ void CArrowChunkIterator::initColumnConverters()
               if (m_useNumpy)\
               {\
                 m_currentBatchConverters.push_back(std::make_shared<\
-                    sf::NumpyDecimalConverter<ArrowArrayView>>(\
+                    sf::NumpyDecimalConverter>(\
                     array, precision, scale, m_context));\
               }\
               else\
               {\
                 m_currentBatchConverters.push_back(std::make_shared<\
-                    sf::DecimalFromIntConverter<ArrowArrayView>>(\
+                    sf::DecimalFromIntConverter>(\
                     array, precision, scale));\
               }\
             }\
@@ -241,13 +241,13 @@ void CArrowChunkIterator::initColumnConverters()
               if (m_useNumpy)\
               {\
                 m_currentBatchConverters.push_back(\
-                    std::make_shared<sf::NumpyIntConverter<ArrowArrayView>>(\
+                    std::make_shared<sf::NumpyIntConverter>(\
                     array, m_context));\
               }\
               else\
               {\
                 m_currentBatchConverters.push_back(\
-                    std::make_shared<sf::IntConverter<ArrowArrayView>>(\
+                    std::make_shared<sf::IntConverter>(\
                     array));\
               }\
             }\
@@ -353,7 +353,7 @@ void CArrowChunkIterator::initColumnConverters()
           case NANOARROW_TYPE_INT64:
           {
             m_currentBatchConverters.push_back(
-                std::make_shared<sf::TimeConverter<ArrowArrayView>>(
+                std::make_shared<sf::TimeConverter>(
                     array, scale));
             break;
           }
