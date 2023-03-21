@@ -29,8 +29,7 @@ private:
 class DecimalFromDecimalConverter : public DecimalBaseConverter
 {
 public:
-  explicit DecimalFromDecimalConverter(PyObject* context, ArrowArrayView* array,
-                                       int scale);
+  explicit DecimalFromDecimalConverter(PyObject* context, ArrowArrayView* array, int scale);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
@@ -41,17 +40,10 @@ private:
   /** no need for this converter to store precision*/
 };
 
-template <typename T>
 class DecimalFromIntConverter : public DecimalBaseConverter
 {
 public:
-  explicit DecimalFromIntConverter(ArrowArrayView* array,
-                                   int precision, int scale)
-  : m_array(array),
-    m_precision(precision),
-    m_scale(scale)
-  {
-  }
+  explicit DecimalFromIntConverter(ArrowArrayView* array, int precision, int scale);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
@@ -63,31 +55,11 @@ private:
   int m_scale;
 };
 
-template <typename T>
-PyObject* DecimalFromIntConverter<T>::toPyObject(int64_t rowIndex) const
-{
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-    Py_RETURN_NONE;
-  }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-  py::UniqueRef decimal(
-        PyObject_CallFunction(m_pyDecimalConstructor.get(), "L", val));
-  return PyObject_CallMethod(decimal.get(), "scaleb", "i", -m_scale);
-}
 
-
-template <typename T>
 class NumpyDecimalConverter : public IColumnConverter
 {
 public:
-  explicit NumpyDecimalConverter(ArrowArrayView* array,
-                                 int precision, int scale, PyObject * context)
-  : m_array(array),
-    m_precision(precision),
-    m_scale(scale),
-    m_context(context)
-  {
-  }
+  explicit NumpyDecimalConverter(ArrowArrayView* array, int precision, int scale, PyObject * context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
@@ -100,17 +72,6 @@ private:
 
   PyObject * m_context;
 };
-
-template <typename T>
-PyObject* NumpyDecimalConverter<T>::toPyObject(int64_t rowIndex) const
-{
-    if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-        Py_RETURN_NONE;
-    }
-    int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-    return PyObject_CallMethod(m_context, "FIXED_to_numpy_float64", "Li", val, m_scale);
-}
-
 
 }  // namespace sf
 
