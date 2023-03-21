@@ -8,10 +8,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.2(Unreleased)
+- v3.0.2(March 22, 2023)
 
   - Fixed a memory leak in the logging module of the Cython extension.
-  - Fixed a bug where the `put` command on AWS raised `AttributeError` when the file size was larger than 200M.
+  - Fixed a bug where the `put` command on AWS raised `AttributeError` when uploading file composed of multiple parts.
+  - Fixed a bug of incorrect type hints of `SnowflakeCursor.fetch_arrow_all` and `SnowflakeCursor.fetchall`.
+  - Improved logging to mask tokens in case of errors.
 
 - v3.0.1(February 28, 2023)
 
