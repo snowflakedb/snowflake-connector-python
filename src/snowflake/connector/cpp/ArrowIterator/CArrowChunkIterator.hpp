@@ -53,10 +53,6 @@ protected:
   /** row index inside current record batch (start from 0) */
   int m_rowIndexInBatch;
 
-
-  /** schema of current record batch */
-  std::shared_ptr<arrow::Schema> m_currentSchema;
-
   /** nanoarrow data */
   nanoarrow::UniqueSchema m_arrowSchema;
   nanoarrow::UniqueArray m_arrowArray;
