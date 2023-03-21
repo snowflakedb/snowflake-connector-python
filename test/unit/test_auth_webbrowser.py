@@ -32,6 +32,7 @@ PASSWORD = "testpassword"
 SERVICE_NAME = ""
 REF_PROOF_KEY = "MOCK_PROOF_KEY"
 REF_SSO_URL = "https://testsso.snowflake.net/sso"
+INVALID_SSO_URL = "this is an invalid URL"
 
 
 def mock_webserver(target_instance, application, port):
@@ -318,3 +319,40 @@ def test_idtoken_reauth():
                     account="account",
                     auth_class=auth_inst,
                 )
+
+
+def test_auth_webbrowser_invalid_sso(monkeypatch):
+    """Authentication by WebBrowser with failed to start web browser case."""
+    rest = _init_rest(INVALID_SSO_URL, REF_PROOF_KEY)
+    ref_token = "MOCK_TOKEN"
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = False
+
+    # mock socket
+    mock_socket_instance = MagicMock()
+    mock_socket_instance.getsockname.return_value = [None, 12345]
+
+    mock_socket_client = MagicMock()
+    mock_socket_client.recv.return_value = (
+        "\r\n".join(["GET /?token=MOCK_TOKEN HTTP/1.1", "User-Agent: snowflake-agent"])
+    ).encode("utf-8")
+    mock_socket_instance.accept.return_value = (mock_socket_client, None)
+    mock_socket = Mock(return_value=mock_socket_instance)
+
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
+    )
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
+    assert rest._connection.errorhandler.called  # an error
+    assert auth.assertion_content is None
