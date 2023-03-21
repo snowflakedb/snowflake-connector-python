@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 from logging import getLogger
+from typing import Optional
 
 logger = getLogger(__name__)
 
@@ -28,7 +29,7 @@ def is_valid_url(url: str) -> bool:
     return bool(URL_VALIDATOR.match(url))
 
 
-def url_encode_str(target: str) -> str:
+def url_encode_str(target: str) -> Optional[str]:
     """Converts a target string into escaped URL safe string
 
     Args:
