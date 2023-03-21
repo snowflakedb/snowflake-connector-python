@@ -7,9 +7,9 @@
 
 #include "IColumnConverter.hpp"
 #include "logging.hpp"
-#include <memory>
 #include "nanoarrow.h"
 #include "nanoarrow.hpp"
+#include <memory>
 
 namespace sf
 {
