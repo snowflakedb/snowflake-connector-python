@@ -18,3 +18,4 @@ def test_url_validator():
 def test_encoder():
     assert url_encode_str("Hello @World") == "Hello+%40World"
     assert url_encode_str("Test//String") == "Test%2F%2FString"
+    assert url_encode_str(None) == ""
