@@ -149,7 +149,6 @@ void CArrowChunkIterator::initColumnConverters()
   m_currentBatchConverters.clear();
   std::shared_ptr<arrow::RecordBatch> currentBatch =
       (*m_cRecordBatches)[m_currentBatchIndex];
-  m_currentSchema = currentBatch->schema();
 
   // Recommended path
   // TODO: Export is not needed when using nanoarrow IPC to read schema
@@ -538,7 +537,7 @@ DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
 void DictCArrowChunkIterator::createRowPyObject()
 {
   m_latestReturnedRow.reset(PyDict_New());
-  for (int i = 0; i < m_currentSchema->num_fields(); i++)
+  for (int i = 0; i < m_arrowSchema->n_children; i++)
   {
     py::UniqueRef value(m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
     if (!value.empty())
@@ -546,7 +545,7 @@ void DictCArrowChunkIterator::createRowPyObject()
       // PyDict_SetItemString doesn't steal a reference to value.get().
       PyDict_SetItemString(
           m_latestReturnedRow.get(),
-          m_currentSchema->field(i)->name().c_str(),
+          m_arrowSchema->children[i]->name,
           value.get());
     }
   }
