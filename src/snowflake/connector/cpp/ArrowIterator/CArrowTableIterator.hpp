@@ -6,6 +6,8 @@
 #define PC_ARROWTABLEITERATOR_HPP
 
 #include "CArrowIterator.hpp"
+#include "nanoarrow.h"
+#include "nanoarrow.hpp"
 #include <string>
 #include <memory>
 #include <vector>
@@ -84,6 +86,16 @@ private:
     bool& needsRebuild
     );
 
+  void replaceColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* newField,
+    ArrowArrayView* newColumn,
+    std::vector<ArrowSchemaView*>& futureFields,
+    std::vector<ArrowArrayView*>& futureColumns,
+    bool& needsRebuild
+    );
+
   /**
    * convert scaled fixed number column to Decimal, or Double column based on setting
    */
@@ -95,6 +107,17 @@ private:
     const unsigned int scale,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
+  );
+
+  void convertScaledFixedNumberColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const unsigned int scale,
+    std::vector<ArrowSchemaView*>& futureFields,
+    std::vector<ArrowArrayView*>& futureColumns,
     bool& needsRebuild
   );
 
@@ -112,6 +135,17 @@ private:
     bool& needsRebuild
     );
 
+  void convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const unsigned int scale,
+    std::vector<ArrowSchemaView*>& futureFields,
+    std::vector<ArrowArrayView*>& futureColumns,
+    bool& needsRebuild
+    );
+
   /**
    * convert scaled fixed number column to Double column
    */
@@ -123,6 +157,17 @@ private:
     const unsigned int scale,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
+    );
+
+  void convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const unsigned int scale,
+    std::vector<ArrowSchemaView*>& futureFields,
+    std::vector<ArrowArrayView*>& futureColumns,
     bool& needsRebuild
     );
 
@@ -141,6 +186,17 @@ private:
     bool& needsRebuild
     );
 
+  void convertTimeColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const int scale,
+    std::vector<ArrowSchemaView*>& futureFields,
+    std::vector<ArrowArrayView*>& futureColumns,
+    bool& needsRebuild
+    );
+
   /**
    * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp column
    */
@@ -152,6 +208,18 @@ private:
     const int scale,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild,
+    const std::string timezone=""
+    );
+
+  void convertTimestampColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const int scale,
+    std::vector<ArrowSchemaView*>& futureFields,
+    std::vector<ArrowArrayView*>& futureColumns,
     bool& needsRebuild,
     const std::string timezone=""
     );
@@ -170,6 +238,19 @@ private:
     const int byteLength,
     std::vector<std::shared_ptr<arrow::Field>>& futureFields,
     std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild,
+    const std::string timezone
+    );
+
+  void convertTimestampTZColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const int scale,
+    const int byteLength,
+    std::vector<ArrowSchemaView*>& futureFields,
+    std::vector<ArrowArrayView*>& futureColumns,
     bool& needsRebuild,
     const std::string timezone
     );
