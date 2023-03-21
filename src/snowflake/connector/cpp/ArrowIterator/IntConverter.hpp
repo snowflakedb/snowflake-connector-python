@@ -13,7 +13,6 @@
 namespace sf
 {
 
-template <typename T>
 class IntConverter : public IColumnConverter
 {
 public:
@@ -38,17 +37,6 @@ private:
   ArrowArrayView* m_array;
 };
 
-template <typename T>
-PyObject* IntConverter<T>::toPyObject(int64_t rowIndex) const
-{
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-    Py_RETURN_NONE;
-  }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-  return pyLongForward(val);
-}
-
-template <typename T>
 class NumpyIntConverter : public IColumnConverter
 {
 public:
@@ -65,16 +53,6 @@ private:
 
   PyObject * m_context;
 };
-
-template <typename T>
-PyObject* NumpyIntConverter<T>::toPyObject(int64_t rowIndex) const
-{
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-      Py_RETURN_NONE;
-  }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-  return PyObject_CallMethod(m_context, "FIXED_to_numpy_int64", "L", val);
-}
 
 }  // namespace sf
 
