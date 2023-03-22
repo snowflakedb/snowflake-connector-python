@@ -324,7 +324,6 @@ def test_idtoken_reauth():
 def test_auth_webbrowser_invalid_sso(monkeypatch):
     """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(INVALID_SSO_URL, REF_PROOF_KEY)
-    ref_token = "MOCK_TOKEN"
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
