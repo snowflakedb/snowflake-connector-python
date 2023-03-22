@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.2(March 21, 2023)
+- v3.0.2(March 22, 2023)
 
   - Fixed a memory leak in the logging module of the Cython extension.
   - Fixed a bug where the `put` command on AWS raised `AttributeError` when uploading file composed of multiple parts.
