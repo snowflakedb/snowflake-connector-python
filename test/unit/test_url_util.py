@@ -9,6 +9,9 @@ except ImportError:
     def is_valid_url(s):
         return False
 
+    def url_encode_str(s):
+        return ""
+
 
 def test_url_validator():
     assert is_valid_url("https://ssoTestURL.okta.com")
