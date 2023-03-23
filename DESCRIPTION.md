@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.0.3(TBD)
+
+  - Fixed a bug that prints error in logs for GET command on GCS
+
 - v3.0.2(March 23, 2023)
 
   - Fixed a memory leak in the logging module of the Cython extension.
