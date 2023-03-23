@@ -93,6 +93,7 @@ repos:
                 | ssd_internal_keys
                 | test_util
                 | util_text
+                | url_util
                 | version
             ).py$
         additional_dependencies:
