@@ -185,9 +185,12 @@ class SnowflakeStorageClient(ABC):
     def preprocess(self) -> None:
         meta = self.meta
         logger.debug(f"Preprocessing {meta.src_file_name}")
+
+        file_header = self.get_file_header(
+            meta.dst_file_name
+        )  # check if file exists on remote
         if not meta.overwrite:
             self.get_digest()  # self.get_file_header needs digest for multiparts upload when aws is used.
-            self.get_file_header(meta.dst_file_name)  # Check if file exists on remote
             if meta.result_status == ResultStatus.UPLOADED:
                 # Skipped
                 logger.debug(
@@ -202,6 +205,15 @@ class SnowflakeStorageClient(ABC):
         if meta.require_compress:
             self.compress()
         self.get_digest()
+
+        if (
+            meta.skip_upload_on_content_match
+            and file_header
+            and meta.sha256_digest == file_header.digest
+        ):
+            logger.debug(f"same file contents for {meta.name}, skipping upload")
+            meta.result_status = ResultStatus.SKIPPED
+
         self.preprocessed = True
 
     def prepare_upload(self) -> None:

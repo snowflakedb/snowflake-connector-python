@@ -555,6 +555,70 @@ def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
+)
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+def test_put_overwrite_skip_on_content_match(
+    tmp_path: pathlib.Path, from_path, conn_cnx
+):
+    """Tests whether _skip_upload_on_content_match and overwrite=true work as intended."""
+    tmp_dir = tmp_path / "data"
+    tmp_dir.mkdir()
+    test_data = tmp_dir / "data.txt"
+    with test_data.open("w") as f:
+        f.write("test1,test2")
+        f.write("test3,test4")
+
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("RM @~/test_put_overwrite_skip_on_content_match")
+        try:
+            file_stream = None if from_path else open(test_data, "rb")
+            with cnx.cursor() as cur:
+                put(
+                    cur,
+                    str(test_data),
+                    "~/test_put_overwrite_skip_on_content_match",
+                    from_path,
+                    file_stream=file_stream,
+                    sql_options="OVERWRITE = TRUE",
+                    _skip_upload_on_content_match=False,
+                )
+                ret = cur.fetchone()
+                assert ret[6] == "UPLOADED"
+
+                put(
+                    cur,
+                    str(test_data),
+                    "~/test_put_overwrite_skip_on_content_match",
+                    from_path,
+                    file_stream=file_stream,
+                    sql_options="OVERWRITE = TRUE",
+                    _skip_upload_on_content_match=True,
+                )
+                ret = cur.fetchone()
+                assert ret[6] == "SKIPPED"
+
+            ret = (
+                cnx.cursor()
+                .execute("LS @~/test_put_overwrite_skip_on_content_match")
+                .fetchone()
+            )
+            assert (
+                "test_put_overwrite_skip_on_content_match/"
+                + os.path.basename(test_data)
+                in ret[0]
+            )
+            assert test_data.name + ".gz" in ret[0]
+        finally:
+            if file_stream:
+                file_stream.close()
+            cnx.cursor().execute("RM @~/test_put_overwrite_skip_on_content_match")
+
+
+@pytest.mark.skipolddriver
 def test_utf8_filename(tmp_path, conn_cnx):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")

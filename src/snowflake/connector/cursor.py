@@ -630,6 +630,7 @@ class SnowflakeCursor:
         _is_put_get: bool | None = None,
         _raise_put_get_error: bool = True,
         _force_put_overwrite: bool = False,
+        _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
     ) -> Self | dict[str, Any] | None:
@@ -660,6 +661,8 @@ class SnowflakeCursor:
             _raise_put_get_error: Whether to raise PUT and GET errors.
             _force_put_overwrite: If the SQL query is a PUT, then this flag can force overwriting of an already
                 existing file on stage.
+            _skip_upload_on_content_match: If the SQL query is a PUT with overwrite enabled, then this flag will skip upload
+                if the file contents match to ease concurrent uploads.
             file_stream: File-like object to be uploaded with PUT
             num_statements: Query level parameter submitted in _statement_params constraining exact number of
             statements being submitted (or 0 if submitting an uncounted number) when using a multi-statement query.
@@ -798,6 +801,7 @@ class SnowflakeCursor:
                     raise_put_get_error=_raise_put_get_error,
                     force_put_overwrite=_force_put_overwrite
                     or data.get("overwrite", False),
+                    skip_upload_on_content_match=_skip_upload_on_content_match,
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
