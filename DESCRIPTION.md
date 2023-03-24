@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.0.3(Unreleased)
+
+  - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
+
 - v3.0.2(March 23, 2023)
 
   - Fixed a memory leak in the logging module of the Cython extension.
