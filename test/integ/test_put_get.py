@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import filecmp
+import logging
 import os
 import pathlib
 from getpass import getuser
@@ -675,7 +676,7 @@ def test_get_empty_file(tmp_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_get_file_permission(tmp_path, conn_cnx):
+def test_get_file_permission(tmp_path, conn_cnx, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_get_empty_file_")
@@ -687,7 +688,10 @@ def test_get_file_permission(tmp_path, conn_cnx):
                 f"PUT 'file://{filename_in_put}' @{stage_name}",
             )
 
-            cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            with caplog.at_level(logging.ERROR):
+                cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            assert "FileNotFoundError" not in caplog.text
+
             # get the default mask, usually it is 0o022
             default_mask = os.umask(0)
             os.umask(default_mask)
