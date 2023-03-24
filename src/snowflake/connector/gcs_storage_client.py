@@ -217,7 +217,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         # Sadly, we can only determine the src file size after we've
         # downloaded it, unlike the other cloud providers where the
         # metadata can be read beforehand.
-        self.meta.src_file_size = os.path.getsize(self.intermediate_dst_path)
+        self.meta.src_file_size = os.path.getsize(self.full_dst_file_name)
 
     def _update_presigned_url(self) -> None:
         """Updates the file metas with presigned urls if any.
