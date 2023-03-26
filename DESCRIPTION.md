@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.0.3(TBD)
 
   - Fixed a bug that prints error in logs for GET command on GCS
+  - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
 
 - v3.0.2(March 23, 2023)
 

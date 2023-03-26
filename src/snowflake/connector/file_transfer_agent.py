@@ -135,6 +135,7 @@ class SnowflakeFileMeta:
     dst_file_size: int = -1
     intermediate_stream: IO[bytes] | None = None
     src_stream: IO[bytes] | None = None
+    skip_upload_on_content_match: bool = False
     # Specific to Downloads only
     local_location: str | None = None
 
@@ -321,6 +322,7 @@ class SnowflakeFileTransferAgent:
         show_progress_bar: bool = True,
         raise_put_get_error: bool = True,
         force_put_overwrite: bool = True,
+        skip_upload_on_content_match: bool = False,
         multipart_threshold: int | None = None,
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
@@ -345,6 +347,7 @@ class SnowflakeFileTransferAgent:
         self._raise_put_get_error = raise_put_get_error
         self._show_progress_bar = show_progress_bar
         self._force_put_overwrite = force_put_overwrite
+        self._skip_upload_on_content_match = skip_upload_on_content_match
         self._source_from_stream = source_from_stream
         # The list of self-sufficient file metas that are sent to
         # remote storage clients to get operated on.
@@ -376,6 +379,7 @@ class SnowflakeFileTransferAgent:
 
         for m in self._file_metadata:
             m.overwrite = self._overwrite
+            m.skip_upload_on_content_match = self._skip_upload_on_content_match
             m.sfagent = self
             if self._stage_location_type != LOCAL_FS:
                 m.put_callback = self._put_callback
