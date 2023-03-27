@@ -8,6 +8,7 @@
 #include "CArrowIterator.hpp"
 #include "nanoarrow.h"
 #include "nanoarrow.hpp"
+#include "arrow/c/bridge.h"
 #include <string>
 #include <memory>
 #include <vector>
@@ -67,11 +68,14 @@ private:
    */
   void reconstructRecordBatches();
 
+  void reconstructRecordBatches_nanoarrow();
+
   /**
    * Convert all current RecordBatches to Arrow Table
    * @return if conversion is executed at first time and successfully
    */
   bool convertRecordBatchesToTable();
+  bool convertRecordBatchesToTable_nanoarrow();
 
   /**
    * replace column with the new column in place
@@ -91,8 +95,8 @@ private:
     const int colIdx,
     ArrowSchemaView* newField,
     ArrowArrayView* newColumn,
-    std::vector<ArrowSchemaView*>& futureFields,
-    std::vector<ArrowArrayView*>& futureColumns,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
     bool& needsRebuild
     );
 
@@ -116,8 +120,8 @@ private:
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
     const unsigned int scale,
-    std::vector<ArrowSchemaView*>& futureFields,
-    std::vector<ArrowArrayView*>& futureColumns,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
     bool& needsRebuild
   );
 
@@ -141,8 +145,8 @@ private:
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
     const unsigned int scale,
-    std::vector<ArrowSchemaView*>& futureFields,
-    std::vector<ArrowArrayView*>& futureColumns,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
     bool& needsRebuild
     );
 
@@ -166,8 +170,8 @@ private:
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
     const unsigned int scale,
-    std::vector<ArrowSchemaView*>& futureFields,
-    std::vector<ArrowArrayView*>& futureColumns,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
     bool& needsRebuild
     );
 
@@ -192,8 +196,8 @@ private:
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
     const int scale,
-    std::vector<ArrowSchemaView*>& futureFields,
-    std::vector<ArrowArrayView*>& futureColumns,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
     bool& needsRebuild
     );
 
@@ -218,8 +222,8 @@ private:
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
     const int scale,
-    std::vector<ArrowSchemaView*>& futureFields,
-    std::vector<ArrowArrayView*>& futureColumns,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
     bool& needsRebuild,
     const std::string timezone=""
     );
@@ -249,8 +253,8 @@ private:
     ArrowArrayView* columnArray,
     const int scale,
     const int byteLength,
-    std::vector<ArrowSchemaView*>& futureFields,
-    std::vector<ArrowArrayView*>& futureColumns,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
     bool& needsRebuild,
     const std::string timezone
     );
