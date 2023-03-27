@@ -159,6 +159,203 @@ void CArrowTableIterator::reconstructRecordBatches()
   }
 }
 
+void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
+{
+  // Type conversion, the code needs to be optimized
+  for (unsigned int batchIdx = 0; batchIdx <  m_cRecordBatches->size(); batchIdx++)
+  {
+    std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
+    std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
+    // These copies will be used if rebuilding the RecordBatch if necessary
+
+    nanoarrow::UniqueSchema arrowSchema;
+    nanoarrow::UniqueArray arrowArray;
+    nanoarrow::UniqueArrayView arrowArrayView;
+
+    // Recommended path
+    // TODO: Export is not needed when using nanoarrow IPC to read schema
+    arrow::Status exportBatchOk = arrow::ExportRecordBatch(
+      *currentBatch, arrowArray.get(), arrowSchema.get());
+
+    ArrowError error;
+    int returnCode = ArrowArrayViewInitFromSchema(
+      arrowArrayView.get(), arrowSchema.get(), &error);
+    if (returnCode != NANOARROW_OK) {
+      std::string errorInfo = Logger::formatString(ArrowErrorMessage(&error));
+      logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+      PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+    }
+
+    returnCode = ArrowArrayViewSetArray(
+        arrowArrayView.get(), arrowArray.get(), &error);
+    if (returnCode != NANOARROW_OK) {
+        std::string errorInfo = Logger::formatString(ArrowErrorMessage(&error));
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+    }
+
+    bool needsRebuild = false;
+    std::vector<nanoarrow::UniqueSchema> futureFields;
+    std::vector<nanoarrow::UniqueArrayView> futureColumns;
+
+
+    for (int colIdx = 0; colIdx < currentBatch->num_columns(); colIdx++)
+    {
+//      std::shared_ptr<arrow::Array> columnArray = currentBatch->column(colIdx);
+//      std::shared_ptr<arrow::Field> field = schema->field(colIdx);
+//      std::shared_ptr<arrow::DataType> dt = field->type();
+//      std::shared_ptr<const arrow::KeyValueMetadata> metaData = field->metadata();
+//      SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
+//          metaData->value(metaData->FindKey("logicalType")));
+
+      ArrowArrayView* columnArray = arrowArrayView->children[colIdx];
+      ArrowSchema* columnSchema = arrowSchema->children[colIdx];
+      ArrowSchemaView columnSchemaView;
+
+      returnCode = ArrowSchemaViewInit(
+         &columnSchemaView, columnSchema, &error);
+      if (returnCode != NANOARROW_OK) {
+        std::string errorInfo = Logger::formatString(ArrowErrorMessage(&error));
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+      }
+
+      ArrowArrayView* array = arrowArrayView->children[colIdx];
+
+      ArrowStringView snowflakeLogicalType;
+      const char* metadata = arrowSchema->children[colIdx]->metadata;
+      ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
+      SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
+        std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
+      );
+
+      // reconstruct columnArray in place
+      switch (st)
+      {
+        case SnowflakeType::Type::FIXED:
+        {
+          int scale = 0;
+          ArrowStringView scaleString;
+          if(metadata != nullptr) {
+              ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+              scale = std::stoi(scaleString.data);
+          }
+          if (scale > 0 && columnSchemaView.type != ArrowType::NANOARROW_TYPE_DECIMAL128)
+          {
+            logger->debug(
+              __FILE__,
+              __func__,
+              __LINE__,
+              "Convert fixed number column to double column, column scale %d, column type id: %d",
+              scale,
+              columnSchemaView.type
+            );
+            convertScaledFixedNumberColumn_nanoarrow(
+                batchIdx,
+                colIdx,
+                &columnSchemaView,
+                columnArray,
+                scale,
+                futureFields,
+                futureColumns,
+                needsRebuild
+            );
+          }
+          break;
+        }
+//
+//        case SnowflakeType::Type::ANY:
+//        case SnowflakeType::Type::ARRAY:
+//        case SnowflakeType::Type::BOOLEAN:
+//        case SnowflakeType::Type::CHAR:
+//        case SnowflakeType::Type::OBJECT:
+//        case SnowflakeType::Type::BINARY:
+//        case SnowflakeType::Type::VARIANT:
+//        case SnowflakeType::Type::TEXT:
+//        case SnowflakeType::Type::REAL:
+//        case SnowflakeType::Type::DATE:
+//        {
+//          // Do not need to convert
+//          break;
+//        }
+//
+//        case SnowflakeType::Type::TIME:
+//        {
+//            int scale = 9;
+//            if(metadata != nullptr) {
+//                ArrowStringView scaleString;
+//                ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+//                scale = std::stoi(scaleString.data);
+//            }
+//
+//          convertTimeColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale, futureFields, futureColumns, needsRebuild);
+//          break;
+//        }
+//
+//        case SnowflakeType::Type::TIMESTAMP_NTZ:
+//        {
+//            int scale = 9;
+//            if(metadata != nullptr) {
+//                ArrowStringView scaleString;
+//                ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+//                scale = std::stoi(scaleString.data);
+//            }
+//
+//          convertTimestampColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale, futureFields, futureColumns, needsRebuild);
+//          break;
+//        }
+//
+//        case SnowflakeType::Type::TIMESTAMP_LTZ:
+//        {
+//            int scale = 9;
+//            if(metadata != nullptr) {
+//                ArrowStringView scaleString;
+//                ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+//                scale = std::stoi(scaleString.data);
+//            }
+//
+//          convertTimestampColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale, futureFields, futureColumns, needsRebuild, m_timezone);
+//          break;
+//        }
+//
+//        case SnowflakeType::Type::TIMESTAMP_TZ:
+//        {
+//            ArrowStringView scaleString;
+//            ArrowStringView byteLengthString;
+//            int scale = 9;
+//            int byteLength = 16;
+//            if(metadata != nullptr) {
+//                ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+//                ArrowMetadataGetValue(metadata, ArrowCharView("byteLength"), &byteLengthString);
+//                scale = std::stoi(scaleString.data);
+//                byteLength = std::stoi(byteLengthString.data);
+//            }
+//
+//          convertTimestampTZColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale, byteLength, futureFields, futureColumns, needsRebuild, m_timezone);
+//          break;
+//        }
+
+        default:
+        {
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown snowflake data type : %s",
+                snowflakeLogicalType.data);
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+            return;
+        }
+      }
+    }
+
+    if (needsRebuild)
+    {
+      //std::shared_ptr<arrow::Schema> futureSchema = arrow::schema(futureFields, schema->metadata());
+      //(*m_cRecordBatches)[batchIdx] = arrow::RecordBatch::Make(futureSchema, currentBatch->num_rows(), futureColumns);
+    }
+  }
+}
+
+
 CArrowTableIterator::CArrowTableIterator(
 PyObject* context,
 std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
@@ -175,16 +372,18 @@ m_convert_number_to_decimal(number_to_decimal)
 
 std::shared_ptr<ReturnVal> CArrowTableIterator::next()
 {
-  bool firstDone = this->convertRecordBatchesToTable();
-  if (firstDone && m_cTable)
-  {
-    m_pyTableObjRef.reset(arrow::py::wrap_table(m_cTable));
-    return std::make_shared<ReturnVal>(m_pyTableObjRef.get(), nullptr);
-  }
-  else
-  {
-    return std::make_shared<ReturnVal>(Py_None, nullptr);
-  }
+  //bool firstDone = this->convertRecordBatchesToTable();
+  bool firstDone = this->convertRecordBatchesToTable_nanoarrow();
+  return std::make_shared<ReturnVal>(Py_None, nullptr);
+//  if (firstDone && m_cTable)
+//  {
+//    m_pyTableObjRef.reset(arrow::py::wrap_table(m_cTable));
+//    return std::make_shared<ReturnVal>(m_pyTableObjRef.get(), nullptr);
+//  }
+//  else
+//  {
+//    return std::make_shared<ReturnVal>(Py_None, nullptr);
+//  }
 }
 
 void CArrowTableIterator::replaceColumn(
@@ -200,6 +399,7 @@ void CArrowTableIterator::replaceColumn(
   if (needsRebuild == false)
   {
     // First time of modifying batches, we have to make a deep copy of fields and columns
+    // TODO: convert each record batch to an ArrowArrayView at the beginning, not doing lazy evaluation
     std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
     futureFields = currentBatch->schema()->fields();
     futureColumns = currentBatch->columns();
@@ -207,6 +407,40 @@ void CArrowTableIterator::replaceColumn(
   }
   futureFields[colIdx] = newField;
   futureColumns[colIdx] = newColumn;
+}
+
+
+void CArrowTableIterator::replaceColumn_nanoarrow(
+    const unsigned int batchIdx,
+    const int colIdx,
+    ArrowSchemaView* newField,
+    ArrowArrayView* newColumn,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
+    bool& needsRebuild)
+{
+  // replace the targeted column
+  if (needsRebuild == false)
+  {
+    // First time of modifying batches, we have to make a deep copy of fields and columns
+    std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
+    nanoarrow::UniqueSchema arrowSchema;
+    nanoarrow::UniqueArray arrowArray;
+    nanoarrow::UniqueArrayView arrowArrayView;
+    arrow::Status exportBatchOk = arrow::ExportRecordBatch(
+        *currentBatch, arrowArray.get(), arrowSchema.get());
+    // TODO: not implemented
+    if (!exportBatchOk.ok()) {
+        std::string errorInfo = Logger::formatString("Export record batch failure");
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+    }
+//    futureFields = currentBatch->schema()->fields();
+//    futureColumns = currentBatch->columns();
+    needsRebuild = true;
+  }
+  //futureFields[colIdx] = newField;
+  //futureColumns[colIdx] = newColumn;
 }
 
 template <typename T>
@@ -263,6 +497,43 @@ void CArrowTableIterator::convertScaledFixedNumberColumn(
       );
   } else {
     convertScaledFixedNumberColumnToDoubleColumn(
+      batchIdx,
+      colIdx,
+      field,
+      columnArray,
+      scale,
+      futureFields,
+      futureColumns,
+      needsRebuild
+      );
+  }
+}
+
+void CArrowTableIterator::convertScaledFixedNumberColumn_nanoarrow(
+  const unsigned int batchIdx,
+  const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const unsigned int scale,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
+  bool& needsRebuild
+)
+{
+// Convert scaled fixed number to either Double, or Decimal based on setting
+  if (m_convert_number_to_decimal){
+    convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
+      batchIdx,
+      colIdx,
+      field,
+      columnArray,
+      scale,
+      futureFields,
+      futureColumns,
+      needsRebuild
+      );
+  } else {
+    convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
       batchIdx,
       colIdx,
       field,
@@ -353,6 +624,90 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn(
   replaceColumn(batchIdx, colIdx, doubleField, doubleArray, futureFields, futureColumns, needsRebuild);
 }
 
+void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
+  const unsigned int batchIdx,
+  const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const unsigned int scale,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
+  bool& needsRebuild
+)
+{
+  // Convert to decimal columns
+  ArrowType field_type = field->type;
+
+  // TODO: how to construct ArrowSchemaView?
+//  const std::shared_ptr<arrow::DataType> destType = arrow::decimal128(38, scale);
+//  std::shared_ptr<arrow::Field> doubleField = std::make_shared<arrow::Field>(
+//      field->name(), destType, field->nullable());
+   // TODO: do we still have Decimal128Builder in nanoarrow?
+//  arrow::Decimal128Builder builder(destType, m_pool);
+//  arrow::Status ret;
+  for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+  {
+    if (columnArray->IsValid(rowIdx))
+    {
+      // TODO: how to construct a decimal 128 value in nanoarrow?
+      arrow::Decimal128 val;
+      switch (field_type->id())
+      {
+        case arrow::Type::type::INT8:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);  // TODO: how to do this in nanoarrow?
+          break;
+        }
+        case arrow::Type::type::INT16:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);
+          break;
+        }
+        case arrow::Type::type::INT32:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);
+          break;
+        }
+        case arrow::Type::type::INT64:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);
+          break;
+        }
+        default:
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for FIXED data",
+              field_type->id());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          return;
+      }
+      ret = builder.Append(val);  // TODO: how to do this in nannoarrow?
+    }
+    else
+    {
+      ret = builder.AppendNull();
+    }
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append Decimal value: internal data type(%d), errorInfo: %s",
+      field_type->id(),  ret.message().c_str());
+  }
+
+  std::shared_ptr<arrow::Array> doubleArray;
+  ret = builder.Finish(&doubleArray);
+  SF_CHECK_ARROW_RC(ret,
+    "[Snowflake Exception] arrow failed to finish Decimal array, errorInfo: %s",
+    ret.message().c_str());
+
+  // replace the targeted column
+  // TODO: is it possible to replace a child array in ArrowArrayView? if possible how?
+  // TODO: if not possible, probably need to switch constructing a new ArrowArrayView and append?
+  replaceColumn(batchIdx, colIdx, doubleField, doubleArray, futureFields, futureColumns, needsRebuild);
+}
+
 void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
   const unsigned int batchIdx,
   const int colIdx,
@@ -361,6 +716,83 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
   const unsigned int scale,
   std::vector<std::shared_ptr<arrow::Field>>& futureFields,
   std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
+)
+{
+  // Convert to arrow double/float64 column
+  std::shared_ptr<arrow::Field> doubleField = std::make_shared<arrow::Field>(
+      field->name(), arrow::float64(), field->nullable());
+  arrow::DoubleBuilder builder(m_pool);
+  arrow::Status ret;
+  auto dt = field->type();
+  for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+  {
+    if (columnArray->IsValid(rowIdx))
+    {
+      double val;
+      switch (dt->id())
+      {
+        case arrow::Type::type::INT8:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT16:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT32:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT64:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        default:
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for FIXED data",
+              dt->id());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          return;
+      }
+      ret = builder.Append(val);
+    }
+    else
+    {
+      ret = builder.AppendNull();
+    }
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append Double value: internal data type(%d), errorInfo: %s",
+      dt->id(),  ret.message().c_str());
+  }
+
+  std::shared_ptr<arrow::Array> doubleArray;
+  ret = builder.Finish(&doubleArray);
+  SF_CHECK_ARROW_RC(ret,
+    "[Snowflake Exception] arrow failed to finish Double array, errorInfo: %s",
+    ret.message().c_str());
+
+  // replace the targeted column
+  replaceColumn(batchIdx, colIdx, doubleField, doubleArray, futureFields, futureColumns, needsRebuild);
+}
+
+void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
+  const unsigned int batchIdx,
+  const int colIdx,
+    ArrowSchemaView* field,
+    ArrowArrayView* columnArray,
+    const unsigned int scale,
+    std::vector<nanoarrow::UniqueSchema>& futureFields,
+    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
   bool& needsRebuild
 )
 {
@@ -1027,6 +1459,23 @@ bool CArrowTableIterator::convertRecordBatchesToTable()
       "[Snowflake Exception] arrow failed to build table from batches, errorInfo: %s",
       ret.status().message().c_str());
     m_cTable = ret.ValueOrDie();
+
+    return true;
+  }
+  return false;
+}
+
+bool CArrowTableIterator::convertRecordBatchesToTable_nanoarrow()
+{
+  // only do conversion once and there exist some record batches
+  if (!m_cTable && !m_cRecordBatches->empty())
+  {
+    reconstructRecordBatches_nanoarrow();
+//    arrow::Result<std::shared_ptr<arrow::Table>> ret = arrow::Table::FromRecordBatches(*m_cRecordBatches);
+//    SF_CHECK_ARROW_RC_AND_RETURN(ret, false,
+//      "[Snowflake Exception] arrow failed to build table from batches, errorInfo: %s",
+//      ret.status().message().c_str());
+//    m_cTable = ret.ValueOrDie();
 
     return true;
   }
