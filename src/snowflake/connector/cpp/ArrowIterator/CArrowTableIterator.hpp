@@ -48,12 +48,12 @@ public:
 
 private:
   // nanoarrow data
-  std::vector<std::unique_ptr<nanoarrow::UniqueArray>> m_nanoarrowTable;
-  std::vector<std::unique_ptr<nanoarrow::UniqueSchema>> m_nanoarrowSchemas;
-  std::vector<std::unique_ptr<nanoarrow::UniqueArrayView>> m_nanoarrowViews;
+  std::vector<nanoarrow::UniqueArray> m_nanoarrowTable;
+  std::vector<nanoarrow::UniqueSchema> m_nanoarrowSchemas;
+  std::vector<nanoarrow::UniqueArrayView> m_nanoarrowViews;
 
-  std::vector<std::vector<std::unique_ptr<nanoarrow::UniqueArray>>> m_newArrays;
-  std::vector<std::vector<std::unique_ptr<nanoarrow::UniqueSchema>>> m_newSchemas;
+  std::vector<std::vector<nanoarrow::UniqueArray>> m_newArrays;
+  std::vector<std::vector<nanoarrow::UniqueSchema>> m_newSchemas;
 
   bool m_tableConverted = false;
 
