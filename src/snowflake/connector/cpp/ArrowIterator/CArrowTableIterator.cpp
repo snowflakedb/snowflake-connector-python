@@ -6,7 +6,6 @@
 #include "SnowflakeType.hpp"
 #include "Python/Common.hpp"
 #include "Util/time.hpp"
-#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -37,22 +36,22 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
     std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
 
     // each record batch will have its own list of newly created array and schema
-    m_newArrays.push_back(std::vector<std::unique_ptr<nanoarrow::UniqueArray>>());
-    m_newSchemas.push_back(std::vector<std::unique_ptr<nanoarrow::UniqueSchema>>());
+    m_newArrays.push_back(std::vector<nanoarrow::UniqueArray>());
+    m_newSchemas.push_back(std::vector<nanoarrow::UniqueSchema>());
 
     // These copies will be used if rebuilding the RecordBatch if necessary
-    std::unique_ptr<nanoarrow::UniqueSchema> arrowSchema = std::make_unique<nanoarrow::UniqueSchema>();
-    std::unique_ptr<nanoarrow::UniqueArray> arrowArray = std::make_unique<nanoarrow::UniqueArray>();
-    std::unique_ptr<nanoarrow::UniqueArrayView> arrowArrayView = std::make_unique<nanoarrow::UniqueArrayView>();
+    nanoarrow::UniqueSchema arrowSchema;
+    nanoarrow::UniqueArray arrowArray;
+    nanoarrow::UniqueArrayView arrowArrayView;
 
     // Recommended path
     // TODO: Export is not needed when using nanoarrow IPC to read schema
     arrow::Status exportBatchOk = arrow::ExportRecordBatch(
-      *currentBatch, arrowArray->get(), arrowSchema->get());
+      *currentBatch, arrowArray.get(), arrowSchema.get());
 
     ArrowError error;
     int returnCode = ArrowArrayViewInitFromSchema(
-      arrowArrayView->get(), arrowSchema->get(), &error);
+      arrowArrayView.get(), arrowSchema.get(), &error);
     if (returnCode != NANOARROW_OK) {
       std::string errorInfo = Logger::formatString(
         "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
@@ -63,7 +62,7 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
     }
 
     returnCode = ArrowArrayViewSetArray(
-        arrowArrayView->get(), arrowArray->get(), &error);
+        arrowArrayView.get(), arrowArray.get(), &error);
     if (returnCode != NANOARROW_OK) {
         std::string errorInfo = Logger::formatString(
           "[Snowflake Exception] error initializing ArrowArrayView from array : %s",
@@ -79,8 +78,8 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
 
     for (int colIdx = 0; colIdx < currentBatch->num_columns(); colIdx++)
     {
-      ArrowArrayView* columnArray = m_nanoarrowViews[batchIdx]->get()->children[colIdx];
-      ArrowSchema* columnSchema = m_nanoarrowSchemas[batchIdx]->get()->children[colIdx];
+      ArrowArrayView* columnArray = m_nanoarrowViews[batchIdx]->children[colIdx];
+      ArrowSchema* columnSchema = m_nanoarrowSchemas[batchIdx]->children[colIdx];
       ArrowSchemaView columnSchemaView;
 
       returnCode = ArrowSchemaViewInit(
@@ -95,7 +94,7 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
       }
 
       ArrowStringView snowflakeLogicalType;
-      const char* metadata = m_nanoarrowSchemas[batchIdx]->get()->children[colIdx]->metadata;
+      const char* metadata = m_nanoarrowSchemas[batchIdx]->children[colIdx]->metadata;
       ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
       SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
         std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
@@ -305,10 +304,10 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
 )
 {
   // Convert to arrow double/float64 column
-  std::unique_ptr<nanoarrow::UniqueSchema> newUniqueField = std::make_unique<nanoarrow::UniqueSchema>();
-  std::unique_ptr<nanoarrow::UniqueArray> newUniqueArray = std::make_unique<nanoarrow::UniqueArray>();
-  ArrowSchema* newSchema = newUniqueField->get();
-  ArrowArray* newArray = newUniqueArray->get();
+  nanoarrow::UniqueSchema newUniqueField;
+  nanoarrow::UniqueArray newUniqueArray;
+  ArrowSchema* newSchema = newUniqueField.get();
+  ArrowArray* newArray = newUniqueArray.get();
 
   // create new schema
   ArrowSchemaInit(newSchema);
@@ -337,8 +336,8 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
-  m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
+  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -352,10 +351,10 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn_nanoarrow
 )
 {
   // Convert to arrow double/float64 column
-  std::unique_ptr<nanoarrow::UniqueSchema> newUniqueField = std::make_unique<nanoarrow::UniqueSchema>();
-  std::unique_ptr<nanoarrow::UniqueArray> newUniqueArray = std::make_unique<nanoarrow::UniqueArray>();
-  ArrowSchema* newSchema = newUniqueField->get();
-  ArrowArray* newArray = newUniqueArray->get();
+  nanoarrow::UniqueSchema newUniqueField;
+  nanoarrow::UniqueArray newUniqueArray;
+  ArrowSchema* newSchema = newUniqueField.get();
+  ArrowArray* newArray = newUniqueArray.get();
 
   // create new schema
   ArrowSchemaInit(newSchema);
@@ -385,8 +384,8 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn_nanoarrow
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
-  m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
+  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -399,10 +398,10 @@ void CArrowTableIterator::convertTimeColumn_nanoarrow(
   const int scale
 )
 {
-  std::unique_ptr<nanoarrow::UniqueSchema> newUniqueField = std::make_unique<nanoarrow::UniqueSchema>();
-  std::unique_ptr<nanoarrow::UniqueArray> newUniqueArray = std::make_unique<nanoarrow::UniqueArray>();
-  ArrowSchema* newSchema = newUniqueField->get();
-  ArrowArray* newArray = newUniqueArray->get();
+  nanoarrow::UniqueSchema newUniqueField;
+  nanoarrow::UniqueArray newUniqueArray;
+  ArrowSchema* newSchema = newUniqueField.get();
+  ArrowArray* newArray = newUniqueArray.get();
   ArrowError error;
 
   // create new schema
@@ -458,8 +457,8 @@ void CArrowTableIterator::convertTimeColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
-  m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
+  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -473,10 +472,10 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   const std::string timezone
 )
 {
-  std::unique_ptr<nanoarrow::UniqueSchema> newUniqueField = std::make_unique<nanoarrow::UniqueSchema>();
-  std::unique_ptr<nanoarrow::UniqueArray> newUniqueArray = std::make_unique<nanoarrow::UniqueArray>();
-  ArrowSchema* newSchema = newUniqueField->get();
-  ArrowArray* newArray = newUniqueArray->get();
+  nanoarrow::UniqueSchema newUniqueField;
+  nanoarrow::UniqueArray newUniqueArray;
+  ArrowSchema* newSchema = newUniqueField.get();
+  ArrowArray* newArray = newUniqueArray.get();
   ArrowError error;
 
   ArrowSchemaInit(newSchema);
@@ -624,6 +623,7 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
             {
               val = epoch * sf::internal::powTenSB4[6] + fraction / 1000;
             }
+            else
             {
               val = epoch * sf::internal::powTenSB4[9] + fraction;
             }
@@ -675,8 +675,8 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
-  m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
+  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -691,10 +691,10 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   const std::string timezone
 )
 {
-  std::unique_ptr<nanoarrow::UniqueSchema> newUniqueField = std::make_unique<nanoarrow::UniqueSchema>();
-  std::unique_ptr<nanoarrow::UniqueArray> newUniqueArray = std::make_unique<nanoarrow::UniqueArray>();
-  ArrowSchema* newSchema = newUniqueField->get();
-  ArrowArray* newArray = newUniqueArray->get();
+  nanoarrow::UniqueSchema newUniqueField;
+  nanoarrow::UniqueArray newUniqueArray;
+  ArrowSchema* newSchema = newUniqueField.get();
+  ArrowArray* newArray = newUniqueArray.get();
   ArrowError error;
   ArrowSchemaInit(newSchema);
   newSchema->flags &= (field->schema->flags & ARROW_FLAG_NULLABLE); // map to nullable()
@@ -813,8 +813,8 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
-  m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
+  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -833,7 +833,7 @@ bool CArrowTableIterator::convertRecordBatchesToTable_nanoarrow()
 std::vector<uintptr_t> CArrowTableIterator::getArrowArrayPtrs() {
     std::vector<uintptr_t> ret;
     for(size_t i = 0; i < m_nanoarrowTable.size(); i++) {
-        ret.push_back((uintptr_t)(void*)(m_nanoarrowTable[i]->get()));
+        ret.push_back((uintptr_t)(void*)(m_nanoarrowTable[i].get()));
     }
     return ret;
 }
@@ -841,7 +841,7 @@ std::vector<uintptr_t> CArrowTableIterator::getArrowArrayPtrs() {
 std::vector<uintptr_t> CArrowTableIterator::getArrowSchemaPtrs() {
     std::vector<uintptr_t> ret;
     for(size_t i = 0; i < m_nanoarrowSchemas.size(); i++) {
-        ret.push_back((uintptr_t)(void*)(m_nanoarrowSchemas[i]->get()));
+        ret.push_back((uintptr_t)(void*)(m_nanoarrowSchemas[i].get()));
     }
     return ret;
 }
