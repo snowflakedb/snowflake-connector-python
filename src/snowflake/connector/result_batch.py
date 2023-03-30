@@ -665,7 +665,10 @@ class ArrowResultBatch(ResultBatch):
 
     def to_arrow(self, connection: SnowflakeConnection | None = None) -> Table:
         """Returns this batch as a pyarrow Table"""
-        val = next(self._get_arrow_iter(connection=connection), None)
+        # TODO: this is a workaround as to avoid the c arrow schema and array from being garbage collected
+        # we need to find a way to transfer the ownership of the created schema/array from c to python pyarrow table
+        self._arrow_table_iterator = self._get_arrow_iter(connection=connection)
+        val = next(self._arrow_table_iterator, None)
         if val is not None:
             return val
         return self._create_empty_table()

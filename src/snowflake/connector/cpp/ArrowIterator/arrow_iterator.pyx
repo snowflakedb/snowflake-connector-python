@@ -6,10 +6,9 @@
 # cython: language_level=3
 
 
-from libc.stdint cimport uint8_t, uintptr_t
-
 from cpython.ref cimport PyObject
 from cython.operator cimport dereference
+from libc.stdint cimport uint8_t, uintptr_t
 from libcpp.memory cimport shared_ptr
 from libcpp.vector cimport vector
 from pyarrow.includes.common cimport CResult, CStatus, GetResultValue
@@ -25,6 +24,8 @@ from pyarrow.includes.libarrow cimport (
     Readable,
     Seekable,
 )
+
+import pyarrow
 
 IF ARROW_LESS_THAN_8:
     from pyarrow.includes.libarrow cimport PyReadableFile
@@ -50,6 +51,8 @@ cdef extern from "CArrowIterator.hpp" namespace "sf":
 
     cdef cppclass CArrowIterator:
         shared_ptr[ReturnVal] next() except +;
+        vector[uintptr_t] getArrowArrayPtrs();
+        vector[uintptr_t] getArrowSchemaPtrs();
 
 
 cdef extern from "CArrowChunkIterator.hpp" namespace "sf":
@@ -97,6 +100,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef vector[shared_ptr[CRecordBatch]] batches
     cdef object use_dict_result
     cdef object cursor
+    cdef vector[uintptr_t] nanoarrow_Table
+    cdef vector[uintptr_t] nanoarrow_Schema
+    cdef object table_returned
 
     # this is the flag indicating whether fetch data as numpy datatypes or not. The flag
     # is passed from the constructor of SnowflakeConnection class. Note, only FIXED, REAL
@@ -105,6 +111,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     # https://docs.snowflake.com/en/user-guide/sqlalchemy.html#numpy-data-type-support
     cdef object use_numpy
     cdef object number_to_decimal
+    cdef object pyarrow_table
 
     def __cinit__(
             self,
@@ -162,6 +169,8 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.cursor = cursor
         self.use_numpy = numpy
         self.number_to_decimal = number_to_decimal
+        self.pyarrow_table = None
+        self.table_returned = False
 
     def __dealloc__(self):
         del self.cIterator
@@ -172,6 +181,13 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     def __next__(self):
         if self.cIterator is NULL:
             self.init_row_unit()
+
+        if self.unit == IterUnit.TABLE_UNIT.value:
+            if not self.table_returned:
+                self.table_returned = True
+                return self.pyarrow_table
+            raise StopIteration
+
         self.cret = self.cIterator.next()
 
         if not self.cret.get().successObj:
@@ -219,3 +235,16 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             &self.batches,
             self.number_to_decimal,
         )
+
+        self.cret = self.cIterator.next()
+        self.unit = 'table'
+        self.nanoarrow_Table = self.cIterator.getArrowArrayPtrs()
+        self.nanoarrow_Schema = self.cIterator.getArrowSchemaPtrs()
+        cdef vector[PyObject] py_batches
+        batches = []
+        for i in range(self.nanoarrow_Table.size()):
+            array_ptr = self.nanoarrow_Table[i]
+            schema_ptr = self.nanoarrow_Schema[i]
+            batch = pyarrow.RecordBatch._import_from_c(array_ptr, schema_ptr)
+            batches.append(batch)
+        self.pyarrow_table = pyarrow.Table.from_batches(batches=batches)
