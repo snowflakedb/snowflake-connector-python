@@ -43,21 +43,22 @@ public:
    * @return an arrow table containing all data in all record batches
    */
   std::shared_ptr<ReturnVal> next() override;
+  std::vector<uintptr_t> getArrowArrayPtrs() override;
+  std::vector<uintptr_t> getArrowSchemaPtrs() override;
 
 private:
-  /* arrow table of all record batches in current chunk */
-  std::shared_ptr<arrow::Table> m_cTable;
+  // nanoarrow data
+  std::vector<std::unique_ptr<nanoarrow::UniqueArray>> m_nanoarrowTable;
+  std::vector<std::unique_ptr<nanoarrow::UniqueSchema>> m_nanoarrowSchemas;
+  std::vector<std::unique_ptr<nanoarrow::UniqueArrayView>> m_nanoarrowViews;
+
+  std::vector<std::vector<std::unique_ptr<nanoarrow::UniqueArray>>> m_newArrays;
+  std::vector<std::vector<std::unique_ptr<nanoarrow::UniqueSchema>>> m_newSchemas;
+
+  bool m_tableConverted = false;
 
   /** arrow format convert context for the current session */
   PyObject* m_context;
-
-  /** reference to PyObject */
-  py::UniqueRef m_pyTableObjRef;
-
-  /**
-   * arrow memory buffer to allocate type converted arrays for fetching pandas from arrow
-   */
-  arrow::MemoryPool* m_pool = arrow::default_memory_pool();
 
   /** local time zone */
   char* m_timezone;
@@ -74,157 +75,62 @@ private:
    * Convert all current RecordBatches to Arrow Table
    * @return if conversion is executed at first time and successfully
    */
-  bool convertRecordBatchesToTable();
   bool convertRecordBatchesToTable_nanoarrow();
-
-  /**
-   * replace column with the new column in place
-   */
-  void replaceColumn(
-    const unsigned int batchIdx,
-    const int colIdx,
-    const std::shared_ptr<arrow::Field>& newField,
-    const std::shared_ptr<arrow::Array>& newColumn,
-    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
-    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild
-    );
-
-  void replaceColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* newField,
-    ArrowArrayView* newColumn,
-    std::vector<nanoarrow::UniqueSchema>& futureFields,
-    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
-    bool& needsRebuild
-    );
 
   /**
    * convert scaled fixed number column to Decimal, or Double column based on setting
    */
-  void convertScaledFixedNumberColumn(
-    const unsigned int batchIdx,
-    const int colIdx,
-    const std::shared_ptr<arrow::Field> field,
-    const std::shared_ptr<arrow::Array> columnArray,
-    const unsigned int scale,
-    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
-    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild
-  );
-
   void convertScaledFixedNumberColumn_nanoarrow(
     const unsigned int batchIdx,
     const int colIdx,
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
-    const unsigned int scale,
-    std::vector<nanoarrow::UniqueSchema>& futureFields,
-    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
-    bool& needsRebuild
+    const unsigned int scale
   );
 
   /**
    * convert scaled fixed number column to Decimal column
    */
-  void convertScaledFixedNumberColumnToDecimalColumn(
-    const unsigned int batchIdx,
-    const int colIdx,
-    const std::shared_ptr<arrow::Field> field,
-    const std::shared_ptr<arrow::Array> columnArray,
-    const unsigned int scale,
-    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
-    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild
-    );
-
   void convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
     const unsigned int batchIdx,
     const int colIdx,
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
-    const unsigned int scale,
-    std::vector<nanoarrow::UniqueSchema>& futureFields,
-    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
-    bool& needsRebuild
+    const unsigned int scale
     );
 
   /**
    * convert scaled fixed number column to Double column
    */
-  void convertScaledFixedNumberColumnToDoubleColumn(
-    const unsigned int batchIdx,
-    const int colIdx,
-    const std::shared_ptr<arrow::Field> field,
-    const std::shared_ptr<arrow::Array> columnArray,
-    const unsigned int scale,
-    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
-    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild
-    );
-
   void convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
     const unsigned int batchIdx,
     const int colIdx,
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
-    const unsigned int scale,
-    std::vector<nanoarrow::UniqueSchema>& futureFields,
-    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
-    bool& needsRebuild
+    const unsigned int scale
     );
 
   /**
    * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
    * Since Python/Pandas Time does not support nanoseconds, this function truncates values to microseconds if necessary
    */
-  void convertTimeColumn(
-    const unsigned int batchIdx,
-    const int colIdx,
-    const std::shared_ptr<arrow::Field> field,
-    const std::shared_ptr<arrow::Array> columnArray,
-    const int scale,
-    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
-    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild
-    );
-
   void convertTimeColumn_nanoarrow(
     const unsigned int batchIdx,
     const int colIdx,
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
-    const int scale,
-    std::vector<nanoarrow::UniqueSchema>& futureFields,
-    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
-    bool& needsRebuild
+    const int scale
     );
 
   /**
    * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp column
    */
-  void convertTimestampColumn(
-    const unsigned int batchIdx,
-    const int colIdx,
-    const std::shared_ptr<arrow::Field> field,
-    const std::shared_ptr<arrow::Array> columnArray,
-    const int scale,
-    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
-    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild,
-    const std::string timezone=""
-    );
-
   void convertTimestampColumn_nanoarrow(
     const unsigned int batchIdx,
     const int colIdx,
     ArrowSchemaView* field,
     ArrowArrayView* columnArray,
     const int scale,
-    std::vector<nanoarrow::UniqueSchema>& futureFields,
-    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
-    bool& needsRebuild,
     const std::string timezone=""
     );
 
@@ -233,19 +139,6 @@ private:
    * Arrow Timestamp does not support time zone info in each value, so this method convert TimestampTZ to Arrow
    * timestamp with UTC timezone
    */
-  void convertTimestampTZColumn(
-    const unsigned int batchIdx,
-    const int colIdx,
-    const std::shared_ptr<arrow::Field> field,
-    const std::shared_ptr<arrow::Array> columnArray,
-    const int scale,
-    const int byteLength,
-    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
-    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
-    bool& needsRebuild,
-    const std::string timezone
-    );
-
   void convertTimestampTZColumn_nanoarrow(
     const unsigned int batchIdx,
     const int colIdx,
@@ -253,9 +146,6 @@ private:
     ArrowArrayView* columnArray,
     const int scale,
     const int byteLength,
-    std::vector<nanoarrow::UniqueSchema>& futureFields,
-    std::vector<nanoarrow::UniqueArrayView>& futureColumns,
-    bool& needsRebuild,
     const std::string timezone
     );
 
