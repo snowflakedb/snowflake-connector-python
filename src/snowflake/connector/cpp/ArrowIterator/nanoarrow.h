@@ -19,9 +19,9 @@
 #define NANOARROW_BUILD_ID_H_INCLUDED
 
 #define NANOARROW_VERSION_MAJOR 0
-#define NANOARROW_VERSION_MINOR 1
+#define NANOARROW_VERSION_MINOR 2
 #define NANOARROW_VERSION_PATCH 0
-#define NANOARROW_VERSION "0.1.0-SNAPSHOT"
+#define NANOARROW_VERSION "0.2.0-SNAPSHOT"
 
 #define NANOARROW_VERSION_INT                                        \
   (NANOARROW_VERSION_MAJOR * 10000 + NANOARROW_VERSION_MINOR * 100 + \
@@ -351,6 +351,25 @@ enum ArrowTimeUnit {
   NANOARROW_TIME_UNIT_NANO = 3
 };
 
+/// \brief Validation level enumerator
+/// \ingroup nanoarrow-array
+enum ArrowValidationLevel {
+  /// \brief Do not validate buffer sizes or content.
+  NANOARROW_VALIDATION_LEVEL_NONE = 0,
+
+  /// \brief Validate buffer sizes that depend on array length but do not validate buffer
+  /// sizes that depend on buffer data access.
+  NANOARROW_VALIDATION_LEVEL_MINIMAL = 1,
+
+  /// \brief Validate all buffer sizes, including those that require buffer data access,
+  /// but do not perform any checks that are O(1) along the length of the buffers.
+  NANOARROW_VALIDATION_LEVEL_DEFAULT = 2,
+
+  /// \brief Validate all buffer sizes and all buffer content. This is useful in the
+  /// context of untrusted input or input that may have been corrupted in transit.
+  NANOARROW_VALIDATION_LEVEL_FULL = 3
+};
+
 /// \brief Get a string value of an enum ArrowTimeUnit value
 /// \ingroup nanoarrow-utils
 ///
@@ -535,7 +554,8 @@ struct ArrowArrayView {
   ///
   /// If storage_type is a union type, a 256-byte ArrowMalloc()ed buffer
   /// such that child_index == union_type_id_map[type_id] and
-  /// type_id == union_type_id_map[128 + child_index]
+  /// type_id == union_type_id_map[128 + child_index]. This value may be
+  /// NULL in the case where child_id == type_id.
   int8_t* union_type_id_map;
 };
 
@@ -675,6 +695,8 @@ struct ArrowArrayPrivateData {
 #define ArrowArrayReserve NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayReserve)
 #define ArrowArrayFinishBuilding \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayFinishBuilding)
+#define ArrowArrayFinishBuildingDefault \
+  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayFinishBuildingDefault)
 #define ArrowArrayViewInitFromType \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayViewInitFromType)
 #define ArrowArrayViewInitFromSchema \
@@ -685,6 +707,8 @@ struct ArrowArrayPrivateData {
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayViewSetLength)
 #define ArrowArrayViewSetArray \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayViewSetArray)
+#define ArrowArrayViewValidateFull \
+  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayViewValidateFull)
 #define ArrowArrayViewReset NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowArrayViewReset)
 #define ArrowBasicArrayStreamInit \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowBasicArrayStreamInit)
@@ -774,10 +798,10 @@ const char* ArrowErrorMessage(struct ArrowError* error);
 /// @{
 
 /// \brief Return a version string in the form "major.minor.patch"
-const char* ArrowNanoarrowVersion();
+const char* ArrowNanoarrowVersion(void);
 
 /// \brief Return an integer that can be used to compare versions sequentially
-int ArrowNanoarrowVersionInt();
+int ArrowNanoarrowVersionInt(void);
 
 /// \brief Initialize a description of buffer arrangements from a storage type
 void ArrowLayoutInit(struct ArrowLayout* layout, enum ArrowType storage_type);
@@ -1275,7 +1299,10 @@ static inline void ArrowBitmapReset(struct ArrowBitmap* bitmap);
 
 /// \defgroup nanoarrow-array Creating arrays
 ///
-/// These functions allocate, copy, and destroy ArrowArray structures
+/// These functions allocate, copy, and destroy ArrowArray structures.
+/// Once an ArrowArray has been initialized via ArrowArrayInitFromType()
+/// or ArrowArrayInitFromSchema(), the caller is responsible for releasing
+/// it using the embedded release callback.
 ///
 /// @{
 
@@ -1423,10 +1450,21 @@ static inline ArrowErrorCode ArrowArrayShrinkToFit(struct ArrowArray* array);
 /// \brief Finish building an ArrowArray
 ///
 /// Flushes any pointers from internal buffers that may have been reallocated
-/// into the array->buffers array and checks the actual size of the buffers
+/// into array->buffers and checks the actual size of the buffers
 /// against the expected size based on the final length.
 /// array must have been allocated using ArrowArrayInitFromType()
+ArrowErrorCode ArrowArrayFinishBuildingDefault(struct ArrowArray* array,
+                                               struct ArrowError* error);
+
+/// \brief Finish building an ArrowArray with explicit validation
+///
+/// Finish building with an explicit validation level. This could perform less validation
+/// (i.e. NANOARROW_VALIDATION_LEVEL_NONE or NANOARROW_VALIDATION_LEVEL_MINIMAL) if CPU
+/// buffer data access is not possible or more validation (i.e.,
+/// NANOARROW_VALIDATION_LEVEL_FULL) if buffer content was obtained from an untrusted or
+/// corruptable source.
 ArrowErrorCode ArrowArrayFinishBuilding(struct ArrowArray* array,
+                                        enum ArrowValidationLevel validation_level,
                                         struct ArrowError* error);
 
 /// @}
@@ -1465,6 +1503,10 @@ void ArrowArrayViewSetLength(struct ArrowArrayView* array_view, int64_t length);
 /// \brief Set buffer sizes and data pointers from an ArrowArray
 ArrowErrorCode ArrowArrayViewSetArray(struct ArrowArrayView* array_view,
                                       struct ArrowArray* array, struct ArrowError* error);
+
+/// \brief Performs extra checks on the array that was set via ArrowArrayViewSetArray()
+ArrowErrorCode ArrowArrayViewValidateFull(struct ArrowArrayView* array_view,
+                                          struct ArrowError* error);
 
 /// \brief Reset the contents of an ArrowArrayView and frees resources
 void ArrowArrayViewReset(struct ArrowArrayView* array_view);
@@ -2155,10 +2197,9 @@ static inline int8_t _ArrowParseUnionTypeIds(const char* type_ids, int8_t* out) 
   return -1;
 }
 
-static inline int8_t _ArrowUnionTypeIdsWillEqualChildIndices(const char* type_id_str,
-                                                             int64_t n_children) {
-  int8_t type_ids[128];
-  int8_t n_type_ids = _ArrowParseUnionTypeIds(type_id_str, type_ids);
+static inline int8_t _ArrowParsedUnionTypeIdsWillEqualChildIndices(const int8_t* type_ids,
+                                                                   int64_t n_type_ids,
+                                                                   int64_t n_children) {
   if (n_type_ids != n_children) {
     return 0;
   }
@@ -2170,6 +2211,13 @@ static inline int8_t _ArrowUnionTypeIdsWillEqualChildIndices(const char* type_id
   }
 
   return 1;
+}
+
+static inline int8_t _ArrowUnionTypeIdsWillEqualChildIndices(const char* type_id_str,
+                                                             int64_t n_children) {
+  int8_t type_ids[128];
+  int8_t n_type_ids = _ArrowParseUnionTypeIds(type_id_str, type_ids);
+  return _ArrowParsedUnionTypeIdsWillEqualChildIndices(type_ids, n_type_ids, n_children);
 }
 
 static inline ArrowErrorCode ArrowArrayStartAppending(struct ArrowArray* array) {
