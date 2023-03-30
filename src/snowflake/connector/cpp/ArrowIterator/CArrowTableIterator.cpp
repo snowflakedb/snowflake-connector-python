@@ -336,7 +336,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
         // TODO: nanoarrow is missing appending a decimal value to array
     }
   }
-  ArrowArrayFinishBuilding(newArray, &error);
+  ArrowArrayFinishBuildingDefault(newArray, &error);
   m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
   m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
@@ -384,7 +384,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn_nanoarrow
         ArrowArrayAppendDouble(newArray, val);
     }
   }
-  ArrowArrayFinishBuilding(newArray, &error);
+  ArrowArrayFinishBuildingDefault(newArray, &error);
   m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
   m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
@@ -457,7 +457,7 @@ void CArrowTableIterator::convertTimeColumn_nanoarrow(
     }
   }
 
-  ArrowArrayFinishBuilding(newArray, &error);
+  ArrowArrayFinishBuildingDefault(newArray, &error);
   m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
   m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
@@ -674,7 +674,7 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
     }
   }
 
-  ArrowArrayFinishBuilding(newArray, &error);
+  ArrowArrayFinishBuildingDefault(newArray, &error);
   m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
   m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
@@ -812,7 +812,7 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
     }
   }
 
-  ArrowArrayFinishBuilding(newArray, &error);
+  ArrowArrayFinishBuildingDefault(newArray, &error);
   m_nanoarrowTable[batchIdx]->get()->children[colIdx] = newArray;
   m_nanoarrowSchemas[batchIdx]->get()->children[colIdx] = newSchema;
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
