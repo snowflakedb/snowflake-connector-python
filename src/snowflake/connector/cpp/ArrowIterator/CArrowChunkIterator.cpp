@@ -123,7 +123,10 @@ void CArrowChunkIterator::initColumnConverters()
   int returnCode = ArrowArrayViewInitFromSchema(
     m_arrowArrayView.get(), m_arrowSchema.get(), &error);
   if (returnCode != NANOARROW_OK) {
-    std::string errorInfo = Logger::formatString(ArrowErrorMessage(&error));
+    std::string errorInfo = Logger::formatString(
+        "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
+        ArrowErrorMessage(&error)
+    );
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
   }
@@ -131,7 +134,10 @@ void CArrowChunkIterator::initColumnConverters()
   returnCode = ArrowArrayViewSetArray(
       m_arrowArrayView.get(), m_arrowArray.get(), &error);
   if (returnCode != NANOARROW_OK) {
-    std::string errorInfo = Logger::formatString(ArrowErrorMessage(&error));
+    std::string errorInfo = Logger::formatString(
+        "[Snowflake Exception] error setting ArrowArrayView from array : %s",
+        ArrowErrorMessage(&error)
+    );
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
   }
@@ -145,7 +151,10 @@ void CArrowChunkIterator::initColumnConverters()
     returnCode = ArrowSchemaViewInit(
         &columnSchemaView, columnSchema, &error);
     if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(ArrowErrorMessage(&error));
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] error initializing ArrowSchemaView : %s",
+            ArrowErrorMessage(&error)
+        );
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     }

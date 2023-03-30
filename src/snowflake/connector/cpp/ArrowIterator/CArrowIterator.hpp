@@ -7,6 +7,8 @@
 
 #include "Python/Common.hpp"
 #include "logging.hpp"
+#include "nanoarrow.hpp"
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -108,6 +110,8 @@ public:
    * @return a python object which might be current row or an Arrow Table
    */
   virtual std::shared_ptr<ReturnVal> next() = 0;
+  virtual std::vector<uintptr_t> getArrowArrayPtrs() { return {}; };
+  virtual std::vector<uintptr_t> getArrowSchemaPtrs() { return {}; };
 
 protected:
    /** list of all record batch in current chunk */
