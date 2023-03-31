@@ -336,7 +336,9 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
+  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
   ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
   ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
@@ -384,7 +386,9 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn_nanoarrow
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
+  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
   ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
   ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
@@ -457,7 +461,9 @@ void CArrowTableIterator::convertTimeColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
+  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
   ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
   ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
@@ -675,7 +681,9 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
+  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
   ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
   ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
@@ -813,7 +821,9 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
+  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
   ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
+  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
   ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
