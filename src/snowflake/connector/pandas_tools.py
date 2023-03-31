@@ -39,7 +39,7 @@ def chunk_helper(lst: pd.DataFrame, n: int) -> Iterator[tuple[int, pd.DataFrame]
         yield 0, lst
         return
     for i in range(0, len(lst), n):
-        yield int(i / n), lst.iloc[i: i + n]
+        yield int(i / n), lst.iloc[i : i + n]
 
 
 def build_location_helper(
@@ -172,11 +172,13 @@ def write_pandas(
         chunk_size = len(df)
 
     if not isinstance(df.index, pd.RangeIndex) or df.index.step != 1:
-        warnings.warn(f"Pandas Dataframe has index of type {str(type(df.index))} which will not be written."
-                      f" Consider changing the index to pd.RangeIndex(...,step=1) or "
-                      f"calling reset_index() to keep index as column(s)",
-                      UserWarning,
-                      stacklevel=2)
+        warnings.warn(
+            f"Pandas Dataframe has index of type {str(type(df.index))} which will not be written."
+            f" Consider changing the index to pd.RangeIndex(...,step=1) or "
+            f"calling reset_index() to keep index as column(s)",
+            UserWarning,
+            stacklevel=2,
+        )
 
     cursor = conn.cursor()
     stage_location = build_location_helper(

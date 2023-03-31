@@ -319,15 +319,12 @@ def test_write_non_range_index_pandas(
 
             if num_of_chunks == 1:
                 # Note: since we used one chunk order is conserved
-                assert (
-                    cnx.cursor().execute(select_sql).fetchall()
-                    == pandas_df_data
-                )
+                assert cnx.cursor().execute(select_sql).fetchall() == pandas_df_data
             else:
                 # Note: since we used more than one chunk order is NOT conserved,
                 # also the index is not stored.
                 assert set(cnx.cursor().execute(select_sql).fetchall()) == set(
-                   pandas_df_data
+                    pandas_df_data
                 )
 
             # Make sure all files were loaded and no error occurred
