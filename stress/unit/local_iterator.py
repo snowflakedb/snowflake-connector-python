@@ -32,6 +32,20 @@ def task_for_loop_iterator(bytes_data):
         pass
 
 
+def task_for_loop_table_iterator(bytes_data):
+    arrow_iter = PyArrowIterator(
+        None,
+        io.BytesIO(bytes_data),
+        arrow_context,
+        False,
+        False,
+        False,
+    )
+    arrow_iter.init_table_unit()
+    for _ in arrow_iter:
+        pass
+
+
 def execute_task(task, bytes_data):
     for _ in range(iteration_cnt):
         task(bytes_data)
@@ -40,9 +54,11 @@ def execute_task(task, bytes_data):
 if __name__ == "__main__":
 
     perf_check_task_for_loop_iterator = task_time_execution_decorator(
-        task_for_loop_iterator
+        task_for_loop_table_iterator
     )
-    memory_check_task_for_loop_iterator = task_memory_decorator(task_for_loop_iterator)
+    memory_check_task_for_loop_iterator = task_memory_decorator(
+        task_for_loop_table_iterator
+    )
 
     execute_task(memory_check_task_for_loop_iterator, decoded_bytes)
     memory_records = stress_util.collect_memory_records()

@@ -7,7 +7,9 @@ recursive-include src/snowflake/connector py.typed *.py *.pyx
 recursive-include src/snowflake/connector/vendored LICENSE*
 
 recursive-include src/snowflake/connector/cpp *.cpp *.hpp
+recursive-include src/snowflake/connector/cpp *.c *.h
 exclude src/snowflake/connector/arrow_iterator.cpp
+exclude src/snowflake/connector/cpp/ArrowIterator/arrow_iterator.cpp
 
 exclude .git-blame-ignore-revs
 exclude .pre-commit-config.yaml
@@ -19,6 +21,7 @@ prune ci
 prune benchmark
 prune test
 prune tested_requirements
+prune stress
 prune src/snowflake/connector/cpp/scripts
 prune __pycache__
 prune samples
