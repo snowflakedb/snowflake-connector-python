@@ -23,7 +23,6 @@ from typing import (
     Callable,
     Generator,
     Iterator,
-    Literal,
     NamedTuple,
     NoReturn,
     Sequence,
@@ -31,7 +30,7 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Self
+from typing_extensions import Literal, Self
 
 from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
