@@ -195,6 +195,16 @@ def test_ocsp_by_post_method():
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
+def test_ocsp_by_get_method():
+    """OCSP tests."""
+    # reset the memory cache
+    SnowflakeOCSP.clear_cache()
+    ocsp = SFOCSP(use_post_method=False, use_ocsp_cache_server=False)
+    for url in TARGET_HOSTS:
+        connection = _openssl_connect(url)
+        assert ocsp.validate(url, connection), f"Failed to validate: {url}"
+
+
 def test_ocsp_with_file_cache(tmpdir):
     """OCSP tests and the cache server and file."""
     tmp_dir = str(tmpdir.mkdir("ocsp_response_cache"))
