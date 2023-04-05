@@ -32,13 +32,15 @@ T = TypeVar("T", bound=collections.abc.Sequence)
 logger = getLogger(__name__)
 
 
-def chunk_helper(lst: T, n: int) -> Iterator[tuple[int, T]]:
+def chunk_helper(
+    lst: pandas.DataFrame, n: int
+) -> Iterator[tuple[int, pandas.DataFrame]]:
     """Helper generator to chunk a sequence efficiently with current index like if enumerate was called on sequence."""
     if len(lst) == 0:
         yield 0, lst
         return
     for i in range(0, len(lst), n):
-        yield int(i / n), lst[i : i + n]
+        yield int(i / n), lst.iloc[i : i + n]
 
 
 def build_location_helper(
@@ -169,6 +171,19 @@ def write_pandas(
 
     if chunk_size is None:
         chunk_size = len(df)
+
+    if not (
+        isinstance(df.index, pandas.RangeIndex)
+        and 1 == df.index.step
+        and 0 == df.index.start
+    ):
+        warnings.warn(
+            f"Pandas Dataframe has non-standard index of type {str(type(df.index))} which will not be written."
+            f" Consider changing the index to pd.RangeIndex(start=0,...,step=1) or "
+            f"call reset_index() to keep index as column(s)",
+            UserWarning,
+            stacklevel=2,
+        )
 
     cursor = conn.cursor()
     stage_location = build_location_helper(
