@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, Callable, Generator
 from unittest import mock
 
 import numpy.random
-import pandas as pd
 import pytest
 
 from snowflake.connector import DictCursor
 from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.options import pandas as pd
 
 try:
     from snowflake.connector.util_text import random_string
@@ -282,11 +282,7 @@ def test_write_non_range_index_pandas(
 
     num_of_chunks = math.ceil(len(pandas_df_data) / chunk_size)
 
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    with conn_cnx() as cnx:
         table_name = "driver_versions"
 
         if quote_identifiers:
