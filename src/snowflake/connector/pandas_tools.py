@@ -12,7 +12,6 @@ from logging import getLogger
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Sequence, TypeVar
 
-import pandas as pd
 from typing_extensions import Literal
 
 from snowflake.connector import ProgrammingError
@@ -33,7 +32,9 @@ T = TypeVar("T", bound=collections.abc.Sequence)
 logger = getLogger(__name__)
 
 
-def chunk_helper(lst: pd.DataFrame, n: int) -> Iterator[tuple[int, pd.DataFrame]]:
+def chunk_helper(
+    lst: pandas.DataFrame, n: int
+) -> Iterator[tuple[int, pandas.DataFrame]]:
     """Helper generator to chunk a sequence efficiently with current index like if enumerate was called on sequence."""
     if len(lst) == 0:
         yield 0, lst
@@ -171,11 +172,11 @@ def write_pandas(
     if chunk_size is None:
         chunk_size = len(df)
 
-    if not isinstance(df.index, pd.RangeIndex) or df.index.step != 1:
+    if not isinstance(df.index, pandas.RangeIndex) or df.index.step != 1:
         warnings.warn(
             f"Pandas Dataframe has index of type {str(type(df.index))} which will not be written."
             f" Consider changing the index to pd.RangeIndex(...,step=1) or "
-            f"calling reset_index() to keep index as column(s)",
+            f"call reset_index() to keep index as column(s)",
             UserWarning,
             stacklevel=2,
         )
