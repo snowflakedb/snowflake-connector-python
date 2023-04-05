@@ -15,7 +15,6 @@ import pytest
 
 from snowflake.connector import DictCursor
 from snowflake.connector.errors import ProgrammingError
-from snowflake.connector.options import pandas as pd
 
 try:
     from snowflake.connector.util_text import random_string
@@ -269,8 +268,8 @@ def test_write_non_range_index_pandas(
 
     # use pandas dataframe with float index
     n_rows = 17
-    pandas_df = pd.DataFrame(
-        pd.DataFrame(
+    pandas_df = pandas.DataFrame(
+        pandas.DataFrame(
             numpy.random.normal(size=(n_rows, 4)),
             columns=["a", "b", "c", "d"],
             index=numpy.random.normal(size=n_rows),
