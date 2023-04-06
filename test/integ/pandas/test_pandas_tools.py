@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Generator
 from unittest import mock
 
+import numpy.random
 import pytest
 
 from snowflake.connector import DictCursor
@@ -28,7 +29,6 @@ try:
 except ImportError:
     pandas = None
     write_pandas = None
-
 
 if TYPE_CHECKING:
     from snowflake.connector import SnowflakeConnection
@@ -239,6 +239,93 @@ def test_write_pandas(
             assert success
             # Make sure overall as many rows were ingested as we tried to insert
             assert nrows == len(sf_connector_version_data)
+            # Make sure we uploaded in as many chunk as we wanted to
+            assert nchunks == num_of_chunks
+            # Check to see if this is a temporary or regular table if we auto-created this table
+            if auto_create_table:
+                table_info = (
+                    cnx.cursor(DictCursor)
+                    .execute(f"show tables like '{table_name}'")
+                    .fetchall()
+                )
+                assert table_info[0]["kind"] == (
+                    "TEMPORARY" if create_temp_table else "TABLE"
+                )
+        finally:
+            cnx.execute_string(drop_sql)
+
+
+def test_write_non_range_index_pandas(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    db_parameters: dict[str, str],
+):
+    compression = "gzip"
+    chunk_size = 3
+    quote_identifiers: bool = False
+    auto_create_table: bool = True
+    create_temp_table: bool = False
+    index: bool = False
+
+    # use pandas dataframe with float index
+    n_rows = 17
+    pandas_df = pandas.DataFrame(
+        pandas.DataFrame(
+            numpy.random.normal(size=(n_rows, 4)),
+            columns=["a", "b", "c", "d"],
+            index=numpy.random.normal(size=n_rows),
+        )
+    )
+
+    # convert to list of tuples to compare to received output
+    pandas_df_data = [tuple(row) for row in list(pandas_df.values)]
+
+    num_of_chunks = math.ceil(len(pandas_df_data) / chunk_size)
+
+    with conn_cnx() as cnx:
+        table_name = "driver_versions"
+
+        if quote_identifiers:
+            create_sql = 'CREATE OR REPLACE TABLE "{}" ("name" STRING, "newest_version" STRING)'.format(
+                table_name
+            )
+            select_sql = f'SELECT * FROM "{table_name}"'
+            drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
+        else:
+            create_sql = "CREATE OR REPLACE TABLE {} (name STRING, newest_version STRING)".format(
+                table_name
+            )
+            select_sql = f"SELECT * FROM {table_name}"
+            drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+
+        if not auto_create_table:
+            cnx.execute_string(create_sql)
+        try:
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                pandas_df,
+                table_name,
+                compression=compression,
+                chunk_size=chunk_size,
+                quote_identifiers=quote_identifiers,
+                auto_create_table=auto_create_table,
+                create_temp_table=create_temp_table,
+                index=index,
+            )
+
+            if num_of_chunks == 1:
+                # Note: since we used one chunk order is conserved
+                assert cnx.cursor().execute(select_sql).fetchall() == pandas_df_data
+            else:
+                # Note: since we used more than one chunk order is NOT conserved,
+                # also the index is not stored.
+                assert set(cnx.cursor().execute(select_sql).fetchall()) == set(
+                    pandas_df_data
+                )
+
+            # Make sure all files were loaded and no error occurred
+            assert success
+            # Make sure overall as many rows were ingested as we tried to insert
+            assert nrows == len(pandas_df_data)
             # Make sure we uploaded in as many chunk as we wanted to
             assert nchunks == num_of_chunks
             # Check to see if this is a temporary or regular table if we auto-created this table
