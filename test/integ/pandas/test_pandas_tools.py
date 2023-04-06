@@ -686,18 +686,24 @@ def test_autoincrement_insertion(
 
 
 @pytest.mark.parametrize("auto_create_table", [True, False])
+@pytest.mark.parametrize(
+    "column_names",
+    [["00 name", "bAl_ance"], ['c""ol', '"col"'], ["c''ol", "'col'"], ["チリヌル", "熊猫"]],
+)
 def test_special_name_quoting(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
     auto_create_table: bool,
+    column_names: list[str],
 ):
     """Tests whether special column names get quoted as expected."""
     table_name = "users"
     df_data = [("Mark", 10), ("Luke", 20)]
 
-    df = pandas.DataFrame(df_data, columns=["00name", "bAlance"])
+    df = pandas.DataFrame(df_data, columns=column_names)
+    snowflake_column_names = [c.replace('"', '""') for c in column_names]
     create_sql = (
         f'CREATE OR REPLACE TABLE "{table_name}"'
-        '("00name" STRING, "bAlance" INT, "id" INT AUTOINCREMENT)'
+        f'("{snowflake_column_names[0]}" STRING, "{snowflake_column_names[1]}" INT, "id" INT AUTOINCREMENT)'
     )
     select_sql = f'SELECT * FROM "{table_name}"'
     drop_sql = f'DROP TABLE IF EXISTS "{table_name}"'
@@ -724,8 +730,8 @@ def test_special_name_quoting(
                 if not auto_create_table:
                     assert row["id"] in (1, 2)
                 assert (
-                    row["00name"],
-                    row["bAlance"],
+                    row[column_names[0]],
+                    row[column_names[1]],
                 ) in df_data
         finally:
             cnx.execute_string(drop_sql)
