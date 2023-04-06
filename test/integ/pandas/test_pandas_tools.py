@@ -685,7 +685,6 @@ def test_autoincrement_insertion(
             cnx.execute_string(drop_sql)
 
 
-#
 @pytest.mark.parametrize("auto_create_table", [True, False])
 @pytest.mark.parametrize(
     "column_names",
