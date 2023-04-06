@@ -219,12 +219,16 @@ def write_pandas(
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
     if quote_identifiers:
         quote = '"'
-        columns = '"' + '","'.join(list(df.columns)) + '"'
-        parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in df.columns)
+        # if the column name contains a double quote, we need to escape it by replacing with two double quotes
+        # https://docs.snowflake.com/en/sql-reference/identifiers-syntax#double-quoted-identifiers
+        snowflake_column_names = [str(c).replace('"', '""') for c in df.columns]
+        columns = '"' + '","'.join(snowflake_column_names) + '"'
+        parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in snowflake_column_names)
     else:
         quote = ""
-        columns = ",".join(list(df.columns))
-        parquet_columns = "$1:" + ",$1:".join(df.columns)
+        snowflake_column_names = list(df.columns)
+        columns = ",".join(snowflake_column_names)
+        parquet_columns = "$1:" + ",$1:".join(snowflake_column_names)
 
     def drop_object(name: str, object_type: str) -> None:
         drop_sql = f"DROP {object_type.upper()} IF EXISTS {name} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
@@ -255,7 +259,10 @@ def write_pandas(
         # so we have to iterate through the dataframe columns to make sure we create the table with its
         # columns in order
         create_table_columns = ", ".join(
-            [f"{quote}{c}{quote} {column_type_mapping[c]}" for c in df.columns]
+            [
+                f"{quote}{snowflake_col}{quote} {column_type_mapping[col]}"
+                for snowflake_col, col in zip(snowflake_column_names, df.columns)
+            ]
         )
 
         target_table_location = build_location_helper(
