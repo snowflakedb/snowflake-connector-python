@@ -196,12 +196,8 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value: str) -> str:
+            t = SnowflakeConverter.create_timestamp_from_string(value, ctx["scale"])
             microseconds, fraction_of_nanoseconds = _extract_timestamp(value, ctx)
-            try:
-                t = time.gmtime(microseconds)
-            except (OSError, ValueError) as e:
-                logger.debug("OSError occurred but falling back to datetime: %s", e)
-                t = ZERO_EPOCH + timedelta(seconds=(microseconds))
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         return conv
