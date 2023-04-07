@@ -269,7 +269,7 @@ class OCSPTelemetryData:
 class OCSPServer:
     MAX_RETRY = int(os.getenv("OCSP_MAX_RETRY", "3"))
 
-    def __init__(self, use_ocsp_cache_server) -> None:
+    def __init__(self, use_ocsp_cache_server=False) -> None:
         self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
         """
         The following will change to something like
