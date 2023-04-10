@@ -25,7 +25,6 @@ from .converter import (
 from .sfbinaryformat import SnowflakeBinaryFormat, binary_to_python
 from .sfdatetime import SnowflakeDateFormat, SnowflakeDateTime, SnowflakeDateTimeFormat
 
-MICROSECONDS_ZERO_FILL = "000000"
 logger = getLogger(__name__)
 
 
@@ -36,36 +35,6 @@ def format_sftimestamp(
         datetime=value, nanosecond=franction_of_nanoseconds, scale=ctx.get("scale")
     )
     return ctx["fmt"].format(sf_datetime) if ctx.get("fmt") else str(sf_datetime)
-
-
-def _extract_timestamp_snowsql(value: str, ctx: dict) -> tuple[int, int, int]:
-    scale = ctx["scale"]
-    sign = 1 if value[0] != "-" else -1
-    value_without_sign = value[1:] if value[0] == "-" else value
-
-    # we can not simply use float(value) to convert string to float
-    # because python float will lost precision, it will round up in case when decimal part of just all 9s
-    # e.g. 253402300799.999999 will just be 253402300800.0 which will further generate incorrect datetime
-    # related issue: SNOW-730092
-    components = value_without_sign.split(".")
-    fraction_of_seconds = int(components[0])
-    fraction_of_microseconds = 0
-    if len(components) == 2:
-        # timestamp with decimal
-        fraction_of_microseconds = (
-            float(components[1][0:6])
-            if scale > 6
-            else int(components[1][:scale] + MICROSECONDS_ZERO_FILL[: 6 - scale])
-        )
-
-    fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
-        value, ctx["max_fraction"], scale
-    )
-    return (
-        sign * fraction_of_seconds,
-        sign * fraction_of_microseconds,
-        fraction_of_nanoseconds,
-    )
 
 
 class SnowflakeConverterSnowSQL(SnowflakeConverter):
@@ -227,31 +196,20 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value: str) -> str:
+            microseconds, fraction_of_nanoseconds = _extract_timestamp(value, ctx)
             try:
-                # flot loses precision when the interger part is way larger than the
-                # decimal part. this is a limitation by Python float number
-                # e.g. 253402300799.999999 will just be 253402300800.0
-                # so we need to separately extract seconds, microseconds part
-                (
-                    fractions_of_seconds,
-                    fractions_of_microseconds,
-                    fraction_of_nanoseconds,
-                ) = _extract_timestamp_snowsql(value, ctx)
-                t = ZERO_EPOCH + timedelta(
-                    seconds=fractions_of_seconds, microseconds=fractions_of_microseconds
-                )
-                return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
-            except OverflowError as e:
-                # timedelta and handle time <= 9999-12-31 23:59:59, however, beyond this point datetime will be out
-                # of range, we use time.gmtime to handle data
-                # in this case we can not yet handle the precision lost issue, but it should really be a corner case
-                logger.debug(
-                    "OverflowError occurred but falling back to time.gmtime: %s", e
-                )
-                microseconds, fraction_of_nanoseconds = _extract_timestamp(value, ctx)
-                return format_sftimestamp(
-                    ctx, time.gmtime(microseconds), fraction_of_nanoseconds
-                )
+                new_integer_part = str(microseconds).split(".")[0]
+                origin_integer_part = value.split(".")[0]
+                if new_integer_part != origin_integer_part and float(
+                    origin_integer_part
+                ) + 1 == float(new_integer_part):
+                    # Python float will round if integer part is too long
+                    microseconds -= 1
+                t = time.gmtime(microseconds)
+            except (OSError, ValueError) as e:
+                logger.debug("OSError occurred but falling back to datetime: %s", e)
+                t = ZERO_EPOCH + timedelta(seconds=(microseconds))
+            return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         return conv
 

@@ -120,3 +120,87 @@ ALTER SESSION SET
         assert ret[2] == "1969-09-30 12:34:56.12345678 -0800"
         assert ret[3] == "1969-09-30 12:34:56.1234 -0800"
         assert ret[4] == "2001-09-30 12:34:56.00123400 "
+
+
+def test_snowsql_timestamp_ntz(conn_cnx):
+    with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
+        cnx.cursor().execute(
+            """
+alter session set python_connector_query_result_format='JSON'
+"""
+        )
+
+        prior_to_epoch_list = [
+            f"""'1965-09-30 12:34:56.{"".join([str(j) for j in range(1, i + 1)])}'::timestamp_ntz({i})"""
+            for i in range(1, 10)
+        ]
+        after_epoch_list = [
+            f"""'2022-02-22 12:34:56.{"".join([str(j) for j in range(1, i + 1)])}'::timestamp_ntz({i})"""
+            for i in range(1, 10)
+        ]
+        float_round_list = [
+            f"""'9999-12-31 23:59:59.{"9"*i}'::timestamp_ntz({i})"""
+            for i in range(1, 10)
+        ]
+
+        select_text = (
+            ",\n".join(prior_to_epoch_list)
+            + ",\n"
+            + ",\n".join(after_epoch_list)
+            + ",\n"
+            + ",\n".join(float_round_list)
+            + ";"
+        )
+
+        cnx.cursor().execute(
+            """
+ALTER SESSION SET
+    TIMEZONE='America/Los_Angeles',
+    TIMESTAMP_NTZ_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM';
+"""
+        )
+        ret = (
+            cnx.cursor()
+            .execute(
+                f"""
+    SELECT
+        {select_text}
+    """
+            )
+            .fetchone()
+        )
+
+        assert (
+            len(ret)
+            == len(prior_to_epoch_list) + len(after_epoch_list) + len(float_round_list)
+            == 27
+        )
+        for i in range(0, 9):
+            assert (
+                ret[i]
+                == f'1965-09-30 12:34:56.{"".join([str(j) for j in range(1, i + 2)])}{"0"*(9 - i - 1)} '
+            )
+        for i in range(0, 9):
+            assert (
+                ret[i + 9]
+                == f'2022-02-22 12:34:56.{"".join([str(j) for j in range(1, i + 2)])}{"0"*(9 - i - 1)} '
+            )
+        for i in range(0, 9):
+            assert (
+                ret[i + 18] == f'9999-12-31 23:59:59.{"9" * (i + 1)}{"0"*(9 - i - 1)} '
+            )
+
+        ret = (
+            cnx.cursor()
+            .execute(
+                """
+    SELECT
+        '12345-12-31 12:34:56.999649'::timestamp_ntz(6),
+        '123-12-31 12:34:56.876321'::timestamp_ntz(6);
+    """
+            )
+            .fetchone()
+        )
+
+        assert ret[0] == "12345-12-31 12:34:56.999649000 "
+        assert ret[1] == "0123-12-31 12:34:56.876321000 "
