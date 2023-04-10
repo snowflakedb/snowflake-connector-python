@@ -1063,7 +1063,7 @@ class SnowflakeConnection:
         if not _no_results:
             # not an async query
             data["queryContext"] = self.get_query_context()
-
+        print("sending query with qc = {}".format(data['queryContext']))
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
@@ -1101,6 +1101,8 @@ class SnowflakeConnection:
                 self._role = data["finalRoleName"]
             if "queryContext" in data and not _no_results:
                 self.set_query_context(data["queryContext"])
+                print("receiving query result with qc = {}".format(data['queryContext']))
+
 
         return ret
 
@@ -1593,12 +1595,12 @@ class SnowflakeConnection:
 
     def get_query_context(self) -> str:
         if not self.is_query_context_cache_disabled:
-            return self.query_context_cache.serialize_to_arrow_base64()
+            return self.query_context_cache.serialize_to_json()
         return None
 
     def set_query_context(self, data) -> None:
         if not self.is_query_context_cache_disabled:
-            self.query_context_cache.deserialize_from_arrow_base64(data)
+            self.query_context_cache.deserialize_json_string(data)
 
     @staticmethod
     def is_still_running(status: QueryStatus) -> bool:
