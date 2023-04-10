@@ -20,7 +20,7 @@ This should help guide contributors through potential pitfalls.
 
 ### Setup a development environment
 
-What is a development environment? It's a [virtualenv](https://virtualenv.pypa.io) that has all of neccessary
+What is a development environment? It's a [virtualenv](https://virtualenv.pypa.io) that has all of necessary
 dependencies installed with `snowflake-connector-python` installed as an editable package.
 
 Setting up a development environment is super easy with this [one simple tox command](https://tox.wiki/en/latest/example/devenv.html).
