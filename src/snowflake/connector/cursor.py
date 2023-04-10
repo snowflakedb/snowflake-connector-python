@@ -30,7 +30,7 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Self
+from typing_extensions import Literal, Self
 
 from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
@@ -606,6 +606,66 @@ class SnowflakeCursor:
         else:
             query = command
         return query
+
+    @overload
+    def execute(
+        self,
+        command: str,
+        params: Sequence[Any] | dict[Any, Any] | None = None,
+        _bind_stage: str | None = None,
+        timeout: int | None = None,
+        _exec_async: bool = False,
+        _no_retry: bool = False,
+        _do_reset: bool = True,
+        _put_callback: SnowflakeProgressPercentage = None,
+        _put_azure_callback: SnowflakeProgressPercentage = None,
+        _put_callback_output_stream: IO[str] = sys.stdout,
+        _get_callback: SnowflakeProgressPercentage = None,
+        _get_azure_callback: SnowflakeProgressPercentage = None,
+        _get_callback_output_stream: IO[str] = sys.stdout,
+        _show_progress_bar: bool = True,
+        _statement_params: dict[str, str] | None = None,
+        _is_internal: bool = False,
+        _describe_only: bool = False,
+        _no_results: Literal[False] = False,
+        _is_put_get: bool | None = None,
+        _raise_put_get_error: bool = True,
+        _force_put_overwrite: bool = False,
+        _skip_upload_on_content_match: bool = False,
+        file_stream: IO[bytes] | None = None,
+        num_statements: int | None = None,
+    ) -> Self | None:
+        ...
+
+    @overload
+    def execute(
+        self,
+        command: str,
+        params: Sequence[Any] | dict[Any, Any] | None = None,
+        _bind_stage: str | None = None,
+        timeout: int | None = None,
+        _exec_async: bool = False,
+        _no_retry: bool = False,
+        _do_reset: bool = True,
+        _put_callback: SnowflakeProgressPercentage = None,
+        _put_azure_callback: SnowflakeProgressPercentage = None,
+        _put_callback_output_stream: IO[str] = sys.stdout,
+        _get_callback: SnowflakeProgressPercentage = None,
+        _get_azure_callback: SnowflakeProgressPercentage = None,
+        _get_callback_output_stream: IO[str] = sys.stdout,
+        _show_progress_bar: bool = True,
+        _statement_params: dict[str, str] | None = None,
+        _is_internal: bool = False,
+        _describe_only: bool = False,
+        _no_results: Literal[True] = True,
+        _is_put_get: bool | None = None,
+        _raise_put_get_error: bool = True,
+        _force_put_overwrite: bool = False,
+        _skip_upload_on_content_match: bool = False,
+        file_stream: IO[bytes] | None = None,
+        num_statements: int | None = None,
+    ) -> dict[str, Any] | None:
+        ...
 
     def execute(
         self,
