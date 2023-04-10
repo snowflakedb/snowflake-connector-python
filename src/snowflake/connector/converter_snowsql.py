@@ -19,14 +19,13 @@ from .converter import (
     ZERO_EPOCH,
     SnowflakeConverter,
     _adjust_fraction_of_nanoseconds,
+    _extract_timestamp,
     _generate_tzinfo_from_tzoffset,
 )
 from .sfbinaryformat import SnowflakeBinaryFormat, binary_to_python
 from .sfdatetime import SnowflakeDateFormat, SnowflakeDateTime, SnowflakeDateTimeFormat
 
 MICROSECONDS_ZERO_FILL = "000000"
-ONE_DAY_SECONDS = 24 * 60 * 60
-
 logger = getLogger(__name__)
 
 
@@ -159,10 +158,10 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value: str) -> str:
-            return ctx["fmt"].format(time.gmtime(int(value) * (ONE_DAY_SECONDS)))
+            return ctx["fmt"].format(time.gmtime(int(value) * (24 * 60 * 60)))
 
         def conv_windows(value):
-            ts = ZERO_EPOCH + timedelta(seconds=int(value) * (ONE_DAY_SECONDS))
+            ts = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
             return ctx["fmt"].format(date(ts.year, ts.month, ts.day))
 
         return conv if not IS_WINDOWS else conv_windows
@@ -175,73 +174,48 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         scale = ctx["scale"]
         max_fraction = ctx.get("max_fraction")
 
-        def conv(encoded_value: str) -> str:
+        def conv0(encoded_value: str) -> str:
             value, tz = encoded_value.split()
-            (
-                fractions_of_seconds,
-                fractions_of_microseconds,
-                fraction_of_nanoseconds,
-            ) = _extract_timestamp_snowsql(value, ctx)
+            microseconds = float(value)
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            compensate_seconds = 0
             try:
-                t = ZERO_EPOCH + timedelta(
-                    seconds=fractions_of_seconds, microseconds=fractions_of_microseconds
-                )
-            except OverflowError:
-                # for TIMESTAMP_TZ, we can assume the time part of all datetime will be <= 9999/12/31, while
-                # the timezone can be different
-                # time like 9999-12-31 23:59:59.999 -1200 will return timestamp value which causes datetime overflow
-                # in this case, we use a trick to first reduce the seconds by one day to make datetime can be
-                # constructed from the timestamp and set tz accordingly.
-                # After the construction of the datetime, we add the one-day back, so we bypass the overflow issue
-                t = ZERO_EPOCH + timedelta(
-                    seconds=fractions_of_seconds - ONE_DAY_SECONDS,
-                    microseconds=fractions_of_microseconds,
-                )
-                compensate_seconds = ONE_DAY_SECONDS
-            if pytz.utc != tzinfo:
-                t += tzinfo.utcoffset(t)
-            t = t.replace(tzinfo=tzinfo)
-            t = t + timedelta(seconds=compensate_seconds)  # add back the reduced 1 day
+                t = datetime.fromtimestamp(microseconds, tz=tzinfo)
+            except OSError as e:
+                logger.debug("OSError occurred but falling back to datetime: %s", e)
+                t = ZERO_EPOCH + timedelta(seconds=microseconds)
+                if pytz.utc != tzinfo:
+                    t += tzinfo.utcoffset(t)
+                t = t.replace(tzinfo=tzinfo)
             fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
                 value, max_fraction, scale
             )
 
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
-        return conv
+        def conv(encoded_value: str) -> str:
+            value, tz = encoded_value.split()
+            microseconds = float(value[0 : -scale + 6])
+            tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
+            try:
+                t = datetime.fromtimestamp(microseconds, tz=tzinfo)
+            except (OSError, ValueError) as e:
+                logger.debug("OSError occurred but falling back to datetime: %s", e)
+                t = ZERO_EPOCH + timedelta(seconds=microseconds)
+                if pytz.utc != tzinfo:
+                    t += tzinfo.utcoffset(t)
+                t = t.replace(tzinfo=tzinfo)
+
+            fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
+                value, max_fraction, scale
+            )
+
+            return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
+
+        return conv if scale > 6 else conv0
 
     def _TIMESTAMP_LTZ_to_python(self, ctx: dict[str, Any]) -> Callable:
         def conv(value: str) -> str:
-            print(value)
-            (
-                fractions_of_seconds,
-                fractions_of_microseconds,
-                fraction_of_nanoseconds,
-            ) = _extract_timestamp_snowsql(value, ctx)
-            tzinfo_value = self._get_session_tz()
-            try:
-                t0 = ZERO_EPOCH + timedelta(
-                    seconds=fractions_of_seconds, microseconds=fractions_of_microseconds
-                )
-                t = pytz.utc.localize(t0, is_dst=False).astimezone(tzinfo_value)
-            except OverflowError:
-                logger.debug(
-                    "OverflowError in converting from epoch time to "
-                    "timestamp_ltz: %s(ms). Falling back to use struct_time."
-                )
-                # handling overflow in TIMESTAMP_LTZ is different from TIMESTAMP_TZ
-                # we can assume all the date no matter of which tz of TIMESTAMP_TZ will be <= 9999/12/31 23:59:59
-                # so we can perform the -1 day operation
-                # however we can not performa the safe strategy here because the timestamp value
-                # can be > 9999/12/31 23:59:59 when converted to local time leading to overflow
-                # and to avoid breaking change and be compatible with the previous behavior
-                # we keep using time.localtime
-
-                # localtime can not handle decimal seconds
-                # it's okay to ignore microseconds which will be handled by format_sftimestamp
-                t = time.localtime(fractions_of_seconds)
+            t, fraction_of_nanoseconds = self._pre_TIMESTAMP_LTZ_to_python(value, ctx)
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
         return conv
@@ -253,16 +227,31 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
         """
 
         def conv(value: str) -> str:
-            print(value)
-            (
-                fractions_of_seconds,
-                fractions_of_microseconds,
-                fraction_of_nanoseconds,
-            ) = _extract_timestamp_snowsql(value, ctx)
-            t = ZERO_EPOCH + timedelta(
-                seconds=fractions_of_seconds, microseconds=fractions_of_microseconds
-            )
-            return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
+            try:
+                # flot loses precision when the interger part is way larger than the
+                # decimal part. this is a limitation by Python float number
+                # e.g. 253402300799.999999 will just be 253402300800.0
+                # so we need to separately extract seconds, microseconds part
+                (
+                    fractions_of_seconds,
+                    fractions_of_microseconds,
+                    fraction_of_nanoseconds,
+                ) = _extract_timestamp_snowsql(value, ctx)
+                t = ZERO_EPOCH + timedelta(
+                    seconds=fractions_of_seconds, microseconds=fractions_of_microseconds
+                )
+                return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
+            except OverflowError as e:
+                # timedelta and handle time <= 9999-12-31 23:59:59, however, beyond this point datetime will be out
+                # of range, we use time.gmtime to handle data
+                # in this case we can not yet handle the precision lost issue, but it should really be a corner case
+                logger.debug(
+                    "OverflowError occurred but falling back to time.gmtime: %s", e
+                )
+                microseconds, fraction_of_nanoseconds = _extract_timestamp(value, ctx)
+                return format_sftimestamp(
+                    ctx, time.gmtime(microseconds), fraction_of_nanoseconds
+                )
 
         return conv
 
