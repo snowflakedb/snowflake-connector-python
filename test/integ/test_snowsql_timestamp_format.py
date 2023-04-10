@@ -122,6 +122,12 @@ ALTER SESSION SET
         assert ret[4] == "2001-09-30 12:34:56.00123400 "
 
 
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    IS_WINDOWS,
+    reason="SnowSQL runs on Python 35+. "
+    "Windows doesn't support more than 9999 yeers",
+)
 def test_snowsql_timestamp_ntz(conn_cnx):
     with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
         cnx.cursor().execute(
