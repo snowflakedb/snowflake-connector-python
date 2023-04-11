@@ -700,3 +700,40 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog):
             assert (
                 oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
             )
+
+
+def test(conn_cnx):
+    stage = "sfan_test_stage"
+    parquet_file_path = "/tmp/test.parquet"
+    with conn_cnx() as conn:
+        cursor = conn.cursor()
+        ret = cursor.execute(
+            f"""
+            CREATE OR REPLACE STAGE {stage}
+            """
+        )
+        print(ret.fetchall())
+        ret = cursor.execute(
+            f"""
+            PUT file://{parquet_file_path} @{stage}/data/1/
+            """
+        )
+        print(ret.fetchall())
+        ret = cursor.execute(
+            f"""
+            PUT file://{parquet_file_path} @{stage}/data/2/
+            """
+        )
+        print(ret.fetchall())
+        ret = cursor.execute(
+            f"""
+            LIST @{stage}
+            """
+        )
+        print(ret.fetchall())
+        ret = cursor.execute(
+            f"""
+            GET @{stage} file:///tmp/get PATTERN='.*parquet.gz'
+            """
+        )
+        print(ret.fetchall())

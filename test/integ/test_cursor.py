@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
 
 import pytest
-import pytz
 
+import pytz
 import snowflake.connector
 from snowflake.connector import (
     DictCursor,
@@ -1618,3 +1618,37 @@ def test_multi_statement_failure(conn_cnx):
             CLIENT_VERSION,
             (type(None), str),
         )
+
+
+def test(conn_cnx):
+    import os
+
+    snowflake.connector.paramstyle = "numeric"
+    sql_file_path = os.path.join("/Users/sfan", "create_roles.txt")
+    create_roles = open(sql_file_path)
+    sql_scripts = create_roles.read()
+
+    with conn_cnx(paramstyle="numeric") as cnx:
+        binding_variables = ["DEV"]
+        result = cnx.cursor().execute(
+            sql_scripts, params=binding_variables, num_statements=5
+        )
+        print(result.fetchall())
+
+
+def test_2(conn_cnx):
+    binding_variables = ["DEV"]
+    with conn_cnx(paramstyle="numeric") as cnx:
+        cursor = cnx.cursor()
+        with open("/Users/sfan/create_roles.txt", encoding="utf8") as f:
+            for line in f:
+                cursor.execute(line, binding_variables)
+
+
+def test(conn_cnx):
+
+    with conn_cnx() as cnx:
+        result = cnx.cursor().execute("create or replace stage test_st")
+        result = cnx.cursor().execute("PUT file:///tmp/test_file @test_st")
+        result = cnx.cursor().execute("GET @test_st file:///tmp")
+        print(result.fetchall())
