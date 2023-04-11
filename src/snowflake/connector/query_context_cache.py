@@ -186,7 +186,7 @@ class QueryContextCache:
                 context_vals = [None] * size
                 self.get_elements(id_vals, timestamp_vals, priority_vals, context_vals)
                 data = {}
-                if(size >= 1):
+                if(size > 0):
                     data = {
                         "entries": [
                             {
@@ -248,21 +248,24 @@ class QueryContextCache:
                 #       "context": "base64 encoded context"
                 #     }
                 #   ]
+                # }
                 if("entries" in data):
                     # Deserialize entries
                     entries = data["entries"]
                     for entry in entries:
+                        logger.debug("deserialize {}".format(entry))
                         if not isinstance(entry.get("id"), int):
-                            raise Exception(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
+                            logger.debug("id type error")
+                            raise TypeError(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
                         if not isinstance(entry.get("timestamp"), int):
-                            raise Exception(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
+                            raise TypeError(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
                         if not isinstance(entry.get("priority"), int):
-                            raise Exception(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
+                            raise TypeError(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
                         
                         context = entry.get("context", None) #OpaqueContext field currently is empty from GS side.
                     
                         if context is not None and not isinstance(context, str):
-                            raise Exception(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
+                            raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
 
                         self.merge(
                             entry.get("id"),

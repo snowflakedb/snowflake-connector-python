@@ -1103,7 +1103,6 @@ class SnowflakeConnection:
                 # here the data["queryContext"] field has been automatically converted into a dict type
                 self.set_query_context(json.dumps(data["queryContext"]))
 
-
         return ret
 
     def _reauthenticate(self):

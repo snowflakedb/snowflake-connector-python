@@ -3,7 +3,7 @@
 #
 
 from random import shuffle
-
+import json
 import pytest
 
 from snowflake.connector.query_context_cache import (
@@ -126,6 +126,78 @@ def assert_cache_with_data(
 
 def test_is_empty(qcc_with_no_data: QueryContextCache):
     assert qcc_with_no_data.get_size() == 0
+
+def test_deserialize_type_error():
+    json_string = """{
+        "entries":[
+            {
+            "id": "abc",  
+            "read_timestamp": 1629456000,
+            "priority": 0,
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    qcc.deserialize_json_string(json_string)
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 111.111,
+            "priority": 0,
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    qcc.deserialize_json_string(json_string)
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 123412123,
+            "priority": "main",
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    qcc.deserialize_json_string(json_string)
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 1112314121,
+            "priority": 0,
+            "context": 1231412
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    qcc.deserialize_json_string(json_string)
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 123142341,
+            "priority": 0,
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    qcc.deserialize_json_string(json_string)
+    assert qcc.get_size() == 1 # because this time the input is correct, qcc size should be 1
 
 
 def test_with_data(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
