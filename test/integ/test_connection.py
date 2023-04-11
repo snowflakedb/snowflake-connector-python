@@ -52,6 +52,7 @@ try:
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
 
+
 def test_basic(conn_testaccount):
     """Basic Connection test."""
     assert conn_testaccount, "invalid cnx"

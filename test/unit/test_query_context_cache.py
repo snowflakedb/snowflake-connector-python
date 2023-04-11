@@ -11,15 +11,6 @@ from snowflake.connector.query_context_cache import (
     QueryContextElement,
 )
 
-installed_pandas = True
-
-try:
-    from snowflake.connector.options import pandas
-except ImportError:
-    installed_pandas = False
-    pandas = None
-
-
 MAX_CAPACITY = 5
 BASE_ID = 0
 BASE_READ_TIMESTAMP = 1668727958
@@ -133,17 +124,14 @@ def assert_cache_with_data(
         assert expected_data.contexts[i] == contexts[i]
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_is_empty(qcc_with_no_data: QueryContextCache):
     assert qcc_with_no_data.get_size() == 0
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_with_data(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_with_data_in_random_order(
     qcc_with_data_random_order: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -151,7 +139,6 @@ def test_with_data_in_random_order(
     assert_cache_with_data(qcc_with_data_random_order, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_check_cache_capacity(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -166,7 +153,6 @@ def test_check_cache_capacity(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_update_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -181,7 +167,6 @@ def test_update_timestamp(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_update_priority(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -202,7 +187,6 @@ def test_update_priority(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_add_same_priority(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -215,7 +199,6 @@ def test_add_same_priority(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_same_id_with_stale_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -228,7 +211,6 @@ def test_same_id_with_stale_timestamp(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_empty_cache_with_null_data(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -238,7 +220,6 @@ def test_empty_cache_with_null_data(
     assert qcc_with_data.get_size() == 0
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_empty_cache_with_empty_response_data(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -248,7 +229,6 @@ def test_empty_cache_with_empty_response_data(
     assert qcc_with_data.get_size() == 0
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_serialization_deserialization_with_null_context(
     qcc_with_data_null_context: QueryContextCache,
     expected_data_with_null_context: ExpectedQCCData,
@@ -263,7 +243,6 @@ def test_serialization_deserialization_with_null_context(
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_serialization_deserialization(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -277,7 +256,6 @@ def test_serialization_deserialization(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pandas not installed")
 def test_eviction_order():
     qce1 = QueryContextElement(id=1, read_timestamp=13323, priority=1, context=None)
     qce2 = QueryContextElement(

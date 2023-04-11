@@ -16,15 +16,6 @@ from sortedcontainers import SortedSet
 
 logger = getLogger(__name__)
 
-installed_pandas = True
-
-try:
-    from snowflake.connector.options import pandas
-except ImportError:
-    installed_pandas = False
-    pandas = None
-
-
 @total_ordering
 class QueryContextElement:
     def __init__(self, id: int, read_timestamp: int, priority: int, context: str):
@@ -180,9 +171,6 @@ class QueryContextCache:
         return self._tree_set[-1]
     
     def serialize_to_json(self) -> str:
-        if not installed_pandas:
-            return self._data
-
         with self._lock:
             logger.debug("serialize_to_json() called")
             self.log_cache_entries()
@@ -223,9 +211,6 @@ class QueryContextCache:
                 return None   
 
     def deserialize_json_string(self, json_string: str) -> None:
-        if not installed_pandas:
-            self._data = json_string
-            return
         with self._lock:
             logger.debug(
                 f"deserialize_from_json() called: data from server: {json_string}"
