@@ -185,19 +185,17 @@ class QueryContextCache:
                 priority_vals = [None] * size
                 context_vals = [None] * size
                 self.get_elements(id_vals, timestamp_vals, priority_vals, context_vals)
-                data = {}
-                if(size > 0):
-                    data = {
-                        "entries": [
-                            {
-                                "id": id_vals[i],
-                                "timestamp": timestamp_vals[i],
-                                "priority": priority_vals[i],
-                                "context": context_vals[i], 
-                            }
-                            for i in range(0, size)
-                        ]
-                    }
+                data = {
+                    "entries": [
+                        {
+                            "id": id_vals[i],
+                            "timestamp": timestamp_vals[i],
+                            "priority": priority_vals[i],
+                            "context": context_vals[i],
+                        }
+                        for i in range(0, size)
+                    ]
+                }
                 # Serialize the data to JSON
                 serialized_data = json.dumps(data)
 
@@ -224,10 +222,11 @@ class QueryContextCache:
                 return
             
             try:
-                # Deserialize the entries. The first entry with priority is the main entry. On JDBC side, 
-                # we save all entries into one list to simplify the logic. When python connector receives
-                # HTTP response, the data["queryContext"] field has been converted from JSON to dict type
-                # automatically, so for this function we deserialize from python dict directly.
+                # Deserialize the entries. The first entry with priority 0 is the main entry. On python
+                # connector side, we save all entries into one list to simplify the logic. When python
+                # connector receives HTTP response, the data["queryContext"] field has been converted
+                # from JSON to dict type automatically, so for this function we deserialize from python
+                # dict directly. Below is an example QueryContext dict.
                 # {
                 #   "entries": [
                 #    {
@@ -263,7 +262,7 @@ class QueryContextCache:
                     if not isinstance(entry.get("priority"), int):
                         raise TypeError(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
                     
-                    context = entry.get("context", None) #OpaqueContext field currently is empty from GS side.
+                    context = entry.get("context", None) # OpaqueContext field currently is empty from GS side.
                 
                     if context is not None and not isinstance(context, str):
                         raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
