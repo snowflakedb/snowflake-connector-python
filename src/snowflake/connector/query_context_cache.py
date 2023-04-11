@@ -226,7 +226,8 @@ class QueryContextCache:
             try:
                 # Deserialize the entries. The first entry with priority is the main entry. On JDBC side, 
                 # we save all entries into one list to simplify the logic. When python connector receives
-                # HTTP response, the data["queryContext"] field has been converted from JSON to dict type.
+                # HTTP response, the data["queryContext"] field has been converted from JSON to dict type
+                # automatically, so for this function we deserialize from python dict directly.
                 # {
                 #   "entries": [
                 #    {

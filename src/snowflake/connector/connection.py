@@ -1064,7 +1064,6 @@ class SnowflakeConnection:
         if not _no_results:
             # not an async query
             data["queryContext"] = self.get_query_context()
-        
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
