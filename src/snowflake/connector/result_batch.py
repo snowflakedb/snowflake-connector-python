@@ -16,7 +16,7 @@ from .arrow_context import ArrowConverterContext
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
-from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
+from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError, OperationalError
 from .network import (
     RetryRequest,
     get_http_retryable_error,
@@ -633,8 +633,30 @@ class ArrowResultBatch(ResultBatch):
             return self._from_data(self._data, iter_unit)
         response = self._download(connection=connection)
         logger.debug(f"started loading result batch id: {self.id}")
-        with TimerContextManager() as load_metric:
-            loaded_data = self._load(response, iter_unit)
+
+        try:
+            with TimerContextManager() as load_metric:
+                loaded_data = self._load(response, iter_unit)
+        except OperationalError as e:
+            logger.error(f"Encountered exception when parsing Arrow chunk: {e}")
+            import pickle
+
+            def dump_to_tmp_file(name:str, content:bytes):
+                import tempfile
+                import os
+                fd, path = tempfile.mkstemp()
+                logger.info(f"Dumping {name} to {path}")
+                try:
+                    with os.fdopen(fd, 'wb') as tmp:
+                        tmp.write(content)
+                finally:
+                    pass
+            
+            dump_to_tmp_file("content of chunk", response.content)
+            dump_to_tmp_file("pickled ArrowResultBatch", pickle.dumps(self))
+
+            raise e
+
         logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
