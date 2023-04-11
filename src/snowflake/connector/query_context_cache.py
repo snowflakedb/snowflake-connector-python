@@ -75,7 +75,12 @@ class QueryContextElement:
             raise NotImplementedError(
                 f"cannot compare QueryContextElement with object of type {type(other)}"
             )
-        return self._priority < other.priority
+        if self._priority != other._priority:
+            return self._priority < other._priority
+        if self._id != other._id:
+            return self._id < other._id
+        return self._read_timestamp < other._read_timestamp
+
 
     def __hash__(self) -> int:
         _hash = 31
@@ -215,7 +220,7 @@ class QueryContextCache:
                 return serialized_data
             except Exception as e:
                 logger.debug(f"serialize_to_json(): Exception {e}")
-                return None
+                return None   
 
     def deserialize_json_string(self, json_string: str) -> None:
         if not installed_pandas:
@@ -235,16 +240,50 @@ class QueryContextCache:
             
             try:
                 data = json.loads(json_string)
-                # main_entry and entries are all stored in a list of QueryContextEntry to simplify
+                # Deserialize the entries. The first entry with priority is the main entry. On JDBC side, 
+                # we save all entries into one list to simplify the logic. An example JSON is:
+                # {
+                #   "entries": [
+                #    {
+                #     "id": 0,    
+                #     "read_timestamp": 123456789,
+                #     "priority": 0,
+                #     "context": "base64 encoded context"
+                #    },
+                #     {
+                #       "id": 1,
+                #       "read_timestamp": 123456789,
+                #       "priority": 1,
+                #       "context": "base64 encoded context"
+                #     },
+                #     {
+                #       "id": 2,
+                #       "read_timestamp": 123456789,
+                #       "priority": 2,
+                #       "context": "base64 encoded context"
+                #     }
+                #   ]
                 if("entries" in data):
                     # Deserialize entries
                     entries = data["entries"]
                     for entry in entries:
+                        if not isinstance(entry.get("id"), int):
+                            raise Exception(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
+                        if not isinstance(entry.get("timestamp"), int):
+                            raise Exception(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
+                        if not isinstance(entry.get("priority"), int):
+                            raise Exception(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
+                        
+                        context = entry.get("context", None) #OpaqueContext field currently is empty from GS side.
+                    
+                        if context is not None and not isinstance(context, str):
+                            raise Exception(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
+
                         self.merge(
-                            entry["id"],
-                            entry["timestamp"],
-                            entry["priority"],
-                            entry["context"],
+                            entry.get("id"),
+                            entry.get("timestamp"),
+                            entry.get("priority"),
+                            context, 
                         )
             except Exception as e:
                 logger.debug(f"deserialize_from_json: Exception = {e}")
