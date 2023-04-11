@@ -28,10 +28,12 @@ except ImportError:
 @total_ordering
 class QueryContextElement:
     def __init__(self, id: int, read_timestamp: int, priority: int, context: str):
+        # entry with id = 0 is the main entry
         self._id = id
         self._read_timestamp = read_timestamp
         # priority values are 0..N with 0 being the highest priority
         self._priority = priority
+        # OpaqueContext field will be base64 encoded in GS, but it is opaque to client side. Client side should not do decoding/encoding and just store the raw data.
         self._context = context
 
     @property
@@ -198,12 +200,11 @@ class QueryContextCache:
                                 "id": id_vals[i],
                                 "timestamp": timestamp_vals[i],
                                 "priority": priority_vals[i],
-                                "context": b64encode(context_vals[i]).decode("iso-8859-1"),
+                                "context": context_vals[i], 
                             }
                             for i in range(0, size)
                         ]
                     }
-
                 # Serialize the data to JSON
                 serialized_data = json.dumps(data)
 
@@ -225,7 +226,6 @@ class QueryContextCache:
                 f"deserialize_from_json() called: data from server: {json_string}"
             )
             self.log_cache_entries()
-            assert(json_string is None, "none json string")
             
             if json_string is None or len(json_string) == 0:
                 self.clear_cache()
