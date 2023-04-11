@@ -139,7 +139,8 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    qcc.deserialize_json_string(json_string)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)  
     assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
     
     
@@ -154,7 +155,8 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    qcc.deserialize_json_string(json_string)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)  
     assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
     
     json_string = """{
@@ -168,7 +170,8 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    qcc.deserialize_json_string(json_string)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)    
     assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
     
     json_string = """{
@@ -182,7 +185,8 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    qcc.deserialize_json_string(json_string)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)
     assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
     
     json_string = """{
@@ -196,7 +200,8 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    qcc.deserialize_json_string(json_string)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)
     assert qcc.get_size() == 1 # because this time the input is correct, qcc size should be 1
 
 
@@ -288,7 +293,7 @@ def test_empty_cache_with_null_data(
 ):
     assert_cache_with_data(qcc_with_data, expected_data)
 
-    qcc_with_data.deserialize_json_string(None)
+    qcc_with_data.deserialize_json_dict(None)
     assert qcc_with_data.get_size() == 0
 
 
@@ -297,7 +302,7 @@ def test_empty_cache_with_empty_response_data(
 ):
     assert_cache_with_data(qcc_with_data, expected_data)    
 
-    qcc_with_data.deserialize_json_string("")
+    qcc_with_data.deserialize_json_dict("")
     assert qcc_with_data.get_size() == 0
 
 
@@ -310,8 +315,9 @@ def test_serialization_deserialization_with_null_context(
     data = qcc_with_data_null_context.serialize_to_json()
     qcc_with_data_null_context.clear_cache()
     assert qcc_with_data_null_context.get_size() == 0
-
-    qcc_with_data_null_context.deserialize_json_string(data)
+    
+    data = json.loads(data) # convert JSON to dict
+    qcc_with_data_null_context.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
 
 
@@ -324,7 +330,8 @@ def test_serialization_deserialization(
     qcc_with_data.clear_cache()
     assert qcc_with_data.get_size() == 0
 
-    qcc_with_data.deserialize_json_string(data)
+    data = json.loads(data) # convert JSON to dict
+    qcc_with_data.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data, expected_data)
 
 

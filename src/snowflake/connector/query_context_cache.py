@@ -210,23 +210,23 @@ class QueryContextCache:
                 logger.debug(f"serialize_to_json(): Exception {e}")
                 return None   
 
-    def deserialize_json_string(self, json_string: str) -> None:
+    def deserialize_json_dict(self, data) -> None:
         with self._lock:
             logger.debug(
-                f"deserialize_from_json() called: data from server: {json_string}"
+                f"deserialize_json_dict() called: data from server: {data}"
             )
             self.log_cache_entries()
             
-            if json_string is None or len(json_string) == 0:
+            if data is None or len(data) == 0:
                 self.clear_cache()
-                logger.debug("deserialize_from_json() returns")
+                logger.debug("deserialize_json_dict() returns")
                 self.log_cache_entries()
                 return
             
             try:
-                data = json.loads(json_string)
                 # Deserialize the entries. The first entry with priority is the main entry. On JDBC side, 
-                # we save all entries into one list to simplify the logic. An example JSON is:
+                # we save all entries into one list to simplify the logic. When python connector receives
+                # HTTP response, the data["queryContext"] field has been converted from JSON to dict type.
                 # {
                 #   "entries": [
                 #    {
@@ -249,30 +249,30 @@ class QueryContextCache:
                 #     }
                 #   ]
                 # }
-                if("entries" in data):
-                    # Deserialize entries
-                    entries = data["entries"]
-                    for entry in entries:
-                        logger.debug("deserialize {}".format(entry))
-                        if not isinstance(entry.get("id"), int):
-                            logger.debug("id type error")
-                            raise TypeError(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
-                        if not isinstance(entry.get("timestamp"), int):
-                            raise TypeError(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
-                        if not isinstance(entry.get("priority"), int):
-                            raise TypeError(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
-                        
-                        context = entry.get("context", None) #OpaqueContext field currently is empty from GS side.
+                
+                # Deserialize entries
+                entries = data.get("entries", None)
+                for entry in entries:
+                    logger.debug("deserialize {}".format(entry))
+                    if not isinstance(entry.get("id"), int):
+                        logger.debug("id type error")
+                        raise TypeError(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
+                    if not isinstance(entry.get("timestamp"), int):
+                        raise TypeError(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
+                    if not isinstance(entry.get("priority"), int):
+                        raise TypeError(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
                     
-                        if context is not None and not isinstance(context, str):
-                            raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
+                    context = entry.get("context", None) #OpaqueContext field currently is empty from GS side.
+                
+                    if context is not None and not isinstance(context, str):
+                        raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
 
-                        self.merge(
-                            entry.get("id"),
-                            entry.get("timestamp"),
-                            entry.get("priority"),
-                            context, 
-                        )
+                    self.merge(
+                        entry.get("id"),
+                        entry.get("timestamp"),
+                        entry.get("priority"),
+                        context, 
+                    )
             except Exception as e:
                 logger.debug(f"deserialize_from_json: Exception = {e}")
                 # clear cache due to incomplete merge
