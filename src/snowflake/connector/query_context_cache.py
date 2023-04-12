@@ -66,11 +66,8 @@ class QueryContextElement:
             raise NotImplementedError(
                 f"cannot compare QueryContextElement with object of type {type(other)}"
             )
-        if self._priority != other._priority:
-            return self._priority < other._priority
-        if self._id != other._id:
-            return self._id < other._id
-        return self._read_timestamp < other._read_timestamp
+        return self._priority < other._priority
+
 
 
     def __hash__(self) -> int:
@@ -92,6 +89,7 @@ class QueryContextCache:
         self._capacity = capacity
         self._id_map: dict[int, QueryContextElement] = {}
         self._priority_map: dict[int, QueryContextElement] = {}
+
         # stores elements sorted by priority. Element with
         # least priority value has the highest priority
         self._tree_set: set[QueryContextElement] = SortedSet()
@@ -179,21 +177,15 @@ class QueryContextCache:
                 return None
 
             try:
-                size = self.get_size()
-                id_vals = [None] * size
-                timestamp_vals = [None] * size
-                priority_vals = [None] * size
-                context_vals = [None] * size
-                self.get_elements(id_vals, timestamp_vals, priority_vals, context_vals)
                 data = {
                     "entries": [
                         {
-                            "id": id_vals[i],
-                            "timestamp": timestamp_vals[i],
-                            "priority": priority_vals[i],
-                            "context": context_vals[i],
+                            "id": qce.id,
+                            "timestamp": qce.read_timestamp,
+                            "priority": qce.priority,
+                            "context": qce.context,
                         }
-                        for i in range(0, size)
+                        for idx, qce in enumerate(self._tree_set)
                     ]
                 }
                 # Serialize the data to JSON
@@ -258,15 +250,17 @@ class QueryContextCache:
                         logger.debug("id type error")
                         raise TypeError(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
                     if not isinstance(entry.get("timestamp"), int):
+                        logger.debug("timestamp type error")
                         raise TypeError(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
                     if not isinstance(entry.get("priority"), int):
+                        logger.debug("priority type error")
                         raise TypeError(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
                     
                     context = entry.get("context", None) # OpaqueContext field currently is empty from GS side.
                 
                     if context is not None and not isinstance(context, str):
+                        logger.debug("context type error")
                         raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
-
                     self.merge(
                         entry.get("id"),
                         entry.get("timestamp"),
@@ -274,12 +268,12 @@ class QueryContextCache:
                         context, 
                     )
             except Exception as e:
-                logger.debug(f"deserialize_from_json: Exception = {e}")
+                logger.debug(f"deserialize_json_dict: Exception = {e}")
                 # clear cache due to incomplete merge
                 self.clear_cache()
 
             self.check_cache_capacity()
-            logger.debug("deserialize_from_json() returns")
+            logger.debug("deserialize_json_dict() returns")
             self.log_cache_entries()
 
     def log_cache_entries(self) -> None:
@@ -292,9 +286,3 @@ class QueryContextCache:
     def get_size(self) -> int:
         return len(self._tree_set)
 
-    def get_elements(self, ids, timestamps, priorities, contexts) -> None:
-        for idx, qce in enumerate(self._tree_set):
-            ids[idx] = qce.id
-            timestamps[idx] = qce.read_timestamp
-            priorities[idx] = qce.priority
-            contexts[idx] = qce.context

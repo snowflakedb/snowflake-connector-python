@@ -111,17 +111,13 @@ def assert_cache_with_data(
 ) -> None:
     assert qcc.get_size() == MAX_CAPACITY
 
-    ids = [None] * MAX_CAPACITY
-    timestamps = [None] * MAX_CAPACITY
-    priorities = [None] * MAX_CAPACITY
-    contexts = [None] * MAX_CAPACITY
-
-    qcc.get_elements(ids, timestamps, priorities, contexts)
-    for i in range(MAX_CAPACITY):
-        assert expected_data.ids[i] == ids[i]
-        assert expected_data.timestamps[i] == timestamps[i]
-        assert expected_data.priorities[i] == priorities[i]
-        assert expected_data.contexts[i] == contexts[i]
+    i = 0
+    for idx, qce in enumerate(qcc._get_elements()):
+        assert expected_data.ids[i] == qce.id
+        assert expected_data.timestamps[i] == qce.read_timestamp
+        assert expected_data.priorities[i] == qce.priority
+        assert expected_data.contexts[i] == qce.context
+        i += 1
 
 
 def test_is_empty(qcc_with_no_data: QueryContextCache):

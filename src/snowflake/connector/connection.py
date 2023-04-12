@@ -1102,7 +1102,7 @@ class SnowflakeConnection:
             if "queryContext" in data and not _no_results:
                 # here the data["queryContext"] field has been automatically converted from JSON into a dict type
                 self.set_query_context(data["queryContext"])
-
+                
         return ret
 
     def _reauthenticate(self):
