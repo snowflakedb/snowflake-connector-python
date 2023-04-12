@@ -559,6 +559,7 @@ class ArrowResultBatch(ResultBatch):
         """
         from .arrow_iterator import PyArrowIterator
 
+
         iter = PyArrowIterator(
             None,
             io.BytesIO(response.content),
@@ -645,17 +646,20 @@ class ArrowResultBatch(ResultBatch):
                 import tempfile
                 import os
                 fd, path = tempfile.mkstemp()
-                logger.info(f"Dumping {name} to {path}")
+
                 try:
                     with os.fdopen(fd, 'wb') as tmp:
                         tmp.write(content)
-                finally:
-                    pass
-            
+                    logger.info(f"Successfully dumped {name} to {path}")
+                except Exception as exc:
+                    logger.error(f"Failed to dump {name} to {path} due to: {exc}")
+                    os.remove(path)
+                    logger.error(f"Logging the content instead... {name}: {content}")
+
             dump_to_tmp_file("content of chunk", response.content)
             dump_to_tmp_file("pickled ArrowResultBatch", pickle.dumps(self))
 
-            raise e
+            raise
 
         logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
