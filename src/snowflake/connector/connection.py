@@ -21,6 +21,7 @@ from logging import getLogger
 from threading import Lock
 from time import strptime
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
+import json
 
 from . import errors, proxy
 from .auth import (
@@ -1063,7 +1064,6 @@ class SnowflakeConnection:
         if not _no_results:
             # not an async query
             data["queryContext"] = self.get_query_context()
-
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
@@ -1100,8 +1100,9 @@ class SnowflakeConnection:
             if "finalRoleName" in data:
                 self._role = data["finalRoleName"]
             if "queryContext" in data and not _no_results:
+                # here the data["queryContext"] field has been automatically converted from JSON into a dict type
                 self.set_query_context(data["queryContext"])
-
+                
         return ret
 
     def _reauthenticate(self):
@@ -1593,12 +1594,12 @@ class SnowflakeConnection:
 
     def get_query_context(self) -> str:
         if not self.is_query_context_cache_disabled:
-            return self.query_context_cache.serialize_to_arrow_base64()
+            return self.query_context_cache.serialize_to_json()
         return None
 
     def set_query_context(self, data) -> None:
         if not self.is_query_context_cache_disabled:
-            self.query_context_cache.deserialize_from_arrow_base64(data)
+            self.query_context_cache.deserialize_json_dict(data)
 
     @staticmethod
     def is_still_running(status: QueryStatus) -> bool:

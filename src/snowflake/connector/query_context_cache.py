@@ -10,35 +10,21 @@ from hashlib import md5
 from io import BytesIO
 from logging import DEBUG, getLogger
 from threading import Lock
+import json
 
 from sortedcontainers import SortedSet
 
-from .options import installed_pandas
-from .options import pyarrow as pa
-
 logger = getLogger(__name__)
-
-
-if installed_pandas:
-    QUERY_CONTEXT_SCHEMA = pa.schema(
-        [
-            pa.field("id", pa.int64(), nullable=False),
-            pa.field("timestamp", pa.int64(), nullable=False),
-            pa.field("priority", pa.int64(), nullable=False),
-            pa.field("context", pa.binary(), nullable=True),
-        ]
-    )
-else:
-    QUERY_CONTEXT_SCHEMA = None
-
 
 @total_ordering
 class QueryContextElement:
-    def __init__(self, id: int, read_timestamp: int, priority: int, context: bytearray):
+    def __init__(self, id: int, read_timestamp: int, priority: int, context: str):
+        # entry with id = 0 is the main entry
         self._id = id
         self._read_timestamp = read_timestamp
         # priority values are 0..N with 0 being the highest priority
         self._priority = priority
+        # OpaqueContext field will be base64 encoded in GS, but it is opaque to client side. Client side should not do decoding/encoding and just store the raw data.
         self._context = context
 
     @property
@@ -58,11 +44,11 @@ class QueryContextElement:
         return self._priority
 
     @property
-    def context(self) -> bytearray:
+    def context(self) -> str:
         return self._context
 
     @context.setter
-    def context(self, ctx: bytearray) -> None:
+    def context(self, ctx: str) -> None:
         self._context = ctx
 
     def __eq__(self, other: object) -> bool:
@@ -80,7 +66,9 @@ class QueryContextElement:
             raise NotImplementedError(
                 f"cannot compare QueryContextElement with object of type {type(other)}"
             )
-        return self._priority < other.priority
+        return self._priority < other._priority
+
+
 
     def __hash__(self) -> int:
         _hash = 31
@@ -89,9 +77,7 @@ class QueryContextElement:
         _hash += (_hash * 31) + self._read_timestamp
         _hash += (_hash * 31) + self._priority
         if self._context:
-            _hash += (_hash * 31) + int.from_bytes(md5(self._context).digest(), "big")
-        else:
-            _hash += _hash * 31
+            _hash += (_hash * 31) + int.from_bytes(md5(self._context.encode('utf-8')).digest(), "big")
         return _hash
 
     def __str__(self) -> str:
@@ -103,6 +89,7 @@ class QueryContextCache:
         self._capacity = capacity
         self._id_map: dict[int, QueryContextElement] = {}
         self._priority_map: dict[int, QueryContextElement] = {}
+
         # stores elements sorted by priority. Element with
         # least priority value has the highest priority
         self._tree_set: set[QueryContextElement] = SortedSet()
@@ -130,7 +117,7 @@ class QueryContextCache:
         self._add_qce(new_qce)
 
     def merge(
-        self, id: int, read_timestamp: int, priority: int, context: bytearray
+        self, id: int, read_timestamp: int, priority: int, context: str
     ) -> None:
         if id in self._id_map:
             qce = self._id_map[id]
@@ -180,91 +167,114 @@ class QueryContextCache:
 
     def _last(self) -> QueryContextElement:
         return self._tree_set[-1]
-
-    def deserialize_from_arrow_base64(self, data: str) -> None:
-        if not installed_pandas:
-            self._data = data
-            return
-
+    
+    def serialize_to_json(self) -> str:
         with self._lock:
-            logger.debug(
-                f"deserialize_from_arrow_base64() called: data from server: {data}"
-            )
-            self.log_cache_entries()
-
-            if data is None or len(data) == 0:
-                self.clear_cache()
-                logger.debug("deserialize_from_arrow_base64() returns")
-                self.log_cache_entries()
-                return
-
-            decoded_data = b64decode(data)
-            input = BytesIO(decoded_data)
-            try:
-                with pa.ipc.open_stream(input) as reader:
-                    for record_batch in reader:
-                        record_dict = record_batch.to_pydict()
-                        for i in range(len(record_batch)):
-                            self.merge(
-                                record_dict["id"][i],
-                                record_dict["timestamp"][i],
-                                record_dict["priority"][i],
-                                record_dict["context"][i],
-                            )
-            except Exception as e:
-                logger.debug(f"deserialize_from_arrow_base64: Exception = {e}")
-                # clear cache due to incomplete merge
-                self.clear_cache()
-
-            self.check_cache_capacity()
-            logger.debug("deserialize_from_arrow_base64() returns")
-            self.log_cache_entries()
-
-    def serialize_to_arrow_base64(self) -> str:
-        if not installed_pandas:
-            return self._data
-
-        with self._lock:
-            logger.debug("serialize_to_arrow_base64() called")
+            logger.debug("serialize_to_json() called")
             self.log_cache_entries()
 
             if len(self._tree_set) == 0:
                 return None
 
             try:
-                stream = BytesIO()
-                size = self.get_size()
-                id_vals = [None] * size
-                timestamp_vals = [None] * size
-                priority_vals = [None] * size
-                context_vals = [None] * size
-                self.get_elements(id_vals, timestamp_vals, priority_vals, context_vals)
-
-                with pa.ipc.RecordBatchStreamWriter(
-                    stream, QUERY_CONTEXT_SCHEMA
-                ) as writer:
-                    id_array = pa.array(id_vals, type=pa.int64())
-                    timestamp_array = pa.array(timestamp_vals, type=pa.int64())
-                    priority_array = pa.array(priority_vals, type=pa.int64())
-                    context_array = pa.array(context_vals, type=pa.binary())
-                    record_batch = pa.record_batch(
-                        [id_array, timestamp_array, priority_array, context_array],
-                        schema=QUERY_CONTEXT_SCHEMA,
-                    )
-                    writer.write_batch(record_batch)
-
-                stream.seek(0)
-                # use same encoding use on jdbc driver
-                data = b64encode(stream.read()).decode("iso-8859-1")
-                stream.close()
+                data = {
+                    "entries": [
+                        {
+                            "id": qce.id,
+                            "timestamp": qce.read_timestamp,
+                            "priority": qce.priority,
+                            "context": qce.context,
+                        }
+                        for idx, qce in enumerate(self._tree_set)
+                    ]
+                }
+                # Serialize the data to JSON
+                serialized_data = json.dumps(data)
 
                 logger.debug(
-                    f"serialize_to_arrow_base64(): data to send to server {data}"
+                    f"serialize_to_json(): data to send to server {serialized_data}"
                 )
-                return data
+
+                return serialized_data
             except Exception as e:
-                logger.debug(f"serialize_to_arrow_base64(): Exception {e}")
-                return None
+                logger.debug(f"serialize_to_json(): Exception {e}")
+                return None   
+
+    def deserialize_json_dict(self, data) -> None:
+        with self._lock:
+            logger.debug(
+                f"deserialize_json_dict() called: data from server: {data}"
+            )
+            self.log_cache_entries()
+            
+            if data is None or len(data) == 0:
+                self.clear_cache()
+                logger.debug("deserialize_json_dict() returns")
+                self.log_cache_entries()
+                return
+            
+            try:
+                # Deserialize the entries. The first entry with priority 0 is the main entry. On python
+                # connector side, we save all entries into one list to simplify the logic. When python
+                # connector receives HTTP response, the data["queryContext"] field has been converted
+                # from JSON to dict type automatically, so for this function we deserialize from python
+                # dict directly. Below is an example QueryContext dict.
+                # {
+                #   "entries": [
+                #    {
+                #     "id": 0,    
+                #     "read_timestamp": 123456789,
+                #     "priority": 0,
+                #     "context": "base64 encoded context"
+                #    },
+                #     {
+                #       "id": 1,
+                #       "read_timestamp": 123456789,
+                #       "priority": 1,
+                #       "context": "base64 encoded context"
+                #     },
+                #     {
+                #       "id": 2,
+                #       "read_timestamp": 123456789,
+                #       "priority": 2,
+                #       "context": "base64 encoded context"
+                #     }
+                #   ]
+                # }
+                
+                # Deserialize entries
+                entries = data.get("entries", None)
+                for entry in entries:
+                    logger.debug("deserialize {}".format(entry))
+                    if not isinstance(entry.get("id"), int):
+                        logger.debug("id type error")
+                        raise TypeError(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
+                    if not isinstance(entry.get("timestamp"), int):
+                        logger.debug("timestamp type error")
+                        raise TypeError(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
+                    if not isinstance(entry.get("priority"), int):
+                        logger.debug("priority type error")
+                        raise TypeError(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
+                    
+                    context = entry.get("context", None) # OpaqueContext field currently is empty from GS side.
+                
+                    if context is not None and not isinstance(context, str):
+                        logger.debug("context type error")
+                        raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
+                    self.merge(
+                        entry.get("id"),
+                        entry.get("timestamp"),
+                        entry.get("priority"),
+                        context, 
+                    )
+            except Exception as e:
+                logger.debug(f"deserialize_json_dict: Exception = {e}")
+                # clear cache due to incomplete merge
+                self.clear_cache()
+
+            self.check_cache_capacity()
+            logger.debug("deserialize_json_dict() returns")
+            self.log_cache_entries()
 
     def log_cache_entries(self) -> None:
         if logger.level == DEBUG:
@@ -276,9 +286,3 @@ class QueryContextCache:
     def get_size(self) -> int:
         return len(self._tree_set)
 
-    def get_elements(self, ids, timestamps, priorities, contexts) -> None:
-        for idx, qce in enumerate(self._tree_set):
-            ids[idx] = qce.id
-            timestamps[idx] = qce.read_timestamp
-            priorities[idx] = qce.priority
-            contexts[idx] = qce.context

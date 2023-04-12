@@ -3,7 +3,7 @@
 #
 
 from random import shuffle
-
+import json
 import pytest
 
 from snowflake.connector.query_context_cache import (
@@ -11,19 +11,11 @@ from snowflake.connector.query_context_cache import (
     QueryContextElement,
 )
 
-try:
-    from snowflake.connector.options import installed_pandas, pandas, pyarrow
-except ImportError:
-    installed_pandas = False
-    pandas = None
-    pyarrow = None
-
-
 MAX_CAPACITY = 5
 BASE_ID = 0
 BASE_READ_TIMESTAMP = 1668727958
 BASE_PRIORITY = 0
-CONTEXT = b"////Some query context"
+CONTEXT = "////Some query context"
 
 
 class ExpectedQCCData:
@@ -119,30 +111,100 @@ def assert_cache_with_data(
 ) -> None:
     assert qcc.get_size() == MAX_CAPACITY
 
-    ids = [None] * MAX_CAPACITY
-    timestamps = [None] * MAX_CAPACITY
-    priorities = [None] * MAX_CAPACITY
-    contexts = [None] * MAX_CAPACITY
-
-    qcc.get_elements(ids, timestamps, priorities, contexts)
-    for i in range(MAX_CAPACITY):
-        assert expected_data.ids[i] == ids[i]
-        assert expected_data.timestamps[i] == timestamps[i]
-        assert expected_data.priorities[i] == priorities[i]
-        assert expected_data.contexts[i] == contexts[i]
+    i = 0
+    for idx, qce in enumerate(qcc._get_elements()):
+        assert expected_data.ids[i] == qce.id
+        assert expected_data.timestamps[i] == qce.read_timestamp
+        assert expected_data.priorities[i] == qce.priority
+        assert expected_data.contexts[i] == qce.context
+        i += 1
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_is_empty(qcc_with_no_data: QueryContextCache):
     assert qcc_with_no_data.get_size() == 0
 
+def test_deserialize_type_error():
+    json_string = """{
+        "entries":[
+            {
+            "id": "abc",  
+            "read_timestamp": 1629456000,
+            "priority": 0,
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)  
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 111.111,
+            "priority": 0,
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)  
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 123412123,
+            "priority": "main",
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)    
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 1112314121,
+            "priority": 0,
+            "context": 1231412
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)
+    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
+    
+    json_string = """{
+        "entries":[
+            {
+            "id": 0,  
+            "timestamp": 123142341,
+            "priority": 0,
+            "context": "sample_base64_encoded_context"
+            }
+        ]
+    }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    data = json.loads(json_string) # convert JSON to dict
+    qcc.deserialize_json_dict(data)
+    assert qcc.get_size() == 1 # because this time the input is correct, qcc size should be 1
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
+
 def test_with_data(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_with_data_in_random_order(
     qcc_with_data_random_order: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -150,7 +212,6 @@ def test_with_data_in_random_order(
     assert_cache_with_data(qcc_with_data_random_order, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_check_cache_capacity(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -165,7 +226,6 @@ def test_check_cache_capacity(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_update_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -180,7 +240,6 @@ def test_update_timestamp(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_update_priority(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -201,7 +260,6 @@ def test_update_priority(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_add_same_priority(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -214,7 +272,6 @@ def test_add_same_priority(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_same_id_with_stale_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -227,64 +284,61 @@ def test_same_id_with_stale_timestamp(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_empty_cache_with_null_data(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
     assert_cache_with_data(qcc_with_data, expected_data)
 
-    qcc_with_data.deserialize_from_arrow_base64(None)
+    qcc_with_data.deserialize_json_dict(None)
     assert qcc_with_data.get_size() == 0
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_empty_cache_with_empty_response_data(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
-    assert_cache_with_data(qcc_with_data, expected_data)
+    assert_cache_with_data(qcc_with_data, expected_data)    
 
-    qcc_with_data.deserialize_from_arrow_base64("")
+    qcc_with_data.deserialize_json_dict("")
     assert qcc_with_data.get_size() == 0
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_serialization_deserialization_with_null_context(
     qcc_with_data_null_context: QueryContextCache,
     expected_data_with_null_context: ExpectedQCCData,
 ):
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
 
-    data = qcc_with_data_null_context.serialize_to_arrow_base64()
+    data = qcc_with_data_null_context.serialize_to_json()
     qcc_with_data_null_context.clear_cache()
     assert qcc_with_data_null_context.get_size() == 0
-
-    qcc_with_data_null_context.deserialize_from_arrow_base64(data)
+    
+    data = json.loads(data) # convert JSON to dict
+    qcc_with_data_null_context.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_serialization_deserialization(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
     assert_cache_with_data(qcc_with_data, expected_data)
 
-    data = qcc_with_data.serialize_to_arrow_base64()
+    data = qcc_with_data.serialize_to_json()
     qcc_with_data.clear_cache()
     assert qcc_with_data.get_size() == 0
 
-    qcc_with_data.deserialize_from_arrow_base64(data)
+    data = json.loads(data) # convert JSON to dict
+    qcc_with_data.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(not installed_pandas, reason="pyarrow not installed")
 def test_eviction_order():
     qce1 = QueryContextElement(id=1, read_timestamp=13323, priority=1, context=None)
     qce2 = QueryContextElement(
-        id=2, read_timestamp=15522, priority=4, context=bytearray(b"")
-    )
+        id=2, read_timestamp=15522, priority=4, context="")
+    
     qce3 = QueryContextElement(
-        id=3, read_timestamp=8383, priority=99, context=bytearray(b"generic context")
-    )
+        id=3, read_timestamp=8383, priority=99, context="generic context")
+    
     qce_list = [qce1, qce2, qce3]
     qcc = QueryContextCache(5)
     for qce in qce_list:
