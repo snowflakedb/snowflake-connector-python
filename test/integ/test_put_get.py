@@ -702,6 +702,32 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog):
             )
 
 
+def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_multiple_files_with_same_name_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}/data/1/",
+            )
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}/data/2/",
+            )
+
+            with caplog.at_level(logging.WARNING):
+                try:
+                    cur.execute(
+                        f"GET @{stage_name} file://{tmp_path} PATTERN='.*data.csv.gz'"
+                    )
+                except OperationalError:
+                    # This is expected flakiness
+                    pass
+            assert "Downloading multiple files with the same name" in caplog.text
+
+
 def test(conn_cnx):
     stage = "sfan_test_stage"
     parquet_file_path = "/tmp/test.parquet"

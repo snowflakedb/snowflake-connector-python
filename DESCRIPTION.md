@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.0.3(TBD)
 
   - Fixed a bug that prints error in logs for GET command on GCS
+  - Improved GET logging to warn when downloading multiple files with the same name.
 
 - v3.0.2(March 23, 2023)
 
