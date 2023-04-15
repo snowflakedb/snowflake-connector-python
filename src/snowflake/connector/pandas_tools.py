@@ -222,13 +222,10 @@ def write_pandas(
         # if the column name contains a double quote, we need to escape it by replacing with two double quotes
         # https://docs.snowflake.com/en/sql-reference/identifiers-syntax#double-quoted-identifiers
         snowflake_column_names = [str(c).replace('"', '""') for c in df.columns]
-        columns = '"' + '","'.join(snowflake_column_names) + '"'
-        parquet_columns = "$1:" + ",$1:".join(f'"{c}"' for c in snowflake_column_names)
     else:
         quote = ""
         snowflake_column_names = list(df.columns)
-        columns = ",".join(snowflake_column_names)
-        parquet_columns = "$1:" + ",$1:".join(snowflake_column_names)
+    columns = quote + f"{quote},{quote}".join(snowflake_column_names) + quote
 
     def drop_object(name: str, object_type: str) -> None:
         drop_sql = f"DROP {object_type.upper()} IF EXISTS {name} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
@@ -279,6 +276,11 @@ def write_pandas(
         )
         logger.debug(f"auto creating table with '{create_table_sql}'")
         cursor.execute(create_table_sql, _is_internal=True)
+        # need explicit casting when the underlying table schema is inferred
+        parquet_columns = "$1:" + ",$1:".join(
+            f"{quote}{snowflake_col}{quote}::{column_type_mapping[col]}"
+            for snowflake_col, col in zip(snowflake_column_names, df.columns)
+        )
     else:
         target_table_location = build_location_helper(
             database=database,
@@ -286,13 +288,16 @@ def write_pandas(
             name=table_name,
             quote_identifiers=quote_identifiers,
         )
+        parquet_columns = "$1:" + ",$1:".join(
+            f"{quote}{snowflake_col}{quote}" for snowflake_col in snowflake_column_names
+        )
 
     try:
         copy_into_sql = (
             f"COPY INTO {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
             f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
-            f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}) "
+            f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}) "
             f"PURGE=TRUE ON_ERROR={on_error}"
         )
         logger.debug(f"copying into with '{copy_into_sql}'")
