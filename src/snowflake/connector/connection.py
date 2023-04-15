@@ -1065,7 +1065,7 @@ class SnowflakeConnection:
             # not an async query
             data["queryContext"] = self.get_query_context()
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
-
+        print("sending qc", data["queryContext"])
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
                 "sql=[%s], sequence_id=[%s], is_file_transfer=[%s]",
@@ -1102,6 +1102,7 @@ class SnowflakeConnection:
             if "queryContext" in data and not _no_results:
                 # here the data["queryContext"] field has been automatically converted from JSON into a dict type
                 self.set_query_context(data["queryContext"])
+                print("receiving qc", data["queryContext"])
                 
         return ret
 
