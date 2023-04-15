@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable, Generator
 from unittest import mock
 
@@ -772,27 +772,47 @@ def test_all_pandas_types(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]
 ):
     table_name = random_string(5, "all_types_")
-    datetime_with_tz = datetime(
-        1997, 6, 3, 14, 21, 32, 00, tzinfo=timezone(timedelta(hours=+10))
-    )
+    datetime_with_tz = datetime(1997, 6, 3, 14, 21, 32, 00, tzinfo=timezone.utc)
     datetime_with_ntz = datetime(1997, 6, 3, 14, 21, 32, 00)
     df_data = [
-        (1, 1.1, "1string1", True, datetime_with_tz, datetime_with_ntz),
-        (2, 2.2, "2string2", False, datetime_with_tz, datetime_with_ntz),
+        [
+            1,
+            1.1,
+            "1string1",
+            True,
+            datetime_with_tz,
+            datetime_with_ntz,
+            datetime_with_tz.date(),
+            datetime_with_tz.time(),
+            bytes("a", "utf-8"),
+        ],
+        [
+            2,
+            2.2,
+            "2string2",
+            False,
+            datetime_with_tz,
+            datetime_with_ntz,
+            datetime_with_tz.date(),
+            datetime_with_tz.time(),
+            bytes("b", "utf-16"),
+        ],
     ]
-    df_data_no_timestamps = [
-        (
-            row[0],
-            row[1],
-            row[2],
-            row[3],
-        )
-        for row in df_data
+    columns = [
+        "int",
+        "float",
+        "string",
+        "bool",
+        "timestamp_tz",
+        "timestamp_ntz",
+        "date",
+        "time",
+        "binary",
     ]
 
     df = pandas.DataFrame(
         df_data,
-        columns=["int", "float", "string", "bool", "timestamp_tz", "timestamp_ntz"],
+        columns=columns,
     )
 
     select_sql = f'SELECT * FROM "{table_name}"'
@@ -809,20 +829,12 @@ def test_all_pandas_types(
             assert nchunks == 1
             # Check table's contents
             result = cnx.cursor(DictCursor).execute(select_sql).fetchall()
-            for row in result:
-                assert (
-                    row["int"],
-                    row["float"],
-                    row["string"],
-                    row["bool"],
-                ) in df_data_no_timestamps
-                # TODO: Schema detection on the server-side has bugs dealing with timestamp_ntz and timestamp_tz.
-                #  After the bugs are fixed, change the assertion to `data[0]["tm_tz"] == datetime_with_tz`
-                #  and `data[0]["tm_ntz"] == datetime_with_ntz`,
-                #  JIRA https://snowflakecomputing.atlassian.net/browse/SNOW-524865
-                #  JIRA https://snowflakecomputing.atlassian.net/browse/SNOW-359205
-                #  JIRA https://snowflakecomputing.atlassian.net/browse/SNOW-507644
-                assert row["timestamp_tz"] is not None
-                assert row["timestamp_ntz"] is not None
+            for row, data in zip(result, df_data):
+                for c in columns:
+                    # TODO: check values of timestamp data after SNOW-667350 is fixed
+                    if "timestamp" in c:
+                        assert row[c] is not None
+                    else:
+                        assert row[c] in data
         finally:
             cnx.execute_string(drop_sql)
