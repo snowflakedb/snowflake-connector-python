@@ -1,6 +1,7 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 from __future__ import annotations
 
 from collections import deque
@@ -11,7 +12,8 @@ from typing import TYPE_CHECKING, Any, Callable, Deque, Iterable, Iterator
 
 from .constants import IterUnit
 from .errors import NotSupportedError
-from .options import installed_pandas, pandas
+from .options import pandas
+from .options import pyarrow as pa
 from .result_batch import (
     ArrowResultBatch,
     DownloadMetrics,
@@ -22,12 +24,10 @@ from .telemetry import TelemetryField
 from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
-    from snowflake.connector.cursor import SnowflakeCursor
+    from pandas import DataFrame
+    from pyarrow import Table
 
-if installed_pandas:
-    from pyarrow import Table, concat_tables
-else:
-    Table = None
+    from snowflake.connector.cursor import SnowflakeCursor
 
 logger = getLogger(__name__)
 
@@ -111,7 +111,7 @@ class ResultSet(Iterable[list]):
         cursor: SnowflakeCursor,
         result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
-    ):
+    ) -> None:
         self.batches = result_chunks
         self._cursor = cursor
         self.prefetch_thread_num = prefetch_thread_num
@@ -141,7 +141,7 @@ class ResultSet(Iterable[list]):
                 metrics.get(DownloadMetrics.parse.value),
             )
 
-    def _finish_iterating(self):
+    def _finish_iterating(self) -> None:
         """Used for any cleanup after the result set iterator is done."""
 
         self._report_metrics()
@@ -167,11 +167,11 @@ class ResultSet(Iterable[list]):
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
         tables = list(self._fetch_arrow_batches())
         if tables:
-            return concat_tables(tables)
+            return pa.concat_tables(tables)
         else:
             return None
 
-    def _fetch_pandas_batches(self, **kwargs) -> Iterator[pandas.DataFrame]:
+    def _fetch_pandas_batches(self, **kwargs) -> Iterator[DataFrame]:
         """Fetches Pandas dataframes in batches, where batch refers to Snowflake Chunk.
 
         Thus, the batch size (the number of rows in dataframe) is determined by
@@ -180,7 +180,7 @@ class ResultSet(Iterable[list]):
         self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas")
 
-    def _fetch_pandas_all(self, **kwargs) -> pandas.DataFrame:
+    def _fetch_pandas_all(self, **kwargs) -> DataFrame:
         """Fetches a single Pandas dataframe."""
         dataframes = list(self._fetch_pandas_batches())
         if dataframes:
@@ -211,7 +211,7 @@ class ResultSet(Iterable[list]):
         Iterator[dict | Exception]
         | Iterator[tuple | Exception]
         | Iterator[Table]
-        | Iterator[pandas.DataFrame]
+        | Iterator[DataFrame]
     ):
         """Set up a new iterator through all batches with first 5 chunks downloaded.
 

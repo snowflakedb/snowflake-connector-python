@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 from __future__ import annotations
 
 import filecmp
+import logging
 import os
 import pathlib
 from getpass import getuser
@@ -18,9 +20,13 @@ import pytest
 
 from snowflake.connector import OperationalError
 
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
+
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
-from ..randomize import random_string
 
 if TYPE_CHECKING:
     from snowflake.connector import SnowflakeConnection
@@ -550,6 +556,70 @@ def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
+)
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+def test_put_overwrite_skip_on_content_match(
+    tmp_path: pathlib.Path, from_path, conn_cnx
+):
+    """Tests whether _skip_upload_on_content_match and overwrite=true work as intended."""
+    tmp_dir = tmp_path / "data"
+    tmp_dir.mkdir()
+    test_data = tmp_dir / "data.txt"
+    with test_data.open("w") as f:
+        f.write("test1,test2")
+        f.write("test3,test4")
+
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("RM @~/test_put_overwrite_skip_on_content_match")
+        try:
+            file_stream = None if from_path else open(test_data, "rb")
+            with cnx.cursor() as cur:
+                put(
+                    cur,
+                    str(test_data),
+                    "~/test_put_overwrite_skip_on_content_match",
+                    from_path,
+                    file_stream=file_stream,
+                    sql_options="OVERWRITE = TRUE",
+                    _skip_upload_on_content_match=False,
+                )
+                ret = cur.fetchone()
+                assert ret[6] == "UPLOADED"
+
+                put(
+                    cur,
+                    str(test_data),
+                    "~/test_put_overwrite_skip_on_content_match",
+                    from_path,
+                    file_stream=file_stream,
+                    sql_options="OVERWRITE = TRUE",
+                    _skip_upload_on_content_match=True,
+                )
+                ret = cur.fetchone()
+                assert ret[6] == "SKIPPED"
+
+            ret = (
+                cnx.cursor()
+                .execute("LS @~/test_put_overwrite_skip_on_content_match")
+                .fetchone()
+            )
+            assert (
+                "test_put_overwrite_skip_on_content_match/"
+                + os.path.basename(test_data)
+                in ret[0]
+            )
+            assert test_data.name + ".gz" in ret[0]
+        finally:
+            if file_stream:
+                file_stream.close()
+            cnx.cursor().execute("RM @~/test_put_overwrite_skip_on_content_match")
+
+
+@pytest.mark.skipolddriver
 def test_utf8_filename(tmp_path, conn_cnx):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")
@@ -667,3 +737,30 @@ def test_get_empty_file(tmp_path, conn_cnx):
             with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
                 cur.execute(f"GET @{stage_name}/foo.csv file://{tmp_path}")
             assert not empty_file.exists()
+
+
+@pytest.mark.skipolddriver
+def test_get_file_permission(tmp_path, conn_cnx, caplog):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_empty_file_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}",
+            )
+
+            with caplog.at_level(logging.ERROR):
+                cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            assert "FileNotFoundError" not in caplog.text
+
+            # get the default mask, usually it is 0o022
+            default_mask = os.umask(0)
+            os.umask(default_mask)
+            # files by default are given the permission 644 (Octal)
+            # umask is for denial, we need to negate
+            assert (
+                oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
+            )

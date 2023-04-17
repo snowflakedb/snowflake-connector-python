@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from asn1crypto.ocsp import (
     OCSPResponse,
     Request,
     Requests,
+    SingleResponse,
     TBSRequest,
     Version,
 )
@@ -34,6 +35,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
+from OpenSSL.SSL import Connection
 
 from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
@@ -44,8 +46,7 @@ from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_STATUS_UNSUCCESSFUL,
 )
 from snowflake.connector.errors import RevocationCheckError
-from snowflake.connector.ocsp_snowflake import SnowflakeOCSP
-from snowflake.connector.ssd_internal_keys import ret_wildcard_hkey
+from snowflake.connector.ocsp_snowflake import SnowflakeOCSP, generate_cache_key
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
@@ -80,12 +81,6 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         "sha512": hashes.SHA3_512,
     }
 
-    WILDCARD_CERTID = None
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.WILDCARD_CERTID = self.encode_cert_id_key(ret_wildcard_hkey())
-
     def encode_cert_id_key(self, hkey):
         issuer_name_hash, issuer_key_hash, serial_number = hkey
         issuer_name_hash = OctetString.load(issuer_name_hash)
@@ -103,12 +98,8 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         )
         return cert_id
 
-    def decode_cert_id_key(self, cert_id):
-        return (
-            cert_id["issuer_name_hash"].dump(),
-            cert_id["issuer_key_hash"].dump(),
-            cert_id["serial_number"].dump(),
-        )
+    def decode_cert_id_key(self, cert_id: CertId) -> tuple[bytes, bytes, bytes]:
+        return generate_cache_key(cert_id)
 
     def decode_cert_id_base64(self, cert_id_base64):
         return CertId.load(b64decode(cert_id_base64))
@@ -116,7 +107,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     def encode_cert_id_base64(self, hkey):
         return b64encode(self.encode_cert_id_key(hkey).dump()).decode("ascii")
 
-    def read_cert_bundle(self, ca_bundle_file, storage=None):
+    def read_cert_bundle(self, ca_bundle_file, storage=None) -> None:
         """Reads a certificate file including certificates in PEM format."""
         if storage is None:
             storage = SnowflakeOCSP.ROOT_CERTIFICATES_DICT
@@ -180,7 +171,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         b64data = b64encode(data).decode("ascii")
         return b64data
 
-    def extract_good_status(self, single_response):
+    def extract_good_status(
+        self, single_response: SingleResponse
+    ) -> tuple[datetime, datetime]:
         """Extracts GOOD status."""
         this_update_native = single_response["this_update"].native
         next_update_native = single_response["next_update"].native
@@ -194,7 +187,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         revocation_reason = revoked_info.native["revocation_reason"]
         return revocation_time, revocation_reason
 
-    def check_cert_time_validity(self, cur_time, ocsp_cert):
+    def check_cert_time_validity(
+        self, cur_time: datetime, ocsp_cert: Certificate
+    ) -> tuple[bool, str | None]:
 
         val_start = ocsp_cert["tbs_certificate"]["validity"]["not_before"].native
         val_end = ocsp_cert["tbs_certificate"]["validity"]["not_after"].native
@@ -223,7 +218,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     :return True/False depending on time validity within the response
     """
 
-    def is_valid_time(self, cert_id, ocsp_response):
+    def is_valid_time(self, cert_id, ocsp_response) -> bool:
         res = OCSPResponse.load(ocsp_response)
 
         if res["response_status"].native != "successful":
@@ -365,7 +360,6 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         try:
             if cert_status == "good":
                 self._process_good_status(single_response, cert_id, ocsp_response)
-                SnowflakeOCSP.OCSP_CACHE.update_cache(self, cert_id, ocsp_response)
             elif cert_status == "revoked":
                 self._process_revoked_status(single_response, cert_id)
             elif cert_status == "unknown":
@@ -431,7 +425,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             except InvalidSignature:
                 raise RevocationCheckError(msg="Failed to verify the signature")
 
-    def extract_certificate_chain(self, connection):
+    def extract_certificate_chain(
+        self, connection: Connection
+    ) -> list[tuple[Certificate, Certificate]]:
         """Gets certificate chain and extract the key info from OpenSSL connection."""
         from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
@@ -448,7 +444,9 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
         return self.create_pair_issuer_subject(cert_map)
 
-    def create_pair_issuer_subject(self, cert_map):
+    def create_pair_issuer_subject(
+        self, cert_map: OrderedDict
+    ) -> list[tuple[Certificate, Certificate]]:
         """Creates pairs of issuer and subject certificates."""
         issuer_subject = []
         for subject_der in cert_map:
@@ -476,5 +474,5 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             issuer_subject.append((issuer, subject))
         return issuer_subject
 
-    def subject_name(self, subject):
+    def subject_name(self, subject: Certificate) -> OrderedDict:
         return subject.subject.native

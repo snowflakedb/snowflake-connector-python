@@ -1,6 +1,5 @@
-#!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from datetime import datetime
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
+from typing import TYPE_CHECKING, Any, Callable
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
@@ -26,10 +26,9 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from .auth_keypair import AuthByKeyPair
-from .auth_usrpwdmfa import AuthByUsrPwdMfa
-from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
-from .constants import (
+from ..compat import IS_LINUX, IS_MACOS, IS_WINDOWS, urlencode
+from ..constants import (
+    DAY_IN_SECONDS,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
@@ -37,15 +36,15 @@ from .constants import (
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
 )
-from .description import (
+from ..description import (
     COMPILER,
     IMPLEMENTATION,
     OPERATING_SYSTEM,
     PLATFORM,
     PYTHON_VERSION,
 )
-from .errorcode import ER_FAILED_TO_CONNECT_TO_DB
-from .errors import (
+from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
+from ..errors import (
     BadGatewayError,
     DatabaseError,
     Error,
@@ -53,17 +52,19 @@ from .errors import (
     ProgrammingError,
     ServiceUnavailableError,
 )
-from .network import (
+from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
-    KEY_PAIR_AUTHENTICATOR,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
-from .options import installed_keyring, keyring
-from .sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from .version import VERSION
+from ..options import installed_keyring, keyring
+from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from ..version import VERSION
+
+if TYPE_CHECKING:
+    from . import AuthByPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ if not path.exists(CACHE_DIR):
 logger.debug("cache directory: %s", CACHE_DIR)
 
 # temporary credential cache
-TEMPORARY_CREDENTIAL = {}
+TEMPORARY_CREDENTIAL: dict[str, dict[str, str | None]] = {}
 
 TEMPORARY_CREDENTIAL_LOCK = Lock()
 
@@ -115,7 +116,7 @@ MFA_TOKEN = "MFATOKEN"
 class Auth:
     """Snowflake Authenticator."""
 
-    def __init__(self, rest):
+    def __init__(self, rest) -> None:
         self._rest = rest
 
     @staticmethod
@@ -153,19 +154,19 @@ class Auth:
 
     def authenticate(
         self,
-        auth_instance,
-        account,
-        user,
-        database=None,
-        schema=None,
-        warehouse=None,
-        role=None,
-        passcode=None,
-        passcode_in_password=False,
-        mfa_callback=None,
-        password_callback=None,
-        session_parameters=None,
-        timeout=120,
+        auth_instance: AuthByPlugin,
+        account: str,
+        user: str,
+        database: str | None = None,
+        schema: str | None = None,
+        warehouse: str | None = None,
+        role: str | None = None,
+        passcode: str | None = None,
+        passcode_in_password: bool = False,
+        mfa_callback: Callable[[], None] | None = None,
+        password_callback: Callable[[], str] | None = None,
+        session_parameters: dict[Any, Any] | None = None,
+        timeout: int = 120,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 
@@ -242,15 +243,7 @@ class Auth:
         # login_timeout comes from user configuration.
         # Between login timeout and auth specific
         # timeout use whichever value is smaller
-        if hasattr(auth_instance, "get_timeout"):
-            logger.debug(
-                f"Authenticator, {type(auth_instance).__name__}, implements get_timeout"
-            )
-            auth_timeout = min(
-                self._rest._connection.login_timeout, auth_instance.get_timeout()
-            )
-        else:
-            auth_timeout = self._rest._connection.login_timeout
+        auth_timeout = min(self._rest._connection.login_timeout, auth_instance.timeout)
         logger.debug(f"Timeout set to {auth_timeout}")
 
         try:
@@ -297,7 +290,7 @@ class Auth:
             body["data"]["EXT_AUTHN_DUO_METHOD"] = "push"
             self.ret = {"message": "Timeout", "data": {}}
 
-            def post_request_wrapper(self, url, headers, body):
+            def post_request_wrapper(self, url, headers, body) -> None:
                 # get the MFA response
                 self.ret = self._rest._post_request(
                     url, headers, body, timeout=self._rest._connection.login_timeout
@@ -386,7 +379,9 @@ class Auth:
                     )
                 )
 
-            if type(auth_instance) is AuthByKeyPair:
+            from . import AuthByKeyPair
+
+            if isinstance(auth_instance, AuthByKeyPair):
                 logger.debug(
                     "JWT Token authentication failed. "
                     "Token expires at: %s. "
@@ -394,7 +389,9 @@ class Auth:
                     str(auth_instance._jwt_token_exp),
                     str(datetime.utcnow()),
                 )
-            if type(auth_instance) is AuthByUsrPwdMfa:
+            from . import AuthByUsrPwdMfa
+
+            if isinstance(auth_instance, AuthByUsrPwdMfa):
                 delete_temporary_credential(self._rest._host, user, MFA_TOKEN)
             Error.errorhandler_wrapper(
                 self._rest._connection,
@@ -453,7 +450,12 @@ class Auth:
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
-    def _read_temporary_credential(self, host, user, cred_type):
+    def _read_temporary_credential(
+        self,
+        host: str,
+        user: str,
+        cred_type: str,
+    ) -> str | None:
         cred = None
         if IS_MACOS or IS_WINDOWS:
             if not installed_keyring:
@@ -463,7 +465,7 @@ class Auth:
                     "this please install keyring module using the following command : pip install "
                     "snowflake-connector-python[secure-local-storage]"
                 )
-                return
+                return None
             try:
                 cred = keyring.get_password(
                     build_temporary_credential_name(host, user, cred_type), user.upper()
@@ -483,16 +485,33 @@ class Auth:
             logger.debug("OS not supported for Local Secure Storage")
         return cred
 
-    def read_temporary_credentials(self, host, user, session_parameters):
+    def read_temporary_credentials(
+        self,
+        host: str,
+        user: str,
+        session_parameters: dict[str, Any],
+    ) -> None:
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
-            self._rest.id_token = self._read_temporary_credential(host, user, ID_TOKEN)
+            self._rest.id_token = self._read_temporary_credential(
+                host,
+                user,
+                ID_TOKEN,
+            )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
             self._rest.mfa_token = self._read_temporary_credential(
-                host, user, MFA_TOKEN
+                host,
+                user,
+                MFA_TOKEN,
             )
 
-    def _write_temporary_credential(self, host, user, cred_type, cred):
+    def _write_temporary_credential(
+        self,
+        host: str,
+        user: str,
+        cred_type: str,
+        cred: str | None,
+    ) -> None:
         if not cred:
             logger.debug(
                 "no credential is given when try to store temporary credential"
@@ -522,9 +541,18 @@ class Auth:
         else:
             logger.debug("OS not supported for Local Secure Storage")
 
-    def write_temporary_credentials(self, host, user, session_parameters, response):
-        if self._rest._connection.consent_cache_id_token and session_parameters.get(
-            PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False
+    def write_temporary_credentials(
+        self,
+        host: str,
+        user: str,
+        session_parameters: dict[str, Any],
+        response: dict[str, Any],
+    ) -> None:
+        if (
+            self._rest._connection.auth_class.consent_cache_id_token
+            and session_parameters.get(
+                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False
+            )
         ):
             self._write_temporary_credential(
                 host, user, ID_TOKEN, response["data"].get("idToken")
@@ -534,10 +562,9 @@ class Auth:
             self._write_temporary_credential(
                 host, user, MFA_TOKEN, response["data"].get("mfaToken")
             )
-        return
 
 
-def flush_temporary_credentials():
+def flush_temporary_credentials() -> None:
     """Flush temporary credentials in memory into disk. Need to hold TEMPORARY_CREDENTIAL_LOCK."""
     global TEMPORARY_CREDENTIAL
     global TEMPORARY_CREDENTIAL_FILE
@@ -566,7 +593,7 @@ def flush_temporary_credentials():
         unlock_temporary_credential_file()
 
 
-def write_temporary_credential_file(host, cred_name, cred):
+def write_temporary_credential_file(host: str, cred_name: str, cred) -> None:
     """Writes temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -616,10 +643,9 @@ def read_temporary_credential_file():
             )
         finally:
             unlock_temporary_credential_file()
-    return None
 
 
-def lock_temporary_credential_file():
+def lock_temporary_credential_file() -> bool:
     global TEMPORARY_CREDENTIAL_FILE_LOCK
     try:
         mkdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
@@ -632,7 +658,7 @@ def lock_temporary_credential_file():
         return False
 
 
-def unlock_temporary_credential_file():
+def unlock_temporary_credential_file() -> bool:
     global TEMPORARY_CREDENTIAL_FILE_LOCK
     try:
         rmdir(TEMPORARY_CREDENTIAL_FILE_LOCK)
@@ -642,7 +668,7 @@ def unlock_temporary_credential_file():
         return False
 
 
-def delete_temporary_credential(host, user, cred_type):
+def delete_temporary_credential(host, user, cred_type) -> None:
     if (IS_MACOS or IS_WINDOWS) and installed_keyring:
         try:
             keyring.delete_password(
@@ -654,7 +680,7 @@ def delete_temporary_credential(host, user, cred_type):
         temporary_credential_file_delete_password(host, user, cred_type)
 
 
-def temporary_credential_file_delete_password(host, user, cred_type):
+def temporary_credential_file_delete_password(host, user, cred_type) -> None:
     """Remove credential from temporary credential file when OS is Linux."""
     if not CACHE_DIR:
         # no cache is enabled
@@ -672,7 +698,7 @@ def temporary_credential_file_delete_password(host, user, cred_type):
         flush_temporary_credentials()
 
 
-def delete_temporary_credential_file():
+def delete_temporary_credential_file() -> None:
     """Deletes temporary credential file and its lock file."""
     global TEMPORARY_CREDENTIAL_FILE
     try:
@@ -689,7 +715,7 @@ def delete_temporary_credential_file():
         logger.debug("Failed to delete credential lock file: err=[%s]", ex)
 
 
-def build_temporary_credential_name(host, user, cred_type):
+def build_temporary_credential_name(host, user, cred_type) -> str:
     return "{host}:{user}:{driver}:{cred}".format(
         host=host.upper(), user=user.upper(), driver=KEYRING_DRIVER_NAME, cred=cred_type
     )
@@ -709,10 +735,13 @@ def get_token_from_private_key(
         format=PrivateFormat.PKCS8,
         encryption_algorithm=NoEncryption(),
     )
-    auth_instance = AuthByKeyPair(private_key, 1440 * 60)  # token valid for 24 hours
-    return auth_instance.authenticate(
-        KEY_PAIR_AUTHENTICATOR, None, account, user, key_password
-    )
+    from . import AuthByKeyPair
+
+    auth_instance = AuthByKeyPair(
+        private_key,
+        DAY_IN_SECONDS,
+    )  # token valid for 24 hours
+    return auth_instance.prepare(account=account, user=user)
 
 
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
@@ -729,4 +758,6 @@ def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     private_key = load_der_private_key(
         data=private_key, password=None, backend=default_backend()
     )
+    from . import AuthByKeyPair
+
     return AuthByKeyPair.calculate_public_key_fingerprint(private_key)

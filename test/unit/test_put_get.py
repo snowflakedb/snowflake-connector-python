@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 from __future__ import annotations
 
 from os import chmod, path
@@ -61,13 +62,13 @@ def test_put_error(tmpdir):
     # Permission error should be raised
     sf_file_transfer_agent = agent_class(cursor, query, ret, raise_put_get_error=True)
     sf_file_transfer_agent.execute()
-    with pytest.raises(Exception):
+    with pytest.raises(OperationalError, match="PermissionError"):
         sf_file_transfer_agent.result()
 
     # unspecified, should fail because flag is on by default now
     sf_file_transfer_agent = agent_class(cursor, query, ret)
     sf_file_transfer_agent.execute()
-    with pytest.raises(Exception):
+    with pytest.raises(OperationalError, match="PermissionError"):
         sf_file_transfer_agent.result()
 
     chmod(file1, 0o700)

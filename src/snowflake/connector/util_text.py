@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
 import logging
+import random
 import re
+import string
 from io import StringIO
+from typing import Sequence
 
 COMMENT_PATTERN_RE = re.compile(r"^\s*\-\-")
 EMPTY_LINE_RE = re.compile(r"^\s*$")
@@ -21,10 +24,10 @@ class SQLDelimiter:
     Since split_statements is a generator this mutable object will allow it change while executing.
     """
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.sql_delimiter
 
-    def __init__(self, sql_delimiter: str = ";"):
+    def __init__(self, sql_delimiter: str = ";") -> None:
         """Initializes SQLDelimiter with a string."""
         self.sql_delimiter = sql_delimiter
 
@@ -143,6 +146,8 @@ def split_statements(
                     if not remove_comments:
                         # keep the comment
                         statement.append((line[col:], False))
+                    else:
+                        statement.append(("\n", True))
                     col = len_line + 1
                     col0 = col
                 elif line[col:].startswith("/*") and not line[col0:].startswith(
@@ -203,7 +208,9 @@ def split_statements(
         yield _concatenate_statements(statement)
 
 
-def _concatenate_statements(statement_list):
+def _concatenate_statements(
+    statement_list: list[tuple[str, bool]]
+) -> tuple[str, bool | None]:
     """Concatenate statements.
 
     Each statement should be a tuple of statement and is_put_or_get.
@@ -226,7 +233,7 @@ def _concatenate_statements(statement_list):
     return "".join(valid_statement_list).strip(), is_put_or_get
 
 
-def construct_hostname(region, account):
+def construct_hostname(region: str | None, account: str) -> str:
     """Constructs hostname from region and account."""
     if region == "us-west-2":
         region = ""
@@ -254,3 +261,21 @@ def parse_account(account):
         parsed_account = account
 
     return parsed_account
+
+
+def random_string(
+    length: int = 10,
+    prefix: str = "",
+    suffix: str = "",
+    choices: Sequence[str] = string.ascii_lowercase,
+) -> str:
+    """Our convenience function to generate random string for object names.
+
+    Args:
+        length: How many random characters to choose from choices.
+        prefix: Prefix to add to random string generated.
+        suffix: Suffix to add to random string generated.
+        choices: A generator of things to choose from.
+    """
+    random_part = "".join([random.choice(choices) for _ in range(length)])
+    return "".join([prefix, random_part, suffix])

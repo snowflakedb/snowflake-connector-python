@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
 from .constants import UTF8, EncryptionMetadata, MaterialDescriptor, kilobyte
+from .util_text import random_string
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
@@ -27,7 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = getLogger(__name__)
 
 
-def matdesc_to_unicode(matdesc):
+def matdesc_to_unicode(matdesc: MaterialDescriptor) -> str:
     """Convert Material Descriptor to Unicode String."""
     return str(
         json.dumps(
@@ -137,7 +138,7 @@ class SnowflakeEncryptionUtil:
         encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
-        tmp_dir: str = None,
+        tmp_dir: str | None = None,
     ) -> tuple[EncryptionMetadata, str]:
         """Encrypts a file in a temporary directory.
 
@@ -238,12 +239,13 @@ class SnowflakeEncryptionUtil:
         Returns:
             The decrypted file's location.
         """
-        temp_output_fd, temp_output_file = tempfile.mkstemp(
-            text=False, dir=tmp_dir, prefix=os.path.basename(in_filename) + "#"
-        )
+        temp_output_file = f"{os.path.basename(in_filename)}#{random_string()}"
+        if tmp_dir:
+            temp_output_file = os.path.join(tmp_dir, temp_output_file)
+
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
         with open(in_filename, "rb") as infile:
-            with os.fdopen(temp_output_fd, "wb") as outfile:
+            with open(temp_output_file, "wb") as outfile:
                 SnowflakeEncryptionUtil.decrypt_stream(
                     metadata, encryption_material, infile, outfile, chunk_size
                 )

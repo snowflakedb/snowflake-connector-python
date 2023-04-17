@@ -1,18 +1,28 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
+from unittest import mock
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
-from snowflake.connector.auth_webbrowser import AuthByWebBrowser
+from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
-from snowflake.connector.network import EXTERNAL_BROWSER_AUTHENTICATOR, SnowflakeRestful
+from snowflake.connector.network import (
+    EXTERNAL_BROWSER_AUTHENTICATOR,
+    ReauthenticationRequest,
+    SnowflakeRestful,
+)
+
+try:  # pragma: no cover
+    from snowflake.connector.auth import AuthByWebBrowser
+except ImportError:
+    from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 
 AUTHENTICATOR = "https://testsso.snowflake.net/"
 APPLICATION = "testapplication"
@@ -22,6 +32,7 @@ PASSWORD = "testpassword"
 SERVICE_NAME = ""
 REF_PROOF_KEY = "MOCK_PROOF_KEY"
 REF_SSO_URL = "https://testsso.snowflake.net/sso"
+INVALID_SSO_URL = "this is an invalid URL"
 
 
 def mock_webserver(target_instance, application, port):
@@ -57,9 +68,18 @@ def test_auth_webbrowser_get():
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
     body = {"data": {}}
@@ -99,9 +119,18 @@ def test_auth_webbrowser_post():
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
     assert not rest._connection.errorhandler.called  # no error
     assert auth.assertion_content == ref_token
     body = {"data": {}}
@@ -143,18 +172,27 @@ def test_auth_webbrowser_fail_webbrowser(
     mock_socket = Mock(return_value=mock_socket_instance)
 
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
     with patch("builtins.input", return_value=input_text):
-        auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
     captured = capsys.readouterr()
     assert captured.out == (
         "Initiating login request with your identity provider. A browser window "
         "should have opened for you to complete the login. If you can't see it, "
         "check existing browser windows, or your OS settings. Press CTRL+C to "
-        "abort and try again...\nWe were unable to open a browser window for "
-        "you, please open the following url manually then paste the URL you "
-        f"are redirected to into the terminal.\nURL: {REF_SSO_URL}\n"
+        f"abort and try again...\nGoing to open: {REF_SSO_URL} to authenticate...\nWe were unable to open a browser window for "
+        "you, please open the url above manually then paste the URL you "
+        "are redirected to into the terminal.\n"
     )
     if expected_error:
         assert rest._connection.errorhandler.called  # an error
@@ -189,15 +227,24 @@ def test_auth_webbrowser_fail_webserver(capsys):
 
     # case 1: invalid HTTP request
     auth = AuthByWebBrowser(
-        rest, APPLICATION, webbrowser_pkg=mock_webbrowser, socket_pkg=mock_socket
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
     )
-    auth.authenticate(AUTHENTICATOR, SERVICE_NAME, ACCOUNT, USER, PASSWORD)
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
     captured = capsys.readouterr()
     assert captured.out == (
         "Initiating login request with your identity provider. A browser window "
         "should have opened for you to complete the login. If you can't see it, "
         "check existing browser windows, or your OS settings. Press CTRL+C to "
-        "abort and try again...\n"
+        f"abort and try again...\nGoing to open: {REF_SSO_URL} to authenticate...\n"
     )
     assert rest._connection.errorhandler.called  # an error
     assert auth.assertion_content is None
@@ -233,4 +280,78 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
     rest._post_request = post_request
+    connection._rest = rest
     return rest
+
+
+def test_idtoken_reauth():
+    """This test makes sure that AuthByIdToken reverts to AuthByWebBrowser.
+
+    This happens when the initial connection fails. Such as when the saved ID
+    token has expired.
+    """
+    from snowflake.connector.auth.idtoken import AuthByIdToken
+
+    auth_inst = AuthByIdToken(
+        id_token="token",
+        application="application",
+        protocol="protocol",
+        host="host",
+        port="port",
+    )
+
+    # We'll use this Exception to make sure AuthByWebBrowser authentication
+    #  flow is called as expected
+    class StopExecuting(Exception):
+        pass
+
+    with mock.patch(
+        "snowflake.connector.auth.idtoken.AuthByIdToken.prepare",
+        side_effect=ReauthenticationRequest(Exception()),
+    ):
+        with mock.patch(
+            "snowflake.connector.auth.webbrowser.AuthByWebBrowser.prepare",
+            side_effect=StopExecuting(),
+        ):
+            with pytest.raises(StopExecuting):
+                SnowflakeConnection(
+                    user="user",
+                    account="account",
+                    auth_class=auth_inst,
+                )
+
+
+def test_auth_webbrowser_invalid_sso(monkeypatch):
+    """Authentication by WebBrowser with failed to start web browser case."""
+    rest = _init_rest(INVALID_SSO_URL, REF_PROOF_KEY)
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = False
+
+    # mock socket
+    mock_socket_instance = MagicMock()
+    mock_socket_instance.getsockname.return_value = [None, 12345]
+
+    mock_socket_client = MagicMock()
+    mock_socket_client.recv.return_value = (
+        "\r\n".join(["GET /?token=MOCK_TOKEN HTTP/1.1", "User-Agent: snowflake-agent"])
+    ).encode("utf-8")
+    mock_socket_instance.accept.return_value = (mock_socket_client, None)
+    mock_socket = Mock(return_value=mock_socket_instance)
+
+    auth = AuthByWebBrowser(
+        application=APPLICATION,
+        webbrowser_pkg=mock_webbrowser,
+        socket_pkg=mock_socket,
+    )
+    auth.prepare(
+        conn=rest._connection,
+        authenticator=AUTHENTICATOR,
+        service_name=SERVICE_NAME,
+        account=ACCOUNT,
+        user=USER,
+        password=PASSWORD,
+    )
+    assert rest._connection.errorhandler.called  # an error
+    assert auth.assertion_content is None

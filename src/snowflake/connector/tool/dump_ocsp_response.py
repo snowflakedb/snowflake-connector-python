@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCS
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 
-def main():
+def main() -> None:
     """Internal Tool: OCSP response dumper."""
 
-    def help():
+    def help() -> None:
         print("Dump OCSP Response for the URL. ")
         print(
             """
@@ -39,7 +39,7 @@ Usage: {} <url> [<url> ...]
     dump_ocsp_response(urls, output_filename=None)
 
 
-def dump_good_status(current_time, single_response):
+def dump_good_status(current_time, single_response) -> None:
     print("This Update: {}".format(single_response["this_update"].native))
     print("Next Update: {}".format(single_response["next_update"].native))
     this_update = (
@@ -61,7 +61,7 @@ def dump_good_status(current_time, single_response):
         print(SFOCSP._validity_error_message(current_time, this_update, next_update))
 
 
-def dump_revoked_status(single_response):
+def dump_revoked_status(single_response) -> None:
     revoked_info = single_response["cert_status"]
     revocation_time = revoked_info.native["revocation_time"]
     revocation_reason = revoked_info.native["revocation_reason"]

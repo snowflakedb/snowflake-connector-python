@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import time
 from functools import wraps
 from inspect import getfullargspec as get_args
 from socket import socket
+from typing import Any
 
 import certifi
 import OpenSSL.SSL
@@ -24,7 +25,7 @@ from .constants import OCSPMode
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .vendored.urllib3 import connection as connection_
-from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext
+from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
 
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
@@ -38,14 +39,14 @@ FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: str | None = None
 log = logging.getLogger(__name__)
 
 
-def inject_into_urllib3():
+def inject_into_urllib3() -> None:
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
     log.debug("Injecting ssl_wrap_socket_with_ocsp")
     connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
 
 
 @wraps(ssl_.ssl_wrap_socket)
-def ssl_wrap_socket_with_ocsp(*args, **kwargs):
+def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
     # Extract host_name
     hostname_index = get_args(ssl_.ssl_wrap_socket).args.index("server_hostname")
     server_hostname = (

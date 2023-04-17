@@ -1,7 +1,7 @@
 ---
 name: Feature Request 💡
 about: Suggest a new idea for the project.
-labels: feature
+labels: feature, needs triage
 ---
 
 ## What is the current behavior?

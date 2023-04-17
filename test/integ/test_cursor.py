@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from snowflake.connector import (
     InterfaceError,
     NotSupportedError,
     ProgrammingError,
+    connection,
     constants,
     errorcode,
     errors,
@@ -45,6 +46,7 @@ except ImportError:
         is_nullable: bool
 
 
+from snowflake.connector.description import CLIENT_VERSION
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_NOT_POSITIVE_SIZE,
@@ -52,11 +54,15 @@ from snowflake.connector.errorcode import (
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
-from ..randomize import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 try:
     from snowflake.connector.constants import (
         FIELD_ID_TO_NAME,
+        PARAMETER_MULTI_STATEMENT_COUNT,
         PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     )
     from snowflake.connector.errorcode import (
@@ -131,7 +137,8 @@ def _check_results(cursor, results):
     assert results[2] == 123456, "the third result was wrong"
 
 
-def test_insert_select(conn, db_parameters):
+@pytest.mark.skipolddriver
+def test_insert_select(conn, db_parameters, caplog):
     """Inserts and selects integer data."""
     with conn() as cnx:
         c = cnx.cursor()
@@ -157,10 +164,13 @@ def test_insert_select(conn, db_parameters):
             for rec in c:
                 results.append(rec[0])
             _check_results(c, results)
+            assert "Number of results in first chunk: 3" in caplog.text
         finally:
             c.close()
 
         with cnx.cursor(snowflake.connector.DictCursor) as c:
+            caplog.clear()
+            assert "Number of results in first chunk: 3" not in caplog.text
             c.execute(
                 "select aa from {name} order by aa".format(name=db_parameters["name"])
             )
@@ -168,9 +178,11 @@ def test_insert_select(conn, db_parameters):
             for rec in c:
                 results.append(rec["AA"])
             _check_results(c, results)
+            assert "Number of results in first chunk: 3" in caplog.text
 
 
-def test_insert_and_select_by_separate_connection(conn, db_parameters):
+@pytest.mark.skipolddriver
+def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
     """Inserts a record and select it by a separate connection."""
     with conn() as cnx:
         result = cnx.cursor().execute(
@@ -204,6 +216,7 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters):
         c.close()
         assert results[0] == 1234, "the first result was wrong"
         assert result.rowcount == 1, "wrong number of records were selected"
+        assert "Number of results in first chunk: 1" in caplog.text
     finally:
         cnx2.close()
 
@@ -752,7 +765,9 @@ def test_closed_cursor(conn, db_parameters):
         ), "SNOW-647539: rowcount should remain available after cursor is closed"
 
 
-def test_fetchmany(conn, db_parameters):
+@pytest.mark.skipolddriver
+def test_fetchmany(conn, db_parameters, caplog):
+
     table_name = random_string(5, "test_fetchmany_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -773,6 +788,7 @@ def test_fetchmany(conn, db_parameters):
 
         with cnx.cursor() as c:
             c.execute(f"select aa from {table_name} order by aa desc")
+            assert "Number of results in first chunk: 6" in caplog.text
 
             rows = c.fetchmany(2)
             assert len(rows) == 2, "The number of records"
@@ -1290,16 +1306,6 @@ def test_fetchmany_size_error(conn_cnx):
                 assert ie.errno == ER_NOT_POSITIVE_SIZE
 
 
-def test_nextset(conn_cnx, caplog):
-    """Tests no op function nextset."""
-    caplog.set_level(logging.DEBUG, "snowflake.connector")
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            caplog.set_level(logging.DEBUG, "snowflake.connector")
-            assert cur.nextset() is None
-    assert ("snowflake.connector.cursor", logging.DEBUG, "nop") in caplog.record_tuples
-
-
 def test_scroll(conn_cnx):
     """Tests if scroll returns a NotSupported exception."""
     with conn_cnx() as con:
@@ -1583,3 +1589,32 @@ def test_null_connection(conn_cnx):
             status = con.get_query_status(cur.sfqid)
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
+
+
+@pytest.mark.skipolddriver
+def test_multi_statement_failure(conn_cnx):
+    """
+    This test mocks the driver version sent to Snowflake to be 2.8.1, which does not support multi-statement.
+    The backend should not allow multi-statements to be submitted for versions older than 2.9.0 and should raise an
+    error when a multi-statement is submitted, regardless of the MULTI_STATEMENT_COUNT parameter.
+    """
+    try:
+        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+            "2.8.1",
+            (type(None), str),
+        )
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                with pytest.raises(
+                    ProgrammingError,
+                    match="Multiple SQL statements in a single API call are not supported; use one API call per statement instead.",
+                ):
+                    cur.execute(
+                        f"alter session set {PARAMETER_MULTI_STATEMENT_COUNT}=0"
+                    )
+                    cur.execute("select 1; select 2; select 3;")
+    finally:
+        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+            CLIENT_VERSION,
+            (type(None), str),
+        )

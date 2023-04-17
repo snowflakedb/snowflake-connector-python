@@ -8,9 +8,89 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.7.13 (Unreleased)
+- v3.0.3(TBD)
 
+  - Fixed a bug that prints error in logs for GET command on GCS.
+  - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
+  - Fixed a bug when writing a Pandas DataFrame with non-default index in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug when writing a Pandas DataFrame with binary data in `snowflake.connector.pandas_tool.write_pandas`.
+  - Improved type hint of `SnowflakeCursor.execute` method.
+
+- v3.0.2(March 23, 2023)
+
+  - Fixed a memory leak in the logging module of the Cython extension.
+  - Fixed a bug where the `put` command on AWS raised `AttributeError` when uploading file composed of multiple parts.
+  - Fixed a bug of incorrect type hints of `SnowflakeCursor.fetch_arrow_all` and `SnowflakeCursor.fetchall`.
+  - Fixed a bug where `snowflake.connector.util_text.split_statements` swallows the final line break in the case when there are no space between lines.
+  - Improved logging to mask tokens in case of errors.
+  - Validate SSO URL before opening it in the browser for External browser authenticator.
+
+- v3.0.1(February 28, 2023)
+
+  - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
+  - Updated async_executes method's doc-string.
+  - Errors raised now have a query field that contains the SQL query that caused them when available.
+  - Fixed a bug where MFA token caching would refuse to work until restarted instead of reauthenticating.
+  - Replaced the dependency on setuptools in favor of packaging.
+  - Fixed a bug where `AuthByKeyPair.handle_timeout` should pass keyword arguments instead of positional arguments when calling `AuthByKeyPair.prepare`.
+
+- v3.0.0(January 26, 2023)
+
+  - Fixed a bug where write_pandas did not use user-specified schema and database to create intermediate objects
+  - Fixed a bug where HTTP response code of 429 were not retried
+  - Fixed a bug where MFA token caching was not working
+  - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.1,<10.1.0
+  - Bumped pyOpenSSL dependency from <23.0.0 to <24.0.0
+  - During browser-based authentication, the SSO url is now printed before opening it in the browser
+  - Increased the level of a log for when ArrowResult cannot be imported
+  - Added a minimum MacOS version check when compiling C-extensions
+  - Enabled `fetch_arrow_all` and `fetch_arrow_batches` to handle async query results
+
+- v2.9.0(December 9, 2022)
+
+  - Fixed a bug where the permission of the file downloaded via GET command is changed
+  - Reworked authentication internals to allow users to plug custom key-pair authenticators
+  - Multi-statement query execution is now supported through `cursor.execute` and `cursor.executemany`
+    - The Snowflake parameter `MULTI_STATEMENT_COUNT` can be altered at the account, session, or statement level. An additional argument, `num_statements`, can be provided to `execute` to use this parameter at the statement level. It *must* be provided to `executemany` to submit a multi-statement query through the method. Note that bulk insert optimizations available through `executemany` are not available when submitting multi-statement queries.
+      - By default the parameter is 1, meaning only a single query can be submitted at a time
+      - Set to 0 to submit any number of statements in a multi-statement query
+      - Set to >1 to submit the specified exact number of statements in a multi-statement query
+    - Bindings are accepted in the same way for multi-statements as they are for single statement queries
+    - Asynchronous multi-statement query execution is supported. Users should still use `get_results_from_sfqid` to retrieve results
+    - To access the results of each query, users can call `SnowflakeCursor.nextset()` as specified in the DB 2.0 API (PEP-249), to iterate through each statements results
+      - The first statement's results are accessible immediately after calling `execute` (or `get_results_from_sfqid` if asynchronous) through the existing `fetch*()` methods
+
+- v2.8.3(November 28,2022)
+
+  - Bumped cryptography dependency from <39.0.0 to <41.0.0
+  - Fixed a bug where expired OCSP response cache caused infinite recursion during cache loading
+
+- v2.8.2(November 18,2022)
+
+  - Improved performance of OCSP response caching
+  - During the execution of GET commands we no longer resolve target location on the local machine
+  - Improved performance of regexes used for PUT/GET SQL statement detection. CVE-2022-42965
+
+- v2.8.1(October 30,2022)
+
+   - Bumped cryptography dependency from <37.0.0 to <39.0.0
+   - Bumped pandas dependency from <1.5.0 to <1.6.0
+   - Fixed a bug where write_pandas wouldn't write an empty DataFrame to Snowflake
+   - When closing connection async query status checking is now parallelized
+   - Fixed a bug where test logging would be enabled on Jenkins workers in non-Snowflake Jenkins machines
+   - Enhanced the atomicity of write_pandas when overwrite is set to True
+
+- v2.8.0(September 27,2022)
+
+  - Fixed a bug where rowcount was deleted when the cursor was closed
+  - Fixed a bug where extTypeName was used even when it was empty
+  - Updated how telemetry entries are constructed
+  - Added telemetry for imported root packages during run-time
+  - Added telemetry for using write_pandas
   - Fixed missing dtypes when calling fetch_pandas_all() on empty result
+  - The write_pandas function now supports providing additional arguments to be used by DataFrame.to_parquet
+  - All optional parameters of write_pandas can now be provided to pd_writer and make_pd_writer to be used with DataFrame.to_sql
 
 - v2.7.12(August 26,2022)
 

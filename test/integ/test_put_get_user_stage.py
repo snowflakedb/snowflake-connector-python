@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -16,9 +16,13 @@ import pytest
 
 from snowflake.connector.cursor import SnowflakeCursor
 
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
+
 from ..generate_test_files import generate_k_lines_of_n_files
 from ..integ_helpers import put
-from ..randomize import random_string
 
 
 @pytest.mark.aws

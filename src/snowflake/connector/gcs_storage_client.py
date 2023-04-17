@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import os
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from ._sql_util import is_put_statement
 from .compat import quote
 from .constants import (
     FILE_PROTOCOL,
@@ -52,7 +53,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         stage_info: dict[str, Any],
         cnx: SnowflakeConnection,
         command: str,
-        use_s3_regional_url=False,
+        use_s3_regional_url: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 
@@ -216,7 +217,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         # Sadly, we can only determine the src file size after we've
         # downloaded it, unlike the other cloud providers where the
         # metadata can be read beforehand.
-        self.meta.src_file_size = os.path.getsize(self.intermediate_dst_path)
+        self.meta.src_file_size = os.path.getsize(self.full_dst_file_name)
 
     def _update_presigned_url(self) -> None:
         """Updates the file metas with presigned urls if any.
@@ -269,9 +270,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             The local file path.
         """
         command = self._command
-        if FILE_PROTOCOL not in self._command or not self._cursor.PUT_SQL_RE.match(
-            command
-        ):
+        if FILE_PROTOCOL not in self._command or not is_put_statement(command):
             return None
 
         file_path_begin_index = command.find(FILE_PROTOCOL)

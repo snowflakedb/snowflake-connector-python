@@ -1,25 +1,32 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
+import inspect
 import time
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
 
-from snowflake.connector.auth import Auth
-from snowflake.connector.auth_default import AuthByDefault
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+
+try:  # pragma: no cover
+    from snowflake.connector.auth import Auth, AuthByDefault, AuthByPlugin
+except ImportError:
+    from snowflake.connector.auth import Auth
+    from snowflake.connector.auth_by_plugin import AuthByPlugin
+    from snowflake.connector.auth_default import AuthByDefault
 
 
 def _init_rest(application, post_requset):
     connection = MagicMock()
     connection._login_timeout = 120
+    connection.login_timeout = 120
     connection._network_timeout = None
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
@@ -213,3 +220,55 @@ def test_auth_password_change():
         auth_instance, account, user, password_callback=_password_callback
     )
     assert not rest._connection.errorhandler.called  # not error
+
+
+def test_authbyplugin_abc_api():
+    """This test verifies that the abstract function signatures have not changed."""
+    bc = AuthByPlugin
+
+    # Verify properties
+    assert inspect.isdatadescriptor(bc.timeout)
+    assert inspect.isdatadescriptor(bc.type_)
+    assert inspect.isdatadescriptor(bc.assertion_content)
+
+    # Verify method signatures
+    # update_body
+    assert inspect.isfunction(bc.update_body)
+    assert str(inspect.signature(bc.update_body).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('body', <Parameter \"body: 'dict[Any, Any]'\">)])"
+    )
+
+    # authenticate
+    assert inspect.isfunction(bc.prepare)
+    assert str(inspect.signature(bc.prepare).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
+        "('authenticator', <Parameter \"authenticator: 'str'\">), "
+        "('service_name', <Parameter \"service_name: 'str | None'\">), "
+        "('account', <Parameter \"account: 'str'\">), "
+        "('user', <Parameter \"user: 'str'\">), "
+        "('password', <Parameter \"password: 'str | None'\">), "
+        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
+    )
+
+    # handle_failure
+    assert inspect.isfunction(bc._handle_failure)
+    assert str(inspect.signature(bc._handle_failure).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
+        "('ret', <Parameter \"ret: 'dict[Any, Any]'\">), "
+        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
+    )
+
+    # handle_timeout
+    assert inspect.isfunction(bc.handle_timeout)
+    assert str(inspect.signature(bc.handle_timeout).parameters) == (
+        "OrderedDict([('self', <Parameter \"self\">), "
+        "('authenticator', <Parameter \"authenticator: 'str'\">), "
+        "('service_name', <Parameter \"service_name: 'str | None'\">), "
+        "('account', <Parameter \"account: 'str'\">), "
+        "('user', <Parameter \"user: 'str'\">), "
+        "('password', <Parameter \"password: 'str'\">), "
+        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
+    )

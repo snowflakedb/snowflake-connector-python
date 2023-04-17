@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -59,6 +59,10 @@ class SFDictCache(Generic[K, V]):
         self._lock = Lock()
         self._reset_telemetry()
 
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
     @classmethod
     def from_dict(
         cls,
@@ -97,11 +101,16 @@ class SFDictCache(Generic[K, V]):
             self._hit(k)
         return v
 
-    def _setitem(
+    def _getitem_non_locking(
         self,
         k: K,
-        v: V,
-    ) -> None:
+        *,
+        should_record_hits: bool = True,
+    ) -> V:
+        # aliasing _getitem to unify the api with SFDictFileCache
+        return self._getitem(k, should_record_hits=should_record_hits)
+
+    def _setitem(self, k: K, v: V) -> None:
         """Non-locking version of __setitem__.
 
         This should only be used by internal functions when already
@@ -337,6 +346,15 @@ class SFDictFileCache(SFDictCache):
 
     # This number decides the chance of saving after writing (probability: 1/n+1)
     MAX_RAND_INT = 9
+    _ATTRIBUTES_TO_PICKLE = (
+        "_entry_lifetime",
+        "_cache",
+        "telemetry",
+        "file_path",
+        "file_timeout",
+        "_file_lock_path",
+        "last_loaded",
+    )
 
     def __init__(
         self,
@@ -403,6 +421,39 @@ class SFDictFileCache(SFDictCache):
         if os.path.exists(self.file_path):
             self._load()
 
+    def _getitem_non_locking(
+        self,
+        k: K,
+        *,
+        should_record_hits: bool = True,
+    ) -> V:
+        """Non-locking version of __getitem__ of SFDictFileCache.
+
+        This should only be used by internal functions when already
+        holding self._lock.
+
+        Note that we do not overwrite _getitem because _getitem is used by
+        self._load to clear in-memory expired caches. Overwriting would cause
+        infinite recursive call.
+        """
+        if k not in self._cache:
+            loaded = self._load_if_should()
+            if (not loaded) or k not in self._cache:
+                self._miss(k)
+                raise KeyError
+        t, v = self._cache[k]
+        if is_expired(t):
+            loaded = self._load_if_should()
+            expire_item = True
+            if loaded:
+                t, v = self._cache[k]
+                expire_item = is_expired(t)
+            if expire_item:
+                # Raises KeyError
+                self._expire(k)
+        self._hit(k)
+        return v
+
     def __getitem__(self, k: K) -> V:
         """Returns an element if it hasn't expired yet in a thread-safe way."""
         self._lock.acquire()
@@ -456,7 +507,8 @@ class SFDictFileCache(SFDictCache):
             )
             self.last_loaded = now()
             return True
-        except OSError:
+        except Exception as e:
+            logger.debug("Fail to read cache from disk due to error: %s", e)
             return False
 
     def _save(self, load_first: bool = True) -> bool:
@@ -474,22 +526,27 @@ class SFDictFileCache(SFDictCache):
                     )
                     with open(tmp_file, "wb") as w_file:
                         pickle.dump(self, w_file)
+                    # We write to a tmp file and then move it to have atomic write
+                    os.replace(tmp_file_path, self.file_path)
+                    self.last_loaded = datetime.datetime.fromtimestamp(
+                        getmtime(self.file_path),
+                    )
+                    return True
                 except OSError as o_err:
                     raise PermissionError(
                         o_err.errno,
                         "Cache folder is not writeable",
                         _dir,
                     )
-                # We write to a tmp file and then move it to have atomic write
-                os.replace(tmp_file_path, self.file_path)
-                self.last_loaded = datetime.datetime.fromtimestamp(
-                    getmtime(self.file_path),
-                )
-                return True
+                finally:
+                    if os.path.exists(tmp_file_path) and os.path.isfile(tmp_file_path):
+                        os.unlink(tmp_file_path)
         except Timeout:
             logger.debug(
                 f"acquiring {self._file_lock_path} timed out, skipping saving..."
             )
+        except Exception as e:
+            logger.debug("Fail to write cache to disk due to error: %s", e)
         return False
 
     def _save_if_should(self) -> bool:
@@ -556,10 +613,11 @@ class SFDictFileCache(SFDictCache):
     # Custom pickling implementation
 
     def __getstate__(self) -> dict:
-        state = self.__dict__.copy()
-        del state["_lock"]
-        del state["_file_lock"]
-        return state
+        return {
+            k: v
+            for k, v in self.__dict__.items()
+            if k in SFDictFileCache._ATTRIBUTES_TO_PICKLE
+        }
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)

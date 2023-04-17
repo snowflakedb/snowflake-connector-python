@@ -13,6 +13,7 @@ exclude .git-blame-ignore-revs
 exclude .pre-commit-config.yaml
 exclude license_header.txt
 exclude tox.ini
+exclude mypy.ini
 
 prune ci
 prune benchmark
@@ -20,3 +21,4 @@ prune test
 prune tested_requirements
 prune src/snowflake/connector/cpp/scripts
 prune __pycache__
+prune samples

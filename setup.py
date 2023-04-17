@@ -49,11 +49,13 @@ try:
 
     _ABLE_TO_COMPILE_EXTENSIONS = True
 except ImportError:
-    warnings.warn("Cannot compile native C code, because of a missing build dependency")
+    warnings.warn(
+        "Cannot compile native C code, because of a missing build dependency",
+        stacklevel=1,
+    )
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
-
     pyarrow_version = tuple(int(x) for x in pyarrow.__version__.split("."))
     extensions = cythonize(
         [
@@ -66,28 +68,49 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
     )
 
     class MyBuildExt(build_ext):
-
         # list of libraries that will be bundled with python connector,
         # this list should be carefully examined when pyarrow lib is
         # upgraded
         arrow_libs_to_copy = {
-            "linux": ["libarrow.so.800", "libarrow_python.so.800", "libparquet.so.800"],
-            "darwin": [
-                "libarrow.800.dylib",
-                "libarrow_python.800.dylib",
-                "libparquet.800.dylib",
+            "linux": [
+                "libarrow.so.1000",
+                "libarrow_dataset.so.1000",
+                "libarrow_python.so.1000",
+                "libparquet.so.1000",
             ],
-            "win32": ["arrow.dll", "arrow_python.dll", "parquet.dll"],
+            "darwin": [
+                "libarrow.1000.dylib",
+                "libarrow_dataset.1000.dylib",
+                "libarrow_python.1000.dylib",
+                "libparquet.1000.dylib",
+            ],
+            "win32": [
+                "arrow.dll",
+                "arrow_dataset.dll",
+                "arrow_python.dll",
+                "parquet.dll",
+            ],
         }
 
         arrow_libs_to_link = {
-            "linux": ["libarrow.so.800", "libarrow_python.so.800", "libparquet.so.800"],
-            "darwin": [
-                "libarrow.800.dylib",
-                "libarrow_python.800.dylib",
-                "libparquet.800.dylib",
+            "linux": [
+                "libarrow.so.1000",
+                "libarrow_dataset.so.1000",
+                "libarrow_python.so.1000",
+                "libparquet.so.1000",
             ],
-            "win32": ["arrow.lib", "arrow_python.lib", "parquet.lib"],
+            "darwin": [
+                "libarrow.1000.dylib",
+                "libarrow_dataset.1000.dylib",
+                "libarrow_python.1000.dylib",
+                "libparquet.1000.dylib",
+            ],
+            "win32": [
+                "arrow.lib",
+                "arrow_dataset.lib",
+                "arrow_python.lib",
+                "parquet.lib",
+            ],
         }
 
         def build_extension(self, ext):
@@ -126,14 +149,18 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ext.include_dirs.append(LOGGING_SRC_DIR)
 
                 if sys.platform == "win32":
+                    if not any("/std" not in s for s in ext.extra_compile_args):
+                        ext.extra_compile_args.append("/std:c++17")
                     ext.include_dirs.append(pyarrow.get_include())
                     ext.include_dirs.append(numpy.get_include())
                 elif sys.platform == "linux" or sys.platform == "darwin":
                     ext.extra_compile_args.append("-isystem" + pyarrow.get_include())
                     ext.extra_compile_args.append("-isystem" + numpy.get_include())
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
-                        ext.extra_compile_args.append("-std=c++11")
+                        ext.extra_compile_args.append("-std=c++17")
                         ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
+                    if sys.platform == "darwin":
+                        ext.extra_compile_args.append("-mmacosx-version-min=10.13")
 
                 ext.library_dirs.append(
                     os.path.join(current_dir, self.build_lib, "snowflake", "connector")
@@ -160,9 +187,11 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
         def _copy_arrow_lib(self):
             libs_to_bundle = self.arrow_libs_to_copy[sys.platform]
 
+            build_dir = os.path.join(self.build_lib, "snowflake", "connector")
+            os.makedirs(build_dir, exist_ok=True)
+
             for lib in libs_to_bundle:
                 source = f"{self._get_arrow_lib_dir()}/{lib}"
-                build_dir = os.path.join(self.build_lib, "snowflake", "connector")
                 copy(source, build_dir)
 
         def _get_arrow_lib_as_linker_input(self):

@@ -36,7 +36,7 @@ if %errorlevel% neq 0 goto :error
 call %venv_dir%\scripts\activate
 if %errorlevel% neq 0 goto :error
 
-python -m pip install -U pip tox tox-external-wheels
+python -m pip install -U pip "tox<4" tox-external-wheels
 if %errorlevel% neq 0 goto :error
 
 cd %CONNECTOR_DIR%

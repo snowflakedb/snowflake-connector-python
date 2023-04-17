@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 from __future__ import annotations
 
 from collections import defaultdict
 from enum import Enum, auto, unique
-from typing import Any, Callable, DefaultDict, NamedTuple
+from typing import TYPE_CHECKING, Any, Callable, DefaultDict, NamedTuple
 
-from .options import installed_pandas
 from .options import pyarrow as pa
 
-if installed_pandas:
-    DataType = pa.DataType
-else:
-    DataType = None
+if TYPE_CHECKING:
+    from pyarrow import DataType
 
 
 DBAPI_TYPE_STRING = 0
@@ -32,7 +30,7 @@ class FieldType(NamedTuple):
 # This type mapping holds column type definitions.
 #  Be careful to not change the ordering as the index is what Snowflake
 #  gives to as schema
-FIELD_TYPES: tuple[FieldType] = (
+FIELD_TYPES: tuple[FieldType, ...] = (
     FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.int64()),
     FieldType(
         name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.float64()
@@ -229,6 +227,7 @@ PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = "PYTHON_CONNECTOR_QUERY_RESULT_
 PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = (
     "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1"
 )
+PARAMETER_MULTI_STATEMENT_COUNT = "MULTI_STATEMENT_COUNT"
 
 HTTP_HEADER_CONTENT_TYPE = "Content-Type"
 HTTP_HEADER_CONTENT_ENCODING = "Content-Encoding"

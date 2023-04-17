@@ -1,6 +1,6 @@
 #!/usr/bin/env python -O
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 """Script to test database capabilities and the DB-API interface.
@@ -19,7 +19,10 @@ import pytz
 
 from snowflake.connector.dbapi import DateFromTicks, TimeFromTicks, TimestampFromTicks
 
-from ..randomize import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 
 def table_exists(conn_cnx, name):

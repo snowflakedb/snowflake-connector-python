@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -53,19 +53,20 @@ urlsplit = urllib.parse.urlsplit
 urlunsplit = urllib.parse.urlunsplit
 parse_qs = urllib.parse.parse_qs
 urlparse = urllib.parse.urlparse
+urlunparse = urllib.parse.urlunparse
 
 NUM_DATA_TYPES += (int, float, decimal.Decimal)
 
 
-def PKCS5_UNPAD(v):
+def PKCS5_UNPAD(v: bytes) -> bytes:
     return v[0 : -v[-1]]
 
 
-def PKCS5_OFFSET(v):
+def PKCS5_OFFSET(v: bytes) -> int:
     return v[-1]
 
 
-def IS_BINARY(v):
+def IS_BINARY(v: bytearray | bytes | str) -> bool:
     return isinstance(v, (bytes, bytearray))
 
 
@@ -73,6 +74,7 @@ METHOD_NOT_ALLOWED = http.client.METHOD_NOT_ALLOWED
 BAD_GATEWAY = http.client.BAD_GATEWAY
 BAD_REQUEST = http.client.BAD_REQUEST
 REQUEST_TIMEOUT = http.client.REQUEST_TIMEOUT
+TOO_MANY_REQUESTS = http.client.TOO_MANY_REQUESTS
 SERVICE_UNAVAILABLE = http.client.SERVICE_UNAVAILABLE
 GATEWAY_TIMEOUT = http.client.GATEWAY_TIMEOUT
 FORBIDDEN = http.client.FORBIDDEN

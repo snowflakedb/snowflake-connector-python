@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 """Script to test database capabilities and the DB-API interface for functionality and data integrity.
@@ -18,7 +18,10 @@ import snowflake.connector
 import snowflake.connector.dbapi
 from snowflake.connector import dbapi, errorcode, errors
 
-from ..randomize import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 TABLE1 = "dbapi_ddl1"
 TABLE2 = "dbapi_ddl2"

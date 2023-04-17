@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 from collections import namedtuple
 from datetime import date, datetime, timedelta
+from time import struct_time
 
 ZERO_TIMEDELTA = timedelta(0)
 
@@ -34,14 +35,14 @@ ElementType = {
 }
 
 
-def sfdatetime_total_seconds_from_timedelta(td):
+def sfdatetime_total_seconds_from_timedelta(td: timedelta) -> int:
     return (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10**6) // 10**6
 
 
 SnowflakeDateTime = namedtuple("SnowflakeDateTime", "datetime nanosecond scale")
 
 
-def _support_negative_year(value, year_len):
+def _support_negative_year(value: SnowflakeDateTime, year_len: int) -> str:
     # if YYYY/YY is included
     return _build_year_format(value.datetime, year_len)
 
@@ -51,7 +52,7 @@ def _support_negative_year_datetime(value, year_len):
     return _build_year_format(value, year_len)
 
 
-def _build_year_format(dt, year_len):
+def _build_year_format(dt: datetime | struct_time, year_len: int) -> str:
     if hasattr(dt, "year"):
         # datetime
         year_raw_value = dt.year
@@ -61,12 +62,12 @@ def _build_year_format(dt, year_len):
     return _build_raw_year_format(year_raw_value, year_len)
 
 
-def _support_negative_year_struct_time(dt, year_len):
+def _support_negative_year_struct_time(dt: struct_time, year_len: int) -> str:
     # struct_time
     return _build_raw_year_format(dt.tm_year, year_len)
 
 
-def _build_raw_year_format(year_raw_value, year_len):
+def _build_raw_year_format(year_raw_value: int, year_len: int) -> str:
     sign_char = ""
     if year_raw_value < 0:
         sign_char = "-"
@@ -82,7 +83,7 @@ def _support_negative_year_date(value, year_len):
     return _build_year_format(value, year_len)
 
 
-def _inject_fraction(value, fraction_len):
+def _inject_fraction(value: SnowflakeDateTime | datetime, fraction_len: int) -> str:
     # if FF is included
     nano_str = "{:09d}"
 
@@ -107,7 +108,7 @@ def _inject_fraction(value, fraction_len):
     return nano_value
 
 
-def _inject_others(_, value0):
+def _inject_others(_: SnowflakeDateTime | struct_time, value0: str) -> str:
     return value0
 
 
@@ -126,11 +127,11 @@ class SnowflakeDateTimeFormat:
     def __init__(
         self,
         sql_format,
-        data_type="TIMESTAMP_NTZ",
+        data_type: str = "TIMESTAMP_NTZ",
         datetime_class=datetime,
-        support_negative_year=True,
-        inject_fraction=True,
-    ):
+        support_negative_year: bool = True,
+        inject_fraction: bool = True,
+    ) -> None:
         self._sql_format = sql_format
         self._ignore_tz = data_type in ("TIMESTAMP_NTZ", "DATE")
         if datetime_class == datetime:
@@ -148,14 +149,14 @@ class SnowflakeDateTimeFormat:
             support_negative_year=support_negative_year, inject_fraction=inject_fraction
         )
 
-    def _pre_format(self, value):
+    def _pre_format(self, value: SnowflakeDateTime | struct_time) -> str:
         fmt = []
         for e in self._elements:
             f = e[0]
             fmt.append(f(value, e[1]))
         return "".join(fmt)
 
-    def _format_SnowflakeDateTime(self, value):
+    def _format_SnowflakeDateTime(self, value: SnowflakeDateTime) -> str:
         """Formats SnowflakeDateTime object."""
         fmt = self._pre_format(value)
         dt = value.datetime
@@ -176,7 +177,7 @@ class SnowflakeDateTimeFormat:
             return value.isoformat()
         return value.strftime(fmt)
 
-    def _match_token(self, sql_fmt, candidates, ignore=False):
+    def _match_token(self, sql_fmt, candidates, ignore: bool = False):
         for c in candidates:
             if sql_fmt.startswith(c[0]):
                 if not ignore:
@@ -185,10 +186,12 @@ class SnowflakeDateTimeFormat:
         self._add_raw_char(sql_fmt[0])
         return 1
 
-    def _add_raw_char(self, ch):
+    def _add_raw_char(self, ch) -> None:
         self._elements.append((_inject_others, "%%" if ch == "%" else ch))
 
-    def _compile(self, support_negative_year=True, inject_fraction=True):
+    def _compile(
+        self, support_negative_year: bool = True, inject_fraction: bool = True
+    ) -> None:
         self._elements = []
         idx = 0
         u_sql_format = self._sql_format.upper()
@@ -315,7 +318,7 @@ class SnowflakeDateTimeFormat:
                 idx += 1
             self._optimize_elements()
 
-    def _optimize_elements(self):
+    def _optimize_elements(self) -> None:
         if len(self._elements) < 2:
             return
         last_element = self._elements[-1]
@@ -332,11 +335,11 @@ class SnowflakeDateTimeFormat:
 
 
 class SnowflakeDateFormat(SnowflakeDateTimeFormat):
-    def __init__(self, sql_format, **kwargs):
+    def __init__(self, sql_format, **kwargs) -> None:
         kwargs["inject_fraction"] = False  # no fraction
         super().__init__(sql_format, **kwargs)
 
-    def _format_struct_time(self, value):
+    def _format_struct_time(self, value: struct_time) -> str:
         """Formats struct_time."""
         fmt = self._pre_format(value)
         return str(time.strftime(fmt, value))
