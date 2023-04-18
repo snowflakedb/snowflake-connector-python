@@ -255,7 +255,6 @@ def test_put_copy_parquet_compressed(conn_cnx, db_parameters, from_path, file_sr
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-        run(cnx, "alter session set enable_parquet_filetype=true")
         run(
             cnx,
             """
@@ -281,7 +280,6 @@ stage_file_format=(type='parquet')
             assert rec[1] == "LOADED"
 
         run(cnx, "drop table if exists {name}")
-        run(cnx, "alter session unset enable_parquet_filetype")
 
 
 @pytest.mark.parametrize(
