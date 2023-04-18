@@ -28,6 +28,7 @@ from snowflake.connector.compat import (
 )
 from snowflake.connector.errors import (
     DatabaseError,
+    ForbiddenError,
     InterfaceError,
     OtherHTTPRetryableError,
 )
@@ -110,7 +111,7 @@ def test_request_exec():
 
     # forbidden on login-request raises InterfaceError
     type(request_mock).status_code = PropertyMock(return_value=FORBIDDEN)
-    with pytest.raises(InterfaceError):
+    with pytest.raises(ForbiddenError):
         rest._request_exec(session=session, **login_parameters)
 
     class IncompleteReadMock(IncompleteRead):
