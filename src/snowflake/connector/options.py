@@ -83,6 +83,7 @@ def _import_or_missing_pandas_option() -> tuple[
         from pandas import DataFrame  # NOQA
 
         pyarrow = importlib.import_module("pyarrow")
+
         # Check whether we have the currently supported pyarrow installed
         installed_packages = {
             package.metadata["Name"]: package for package in distributions()

@@ -53,7 +53,7 @@ ratio number(6,2))
                 return agent
 
             with patch(
-                "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
                 side_effect=mocked_file_agent,
             ):
                 # upload with auto compress = True
