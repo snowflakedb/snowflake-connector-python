@@ -109,7 +109,7 @@ def test_request_exec():
             session=session, catch_okta_unauthorized_error=True, **default_parameters
         )
 
-    # forbidden on login-request raises InterfaceError
+    # forbidden on login-request raises ForbiddenError
     type(request_mock).status_code = PropertyMock(return_value=FORBIDDEN)
     with pytest.raises(ForbiddenError):
         rest._request_exec(session=session, **login_parameters)
