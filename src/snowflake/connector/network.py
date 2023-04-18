@@ -11,7 +11,6 @@ import gzip
 import itertools
 import json
 import logging
-import re
 import time
 import traceback
 import uuid
@@ -183,10 +182,6 @@ OAUTH_AUTHENTICATOR = "OAUTH"
 ID_TOKEN_AUTHENTICATOR = "ID_TOKEN"
 USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 
-LOGIN_REQUEST_PATTERN = re.compile(
-    r"/session/v1/login-request\?request_id=[a-zA-Z0-9-]+&request_guid=[a-zA-Z0-9-]+"
-)
-
 
 def is_retryable_http_code(code: int) -> bool:
     """Decides whether code is a retryable HTTP issue."""
@@ -248,7 +243,7 @@ def raise_failed_request_error(
 
 
 def is_login_request(url: str) -> bool:
-    return LOGIN_REQUEST_PATTERN.search(url) is not None
+    return "/session/v1/login-request" in url
 
 
 class ProxySupportAdapter(HTTPAdapter):
@@ -1065,7 +1060,7 @@ class SnowflakeRestful:
                     return ret
 
                 if is_login_request(full_url) and raw_ret.status_code == FORBIDDEN:
-                    raise ForbiddenError()
+                    raise ForbiddenError
 
                 elif is_retryable_http_code(raw_ret.status_code):
                     error = get_http_retryable_error(raw_ret.status_code)
