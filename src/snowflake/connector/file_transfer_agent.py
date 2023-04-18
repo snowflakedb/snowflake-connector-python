@@ -1017,6 +1017,7 @@ class SnowflakeFileTransferAgent:
                         )
                     )
         elif self._command_type == CMD_TYPE_DOWNLOAD:
+            basename_counts = dict()
             for idx, file_name in enumerate(self._src_files):
                 if not file_name:
                     continue
@@ -1029,9 +1030,13 @@ class SnowflakeFileTransferAgent:
                 url = None
                 if self._presigned_urls and idx < len(self._presigned_urls):
                     url = self._presigned_urls[idx]
+
+                basename = os.path.basename(file_name)
+                basename_counts[basename] = basename_counts.get(basename, 0) + 1
+
                 self._file_metadata.append(
                     SnowflakeFileMeta(
-                        name=os.path.basename(file_name),
+                        name=basename,
                         src_file_name=file_name,
                         dst_file_name=dst_file_name,
                         stage_location_type=self._stage_location_type,
@@ -1043,6 +1048,14 @@ class SnowflakeFileTransferAgent:
                         if file_name in self._src_file_to_encryption_material
                         else None,
                     )
+                )
+
+            # TODO: remove this warning once we support directory structure for GET
+            duplicate_basenames = [k for k, v in basename_counts.items() if v > 1]
+            if duplicate_basenames:
+                logger.warning(
+                    f"Downloading multiple files with the same name could cause failures. "
+                    f"File names with multiple entries: {duplicate_basenames}"
                 )
 
     def _process_file_compression_type(self) -> None:

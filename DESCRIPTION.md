@@ -16,6 +16,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
   - Fixed a bug when writing a Pandas DataFrame with binary data in `snowflake.connector.pandas_tool.write_pandas`.
   - Improved type hint of `SnowflakeCursor.execute` method.
+  - Improved GET logging to warn when downloading multiple files with the same name.
 
 - v3.0.2(March 23, 2023)
 
