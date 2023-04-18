@@ -239,9 +239,6 @@ def test_put_copy_zstd_compressed(conn_cnx, db_parameters, from_path, file_src):
         run(cnx, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
-)
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
