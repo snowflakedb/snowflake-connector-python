@@ -58,6 +58,11 @@ def test_request_exec():
         "token": None,
     }
 
+    login_parameters = {
+        **default_parameters,
+        "full_url": "https://bad_id.snowflakecomputing.com:443/session/v1/login-request?request_id=s0m3-r3a11Y-rAnD0m-reqID&request_guid=s0m3-r3a11Y-rAnD0m-reqGUID",
+    }
+
     # request mock
     output_data = {"success": True, "code": 12345}
     request_mock = MagicMock()
@@ -102,6 +107,11 @@ def test_request_exec():
         rest._request_exec(
             session=session, catch_okta_unauthorized_error=True, **default_parameters
         )
+
+    # forbidden on login-request raises InterfaceError
+    type(request_mock).status_code = PropertyMock(return_value=FORBIDDEN)
+    with pytest.raises(InterfaceError):
+        rest._request_exec(session=session, **login_parameters)
 
     class IncompleteReadMock(IncompleteRead):
         def __init__(self):
