@@ -21,7 +21,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Generator,
     Iterator,
     NamedTuple,
     NoReturn,
