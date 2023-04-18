@@ -1243,7 +1243,7 @@ class SnowflakeCursor:
 
     def fetchone(self) -> dict | tuple | None:
         """Fetches one row."""
-        next(iter(self), None)
+        return next(iter(self), None)
 
     def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
         """Fetches the number of specified rows."""
