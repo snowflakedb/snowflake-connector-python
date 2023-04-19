@@ -651,7 +651,7 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
         from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
         with mock.patch(
-            "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+            "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
             autospec=SnowflakeFileTransferAgent,
         ) as mock_agent:
             cur.execute(f"put file://{file} @{stage_name} threshold=156")
