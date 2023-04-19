@@ -584,7 +584,7 @@ def test_put_overwrite_skip_on_content_match(
                     "~/test_put_overwrite_skip_on_content_match",
                     from_path,
                     file_stream=file_stream,
-                    sql_options="OVERWRITE = TRUE",
+                    sql_options="OVERWRITE = TRUE AUTO_COMPRESS = FALSE",
                     _skip_upload_on_content_match=False,
                 )
                 ret = cur.fetchone()
@@ -596,7 +596,7 @@ def test_put_overwrite_skip_on_content_match(
                     "~/test_put_overwrite_skip_on_content_match",
                     from_path,
                     file_stream=file_stream,
-                    sql_options="OVERWRITE = TRUE",
+                    sql_options="OVERWRITE = TRUE AUTO_COMPRESS = FALSE",
                     _skip_upload_on_content_match=True,
                 )
                 ret = cur.fetchone()
@@ -612,7 +612,7 @@ def test_put_overwrite_skip_on_content_match(
                 + os.path.basename(test_data)
                 in ret[0]
             )
-            assert test_data.name + ".gz" in ret[0]
+            assert test_data.name in ret[0]
         finally:
             if file_stream:
                 file_stream.close()
