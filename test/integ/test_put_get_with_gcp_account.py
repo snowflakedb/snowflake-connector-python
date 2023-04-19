@@ -444,7 +444,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                 mocked_get.counter = 0
 
                 with mock.patch(
-                    "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                    "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
@@ -571,7 +571,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                     return agent
 
                 with mock.patch(
-                    "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                    "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
@@ -616,7 +616,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                 mocked_get.counter = 0
 
                 with mock.patch(
-                    "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                    "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(

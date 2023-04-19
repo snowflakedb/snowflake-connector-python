@@ -81,7 +81,7 @@ def test_put_get_accelerate_user_stage(tmpdir, conn_cnx, from_path, accelerate_c
         return expected_cfg
 
     with patch(
-        "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+        "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
         side_effect=mocked_file_agent,
     ):
         with patch.multiple(
