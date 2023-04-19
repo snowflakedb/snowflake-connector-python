@@ -27,4 +27,3 @@ jobs:
           allowlist: 'dependabot[bot],github-actions,Jenkins User,sfc-gh-snyk-sca-sa'
           remote-organization-name: 'snowflakedb'
           remote-repository-name: 'cla-db'
-        
