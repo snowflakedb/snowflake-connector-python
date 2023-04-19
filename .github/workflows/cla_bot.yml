@@ -22,3 +22,8 @@ jobs:
           allowlist: 'dependabot[bot],github-actions,Jenkins User,sfc-gh-snyk-sca-sa'
           remote-organization-name: 'snowflakedb'
           remote-repository-name: 'cla-db'
+        permissions:
+          actions: write
+          contents: write
+          pull-requests: write
+          statuses: write
