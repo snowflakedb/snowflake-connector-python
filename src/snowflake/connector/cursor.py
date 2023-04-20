@@ -710,7 +710,8 @@ class SnowflakeCursor:
             _get_azure_callback: Function to which an Azure GET command should call back to.
             _get_callback_output_stream: The output stream a GET command's callback should report on.
             _show_progress_bar: Whether or not to show progress bar.
-            _statement_params: Extra information that should be sent to Snowflake with query.
+            _statement_params: Extra information that should be sent to Snowflake with query. This dict will not be
+                modified by the connector.
             _is_internal: This flag indicates whether the query is issued internally by the connector.
             _describe_only: If true, the query will not be executed but return the schema/description of this query.
             _no_results: This flag tells the back-end to not return the result, just fire the query and return the
@@ -748,11 +749,18 @@ class SnowflakeCursor:
             logger.warning("execute: no query is given to execute")
             return None
 
-        if _statement_params is None:
-            _statement_params = dict()
-
+        extra_statement_params = dict()
         if num_statements:
-            _statement_params["MULTI_STATEMENT_COUNT"] = num_statements
+            extra_statement_params["MULTI_STATEMENT_COUNT"] = num_statements
+
+        # We should not edit the original _statement_params object passed in by the caller, because the caller might
+        # reuse the same object.
+        if extra_statement_params:
+            if _statement_params is None:
+                _statement_params = dict()
+            else:
+                _statement_params = _statement_params.copy()
+            _statement_params.update(extra_statement_params)
 
         kwargs: dict[str, Any] = {
             "timeout": timeout,

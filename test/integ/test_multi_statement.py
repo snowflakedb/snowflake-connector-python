@@ -82,7 +82,12 @@ def test_multi_statement_basic(conn_cnx):
     """Selects fixed integer data using statement level parameters."""
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute("select 1; select 2; select 'a';", num_statements=3)
+            statement_params = dict()
+            cur.execute(
+                "select 1; select 2; select 'a';",
+                num_statements=3,
+                _statement_params=statement_params,
+            )
             _check_multi_statement_results(
                 cur,
                 checks=[
@@ -91,6 +96,7 @@ def test_multi_statement_basic(conn_cnx):
                     [("a",)],
                 ],
             )
+            assert len(statement_params) == 0
 
 
 def test_insert_select_multi(conn_cnx, db_parameters):
