@@ -13,8 +13,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug that prints error in logs for GET command on GCS.
   - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
   - Fixed a bug that occurred when writing a Pandas DataFrame with non-default index in `snowflake.connector.pandas_tool.write_pandas`.
-  - Fixed a bug when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
-  - Fixed a bug when writing a Pandas DataFrame with binary data in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug that occurred when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug that occurred when writing a Pandas DataFrame with binary data in `snowflake.connector.pandas_tool.write_pandas`.
   - Improved type hint of `SnowflakeCursor.execute` method.
 
 - v3.0.2(March 23, 2023)
