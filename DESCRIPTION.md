@@ -9,7 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.0.4(TBD)
-  - Fixed a bug that cursor.execute() could change user's input statement_params object if multistatement query is used.
+  - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
 
 - v3.0.3(April 20, 2023)
   - Fixed a bug that prints error in logs for GET command on GCS.
