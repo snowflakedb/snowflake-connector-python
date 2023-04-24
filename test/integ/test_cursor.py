@@ -1618,3 +1618,16 @@ def test_multi_statement_failure(conn_cnx):
             CLIENT_VERSION,
             (type(None), str),
         )
+
+
+def test_encoding_utf8_for_json_load(conn_cnx):
+    # SNOW-787480, if not explicitly setting utf-8 encoding, the data will be
+    # detected encoding as windows-1250 by chardet.detect
+    # which is wrong, with the utf-8 fix, we can get the correct decoded data
+    with conn_cnx() as con, con.cursor() as cur:
+        cur.execute("alter session set python_connector_query_result_format='JSON'")
+        ret = cur.execute(
+            """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""
+        ).fetchall()
+        assert len(ret) == 5000
+        assert ret[0] == ('"","","","","",Ofigràfic"",',)

@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.0.4(Unreleased)
+
+  - Fixed a bug that JSON formatted returning data is decoded in wrong encoding.
+
 - v3.0.3(April 20, 2023)
 
   - Fixed a bug that prints error in logs for GET command on GCS.

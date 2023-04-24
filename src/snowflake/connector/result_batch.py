@@ -423,6 +423,9 @@ class JSONResultBatch(ResultBatch):
             Unfortunately there's not type hint for this.
             For context: https://github.com/python/typing/issues/182
         """
+        # SNOW-787480, response.apparent_encoding is unreliable, chardet.detect can be wrong
+        # we set encoding to be utf-8 if encoding is not specified in the response header
+        response.encoding = response.encoding or "utf-8"
         read_data = response.text
         return json.loads("".join(["[", read_data, "]"]))
 
