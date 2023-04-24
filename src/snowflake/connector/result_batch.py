@@ -424,9 +424,15 @@ class JSONResultBatch(ResultBatch):
             For context: https://github.com/python/typing/issues/182
         """
         # SNOW-787480, response.apparent_encoding is unreliable, chardet.detect can be wrong
+        # we try decoding as utf-8 first,
         # we set encoding to be utf-8 if encoding is not specified in the response header
-        response.encoding = response.encoding or "utf-8"
-        read_data = response.text
+        try:
+            read_data = str(response.content, "utf-8", errors="strict")
+        except UnicodeError:
+            logger.debug(
+                f"utf-8 decoding failed and fell back to automatic decoder for result batch id: {self.id}"
+            )
+            read_data = response.text
         return json.loads("".join(["[", read_data, "]"]))
 
     def _parse(
