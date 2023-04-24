@@ -8,13 +8,18 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.3(TBD)
+- v3.0.4()
+  - Updated the OCSP module to urlencode OCSP requests sent to OCSP Responders.
+
+- v3.0.3(April 20, 2023)
 
   - Fixed a bug that prints error in logs for GET command on GCS.
   - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
-  - Fixed a bug when writing a Pandas DataFrame with non-default index in `snowflake.connector.pandas_tool.write_pandas`.
-  - Fixed a bug when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
-  - URLEncode OCSP Requests to OCSP Responders
+  - Fixed a bug that occurred when writing a Pandas DataFrame with non-default index in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug that occurred when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug that occurred when writing a Pandas DataFrame with binary data in `snowflake.connector.pandas_tool.write_pandas`.
+  - Improved type hint of `SnowflakeCursor.execute` method.
+  - Improved GET logging to warn when downloading multiple files with the same name.
 
 - v3.0.2(March 23, 2023)
 
