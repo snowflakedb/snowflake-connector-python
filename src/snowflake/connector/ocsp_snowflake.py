@@ -290,12 +290,7 @@ class OCSPServer:
         else:
             self.CACHE_SERVER_URL = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
 
-        self.CACHE_SERVER_ENABLED = True
-        if (
-            not use_ocsp_cache_server
-            or os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "true"
-        ):
-            self.CACHE_SERVER_ENABLED = False
+        self.CACHE_SERVER_ENABLED = use_ocsp_cache_server and os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
 
         # OCSP dynamic cache server URL pattern
         self.OCSP_RETRY_URL = None
