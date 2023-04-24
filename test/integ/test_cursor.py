@@ -53,7 +53,6 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
-from snowflake.connector.vendored.requests import Response
 
 try:
     from snowflake.connector.util_text import random_string
@@ -1621,12 +1620,15 @@ def test_multi_statement_failure(conn_cnx):
         )
 
 
+@pytest.mark.skipolddriver
 def test_encoding_utf8_for_json_load(conn_cnx):
     # SNOW-787480, if not explicitly setting utf-8 encoding, the data will be
     # detected encoding as windows-1250 by chardet.detect
     # which is wrong, with the utf-8 fix, we can get the correct decoded data
 
     local_result_batch = JSONResultBatch(None, None, None, None, None, None)
+    from snowflake.connector.vendored.requests import Response
+
     resp = Response()
     resp._content = '{"key": "á"}'.encode("latin1")
     assert local_result_batch._load(resp) == [
