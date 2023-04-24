@@ -423,9 +423,9 @@ class JSONResultBatch(ResultBatch):
             Unfortunately there's not type hint for this.
             For context: https://github.com/python/typing/issues/182
         """
-        # SNOW-787480, response.apparent_encoding is unreliable, chardet.detect can be wrong
-        # we try decoding as utf-8 first,
-        # we set encoding to be utf-8 if encoding is not specified in the response header
+        # SNOW-787480, response.apparent_encoding is unreliable, chardet.detect can be wrong which is used by
+        # response.text to decode content.
+        # Instead, we try decoding as utf-8 first, if we hit UnicodeError, we fall back to the auto-detection.
         try:
             read_data = str(response.content, "utf-8", errors="strict")
         except UnicodeError:
