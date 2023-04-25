@@ -33,6 +33,11 @@ except ImportError:
     from ..randomize import random_string
 
 
+@pytest.fixture(scope="module", params=[False, True])
+def skip_to_last_set(request) -> bool:
+    return request.param
+
+
 def test_multi_statement_wrong_count(conn_cnx):
     """Tries to send the wrong number of statements."""
     with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 1}) as con:
@@ -67,7 +72,7 @@ def _check_multi_statement_results(
     cur: snowflake.connector.cursor,
     checks: "list[list[tuple] | function]",
     skip_to_last_set: bool,
-):
+) -> None:
     savedIds = []
     for index, check in enumerate(checks):
         if not skip_to_last_set or index == len(checks) - 1:
@@ -82,7 +87,6 @@ def _check_multi_statement_results(
     assert cur.multi_statement_savedIds[-1 if skip_to_last_set else 0 :] == savedIds
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 def test_multi_statement_basic(conn_cnx, skip_to_last_set: bool):
     """Selects fixed integer data using statement level parameters."""
     with conn_cnx() as con:
@@ -105,7 +109,6 @@ def test_multi_statement_basic(conn_cnx, skip_to_last_set: bool):
             assert len(statement_params) == 0
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 def test_insert_select_multi(conn_cnx, db_parameters, skip_to_last_set: bool):
     """Naive use of multi-statement to check multiple SQL functions."""
     with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 0}) as con:
@@ -137,7 +140,6 @@ def test_insert_select_multi(conn_cnx, db_parameters, skip_to_last_set: bool):
             )
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 @pytest.mark.parametrize("style", ["pyformat", "qmark"])
 def test_binding_multi(conn_cnx, style: str, skip_to_last_set: bool):
     """Tests using pyformat and qmark style bindings with multi-statement"""
@@ -153,7 +155,6 @@ def test_binding_multi(conn_cnx, style: str, skip_to_last_set: bool):
             )
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 def test_async_exec_multi(conn_cnx, skip_to_last_set: bool):
     """Tests whether async execution query works within a multi-statement"""
     with conn_cnx() as con:
@@ -202,7 +203,6 @@ def test_async_error_multi(conn_cnx):
             assert e1.value.errno == e2.value.errno == sync_error.value.errno
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 def test_mix_sync_async_multi(conn_cnx, skip_to_last_set: bool):
     """Tests sending multiple multi-statement async queries at the same time."""
     with conn_cnx(
@@ -245,7 +245,6 @@ def test_mix_sync_async_multi(conn_cnx, skip_to_last_set: bool):
             )
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 def test_done_caching_multi(conn_cnx, skip_to_last_set: bool):
     """Tests whether get status caching is working as expected."""
     with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 0}) as con:
@@ -304,7 +303,6 @@ def test_alter_session_multi(conn_cnx):
             )
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 def test_executemany_multi(conn_cnx, skip_to_last_set: bool):
     """Tests executemany with multi-statement optimizations enabled through the num_statements parameter."""
     table1 = random_string(5, "test_executemany_multi_")
@@ -370,7 +368,6 @@ def test_executemany_multi(conn_cnx, skip_to_last_set: bool):
             )
 
 
-@pytest.mark.parametrize("skip_to_last_set", [True, False])
 def test_executmany_qmark_multi(conn_cnx, skip_to_last_set: bool):
     """Tests executemany with multi-statement optimization with qmark style."""
     table1 = random_string(5, "test_executemany_qmark_multi_")
