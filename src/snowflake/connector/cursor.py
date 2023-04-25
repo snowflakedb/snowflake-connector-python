@@ -749,18 +749,14 @@ class SnowflakeCursor:
             logger.warning("execute: no query is given to execute")
             return None
 
-        extra_statement_params = dict()
-        if num_statements:
-            extra_statement_params["MULTI_STATEMENT_COUNT"] = num_statements
-
-        # We should not edit the original _statement_params object passed in by the caller, because the caller might
-        # reuse the same object.
-        if extra_statement_params:
-            if _statement_params is None:
-                _statement_params = dict()
-            else:
-                _statement_params = _statement_params.copy()
-            _statement_params.update(extra_statement_params)
+        _statement_params = _statement_params or dict()
+        # If we need to add another parameter, please consider introducing a dict for all extra params
+        # See discussion in https://github.com/snowflakedb/snowflake-connector-python/pull/1524#discussion_r1174061775
+        if num_statements is not None:
+            _statement_params = {
+                **_statement_params,
+                "MULTI_STATEMENT_COUNT": num_statements,
+            }
 
         kwargs: dict[str, Any] = {
             "timeout": timeout,
