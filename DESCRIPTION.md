@@ -8,8 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.3(April 20, 2023)
+- v3.0.4(TBD)
+  - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
 
+- v3.0.3(April 20, 2023)
   - Fixed a bug that prints error in logs for GET command on GCS.
   - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
   - Fixed a bug that occurred when writing a Pandas DataFrame with non-default index in `snowflake.connector.pandas_tool.write_pandas`.
