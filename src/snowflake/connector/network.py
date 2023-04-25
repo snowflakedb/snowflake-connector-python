@@ -242,6 +242,10 @@ def raise_failed_request_error(
     )
 
 
+def is_login_request(url: str) -> bool:
+    return "/session/v1/login-request" in url
+
+
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
@@ -1055,7 +1059,10 @@ class SnowflakeRestful:
                         ret = raw_ret.json()
                     return ret
 
-                if is_retryable_http_code(raw_ret.status_code):
+                if is_login_request(full_url) and raw_ret.status_code == FORBIDDEN:
+                    raise ForbiddenError
+
+                elif is_retryable_http_code(raw_ret.status_code):
                     error = get_http_retryable_error(raw_ret.status_code)
                     logger.debug(f"{error}. Retrying...")
                     # retryable server exceptions
