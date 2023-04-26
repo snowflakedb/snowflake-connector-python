@@ -1621,21 +1621,18 @@ def test_multi_statement_failure(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_encoding_utf8_for_json_load(conn_cnx):
-    # SNOW-787480, if not explicitly setting utf-8 encoding, the data will be
-    # detected encoding as windows-1250 by chardet.detect
-    # which is wrong, with the utf-8 fix, we can get the correct decoded data
-
-    local_result_batch = JSONResultBatch(None, None, None, None, None, None)
-    from snowflake.connector.vendored.requests import Response
-
-    resp = Response()
-    resp._content = '{"key": "á"}'.encode("latin1")
-    assert local_result_batch._load(resp) == [
-        {"key": "с"}
-    ]  # it is expected to be wrong
-
+def test_decoding_utf8_for_json_result(conn_cnx):
+    # SNOW-787480, if not explicitly setting utf-8 decoding, the data will be
+    # detected decoding as windows-1250 by chardet.detect
     with conn_cnx() as con, con.cursor() as cur:
+        cur.execute("alter session set python_connector_query_result_format='JSON'")
+        ret = cur.execute(
+            """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""
+        ).fetchall()
+        assert len(ret) == 5000
+        assert ret[0] == ('"","","","","",OfigrĂ\xa0fic"",',)
+
+    with conn_cnx(json_result_force_utf8_decoding=True) as con, con.cursor() as cur:
         cur.execute("alter session set python_connector_query_result_format='JSON'")
         ret = cur.execute(
             """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""

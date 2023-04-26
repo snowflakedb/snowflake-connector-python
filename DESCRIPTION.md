@@ -10,7 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.0.4(Unreleased)
 
-  - Fixed a bug that JSON formatted returning data is decoded in wrong encoding.
+  - Added the json_result_force_utf8_decoding connection parameter to force decoding JSON content in utf-8 when the result format is JSON.
 
 - v3.0.3(April 20, 2023)
 
