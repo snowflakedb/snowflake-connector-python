@@ -437,7 +437,7 @@ class JSONResultBatch(ResultBatch):
                 raise Error(msg=err_msg)
         else:
             # note: SNOW-787480 response.apparent_encoding is unreliable, chardet.detect can be wrong which is used by
-            # response.text to decode content
+            # response.text to decode content, check issue: https://github.com/chardet/chardet/issues/148
             read_data = response.text
         return json.loads("".join(["[", read_data, "]"]))
 
