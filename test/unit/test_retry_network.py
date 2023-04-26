@@ -28,6 +28,7 @@ from snowflake.connector.compat import (
 )
 from snowflake.connector.errors import (
     DatabaseError,
+    ForbiddenError,
     InterfaceError,
     OtherHTTPRetryableError,
 )
@@ -56,6 +57,11 @@ def test_request_exec():
         "headers": {},
         "data": '{"code": 12345}',
         "token": None,
+    }
+
+    login_parameters = {
+        **default_parameters,
+        "full_url": "https://bad_id.snowflakecomputing.com:443/session/v1/login-request?request_id=s0m3-r3a11Y-rAnD0m-reqID&request_guid=s0m3-r3a11Y-rAnD0m-reqGUID",
     }
 
     # request mock
@@ -102,6 +108,11 @@ def test_request_exec():
         rest._request_exec(
             session=session, catch_okta_unauthorized_error=True, **default_parameters
         )
+
+    # forbidden on login-request raises ForbiddenError
+    type(request_mock).status_code = PropertyMock(return_value=FORBIDDEN)
+    with pytest.raises(ForbiddenError):
+        rest._request_exec(session=session, **login_parameters)
 
     class IncompleteReadMock(IncompleteRead):
         def __init__(self):

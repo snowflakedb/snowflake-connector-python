@@ -210,12 +210,13 @@ class AuthByPlugin(ABC):
         del authenticator, service_name, account, user, password
         logger.debug("Default timeout handler invoked for authenticator")
         if not self._retry_ctx.should_retry():
-            self._retry_ctx.reset()
-            raise OperationalError(
+            error = OperationalError(
                 msg=f"Could not connect to Snowflake backend after {self._retry_ctx.get_current_retry_count()} attempt(s)."
                 "Aborting",
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
             )
+            self._retry_ctx.reset()
+            raise error
         else:
             logger.debug(
                 f"Hit connection timeout, attempt number {self._retry_ctx.get_current_retry_count()}."

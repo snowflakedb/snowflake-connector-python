@@ -8,18 +8,18 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.4(Unreleased)
-
+- v3.0.4(TBD)
+  - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
   - Added the json_result_force_utf8_decoding connection parameter to force decoding JSON content in utf-8 when the result format is JSON.
 
 - v3.0.3(April 20, 2023)
-
   - Fixed a bug that prints error in logs for GET command on GCS.
   - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
   - Fixed a bug that occurred when writing a Pandas DataFrame with non-default index in `snowflake.connector.pandas_tool.write_pandas`.
   - Fixed a bug that occurred when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
   - Fixed a bug that occurred when writing a Pandas DataFrame with binary data in `snowflake.connector.pandas_tool.write_pandas`.
   - Improved type hint of `SnowflakeCursor.execute` method.
+  - Fail instantly upon receiving `403: Forbidden` HTTP response for a login-request.
   - Improved GET logging to warn when downloading multiple files with the same name.
 
 - v3.0.2(March 23, 2023)
