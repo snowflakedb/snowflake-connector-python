@@ -1316,6 +1316,8 @@ class SnowflakeCursor:
         to any of the fetch*() methods will return rows from the next query's set of results. Returns None if no more
         query results are available.
         """
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
         self.reset()
         if self._multi_statement_resultIds:
             self.query_result(self._multi_statement_resultIds[0])
