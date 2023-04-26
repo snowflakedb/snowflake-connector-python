@@ -69,6 +69,7 @@ def qcc_with_data(
             expected_data.priorities[i],
             expected_data.contexts[i],
         )
+    qcc_with_no_data.sync_priority_map()
     yield qcc_with_no_data
     qcc_with_no_data.clear_cache()
 
@@ -86,6 +87,7 @@ def qcc_with_data_random_order(
             expected_data.priorities[i],
             expected_data.contexts[i],
         )
+    qcc_with_no_data.sync_priority_map()
     yield qcc_with_no_data
     qcc_with_no_data.clear_cache()
 
@@ -102,6 +104,7 @@ def qcc_with_data_null_context(
             expected_data_with_null_context.priorities[i],
             expected_data_with_null_context.contexts[i],
         )
+    qcc_with_no_data.sync_priority_map()
     yield qcc_with_no_data
     qcc_with_no_data.clear_cache()
 
@@ -221,6 +224,7 @@ def test_check_cache_capacity(
         BASE_PRIORITY + MAX_CAPACITY,
         CONTEXT,
     )
+    qcc_with_data.sync_priority_map()
     qcc_with_data.check_cache_capacity()
 
     assert_cache_with_data(qcc_with_data, expected_data)
@@ -236,6 +240,7 @@ def test_update_timestamp(
         BASE_PRIORITY + update_id,
         CONTEXT,
     )
+    qcc_with_data.sync_priority_map()
     expected_data.timestamps[update_id] = BASE_READ_TIMESTAMP + update_id + 10
     assert_cache_with_data(qcc_with_data, expected_data)
 
@@ -248,6 +253,7 @@ def test_update_priority(
     qcc_with_data.merge(
         BASE_ID + update_id, BASE_READ_TIMESTAMP + update_id, updated_priority, CONTEXT
     )
+    qcc_with_data.sync_priority_map()
 
     for i in range(update_id, MAX_CAPACITY - 1):
         expected_data.ids[i] = expected_data.ids[i + 1]
@@ -266,6 +272,7 @@ def test_add_same_priority(
     i = MAX_CAPACITY
     updated_priority = BASE_PRIORITY + 1
     qcc_with_data.merge(BASE_ID + i, BASE_READ_TIMESTAMP + i, updated_priority, CONTEXT)
+    qcc_with_data.sync_priority_map()
 
     expected_data.ids[1] = BASE_ID + i
     expected_data.timestamps[1] = BASE_READ_TIMESTAMP + i
@@ -279,6 +286,7 @@ def test_same_id_with_stale_timestamp(
     qcc_with_data.merge(
         BASE_ID + i, BASE_READ_TIMESTAMP + i - 10, BASE_PRIORITY + i, CONTEXT
     )
+    qcc_with_data.sync_priority_map()
     qcc_with_data.check_cache_capacity()
 
     assert_cache_with_data(qcc_with_data, expected_data)
@@ -343,6 +351,7 @@ def test_eviction_order():
     qcc = QueryContextCache(5)
     for qce in qce_list:
         qcc.merge(qce.id, qce.read_timestamp, qce.priority, qce.context)
+    qcc.sync_priority_map()
 
     assert qcc.get_size() == 3
     assert qcc._last() == qce3
