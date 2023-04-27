@@ -278,6 +278,41 @@ def test_add_same_priority(
     expected_data.timestamps[1] = BASE_READ_TIMESTAMP + i
     assert_cache_with_data(qcc_with_data, expected_data)
 
+# helper function to shuffle priorities in all entries
+def random_priority_shuffle(num_entries: int):
+    id_list = list(range(BASE_ID, BASE_ID + num_entries))
+    priority_list = list(range(BASE_PRIORITY, BASE_PRIORITY + num_entries))
+    # Shuffle priorities randomly
+    shuffle(priority_list)
+
+    # Create a dictionary mapping IDs to their new random priorities
+    id_to_priority = dict(zip(id_list, priority_list))
+    return id_to_priority
+
+def test_priority_switch_randomized(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
+    num_retry = MAX_CAPACITY * 5
+    for i in range(num_retry):
+        # for each iteration, we simulate randomized priority switch for the batch of QCEs.
+        id_to_priority = random_priority_shuffle(MAX_CAPACITY)
+
+        # Update priorities using the random shuffle
+        for idx, (id, priority) in enumerate(id_to_priority.items()):
+            qcc_with_data.merge(id, BASE_READ_TIMESTAMP + MAX_CAPACITY + 10, priority, CONTEXT)
+
+        qcc_with_data.sync_priority_map()
+
+        # Check if the inner priority map has been correctly updated
+        for id, priority in id_to_priority.items():
+            assert qcc_with_data._priority_map[priority]._id == id
+        # Check if the inner id map has been correctly updated
+        for id in range(MAX_CAPACITY):
+            assert qcc_with_data._id_map[id]._id == id
+        # Update expected_data
+        for idx, id in enumerate(sorted(id_to_priority.keys(), key=lambda x: id_to_priority[x])):
+            expected_data.ids[idx] = id
+            expected_data.timestamps[idx] = BASE_READ_TIMESTAMP + MAX_CAPACITY + 10
+
+        assert_cache_with_data(qcc_with_data, expected_data)
 
 def test_same_id_with_stale_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
