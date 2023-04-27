@@ -207,7 +207,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "json_result_force_utf8_decoding": (
         False,
         bool,
-    ),  # Whether to force the JSON content to be decoded in utf-8, it only works when result format is JSON
+    ),  # Whether to force the JSON content to be decoded in utf-8, it is only effective when result format is JSON
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -271,7 +271,7 @@ class SnowflakeConnection:
         connection_diag_whitelist_path: path to a whitelist.json file to test with enable_connection_diag.
         json_result_force_utf8_decoding: When true, json result will be decoded in utf-8,
           when false, the encoding of the content is auto-detected. Default value is false.
-          This parameter only works when the result format is JSON.
+          This parameter is only effective when the result format is JSON.
     """
 
     OCSP_ENV_LOCK = Lock()

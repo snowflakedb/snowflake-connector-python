@@ -1630,7 +1630,13 @@ def test_decoding_utf8_for_json_result(conn_cnx):
             """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""
         ).fetchall()
         assert len(ret) == 5000
-        assert ret[0] != ('"","","","","",Ofigràfic"",',)
+        # This test case is tricky, for most of the test cases, the decoding is incorrect and can could be different
+        # on different platforms, however, due to randomness, in rare cases the decoding is indeed utf-8,
+        # the backend behavior is flaky
+        assert ret[0] in (
+            ('"","","","","",OfigrĂ\xa0fic"",',),
+            ('"","","","","",Ofigràfic"",',),
+        )
 
     with conn_cnx(json_result_force_utf8_decoding=True) as con, con.cursor() as cur:
         cur.execute("alter session set python_connector_query_result_format='JSON'")
