@@ -11,6 +11,7 @@ from io import BytesIO
 from logging import DEBUG, getLogger
 from threading import Lock
 import json
+import copy
 
 from sortedcontainers import SortedSet
 
@@ -89,6 +90,7 @@ class QueryContextCache:
         self._capacity = capacity
         self._id_map: dict[int, QueryContextElement] = {}
         self._priority_map: dict[int, QueryContextElement] = {}
+        self._intermediate_priority_map: dict[int, QueryContextElement] = {}
 
         # stores elements sorted by priority. Element with
         # least priority value has the highest priority
@@ -101,9 +103,9 @@ class QueryContextCache:
         return self._capacity
 
     def _add_qce(self, qce: QueryContextElement) -> None:
-        self._id_map[qce.id] = qce
-        self._priority_map[qce.priority] = qce
         self._tree_set.add(qce)
+        self._id_map[qce.id] = copy.deepcopy(qce)
+        self._intermediate_priority_map[qce.priority] = copy.deepcopy(qce)
 
     def _remove_qce(self, qce: QueryContextElement) -> None:
         self._id_map.pop(qce.id)
@@ -115,23 +117,24 @@ class QueryContextCache:
     ) -> None:
         self._remove_qce(old_qce)
         self._add_qce(new_qce)
+        
+    def sync_priority_map(self):
+        """
+        Sync the _intermediate_priority_map with the _priority_map at the end of the current round of merges.
+        """
+        logger.debug(f"syncPriorityMap called priority_map size = {len(self._priority_map)}, new_priority_map size = {len(self._intermediate_priority_map)}")
+        
+        self._priority_map.update(self._intermediate_priority_map)
+        # Clear the _intermediate_priority_map for the next round of QCC merge (a round consists of multiple entries)
+        self._intermediate_priority_map.clear()
 
     def merge(
         self, id: int, read_timestamp: int, priority: int, context: str
     ) -> None:
         if id in self._id_map:
             qce = self._id_map[id]
-            # when id if found in cache and we are operating on a more recent timestamp
-            if read_timestamp > qce.read_timestamp:
-                if qce.priority == priority:
-                    # same priority updates the current context object
-                    qce.read_timestamp = read_timestamp
-                    qce.context = context
-                else:
-                    # change in priority caused replacement of query context
-                    new_qce = QueryContextElement(id, read_timestamp, priority, context)
-                    self._replace_qce(qce, new_qce)
-            elif read_timestamp == qce.read_timestamp and priority != qce.priority:
+            if (read_timestamp > qce.read_timestamp) or (read_timestamp == qce.read_timestamp and priority != qce.priority):
+                # when id if found in cache and we are operating on a more recent timestamp. We do not update in-place here.
                 new_qce = QueryContextElement(id, read_timestamp, priority, context)
                 self._replace_qce(qce, new_qce)
         else:
@@ -267,6 +270,9 @@ class QueryContextCache:
                         entry.get("priority"),
                         context, 
                     )
+                
+                # Sync the priority map at the end of for loop merge.
+                self.sync_priority_map()
             except Exception as e:
                 logger.debug(f"deserialize_json_dict: Exception = {e}")
                 # clear cache due to incomplete merge
