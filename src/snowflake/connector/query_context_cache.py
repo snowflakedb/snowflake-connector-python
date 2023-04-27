@@ -124,9 +124,7 @@ class QueryContextCache:
         """
         logger.debug(f"syncPriorityMap called priority_map size = {len(self._priority_map)}, new_priority_map size = {len(self._intermediate_priority_map)}")
         
-        for key, value in self._intermediate_priority_map.items():
-            self._priority_map[key] = value
-
+        self._priority_map.update(self._intermediate_priority_map)
         # Clear the _intermediate_priority_map for the next round of QCC merge (a round consists of multiple entries)
         self._intermediate_priority_map.clear()
 
@@ -135,7 +133,7 @@ class QueryContextCache:
     ) -> None:
         if id in self._id_map:
             qce = self._id_map[id]
-            if((read_timestamp > qce.read_timestamp) or (read_timestamp == qce.read_timestamp and priority != qce.priority)):
+            if (read_timestamp > qce.read_timestamp) or (read_timestamp == qce.read_timestamp and priority != qce.priority):
                 # when id if found in cache and we are operating on a more recent timestamp. We do not update in-place here.
                 new_qce = QueryContextElement(id, read_timestamp, priority, context)
                 self._replace_qce(qce, new_qce)
