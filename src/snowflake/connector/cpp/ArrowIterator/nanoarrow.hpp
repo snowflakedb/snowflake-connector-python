@@ -1,3 +1,7 @@
+//
+// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+//
+
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -278,10 +282,10 @@ class VectorArrayStream : public EmptyArrayStream {
 
  protected:
   VectorArrayStream(struct ArrowSchema* schema, std::vector<UniqueArray> arrays)
-      : EmptyArrayStream(schema), offset_(0), arrays_(std::move(arrays)) {}
+      : EmptyArrayStream(schema), arrays_(std::move(arrays)), offset_(0) {}
 
   int get_next(struct ArrowArray* array) {
-    if (offset_ < arrays_.size()) {
+    if (offset_ < static_cast<int64_t>(arrays_.size())) {
       arrays_[offset_++].move(array);
     } else {
       array->release = nullptr;

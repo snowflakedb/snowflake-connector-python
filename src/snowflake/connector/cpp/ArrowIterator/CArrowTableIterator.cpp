@@ -316,7 +316,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
   ArrowSchemaSetName(newSchema, field->schema->name);
 
   ArrowError error;
-  int returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
+  int returnCode = ArrowArrayInitFromType(newArray, NANOARROW_TYPE_DECIMAL128);
   if (returnCode != NANOARROW_OK) {
     std::string errorInfo = Logger::formatString(
       "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
@@ -325,14 +325,17 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
   }
-
+  ArrowArrayStartAppending(newArray);
   for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
   {
     if(ArrowArrayViewIsNull(columnArray, rowIdx)) {
         ArrowArrayAppendNull(newArray, 1);
     } else {
         auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-        // TODO: nanoarrow is missing appending a decimal value to array
+        std::shared_ptr<ArrowDecimal> arrowDecimal = std::make_shared<ArrowDecimal>();
+        ArrowDecimalInit(arrowDecimal.get(), 128, 38, scale);
+        ArrowDecimalSetInt(arrowDecimal.get(), originalVal);
+        ArrowArrayAppendDecimal(newArray, arrowDecimal.get());
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
