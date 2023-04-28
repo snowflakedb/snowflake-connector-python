@@ -936,7 +936,6 @@ def test_query_resultscan_combos(conn_cnx, query_format, resultscan_format):
     ],
 )
 def test_number_fetchall_retrieve_type(conn_cnx, use_decimal, expected):
-    pytest.skip("missing decimal")
     with conn_cnx(arrow_number_to_decimal=use_decimal) as con:
         with con.cursor() as cur:
             cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
@@ -956,7 +955,6 @@ def test_number_fetchall_retrieve_type(conn_cnx, use_decimal, expected):
     ],
 )
 def test_number_fetchbatches_retrieve_type(conn_cnx, use_decimal: bool, expected: type):
-    pytest.skip("missing decimal")
     with conn_cnx(arrow_number_to_decimal=use_decimal) as con:
         with con.cursor() as cur:
             cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
@@ -1249,7 +1247,6 @@ def test_timestamp_tz(conn_cnx):
 
 
 def test_arrow_number_to_decimal(conn_cnx):
-    pytest.skip("missing decimal")
     with conn_cnx(
         session_parameters={
             PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "arrow_force"
