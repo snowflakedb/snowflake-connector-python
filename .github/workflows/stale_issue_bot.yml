@@ -5,6 +5,8 @@ on:
       staleDays:
         required: true
 
+permissions:
+  pull-request: write
 
 jobs:
   stale:
