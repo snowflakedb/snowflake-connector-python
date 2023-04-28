@@ -312,7 +312,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
   // create new schema
   ArrowSchemaInit(newSchema);
   newSchema->flags &= (field->schema->flags & ARROW_FLAG_NULLABLE); // map to nullable()
-  ArrowSchemaSetType(newSchema, NANOARROW_TYPE_DECIMAL128);  // map to arrow:float64()
+  ArrowSchemaSetTypeDecimal(newSchema, NANOARROW_TYPE_DECIMAL128, 38, scale);
   ArrowSchemaSetName(newSchema, field->schema->name);
 
   ArrowError error;
@@ -325,14 +325,17 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
     PyErr_SetString(PyExc_Exception, errorInfo.c_str());
   }
-
+  ArrowArrayStartAppending(newArray);
   for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
   {
     if(ArrowArrayViewIsNull(columnArray, rowIdx)) {
         ArrowArrayAppendNull(newArray, 1);
     } else {
         auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-        // TODO: nanoarrow is missing appending a decimal value to array
+        std::shared_ptr<ArrowDecimal> arrowDecimal = std::make_shared<ArrowDecimal>();
+        ArrowDecimalInit(arrowDecimal.get(), 128, 38, scale);
+        ArrowDecimalSetInt(arrowDecimal.get(), originalVal);
+        ArrowArrayAppendDecimal(newArray, arrowDecimal.get());
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
