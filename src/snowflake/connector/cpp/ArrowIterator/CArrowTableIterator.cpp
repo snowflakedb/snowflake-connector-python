@@ -316,7 +316,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
   ArrowSchemaSetName(newSchema, field->schema->name);
 
   ArrowError error;
-  int returnCode = ArrowArrayInitFromType(newArray, NANOARROW_TYPE_DECIMAL128);
+  int returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
   if (returnCode != NANOARROW_OK) {
     std::string errorInfo = Logger::formatString(
       "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
