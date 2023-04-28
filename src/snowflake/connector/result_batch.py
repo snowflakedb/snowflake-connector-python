@@ -16,7 +16,13 @@ from .arrow_context import ArrowConverterContext
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
-from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError, OperationalError
+from .errors import (
+    Error,
+    InterfaceError,
+    NotSupportedError,
+    OperationalError,
+    ProgrammingError,
+)
 from .network import (
     RetryRequest,
     get_http_retryable_error,
@@ -559,7 +565,6 @@ class ArrowResultBatch(ResultBatch):
         """
         from .arrow_iterator import PyArrowIterator
 
-
         iter = PyArrowIterator(
             None,
             io.BytesIO(response.content),
@@ -642,13 +647,14 @@ class ArrowResultBatch(ResultBatch):
             logger.error(f"Encountered exception when parsing Arrow chunk: {e}")
             import pickle
 
-            def dump_to_tmp_file(name:str, content:bytes):
-                import tempfile
+            def dump_to_tmp_file(name: str, content: bytes):
                 import os
+                import tempfile
+
                 fd, path = tempfile.mkstemp()
 
                 try:
-                    with os.fdopen(fd, 'wb') as tmp:
+                    with os.fdopen(fd, "wb") as tmp:
                         tmp.write(content)
                     logger.info(f"Successfully dumped {name} to {path}")
                 except Exception as exc:
