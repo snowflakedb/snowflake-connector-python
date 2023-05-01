@@ -58,6 +58,7 @@ from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
 from snowflake.connector.telemetry_oob import TelemetryService
 from snowflake.connector.time_util import DecorrelateJitterBackoff
+from snowflake.connector.url_util import url_encode_str
 
 from . import constants
 from .cache import SFDictCache, SFDictFileCache
@@ -268,7 +269,7 @@ class OCSPTelemetryData:
 class OCSPServer:
     MAX_RETRY = int(os.getenv("OCSP_MAX_RETRY", "3"))
 
-    def __init__(self) -> None:
+    def __init__(self, use_ocsp_cache_server=False) -> None:
         self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
         """
         The following will change to something like
@@ -289,9 +290,8 @@ class OCSPServer:
         else:
             self.CACHE_SERVER_URL = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
 
-        self.CACHE_SERVER_ENABLED = (
-            os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
-        )
+        self.CACHE_SERVER_ENABLED = use_ocsp_cache_server and os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED", "true") != "false"
+
         # OCSP dynamic cache server URL pattern
         self.OCSP_RETRY_URL = None
 
@@ -436,10 +436,11 @@ class OCSPServer:
 
     def generate_get_url(self, ocsp_url, b64data):
         parsed_url = urlsplit(ocsp_url)
+        urlEncodedData = url_encode_str(b64data)
         if self.OCSP_RETRY_URL is None:
-            target_url = f"{ocsp_url}/{b64data}"
+            target_url = f"{ocsp_url}/{urlEncodedData}"
         else:
-            target_url = self.OCSP_RETRY_URL.format(parsed_url.hostname, b64data)
+            target_url = self.OCSP_RETRY_URL.format(parsed_url.hostname, urlEncodedData)
 
         logger.debug("OCSP Retry URL is - %s", target_url)
         return target_url
@@ -877,7 +878,7 @@ class SnowflakeOCSP:
             logger.debug("WARNING - DRIVER CONFIGURED IN TEST MODE")
 
         self._use_post_method = use_post_method
-        self.OCSP_CACHE_SERVER = OCSPServer()
+        self.OCSP_CACHE_SERVER = OCSPServer(use_ocsp_cache_server)
 
         self.debug_ocsp_failure_url = None
 
@@ -916,7 +917,7 @@ class SnowflakeOCSP:
         4. After validating all the certs, we save OCSP_RESPONSE_VALIDATION_CACHE and ocsp response json
          onto disk.
         """
-        if not OCSP_RESPONSE_VALIDATION_CACHE:
+        if not OCSP_RESPONSE_VALIDATION_CACHE and use_ocsp_cache_server:
             SnowflakeOCSP.OCSP_CACHE.read_file(self)
 
     def validate_certfile(self, cert_filename, no_exception: bool = False):

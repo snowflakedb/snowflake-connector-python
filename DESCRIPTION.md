@@ -13,7 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug in which we cannot call `SnowflakeCursor.nextset` before fetching the result of the first query if the cursor runs an async multistatement query.
   - Bumped vendored library urllib3 to 1.26.15
   - Bumped vendored library requests to 2.29.0
-
+  - Updated the OCSP module to urlencode OCSP requests sent to OCSP Responders.
 
 - v3.0.3(April 20, 2023)
   - Fixed a bug that prints error in logs for GET command on GCS.
