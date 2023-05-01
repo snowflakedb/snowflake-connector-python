@@ -33,6 +33,11 @@ except ImportError:
     from ..randomize import random_string
 
 
+@pytest.fixture(scope="module", params=[False, True])
+def skip_to_last_set(request) -> bool:
+    return request.param
+
+
 def test_multi_statement_wrong_count(conn_cnx):
     """Tries to send the wrong number of statements."""
     with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 1}) as con:
@@ -64,25 +69,34 @@ def test_multi_statement_wrong_count(conn_cnx):
 
 
 def _check_multi_statement_results(
-    cur: snowflake.connector.cursor, checks: "list[list[tuple] | function]"
-):
+    cur: snowflake.connector.cursor,
+    checks: "list[list[tuple] | function]",
+    skip_to_last_set: bool,
+) -> None:
     savedIds = []
     for index, check in enumerate(checks):
-        if callable(check):
-            assert check(cur.fetchall())
-        else:
-            assert cur.fetchall() == check
-        savedIds.append(cur.sfqid)
+        if not skip_to_last_set or index == len(checks) - 1:
+            if callable(check):
+                assert check(cur.fetchall())
+            else:
+                assert cur.fetchall() == check
+            savedIds.append(cur.sfqid)
         assert cur.nextset() == (cur if index < len(checks) - 1 else None)
     assert cur.fetchall() == []
-    assert cur.multi_statement_savedIds == savedIds
+
+    assert cur.multi_statement_savedIds[-1 if skip_to_last_set else 0 :] == savedIds
 
 
-def test_multi_statement_basic(conn_cnx):
+def test_multi_statement_basic(conn_cnx, skip_to_last_set: bool):
     """Selects fixed integer data using statement level parameters."""
     with conn_cnx() as con:
         with con.cursor() as cur:
-            cur.execute("select 1; select 2; select 'a';", num_statements=3)
+            statement_params = dict()
+            cur.execute(
+                "select 1; select 2; select 'a';",
+                num_statements=3,
+                _statement_params=statement_params,
+            )
             _check_multi_statement_results(
                 cur,
                 checks=[
@@ -90,10 +104,12 @@ def test_multi_statement_basic(conn_cnx):
                     [(2,)],
                     [("a",)],
                 ],
+                skip_to_last_set=skip_to_last_set,
             )
+            assert len(statement_params) == 0
 
 
-def test_insert_select_multi(conn_cnx, db_parameters):
+def test_insert_select_multi(conn_cnx, db_parameters, skip_to_last_set: bool):
     """Naive use of multi-statement to check multiple SQL functions."""
     with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 0}) as con:
         with con.cursor() as cur:
@@ -120,11 +136,12 @@ def test_insert_select_multi(conn_cnx, db_parameters):
                     [(65432,), (98765,), (123456,)],
                     [(f"{table_name} successfully dropped.",)],
                 ],
+                skip_to_last_set=skip_to_last_set,
             )
 
 
 @pytest.mark.parametrize("style", ["pyformat", "qmark"])
-def test_binding_multi(conn_cnx, style: str):
+def test_binding_multi(conn_cnx, style: str, skip_to_last_set: bool):
     """Tests using pyformat and qmark style bindings with multi-statement"""
     test_string = "select {s}; select {s}, {s}; select {s}, {s}, {s};"
     with conn_cnx(paramstyle=style) as con:
@@ -132,11 +149,13 @@ def test_binding_multi(conn_cnx, style: str):
             sql = test_string.format(s="%s" if style == "pyformat" else "?")
             cur.execute(sql, (10, 20, 30, "a", "b", "c"), num_statements=3)
             _check_multi_statement_results(
-                cur, checks=[[(10,)], [(20, 30)], [("a", "b", "c")]]
+                cur,
+                checks=[[(10,)], [(20, 30)], [("a", "b", "c")]],
+                skip_to_last_set=skip_to_last_set,
             )
 
 
-def test_async_exec_multi(conn_cnx):
+def test_async_exec_multi(conn_cnx, skip_to_last_set: bool):
     """Tests whether async execution query works within a multi-statement"""
     with conn_cnx() as con:
         with con.cursor() as cur:
@@ -154,7 +173,9 @@ def test_async_exec_multi(conn_cnx):
 
             cur.get_results_from_sfqid(q_id)
             _check_multi_statement_results(
-                cur, checks=[[(1,)], [(2,)], lambda x: x > [(0,)], [("b",)]]
+                cur,
+                checks=[[(1,)], [(2,)], lambda x: x > [(0,)], [("b",)]],
+                skip_to_last_set=skip_to_last_set,
             )
 
 
@@ -182,7 +203,7 @@ def test_async_error_multi(conn_cnx):
             assert e1.value.errno == e2.value.errno == sync_error.value.errno
 
 
-def test_mix_sync_async_multi(conn_cnx):
+def test_mix_sync_async_multi(conn_cnx, skip_to_last_set: bool):
     """Tests sending multiple multi-statement async queries at the same time."""
     with conn_cnx(
         session_parameters={
@@ -212,15 +233,19 @@ def test_mix_sync_async_multi(conn_cnx):
             assert cur.fetchall() == [("USELESSTABLE successfully dropped.",)]
             cur.get_results_from_sfqid(sf_qid1)
             _check_multi_statement_results(
-                cur, checks=[[(1,)], [("a",)], [("row1", 1), ("row2", 2), ("row3", 3)]]
+                cur,
+                checks=[[(1,)], [("a",)], [("row1", 1), ("row2", 2), ("row3", 3)]],
+                skip_to_last_set=skip_to_last_set,
             )
             cur.get_results_from_sfqid(sf_qid2)
             _check_multi_statement_results(
-                cur, checks=[[(2,)], [("b",)], [("row1", 1), ("row2", 2), ("row3", 3)]]
+                cur,
+                checks=[[(2,)], [("b",)], [("row1", 1), ("row2", 2), ("row3", 3)]],
+                skip_to_last_set=skip_to_last_set,
             )
 
 
-def test_done_caching_multi(conn_cnx):
+def test_done_caching_multi(conn_cnx, skip_to_last_set: bool):
     """Tests whether get status caching is working as expected."""
     with conn_cnx(session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 0}) as con:
         with con.cursor() as cur:
@@ -238,7 +263,9 @@ def test_done_caching_multi(conn_cnx):
             assert con.get_query_status(qid1) == QueryStatus.SUCCESS
             cur.get_results_from_sfqid(qid1)
             _check_multi_statement_results(
-                cur, checks=[[(1,)], [("a",)], lambda x: x > [(0,)]]
+                cur,
+                checks=[[(1,)], [("a",)], lambda x: x > [(0,)]],
+                skip_to_last_set=skip_to_last_set,
             )
             assert len(con._async_sfqids) == 1
             assert len(con._done_async_sfqids) == 1
@@ -247,7 +274,9 @@ def test_done_caching_multi(conn_cnx):
             assert con.get_query_status(qid2) == QueryStatus.SUCCESS
             cur.get_results_from_sfqid(qid2)
             _check_multi_statement_results(
-                cur, checks=[[(2,)], [("b",)], lambda x: x > [(0,)]]
+                cur,
+                checks=[[(2,)], [("b",)], lambda x: x > [(0,)]],
+                skip_to_last_set=skip_to_last_set,
             )
             assert len(con._async_sfqids) == 0
             assert len(con._done_async_sfqids) == 2
@@ -274,7 +303,7 @@ def test_alter_session_multi(conn_cnx):
             )
 
 
-def test_executemany_multi(conn_cnx):
+def test_executemany_multi(conn_cnx, skip_to_last_set: bool):
     """Tests executemany with multi-statement optimizations enabled through the num_statements parameter."""
     table1 = random_string(5, "test_executemany_multi_")
     table2 = random_string(5, "test_executemany_multi_")
@@ -303,6 +332,7 @@ def test_executemany_multi(conn_cnx):
             _check_multi_statement_results(
                 cur,
                 checks=[[(1234,), (234,), (34,), (4,)], [(4,), (34,), (234,), (1234,)]],
+                skip_to_last_set=skip_to_last_set,
             )
 
     with conn_cnx() as con:
@@ -334,10 +364,11 @@ def test_executemany_multi(conn_cnx):
                     [(12345,), (1234,), (234,), (34,), (4,)],
                     [(4,), (34,), (234,), (1234,), (12345,)],
                 ],
+                skip_to_last_set=skip_to_last_set,
             )
 
 
-def test_executmany_qmark_multi(conn_cnx):
+def test_executmany_qmark_multi(conn_cnx, skip_to_last_set: bool):
     """Tests executemany with multi-statement optimization with qmark style."""
     table1 = random_string(5, "test_executemany_qmark_multi_")
     table2 = random_string(5, "test_executemany_qmark_multi_")
@@ -369,4 +400,5 @@ def test_executmany_qmark_multi(conn_cnx):
                     [(1234,), (234,), (34,), (4,)],
                     [(4,), (34,), (234,), (1234,)],
                 ],
+                skip_to_last_set=skip_to_last_set,
             )

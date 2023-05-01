@@ -9,6 +9,8 @@ on:
 jobs:
   create-issue:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     if: ((github.event_name == 'issue_comment' && github.event.comment.body == 'recreate jira' && github.event.comment.user.login == 'sfc-gh-mkeller') || (github.event_name == 'issues' && github.event.pull_request.user.login != 'whitesource-for-github-com[bot]'))
     steps:
       - name: Checkout
