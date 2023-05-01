@@ -84,6 +84,18 @@ PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const
   int64_t bytes_start = 16 * (m_array->array->offset + rowIndex);
   const char* ptr_start = m_array->buffer_views[1].data.as_char;
   PyObject* int128_bytes = PyBytes_FromStringAndSize(&(ptr_start[bytes_start]), 16);
+  /**
+  # Alternatively, the decimal conversion can be implemented using the ArrowDecimal related APIs in the following
+  # code snippets, however, it's less performant than the direct memory manipulation.
+  # The code snippets here is for context reference.
+
+  ArrowDecimal arrowDecimal;
+  ArrowDecimalInit(&arrowDecimal, 128, precision, scale);
+  ArrowArrayViewGetDecimalUnsafe(m_array, rowIndex, &arrowDecimal);
+  uint8_t outBytes[16];
+  ArrowDecimalGetBytes(&arrowDecimal, outBytes);
+  PyObject* int128_bytes = PyBytes_FromStringAndSize(&outBytes, 16);
+  */
   return PyObject_CallMethod(m_context, "DECIMAL128_to_decimal", "Si", int128_bytes, m_scale);
 }
 
