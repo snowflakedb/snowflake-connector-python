@@ -51,6 +51,7 @@ from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_NOT_POSITIVE_SIZE,
 )
+from snowflake.connector.errors import Error
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
@@ -1649,3 +1650,11 @@ def test_decoding_utf8_for_json_result(conn_cnx):
         ret = cur.execute(sql).fetchall()
         assert len(ret) == 5000
         assert ret[0] == ('"","","","","",Ofigràfic"",',)
+
+    result_batch = JSONResultBatch(
+        None, None, None, None, None, False, json_result_force_utf8_decoding=True
+    )
+    mock_resp = mock.Mock()
+    mock_resp.content = "À".encode("latin1")
+    with pytest.raises(Error):
+        result_batch._load(mock_resp)
