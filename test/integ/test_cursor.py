@@ -51,6 +51,7 @@ from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_NOT_POSITIVE_SIZE,
 )
+from snowflake.connector.errors import Error
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
@@ -1618,3 +1619,42 @@ def test_multi_statement_failure(conn_cnx):
             CLIENT_VERSION,
             (type(None), str),
         )
+
+
+@pytest.mark.skipolddriver
+def test_decoding_utf8_for_json_result(conn_cnx):
+    # SNOW-787480, if not explicitly setting utf-8 decoding, the data will be
+    # detected decoding as windows-1250 by chardet.detect
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": "JSON"}
+    ) as con, con.cursor() as cur:
+        sql = """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""
+        ret = cur.execute(sql).fetchall()
+        assert len(ret) == 5000
+        # This test case is tricky, for most of the test cases, the decoding is incorrect and can could be different
+        # on different platforms, however, due to randomness, in rare cases the decoding is indeed utf-8,
+        # the backend behavior is flaky
+        assert ret[0] in (
+            ('"","","","","",OfigrĂ\xa0fic"",',),  # AWS Cloud
+            ('"","","","","",OfigrÃ\xa0fic"",',),  # GCP Mac and Linux Cloud
+            ('"","","","","",Ofigr\xc3\\xa0fic"",',),  # GCP Windows Cloud
+            (
+                '"","","","","",Ofigràfic"",',
+            ),  # regression environment gets the correct decoding
+        )
+
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": "JSON"},
+        json_result_force_utf8_decoding=True,
+    ) as con, con.cursor() as cur:
+        ret = cur.execute(sql).fetchall()
+        assert len(ret) == 5000
+        assert ret[0] == ('"","","","","",Ofigràfic"",',)
+
+    result_batch = JSONResultBatch(
+        None, None, None, None, None, False, json_result_force_utf8_decoding=True
+    )
+    mock_resp = mock.Mock()
+    mock_resp.content = "À".encode("latin1")
+    with pytest.raises(Error):
+        result_batch._load(mock_resp)

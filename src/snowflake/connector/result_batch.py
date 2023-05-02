@@ -132,6 +132,7 @@ def create_batches_from_response(
                     schema,
                     column_converters,
                     cursor._use_dict_result,
+                    json_result_force_utf8_decoding=cursor._connection._json_result_force_utf8_decoding,
                 )
                 for c in chunks
             ]
@@ -384,6 +385,8 @@ class JSONResultBatch(ResultBatch):
         schema: Sequence[ResultMetadata],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
+        *,
+        json_result_force_utf8_decoding: bool = False,
     ) -> None:
         super().__init__(
             rowcount,
@@ -392,6 +395,7 @@ class JSONResultBatch(ResultBatch):
             schema,
             use_dict_result,
         )
+        self._json_result_force_utf8_decoding = json_result_force_utf8_decoding
         self.column_converters = column_converters
 
     @classmethod
@@ -420,10 +424,21 @@ class JSONResultBatch(ResultBatch):
 
         Returns:
             Whatever ``json.loads`` return, but in a list.
-            Unfortunately there's not type hint for this.
+            Unfortunately there's no type hint for this.
             For context: https://github.com/python/typing/issues/182
         """
-        read_data = response.text
+        # if users specify how to decode the data, we decode the bytes using the specified encoding
+        if self._json_result_force_utf8_decoding:
+            try:
+                read_data = str(response.content, "utf-8", errors="strict")
+            except Exception as exc:
+                err_msg = f"failed to decode json result content due to error {exc!r}"
+                logger.error(err_msg)
+                raise Error(msg=err_msg)
+        else:
+            # note: SNOW-787480 response.apparent_encoding is unreliable, chardet.detect can be wrong which is used by
+            # response.text to decode content, check issue: https://github.com/chardet/chardet/issues/148
+            read_data = response.text
         return json.loads("".join(["[", read_data, "]"]))
 
     def _parse(
