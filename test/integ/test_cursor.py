@@ -1624,24 +1624,25 @@ def test_multi_statement_failure(conn_cnx):
 def test_decoding_utf8_for_json_result(conn_cnx):
     # SNOW-787480, if not explicitly setting utf-8 decoding, the data will be
     # detected decoding as windows-1250 by chardet.detect
-    with conn_cnx() as con, con.cursor() as cur:
-        cur.execute("alter session set python_connector_query_result_format='JSON'")
-        ret = cur.execute(
-            """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""
-        ).fetchall()
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": "JSON"}
+    ) as con, con.cursor() as cur:
+        sql = """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""
+        ret = cur.execute(sql).fetchall()
         assert len(ret) == 5000
         # This test case is tricky, for most of the test cases, the decoding is incorrect and can could be different
         # on different platforms, however, due to randomness, in rare cases the decoding is indeed utf-8,
         # the backend behavior is flaky
         assert ret[0] in (
-            ('"","","","","",OfigrĂ\xa0fic"",',),
-            ('"","","","","",Ofigràfic"",',),
+            ('"","","","","",OfigrĂ\xa0fic"",',),  # AWS Mac Cloud
+            ('"","","","","",OfigrÃ\xa0fic"",',),  # GCP Mac and Linux Cloud
+            ('"","","","","",Ofigr\xc3\\xa0fic"",',),  # GCP Windows Cloud
         )
 
-    with conn_cnx(json_result_force_utf8_decoding=True) as con, con.cursor() as cur:
-        cur.execute("alter session set python_connector_query_result_format='JSON'")
-        ret = cur.execute(
-            """select '"",' || '"",' || '"",' || '"",' || '"",' || 'Ofigràfic' || '"",' from TABLE(GENERATOR(ROWCOUNT => 5000)) v;"""
-        ).fetchall()
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": "JSON"},
+        json_result_force_utf8_decoding=True,
+    ) as con, con.cursor() as cur:
+        ret = cur.execute(sql).fetchall()
         assert len(ret) == 5000
         assert ret[0] == ('"","","","","",Ofigràfic"",',)
