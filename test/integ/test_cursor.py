@@ -1634,9 +1634,12 @@ def test_decoding_utf8_for_json_result(conn_cnx):
         # on different platforms, however, due to randomness, in rare cases the decoding is indeed utf-8,
         # the backend behavior is flaky
         assert ret[0] in (
-            ('"","","","","",OfigrĂ\xa0fic"",',),  # AWS Mac Cloud
+            ('"","","","","",OfigrĂ\xa0fic"",',),  # AWS Cloud
             ('"","","","","",OfigrÃ\xa0fic"",',),  # GCP Mac and Linux Cloud
             ('"","","","","",Ofigr\xc3\\xa0fic"",',),  # GCP Windows Cloud
+            (
+                '"","","","","",Ofigràfic"",',
+            ),  # regression environment gets the correct decoding
         )
 
     with conn_cnx(
