@@ -35,6 +35,25 @@ def test_simple_async(conn_cnx):
             assert cur.description
 
 
+def test_async_result_iteration(conn_cnx):
+    """Test yielding results of an async query.
+
+    Ensures that wait_until_ready is also called in __iter__() via _prefetch_hook().
+    """
+
+    def result_generator(query):
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                cur.execute_async(query)
+                cur.get_results_from_sfqid(cur.sfqid)
+                yield from cur
+
+    gen = result_generator("select count(*) from table(generator(timeLimit => 5))")
+    assert next(gen)
+    with pytest.raises(StopIteration):
+        next(gen)
+
+
 def test_async_exec(conn_cnx):
     """Tests whether simple async query execution works.
 

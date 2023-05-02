@@ -21,7 +21,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Generator,
     Iterator,
     NamedTuple,
     NoReturn,
@@ -1242,26 +1241,6 @@ class SnowflakeCursor:
 
         return self
 
-    def _result_iterator(
-        self,
-    ) -> Generator[dict, None, None] | Generator[tuple, None, None]:
-        """Yields the elements from _result and raises an exception when appropriate."""
-        try:
-            for _next in self._result:
-                if isinstance(_next, Exception):
-                    Error.errorhandler_wrapper_from_ready_exception(
-                        self._connection,
-                        self,
-                        _next,
-                    )
-                self._rownumber += 1
-                yield _next
-        except TypeError as err:
-            if self._result_state == ResultState.DEFAULT:
-                raise err
-            else:
-                yield None
-
     def fetchone(self) -> dict | tuple | None:
         """Fetches one row."""
         if self._prefetch_hook is not None:
@@ -1269,10 +1248,23 @@ class SnowflakeCursor:
         if self._result is None and self._result_set is not None:
             self._result = iter(self._result_set)
             self._result_state = ResultState.VALID
+
         try:
-            return next(self._result_iterator())
-        except StopIteration:
-            return None
+            _next = next(self._result, None)
+            if isinstance(_next, Exception):
+                Error.errorhandler_wrapper_from_ready_exception(
+                    self._connection,
+                    self,
+                    _next,
+                )
+            if _next is not None:
+                self._rownumber += 1
+            return _next
+        except TypeError as err:
+            if self._result_state == ResultState.DEFAULT:
+                raise err
+            else:
+                return None
 
     def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
         """Fetches the number of specified rows."""
@@ -1369,11 +1361,11 @@ class SnowflakeCursor:
 
     def __iter__(self) -> Iterator[dict] | Iterator[tuple]:
         """Iteration over the result set."""
-        # set _result if _result_set is not None
-        if self._result is None and self._result_set is not None:
-            self._result = iter(self._result_set)
-            self._result_state = ResultState.VALID
-        return self._result_iterator()
+        while True:
+            _next = self.fetchone()
+            if _next is None:
+                break
+            yield _next
 
     def __cancel_query(self, query) -> None:
         if self._sequence_counter >= 0 and not self.is_closed():
