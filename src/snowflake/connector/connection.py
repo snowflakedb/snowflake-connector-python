@@ -40,6 +40,7 @@ from .auth import (
 from .auth.idtoken import AuthByIdToken
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
+from .config_parser import CONFIG_PARSER
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     ENV_VAR_PARTNER,
@@ -282,7 +283,11 @@ class SnowflakeConnection:
 
     OCSP_ENV_LOCK = Lock()
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        connection_name: str | None = None,
+        **kwargs,
+    ) -> None:
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
@@ -315,6 +320,14 @@ class SnowflakeConnection:
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
+        if connection_name is not None:
+            connections = CONFIG_PARSER["connections"]
+            if connection_name not in connections:
+                raise ProgrammingError(
+                    f"Invalid connection_name '{connection_name}',"
+                    f" known ones are {connections.keys()}"
+                )
+            kwargs = {**connections[connection_name], **kwargs}
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)

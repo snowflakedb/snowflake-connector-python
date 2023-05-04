@@ -14,6 +14,14 @@ from .options import pyarrow as pa
 if TYPE_CHECKING:
     from pyarrow import DataType
 
+from platformdirs import PlatformDirs
+
+dirs = PlatformDirs(
+    appname="snowflake",
+    appauthor=False,
+    ensure_exists=True,
+)
+config_file = dirs.user_config_path / "config.toml"
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1

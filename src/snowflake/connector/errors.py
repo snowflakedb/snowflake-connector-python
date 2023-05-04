@@ -579,3 +579,17 @@ class PresignedUrlExpiredError(Error):
     """Exception for REST call to remote storage API failed because of expired presigned URL."""
 
     pass
+
+
+class ConfigSourceError(Error):
+    """Configuration source related errors.
+
+    Examples are environmental variable and configuration file.
+    """
+
+
+class ConfigParserError(Error):
+    """Configuration parser related errors.
+
+    These mean that ConfigParser is misused by a developer.
+    """

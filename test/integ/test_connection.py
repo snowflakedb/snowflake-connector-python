@@ -1202,3 +1202,30 @@ def test_disable_query_context_cache(conn_cnx) -> None:
         ret = conn.cursor().execute("select 1").fetchone()
         assert ret == (1,)
         assert conn.query_context_cache is None
+def test_connection_name_loading(monkeypatch, db_parameters):
+    import tomlkit
+
+    doc = tomlkit.document()
+    default_con = tomlkit.table()
+    doc["default"] = default_con
+    try:
+        # If anything unexpected fails here, don't want to expose password
+        for k, v in db_parameters.items():
+            default_con[k] = v
+        with monkeypatch.context() as m:
+            m.setenv("SF_CONNECTIONS", tomlkit.dumps(doc))
+            with snowflake.connector.connect(connection_name="default") as conn:
+                with conn.cursor() as cur:
+                    assert cur.execute("select 1;").fetchall() == [
+                        (1,),
+                    ]
+    except Exception:
+        pytest.fail("something failed", pytrace=False)
+
+
+@pytest.mark.skipolddriver
+def test_not_found_connection_name():
+    with pytest.raises(
+        ProgrammingError, match="Invalid connection_name 'default', known ones are"
+    ):
+        snowflake.connector.connect(connection_name="default")

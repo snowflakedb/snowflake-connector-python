@@ -1,0 +1,4 @@
+[connections.default]
+account = "accountname"
+user = "username"
+password = "password"
