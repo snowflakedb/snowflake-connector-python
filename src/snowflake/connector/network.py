@@ -26,6 +26,7 @@ from snowflake.connector.vendored.urllib3.connectionpool import (
     HTTPConnectionPool,
     HTTPSConnectionPool,
 )
+from snowflake.connector.vendored.urllib3.contrib.socks import SOCKSProxyManager
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -268,8 +269,9 @@ class ProxySupportAdapter(HTTPAdapter):
                 )
             proxy_manager = self.proxy_manager_for(proxy)
 
-            # Add Host to proxy header SNOW-232777
-            proxy_manager.proxy_headers["Host"] = parsed_url.hostname
+            if not isinstance(proxy_manager, SOCKSProxyManager):
+                # Add Host to proxy header SNOW-232777
+                proxy_manager.proxy_headers["Host"] = parsed_url.hostname
             conn = proxy_manager.connection_from_url(url)
         else:
             # Only scheme should be lower case
