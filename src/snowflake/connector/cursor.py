@@ -123,10 +123,10 @@ ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 class ResultMetadata(NamedTuple):
     name: str
     type_code: int
-    display_size: int
-    internal_size: int
-    precision: int
-    scale: int
+    display_size: int | None
+    internal_size: int | None
+    precision: int | None
+    scale: int | None
     is_nullable: bool
 
     @classmethod
