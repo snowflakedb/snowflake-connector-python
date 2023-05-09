@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -313,7 +313,7 @@ class ConnectionDiagnostic:
 
     def __https_host_report(
         self, host: str, port: int = 443, host_type: str = "SNOWFLAKE_URL"
-    ):
+    ) -> None:
         try:
             certificate = self.__test_socket_get_cert(
                 host, port=port, host_type=host_type
@@ -413,9 +413,6 @@ class ConnectionDiagnostic:
             logger.warning(f"Connectivity Test Exception in https_host_report: {e}")
 
     def __get_issuer_string(self, issuer: dict[bytes, bytes]) -> str:
-        issuer: dict[str, str] = {
-            y.decode("ascii"): issuer.get(y).decode("ascii") for y in issuer.keys()
-        }
         issuer_str: str = (
             re.sub('[{}"]', "", json.dumps(issuer)).replace(": ", "=").replace(",", ";")
         )

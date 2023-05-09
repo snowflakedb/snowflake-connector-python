@@ -1,0 +1,22 @@
+name: Close Stale Issues
+on:
+  workflow_dispatch:
+    inputs:
+      staleDays:
+        required: true
+
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v7
+        with:
+          close-issue-message: 'To clean up and re-prioritize bugs and feature requests we are closing all issues older than 6 months as of March 1, 2023. If there are any issues or feature requests that you would like us to address, please re-create them. For urgent issues, opening a support case with this link [Snowflake Community](https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge) is the fastest way to get a response'
+          days-before-issue-stale: ${{ inputs.staleDays }}
+          days-before-pr-stale: -1
+          # Stale issues are closed immediately
+          days-before-issue-close: 0
+          days-before-pr-close: -1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

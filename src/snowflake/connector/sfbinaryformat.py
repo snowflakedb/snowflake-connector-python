@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def binary_to_snowflake(binary_value) -> bytes | bytearray:
 class SnowflakeBinaryFormat:
     """Formats binary values ("bytes" objects) in hex or base64."""
 
-    def __init__(self, name):
+    def __init__(self, name) -> None:
         name = name.upper()
         if name == "HEX":
             self._encode = b16encode

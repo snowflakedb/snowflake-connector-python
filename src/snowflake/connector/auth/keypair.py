@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -68,13 +68,15 @@ class AuthByKeyPair(AuthByPlugin):
                 "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
             )
         )
-        self._timeout = timedelta(
-            seconds=int(
-                os.getenv(
-                    "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+        self._timeout = int(
+            timedelta(
+                seconds=int(
+                    os.getenv(
+                        "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+                    )
                 )
-            )
-        ).total_seconds()
+            ).total_seconds()
+        )
         self._current_retry_count = 0
 
     def reset_secrets(self) -> None:
@@ -197,7 +199,7 @@ class AuthByKeyPair(AuthByPlugin):
             )
             self._retry_ctx.increment_retry()
 
-        self.prepare(account, user)
+        self.prepare(account=account, user=user)
 
     @staticmethod
     def can_handle_exception(op: OperationalError) -> bool:

@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
 import logging
 import os
+from typing import cast
 
 from .compat import IS_LINUX
 
@@ -20,7 +21,9 @@ if ENABLE_TELEMETRY_LOG:
     rt_plain_logger = logging.getLogger("regression.test.plain.logger")
     rt_plain_logger.setLevel(logging.DEBUG)
     ch = logging.FileHandler(
-        os.path.join(REGRESSION_TEST_LOG_DIR, "snowflake_ssm_rt_telemetry.log")
+        os.path.join(
+            cast(str, REGRESSION_TEST_LOG_DIR), "snowflake_ssm_rt_telemetry.log"
+        )
     )
     ch.setLevel(logging.DEBUG)
     ch.setFormatter(

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ class AuthByUsrPwdMfa(AuthByPlugin):
     """Username & password & mfa authenticator."""
 
     @property
-    def assertion_content(self):
+    def assertion_content(self) -> str:
         return "*********"
 
     def __init__(

@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 # Python Db API v2
 #
 from __future__ import annotations
@@ -24,7 +25,6 @@ from .dbapi import (
     Binary,
     Date,
     DateFromTicks,
-    Json,
     Time,
     TimeFromTicks,
     Timestamp,
@@ -89,5 +89,4 @@ __all__ = [
     "DATETIME",
     "ROWID",
     # Extended data type (experimental)
-    "Json",
 ]

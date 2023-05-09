@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ INJECT_WAIT_IN_PUT = 0
 logger = getLogger(__name__)
 
 
-def result_text_column_desc(name):
+def result_text_column_desc(name: str) -> dict[str, Any]:
     return {
         "name": name,
         "type": "text",
@@ -77,7 +77,7 @@ def result_text_column_desc(name):
     }
 
 
-def result_fixed_column_desc(name):
+def result_fixed_column_desc(name: str) -> dict[str, Any]:
     return {
         "name": name,
         "type": "fixed",
@@ -135,6 +135,7 @@ class SnowflakeFileMeta:
     dst_file_size: int = -1
     intermediate_stream: IO[bytes] | None = None
     src_stream: IO[bytes] | None = None
+    skip_upload_on_content_match: bool = False
     # Specific to Downloads only
     local_location: str | None = None
 
@@ -195,7 +196,7 @@ class SnowflakeProgressPercentage:
         filesize: int | float,
         output_stream: IO | None = sys.stdout,
         show_progress_bar: bool | None = True,
-    ):
+    ) -> None:
         last_pound_char = filename.rfind("#")
         if last_pound_char < 0:
             last_pound_char = len(filename)
@@ -219,7 +220,7 @@ class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
         filesize: int | float,
         output_stream: IO | None = sys.stdout,
         show_progress_bar: bool | None = True,
-    ):
+    ) -> None:
         super().__init__(
             filename,
             filesize,
@@ -227,7 +228,7 @@ class SnowflakeS3ProgressPercentage(SnowflakeProgressPercentage):
             show_progress_bar=show_progress_bar,
         )
 
-    def __call__(self, bytes_amount: int):
+    def __call__(self, bytes_amount: int) -> None:
         with self._lock:
             if self._output_stream:
                 self._seen_so_far += bytes_amount
@@ -250,7 +251,7 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
         filesize: int | float,
         output_stream: IO | None = sys.stdout,
         show_progress_bar: bool | None = True,
-    ):
+    ) -> None:
         super().__init__(
             filename,
             filesize,
@@ -258,7 +259,7 @@ class SnowflakeAzureProgressPercentage(SnowflakeProgressPercentage):
             show_progress_bar=show_progress_bar,
         )
 
-    def __call__(self, current: int):
+    def __call__(self, current: int) -> None:
         with self._lock:
             if self._output_stream:
                 self._seen_so_far = current
@@ -280,14 +281,14 @@ class StorageCredential:
         credentials: dict[str, Any],
         connection: SnowflakeConnection,
         command: str,
-    ):
+    ) -> None:
         self.creds = credentials
         self.timestamp = time()
         self.lock = threading.Lock()
         self.connection = connection
         self._command = command
 
-    def update(self, cur_timestamp):
+    def update(self, cur_timestamp) -> None:
         with self.lock:
             if cur_timestamp < self.timestamp:
                 return
@@ -321,10 +322,11 @@ class SnowflakeFileTransferAgent:
         show_progress_bar: bool = True,
         raise_put_get_error: bool = True,
         force_put_overwrite: bool = True,
+        skip_upload_on_content_match: bool = False,
         multipart_threshold: int | None = None,
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
-    ):
+    ) -> None:
         self._cursor = cursor
         self._command = command
         self._ret = ret
@@ -345,6 +347,7 @@ class SnowflakeFileTransferAgent:
         self._raise_put_get_error = raise_put_get_error
         self._show_progress_bar = show_progress_bar
         self._force_put_overwrite = force_put_overwrite
+        self._skip_upload_on_content_match = skip_upload_on_content_match
         self._source_from_stream = source_from_stream
         # The list of self-sufficient file metas that are sent to
         # remote storage clients to get operated on.
@@ -376,6 +379,7 @@ class SnowflakeFileTransferAgent:
 
         for m in self._file_metadata:
             m.overwrite = self._overwrite
+            m.skip_upload_on_content_match = self._skip_upload_on_content_match
             m.sfagent = self
             if self._stage_location_type != LOCAL_FS:
                 m.put_callback = self._put_callback
@@ -423,7 +427,7 @@ class SnowflakeFileTransferAgent:
         is_upload = self._command_type == CMD_TYPE_UPLOAD
         exception_caught_in_callback: Exception | None = None
 
-        def notify_file_completed():
+        def notify_file_completed() -> None:
             # Increment the number of completed files, then notify the main thread.
             with cv_main_thread:
                 transfer_metadata.num_files_completed += 1
@@ -434,7 +438,7 @@ class SnowflakeFileTransferAgent:
             result: Any,
             file_meta: SnowflakeFileMeta,
             done_client: SnowflakeStorageClient,
-        ):
+        ) -> None:
             if not success:
                 logger.debug(f"Failed to prepare {done_client.meta.name}.")
                 if is_upload:
@@ -491,7 +495,7 @@ class SnowflakeFileTransferAgent:
             file_meta: SnowflakeFileMeta,
             done_client: SnowflakeStorageClient,
             chunk_id: int,
-        ):
+        ) -> None:
             # Note: chunk_id is 0 based while num_of_chunks is count
             logger.debug(
                 f"Chunk {chunk_id}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
@@ -538,7 +542,7 @@ class SnowflakeFileTransferAgent:
             result: Any,
             file_meta: SnowflakeFileMeta,
             done_client: SnowflakeStorageClient,
-        ):
+        ) -> None:
             logger.debug(f"File {done_client.meta.name} reached postprocess callback")
 
             with done_client.lock:
@@ -668,7 +672,7 @@ class SnowflakeFileTransferAgent:
             client = self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
 
-    def result(self):
+    def result(self) -> dict[str, Any]:
         converter_class = self._cursor._connection.converter_class
         rowset = []
         if self._command_type == CMD_TYPE_UPLOAD:
@@ -792,7 +796,7 @@ class SnowflakeFileTransferAgent:
                 "rowset": sorted(rowset),
             }
 
-    def _expand_filenames(self, locations):
+    def _expand_filenames(self, locations: list[str]) -> list[str]:
         canonical_locations = []
         for file_name in locations:
             if self._command_type == CMD_TYPE_UPLOAD:
@@ -1013,6 +1017,7 @@ class SnowflakeFileTransferAgent:
                         )
                     )
         elif self._command_type == CMD_TYPE_DOWNLOAD:
+            basename_counts = dict()
             for idx, file_name in enumerate(self._src_files):
                 if not file_name:
                     continue
@@ -1025,9 +1030,13 @@ class SnowflakeFileTransferAgent:
                 url = None
                 if self._presigned_urls and idx < len(self._presigned_urls):
                     url = self._presigned_urls[idx]
+
+                basename = os.path.basename(file_name)
+                basename_counts[basename] = basename_counts.get(basename, 0) + 1
+
                 self._file_metadata.append(
                     SnowflakeFileMeta(
-                        name=os.path.basename(file_name),
+                        name=basename,
                         src_file_name=file_name,
                         dst_file_name=dst_file_name,
                         stage_location_type=self._stage_location_type,
@@ -1039,6 +1048,14 @@ class SnowflakeFileTransferAgent:
                         if file_name in self._src_file_to_encryption_material
                         else None,
                     )
+                )
+
+            # TODO: remove this warning once we support directory structure for GET
+            duplicate_basenames = [k for k, v in basename_counts.items() if v > 1]
+            if duplicate_basenames:
+                logger.warning(
+                    f"Downloading multiple files with the same name could cause failures. "
+                    f"File names with multiple entries: {duplicate_basenames}"
                 )
 
     def _process_file_compression_type(self) -> None:

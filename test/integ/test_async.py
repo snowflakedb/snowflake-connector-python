@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -33,6 +33,25 @@ def test_simple_async(conn_cnx):
             assert len(cur.fetchall()) == 1
             assert cur.rowcount
             assert cur.description
+
+
+def test_async_result_iteration(conn_cnx):
+    """Test yielding results of an async query.
+
+    Ensures that wait_until_ready is also called in __iter__() via _prefetch_hook().
+    """
+
+    def result_generator(query):
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                cur.execute_async(query)
+                cur.get_results_from_sfqid(cur.sfqid)
+                yield from cur
+
+    gen = result_generator("select count(*) from table(generator(timeLimit => 5))")
+    assert next(gen)
+    with pytest.raises(StopIteration):
+        next(gen)
 
 
 def test_async_exec(conn_cnx):

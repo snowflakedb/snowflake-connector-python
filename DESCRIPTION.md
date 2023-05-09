@@ -8,9 +8,54 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v2.9.1(unreleased)
+- v3.0.4(TBD)
+  - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
+  - Added the json_result_force_utf8_decoding connection parameter to force decoding JSON content in utf-8 when the result format is JSON.
+  - Fixed a bug in which we cannot call `SnowflakeCursor.nextset` before fetching the result of the first query if the cursor runs an async multistatement query.
+  - Bumped vendored library urllib3 to 1.26.15
+  - Bumped vendored library requests to 2.29.0
+  - Fixed a bug when `_prefetch_hook()` was not called before yielding results of `execute_async()`.
+  - Fixed a bug where some ResultMetadata fields were marked as required when they were optional.
 
+- v3.0.3(April 20, 2023)
+  - Fixed a bug that prints error in logs for GET command on GCS.
+  - Added a parameter that allows users to skip file uploads to stage if file exists on stage and contents of the file match.
+  - Fixed a bug that occurred when writing a Pandas DataFrame with non-default index in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug that occurred when writing a Pandas DataFrame with column names containing double quotes in `snowflake.connector.pandas_tool.write_pandas`.
+  - Fixed a bug that occurred when writing a Pandas DataFrame with binary data in `snowflake.connector.pandas_tool.write_pandas`.
+  - Improved type hint of `SnowflakeCursor.execute` method.
+  - Fail instantly upon receiving `403: Forbidden` HTTP response for a login-request.
+  - Improved GET logging to warn when downloading multiple files with the same name.
+
+- v3.0.2(March 23, 2023)
+
+  - Fixed a memory leak in the logging module of the Cython extension.
+  - Fixed a bug where the `put` command on AWS raised `AttributeError` when uploading file composed of multiple parts.
+  - Fixed a bug of incorrect type hints of `SnowflakeCursor.fetch_arrow_all` and `SnowflakeCursor.fetchall`.
+  - Fixed a bug where `snowflake.connector.util_text.split_statements` swallows the final line break in the case when there are no space between lines.
+  - Improved logging to mask tokens in case of errors.
+  - Validate SSO URL before opening it in the browser for External browser authenticator.
+
+- v3.0.1(February 28, 2023)
+
+  - Improved the robustness of OCSP response caching to handle errors in cases of serialization and deserialization.
+  - Updated async_executes method's doc-string.
+  - Errors raised now have a query field that contains the SQL query that caused them when available.
+  - Fixed a bug where MFA token caching would refuse to work until restarted instead of reauthenticating.
+  - Replaced the dependency on setuptools in favor of packaging.
+  - Fixed a bug where `AuthByKeyPair.handle_timeout` should pass keyword arguments instead of positional arguments when calling `AuthByKeyPair.prepare`.
+
+- v3.0.0(January 26, 2023)
+
+  - Fixed a bug where write_pandas did not use user-specified schema and database to create intermediate objects
+  - Fixed a bug where HTTP response code of 429 were not retried
+  - Fixed a bug where MFA token caching was not working
   - Bumped pyarrow dependency from >=8.0.0,<8.1.0 to >=10.0.1,<10.1.0
+  - Bumped pyOpenSSL dependency from <23.0.0 to <24.0.0
+  - During browser-based authentication, the SSO url is now printed before opening it in the browser
+  - Increased the level of a log for when ArrowResult cannot be imported
+  - Added a minimum MacOS version check when compiling C-extensions
+  - Enabled `fetch_arrow_all` and `fetch_arrow_batches` to handle async query results
 
 - v2.9.0(December 9, 2022)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ class AuthRetryCtx:
         logger.debug(f"Sleeping for {self._current_sleep_time} seconds")
         return self._current_sleep_time
 
-    def reset(self):
+    def reset(self) -> None:
         self._current_retry_count = 0
         self._current_sleep_time = 1
 
@@ -92,7 +92,7 @@ class AuthByPlugin(ABC):
     def __init__(self) -> None:
         self._retry_ctx = AuthRetryCtx()
         self.consent_cache_id_token = False
-        self._timeout = 120
+        self._timeout: int = 120
 
     @property
     def timeout(self) -> int:
@@ -210,12 +210,13 @@ class AuthByPlugin(ABC):
         del authenticator, service_name, account, user, password
         logger.debug("Default timeout handler invoked for authenticator")
         if not self._retry_ctx.should_retry():
-            self._retry_ctx.reset()
-            raise OperationalError(
+            error = OperationalError(
                 msg=f"Could not connect to Snowflake backend after {self._retry_ctx.get_current_retry_count()} attempt(s)."
                 "Aborting",
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
             )
+            self._retry_ctx.reset()
+            raise error
         else:
             logger.debug(
                 f"Hit connection timeout, attempt number {self._retry_ctx.get_current_retry_count()}."

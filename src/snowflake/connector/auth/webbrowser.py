@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from ..constants import (
 )
 from ..errorcode import (
     ER_IDP_CONNECTION_ERROR,
+    ER_INVALID_VALUE,
     ER_NO_HOSTNAME_FOUND,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
@@ -32,6 +33,7 @@ from ..network import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     PYTHON_CONNECTOR_USER_AGENT,
 )
+from ..url_util import is_valid_url
 from . import Auth
 from .by_plugin import AuthByPlugin, AuthType
 
@@ -131,16 +133,27 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
+            logger.debug("step 1: query GS to obtain SSO url")
+            sso_url = self._get_sso_url(
+                conn, authenticator, service_name, account, callback_port, user
+            )
+
+            logger.debug("Validate SSO URL")
+            if not is_valid_url(sso_url):
+                self._handle_failure(
+                    conn=conn,
+                    ret={
+                        "code": ER_INVALID_VALUE,
+                        "message": (f"The SSO URL provided {sso_url} is invalid"),
+                    },
+                )
+                return
+
             print(
                 "Initiating login request with your identity provider. A "
                 "browser window should have opened for you to complete the "
                 "login. If you can't see it, check existing browser windows, "
                 "or your OS settings. Press CTRL+C to abort and try again..."
-            )
-
-            logger.debug("step 1: query GS to obtain SSO url")
-            sso_url = self._get_sso_url(
-                conn, authenticator, service_name, account, callback_port, user
             )
 
             logger.debug("step 2: open a browser")

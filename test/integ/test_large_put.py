@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -53,13 +53,29 @@ ratio number(6,2))
                 return agent
 
             with patch(
-                "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+                "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
                 side_effect=mocked_file_agent,
             ):
+                # upload with auto compress = True
                 cnx.cursor().execute(
-                    f"put 'file://{files}' @%{db_parameters['name']}",
+                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=True",
                 )
                 assert mocked_file_agent.agent._multipart_threshold == 10000
+                cnx.cursor().execute(f"remove @%{db_parameters['name']}")
+
+                # upload with auto compress = False
+                cnx.cursor().execute(
+                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
+                )
+                assert mocked_file_agent.agent._multipart_threshold == 10000
+
+                # Upload again. There was a bug when a large file is uploaded again while it already exists in a stage.
+                # Refer to preprocess(self) of storage_client.py.
+                # self.get_digest() needs to be called before self.get_file_header(meta.dst_file_name).
+                # SNOW-749141
+                cnx.cursor().execute(
+                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
+                )  # do not add `overwrite=True` because overwrite will skip the code path to extract file header.
 
             c = cnx.cursor()
             try:

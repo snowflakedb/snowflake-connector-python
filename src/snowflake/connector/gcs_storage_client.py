@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         stage_info: dict[str, Any],
         cnx: SnowflakeConnection,
         command: str,
-        use_s3_regional_url=False,
+        use_s3_regional_url: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 
@@ -217,7 +217,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         # Sadly, we can only determine the src file size after we've
         # downloaded it, unlike the other cloud providers where the
         # metadata can be read beforehand.
-        self.meta.src_file_size = os.path.getsize(self.intermediate_dst_path)
+        self.meta.src_file_size = os.path.getsize(self.full_dst_file_name)
 
     def _update_presigned_url(self) -> None:
         """Updates the file metas with presigned urls if any.

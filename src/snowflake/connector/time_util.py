@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import random
 import time
 from logging import getLogger
+from types import TracebackType
 from typing import Any, Callable
 
 logger = getLogger(__name__)
@@ -78,7 +79,12 @@ class TimerContextManager:
         self._start = get_time_millis()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self._end = get_time_millis()
 
     def get_timing_millis(self) -> int:

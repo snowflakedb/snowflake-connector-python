@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
 import errno
+import logging
 import os
 import time
 from unittest.mock import MagicMock, Mock, PropertyMock
@@ -27,6 +28,7 @@ from snowflake.connector.compat import (
 )
 from snowflake.connector.errors import (
     DatabaseError,
+    ForbiddenError,
     InterfaceError,
     OtherHTTPRetryableError,
 )
@@ -55,6 +57,11 @@ def test_request_exec():
         "headers": {},
         "data": '{"code": 12345}',
         "token": None,
+    }
+
+    login_parameters = {
+        **default_parameters,
+        "full_url": "https://bad_id.snowflakecomputing.com:443/session/v1/login-request?request_id=s0m3-r3a11Y-rAnD0m-reqID&request_guid=s0m3-r3a11Y-rAnD0m-reqGUID",
     }
 
     # request mock
@@ -101,6 +108,11 @@ def test_request_exec():
         rest._request_exec(
             session=session, catch_okta_unauthorized_error=True, **default_parameters
         )
+
+    # forbidden on login-request raises ForbiddenError
+    type(request_mock).status_code = PropertyMock(return_value=FORBIDDEN)
+    with pytest.raises(ForbiddenError):
+        rest._request_exec(session=session, **login_parameters)
 
     class IncompleteReadMock(IncompleteRead):
         def __init__(self):
@@ -217,3 +229,40 @@ def test_fetch():
     assert ret == {}
     assert cnt.c == 1  # failed on first call - did not retry
     assert rest._connection.errorhandler.called  # error
+
+
+def test_secret_masking(caplog):
+    connection = MagicMock()
+    connection.errorhandler = Mock(return_value=None)
+
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    data = (
+        '{"code": 12345,'
+        ' "data": {"TOKEN": "_Y1ZNETTn5/qfUWj3Jedb", "PASSWORD": "dummy_pass"}'
+        "}"
+    )
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": data,
+    }
+
+    class NotRetryableException(Exception):
+        pass
+
+    def fake_request_exec(**kwargs):
+        return None
+
+    # inject a fake method
+    rest._request_exec = fake_request_exec
+
+    # first two attempts will fail but third will success
+    with caplog.at_level(logging.ERROR):
+        ret = rest.fetch(timeout=10, **default_parameters)
+    assert '"TOKEN": "****' in caplog.text
+    assert '"PASSWORD": "****' in caplog.text
+    assert ret == {}

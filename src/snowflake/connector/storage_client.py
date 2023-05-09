@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -186,8 +186,11 @@ class SnowflakeStorageClient(ABC):
         meta = self.meta
         logger.debug(f"Preprocessing {meta.src_file_name}")
 
+        file_header = self.get_file_header(
+            meta.dst_file_name
+        )  # check if file exists on remote
         if not meta.overwrite:
-            self.get_file_header(meta.dst_file_name)  # Check if file exists on remote
+            self.get_digest()  # self.get_file_header needs digest for multiparts upload when aws is used.
             if meta.result_status == ResultStatus.UPLOADED:
                 # Skipped
                 logger.debug(
@@ -202,6 +205,14 @@ class SnowflakeStorageClient(ABC):
         if meta.require_compress:
             self.compress()
         self.get_digest()
+
+        if (
+            meta.skip_upload_on_content_match
+            and file_header
+            and meta.sha256_digest == file_header.digest
+        ):
+            logger.debug(f"same file contents for {meta.name}, skipping upload")
+            meta.result_status = ResultStatus.SKIPPED
 
         self.preprocessed = True
 

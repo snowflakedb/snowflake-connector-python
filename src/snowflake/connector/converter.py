@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
@@ -14,15 +14,20 @@ from datetime import timedelta, tzinfo
 from functools import partial
 from logging import getLogger
 from math import ceil
-from typing import Any, Callable
+from time import struct_time
+from typing import TYPE_CHECKING, Any, Callable, NoReturn
 
 import pytz
+from pytz import UTC
 
 from .compat import IS_BINARY, IS_NUMERIC
 from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
+
+if TYPE_CHECKING:
+    from numpy import int64
 
 try:
     import numpy
@@ -138,7 +143,7 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> tzinfo:
 
 
 class SnowflakeConverter:
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         self._parameters: dict[str, str | int | bool] = {}
         self._use_numpy = kwargs.get("use_numpy", False) and numpy is not None
 
@@ -173,15 +178,15 @@ class SnowflakeConverter:
         logger.warning("No column converter found for type: %s", type_name)
         return None  # Skip conversion
 
-    def _FIXED_to_python(self, ctx):
+    def _FIXED_to_python(self, ctx: dict[str, Any]) -> Callable:
         return int if ctx["scale"] == 0 else decimal.Decimal
 
-    def _FIXED_numpy_to_python(self, ctx):
+    def _FIXED_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
         if ctx["scale"]:
             return numpy.float64
         else:
 
-            def conv(value):
+            def conv(value: str) -> int64:
                 try:
                     return numpy.int64(value)
                 except OverflowError:
@@ -189,19 +194,19 @@ class SnowflakeConverter:
 
             return conv
 
-    def _REAL_to_python(self, _):
+    def _REAL_to_python(self, _: dict[str, str | None] | dict[str, str]) -> Callable:
         return float
 
-    def _REAL_numpy_to_python(self, _):
+    def _REAL_numpy_to_python(self, _) -> Callable:
         return numpy.float64
 
-    def _TEXT_to_python(self, _):
+    def _TEXT_to_python(self, _: dict[str, Any]) -> None:
         return None  # skip conv
 
-    def _BINARY_to_python(self, _):
+    def _BINARY_to_python(self, _) -> Callable:
         return binary_to_python
 
-    def _DATE_to_python(self, _):
+    def _DATE_to_python(self, _: dict[str, str | None]) -> Callable:
         """Converts DATE to date."""
 
         def conv(value: str) -> date:
@@ -214,14 +219,14 @@ class SnowflakeConverter:
 
         return conv
 
-    def _DATE_numpy_to_python(self, _):
+    def _DATE_numpy_to_python(self, _) -> Callable:
         """Converts DATE to datetime.
 
         No timezone is attached.
         """
         return lambda x: numpy.datetime64(int(x), "D")
 
-    def _TIMESTAMP_TZ_to_python(self, ctx):
+    def _TIMESTAMP_TZ_to_python(self, ctx: dict[str, Any]) -> Callable:
         """Converts TIMESTAMP TZ to datetime.
 
         The timezone offset is piggybacked.
@@ -237,7 +242,7 @@ class SnowflakeConverter:
 
         return conv
 
-    def _get_session_tz(self):
+    def _get_session_tz(self) -> tzinfo | UTC:
         """Gets the session timezone or use the local computer's timezone."""
         try:
             tz = self.get_parameter("TIMEZONE")
@@ -251,7 +256,11 @@ class SnowflakeConverter:
             else:
                 return datetime.timezone.utc
 
-    def _pre_TIMESTAMP_LTZ_to_python(self, value, ctx) -> datetime:
+    def _pre_TIMESTAMP_LTZ_to_python(
+        self,
+        value,
+        ctx,
+    ) -> tuple[datetime, int] | tuple[struct_time, int]:
         """Converts TIMESTAMP LTZ to datetime.
 
         This takes consideration of the session parameter TIMEZONE if available. If not, tzlocal is used.
@@ -270,7 +279,7 @@ class SnowflakeConverter:
             )
             return time.localtime(microseconds), fraction_of_nanoseconds
 
-    def _TIMESTAMP_LTZ_to_python(self, ctx):
+    def _TIMESTAMP_LTZ_to_python(self, ctx: dict[str, Any]) -> Callable:
         tzinfo = self._get_session_tz()
         scale = ctx["scale"]
 
@@ -280,7 +289,7 @@ class SnowflakeConverter:
 
     _TIMESTAMP_to_python = _TIMESTAMP_LTZ_to_python
 
-    def _TIMESTAMP_NTZ_to_python(self, ctx):
+    def _TIMESTAMP_NTZ_to_python(self, ctx: dict[str, Any]) -> Callable:
         """TIMESTAMP NTZ to datetime with no timezone info is attached."""
         scale = ctx["scale"]
 
@@ -295,11 +304,11 @@ class SnowflakeConverter:
 
         return conv
 
-    def _TIME_to_python(self, ctx):
+    def _TIME_to_python(self, ctx: dict[str, Any]) -> Callable:
         """TIME to formatted string, SnowflakeDateTime, or datetime.time with no timezone attached."""
         scale = ctx["scale"]
 
-        def conv0(value):
+        def conv0(value: str) -> time:
             return datetime.utcfromtimestamp(float(value)).time()
 
         def conv(value: str) -> dt_t:
@@ -308,22 +317,24 @@ class SnowflakeConverter:
 
         return conv if scale > 6 else conv0
 
-    def _VARIANT_to_python(self, _):
+    def _VARIANT_to_python(self, _: dict[str, Any]) -> Any | None:
         return None  # skip conv
 
     _OBJECT_to_python = _VARIANT_to_python
 
     _ARRAY_to_python = _VARIANT_to_python
 
-    def _BOOLEAN_to_python(self, ctx):
+    def _BOOLEAN_to_python(
+        self, ctx: dict[str, str | None] | dict[str, str]
+    ) -> Callable:
         return lambda value: value in ("1", "TRUE")
 
-    def snowflake_type(self, value):
+    def snowflake_type(self, value: Any) -> str | None:
         """Returns Snowflake data type for the value. This is used for qmark parameter style."""
         type_name = value.__class__.__name__.lower()
         return PYTHON_TO_SNOWFLAKE_TYPE.get(type_name)
 
-    def to_snowflake_bindings(self, snowflake_type, value):
+    def to_snowflake_bindings(self, snowflake_type: str, value: Any) -> str:
         """Converts Python data to snowflake data for qmark and numeric parameter style.
 
         The output is bound in a query in the server side.
@@ -457,7 +468,7 @@ class SnowflakeConverter:
     def _bool__to_snowflake(self, value) -> bool:
         return bool(value)
 
-    def _nonetype_to_snowflake(self, _):
+    def _nonetype_to_snowflake(self, _: Any | None) -> Any | None:
         return None
 
     def _total_seconds_from_timedelta(self, td: timedelta) -> int:
@@ -600,7 +611,7 @@ class SnowflakeConverter:
     def _quoted_name_to_snowflake(self, value) -> str:
         return str(value)
 
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> NoReturn:
         if item.endswith("_to_snowflake"):
             raise ProgrammingError(
                 msg="Binding data in type ({}) is not supported.".format(
@@ -638,7 +649,7 @@ class SnowflakeConverter:
         return self.escape_for_csv(val)
 
     @staticmethod
-    def escape(value):
+    def escape(value: Any) -> Any:
         if isinstance(value, list):
             return value
         if value is None or IS_NUMERIC(value) or IS_BINARY(value):

@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 from __future__ import annotations
 
 import filecmp
+import logging
 import os
 import pathlib
 from getpass import getuser
@@ -554,6 +556,70 @@ def test_put_overwrite(tmp_path: pathlib.Path, from_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
+)
+@pytest.mark.parametrize(
+    "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
+)
+def test_put_overwrite_skip_on_content_match(
+    tmp_path: pathlib.Path, from_path, conn_cnx
+):
+    """Tests whether _skip_upload_on_content_match and overwrite=true work as intended."""
+    tmp_dir = tmp_path / "data"
+    tmp_dir.mkdir()
+    test_data = tmp_dir / "data.txt"
+    with test_data.open("w") as f:
+        f.write("test1,test2")
+        f.write("test3,test4")
+
+    with conn_cnx() as cnx:
+        cnx.cursor().execute("RM @~/test_put_overwrite_skip_on_content_match")
+        try:
+            file_stream = None if from_path else open(test_data, "rb")
+            with cnx.cursor() as cur:
+                put(
+                    cur,
+                    str(test_data),
+                    "~/test_put_overwrite_skip_on_content_match",
+                    from_path,
+                    file_stream=file_stream,
+                    sql_options="OVERWRITE = TRUE AUTO_COMPRESS = FALSE",
+                    _skip_upload_on_content_match=False,
+                )
+                ret = cur.fetchone()
+                assert ret[6] == "UPLOADED"
+
+                put(
+                    cur,
+                    str(test_data),
+                    "~/test_put_overwrite_skip_on_content_match",
+                    from_path,
+                    file_stream=file_stream,
+                    sql_options="OVERWRITE = TRUE AUTO_COMPRESS = FALSE",
+                    _skip_upload_on_content_match=True,
+                )
+                ret = cur.fetchone()
+                assert ret[6] == "SKIPPED"
+
+            ret = (
+                cnx.cursor()
+                .execute("LS @~/test_put_overwrite_skip_on_content_match")
+                .fetchone()
+            )
+            assert (
+                "test_put_overwrite_skip_on_content_match/"
+                + os.path.basename(test_data)
+                in ret[0]
+            )
+            assert test_data.name in ret[0]
+        finally:
+            if file_stream:
+                file_stream.close()
+            cnx.cursor().execute("RM @~/test_put_overwrite_skip_on_content_match")
+
+
+@pytest.mark.skipolddriver
 def test_utf8_filename(tmp_path, conn_cnx):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")
@@ -585,7 +651,7 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
         from snowflake.connector.file_transfer_agent import SnowflakeFileTransferAgent
 
         with mock.patch(
-            "snowflake.connector.cursor.SnowflakeFileTransferAgent",
+            "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
             autospec=SnowflakeFileTransferAgent,
         ) as mock_agent:
             cur.execute(f"put file://{file} @{stage_name} threshold=156")
@@ -674,7 +740,7 @@ def test_get_empty_file(tmp_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_get_file_permission(tmp_path, conn_cnx):
+def test_get_file_permission(tmp_path, conn_cnx, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_get_empty_file_")
@@ -686,7 +752,10 @@ def test_get_file_permission(tmp_path, conn_cnx):
                 f"PUT 'file://{filename_in_put}' @{stage_name}",
             )
 
-            cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            with caplog.at_level(logging.ERROR):
+                cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            assert "FileNotFoundError" not in caplog.text
+
             # get the default mask, usually it is 0o022
             default_mask = os.umask(0)
             os.umask(default_mask)
@@ -695,3 +764,30 @@ def test_get_file_permission(tmp_path, conn_cnx):
             assert (
                 oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
             )
+
+
+@pytest.mark.skipolddriver
+def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_multiple_files_with_same_name_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}/data/1/",
+            )
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name}/data/2/",
+            )
+
+            with caplog.at_level(logging.WARNING):
+                try:
+                    cur.execute(
+                        f"GET @{stage_name} file://{tmp_path} PATTERN='.*data.csv.gz'"
+                    )
+                except OperationalError:
+                    # This is expected flakiness
+                    pass
+            assert "Downloading multiple files with the same name" in caplog.text

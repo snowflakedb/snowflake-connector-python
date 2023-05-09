@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 import datetime
@@ -21,6 +21,28 @@ except ImportError:
 
 # Used to insert entries that expire instantaneously
 NO_LIFETIME = datetime.timedelta(seconds=0)
+
+
+class BrokenReadingPickleObject:
+    def __init__(self):
+        self.val = "string"
+
+    def __getstate__(self):
+        return {"val": "string"}
+
+    def __setstate__(self, state):
+        raise ModuleNotFoundError()
+
+
+class BrokenWritingPickleObject:
+    def __init__(self):
+        self.val = "string"
+
+    def __getstate__(self):
+        raise ModuleNotFoundError()
+
+    def __setstate__(self, state):
+        self.val = "string"
 
 
 class TestSFDictCache:
@@ -325,6 +347,16 @@ class TestSFDictFileCache:
         assert c._lock is not c2._lock
         assert c._file_lock is not c2._file_lock
 
+        c.arribute_shoud_not_be_pickled = "value"
+        c2 = pickle.loads(pickle.dumps(c))
+        assert c.arribute_shoud_not_be_pickled
+        assert c is not c2
+        assert c._lock is not c2._lock
+        assert c._file_lock is not c2._file_lock
+        assert not hasattr(c2, "arribute_shoud_not_be_pickled")
+        for attr in cache.SFDictFileCache._ATTRIBUTES_TO_PICKLE:
+            assert hasattr(c2, attr) and getattr(c2, attr) == getattr(c, attr)
+
     def test_precise_save_load(self, tmpdir):
         c1 = NeverSaveSFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))
         c2 = pickle.loads(pickle.dumps(c1))
@@ -428,3 +460,22 @@ class TestSFDictFileCache:
         c2._load()
 
         assert len(c2) == 1 and c2["a"] == 1 and c2._getitem_non_locking("a") == 1
+
+    def test_broken_pickle_objects(self, tmpdir):
+        cache_path = os.path.join(tmpdir, "cache.txt")
+        c1 = cache.SFDictFileCache(file_path=cache_path)
+        c1["key"] = BrokenReadingPickleObject()
+        assert c1._save()
+        assert os.path.exists(cache_path) and os.path.isfile(cache_path)
+
+        c2 = cache.SFDictFileCache(file_path=cache_path)
+        assert not c2._load()  # load should return false due to ModuleNotFound error
+
+        cache_path = os.path.join(tmpdir, "cache2.txt")
+        c1 = cache.SFDictFileCache(file_path=cache_path)
+        c1["key"] = BrokenWritingPickleObject()
+        assert not c1._save()
+        assert not os.path.exists(cache_path)
+
+        c2 = cache.SFDictFileCache(file_path=cache_path)
+        assert not c2._load()  # load should return false due to no file

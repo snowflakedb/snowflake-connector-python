@@ -1,6 +1,7 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
 from __future__ import annotations
 
 import abc
@@ -24,7 +25,7 @@ from .network import (
     raise_failed_request_error,
     raise_okta_unauthorized_error,
 )
-from .options import installed_pandas, pandas
+from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
 from .time_util import DecorrelateJitterBackoff, TimerContextManager
@@ -36,17 +37,13 @@ MAX_DOWNLOAD_RETRY = 10
 DOWNLOAD_TIMEOUT = 7  # seconds
 
 if TYPE_CHECKING:  # pragma: no cover
+    from pandas import DataFrame
+    from pyarrow import DataType, Table
+
     from .connection import SnowflakeConnection
     from .converter import SnowflakeConverterType
     from .cursor import ResultMetadata, SnowflakeCursor
     from .vendored.requests import Response
-
-    if installed_pandas:
-        DataType = pa.DataType
-        Table = pa.Table
-    else:
-        DataType = None
-        Table = None
 
 
 # emtpy pyarrow type array corresponding to FIELD_TYPES
@@ -96,9 +93,7 @@ def create_batches_from_response(
             )
             return type_name, python_method
 
-        column_converters: list[tuple[str, SnowflakeConverterType]] = [
-            col_to_converter(c) for c in rowtypes
-        ]
+        column_converters = [col_to_converter(c) for c in rowtypes]
     else:
         rowset_b64 = data.get("rowsetBase64")
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
@@ -137,6 +132,7 @@ def create_batches_from_response(
                     schema,
                     column_converters,
                     cursor._use_dict_result,
+                    json_result_force_utf8_decoding=cursor._connection._json_result_force_utf8_decoding,
                 )
                 for c in chunks
             ]
@@ -217,7 +213,7 @@ class ResultBatch(abc.ABC):
         remote_chunk_info: RemoteChunkInfo | None,
         schema: Sequence[ResultMetadata],
         use_dict_result: bool,
-    ):
+    ) -> None:
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
@@ -343,7 +339,7 @@ class ResultBatch(abc.ABC):
         Iterator[dict | Exception]
         | Iterator[tuple | Exception]
         | Iterator[Table]
-        | Iterator[pandas.DataFrame]
+        | Iterator[DataFrame]
     ):
         """Downloads the data from from blob storage that this ResultChunk points at.
 
@@ -372,7 +368,7 @@ class ResultBatch(abc.ABC):
             )
 
     @abc.abstractmethod
-    def to_pandas(self) -> pandas.DataFrame:
+    def to_pandas(self) -> DataFrame:
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -389,7 +385,9 @@ class JSONResultBatch(ResultBatch):
         schema: Sequence[ResultMetadata],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
-    ):
+        *,
+        json_result_force_utf8_decoding: bool = False,
+    ) -> None:
         super().__init__(
             rowcount,
             chunk_headers,
@@ -397,6 +395,7 @@ class JSONResultBatch(ResultBatch):
             schema,
             use_dict_result,
         )
+        self._json_result_force_utf8_decoding = json_result_force_utf8_decoding
         self.column_converters = column_converters
 
     @classmethod
@@ -417,9 +416,7 @@ class JSONResultBatch(ResultBatch):
             column_converters,
             use_dict_result,
         )
-        new_chunk._data: (
-            list[dict | Exception] | list[tuple | Exception]
-        ) = new_chunk._parse(data)
+        new_chunk._data = new_chunk._parse(data)
         return new_chunk
 
     def _load(self, response: Response) -> list:
@@ -427,10 +424,21 @@ class JSONResultBatch(ResultBatch):
 
         Returns:
             Whatever ``json.loads`` return, but in a list.
-            Unfortunately there's not type hint for this.
+            Unfortunately there's no type hint for this.
             For context: https://github.com/python/typing/issues/182
         """
-        read_data = response.text
+        # if users specify how to decode the data, we decode the bytes using the specified encoding
+        if self._json_result_force_utf8_decoding:
+            try:
+                read_data = str(response.content, "utf-8", errors="strict")
+            except Exception as exc:
+                err_msg = f"failed to decode json result content due to error {exc!r}"
+                logger.error(err_msg)
+                raise Error(msg=err_msg)
+        else:
+            # note: SNOW-787480 response.apparent_encoding is unreliable, chardet.detect can be wrong which is used by
+            # response.text to decode content, check issue: https://github.com/chardet/chardet/issues/148
+            read_data = response.text
         return json.loads("".join(["[", read_data, "]"]))
 
     def _parse(
@@ -534,7 +542,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
-    ):
+    ) -> None:
         super().__init__(
             rowcount,
             chunk_headers,
@@ -664,7 +672,7 @@ class ArrowResultBatch(ResultBatch):
 
     def to_pandas(
         self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> pandas.DataFrame:
+    ) -> DataFrame:
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
@@ -672,7 +680,7 @@ class ArrowResultBatch(ResultBatch):
 
     def _get_pandas_iter(
         self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> Iterator[pandas.DataFrame]:
+    ) -> Iterator[DataFrame]:
         """An iterator for this batch which yields a pandas DataFrame"""
         iterator_data = []
         dataframe = self.to_pandas(connection=connection, **kwargs)
@@ -686,7 +694,7 @@ class ArrowResultBatch(ResultBatch):
         Iterator[dict | Exception]
         | Iterator[tuple | Exception]
         | Iterator[Table]
-        | Iterator[pandas.DataFrame]
+        | Iterator[DataFrame]
     ):
         """The interface used by ResultSet to create an iterator for this ResultBatch."""
         iter_unit: IterUnit = kwargs.pop("iter_unit", IterUnit.ROW_UNIT)
