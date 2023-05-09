@@ -4,18 +4,17 @@
 #
 from __future__ import annotations
 
-from base64 import b64decode, b64encode
+import copy
+import json
 from functools import total_ordering
 from hashlib import md5
-from io import BytesIO
 from logging import DEBUG, getLogger
 from threading import Lock
-import json
-import copy
 
 from sortedcontainers import SortedSet
 
 logger = getLogger(__name__)
+
 
 @total_ordering
 class QueryContextElement:
@@ -69,8 +68,6 @@ class QueryContextElement:
             )
         return self._priority < other._priority
 
-
-
     def __hash__(self) -> int:
         _hash = 31
 
@@ -78,7 +75,9 @@ class QueryContextElement:
         _hash += (_hash * 31) + self._read_timestamp
         _hash += (_hash * 31) + self._priority
         if self._context:
-            _hash += (_hash * 31) + int.from_bytes(md5(self._context.encode('utf-8')).digest(), "big")
+            _hash += (_hash * 31) + int.from_bytes(
+                md5(self._context.encode("utf-8")).digest(), "big"
+            )
         return _hash
 
     def __str__(self) -> str:
@@ -117,23 +116,25 @@ class QueryContextCache:
     ) -> None:
         self._remove_qce(old_qce)
         self._add_qce(new_qce)
-        
-    def sync_priority_map(self):
+
+    def _sync_priority_map(self):
         """
         Sync the _intermediate_priority_map with the _priority_map at the end of the current round of merges.
         """
-        logger.debug(f"syncPriorityMap called priority_map size = {len(self._priority_map)}, new_priority_map size = {len(self._intermediate_priority_map)}")
-        
+        logger.debug(
+            f"syncPriorityMap called priority_map size = {len(self._priority_map)}, new_priority_map size = {len(self._intermediate_priority_map)}"
+        )
+
         self._priority_map.update(self._intermediate_priority_map)
         # Clear the _intermediate_priority_map for the next round of QCC merge (a round consists of multiple entries)
         self._intermediate_priority_map.clear()
 
-    def merge(
-        self, id: int, read_timestamp: int, priority: int, context: str
-    ) -> None:
+    def merge(self, id: int, read_timestamp: int, priority: int, context: str) -> None:
         if id in self._id_map:
             qce = self._id_map[id]
-            if (read_timestamp > qce.read_timestamp) or (read_timestamp == qce.read_timestamp and priority != qce.priority):
+            if (read_timestamp > qce.read_timestamp) or (
+                read_timestamp == qce.read_timestamp and priority != qce.priority
+            ):
                 # when id if found in cache and we are operating on a more recent timestamp. We do not update in-place here.
                 new_qce = QueryContextElement(id, read_timestamp, priority, context)
                 self._replace_qce(qce, new_qce)
@@ -170,7 +171,7 @@ class QueryContextCache:
 
     def _last(self) -> QueryContextElement:
         return self._tree_set[-1]
-    
+
     def serialize_to_json(self) -> str:
         with self._lock:
             logger.debug("serialize_to_json() called")
@@ -188,7 +189,7 @@ class QueryContextCache:
                             "priority": qce.priority,
                             "context": qce.context,
                         }
-                        for idx, qce in enumerate(self._tree_set)
+                        for qce in self._tree_set
                     ]
                 }
                 # Serialize the data to JSON
@@ -201,21 +202,19 @@ class QueryContextCache:
                 return serialized_data
             except Exception as e:
                 logger.debug(f"serialize_to_json(): Exception {e}")
-                return None   
+                return None
 
     def deserialize_json_dict(self, data) -> None:
         with self._lock:
-            logger.debug(
-                f"deserialize_json_dict() called: data from server: {data}"
-            )
+            logger.debug(f"deserialize_json_dict() called: data from server: {data}")
             self.log_cache_entries()
-            
+
             if data is None or len(data) == 0:
                 self.clear_cache()
                 logger.debug("deserialize_json_dict() returns")
                 self.log_cache_entries()
                 return
-            
+
             try:
                 # Deserialize the entries. The first entry with priority 0 is the main entry. On python
                 # connector side, we save all entries into one list to simplify the logic. When python
@@ -225,7 +224,7 @@ class QueryContextCache:
                 # {
                 #   "entries": [
                 #    {
-                #     "id": 0,    
+                #     "id": 0,
                 #     "read_timestamp": 123456789,
                 #     "priority": 0,
                 #     "context": "base64 encoded context"
@@ -244,35 +243,45 @@ class QueryContextCache:
                 #     }
                 #   ]
                 # }
-                
+
                 # Deserialize entries
                 entries = data.get("entries", None)
                 for entry in entries:
-                    logger.debug("deserialize {}".format(entry))
+                    logger.debug(f"deserialize {entry}")
                     if not isinstance(entry.get("id"), int):
                         logger.debug("id type error")
-                        raise TypeError(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
+                        raise TypeError(
+                            f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}"
+                        )
                     if not isinstance(entry.get("timestamp"), int):
                         logger.debug("timestamp type error")
-                        raise TypeError(f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}")
+                        raise TypeError(
+                            f"Invalid type for 'timestamp' field: Expected int, got {type(entry['timestamp'])}"
+                        )
                     if not isinstance(entry.get("priority"), int):
                         logger.debug("priority type error")
-                        raise TypeError(f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}")
-                    
-                    context = entry.get("context", None) # OpaqueContext field currently is empty from GS side.
-                
+                        raise TypeError(
+                            f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}"
+                        )
+
+                    context = entry.get(
+                        "context", None
+                    )  # OpaqueContext field currently is empty from GS side.
+
                     if context is not None and not isinstance(context, str):
                         logger.debug("context type error")
-                        raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
+                        raise TypeError(
+                            f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}"
+                        )
                     self.merge(
                         entry.get("id"),
                         entry.get("timestamp"),
                         entry.get("priority"),
-                        context, 
+                        context,
                     )
-                
+
                 # Sync the priority map at the end of for loop merge.
-                self.sync_priority_map()
+                self._sync_priority_map()
             except Exception as e:
                 logger.debug(f"deserialize_json_dict: Exception = {e}")
                 # clear cache due to incomplete merge
@@ -291,4 +300,3 @@ class QueryContextCache:
 
     def get_size(self) -> int:
         return len(self._tree_set)
-

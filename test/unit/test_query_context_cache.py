@@ -2,8 +2,9 @@
 # Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
 #
 
-from random import shuffle
 import json
+from random import shuffle
+
 import pytest
 
 from snowflake.connector.query_context_cache import (
@@ -69,7 +70,7 @@ def qcc_with_data(
             expected_data.priorities[i],
             expected_data.contexts[i],
         )
-    qcc_with_no_data.sync_priority_map()
+    qcc_with_no_data._sync_priority_map()
     yield qcc_with_no_data
     qcc_with_no_data.clear_cache()
 
@@ -87,7 +88,7 @@ def qcc_with_data_random_order(
             expected_data.priorities[i],
             expected_data.contexts[i],
         )
-    qcc_with_no_data.sync_priority_map()
+    qcc_with_no_data._sync_priority_map()
     yield qcc_with_no_data
     qcc_with_no_data.clear_cache()
 
@@ -104,7 +105,7 @@ def qcc_with_data_null_context(
             expected_data_with_null_context.priorities[i],
             expected_data_with_null_context.contexts[i],
         )
-    qcc_with_no_data.sync_priority_map()
+    qcc_with_no_data._sync_priority_map()
     yield qcc_with_no_data
     qcc_with_no_data.clear_cache()
 
@@ -114,23 +115,22 @@ def assert_cache_with_data(
 ) -> None:
     assert qcc.get_size() == MAX_CAPACITY
 
-    i = 0
     for idx, qce in enumerate(qcc._get_elements()):
-        assert expected_data.ids[i] == qce.id
-        assert expected_data.timestamps[i] == qce.read_timestamp
-        assert expected_data.priorities[i] == qce.priority
-        assert expected_data.contexts[i] == qce.context
-        i += 1
+        assert expected_data.ids[idx] == qce.id
+        assert expected_data.timestamps[idx] == qce.read_timestamp
+        assert expected_data.priorities[idx] == qce.priority
+        assert expected_data.contexts[idx] == qce.context
 
 
 def test_is_empty(qcc_with_no_data: QueryContextCache):
     assert qcc_with_no_data.get_size() == 0
 
+
 def test_deserialize_type_error():
     json_string = """{
         "entries":[
             {
-            "id": "abc",  
+            "id": "abc",
             "read_timestamp": 1629456000,
             "priority": 0,
             "context": "sample_base64_encoded_context"
@@ -138,15 +138,14 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    data = json.loads(json_string) # convert JSON to dict
-    qcc.deserialize_json_dict(data)  
-    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
-    
-    
+    data = json.loads(json_string)  # convert JSON to dict
+    qcc.deserialize_json_dict(data)
+    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+
     json_string = """{
         "entries":[
             {
-            "id": 0,  
+            "id": 0,
             "timestamp": 111.111,
             "priority": 0,
             "context": "sample_base64_encoded_context"
@@ -154,14 +153,14 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    data = json.loads(json_string) # convert JSON to dict
-    qcc.deserialize_json_dict(data)  
-    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
-    
+    data = json.loads(json_string)  # convert JSON to dict
+    qcc.deserialize_json_dict(data)
+    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+
     json_string = """{
         "entries":[
             {
-            "id": 0,  
+            "id": 0,
             "timestamp": 123412123,
             "priority": "main",
             "context": "sample_base64_encoded_context"
@@ -169,14 +168,14 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    data = json.loads(json_string) # convert JSON to dict
-    qcc.deserialize_json_dict(data)    
-    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
-    
+    data = json.loads(json_string)  # convert JSON to dict
+    qcc.deserialize_json_dict(data)
+    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+
     json_string = """{
         "entries":[
             {
-            "id": 0,  
+            "id": 0,
             "timestamp": 1112314121,
             "priority": 0,
             "context": 1231412
@@ -184,14 +183,14 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    data = json.loads(json_string) # convert JSON to dict
+    data = json.loads(json_string)  # convert JSON to dict
     qcc.deserialize_json_dict(data)
-    assert qcc.get_size() == 0 # because of TypeError, the qcc is cleared
-    
+    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+
     json_string = """{
         "entries":[
             {
-            "id": 0,  
+            "id": 0,
             "timestamp": 123142341,
             "priority": 0,
             "context": "sample_base64_encoded_context"
@@ -199,9 +198,11 @@ def test_deserialize_type_error():
         ]
     }"""
     qcc = QueryContextCache(MAX_CAPACITY)
-    data = json.loads(json_string) # convert JSON to dict
+    data = json.loads(json_string)  # convert JSON to dict
     qcc.deserialize_json_dict(data)
-    assert qcc.get_size() == 1 # because this time the input is correct, qcc size should be 1
+    assert (
+        qcc.get_size() == 1
+    )  # because this time the input is correct, qcc size should be 1
 
 
 def test_with_data(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
@@ -224,7 +225,7 @@ def test_check_cache_capacity(
         BASE_PRIORITY + MAX_CAPACITY,
         CONTEXT,
     )
-    qcc_with_data.sync_priority_map()
+    qcc_with_data._sync_priority_map()
     qcc_with_data.check_cache_capacity()
 
     assert_cache_with_data(qcc_with_data, expected_data)
@@ -240,7 +241,7 @@ def test_update_timestamp(
         BASE_PRIORITY + update_id,
         CONTEXT,
     )
-    qcc_with_data.sync_priority_map()
+    qcc_with_data._sync_priority_map()
     expected_data.timestamps[update_id] = BASE_READ_TIMESTAMP + update_id + 10
     assert_cache_with_data(qcc_with_data, expected_data)
 
@@ -253,7 +254,7 @@ def test_update_priority(
     qcc_with_data.merge(
         BASE_ID + update_id, BASE_READ_TIMESTAMP + update_id, updated_priority, CONTEXT
     )
-    qcc_with_data.sync_priority_map()
+    qcc_with_data._sync_priority_map()
 
     for i in range(update_id, MAX_CAPACITY - 1):
         expected_data.ids[i] = expected_data.ids[i + 1]
@@ -272,11 +273,12 @@ def test_add_same_priority(
     i = MAX_CAPACITY
     updated_priority = BASE_PRIORITY + 1
     qcc_with_data.merge(BASE_ID + i, BASE_READ_TIMESTAMP + i, updated_priority, CONTEXT)
-    qcc_with_data.sync_priority_map()
+    qcc_with_data._sync_priority_map()
 
     expected_data.ids[1] = BASE_ID + i
     expected_data.timestamps[1] = BASE_READ_TIMESTAMP + i
     assert_cache_with_data(qcc_with_data, expected_data)
+
 
 # helper function to shuffle priorities in all entries
 def random_priority_shuffle(num_entries: int):
@@ -289,17 +291,22 @@ def random_priority_shuffle(num_entries: int):
     id_to_priority = dict(zip(id_list, priority_list))
     return id_to_priority
 
-def test_priority_switch_randomized(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
+
+def test_priority_switch_randomized(
+    qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
+):
     num_retry = MAX_CAPACITY * 5
-    for i in range(num_retry):
+    for _ in range(num_retry):
         # for each iteration, we simulate randomized priority switch for the batch of QCEs.
         id_to_priority = random_priority_shuffle(MAX_CAPACITY)
 
         # Update priorities using the random shuffle
-        for idx, (id, priority) in enumerate(id_to_priority.items()):
-            qcc_with_data.merge(id, BASE_READ_TIMESTAMP + MAX_CAPACITY + 10, priority, CONTEXT)
+        for id, priority in id_to_priority.items():
+            qcc_with_data.merge(
+                id, BASE_READ_TIMESTAMP + MAX_CAPACITY + 10, priority, CONTEXT
+            )
 
-        qcc_with_data.sync_priority_map()
+        qcc_with_data._sync_priority_map()
 
         # Check if the inner priority map has been correctly updated
         for id, priority in id_to_priority.items():
@@ -308,11 +315,14 @@ def test_priority_switch_randomized(qcc_with_data: QueryContextCache, expected_d
         for id in range(MAX_CAPACITY):
             assert qcc_with_data._id_map[id]._id == id
         # Update expected_data
-        for idx, id in enumerate(sorted(id_to_priority.keys(), key=lambda x: id_to_priority[x])):
+        for idx, id in enumerate(
+            sorted(id_to_priority.keys(), key=lambda x: id_to_priority[x])
+        ):
             expected_data.ids[idx] = id
             expected_data.timestamps[idx] = BASE_READ_TIMESTAMP + MAX_CAPACITY + 10
 
         assert_cache_with_data(qcc_with_data, expected_data)
+
 
 def test_same_id_with_stale_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
@@ -321,7 +331,7 @@ def test_same_id_with_stale_timestamp(
     qcc_with_data.merge(
         BASE_ID + i, BASE_READ_TIMESTAMP + i - 10, BASE_PRIORITY + i, CONTEXT
     )
-    qcc_with_data.sync_priority_map()
+    qcc_with_data._sync_priority_map()
     qcc_with_data.check_cache_capacity()
 
     assert_cache_with_data(qcc_with_data, expected_data)
@@ -339,7 +349,7 @@ def test_empty_cache_with_null_data(
 def test_empty_cache_with_empty_response_data(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
-    assert_cache_with_data(qcc_with_data, expected_data)    
+    assert_cache_with_data(qcc_with_data, expected_data)
 
     qcc_with_data.deserialize_json_dict("")
     assert qcc_with_data.get_size() == 0
@@ -354,8 +364,8 @@ def test_serialization_deserialization_with_null_context(
     data = qcc_with_data_null_context.serialize_to_json()
     qcc_with_data_null_context.clear_cache()
     assert qcc_with_data_null_context.get_size() == 0
-    
-    data = json.loads(data) # convert JSON to dict
+
+    data = json.loads(data)  # convert JSON to dict
     qcc_with_data_null_context.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
 
@@ -369,24 +379,24 @@ def test_serialization_deserialization(
     qcc_with_data.clear_cache()
     assert qcc_with_data.get_size() == 0
 
-    data = json.loads(data) # convert JSON to dict
+    data = json.loads(data)  # convert JSON to dict
     qcc_with_data.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
 def test_eviction_order():
     qce1 = QueryContextElement(id=1, read_timestamp=13323, priority=1, context=None)
-    qce2 = QueryContextElement(
-        id=2, read_timestamp=15522, priority=4, context="")
-    
+    qce2 = QueryContextElement(id=2, read_timestamp=15522, priority=4, context="")
+
     qce3 = QueryContextElement(
-        id=3, read_timestamp=8383, priority=99, context="generic context")
-    
+        id=3, read_timestamp=8383, priority=99, context="generic context"
+    )
+
     qce_list = [qce1, qce2, qce3]
     qcc = QueryContextCache(5)
     for qce in qce_list:
         qcc.merge(qce.id, qce.read_timestamp, qce.priority, qce.context)
-    qcc.sync_priority_map()
+    qcc._sync_priority_map()
 
     assert qcc.get_size() == 3
     assert qcc._last() == qce3
