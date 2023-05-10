@@ -1088,6 +1088,34 @@ def test_rownumber(conn):
             assert cur.rownumber == 1
 
 
+def test_get_last_request_json(conn):
+    """Checks whether get_last_request_json is returned as expected."""
+    with conn() as cnx:
+        with cnx.cursor() as cur:
+            assert cur.execute("select * from values (1), (2)")
+            assert cur.rownumber is None
+            return_val = json.loads(cur.get_last_request_json)
+
+            assert "data" in return_val
+            assert "code" in return_val
+            assert return_val["success"] is True
+            assert "message" in return_val
+
+
+def test_get_last_request_json_for_get_results(conn):
+    """Checks whether get_last_request_json for get_results_from_sfqid is returned as expected."""
+    with conn() as cnx:
+        with cnx.cursor() as cur:
+            assert cur.execute("select * from values (4), (5)")
+            cur.get_results_from_sfqid(cur.sfqid)
+            return_val = json.loads(cur.get_last_request_json)
+
+            assert "data" in return_val
+            assert "code" in return_val
+            assert return_val["success"] is True
+            assert "message" in return_val
+
+
 def test_values_set(conn):
     """Checks whether a bunch of properties start as Nones, but get set to something else when a query was executed."""
     properties = [

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import collections
+import json
 import logging
 import re
 import signal
@@ -264,6 +265,7 @@ class SnowflakeCursor:
         self._inner_cursor: SnowflakeCursor | None = None
         self._prefetch_hook = None
         self._rownumber: int | None = None
+        self._get_last_request_json: dict | None = None
 
         self.reset()
 
@@ -370,6 +372,19 @@ class SnowflakeCursor:
     def lastrowid(self) -> None:
         """Snowflake does not support lastrowid in which case None should be returned as per PEP249."""
         return None
+
+    @property
+    def get_last_request_json(self) -> str:
+        """
+        **** INTERNAL USE ONLY ******
+        This method fetches the raw JSON response returned from the backend for the most recently executed call.
+        WARNING: This method is primarily used for internal tools. Its implementation may be removed or changed at any time without notice.
+        """
+        return json.dumps(self._get_last_request_json)
+
+    @get_last_request_json.setter
+    def get_last_request_json(self, value: dict[str, Any]) -> None:
+        self._get_last_request_json = value
 
     @overload
     def callproc(self, procname: str) -> tuple:
@@ -541,6 +556,8 @@ class SnowflakeCursor:
             if self._timebomb is not None:
                 self._timebomb.cancel()
                 logger.debug("cancelled timebomb in finally")
+
+            self._get_last_request_json = ret
 
         if "data" in ret and "parameters" in ret["data"]:
             parameters = ret["data"]["parameters"]
@@ -1073,6 +1090,7 @@ class SnowflakeCursor:
             Error.errorhandler_wrapper(
                 self.connection, self, ProgrammingError, errvalue
             )
+        self._get_last_request_json = ret
         return self
 
     def fetch_arrow_batches(self) -> Iterator[Table]:
@@ -1122,6 +1140,7 @@ class SnowflakeCursor:
     def abort_query(self, qid: str) -> bool:
         url = f"/queries/{qid}/abort-request"
         ret = self._connection.rest.request(url=url, method="post")
+        self._get_last_request_json = ret
         return ret.get("success")
 
     def executemany(
@@ -1457,6 +1476,7 @@ class SnowflakeCursor:
             ):
                 url = f"/queries/{sfqid}/result"
                 ret = self._connection.rest.request(url=url, method="get")
+                self._get_last_request_json = ret
                 if "data" in ret and "resultIds" in ret["data"]:
                     self._init_multi_statement_results(ret["data"])
 
