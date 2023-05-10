@@ -17,6 +17,15 @@ try:
 
     no_qcc = False
 except ImportError:
+
+    class QueryContextCache:
+        def __init__(self, capacity):
+            pass
+
+    class QueryContextElement:
+        def __init__(self, id, read_timestamp, priority, context):
+            pass
+
     no_qcc = True
 
 MAX_CAPACITY = 5
