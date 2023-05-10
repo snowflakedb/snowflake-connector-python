@@ -1194,6 +1194,7 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry, db_paramete
         assert len(telemetry_test.records) == 0
 
 
+@pytest.mark.skipolddriver
 def test_disable_query_context_cache(conn_cnx) -> None:
     with conn_cnx(disable_query_context_cache=True) as conn:
         # check that connector function correctly when query context
