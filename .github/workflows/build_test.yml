@@ -109,7 +109,8 @@ jobs:
         env:
           CIBW_ARCHS: ${{ matrix.os.arch }}
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
-          MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
+          CIBW_ENVIRONMENT: 'MACOSX_DEPLOYMENT_TARGET=12.0'
+          # MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
         with:
           output-dir: dist
       - name: Show wheels generated
