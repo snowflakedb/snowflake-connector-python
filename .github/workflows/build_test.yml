@@ -72,14 +72,19 @@ jobs:
         os:
           - image: ubuntu-20.04
             id: manylinux_x86_64
+            arch: auto
           - image: ubuntu-20.04
             id: manylinux_aarch64
+            arch: auto
           - image: windows-2019
             id: win_amd64
+            arch: auto
           - image: macos-latest
             id: macosx_x86_64
+            arch: auto
           - image: macos-latest
             id: macosx_arm64
+            arch: arm64
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
         exclude:
           - os:
@@ -102,8 +107,9 @@ jobs:
       - name: Building wheel
         uses: pypa/cibuildwheel@v2.12.0
         env:
+          CIBW_ARCHS: ${{ matrix.os.arch }}
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
-          # MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
+          MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
         with:
           output-dir: dist
       - name: Show wheels generated
