@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import pathlib
 import re
 import sys
 import uuid
@@ -286,6 +287,7 @@ class SnowflakeConnection:
     def __init__(
         self,
         connection_name: str | None = None,
+        config_file_path: pathlib.Path | None = None,
         **kwargs,
     ) -> None:
         self._lock_sequence_counter = Lock()
@@ -320,6 +322,10 @@ class SnowflakeConnection:
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
+        if config_file_path is not None:
+            # Change config file path and force update cache
+            CONFIG_PARSER.file_path = config_file_path
+            CONFIG_PARSER.read_config()
         if connection_name is not None:
             connections = CONFIG_PARSER["connections"]
             if connection_name not in connections:
