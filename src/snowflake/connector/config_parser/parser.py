@@ -90,7 +90,7 @@ class ConfigOption:
         return True, loaded_var
 
     def _get_config(self):
-        e = self._root_parser._conf
+        e = self._root_parser._conf_file_cache
         for k in self._nest_path[1:]:
             e = e[k]
         if isinstance(e, (Table, TOMLDocument)):
@@ -112,7 +112,7 @@ class ConfigParser:
         self._options: dict[str, ConfigOption] = dict()
         self._sub_parsers: dict[str, ConfigParser] = dict()
         # Dictionary to cache read in config file
-        self._conf: TOMLDocument | None = None
+        self._conf_file_cache: TOMLDocument | None = None
         # Information necessary to be able to nest elements
         #  and add options in O(1)
         self._root_parser: ConfigParser = self
@@ -128,7 +128,7 @@ class ConfigParser:
             )
         LOGGER.debug(f"reading configuration file from {str(self.file_path)}")
         try:
-            self._conf = tomlkit.parse(self.file_path.read_text())
+            self._conf_file_cache = tomlkit.parse(self.file_path.read_text())
         except Exception as e:
             raise ConfigSourceError(
                 f"An unknown error happened while loading '{str(self.file_path)}"
@@ -174,7 +174,7 @@ class ConfigParser:
         _root_setter_helper(other)
 
     def __getitem__(self, item: str) -> ConfigOption | ConfigParser:
-        if self._conf is None and (
+        if self._conf_file_cache is None and (
             self.file_path is not None
             and self.file_path.exists()
             and self.file_path.is_file()
