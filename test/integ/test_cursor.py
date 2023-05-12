@@ -1088,13 +1088,13 @@ def test_rownumber(conn):
             assert cur.rownumber == 1
 
 
-def test_last_response_json(conn):
+def test_last_result(conn):
     """Checks whether get_last_request_json is returned as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
             assert cur.execute("select * from values (1), (2)")
             assert cur.rownumber is None
-            return_val = json.loads(cur._last_response_json)
+            return_val = cur._last_result
 
             assert "data" in return_val
             assert "code" in return_val
@@ -1102,13 +1102,13 @@ def test_last_response_json(conn):
             assert "message" in return_val
 
 
-def test_last_response_json_for_get_results(conn):
+def test_last_result_for_get_results_api(conn):
     """Checks whether get_last_request_json for get_results_from_sfqid is returned as expected."""
     with conn() as cnx:
         with cnx.cursor() as cur:
             assert cur.execute("select * from values (4), (5)")
             cur.get_results_from_sfqid(cur.sfqid)
-            return_val = json.loads(cur._last_response_json)
+            return_val = cur._last_result
 
             assert "data" in return_val
             assert "code" in return_val

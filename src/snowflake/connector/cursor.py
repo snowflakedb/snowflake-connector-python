@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import collections
-import json
 import logging
 import re
 import signal
@@ -265,7 +264,7 @@ class SnowflakeCursor:
         self._inner_cursor: SnowflakeCursor | None = None
         self._prefetch_hook = None
         self._rownumber: int | None = None
-        self._last_response_dict: dict | None = None
+        self._cached_last_result: dict | None = None
 
         self.reset()
 
@@ -374,13 +373,13 @@ class SnowflakeCursor:
         return None
 
     @property
-    def _last_response_json(self) -> str:
+    def _last_result(self) -> dict[str, Any]:
         """
         **** INTERNAL USE ONLY ******
-        This method fetches the raw JSON response returned from the backend for the most recently executed call.
+        This method fetches the raw response returned from the backend for the most recently executed call.
         WARNING: This method is primarily used for internal tools. Its implementation may be removed or changed at any time without notice.
         """
-        return json.dumps(self._last_response_dict)
+        return self._cached_last_result
 
     @overload
     def callproc(self, procname: str) -> tuple:
@@ -553,7 +552,7 @@ class SnowflakeCursor:
                 self._timebomb.cancel()
                 logger.debug("cancelled timebomb in finally")
 
-            self._last_response_dict = ret
+            self._cached_last_result = ret
 
         if "data" in ret and "parameters" in ret["data"]:
             parameters = ret["data"]["parameters"]
@@ -1086,7 +1085,7 @@ class SnowflakeCursor:
             Error.errorhandler_wrapper(
                 self.connection, self, ProgrammingError, errvalue
             )
-        self._last_response_dict = ret
+        self._cached_last_result = ret
         return self
 
     def fetch_arrow_batches(self) -> Iterator[Table]:
@@ -1136,7 +1135,7 @@ class SnowflakeCursor:
     def abort_query(self, qid: str) -> bool:
         url = f"/queries/{qid}/abort-request"
         ret = self._connection.rest.request(url=url, method="post")
-        self._last_response_dict = ret
+        self._cached_last_result = ret
         return ret.get("success")
 
     def executemany(
@@ -1472,7 +1471,7 @@ class SnowflakeCursor:
             ):
                 url = f"/queries/{sfqid}/result"
                 ret = self._connection.rest.request(url=url, method="get")
-                self._last_response_dict = ret
+                self._cached_last_result = ret
                 if "data" in ret and "resultIds" in ret["data"]:
                     self._init_multi_statement_results(ret["data"])
 
