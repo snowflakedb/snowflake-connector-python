@@ -1094,7 +1094,7 @@ def test_last_result(conn):
         with cnx.cursor() as cur:
             assert cur.execute("select * from values (1), (2)")
             assert cur.rownumber is None
-            return_val = cur._last_result
+            return_val = cur._cached_last_result
 
             assert "data" in return_val
             assert "code" in return_val
@@ -1108,7 +1108,7 @@ def test_last_result_for_get_results_api(conn):
         with cnx.cursor() as cur:
             assert cur.execute("select * from values (4), (5)")
             cur.get_results_from_sfqid(cur.sfqid)
-            return_val = cur._last_result
+            return_val = cur._cached_last_result
 
             assert "data" in return_val
             assert "code" in return_val

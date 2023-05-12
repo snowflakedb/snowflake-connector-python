@@ -372,15 +372,6 @@ class SnowflakeCursor:
         """Snowflake does not support lastrowid in which case None should be returned as per PEP249."""
         return None
 
-    @property
-    def _last_result(self) -> dict[str, Any]:
-        """
-        **** INTERNAL USE ONLY ******
-        This method fetches the raw response returned from the backend for the most recently executed call.
-        WARNING: This method is primarily used for internal tools. Its implementation may be removed or changed at any time without notice.
-        """
-        return self._cached_last_result
-
     @overload
     def callproc(self, procname: str) -> tuple:
         ...
