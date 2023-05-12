@@ -27,7 +27,7 @@ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> * batches, PyObject *use_numpy);
+  CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
 
   /**
    * Destructor
@@ -58,8 +58,13 @@ protected:
   nanoarrow::UniqueArray m_arrowArray;
   nanoarrow::UniqueArrayView m_arrowArrayView;
 
+  std::vector<nanoarrow::UniqueArray> m_ipcArrowArrayVec;
+  std::vector<nanoarrow::UniqueArrayView> m_ipcArrowArrayViewVec;
+  nanoarrow::UniqueSchema m_ipcArrowSchema;
+
 private:
   /** number of columns */
+  const char* m_arrowBytes;
   int m_columnCount;
 
   /** number of record batch in current chunk */
@@ -86,7 +91,7 @@ private:
 class DictCArrowChunkIterator : public CArrowChunkIterator
 {
 public:
-  DictCArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> * batches, PyObject *use_numpy);
+  DictCArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
 
   ~DictCArrowChunkIterator() = default;
 

@@ -8,29 +8,14 @@
 
 from cpython.ref cimport PyObject
 from cython.operator cimport dereference
-from libc.stdint cimport uint8_t, uintptr_t
+from libc.stdint cimport int64_t, uint8_t, uintptr_t
 from libcpp.memory cimport shared_ptr
 from libcpp.vector cimport vector
-from pyarrow.includes.common cimport CResult, CStatus, GetResultValue
-from pyarrow.includes.libarrow cimport (
-    CBuffer,
-    CInputStream,
-    CIpcReadOptions,
-    CRecordBatch,
-    CRecordBatchReader,
-    CRecordBatchStreamReader,
-    FileInterface,
-    FileMode,
-    Readable,
-    Seekable,
-)
 
-import pyarrow
-
-IF ARROW_LESS_THAN_8:
-    from pyarrow.includes.libarrow cimport PyReadableFile
-ELSE:
-    from pyarrow.includes.libarrow_python cimport PyReadableFile
+try:
+    import pyarrow
+except ImportError:
+    pass
 
 from .constants import IterUnit
 from .errorcode import (
@@ -53,29 +38,32 @@ cdef extern from "CArrowIterator.hpp" namespace "sf":
         shared_ptr[ReturnVal] next() except +;
         vector[uintptr_t] getArrowArrayPtrs();
         vector[uintptr_t] getArrowSchemaPtrs();
+        uintptr_t getArrowSchemaPtr();
 
 
 cdef extern from "CArrowChunkIterator.hpp" namespace "sf":
     cdef cppclass CArrowChunkIterator(CArrowIterator):
         CArrowChunkIterator(
-                PyObject* context,
-                vector[shared_ptr[CRecordBatch]]* batches,
-                PyObject* use_numpy,
+            PyObject* context,
+            char* arrow_bytes,
+            int64_t arrow_bytes_size,
+            PyObject* use_numpy,
         ) except +
 
     cdef cppclass DictCArrowChunkIterator(CArrowChunkIterator):
         DictCArrowChunkIterator(
-                PyObject* context,
-                vector[shared_ptr[CRecordBatch]]* batches,
-                PyObject* use_numpy
+            PyObject* context,
+            char* arrow_bytes,
+            int64_t arrow_bytes_size,
+            PyObject* use_numpy
         ) except +
-
 
 cdef extern from "CArrowTableIterator.hpp" namespace "sf":
     cdef cppclass CArrowTableIterator(CArrowIterator):
         CArrowTableIterator(
             PyObject* context,
-            vector[shared_ptr[CRecordBatch]]* batches,
+            char* arrow_bytes,
+            int64_t arrow_bytes_size,
             bint number_to_decimal,
         ) except +
 
@@ -97,12 +85,13 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef CArrowIterator* cIterator
     cdef str unit
     cdef shared_ptr[ReturnVal] cret
-    cdef vector[shared_ptr[CRecordBatch]] batches
     cdef object use_dict_result
     cdef object cursor
     cdef vector[uintptr_t] nanoarrow_Table
     cdef vector[uintptr_t] nanoarrow_Schema
     cdef object table_returned
+    cdef char* arrow_bytes
+    cdef int64_t arrow_bytes_size
 
     # this is the flag indicating whether fetch data as numpy datatypes or not. The flag
     # is passed from the constructor of SnowflakeConnection class. Note, only FIXED, REAL
@@ -112,55 +101,21 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object use_numpy
     cdef object number_to_decimal
     cdef object pyarrow_table
+    # this is needed keep the original reference of the python bytes object
+    cdef object python_bytes
 
     def __cinit__(
             self,
             object cursor,
-            object py_inputstream,
+            object arrow_bytes,
             object arrow_context,
             object use_dict_result,
             object numpy,
             object number_to_decimal,
+
     ):
-        cdef shared_ptr[CInputStream] input_stream
-        cdef shared_ptr[CRecordBatch] record_batch
-        cdef CStatus ret
-        input_stream.reset(new PyReadableFile(py_inputstream))
-        cdef CResult[shared_ptr[CRecordBatchReader]] readerRet = CRecordBatchStreamReader.Open(
-            input_stream,
-            CIpcReadOptions.Defaults()
-            )
-        if not readerRet.ok():
-            Error.errorhandler_wrapper(
-                cursor.connection if cursor is not None else None,
-                cursor,
-                OperationalError,
-                {
-                    'msg': f'Failed to open arrow stream: {readerRet.status().message()}',
-                    'errno': ER_FAILED_TO_READ_ARROW_STREAM
-                })
 
-        cdef shared_ptr[CRecordBatchReader] reader = dereference(readerRet)
-
-        while True:
-            ret = reader.get().ReadNext(&record_batch)
-            if not ret.ok():
-                Error.errorhandler_wrapper(
-                    cursor.connection if cursor is not None else None,
-                    cursor,
-                    OperationalError,
-                    {
-                        'msg': f'Failed to read next arrow batch: {ret.message()}',
-                        'errno': ER_FAILED_TO_READ_ARROW_STREAM
-                    }
-                )
-
-            if record_batch.get() is NULL:
-                break
-
-            self.batches.push_back(record_batch)
-
-        snow_logger.debug(msg=f"Batches read: {self.batches.size()}", path_name=__file__, func_name="__cinit__")
+        #snow_logger.debug(msg=f"Batches read: {self.batches.size()}", path_name=__file__, func_name="__cinit__")
 
         self.context = arrow_context
         self.cIterator = NULL
@@ -171,6 +126,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.number_to_decimal = number_to_decimal
         self.pyarrow_table = None
         self.table_returned = False
+        self.arrow_bytes = <char*>arrow_bytes
+        self.arrow_bytes_size = len(arrow_bytes)
+        self.python_bytes = arrow_bytes
 
     def __dealloc__(self):
         del self.cIterator
@@ -219,20 +177,23 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     def init_row_unit(self) -> None:
         self.cIterator = new CArrowChunkIterator(
             <PyObject *> self.context,
-            &self.batches,
+            self.arrow_bytes,
+            self.arrow_bytes_size,
             <PyObject *> self.use_numpy
         ) \
             if not self.use_dict_result \
             else new DictCArrowChunkIterator(
             <PyObject *> self.context,
-            &self.batches,
+            self.arrow_bytes,
+            self.arrow_bytes_size,
             <PyObject *> self.use_numpy
             )
 
     def init_table_unit(self) -> None:
         self.cIterator = new CArrowTableIterator(
             <PyObject *> self.context,
-            &self.batches,
+            self.arrow_bytes,
+            self.arrow_bytes_size,
             self.number_to_decimal,
         )
 

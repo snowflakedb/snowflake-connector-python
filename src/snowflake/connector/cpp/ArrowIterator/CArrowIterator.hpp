@@ -102,7 +102,7 @@ public:
 class CArrowIterator
 {
 public:
-  CArrowIterator(std::vector<std::shared_ptr<arrow::RecordBatch>> * batches);
+  CArrowIterator();
 
   virtual ~CArrowIterator() = default;
 
@@ -112,10 +112,10 @@ public:
   virtual std::shared_ptr<ReturnVal> next() = 0;
   virtual std::vector<uintptr_t> getArrowArrayPtrs() { return {}; };
   virtual std::vector<uintptr_t> getArrowSchemaPtrs() { return {}; };
+  virtual uintptr_t getArrowSchemaPtr() { return 0; };
 
 protected:
    /** list of all record batch in current chunk */
-  std::vector<std::shared_ptr<arrow::RecordBatch>> *m_cRecordBatches;
 
   static Logger* logger;
 };
