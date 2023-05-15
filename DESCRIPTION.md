@@ -17,6 +17,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug when `_prefetch_hook()` was not called before yielding results of `execute_async()`.
   - Fixed a bug where some ResultMetadata fields were marked as required when they were optional.
   - Bumped pandas dependency from <1.6.0,>=1.0.0 to >=1.0.0,<2.1.0
+  - Fixed a bug where bulk insert converts date incorrectly.
 
 - v3.0.3(April 20, 2023)
   - Fixed a bug that prints error in logs for GET command on GCS.

@@ -366,8 +366,7 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
-        # milliseconds
-        return _convert_date_to_epoch_milliseconds(value)
+        return value.strftime("%Y-%m-%d")
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
