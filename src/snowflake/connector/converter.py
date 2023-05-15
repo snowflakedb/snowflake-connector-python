@@ -366,6 +366,7 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
+        # we are binding "TEXT" value for DATE, check function _adjust_bind_type
         return value.strftime("%Y-%m-%d")
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
@@ -734,3 +735,11 @@ class SnowflakeConverter:
         if not tz:
             return datetime.utcfromtimestamp(seconds) + timedelta(microseconds=fraction)
         return datetime.fromtimestamp(seconds, tz=tz) + timedelta(microseconds=fraction)
+
+
+def _adjust_bind_type(input_type: str | None) -> str | None:
+    # This is to address SNOW-7706788, binding "DATE" value can not go beyond date 2969-05-03 (31536000000)
+    # https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes
+    # https://docs.snowflake.com/en/developer-guide/sql-api/submitting-requests
+    # to correctly bind DATE value, we adjust to use "TEXT" type to bind value
+    return input_type if input_type != "DATE" else "TEXT"
