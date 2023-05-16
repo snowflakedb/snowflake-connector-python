@@ -57,7 +57,7 @@ from .constants import (
     OCSPMode,
     QueryStatus,
 )
-from .converter import SnowflakeConverter
+from .converter import SnowflakeConverter, _adjust_bind_type
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
 from .description import (
     CLIENT_NAME,
@@ -1261,13 +1261,13 @@ class SnowflakeConnection:
                 if all(param_data.type == first_type for param_data in all_param_data):
                     snowflake_type = first_type
                 processed_params[str(idx + 1)] = {
-                    "type": snowflake_type,
+                    "type": _adjust_bind_type(snowflake_type),
                     "value": [param_data.binding for param_data in all_param_data],
                 }
             else:
                 snowflake_type, snowflake_binding = get_type_and_binding(v)
                 processed_params[str(idx + 1)] = {
-                    "type": snowflake_type,
+                    "type": _adjust_bind_type(snowflake_type),
                     "value": snowflake_binding,
                 }
         if logger.getEffectiveLevel() <= logging.DEBUG:

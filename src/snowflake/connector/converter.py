@@ -101,10 +101,6 @@ def _convert_datetime_to_epoch_nanoseconds(dt: datetime) -> str:
     return f"{convert_datetime_to_epoch(dt):f}".replace(".", "") + "000"
 
 
-def _convert_date_to_epoch_milliseconds(dt: datetime) -> str:
-    return f"{(dt - ZERO_EPOCH_DATE).total_seconds():.3f}".replace(".", "")
-
-
 def _convert_time_to_epoch_nanoseconds(tm: dt_t) -> str:
     return (
         str(tm.hour * 3600 + tm.minute * 60 + tm.second)
@@ -366,8 +362,8 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
-        # milliseconds
-        return _convert_date_to_epoch_milliseconds(value)
+        # we are binding "TEXT" value for DATE, check function _adjust_bind_type
+        return value.isoformat()
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
@@ -735,3 +731,11 @@ class SnowflakeConverter:
         if not tz:
             return datetime.utcfromtimestamp(seconds) + timedelta(microseconds=fraction)
         return datetime.fromtimestamp(seconds, tz=tz) + timedelta(microseconds=fraction)
+
+
+def _adjust_bind_type(input_type: str | None) -> str | None:
+    # This is to address SNOW-7706788, binding "DATE" value can not go beyond date 2969-05-03 (31536000000)
+    # https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes
+    # https://docs.snowflake.com/en/developer-guide/sql-api/submitting-requests
+    # to correctly bind DATE value, we adjust to use "TEXT" type to bind value
+    return input_type if input_type != "DATE" else "TEXT"

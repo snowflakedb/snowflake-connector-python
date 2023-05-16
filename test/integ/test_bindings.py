@@ -432,6 +432,55 @@ drop table if exists {name}
 
 
 @pytest.mark.skipolddriver
+def test_binding_bulk_insert_date(conn_cnx, db_parameters):
+    """Bulk insert test."""
+    with conn_cnx() as cnx:
+        cnx.cursor().execute(
+            """
+create or replace table {name} (
+    c1 date
+)
+""".format(
+                name=db_parameters["name"]
+            )
+        )
+    try:
+        with conn_cnx(paramstyle="qmark") as cnx:
+            c = cnx.cursor()
+            cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
+            dates = [
+                [date.fromisoformat("1750-05-09")],
+                [date.fromisoformat("1969-12-31")],
+                [date.fromisoformat("1970-01-01")],
+                [date.fromisoformat("2023-05-12")],
+                [date.fromisoformat("2999-12-31")],
+                [date.fromisoformat("3000-12-31")],
+                [date.fromisoformat("9999-12-31")],
+            ]
+            c.executemany(f'INSERT INTO {db_parameters["name"]}(c1) VALUES (?)', dates)
+            assert c.rowcount == len(dates)
+            ret = c.execute(f'SELECT c1 from {db_parameters["name"]}').fetchall()
+            assert ret == [
+                (date(1750, 5, 9),),
+                (date(1969, 12, 31),),
+                (date(1970, 1, 1),),
+                (date(2023, 5, 12),),
+                (date(2999, 12, 31),),
+                (date(3000, 12, 31),),
+                (date(9999, 12, 31),),
+            ]
+    finally:
+        with conn_cnx() as cnx:
+            cnx.cursor().execute(
+                """
+drop table if exists {name}
+""".format(
+                    name=db_parameters["name"]
+                )
+            )
+
+
+@pytest.mark.skipolddriver
 def test_bulk_insert_binding_fallback(conn_cnx):
     """When stage creation fails, bulk inserts falls back to server side binding and disables stage optimization."""
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as csr:
