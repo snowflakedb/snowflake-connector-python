@@ -16,11 +16,20 @@ if TYPE_CHECKING:
 
 from platformdirs import PlatformDirs
 
+# We use platformdirs to determine where system files should be placed
+#  Please see docs for all the directories defined in the module
+#  https://platformdirs.readthedocs.io/
 dirs = PlatformDirs(
     appname="snowflake",
     appauthor=False,
     ensure_exists=True,
 )
+
+# Snowflake's central configuration file, (see platformdirs comment above)
+#   located at:
+#   * Linux: `~/.config/snowflake/config.toml` but can be updated with XDG vars
+#   * Windows: `%USERPROFILE%\AppData\Local\snowflake\config.toml`
+#   * Mac: `~/Library/Application Support/$appname/config.toml`
 config_file = dirs.user_config_path / "config.toml"
 
 DBAPI_TYPE_STRING = 0
