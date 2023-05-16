@@ -8,7 +8,6 @@
 #include "CArrowIterator.hpp"
 #include "nanoarrow.h"
 #include "nanoarrow.hpp"
-#include "arrow/c/bridge.h"
 #include <string>
 #include <memory>
 #include <vector>
@@ -28,9 +27,10 @@ public:
   /**
    * Constructor
    */
+
   CArrowTableIterator(
   PyObject* context,
-  std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
+  char* arrow_bytes, int64_t arrow_bytes_size,
   bool number_to_decimal
   );
 
@@ -48,12 +48,9 @@ public:
 
 private:
   // nanoarrow data
-  std::vector<nanoarrow::UniqueArray> m_nanoarrowTable;
-  std::vector<nanoarrow::UniqueSchema> m_nanoarrowSchemas;
-  std::vector<nanoarrow::UniqueArrayView> m_nanoarrowViews;
-
   std::vector<std::vector<nanoarrow::UniqueArray>> m_newArrays;
   std::vector<std::vector<nanoarrow::UniqueSchema>> m_newSchemas;
+  std::vector<nanoarrow::UniqueSchema> m_ipcSchemaArrayVec;
 
   bool m_tableConverted = false;
 

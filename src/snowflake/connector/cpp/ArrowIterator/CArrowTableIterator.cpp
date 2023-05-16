@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
 
 namespace sf
 {
@@ -30,56 +31,22 @@ namespace sf
 void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
 {
   // Type conversion, the code needs to be optimized
-  for (unsigned int batchIdx = 0; batchIdx <  m_cRecordBatches->size(); batchIdx++)
+  for (unsigned int batchIdx = 0; batchIdx <  m_ipcArrowArrayViewVec.size(); batchIdx++)
   {
-    std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
-    std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
-
     // each record batch will have its own list of newly created array and schema
     m_newArrays.push_back(std::vector<nanoarrow::UniqueArray>());
     m_newSchemas.push_back(std::vector<nanoarrow::UniqueSchema>());
 
-    // These copies will be used if rebuilding the RecordBatch if necessary
-    nanoarrow::UniqueSchema arrowSchema;
-    nanoarrow::UniqueArray arrowArray;
-    nanoarrow::UniqueArrayView arrowArrayView;
-
-    // Recommended path
-    // TODO: Export is not needed when using nanoarrow IPC to read schema
-    arrow::Status exportBatchOk = arrow::ExportRecordBatch(
-      *currentBatch, arrowArray.get(), arrowSchema.get());
+    nanoarrow::UniqueSchema copiedSchema;
+    ArrowSchemaDeepCopy(m_ipcArrowSchema.get(), copiedSchema.get());
+    m_ipcSchemaArrayVec.push_back(std::move(copiedSchema));
 
     ArrowError error;
-    int returnCode = ArrowArrayViewInitFromSchema(
-      arrowArrayView.get(), arrowSchema.get(), &error);
-    if (returnCode != NANOARROW_OK) {
-      std::string errorInfo = Logger::formatString(
-        "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
-        ArrowErrorMessage(&error)
-      );
-      logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-      PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-    }
-
-    returnCode = ArrowArrayViewSetArray(
-        arrowArrayView.get(), arrowArray.get(), &error);
-    if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] error initializing ArrowArrayView from array : %s",
-          ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-    }
-
-    m_nanoarrowTable.push_back(std::move(arrowArray));
-    m_nanoarrowSchemas.push_back(std::move(arrowSchema));
-    m_nanoarrowViews.push_back(std::move(arrowArrayView));
-
-    for (int colIdx = 0; colIdx < currentBatch->num_columns(); colIdx++)
+    int returnCode;
+    for (int colIdx = 0; colIdx < m_ipcSchemaArrayVec[batchIdx]->n_children; colIdx++)
     {
-      ArrowArrayView* columnArray = m_nanoarrowViews[batchIdx]->children[colIdx];
-      ArrowSchema* columnSchema = m_nanoarrowSchemas[batchIdx]->children[colIdx];
+      ArrowArrayView* columnArray = m_ipcArrowArrayViewVec[batchIdx]->children[colIdx];
+      ArrowSchema* columnSchema = m_ipcSchemaArrayVec[batchIdx]->children[colIdx];
       ArrowSchemaView columnSchemaView;
 
       returnCode = ArrowSchemaViewInit(
@@ -94,7 +61,7 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
       }
 
       ArrowStringView snowflakeLogicalType;
-      const char* metadata = m_nanoarrowSchemas[batchIdx]->children[colIdx]->metadata;
+      const char* metadata = m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->metadata;
       ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
       SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
         std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
@@ -113,9 +80,9 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
           }
           if (scale > 0 && columnSchemaView.type != ArrowType::NANOARROW_TYPE_DECIMAL128)
           {
-              // TODO: this log is causing seg fault
-//            logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
-//              scale, columnSchemaView.type);
+            // TODO: this log is causing seg fault
+            logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
+              scale, columnSchemaView.type);
             convertScaledFixedNumberColumn_nanoarrow(
                 batchIdx,
                 colIdx,
@@ -214,10 +181,10 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
 
 CArrowTableIterator::CArrowTableIterator(
 PyObject* context,
-std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
+char* arrow_bytes, int64_t arrow_bytes_size,
 const bool number_to_decimal
 )
-: CArrowIterator(batches),
+: CArrowIterator(arrow_bytes, arrow_bytes_size),
 m_context(context),
 m_convert_number_to_decimal(number_to_decimal)
 {
@@ -228,7 +195,7 @@ m_convert_number_to_decimal(number_to_decimal)
 std::shared_ptr<ReturnVal> CArrowTableIterator::next()
 {
   bool firstDone = this->convertRecordBatchesToTable_nanoarrow();
-  if (firstDone && !m_nanoarrowTable.empty())
+  if (firstDone && !m_ipcArrowArrayVec.empty())
   {
     return std::make_shared<ReturnVal>(Py_True, nullptr);
   }
@@ -339,10 +306,10 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
+  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -389,10 +356,10 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn_nanoarrow
     }
   }
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
+  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -464,10 +431,10 @@ void CArrowTableIterator::convertTimeColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
+  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -684,10 +651,10 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
+  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -824,10 +791,10 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   }
 
   ArrowArrayFinishBuildingDefault(newArray, &error);
-  m_nanoarrowSchemas[batchIdx]->children[colIdx]->release(m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_nanoarrowSchemas[batchIdx]->children[colIdx]);
-  m_nanoarrowTable[batchIdx]->children[colIdx]->release(m_nanoarrowTable[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_nanoarrowTable[batchIdx]->children[colIdx]);
+  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
+  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
+  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
   m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
   m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
 }
@@ -835,7 +802,7 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
 bool CArrowTableIterator::convertRecordBatchesToTable_nanoarrow()
 {
   // only do conversion once and there exist some record batches
-  if (!m_tableConverted && !m_cRecordBatches->empty())
+  if (!m_tableConverted && m_ipcArrowArrayViewVec.size() > 0)
   {
     reconstructRecordBatches_nanoarrow();
     return true;
@@ -845,16 +812,16 @@ bool CArrowTableIterator::convertRecordBatchesToTable_nanoarrow()
 
 std::vector<uintptr_t> CArrowTableIterator::getArrowArrayPtrs() {
     std::vector<uintptr_t> ret;
-    for(size_t i = 0; i < m_nanoarrowTable.size(); i++) {
-        ret.push_back((uintptr_t)(void*)(m_nanoarrowTable[i].get()));
+    for(size_t i = 0; i < m_ipcArrowArrayVec.size(); i++) {
+        ret.push_back((uintptr_t)(void*)(m_ipcArrowArrayVec[i].get()));
     }
     return ret;
 }
 
 std::vector<uintptr_t> CArrowTableIterator::getArrowSchemaPtrs() {
     std::vector<uintptr_t> ret;
-    for(size_t i = 0; i < m_nanoarrowSchemas.size(); i++) {
-        ret.push_back((uintptr_t)(void*)(m_nanoarrowSchemas[i].get()));
+    for(size_t i = 0; i < m_ipcSchemaArrayVec.size(); i++) {
+        ret.push_back((uintptr_t)(void*)(m_ipcSchemaArrayVec[i].get()));
     }
     return ret;
 }
