@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import abc
-import io
 import json
 import time
 from base64 import b64decode
@@ -569,7 +568,7 @@ class ArrowResultBatch(ResultBatch):
 
         iter = PyArrowIterator(
             None,
-            io.BytesIO(response.content),
+            response.content,
             self._context,
             self._use_dict_result,
             self._numpy,
@@ -595,7 +594,7 @@ class ArrowResultBatch(ResultBatch):
 
         _iter = PyArrowIterator(
             None,
-            io.BytesIO(b64decode(data)),
+            b64decode(data),
             self._context,
             self._use_dict_result,
             self._numpy,
