@@ -102,7 +102,7 @@ public:
 class CArrowIterator
 {
 public:
-  CArrowIterator(std::vector<std::shared_ptr<arrow::RecordBatch>> * batches);
+  CArrowIterator(char* arrow_bytes, int64_t arrow_bytes_size);
 
   virtual ~CArrowIterator() = default;
 
@@ -114,10 +114,12 @@ public:
   virtual std::vector<uintptr_t> getArrowSchemaPtrs() { return {}; };
 
 protected:
-   /** list of all record batch in current chunk */
-  std::vector<std::shared_ptr<arrow::RecordBatch>> *m_cRecordBatches;
-
   static Logger* logger;
+
+  /** nanoarrow data */
+  std::vector<nanoarrow::UniqueArray> m_ipcArrowArrayVec;
+  std::vector<nanoarrow::UniqueArrayView> m_ipcArrowArrayViewVec;
+  nanoarrow::UniqueSchema m_ipcArrowSchema;
 };
 }
 

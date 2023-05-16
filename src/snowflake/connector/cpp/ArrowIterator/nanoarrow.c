@@ -49,7 +49,13 @@ int ArrowErrorSet(struct ArrowError* error, const char* fmt, ...) {
   }
 }
 
-const char* ArrowErrorMessage(struct ArrowError* error) { return error->message; }
+const char* ArrowErrorMessage(struct ArrowError* error) {
+  if (error == NULL) {
+    return "";
+  } else {
+    return error->message;
+  }
+}
 
 void ArrowLayoutInit(struct ArrowLayout* layout, enum ArrowType storage_type) {
   layout->buffer_type[0] = NANOARROW_BUFFER_TYPE_VALIDITY;
@@ -2168,7 +2174,7 @@ ArrowErrorCode ArrowArrayFinishBuilding(struct ArrowArray* array,
   // in some implementations (at least one version of Arrow C++ at the time this
   // was added). Only do this fix if we can assume CPU data access.
   if (validation_level >= NANOARROW_VALIDATION_LEVEL_DEFAULT) {
-    NANOARROW_RETURN_NOT_OK(ArrowArrayFinalizeBuffers(array));
+    NANOARROW_RETURN_NOT_OK_WITH_ERROR(ArrowArrayFinalizeBuffers(array), error);
   }
 
   // Make sure the value we get with array->buffers[i] is set to the actual
@@ -2183,7 +2189,8 @@ ArrowErrorCode ArrowArrayFinishBuilding(struct ArrowArray* array,
   // into the wild that is going to segfault
   struct ArrowArrayView array_view;
 
-  NANOARROW_RETURN_NOT_OK(ArrowArrayViewInitFromArray(&array_view, array));
+  NANOARROW_RETURN_NOT_OK_WITH_ERROR(ArrowArrayViewInitFromArray(&array_view, array),
+                                     error);
 
   // Check buffer sizes once without using internal buffer data since
   // ArrowArrayViewSetArray() assumes that all the buffers are long enough
@@ -2277,6 +2284,7 @@ ArrowErrorCode ArrowArrayViewInitFromSchema(struct ArrowArrayView* array_view,
 
   result = ArrowArrayViewAllocateChildren(array_view, schema->n_children);
   if (result != NANOARROW_OK) {
+    ArrowErrorSet(error, "ArrowArrayViewAllocateChildren() failed");
     ArrowArrayViewReset(array_view);
     return result;
   }

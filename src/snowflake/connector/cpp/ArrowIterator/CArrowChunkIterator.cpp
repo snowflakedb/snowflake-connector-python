@@ -13,12 +13,9 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
-#include "nanoarrow.h"
-#include "arrow/c/bridge.h"
 #include <memory>
 #include <string>
 #include <vector>
-#include <iostream>
 
 
 #define SF_CHECK_PYTHON_ERR() \
@@ -39,17 +36,17 @@
 namespace sf
 {
 
-CArrowChunkIterator::CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> *batches,
-                                         PyObject* use_numpy)
-: CArrowIterator(batches), m_latestReturnedRow(nullptr), m_context(context)
+CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy)
+: CArrowIterator(arrow_bytes, arrow_bytes_size), m_latestReturnedRow(nullptr), m_context(context)
 {
-  m_batchCount = m_cRecordBatches->size();
-  m_columnCount = m_batchCount > 0 ? (*m_cRecordBatches)[0]->num_columns() : 0;
   m_currentBatchIndex = -1;
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
   m_latestReturnedRow.reset();
   m_useNumpy = PyObject_IsTrue(use_numpy);
+
+  m_batchCount = m_ipcArrowArrayVec.size();
+  m_columnCount = m_batchCount > 0 ? m_ipcArrowSchema->n_children : 0;
 
   logger->debug(__FILE__, __func__, __LINE__, "Arrow chunk info: batchCount %d, columnCount %d, use_numpy: %d", m_batchCount,
                m_columnCount, m_useNumpy);
@@ -71,7 +68,7 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
     if (m_currentBatchIndex < m_batchCount)
     {
       m_rowIndexInBatch = 0;
-      m_rowCountInBatch = (*m_cRecordBatches)[m_currentBatchIndex]->num_rows();
+      m_rowCountInBatch = m_ipcArrowArrayVec[m_currentBatchIndex]->length;
       this->initColumnConverters();
       SF_CHECK_PYTHON_ERR()
 
@@ -106,46 +103,12 @@ void CArrowChunkIterator::createRowPyObject()
 void CArrowChunkIterator::initColumnConverters()
 {
   m_currentBatchConverters.clear();
-  std::shared_ptr<arrow::RecordBatch> currentBatch =
-      (*m_cRecordBatches)[m_currentBatchIndex];
-
-  // Recommended path
-  // TODO: Export is not needed when using nanoarrow IPC to read schema
-  arrow::Status exportBatchOk = arrow::ExportRecordBatch(
-      *currentBatch, m_arrowArray.get(), m_arrowSchema.get());
-  if (!exportBatchOk.ok()) {
-      std::string errorInfo = Logger::formatString("Export record batch failure");
-      logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-      PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-  }
-
   ArrowError error;
-  int returnCode = ArrowArrayViewInitFromSchema(
-    m_arrowArrayView.get(), m_arrowSchema.get(), &error);
-  if (returnCode != NANOARROW_OK) {
-    std::string errorInfo = Logger::formatString(
-        "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
-        ArrowErrorMessage(&error)
-    );
-    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-  }
-
-  returnCode = ArrowArrayViewSetArray(
-      m_arrowArrayView.get(), m_arrowArray.get(), &error);
-  if (returnCode != NANOARROW_OK) {
-    std::string errorInfo = Logger::formatString(
-        "[Snowflake Exception] error setting ArrowArrayView from array : %s",
-        ArrowErrorMessage(&error)
-    );
-    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-  }
-
-  for (int i = 0; i < currentBatch->num_columns(); i++)
+  int returnCode = 0;
+  for (int i = 0; i < m_ipcArrowSchema->n_children; i++)
   {
 
-    ArrowSchema* columnSchema = m_arrowSchema->children[i];
+    ArrowSchema* columnSchema = m_ipcArrowSchema->children[i];
     ArrowSchemaView columnSchemaView;
 
     returnCode = ArrowSchemaViewInit(
@@ -159,10 +122,10 @@ void CArrowChunkIterator::initColumnConverters()
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
     }
 
-    ArrowArrayView* array = m_arrowArrayView->children[i];
+    ArrowArrayView* array = m_ipcArrowArrayViewVec[m_currentBatchIndex]->children[i];
 
     ArrowStringView snowflakeLogicalType;
-    const char* metadata = m_arrowSchema->children[i]->metadata;
+    const char* metadata = m_ipcArrowSchema->children[i]->metadata;
     ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
     SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
         std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
@@ -496,16 +459,16 @@ void CArrowChunkIterator::initColumnConverters()
 }
 
 DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
-                                                 std::vector<std::shared_ptr<arrow::RecordBatch>> * batches,
+                                                 char* arrow_bytes, int64_t arrow_bytes_size,
                                                  PyObject* use_numpy)
-: CArrowChunkIterator(context, batches, use_numpy)
+: CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy)
 {
 }
 
 void DictCArrowChunkIterator::createRowPyObject()
 {
   m_latestReturnedRow.reset(PyDict_New());
-  for (int i = 0; i < m_arrowSchema->n_children; i++)
+  for (int i = 0; i < m_ipcArrowSchema->n_children; i++)
   {
     py::UniqueRef value(m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
     if (!value.empty())
@@ -513,7 +476,7 @@ void DictCArrowChunkIterator::createRowPyObject()
       // PyDict_SetItemString doesn't steal a reference to value.get().
       PyDict_SetItemString(
           m_latestReturnedRow.get(),
-          m_arrowSchema->children[i]->name,
+          m_ipcArrowSchema->children[i]->name,
           value.get());
     }
   }
