@@ -12,11 +12,6 @@
 // We have to make sure that we import Python.h once for special flags that need to be
 //  set before importing it
 #include <Python.h>
-#include <arrow/python/platform.h>
-#include <arrow/api.h>
-#include <arrow/python/pyarrow.h>
-#include <arrow/python/api.h>
-#include <arrow/table.h>
 #include "Util/macros.hpp"
 
 namespace sf
