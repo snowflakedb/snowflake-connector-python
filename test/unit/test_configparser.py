@@ -80,8 +80,8 @@ def test_simple_config_read(tmp_files):
     from tomlkit import parse
 
     TEST_PARSER.add_option(
-        "connections",
-        _type=parse,
+        name="connections",
+        parse_str=parse,
     )
     assert TEST_PARSER["connections"] == {
         "snowflake": {
@@ -96,11 +96,11 @@ def test_simple_nesting(monkeypatch, tmp_path):
     c1 = ConfigParser(name="test", file_path=tmp_path / "config.toml")
     c2 = ConfigParser(name="sb")
     c3 = ConfigParser(name="sb")
-    c3.add_option(name="b", _type=lambda e: e.lower() == "true")
+    c3.add_option(name="b", parse_str=lambda e: e.lower() == "true")
     c2.add_subparser(c3)
     c1.add_subparser(c2)
     with monkeypatch.context() as m:
-        m.setenv("SF_SB_SB_B", "TrUe")
+        m.setenv("SNOWFLAKE_SB_SB_B", "TrUe")
         assert c1["sb"]["sb"]["b"] is True
 
 
@@ -108,7 +108,7 @@ def test_complicated_nesting(monkeypatch, tmp_path):
     c_file = tmp_path / "config.toml"
     c1 = ConfigParser(file_path=c_file, name="root_parser")
     c2 = ConfigParser(file_path=tmp_path / "config2.toml", name="sp")
-    c2.add_option(name="b", _type=lambda e: e.lower() == "true")
+    c2.add_option(name="b", parse_str=lambda e: e.lower() == "true")
     c1.add_subparser(c2)
     c_file.write_text(
         dedent(
@@ -160,7 +160,7 @@ def test_error_child_conflict():
         ConfigParserError,
         match="'b' subparser, or option conflicts with a child element of 'test_parser'",
     ):
-        cp.add_option("b")
+        cp.add_option(name="b")
 
 
 def test_explicit_env_name(monkeypatch):
@@ -176,7 +176,7 @@ def test_explicit_env_name(monkeypatch):
 
     from tomlkit import parse
 
-    TEST_PARSER.add_option("connections", _type=parse, env_name="CONNECTIONS")
+    TEST_PARSER.add_option(name="connections", parse_str=parse, env_name="CONNECTIONS")
     with monkeypatch.context() as m:
         m.setenv("CONNECTIONS", toml_value)
         assert TEST_PARSER["connections"] == {"text": rnd_string}
@@ -186,9 +186,9 @@ def test_error_contains(monkeypatch):
     tp = ConfigParser(
         name="test_parser",
     )
-    tp.add_option("output_format", choices=("json", "csv"))
+    tp.add_option(name="output_format", choices=("json", "csv"))
     with monkeypatch.context() as m:
-        m.setenv("SF_OUTPUT_FORMAT", "toml")
+        m.setenv("SNOWFLAKE_OUTPUT_FORMAT", "toml")
         with pytest.raises(
             ConfigSourceError,
             match="The value of output_format read from environment variable "
@@ -197,7 +197,7 @@ def test_error_contains(monkeypatch):
             tp["output_format"]
 
 
-def test_missing_item():
+def test_error_missing_item():
     tp = ConfigParser(
         name="test_parser",
     )
@@ -206,3 +206,26 @@ def test_missing_item():
         match="No ConfigParser, or ConfigOption can be found with the" " name 'asd'",
     ):
         tp["asd"]
+
+
+def test_error_missing_fp():
+    tp = ConfigParser(
+        name="test_parser",
+    )
+    with pytest.raises(
+        ConfigParserError,
+        match="ConfigParser is trying to read config file, but it doesn't have one",
+    ):
+        tp.read_config()
+
+
+def test_error_missing_fp_retrieve():
+    tp = ConfigParser(
+        name="test_parser",
+    )
+    tp.add_option(name="option")
+    with pytest.raises(
+        ConfigParserError,
+        match="Root parser 'test_parser' is missing file_path",
+    ):
+        tp["option"]

@@ -23,7 +23,7 @@ CONFIG_PARSER = ConfigParser(
 )
 CONFIG_PARSER.add_option(
     name="connections",
-    _type=parse,
+    parse_str=parse,
 )
 
 __all__ = [
