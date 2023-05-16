@@ -101,10 +101,6 @@ def _convert_datetime_to_epoch_nanoseconds(dt: datetime) -> str:
     return f"{convert_datetime_to_epoch(dt):f}".replace(".", "") + "000"
 
 
-def _convert_date_to_epoch_milliseconds(dt: datetime) -> str:
-    return f"{(dt - ZERO_EPOCH_DATE).total_seconds():.3f}".replace(".", "")
-
-
 def _convert_time_to_epoch_nanoseconds(tm: dt_t) -> str:
     return (
         str(tm.hour * 3600 + tm.minute * 60 + tm.second)
@@ -367,7 +363,7 @@ class SnowflakeConverter:
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
         # we are binding "TEXT" value for DATE, check function _adjust_bind_type
-        return value.strftime("%Y-%m-%d")
+        return value.isoformat()
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
