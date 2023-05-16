@@ -119,10 +119,7 @@ def set_backend_client_session_keep_alive(
     admin_cnx.cursor().execute(query)
 
 
-@pytest.mark.skipif(
-    not CONNECTION_PARAMETERS_ADMIN,
-    reason="Snowflake admin required to setup parameter.",
-)
+@pytest.mark.internal
 def test_htap_optimizations(db_parameters: object, conn_cnx) -> None:
     with conn_cnx("admin") as admin_cnx:
         try:

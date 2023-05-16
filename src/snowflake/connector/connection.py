@@ -25,6 +25,7 @@ from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 from uuid import UUID
 
 from . import errors, proxy
+from ._query_context_cache import QueryContextCache
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
     Auth,
@@ -90,7 +91,6 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
-from .query_context_cache import QueryContextCache
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
@@ -313,8 +313,8 @@ class SnowflakeConnection:
                 kwargs["application"] = "streamlit"
 
         self.converter = None
-        self.query_context_cache: QueryContextCache = None
-        self._query_context_cache_size = 5
+        self.query_context_cache: QueryContextCache | None = None
+        self.query_context_cache_size = 5
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
@@ -550,14 +550,6 @@ class SnowflakeConnection:
             self._auth_class = value
         else:
             raise TypeError("auth_class must subclass AuthByPlugin")
-
-    @property
-    def query_context_cache_size(self) -> int:
-        return self._query_context_cache_size
-
-    @query_context_cache_size.setter
-    def query_context_cache_size(self, size: int) -> None:
-        self._query_context_cache_size = size
 
     @property
     def is_query_context_cache_disabled(self) -> bool:
@@ -1621,14 +1613,14 @@ class SnowflakeConnection:
 
     def initialize_query_context_cache(self) -> None:
         if not self.is_query_context_cache_disabled:
-            self.query_context_cache = QueryContextCache(self._query_context_cache_size)
+            self.query_context_cache = QueryContextCache(self.query_context_cache_size)
 
-    def get_query_context(self) -> str:
-        if not self.is_query_context_cache_disabled:
-            return self.query_context_cache.serialize_to_json()
-        return None
+    def get_query_context(self) -> str | None:
+        if self.is_query_context_cache_disabled:
+            return None
+        return self.query_context_cache.serialize_to_json()
 
-    def set_query_context(self, data) -> None:
+    def set_query_context(self, data: dict) -> None:
         if not self.is_query_context_cache_disabled:
             self.query_context_cache.deserialize_json_dict(data)
 

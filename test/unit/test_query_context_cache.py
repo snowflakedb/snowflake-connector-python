@@ -10,7 +10,7 @@ import pytest
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
 try:
-    from snowflake.connector.query_context_cache import (
+    from snowflake.connector._query_context_cache import (
         QueryContextCache,
         QueryContextElement,
     )
@@ -129,7 +129,7 @@ def qcc_with_data_null_context(
 def assert_cache_with_data(
     qcc: QueryContextCache, expected_data: ExpectedQCCData
 ) -> None:
-    assert qcc.get_size() == MAX_CAPACITY
+    assert len(qcc) == MAX_CAPACITY
 
     for idx, qce in enumerate(qcc._get_elements()):
         assert expected_data.ids[idx] == qce.id
@@ -140,11 +140,17 @@ def assert_cache_with_data(
 
 @pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_is_empty(qcc_with_no_data: QueryContextCache):
-    assert qcc_with_no_data.get_size() == 0
+    assert len(qcc_with_no_data) == 0
 
 
 @pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_deserialize_type_error():
+    json_string = """{ "entries": null }"""
+    qcc = QueryContextCache(MAX_CAPACITY)
+    data = json.loads(json_string)
+    qcc.deserialize_json_dict(data)
+    assert len(qcc) == 0  # because of TypeError, the qcc is cleared
+
     json_string = """{
         "entries":[
             {
@@ -158,7 +164,7 @@ def test_deserialize_type_error():
     qcc = QueryContextCache(MAX_CAPACITY)
     data = json.loads(json_string)  # convert JSON to dict
     qcc.deserialize_json_dict(data)
-    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+    assert len(qcc) == 0  # because of TypeError, the qcc is cleared
 
     json_string = """{
         "entries":[
@@ -173,7 +179,7 @@ def test_deserialize_type_error():
     qcc = QueryContextCache(MAX_CAPACITY)
     data = json.loads(json_string)  # convert JSON to dict
     qcc.deserialize_json_dict(data)
-    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+    assert len(qcc) == 0  # because of TypeError, the qcc is cleared
 
     json_string = """{
         "entries":[
@@ -188,7 +194,7 @@ def test_deserialize_type_error():
     qcc = QueryContextCache(MAX_CAPACITY)
     data = json.loads(json_string)  # convert JSON to dict
     qcc.deserialize_json_dict(data)
-    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+    assert len(qcc) == 0  # because of TypeError, the qcc is cleared
 
     json_string = """{
         "entries":[
@@ -203,7 +209,7 @@ def test_deserialize_type_error():
     qcc = QueryContextCache(MAX_CAPACITY)
     data = json.loads(json_string)  # convert JSON to dict
     qcc.deserialize_json_dict(data)
-    assert qcc.get_size() == 0  # because of TypeError, the qcc is cleared
+    assert len(qcc) == 0  # because of TypeError, the qcc is cleared
 
     json_string = """{
         "entries":[
@@ -218,9 +224,7 @@ def test_deserialize_type_error():
     qcc = QueryContextCache(MAX_CAPACITY)
     data = json.loads(json_string)  # convert JSON to dict
     qcc.deserialize_json_dict(data)
-    assert (
-        qcc.get_size() == 1
-    )  # because this time the input is correct, qcc size should be 1
+    assert len(qcc) == 1  # because this time the input is correct, qcc size should be 1
 
 
 @pytest.mark.skipif(no_qcc, reason="qcc module not available")
@@ -237,9 +241,7 @@ def test_with_data_in_random_order(
 
 
 @pytest.mark.skipif(no_qcc, reason="qcc module not available")
-def test_check_cache_capacity(
-    qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
-):
+def test_trim_cache(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
     qcc_with_data.merge(
         BASE_ID + MAX_CAPACITY,
         BASE_READ_TIMESTAMP + MAX_CAPACITY,
@@ -247,7 +249,7 @@ def test_check_cache_capacity(
         CONTEXT,
     )
     qcc_with_data._sync_priority_map()
-    qcc_with_data.check_cache_capacity()
+    qcc_with_data.trim_cache()
 
     assert_cache_with_data(qcc_with_data, expected_data)
 
@@ -305,7 +307,6 @@ def test_add_same_priority(
 
 
 # helper function to shuffle priorities in all entries
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def random_priority_shuffle(num_entries: int):
     id_list = list(range(BASE_ID, BASE_ID + num_entries))
     priority_list = list(range(BASE_PRIORITY, BASE_PRIORITY + num_entries))
@@ -336,10 +337,10 @@ def test_priority_switch_randomized(
 
         # Check if the inner priority map has been correctly updated
         for id, priority in id_to_priority.items():
-            assert qcc_with_data._priority_map[priority]._id == id
+            assert qcc_with_data._priority_map[priority].id == id
         # Check if the inner id map has been correctly updated
         for id in range(MAX_CAPACITY):
-            assert qcc_with_data._id_map[id]._id == id
+            assert qcc_with_data._id_map[id].id == id
         # Update expected_data
         for idx, id in enumerate(
             sorted(id_to_priority.keys(), key=lambda x: id_to_priority[x])
@@ -359,7 +360,7 @@ def test_same_id_with_stale_timestamp(
         BASE_ID + i, BASE_READ_TIMESTAMP + i - 10, BASE_PRIORITY + i, CONTEXT
     )
     qcc_with_data._sync_priority_map()
-    qcc_with_data.check_cache_capacity()
+    qcc_with_data.trim_cache()
 
     assert_cache_with_data(qcc_with_data, expected_data)
 
@@ -371,7 +372,7 @@ def test_empty_cache_with_null_data(
     assert_cache_with_data(qcc_with_data, expected_data)
 
     qcc_with_data.deserialize_json_dict(None)
-    assert qcc_with_data.get_size() == 0
+    assert len(qcc_with_data) == 0
 
 
 @pytest.mark.skipif(no_qcc, reason="qcc module not available")
@@ -381,7 +382,7 @@ def test_empty_cache_with_empty_response_data(
     assert_cache_with_data(qcc_with_data, expected_data)
 
     qcc_with_data.deserialize_json_dict("")
-    assert qcc_with_data.get_size() == 0
+    assert len(qcc_with_data) == 0
 
 
 @pytest.mark.skipif(no_qcc, reason="qcc module not available")
@@ -393,7 +394,7 @@ def test_serialization_deserialization_with_null_context(
 
     data = qcc_with_data_null_context.serialize_to_json()
     qcc_with_data_null_context.clear_cache()
-    assert qcc_with_data_null_context.get_size() == 0
+    assert len(qcc_with_data_null_context) == 0
 
     data = json.loads(data)  # convert JSON to dict
     qcc_with_data_null_context.deserialize_json_dict(data)
@@ -408,7 +409,7 @@ def test_serialization_deserialization(
 
     data = qcc_with_data.serialize_to_json()
     qcc_with_data.clear_cache()
-    assert qcc_with_data.get_size() == 0
+    assert len(qcc_with_data) == 0
 
     data = json.loads(data)  # convert JSON to dict
     qcc_with_data.deserialize_json_dict(data)
@@ -430,7 +431,7 @@ def test_eviction_order():
         qcc.merge(qce.id, qce.read_timestamp, qce.priority, qce.context)
     qcc._sync_priority_map()
 
-    assert qcc.get_size() == 3
+    assert len(qcc) == 3
     assert qcc._last() == qce3
     qcc._remove_qce(qcc._last())
     assert qcc._last() == qce2
@@ -438,4 +439,4 @@ def test_eviction_order():
     assert qcc._last() == qce1
     qcc._remove_qce(qcc._last())
 
-    assert qcc.get_size() == 0
+    assert len(qcc) == 0

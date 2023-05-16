@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
@@ -8,8 +7,9 @@ import copy
 import json
 from functools import total_ordering
 from hashlib import md5
-from logging import DEBUG, getLogger
+from logging import getLogger
 from threading import Lock
+from typing import Any, Iterable
 
 from sortedcontainers import SortedSet
 
@@ -18,75 +18,53 @@ logger = getLogger(__name__)
 
 @total_ordering
 class QueryContextElement:
-    def __init__(self, id: int, read_timestamp: int, priority: int, context: str):
+    def __init__(
+        self, id: int, read_timestamp: int, priority: int, context: str
+    ) -> None:
         # entry with id = 0 is the main entry
-        self._id = id
-        self._read_timestamp = read_timestamp
+        self.id = id
+        self.read_timestamp = read_timestamp
         # priority values are 0..N with 0 being the highest priority
-        self._priority = priority
+        self.priority = priority
         # OpaqueContext field will be base64 encoded in GS, but it is opaque to client side. Client side should not do decoding/encoding and just store the raw data.
-        self._context = context
-
-    @property
-    def id(self) -> int:
-        return self._id
-
-    @property
-    def read_timestamp(self) -> int:
-        return self._read_timestamp
-
-    @read_timestamp.setter
-    def read_timestamp(self, timestamp: int) -> None:
-        self._read_timestamp = timestamp
-
-    @property
-    def priority(self) -> int:
-        return self._priority
-
-    @property
-    def context(self) -> str:
-        return self._context
-
-    @context.setter
-    def context(self, ctx: str) -> None:
-        self._context = ctx
+        self.context = context
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, QueryContextElement):
             return False
         return (
-            self._id == other.id
-            and self._read_timestamp == other.read_timestamp
-            and self._priority == other.priority
-            and self._context == other.context
+            self.id == other.id
+            and self.read_timestamp == other.read_timestamp
+            and self.priority == other.priority
+            and self.context == other.context
         )
 
-    def __lt__(self, other: object) -> bool:
+    def __lt__(self, other: Any) -> bool:
         if not isinstance(other, QueryContextElement):
-            raise NotImplementedError(
+            raise TypeError(
                 f"cannot compare QueryContextElement with object of type {type(other)}"
             )
-        return self._priority < other._priority
+        return self.priority < other.priority
 
     def __hash__(self) -> int:
         _hash = 31
 
-        _hash = _hash * 31 + self._id
-        _hash += (_hash * 31) + self._read_timestamp
-        _hash += (_hash * 31) + self._priority
-        if self._context:
+        _hash = _hash * 31 + self.id
+        _hash += (_hash * 31) + self.read_timestamp
+        _hash += (_hash * 31) + self.priority
+        if self.context:
             _hash += (_hash * 31) + int.from_bytes(
-                md5(self._context.encode("utf-8")).digest(), "big"
+                md5(self.context.encode("utf-8")).digest(), "big"
             )
         return _hash
 
     def __str__(self) -> str:
-        return f"({self._id}, {self._read_timestamp}, {self._priority})"
+        return f"({self.id}, {self.read_timestamp}, {self.priority})"
 
 
 class QueryContextCache:
-    def __init__(self, capacity: int):
-        self._capacity = capacity
+    def __init__(self, capacity: int) -> None:
+        self.capacity = capacity
         self._id_map: dict[int, QueryContextElement] = {}
         self._priority_map: dict[int, QueryContextElement] = {}
         self._intermediate_priority_map: dict[int, QueryContextElement] = {}
@@ -96,10 +74,6 @@ class QueryContextCache:
         self._tree_set: set[QueryContextElement] = SortedSet()
         self._lock = Lock()
         self._data: str = None
-
-    @property
-    def capacity(self) -> int:
-        return self._capacity
 
     def _add_qce(self, qce: QueryContextElement) -> None:
         self._tree_set.add(qce)
@@ -146,9 +120,9 @@ class QueryContextCache:
             else:
                 self._add_qce(new_qce)
 
-    def check_cache_capacity(self) -> None:
+    def trim_cache(self) -> None:
         logger.debug(
-            f"check_cache_capacity() called. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
+            f"trim_cache() called. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
         )
 
         while len(self._tree_set) > self.capacity:
@@ -157,7 +131,7 @@ class QueryContextCache:
             self._remove_qce(qce)
 
         logger.debug(
-            f"check_cache_capacity() returns. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
+            f"trim_cache() returns. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
         )
 
     def clear_cache(self) -> None:
@@ -165,8 +139,9 @@ class QueryContextCache:
         self._id_map.clear()
         self._priority_map.clear()
         self._tree_set.clear()
+        self._intermediate_priority_map.clear()
 
-    def _get_elements(self) -> set[QueryContextElement]:
+    def _get_elements(self) -> Iterable[QueryContextElement]:
         return self._tree_set
 
     def _last(self) -> QueryContextElement:
@@ -178,7 +153,7 @@ class QueryContextCache:
             self.log_cache_entries()
 
             if len(self._tree_set) == 0:
-                return None
+                return ""
 
             try:
                 data = {
@@ -202,9 +177,9 @@ class QueryContextCache:
                 return serialized_data
             except Exception as e:
                 logger.debug(f"serialize_to_json(): Exception {e}")
-                return None
+                return ""
 
-    def deserialize_json_dict(self, data) -> None:
+    def deserialize_json_dict(self, data: dict) -> None:
         with self._lock:
             logger.debug(f"deserialize_json_dict() called: data from server: {data}")
             self.log_cache_entries()
@@ -245,7 +220,7 @@ class QueryContextCache:
                 # }
 
                 # Deserialize entries
-                entries = data.get("entries", None)
+                entries = data.get("entries", list())
                 for entry in entries:
                     logger.debug(f"deserialize {entry}")
                     if not isinstance(entry.get("id"), int):
@@ -264,11 +239,9 @@ class QueryContextCache:
                             f"Invalid type for 'priority' field: Expected int, got {type(entry['priority'])}"
                         )
 
-                    context = entry.get(
-                        "context", None
-                    )  # OpaqueContext field currently is empty from GS side.
-
-                    if context is not None and not isinstance(context, str):
+                    # OpaqueContext field currently is empty from GS side.
+                    context = entry.get("context", None)
+                    if context and not isinstance(entry.get("context"), str):
                         logger.debug("context type error")
                         raise TypeError(
                             f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}"
@@ -287,16 +260,13 @@ class QueryContextCache:
                 # clear cache due to incomplete merge
                 self.clear_cache()
 
-            self.check_cache_capacity()
+            self.trim_cache()
             logger.debug("deserialize_json_dict() returns")
             self.log_cache_entries()
 
     def log_cache_entries(self) -> None:
-        if logger.level == DEBUG:
-            for qce in self._tree_set:
-                logger.debug(
-                    f"Cache Entry: id: {qce.id}, read_timestamp: {qce.read_timestamp}, priority: {qce.priority}"
-                )
+        for qce in self._tree_set:
+            logger.debug(f"Cache Entry: {str(qce)}")
 
-    def get_size(self) -> int:
+    def __len__(self) -> int:
         return len(self._tree_set)
