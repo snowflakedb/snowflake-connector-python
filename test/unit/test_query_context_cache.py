@@ -80,7 +80,7 @@ def qcc_with_data(
     qcc_with_no_data: QueryContextCache, expected_data: ExpectedQCCData
 ) -> QueryContextCache:
     for i in range(MAX_CAPACITY):
-        qcc_with_no_data.merge(
+        qcc_with_no_data.insert(
             expected_data.ids[i],
             expected_data.timestamps[i],
             expected_data.priorities[i],
@@ -98,7 +98,7 @@ def qcc_with_data_random_order(
 ) -> QueryContextCache:
     expected_data.shuffle_data()
     for i in range(MAX_CAPACITY):
-        qcc_with_no_data.merge(
+        qcc_with_no_data.insert(
             expected_data.ids[i],
             expected_data.timestamps[i],
             expected_data.priorities[i],
@@ -115,7 +115,7 @@ def qcc_with_data_null_context(
     expected_data_with_null_context: ExpectedQCCData,
 ):
     for i in range(MAX_CAPACITY):
-        qcc_with_no_data.merge(
+        qcc_with_no_data.insert(
             expected_data_with_null_context.ids[i],
             expected_data_with_null_context.timestamps[i],
             expected_data_with_null_context.priorities[i],
@@ -242,7 +242,7 @@ def test_with_data_in_random_order(
 
 @pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_trim_cache(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
-    qcc_with_data.merge(
+    qcc_with_data.insert(
         BASE_ID + MAX_CAPACITY,
         BASE_READ_TIMESTAMP + MAX_CAPACITY,
         BASE_PRIORITY + MAX_CAPACITY,
@@ -259,7 +259,7 @@ def test_update_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
     update_id = 1
-    qcc_with_data.merge(
+    qcc_with_data.insert(
         BASE_ID + update_id,
         BASE_READ_TIMESTAMP + update_id + 10,
         BASE_PRIORITY + update_id,
@@ -276,7 +276,7 @@ def test_update_priority(
 ):
     update_id = 3
     updated_priority = BASE_PRIORITY + update_id + 7
-    qcc_with_data.merge(
+    qcc_with_data.insert(
         BASE_ID + update_id, BASE_READ_TIMESTAMP + update_id, updated_priority, CONTEXT
     )
     qcc_with_data._sync_priority_map()
@@ -298,7 +298,9 @@ def test_add_same_priority(
 ):
     i = MAX_CAPACITY
     updated_priority = BASE_PRIORITY + 1
-    qcc_with_data.merge(BASE_ID + i, BASE_READ_TIMESTAMP + i, updated_priority, CONTEXT)
+    qcc_with_data.insert(
+        BASE_ID + i, BASE_READ_TIMESTAMP + i, updated_priority, CONTEXT
+    )
     qcc_with_data._sync_priority_map()
 
     expected_data.ids[1] = BASE_ID + i
@@ -329,7 +331,7 @@ def test_priority_switch_randomized(
 
         # Update priorities using the random shuffle
         for id, priority in id_to_priority.items():
-            qcc_with_data.merge(
+            qcc_with_data.insert(
                 id, BASE_READ_TIMESTAMP + MAX_CAPACITY + 10, priority, CONTEXT
             )
 
@@ -356,7 +358,7 @@ def test_same_id_with_stale_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
     i = 2
-    qcc_with_data.merge(
+    qcc_with_data.insert(
         BASE_ID + i, BASE_READ_TIMESTAMP + i - 10, BASE_PRIORITY + i, CONTEXT
     )
     qcc_with_data._sync_priority_map()
@@ -428,7 +430,7 @@ def test_eviction_order():
     qce_list = [qce1, qce2, qce3]
     qcc = QueryContextCache(5)
     for qce in qce_list:
-        qcc.merge(qce.id, qce.read_timestamp, qce.priority, qce.context)
+        qcc.insert(qce.id, qce.read_timestamp, qce.priority, qce.context)
     qcc._sync_priority_map()
 
     assert len(qcc) == 3

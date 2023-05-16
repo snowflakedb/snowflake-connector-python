@@ -3,7 +3,6 @@
 #
 from __future__ import annotations
 
-import copy
 import json
 from functools import total_ordering
 from hashlib import md5
@@ -77,8 +76,8 @@ class QueryContextCache:
 
     def _add_qce(self, qce: QueryContextElement) -> None:
         self._tree_set.add(qce)
-        self._id_map[qce.id] = copy.deepcopy(qce)
-        self._intermediate_priority_map[qce.priority] = copy.deepcopy(qce)
+        self._id_map[qce.id] = qce
+        self._intermediate_priority_map[qce.priority] = qce
 
     def _remove_qce(self, qce: QueryContextElement) -> None:
         self._id_map.pop(qce.id)
@@ -88,22 +87,23 @@ class QueryContextCache:
     def _replace_qce(
         self, old_qce: QueryContextElement, new_qce: QueryContextElement
     ) -> None:
+        """This is just a convenience function to call a remove and add operation back-to-back"""
         self._remove_qce(old_qce)
         self._add_qce(new_qce)
 
     def _sync_priority_map(self):
         """
-        Sync the _intermediate_priority_map with the _priority_map at the end of the current round of merges.
+        Sync the _intermediate_priority_map with the _priority_map at the end of the current round of inserts.
         """
         logger.debug(
-            f"syncPriorityMap called priority_map size = {len(self._priority_map)}, new_priority_map size = {len(self._intermediate_priority_map)}"
+            f"sync_priority_map called priority_map size = {len(self._priority_map)}, new_priority_map size = {len(self._intermediate_priority_map)}"
         )
 
         self._priority_map.update(self._intermediate_priority_map)
-        # Clear the _intermediate_priority_map for the next round of QCC merge (a round consists of multiple entries)
+        # Clear the _intermediate_priority_map for the next round of QCC insert (a round consists of multiple entries)
         self._intermediate_priority_map.clear()
 
-    def merge(self, id: int, read_timestamp: int, priority: int, context: str) -> None:
+    def insert(self, id: int, read_timestamp: int, priority: int, context: str) -> None:
         if id in self._id_map:
             qce = self._id_map[id]
             if (read_timestamp > qce.read_timestamp) or (
@@ -125,9 +125,9 @@ class QueryContextCache:
             f"trim_cache() called. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
         )
 
-        while len(self._tree_set) > self.capacity:
+        while len(self) > self.capacity:
             # remove the qce with highest priority value => element with least priority
-            qce = self._tree_set[-1]
+            qce = self._last()
             self._remove_qce(qce)
 
         logger.debug(
@@ -246,18 +246,18 @@ class QueryContextCache:
                         raise TypeError(
                             f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}"
                         )
-                    self.merge(
+                    self.insert(
                         entry.get("id"),
                         entry.get("timestamp"),
                         entry.get("priority"),
                         context,
                     )
 
-                # Sync the priority map at the end of for loop merge.
+                # Sync the priority map at the end of for loop insert.
                 self._sync_priority_map()
             except Exception as e:
                 logger.debug(f"deserialize_json_dict: Exception = {e}")
-                # clear cache due to incomplete merge
+                # clear cache due to incomplete insert
                 self.clear_cache()
 
             self.trim_cache()
