@@ -7,15 +7,11 @@ from random import shuffle
 
 import pytest
 
-pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
-
 try:
     from snowflake.connector._query_context_cache import (
         QueryContextCache,
         QueryContextElement,
     )
-
-    no_qcc = False
 except ImportError:
 
     class QueryContextCache:
@@ -26,7 +22,6 @@ except ImportError:
         def __init__(self, id, read_timestamp, priority, context):
             pass
 
-    no_qcc = True
 
 MAX_CAPACITY = 5
 BASE_ID = 0
@@ -138,12 +133,10 @@ def assert_cache_with_data(
         assert expected_data.contexts[idx] == qce.context
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_is_empty(qcc_with_no_data: QueryContextCache):
     assert len(qcc_with_no_data) == 0
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_deserialize_type_error():
     json_string = """{ "entries": null }"""
     qcc = QueryContextCache(MAX_CAPACITY)
@@ -227,12 +220,10 @@ def test_deserialize_type_error():
     assert len(qcc) == 1  # because this time the input is correct, qcc size should be 1
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_with_data(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_with_data_in_random_order(
     qcc_with_data_random_order: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -240,7 +231,6 @@ def test_with_data_in_random_order(
     assert_cache_with_data(qcc_with_data_random_order, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_trim_cache(qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData):
     qcc_with_data.insert(
         BASE_ID + MAX_CAPACITY,
@@ -254,7 +244,6 @@ def test_trim_cache(qcc_with_data: QueryContextCache, expected_data: ExpectedQCC
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_update_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -270,7 +259,6 @@ def test_update_timestamp(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_update_priority(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -292,7 +280,6 @@ def test_update_priority(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_add_same_priority(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -320,7 +307,6 @@ def random_priority_shuffle(num_entries: int):
     return id_to_priority
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_priority_switch_randomized(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -353,7 +339,6 @@ def test_priority_switch_randomized(
         assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_same_id_with_stale_timestamp(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -367,7 +352,6 @@ def test_same_id_with_stale_timestamp(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_empty_cache_with_null_data(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -377,7 +361,6 @@ def test_empty_cache_with_null_data(
     assert len(qcc_with_data) == 0
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_empty_cache_with_empty_response_data(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -387,7 +370,6 @@ def test_empty_cache_with_empty_response_data(
     assert len(qcc_with_data) == 0
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_serialization_deserialization_with_null_context(
     qcc_with_data_null_context: QueryContextCache,
     expected_data_with_null_context: ExpectedQCCData,
@@ -403,7 +385,6 @@ def test_serialization_deserialization_with_null_context(
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_serialization_deserialization(
     qcc_with_data: QueryContextCache, expected_data: ExpectedQCCData
 ):
@@ -418,7 +399,6 @@ def test_serialization_deserialization(
     assert_cache_with_data(qcc_with_data, expected_data)
 
 
-@pytest.mark.skipif(no_qcc, reason="qcc module not available")
 def test_eviction_order():
     qce1 = QueryContextElement(id=1, read_timestamp=13323, priority=1, context=None)
     qce2 = QueryContextElement(id=2, read_timestamp=15522, priority=4, context="")
