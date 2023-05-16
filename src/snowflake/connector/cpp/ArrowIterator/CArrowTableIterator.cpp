@@ -6,7 +6,6 @@
 #include "SnowflakeType.hpp"
 #include "Python/Common.hpp"
 #include "Util/time.hpp"
-#include "nanoarrow_ipc.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -34,49 +33,9 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
   // Type conversion, the code needs to be optimized
   for (unsigned int batchIdx = 0; batchIdx <  m_ipcArrowArrayViewVec.size(); batchIdx++)
   {
-    //std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
-    //std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
-
     // each record batch will have its own list of newly created array and schema
     m_newArrays.push_back(std::vector<nanoarrow::UniqueArray>());
     m_newSchemas.push_back(std::vector<nanoarrow::UniqueSchema>());
-
-    // These copies will be used if rebuilding the RecordBatch if necessary
-//    nanoarrow::UniqueSchema arrowSchema;
-//    nanoarrow::UniqueArray arrowArray;
-//    nanoarrow::UniqueArrayView arrowArrayView;
-
-//    // Recommended path
-//    // TODO: Export is not needed when using nanoarrow IPC to read schema
-//    arrow::Status exportBatchOk = arrow::ExportRecordBatch(
-//      *currentBatch, arrowArray.get(), arrowSchema.get());
-//
-//    ArrowError error;
-//    int returnCode = ArrowArrayViewInitFromSchema(
-//      arrowArrayView.get(), arrowSchema.get(), &error);
-//    if (returnCode != NANOARROW_OK) {
-//      std::string errorInfo = Logger::formatString(
-//        "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
-//        ArrowErrorMessage(&error)
-//      );
-//      logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-//      PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-//    }
-//
-//    returnCode = ArrowArrayViewSetArray(
-//        arrowArrayView.get(), arrowArray.get(), &error);
-//    if (returnCode != NANOARROW_OK) {
-//        std::string errorInfo = Logger::formatString(
-//          "[Snowflake Exception] error initializing ArrowArrayView from array : %s",
-//          ArrowErrorMessage(&error)
-//        );
-//        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-//        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-//    }
-//
-//    m_nanoarrowTable.push_back(std::move(arrowArray));
-//    m_nanoarrowSchemas.push_back(std::move(arrowSchema));
-//    m_nanoarrowViews.push_back(std::move(arrowArrayView));
 
     nanoarrow::UniqueSchema copiedSchema;
     ArrowSchemaDeepCopy(m_ipcArrowSchema.get(), copiedSchema.get());
@@ -121,9 +80,9 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
           }
           if (scale > 0 && columnSchemaView.type != ArrowType::NANOARROW_TYPE_DECIMAL128)
           {
-              // TODO: this log is causing seg fault
-//            logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
-//              scale, columnSchemaView.type);
+            // TODO: this log is causing seg fault
+            logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
+              scale, columnSchemaView.type);
             convertScaledFixedNumberColumn_nanoarrow(
                 batchIdx,
                 colIdx,
@@ -225,65 +184,18 @@ PyObject* context,
 char* arrow_bytes, int64_t arrow_bytes_size,
 const bool number_to_decimal
 )
-: CArrowIterator(),
+: CArrowIterator(arrow_bytes, arrow_bytes_size),
 m_context(context),
 m_convert_number_to_decimal(number_to_decimal)
 {
   py::UniqueRef tz(PyObject_GetAttrString(m_context, "_timezone"));
   PyArg_Parse(tz.get(), "s", &m_timezone);
-
-
-  ArrowBuffer input_buffer;
-  ArrowBufferInit(&input_buffer);
-  ArrowBufferAppend(&input_buffer, arrow_bytes, arrow_bytes_size);
-  ArrowIpcInputStream input;
-  ArrowIpcInputStreamInitBuffer(&input, &input_buffer);
-  ArrowArrayStream stream;
-  ArrowIpcArrayStreamReaderInit(&stream, &input, nullptr);
-  stream.get_schema(&stream, m_ipcArrowSchema.get());
-
-  while(true) {
-    nanoarrow::UniqueArray newUniqueArray;
-    nanoarrow::UniqueArrayView newUniqueArrayView;
-    auto retcode = stream.get_next(&stream, newUniqueArray.get());
-    if(retcode == NANOARROW_OK && newUniqueArray->release != nullptr) {
-      m_ipcArrowArrayVec.push_back(std::move(newUniqueArray));
-
-      ArrowError error;
-      int returnCode = ArrowArrayViewInitFromSchema(
-      newUniqueArrayView.get(), m_ipcArrowSchema.get(), &error);
-      if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
-          ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      }
-
-      returnCode = ArrowArrayViewSetArray(
-        newUniqueArrayView.get(), newUniqueArray.get(), &error);
-      if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] error setting ArrowArrayView from array : %s",
-          ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      }
-      m_ipcArrowArrayViewVec.push_back(std::move(newUniqueArrayView));
-    } else {
-      break;
-    }
-  }
-
-  stream.release(&stream);
 }
 
 std::shared_ptr<ReturnVal> CArrowTableIterator::next()
 {
   bool firstDone = this->convertRecordBatchesToTable_nanoarrow();
-  if (firstDone && !m_nanoarrowTable.empty())
+  if (firstDone && !m_ipcArrowArrayVec.empty())
   {
     return std::make_shared<ReturnVal>(Py_True, nullptr);
   }
@@ -912,10 +824,6 @@ std::vector<uintptr_t> CArrowTableIterator::getArrowSchemaPtrs() {
         ret.push_back((uintptr_t)(void*)(m_ipcSchemaArrayVec[i].get()));
     }
     return ret;
-}
-
-uintptr_t CArrowTableIterator::getArrowSchemaPtr() {
-    return (uintptr_t)(void*)(m_ipcArrowSchema.get());
 }
 
 } // namespace sf

@@ -45,21 +45,12 @@ public:
   std::shared_ptr<ReturnVal> next() override;
   std::vector<uintptr_t> getArrowArrayPtrs() override;
   std::vector<uintptr_t> getArrowSchemaPtrs() override;
-  uintptr_t getArrowSchemaPtr() override;
 
 private:
   // nanoarrow data
-  std::vector<nanoarrow::UniqueArray> m_nanoarrowTable;
-  std::vector<nanoarrow::UniqueSchema> m_nanoarrowSchemas;
-  std::vector<nanoarrow::UniqueArrayView> m_nanoarrowViews;
-
   std::vector<std::vector<nanoarrow::UniqueArray>> m_newArrays;
   std::vector<std::vector<nanoarrow::UniqueSchema>> m_newSchemas;
-
-  std::vector<nanoarrow::UniqueArray> m_ipcArrowArrayVec;
-  std::vector<nanoarrow::UniqueArrayView> m_ipcArrowArrayViewVec;
   std::vector<nanoarrow::UniqueSchema> m_ipcSchemaArrayVec;
-  nanoarrow::UniqueSchema m_ipcArrowSchema;
 
   bool m_tableConverted = false;
 

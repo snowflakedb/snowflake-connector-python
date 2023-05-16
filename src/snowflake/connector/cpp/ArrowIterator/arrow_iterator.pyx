@@ -12,8 +12,10 @@ from libc.stdint cimport int64_t, uint8_t, uintptr_t
 from libcpp.memory cimport shared_ptr
 from libcpp.vector cimport vector
 
+INSTALLED_PYARROW = False
 try:
     import pyarrow
+    INSTALLED_PYARROW = True
 except ImportError:
     pass
 
@@ -21,8 +23,9 @@ from .constants import IterUnit
 from .errorcode import (
     ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE,
     ER_FAILED_TO_READ_ARROW_STREAM,
+    ER_NO_PYARROW,
 )
-from .errors import Error, InterfaceError, OperationalError
+from .errors import Error, InterfaceError, OperationalError, ProgrammingError
 from .snow_logging import getSnowLogger
 
 snow_logger = getSnowLogger(__name__)
@@ -38,7 +41,6 @@ cdef extern from "CArrowIterator.hpp" namespace "sf":
         shared_ptr[ReturnVal] next() except +;
         vector[uintptr_t] getArrowArrayPtrs();
         vector[uintptr_t] getArrowSchemaPtrs();
-        uintptr_t getArrowSchemaPtr();
 
 
 cdef extern from "CArrowChunkIterator.hpp" namespace "sf":
@@ -114,9 +116,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             object number_to_decimal,
 
     ):
-
-        #snow_logger.debug(msg=f"Batches read: {self.batches.size()}", path_name=__file__, func_name="__cinit__")
-
         self.context = arrow_context
         self.cIterator = NULL
         self.unit = ''
@@ -188,8 +187,21 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             self.arrow_bytes_size,
             <PyObject *> self.use_numpy
             )
+        snow_logger.debug(msg=f"Batches read: {self.cIterator.getArrowArrayPtrs().size()}", path_name=__file__, func_name="init_row_unit")
 
     def init_table_unit(self) -> None:
+        if not INSTALLED_PYARROW:
+            raise Error.errorhandler_make_exception(
+                ProgrammingError,
+                {
+                    "msg": (
+                        "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+                        "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
+                    ),
+                    "errno": ER_NO_PYARROW,
+                },
+            )
+
         self.cIterator = new CArrowTableIterator(
             <PyObject *> self.context,
             self.arrow_bytes,
@@ -209,3 +221,4 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             batch = pyarrow.RecordBatch._import_from_c(array_ptr, schema_ptr)
             batches.append(batch)
         self.pyarrow_table = pyarrow.Table.from_batches(batches=batches)
+        snow_logger.debug(msg=f"Batches read: {self.nanoarrow_Table.size()}", path_name=__file__, func_name="init_table_unit")

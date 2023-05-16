@@ -13,8 +13,6 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
-#include "nanoarrow.h"
-#include "nanoarrow_ipc.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -39,58 +37,13 @@ namespace sf
 {
 
 CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy)
-: CArrowIterator(), m_latestReturnedRow(nullptr), m_context(context)
+: CArrowIterator(arrow_bytes, arrow_bytes_size), m_latestReturnedRow(nullptr), m_context(context)
 {
   m_currentBatchIndex = -1;
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
-  m_arrowBytes = arrow_bytes;
   m_latestReturnedRow.reset();
   m_useNumpy = PyObject_IsTrue(use_numpy);
-
-  ArrowBuffer input_buffer;
-  ArrowBufferInit(&input_buffer);
-  ArrowBufferAppend(&input_buffer, m_arrowBytes, arrow_bytes_size);
-  ArrowIpcInputStream input;
-  ArrowIpcInputStreamInitBuffer(&input, &input_buffer);
-  ArrowArrayStream stream;
-  ArrowIpcArrayStreamReaderInit(&stream, &input, nullptr);
-  stream.get_schema(&stream, m_ipcArrowSchema.get());
-
-  while(true) {
-    nanoarrow::UniqueArray newUniqueArray;
-    nanoarrow::UniqueArrayView newUniqueArrayView;
-    auto retcode = stream.get_next(&stream, newUniqueArray.get());
-    if(retcode == NANOARROW_OK && newUniqueArray->release != nullptr) {
-      m_ipcArrowArrayVec.push_back(std::move(newUniqueArray));
-
-      ArrowError error;
-      int returnCode = ArrowArrayViewInitFromSchema(
-      newUniqueArrayView.get(), m_ipcArrowSchema.get(), &error);
-      if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
-          ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      }
-
-      returnCode = ArrowArrayViewSetArray(
-        newUniqueArrayView.get(), newUniqueArray.get(), &error);
-      if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] error setting ArrowArrayView from array : %s",
-          ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      }
-      m_ipcArrowArrayViewVec.push_back(std::move(newUniqueArrayView));
-    } else {
-      break;
-    }
-  }
 
   m_batchCount = m_ipcArrowArrayVec.size();
   m_columnCount = m_batchCount > 0 ? m_ipcArrowSchema->n_children : 0;
@@ -150,41 +103,6 @@ void CArrowChunkIterator::createRowPyObject()
 void CArrowChunkIterator::initColumnConverters()
 {
   m_currentBatchConverters.clear();
-//  std::shared_ptr<arrow::RecordBatch> currentBatch =
-//      (*m_cRecordBatches)[m_currentBatchIndex];
-
-  // Recommended path
-  // TODO: Export is not needed when using nanoarrow IPC to read schema
-//  arrow::Status exportBatchOk = arrow::ExportRecordBatch(
-//      *currentBatch, m_arrowArray.get(), m_arrowSchema.get());
-//  if (!exportBatchOk.ok()) {
-//      std::string errorInfo = Logger::formatString("Export record batch failure");
-//      logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-//      PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-//  }
-//
-//  ArrowError error;
-//  int returnCode = ArrowArrayViewInitFromSchema(
-//    m_arrowArrayView.get(), m_ipcArrowSchema.get(), &error);
-//  if (returnCode != NANOARROW_OK) {
-//    std::string errorInfo = Logger::formatString(
-//        "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
-//        ArrowErrorMessage(&error)
-//    );
-//    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-//    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-//  }
-//
-//  returnCode = ArrowArrayViewSetArray(
-//      m_arrowArrayView.get(), m_ipcArrowArrayVec[m_currentBatchIndex].get(), &error);
-//  if (returnCode != NANOARROW_OK) {
-//    std::string errorInfo = Logger::formatString(
-//        "[Snowflake Exception] error setting ArrowArrayView from array : %s",
-//        ArrowErrorMessage(&error)
-//    );
-//    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-//    PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-//  }
   ArrowError error;
   int returnCode = 0;
   for (int i = 0; i < m_ipcArrowSchema->n_children; i++)

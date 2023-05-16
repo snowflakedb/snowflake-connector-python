@@ -42,8 +42,6 @@ extensions = None
 cmd_class = {}
 
 try:
-    # import numpy
-    # import pyarrow
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
 
@@ -54,7 +52,6 @@ except ImportError:
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
 
-    # pyarrow_version = tuple(int(x) for x in pyarrow.__version__.split("."))
     extensions = cythonize(
         [
             Extension(
@@ -63,7 +60,6 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 language="c++",
             ),
         ],
-        # compile_time_env=dict(ARROW_LESS_THAN_8=pyarrow_version < (8,)),
     )
 
     class MyBuildExt(build_ext):
@@ -74,8 +70,6 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             current_dir = os.getcwd()
 
             if ext.name == "snowflake.connector.arrow_iterator":
-                # if not os.environ.get("SF_NO_COPY_ARROW_LIB", False):
-                #     self._copy_arrow_lib()
                 CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "cpp")
                 ARROW_ITERATOR_SRC_DIR = os.path.join(CPP_SRC_DIR, "ArrowIterator")
                 LOGGING_SRC_DIR = os.path.join(CPP_SRC_DIR, "Logging")
@@ -104,7 +98,6 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ]
                 ext.include_dirs.append(ARROW_ITERATOR_SRC_DIR)
                 ext.include_dirs.append(LOGGING_SRC_DIR)
-                # ext.include_dirs.append(numpy.get_include())
 
                 if sys.platform == "win32":
                     if not any("/std" not in s for s in ext.extra_compile_args):

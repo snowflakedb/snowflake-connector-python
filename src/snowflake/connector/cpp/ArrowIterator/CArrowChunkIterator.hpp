@@ -53,18 +53,8 @@ protected:
   /** row index inside current record batch (start from 0) */
   int m_rowIndexInBatch;
 
-  /** nanoarrow data */
-  nanoarrow::UniqueSchema m_arrowSchema;
-  nanoarrow::UniqueArray m_arrowArray;
-  nanoarrow::UniqueArrayView m_arrowArrayView;
-
-  std::vector<nanoarrow::UniqueArray> m_ipcArrowArrayVec;
-  std::vector<nanoarrow::UniqueArrayView> m_ipcArrowArrayViewVec;
-  nanoarrow::UniqueSchema m_ipcArrowSchema;
-
 private:
   /** number of columns */
-  const char* m_arrowBytes;
   int m_columnCount;
 
   /** number of record batch in current chunk */
