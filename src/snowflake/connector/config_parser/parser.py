@@ -75,7 +75,7 @@ class ConfigOption:
         self._root_parser: ConfigParser = _root_parser
         self.env_name = env_name
 
-    def get(self) -> Any:
+    def value(self) -> Any:
         """Retrieve a value of option.
 
         This function implements order of precedence between different sources.
@@ -289,7 +289,7 @@ class ConfigParser:
         ):
             self.read_config()
         if name in self._options:
-            return self._options[name].get()
+            return self._options[name].value()
         if name not in self._sub_parsers:
             raise ConfigSourceError(
                 "No ConfigParser, or ConfigOption can be found"
