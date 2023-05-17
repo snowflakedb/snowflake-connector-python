@@ -147,7 +147,7 @@ class ConfigParser:
     """Read TOML configuration file with managed multi-source precedence.
 
      This class is updatable at run-time, allowing other libraries to add their
-     options own configuration options and sub-parsers. Sub-parsers allow
+    own configuration options and sub-parsers. Sub-parsers allow
      options groups to exist, e.g. the group "snowflake.cli.output" could have
      2 options in it: debug (boolean flag) and format (a string like "json", or
      "csv").
