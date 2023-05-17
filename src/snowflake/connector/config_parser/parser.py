@@ -8,11 +8,11 @@ import logging
 import os
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Callable, TypeVar
 
 import tomlkit
-from tomlkit import TOMLDocument
 from tomlkit.items import Table
+from typing_extensions import Literal
 
 from ..errors import ConfigParserError, ConfigSourceError
 
@@ -123,7 +123,7 @@ class ConfigOption:
         loaded_var: _T | None | str = env_var
         if env_var and self.parse_str is not None:
             loaded_var = self.parse_str(env_var)
-        if isinstance(loaded_var, (Table, TOMLDocument)):
+        if isinstance(loaded_var, (Table, tomlkit.TOMLDocument)):
             # If we got a TOML table we probably want it in dictionary form
             return True, loaded_var.value
         return True, loaded_var
@@ -137,7 +137,7 @@ class ConfigOption:
             )
         for k in self._nest_path[1:]:
             e = e[k]
-        if isinstance(e, (Table, TOMLDocument)):
+        if isinstance(e, (Table, tomlkit.TOMLDocument)):
             # If we got a TOML table we probably want it in dictionary form
             return e.value
         return e
@@ -190,7 +190,7 @@ class ConfigParser:
         self._options: dict[str, ConfigOption] = dict()
         self._sub_parsers: dict[str, ConfigParser] = dict()
         # Dictionary to cache read in config file
-        self.conf_file_cache: TOMLDocument | None = None
+        self.conf_file_cache: tomlkit.TOMLDocument | None = None
         # Information necessary to be able to nest elements
         #  and add options in O(1)
         self._root_parser: ConfigParser = self

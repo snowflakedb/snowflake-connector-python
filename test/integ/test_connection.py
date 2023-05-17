@@ -1243,4 +1243,4 @@ def test_not_found_connection_name():
     with pytest.raises(
         ProgrammingError, match="Invalid connection_name 'default', known ones are"
     ):
-        snowflake.connector.connect(connection_name="default")
+        snowflake.connector.connect(connection_name="non_default")
