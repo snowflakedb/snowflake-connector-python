@@ -75,6 +75,10 @@ class QueryContextCache:
         self._data: str = None
 
     def _add_qce(self, qce: QueryContextElement) -> None:
+        """Adds qce element in tree_set, id_map and intermediate_priority_map.
+        We still need to add _sync_priority_map after all the new qce have been merged
+        into the cache.
+        """
         self._tree_set.add(qce)
         self._id_map[qce.id] = qce
         self._intermediate_priority_map[qce.priority] = qce
