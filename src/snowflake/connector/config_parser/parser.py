@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterable
+from operator import methodcaller
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
@@ -100,7 +101,7 @@ class ConfigOption:
     @property
     def default_env_name(self) -> str:
         """The default environmental variable name for this option."""
-        pieces = map(lambda e: e.upper(), self._nest_path[1:])
+        pieces = map(methodcaller("upper"), self._nest_path[1:])
         return f"SNOWFLAKE_{'_'.join(pieces)}"
 
     def _get_env(self) -> tuple[bool, str | _T | None]:
