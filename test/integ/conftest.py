@@ -107,6 +107,7 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
     connections = {
         "default": CONNECTION_PARAMETERS,
         "client_failover": CLIENT_FAILOVER_PARAMETERS,
+        "admin": CONNECTION_PARAMETERS_ADMIN,
     }
 
     chosen_connection = connections[connection_name]

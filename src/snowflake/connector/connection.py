@@ -25,6 +25,7 @@ from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 from uuid import UUID
 
 from . import errors, proxy
+from ._query_context_cache import QueryContextCache
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
     Auth,
@@ -52,6 +53,7 @@ from .constants import (
     PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
+    PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
     OCSPMode,
@@ -204,6 +206,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Whether to log imported packages in telemetry
+    "disable_query_context_cache": (
+        False,
+        bool,
+    ),  # Disable query context cache
     "json_result_force_utf8_decoding": (
         False,
         bool,
@@ -307,6 +313,8 @@ class SnowflakeConnection:
                 kwargs["application"] = "streamlit"
 
         self.converter = None
+        self.query_context_cache: QueryContextCache | None = None
+        self.query_context_cache_size = 5
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
@@ -543,6 +551,10 @@ class SnowflakeConnection:
         else:
             raise TypeError("auth_class must subclass AuthByPlugin")
 
+    @property
+    def is_query_context_cache_disabled(self) -> bool:
+        return self._disable_query_context_cache
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -603,6 +615,8 @@ class SnowflakeConnection:
                 )
             self.rest.close()
             self._rest = None
+            if self.query_context_cache:
+                self.query_context_cache.clear_cache()
             del self.messages[:]
             logger.debug("Session is closed")
         except Exception as e:
@@ -848,6 +862,8 @@ class SnowflakeConnection:
         self._password = None  # ensure password won't persist
         self.auth_class.reset_secrets()
 
+        self.initialize_query_context_cache()
+
         if self.client_session_keep_alive:
             # This will be called after the heartbeat frequency has actually been set.
             # By this point it should have been decided if the heartbeat has to be enabled
@@ -1058,7 +1074,9 @@ class SnowflakeConnection:
         if binding_params is not None:
             # binding parameters. This is for qmarks paramstyle.
             data["bindings"] = binding_params
-
+        if not _no_results:
+            # not an async query
+            data["queryContext"] = self.get_query_context()
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
@@ -1086,14 +1104,17 @@ class SnowflakeConnection:
             ret["data"] = {}
         if _update_current_object:
             data = ret["data"]
-            if "finalDatabaseName" in data:
+            if "finalDatabaseName" in data and data["finalDatabaseName"] is not None:
                 self._database = data["finalDatabaseName"]
-            if "finalSchemaName" in data:
+            if "finalSchemaName" in data and data["finalSchemaName"] is not None:
                 self._schema = data["finalSchemaName"]
-            if "finalWarehouseName" in data:
+            if "finalWarehouseName" in data and data["finalWarehouseName"] is not None:
                 self._warehouse = data["finalWarehouseName"]
             if "finalRoleName" in data:
                 self._role = data["finalRoleName"]
+            if "queryContext" in data and not _no_results:
+                # here the data["queryContext"] field has been automatically converted from JSON into a dict type
+                self.set_query_context(data["queryContext"])
 
         return ret
 
@@ -1466,6 +1487,8 @@ class SnowflakeConnection:
                 self.client_prefetch_threads = value
             elif PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 == name:
                 self.enable_stage_s3_privatelink_for_us_east_1 = value
+            elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
+                self.query_context_cache_size = value
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))
@@ -1587,6 +1610,19 @@ class SnowflakeConnection:
                 },
             )
         return status
+
+    def initialize_query_context_cache(self) -> None:
+        if not self.is_query_context_cache_disabled:
+            self.query_context_cache = QueryContextCache(self.query_context_cache_size)
+
+    def get_query_context(self) -> str | None:
+        if self.is_query_context_cache_disabled:
+            return None
+        return self.query_context_cache.serialize_to_json()
+
+    def set_query_context(self, data: dict) -> None:
+        if not self.is_query_context_cache_disabled:
+            self.query_context_cache.deserialize_json_dict(data)
 
     @staticmethod
     def is_still_running(status: QueryStatus) -> bool:
