@@ -3,7 +3,7 @@ include *.rst
 include LICENSE.txt
 include NOTICE
 include pyproject.toml
-recursive-include src/snowflake/connector py.typed *.py *.pyx *.toml
+recursive-include src/snowflake/connector py.typed *.py *.pyx
 recursive-include src/snowflake/connector/vendored LICENSE*
 
 recursive-include src/snowflake/connector/cpp *.cpp *.hpp
