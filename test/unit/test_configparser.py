@@ -17,11 +17,10 @@ from unittest import mock
 import pytest
 from pytest import raises
 
-from snowflake.connector.sf_dirs import SFPlatformDirs, _resolve_platform_dirs
-
 try:
     from snowflake.connector.config_parser import ConfigParser
     from snowflake.connector.errors import ConfigParserError, ConfigSourceError
+    from snowflake.connector.sf_dirs import SFPlatformDirs, _resolve_platform_dirs
 except ImportError:
     # olddriver tests
     pass
