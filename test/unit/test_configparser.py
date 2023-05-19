@@ -4,13 +4,20 @@
 
 from __future__ import annotations
 
+import os.path
+import shutil
+import stat
+import warnings
 from pathlib import Path
 from test.randomize import random_string
 from textwrap import dedent
 from typing import Callable, Dict, Union
+from unittest import mock
 
 import pytest
 from pytest import raises
+
+from snowflake.connector.sf_dirs import SFPlatformDirs, _resolve_platform_dirs
 
 try:
     from snowflake.connector.config_parser import ConfigParser
@@ -219,6 +226,15 @@ def test_error_missing_fp():
         tp.read_config()
 
 
+def test_missing_config_file(tmp_path):
+    config_file = tmp_path / "config.toml"
+    with raises(
+        ConfigSourceError,
+        match=f"The config file '{config_file}' does not exist",
+    ):
+        ConfigParser(name="test", file_path=config_file).read_config()
+
+
 def test_error_missing_fp_retrieve():
     tp = ConfigParser(
         name="test_parser",
@@ -229,3 +245,96 @@ def test_error_missing_fp_retrieve():
         match="Root parser 'test_parser' is missing file_path",
     ):
         tp["option"]
+
+
+@pytest.mark.parametrize("version", (None, "1"))
+@pytest.mark.parametrize(
+    "method",
+    (
+        "user_data_dir",
+        "site_data_dir",
+        "user_config_dir",
+        "site_config_dir",
+        "user_cache_dir",
+        "user_state_dir",
+        "user_log_dir",
+        "user_documents_dir",
+        "user_runtime_dir",
+    ),
+)
+def test_sf_dirs(tmp_path, method, version):
+    appname = random_string(5)
+    single_dir = tmp_path / appname
+    if version is not None:
+        single_dir = single_dir / version
+    assert getattr(
+        SFPlatformDirs(
+            str(tmp_path),
+            appname=appname,
+            appauthor=False,
+            version=version,
+            ensure_exists=True,
+        ),
+        method,
+    ) == str(single_dir)
+    assert single_dir.exists() and not single_dir.is_file()
+
+
+def test_config_file_resolution_sfdirs_default():
+    default_loc = os.path.expanduser("~/.snowflake")
+    existed_before = os.path.exists(default_loc)
+    os.makedirs(default_loc, exist_ok=True)
+    try:
+        assert isinstance(_resolve_platform_dirs(), SFPlatformDirs)
+    finally:
+        if not existed_before:
+            shutil.rmtree(default_loc)
+
+
+def test_config_file_resolution_sfdirs_nondefault(tmp_path, monkeypatch):
+    with monkeypatch.context() as m:
+        m.setenv("SNOWFLAKE_HOME", str(tmp_path))
+        assert isinstance(_resolve_platform_dirs(), SFPlatformDirs)
+
+
+def test_config_file_resolution_non_sfdirs(monkeypatch):
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_HOME", raising=False)
+        assert not isinstance(_resolve_platform_dirs(), SFPlatformDirs)
+
+
+def test_warn_config_file_owner(tmp_path, monkeypatch):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigParser(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    with mock.patch("os.getuid", return_value=os.getuid() + 1):
+        with warnings.catch_warnings(record=True) as c:
+            assert c1["b"] is True
+        assert len(c) == 1
+        assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+
+
+def test_warn_config_file_permissions(tmp_path):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigParser(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    c_file.chmod(stat.S_IMODE(c_file.stat().st_mode) | stat.S_IROTH)
+    with warnings.catch_warnings(record=True) as c:
+        assert c1["b"] is True
+    assert len(c) == 1
+    assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"

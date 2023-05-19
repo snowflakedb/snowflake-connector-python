@@ -6,20 +6,24 @@ from __future__ import annotations
 
 import logging
 import os
+import stat
 from collections.abc import Iterable
 from operator import methodcaller
 from pathlib import Path
 from typing import Any, Callable, TypeVar
+from warnings import warn
 
 import tomlkit
 from tomlkit.items import Table
 from typing_extensions import Literal
 
-from ..errors import ConfigParserError, ConfigSourceError
+from snowflake.connector.constants import CONFIG_FILE
+from snowflake.connector.errors import ConfigParserError, ConfigSourceError
 
 _T = TypeVar("_T")
 
 LOGGER = logging.getLogger(__name__)
+READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
 
 
 class ConfigOption:
@@ -131,6 +135,12 @@ class ConfigOption:
 
     def _get_config(self) -> Any:
         """Get value from the cached config file."""
+        if self._root_parser.conf_file_cache is None and (
+            self._root_parser.file_path is not None
+            and self._root_parser.file_path.exists()
+            and self._root_parser.file_path.is_file()
+        ):
+            self._root_parser.read_config()
         e = self._root_parser.conf_file_cache
         if e is None:
             raise ConfigParserError(
@@ -205,14 +215,22 @@ class ConfigParser:
             raise ConfigParserError(
                 "ConfigParser is trying to read config file, but it doesn't have one"
             )
+        if not self.file_path.exists():
+            raise ConfigSourceError(
+                f"The config file '{self.file_path}' does not exist"
+            )
+        if (
+            self.file_path.stat().st_mode & READABLE_BY_OTHERS != 0
+            or self.file_path.stat().st_uid != os.getuid()
+        ):
+            warn(f"Bad owner or permissions on {self.file_path}")
         LOGGER.debug(f"reading configuration file from {str(self.file_path)}")
         try:
             self.conf_file_cache = tomlkit.parse(self.file_path.read_text())
         except Exception as e:
             raise ConfigSourceError(
-                f"An unknown error happened while loading '{str(self.file_path)}"
-                f"', please see the error: {e}"
-            )
+                "An unknown error happened while loading " f"'{str(self.file_path)}'"
+            ) from e
 
     def add_option(
         self,
@@ -283,12 +301,6 @@ class ConfigParser:
         Args:
             name: Name to retrieve.
         """
-        if self.conf_file_cache is None and (
-            self.file_path is not None
-            and self.file_path.exists()
-            and self.file_path.is_file()
-        ):
-            self.read_config()
         if name in self._options:
             return self._options[name].value()
         if name not in self._sub_parsers:
@@ -297,3 +309,18 @@ class ConfigParser:
                 f" with the name '{name}'"
             )
         return self._sub_parsers[name]
+
+
+CONFIG_PARSER = ConfigParser(
+    name="CONFIG_PARSER",
+    file_path=CONFIG_FILE,
+)
+CONFIG_PARSER.add_option(
+    name="connections",
+    parse_str=tomlkit.parse,
+)
+
+__all__ = [
+    "ConfigParser",
+    "CONFIG_PARSER",
+]
