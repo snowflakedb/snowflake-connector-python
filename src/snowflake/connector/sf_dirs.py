@@ -120,3 +120,18 @@ class SFPlatformDirs(PlatformDirsABC):
     def user_runtime_dir(self) -> str:
         """runtime directory tied to the user"""
         return self.user_data_dir
+
+    @property
+    def user_music_dir(self) -> str:
+        """music directory tied to the user"""
+        return self.user_data_dir
+
+    @property
+    def user_pictures_dir(self) -> str:
+        """pictures directory tied to the user"""
+        return self.user_data_dir
+
+    @property
+    def user_videos_dir(self) -> str:
+        """videos directory tied to the user"""
+        return self.user_data_dir
