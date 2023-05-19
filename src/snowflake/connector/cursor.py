@@ -182,11 +182,11 @@ class SnowflakeCursor:
         connection: The connection object by which the cursor was created.
         errorhandle: The class that handles error handling.
         is_file_transfer: Whether, or not the current command is a put, or get.
-
-    TODO:
-        Most of these attributes have no reason to be properties, we could just store them in public variables.
-        Calling a function is expensive in Python and most of these getters are unnecessary.
     """
+
+    # TODO:
+    #    Most of these attributes have no reason to be properties, we could just store them in public variables.
+    #    Calling a function is expensive in Python and most of these getters are unnecessary.
 
     INSERT_SQL_RE = re.compile(r"^insert\s+into", flags=re.IGNORECASE)
     COMMENT_SQL_RE = re.compile(r"/\*.*\*/")
