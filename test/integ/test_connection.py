@@ -1239,6 +1239,9 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
                         (1,),
                     ]
     except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
         pytest.fail("something failed", pytrace=False)
 
 
@@ -1246,7 +1249,7 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
 def test_not_found_connection_name():
     connection_name = random_string(5)
     with pytest.raises(
-        ProgrammingError,
+        Error,
         match=f"Invalid connection_name '{connection_name}', known ones are",
     ):
         snowflake.connector.connect(connection_name=connection_name)

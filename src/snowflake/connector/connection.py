@@ -329,7 +329,7 @@ class SnowflakeConnection:
         if connection_name is not None:
             connections = CONFIG_PARSER["connections"]
             if connection_name not in connections:
-                raise ProgrammingError(
+                raise Error(
                     f"Invalid connection_name '{connection_name}',"
                     f" known ones are {list(connections.keys())}"
                 )

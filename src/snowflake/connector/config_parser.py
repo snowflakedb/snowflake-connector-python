@@ -210,7 +210,13 @@ class ConfigParser:
     def read_config(
         self,
     ) -> None:
-        """Read and cache config file."""
+        """Read and cache config file.
+
+        This function should be called if the ConfigParser's cache is outdated.
+        Maybe in the case when we want to replace the file_path assigned to a
+        ConfigParser, or if one's doing development and are interactively adding
+        new options to their configuration files.
+        """
         if self.file_path is None:
             raise ConfigParserError(
                 "ConfigParser is trying to read config file, but it doesn't have one"
