@@ -260,7 +260,7 @@ class ConfigParser:
         Args:
             name: Name to check against children.
         """
-        if name in (self._options | self._sub_parsers):
+        if name in (self._options.keys() | self._sub_parsers.keys()):
             raise ConfigParserError(
                 f"'{name}' subparser, or option conflicts with a child element of '{self.name}'"
             )
