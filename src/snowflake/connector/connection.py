@@ -331,7 +331,7 @@ class SnowflakeConnection:
             if connection_name not in connections:
                 raise ProgrammingError(
                     f"Invalid connection_name '{connection_name}',"
-                    f" known ones are {connections.keys()}"
+                    f" known ones are {list(connections.keys())}"
                 )
             kwargs = {**connections[connection_name], **kwargs}
         self.__set_error_attributes()

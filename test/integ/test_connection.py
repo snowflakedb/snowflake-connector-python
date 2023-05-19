@@ -37,6 +37,8 @@ from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationReq
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
+from ..randomize import random_string
+
 try:  # pragma: no cover
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
@@ -1203,6 +1205,8 @@ def test_disable_query_context_cache(conn_cnx) -> None:
         ret = conn.cursor().execute("select 1").fetchone()
         assert ret == (1,)
         assert conn.query_context_cache is None
+
+
 @pytest.mark.parametrize(
     "mode",
     ("file", "env"),
@@ -1240,7 +1244,9 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
 
 @pytest.mark.skipolddriver
 def test_not_found_connection_name():
+    connection_name = random_string(5)
     with pytest.raises(
-        ProgrammingError, match="Invalid connection_name 'default', known ones are"
+        ProgrammingError,
+        match=f"Invalid connection_name '{connection_name}', known ones are",
     ):
-        snowflake.connector.connect(connection_name="non_default")
+        snowflake.connector.connect(connection_name=connection_name)
