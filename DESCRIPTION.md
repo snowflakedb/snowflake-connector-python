@@ -9,6 +9,35 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.0.4(TBD)
+
+- v3.0.4(May 25,2023)
+
+   - e79f21ca SNOW-823590 passrot (#1569)
+   - fix Sphinx-busting docstring (#1571)
+   - 69fadcb4 SNOW-678541: HTAP Driver Changes (#1416)
+   - d6a47498 SNOW-770678: Fix incorrect date conversion in bulk insertion (#1562)
+   - bde81014 Update pandas requirement from <1.6.0,>=1.0.0 to >=1.0.0,<2.1.0 (#1496)
+   - Ignore tests on olddriver (#1563)
+   - Add ability to return raw response json from python-connector (#1556)
+   - fda642f0 SNOW-811030 Disable dependabot for github actions (#1554)
+   - c371d9fb type ResultMetaData fields as optional (#1424)
+   - 97c25993 SNOW-787480: fix json load encoding error (#1528)
+   - 3d4f8f45 Test 1493 (#1515)
+   - 72c4f15d SNOW-803639 bumped vendored libraries (#1540)
+   - cec0e45a Revert "Bump actions/stale from 7 to 8 (#1486)"
+   - 93a15d9f Revert "Bump atlassian/gajira-login from 2.0.0 to 3.0.1 (#1456)"
+   - b92ef3bd Revert "Bump pypa/cibuildwheel from 2.12.0 to 2.12.3 (#1517)"
+   - 49031b66 Update pytest requirement from <7.3.0 to <7.4.0 (#1505)
+   - c6189d0f Bump pypa/cibuildwheel from 2.12.0 to 2.12.3 (#1517)
+   - 1ad585a3 Bump atlassian/gajira-login from 2.0.0 to 3.0.1 (#1456)
+   - e9e9691e Bump actions/stale from 7 to 8 (#1486)
+   - 6592163d SNOW-799216 Allow nextset without fetching result for async multistat… (#1526)
+   - 4bfe405a SNOW-670921 fail fast on login request with 403 response (#1514)
+   - a9f5db39 SNOW-799180 Do not modify statement_params from user (#1524)
+   - f0648b82 Update jira_issue.yml
+   - 2f92501d fix jira_issue integration
+   -
+
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
   - Added the json_result_force_utf8_decoding connection parameter to force decoding JSON content in utf-8 when the result format is JSON.
   - Fixed a bug in which we cannot call `SnowflakeCursor.nextset` before fetching the result of the first query if the cursor runs an async multistatement query.
