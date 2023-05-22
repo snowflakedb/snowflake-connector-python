@@ -78,6 +78,9 @@ FIELD_TYPES: tuple[FieldType, ...] = (
     FieldType(
         name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()
     ),
+    FieldType(
+        name="GEOMETRY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()
+    ),
 )
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
