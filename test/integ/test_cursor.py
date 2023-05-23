@@ -615,6 +615,36 @@ def test_geography(conn_cnx):
                 assert row in expected_data
 
 
+@pytest.mark.skipolddriver
+def test_geometry(conn_cnx):
+    """Variant including JSON object."""
+    name_geo = random_string(5, "test_geometry_")
+    with conn_cnx(
+        session_parameters={
+            "GEOMETRY_OUTPUT_FORMAT": "geoJson",
+        },
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary table {name_geo} (geo GEOMETRY)")
+            cur.execute(
+                f"insert into {name_geo} values ('POINT(0 0)'), ('LINESTRING(1 1, 2 2)')"
+            )
+            expected_data = [
+                {"coordinates": [0, 0], "type": "Point"},
+                {"coordinates": [[1, 1], [2, 2]], "type": "LineString"},
+            ]
+
+        with cnx.cursor() as cur:
+            # Test with GEOMETRY return type
+            result = cur.execute(f"select * from {name_geo}")
+            metadata = result.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOMETRY"
+            data = result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
+
+
 def test_invalid_bind_data_type(conn_cnx):
     """Invalid bind data type."""
     with conn_cnx() as cnx:
