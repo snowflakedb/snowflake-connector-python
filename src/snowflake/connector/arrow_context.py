@@ -9,8 +9,8 @@ import decimal
 import time
 from datetime import datetime, timedelta, tzinfo
 from logging import getLogger
-from typing import TYPE_CHECKING
 from sys import byteorder
+from typing import TYPE_CHECKING
 
 import pytz
 from pytz import UTC
@@ -154,6 +154,6 @@ class ArrowConverterContext:
         int128 = int.from_bytes(int128_bytes, byteorder=byteorder, signed=True)
         if scale == 0:
             return int128
-        digits = [int(digit) for digit in str(int128) if digit != '-']
+        digits = [int(digit) for digit in str(int128) if digit != "-"]
         sign = int128 < 0
         return decimal.Decimal((sign, digits, -scale))
