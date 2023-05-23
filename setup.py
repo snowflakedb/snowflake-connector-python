@@ -47,7 +47,10 @@ try:
 
     _ABLE_TO_COMPILE_EXTENSIONS = True
 except ImportError:
-    warnings.warn("Cannot compile native C code, because of a missing build dependency")
+    warnings.warn(
+        "Cannot compile native C code, because of a missing build dependency",
+        stacklevel=2,
+    )
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
