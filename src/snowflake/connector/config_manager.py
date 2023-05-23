@@ -125,7 +125,7 @@ class ConfigOption:
         if env_name not in os.environ:
             return False, None
         env_var = os.environ.get(env_name, None)
-        loaded_var: _T | None | str = env_var
+        loaded_var: str | _T | None = env_var
         if env_var and self.parse_str is not None:
             loaded_var = self.parse_str(env_var)
         if isinstance(loaded_var, (Table, tomlkit.TOMLDocument)):
