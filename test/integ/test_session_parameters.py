@@ -122,7 +122,7 @@ def set_backend_client_session_keep_alive(
     admin_cnx.cursor().execute(query)
 
 
-# @pytest.mark.internal
+@pytest.mark.internal
 def test_htap_optimizations(db_parameters: object, conn_cnx) -> None:
     random_prefix = random_string(5, "test_prefix").lower()
     test_wh = f"{random_prefix}_wh"
