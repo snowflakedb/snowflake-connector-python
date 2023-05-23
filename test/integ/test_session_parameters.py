@@ -122,7 +122,7 @@ def set_backend_client_session_keep_alive(
     admin_cnx.cursor().execute(query)
 
 
-@pytest.mark.internal
+# @pytest.mark.internal
 def test_htap_optimizations(db_parameters: object, conn_cnx) -> None:
     random_prefix = random_string(5, "test_prefix").lower()
     test_wh = f"{random_prefix}_wh"
@@ -177,3 +177,6 @@ def test_htap_optimizations(db_parameters: object, conn_cnx) -> None:
             # alter account unset ENABLE_SNOW_654741_FOR_TESTING
             query = f"alter account {db_parameters['sf_account']} unset ENABLE_SNOW_654741_FOR_TESTING"
             admin_cnx.cursor().execute(query)
+            admin_cnx.cursor().execute(f"DROP SCHEMA IF EXISTS {test_schema}")
+            admin_cnx.cursor().execute(f"DROP DATABASE IF EXISTS {test_db}")
+            admin_cnx.cursor().execute(f"DROP WAREHOUSE IF EXISTS {test_wh}")
