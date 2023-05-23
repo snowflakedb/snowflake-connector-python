@@ -49,7 +49,7 @@ try:
 except ImportError:
     warnings.warn(
         "Cannot compile native C code, because of a missing build dependency",
-        stacklevel=1,
+        stacklevel=2,
     )
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
