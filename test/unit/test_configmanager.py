@@ -18,8 +18,8 @@ import pytest
 from pytest import raises
 
 try:
-    from snowflake.connector.config_parser import ConfigParser
-    from snowflake.connector.errors import ConfigParserError, ConfigSourceError
+    from snowflake.connector.config_manager import ConfigManager
+    from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
     from snowflake.connector.sf_dirs import SFPlatformDirs, _resolve_platform_dirs
 except ImportError:
     # olddriver tests
@@ -61,7 +61,7 @@ def test_incorrect_config_read(tmp_files):
     )
     config_file = tmp_folder / "config.toml"
     with raises(ConfigSourceError) as ex:
-        ConfigParser(name="test", file_path=config_file).read_config()
+        ConfigManager(name="test", file_path=config_file).read_config()
     assert ex.match(f"An unknown error happened while loading '{str(config_file)}'")
 
 
@@ -79,7 +79,7 @@ def test_simple_config_read(tmp_files):
         }
     )
     config_file = tmp_folder / "config.toml"
-    TEST_PARSER = ConfigParser(
+    TEST_PARSER = ConfigManager(
         name="test",
         file_path=config_file,
     )
@@ -99,9 +99,9 @@ def test_simple_config_read(tmp_files):
 
 
 def test_simple_nesting(monkeypatch, tmp_path):
-    c1 = ConfigParser(name="test", file_path=tmp_path / "config.toml")
-    c2 = ConfigParser(name="sb")
-    c3 = ConfigParser(name="sb")
+    c1 = ConfigManager(name="test", file_path=tmp_path / "config.toml")
+    c2 = ConfigManager(name="sb")
+    c3 = ConfigManager(name="sb")
     c3.add_option(name="b", parse_str=lambda e: e.lower() == "true")
     c2.add_subparser(c3)
     c1.add_subparser(c2)
@@ -112,8 +112,8 @@ def test_simple_nesting(monkeypatch, tmp_path):
 
 def test_complicated_nesting(monkeypatch, tmp_path):
     c_file = tmp_path / "config.toml"
-    c1 = ConfigParser(file_path=c_file, name="root_parser")
-    c2 = ConfigParser(file_path=tmp_path / "config2.toml", name="sp")
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c2 = ConfigManager(file_path=tmp_path / "config2.toml", name="sp")
     c2.add_option(name="b", parse_str=lambda e: e.lower() == "true")
     c1.add_subparser(c2)
     c_file.write_text(
@@ -134,10 +134,10 @@ def test_complicated_nesting(monkeypatch, tmp_path):
 
 def test_error_missing_file_path():
     with pytest.raises(
-        ConfigParserError,
-        match="ConfigParser is trying to read config file," " but it doesn't have one",
+        ConfigManagerError,
+        match="ConfigManager is trying to read config file," " but it doesn't have one",
     ):
-        ConfigParser(name="test_parser").read_config()
+        ConfigManager(name="test_parser").read_config()
 
 
 def test_error_invalid_toml(tmp_path):
@@ -153,17 +153,17 @@ def test_error_invalid_toml(tmp_path):
         ConfigSourceError,
         match=f"An unknown error happened while loading '{str(c_file)}'",
     ):
-        ConfigParser(
+        ConfigManager(
             name="test_parser",
             file_path=c_file,
         ).read_config()
 
 
 def test_error_child_conflict():
-    cp = ConfigParser(name="test_parser")
-    cp.add_subparser(ConfigParser(name="b"))
+    cp = ConfigManager(name="test_parser")
+    cp.add_subparser(ConfigManager(name="b"))
     with pytest.raises(
-        ConfigParserError,
+        ConfigManagerError,
         match="'b' subparser, or option conflicts with a child element of 'test_parser'",
     ):
         cp.add_option(name="b")
@@ -176,7 +176,7 @@ def test_explicit_env_name(monkeypatch):
         text = "{rnd_string}"
         """
     )
-    TEST_PARSER = ConfigParser(
+    TEST_PARSER = ConfigManager(
         name="test_parser",
     )
 
@@ -189,7 +189,7 @@ def test_explicit_env_name(monkeypatch):
 
 
 def test_error_contains(monkeypatch):
-    tp = ConfigParser(
+    tp = ConfigManager(
         name="test_parser",
     )
     tp.add_option(name="output_format", choices=("json", "csv"))
@@ -204,23 +204,23 @@ def test_error_contains(monkeypatch):
 
 
 def test_error_missing_item():
-    tp = ConfigParser(
+    tp = ConfigManager(
         name="test_parser",
     )
     with pytest.raises(
         ConfigSourceError,
-        match="No ConfigParser, or ConfigOption can be found with the" " name 'asd'",
+        match="No ConfigManager, or ConfigOption can be found with the" " name 'asd'",
     ):
         tp["asd"]
 
 
 def test_error_missing_fp():
-    tp = ConfigParser(
+    tp = ConfigManager(
         name="test_parser",
     )
     with pytest.raises(
-        ConfigParserError,
-        match="ConfigParser is trying to read config file, but it doesn't have one",
+        ConfigManagerError,
+        match="ConfigManager is trying to read config file, but it doesn't have one",
     ):
         tp.read_config()
 
@@ -231,16 +231,16 @@ def test_missing_config_file(tmp_path):
         ConfigSourceError,
         match=f"The config file '{config_file}' does not exist",
     ):
-        ConfigParser(name="test", file_path=config_file).read_config()
+        ConfigManager(name="test", file_path=config_file).read_config()
 
 
 def test_error_missing_fp_retrieve():
-    tp = ConfigParser(
+    tp = ConfigManager(
         name="test_parser",
     )
     tp.add_option(name="option")
     with pytest.raises(
-        ConfigParserError,
+        ConfigManagerError,
         match="Root parser 'test_parser' is missing file_path",
     ):
         tp["option"]
@@ -307,7 +307,7 @@ def test_config_file_resolution_non_sfdirs(monkeypatch):
 
 def test_warn_config_file_owner(tmp_path, monkeypatch):
     c_file = tmp_path / "config.toml"
-    c1 = ConfigParser(file_path=c_file, name="root_parser")
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
     c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
     c_file.write_text(
         dedent(
@@ -326,7 +326,7 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
 
 def test_warn_config_file_permissions(tmp_path):
     c_file = tmp_path / "config.toml"
-    c1 = ConfigParser(file_path=c_file, name="root_parser")
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
     c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
     c_file.write_text(
         dedent(

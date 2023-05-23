@@ -588,8 +588,8 @@ class ConfigSourceError(Error):
     """
 
 
-class ConfigParserError(Error):
+class ConfigManagerError(Error):
     """Configuration parser related errors.
 
-    These mean that ConfigParser is misused by a developer.
+    These mean that ConfigManager is misused by a developer.
     """
