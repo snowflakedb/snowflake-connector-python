@@ -7,6 +7,7 @@
 #include "Python/Common.hpp"
 #include "Util/time.hpp"
 #include <memory>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <iostream>

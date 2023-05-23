@@ -7,6 +7,7 @@
 #include "Util/time.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <type_traits>
 
