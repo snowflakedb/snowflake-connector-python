@@ -9,7 +9,10 @@ import pytest
 
 import snowflake.connector
 
-from .conftest import TEST_SCHEMA
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 try:  # pragma: no cover
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
@@ -121,16 +124,24 @@ def set_backend_client_session_keep_alive(
 
 @pytest.mark.internal
 def test_htap_optimizations(db_parameters: object, conn_cnx) -> None:
+    random_prefix = random_string(5, "test_prefix").lower()
+    test_wh = f"{random_prefix}_wh"
+    test_db = f"{random_prefix}_db"
+    test_schema = f"{random_prefix}_schema"
+
     with conn_cnx("admin") as admin_cnx:
         try:
-            admin_cnx.cursor().execute(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
+            admin_cnx.cursor().execute(f"CREATE WAREHOUSE IF NOT EXISTS {test_wh}")
+            admin_cnx.cursor().execute(f"USE WAREHOUSE {test_wh}")
+            admin_cnx.cursor().execute(f"CREATE DATABASE IF NOT EXISTS {test_db}")
+            admin_cnx.cursor().execute(f"CREATE SCHEMA IF NOT EXISTS {test_schema}")
             query = f"alter account {db_parameters['sf_account']} set ENABLE_SNOW_654741_FOR_TESTING=true"
             admin_cnx.cursor().execute(query)
 
             # assert wh, db, schema match conn params
-            assert admin_cnx._warehouse.lower() == db_parameters["sf_warehouse"].lower()
-            assert admin_cnx._database.lower() == db_parameters["sf_database"].lower()
-            assert admin_cnx._schema.lower() == TEST_SCHEMA
+            assert admin_cnx._warehouse.lower() == test_wh
+            assert admin_cnx._database.lower() == test_db
+            assert admin_cnx._schema.lower() == test_schema
 
             # alter session set TIMESTAMP_OUTPUT_FORMAT='YYYY-MM-DD HH24:MI:SS.FFTZH'
             admin_cnx.cursor().execute(
@@ -151,9 +162,9 @@ def test_htap_optimizations(db_parameters: object, conn_cnx) -> None:
             assert len(ret) == 3
 
             # assert wh, db, schema
-            assert admin_cnx._warehouse.lower() == db_parameters["sf_warehouse"].lower()
-            assert admin_cnx._database.lower() == db_parameters["sf_database"].lower()
-            assert admin_cnx._schema.lower() == TEST_SCHEMA
+            assert admin_cnx._warehouse.lower() == test_wh
+            assert admin_cnx._database.lower() == test_db
+            assert admin_cnx._schema.lower() == test_schema
 
             assert (
                 admin_cnx._session_parameters["TIMESTAMP_OUTPUT_FORMAT"]
@@ -166,3 +177,6 @@ def test_htap_optimizations(db_parameters: object, conn_cnx) -> None:
             # alter account unset ENABLE_SNOW_654741_FOR_TESTING
             query = f"alter account {db_parameters['sf_account']} unset ENABLE_SNOW_654741_FOR_TESTING"
             admin_cnx.cursor().execute(query)
+            admin_cnx.cursor().execute(f"DROP SCHEMA IF EXISTS {test_schema}")
+            admin_cnx.cursor().execute(f"DROP DATABASE IF EXISTS {test_db}")
+            admin_cnx.cursor().execute(f"DROP WAREHOUSE IF EXISTS {test_wh}")
