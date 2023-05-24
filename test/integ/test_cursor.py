@@ -1118,7 +1118,6 @@ def test_rownumber(conn):
             assert cur.rownumber == 1
 
 
-@pytest.mark.skipolddriver
 def test_last_result(conn):
     """Checks whether get_last_request_json is returned as expected."""
     with conn() as cnx:
@@ -1133,7 +1132,6 @@ def test_last_result(conn):
             assert "message" in return_val
 
 
-@pytest.mark.skipolddriver
 def test_last_result_for_get_results_api(conn):
     """Checks whether get_last_request_json for get_results_from_sfqid is returned as expected."""
     with conn() as cnx:
