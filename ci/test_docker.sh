@@ -18,6 +18,7 @@ source $THIS_DIR/set_base_image.sh
 cd $THIS_DIR/docker/connector_test
 
 CONTAINER_NAME=test_pyconnector
+arch=$(uname -p)
 
 echo "[Info] Building docker image"
 if [[ "$arch" == "aarch64" ]]; then
