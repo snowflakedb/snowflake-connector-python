@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.4(TBD)
+- v3.0.4(May 23,2023)
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
   - Added the json_result_force_utf8_decoding connection parameter to force decoding JSON content in utf-8 when the result format is JSON.
   - Fixed a bug in which we cannot call `SnowflakeCursor.nextset` before fetching the result of the first query if the cursor runs an async multistatement query.
