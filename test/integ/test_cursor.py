@@ -1118,36 +1118,6 @@ def test_rownumber(conn):
             assert cur.rownumber == 1
 
 
-@pytest.mark.skipolddriver
-def test_last_result(conn):
-    """Checks whether get_last_request_json is returned as expected."""
-    with conn() as cnx:
-        with cnx.cursor() as cur:
-            assert cur.execute("select * from values (1), (2)")
-            assert cur.rownumber is None
-            return_val = cur._cached_last_result
-
-            assert "data" in return_val
-            assert "code" in return_val
-            assert return_val["success"] is True
-            assert "message" in return_val
-
-
-@pytest.mark.skipolddriver
-def test_last_result_for_get_results_api(conn):
-    """Checks whether get_last_request_json for get_results_from_sfqid is returned as expected."""
-    with conn() as cnx:
-        with cnx.cursor() as cur:
-            assert cur.execute("select * from values (4), (5)")
-            cur.get_results_from_sfqid(cur.sfqid)
-            return_val = cur._cached_last_result
-
-            assert "data" in return_val
-            assert "code" in return_val
-            assert return_val["success"] is True
-            assert "message" in return_val
-
-
 def test_values_set(conn):
     """Checks whether a bunch of properties start as Nones, but get set to something else when a query was executed."""
     properties = [

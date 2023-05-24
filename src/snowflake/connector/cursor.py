@@ -264,7 +264,6 @@ class SnowflakeCursor:
         self._inner_cursor: SnowflakeCursor | None = None
         self._prefetch_hook = None
         self._rownumber: int | None = None
-        self._cached_last_result: dict | None = None
 
         self.reset()
 
@@ -542,8 +541,6 @@ class SnowflakeCursor:
             if self._timebomb is not None:
                 self._timebomb.cancel()
                 logger.debug("cancelled timebomb in finally")
-
-            self._cached_last_result = ret
 
         if "data" in ret and "parameters" in ret["data"]:
             parameters = ret["data"].get("parameters", list())
@@ -1076,7 +1073,6 @@ class SnowflakeCursor:
             Error.errorhandler_wrapper(
                 self.connection, self, ProgrammingError, errvalue
             )
-        self._cached_last_result = ret
         return self
 
     def fetch_arrow_batches(self) -> Iterator[Table]:
@@ -1126,7 +1122,6 @@ class SnowflakeCursor:
     def abort_query(self, qid: str) -> bool:
         url = f"/queries/{qid}/abort-request"
         ret = self._connection.rest.request(url=url, method="post")
-        self._cached_last_result = ret
         return ret.get("success")
 
     def executemany(
@@ -1462,7 +1457,6 @@ class SnowflakeCursor:
             ):
                 url = f"/queries/{sfqid}/result"
                 ret = self._connection.rest.request(url=url, method="get")
-                self._cached_last_result = ret
                 if "data" in ret and "resultIds" in ret["data"]:
                     self._init_multi_statement_results(ret["data"])
 
