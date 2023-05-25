@@ -524,8 +524,10 @@ class SFDictFileCache(SFDictCache):
                         prefix=fname,
                         dir=_dir,
                     )
-                    with open(tmp_file, "wb") as w_file:
-                        pickle.dump(self, w_file)
+                    os.write(tmp_file, pickle.dumps(self))
+                    os.close(
+                        tmp_file
+                    )  # tmp_file is already an open handle, we close it after writing
                     # We write to a tmp file and then move it to have atomic write
                     os.replace(tmp_file_path, self.file_path)
                     self.last_loaded = datetime.datetime.fromtimestamp(
