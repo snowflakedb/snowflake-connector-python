@@ -18,7 +18,7 @@ import pytest
 from pytest import raises
 
 try:
-    from snowflake.connector.config_manager import ConfigManager
+    from snowflake.connector.config_manager import ConfigManager, ConfigOption
     from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
     from snowflake.connector.sf_dirs import SFPlatformDirs, _resolve_platform_dirs
 except ImportError:
@@ -340,3 +340,27 @@ def test_warn_config_file_permissions(tmp_path):
         assert c1["b"] is True
     assert len(c) == 1
     assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+
+
+def test_configoption_missing_root_manager():
+    with pytest.raises(
+        TypeError,
+        match="_root_manager cannot be None",
+    ):
+        ConfigOption(
+            name="test_option",
+            _nest_path=["test_option"],
+            _root_manager=None,
+        )
+
+
+def test_configoption_missing_nest_path():
+    with pytest.raises(
+        TypeError,
+        match="_nest_path cannot be None",
+    ):
+        ConfigOption(
+            name="test_option",
+            _nest_path=None,
+            _root_manager=ConfigManager(name="test_manager"),
+        )

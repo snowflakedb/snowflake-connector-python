@@ -42,7 +42,7 @@ class ConfigOption:
           supplied, we'll construct this. False disables reading from
           environmental variable, None uses the auto generated variable name
           and explicitly provided string overwrites the default one.
-        _root_parser: Reference to the root parser. Used to efficiently
+        _root_manager: Reference to the root parser. Used to efficiently
           refer to cached config file. Is supplied by the parent
           ConfigManager.
         _nest_path: The names of the ConfigManagers that this option is
@@ -55,11 +55,11 @@ class ConfigOption:
         self,
         *,
         name: str,
-        _root_parser: ConfigManager,
-        _nest_path: list[str],
         parse_str: Callable[[str], _T] | None = None,
         choices: Iterable[Any] | None = None,
         env_name: str | None | Literal[False] = None,
+        _root_manager: ConfigManager | None = None,
+        _nest_path: list[str] | None,
     ) -> None:
         """Create a config option that can read values from different locations.
 
@@ -68,16 +68,20 @@ class ConfigOption:
             parse_str: String parser function for this ConfigOption.
             choices: List of possible values for this ConfigOption.
             env_name: Environmental variable name value should be read from.
-            _root_parser: Reference to the root parser. Should be supplied by
+            _root_manager: Reference to the root parser. Should be supplied by
               the parent ConfigManager.
             _nest_path: The names of the ConfigManagers that this option is
               nested in. This is supplied by the parent ConfigManager.
         """
+        if _root_manager is None:
+            raise TypeError("_root_manager cannot be None")
+        if _nest_path is None:
+            raise TypeError("_nest_path cannot be None")
         self.name = name
         self.parse_str = parse_str
         self.choices = choices
         self._nest_path = _nest_path + [name]
-        self._root_parser: ConfigManager = _root_parser
+        self._root_manager: ConfigManager = _root_manager
         self.env_name = env_name
 
     def value(self) -> Any:
@@ -122,9 +126,9 @@ class ConfigOption:
             # Generate environment name if it was not explicitly supplied,
             #  and isn't disabled
             env_name = self.default_env_name
-        if env_name not in os.environ:
+        env_var = os.environ.get(env_name)
+        if env_var is None:
             return False, None
-        env_var = os.environ.get(env_name, None)
         loaded_var: str | _T | None = env_var
         if env_var and self.parse_str is not None:
             loaded_var = self.parse_str(env_var)
@@ -135,16 +139,16 @@ class ConfigOption:
 
     def _get_config(self) -> Any:
         """Get value from the cached config file."""
-        if self._root_parser.conf_file_cache is None and (
-            self._root_parser.file_path is not None
-            and self._root_parser.file_path.exists()
-            and self._root_parser.file_path.is_file()
+        if self._root_manager.conf_file_cache is None and (
+            self._root_manager.file_path is not None
+            and self._root_manager.file_path.exists()
+            and self._root_manager.file_path.is_file()
         ):
-            self._root_parser.read_config()
-        e = self._root_parser.conf_file_cache
+            self._root_manager.read_config()
+        e = self._root_manager.conf_file_cache
         if e is None:
             raise ConfigManagerError(
-                f"Root parser '{self._root_parser.name}' is missing file_path",
+                f"Root parser '{self._root_manager.name}' is missing file_path",
             )
         for k in self._nest_path[1:]:
             e = e[k]
@@ -163,7 +167,7 @@ class ConfigManager:
      2 options in it: debug (boolean flag) and format (a string like "json", or
      "csv").
 
-    When a ConfigManager tries to retrieve ConfigOptions' value the _root_parser
+    When a ConfigManager tries to retrieve ConfigOptions' value the _root_manager
     will read and cache the TOML file from the file it's pointing at, afterwards
     updating the read cache can be forced by calling read_config.
 
@@ -176,7 +180,7 @@ class ConfigManager:
         conf_file_cache: Cache to store what we read from the TOML file.
         _sub_parsers: List of ConfigManagers that are nested under us.
         _options: List of ConfigOptions that are our children.
-        _root_parser: Reference to root parser. Used to efficiently propagate to
+        _root_manager: Reference to root parser. Used to efficiently propagate to
           child options.
         _nest_path: The names of the ConfigManagers that this parser is nested
           under. Used to efficiently propagate to child options.
@@ -204,7 +208,7 @@ class ConfigManager:
         self.conf_file_cache: tomlkit.TOMLDocument | None = None
         # Information necessary to be able to nest elements
         #  and add options in O(1)
-        self._root_parser: ConfigManager = self
+        self._root_manager: ConfigManager = self
         self._nest_path = [name]
 
     def read_config(
@@ -253,7 +257,7 @@ class ConfigManager:
               where the default ConfigOption needs to be extended, for example
               if a new configuration option source needs to be supported.
         """
-        kwargs["_root_parser"] = self._root_parser
+        kwargs["_root_manager"] = self._root_manager
         kwargs["_nest_path"] = self._nest_path
         new_option = option_cls(
             **kwargs,
@@ -275,7 +279,7 @@ class ConfigManager:
     def add_subparser(self, new_child: ConfigManager) -> None:
         """Nest another ConfigManager under this one.
 
-        This function recursively updates _nest_path and _root_parser of all
+        This function recursively updates _nest_path and _root_manager of all
         children under new_child.
 
         Args:
@@ -289,13 +293,13 @@ class ConfigManager:
 
         def _root_setter_helper(node: ConfigManager):
             # Deal with ConfigManagers
-            node._root_parser = self._root_parser
+            node._root_manager = self._root_manager
             node._nest_path = self._nest_path + node._nest_path
             for sub_parser in node._sub_parsers.values():
                 _root_setter_helper(sub_parser)
             # Deal with ConfigOptions
             for option in node._options.values():
-                option._root_parser = self._root_parser
+                option._root_manager = self._root_manager
                 option._nest_path = self._nest_path + option._nest_path
 
         _root_setter_helper(new_child)
