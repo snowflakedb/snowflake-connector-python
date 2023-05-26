@@ -19,6 +19,10 @@ PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
 [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
+python3.7 -m venv venv
+. venv/bin/activate
+pip install tox tox-external_wheels
+
 # Run tests
 cd $CONNECTOR_DIR
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
@@ -27,8 +31,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
     TEST_ENVLIST=py${SHORT_VERSION}-{unit,integ,pandas,sso}-ci
     echo "[Info] Running tox for ${TEST_ENVLIST}"
-
-    # https://github.com/tox-dev/tox/issues/1485
-    # tox seems to not work inside virtualenv, so manually installed tox and trigger system default tox
-    /Library/Frameworks/Python.framework/Versions/3.5/bin/tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
+    tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
 done
+
+deactivate
