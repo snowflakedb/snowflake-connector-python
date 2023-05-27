@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os.path
+import re
 import shutil
 import stat
 import warnings
@@ -60,9 +61,11 @@ def test_incorrect_config_read(tmp_files):
         }
     )
     config_file = tmp_folder / "config.toml"
-    with raises(ConfigSourceError) as ex:
+    with raises(
+            ConfigSourceError,
+            match=re.escape(f"An unknown error happened while loading '{str(config_file)}'"),
+    ) as ex:
         ConfigManager(name="test", file_path=config_file).read_config()
-    assert ex.match(f"An unknown error happened while loading '{str(config_file)}'")
 
 
 def test_simple_config_read(tmp_files):
@@ -151,7 +154,7 @@ def test_error_invalid_toml(tmp_path):
     )
     with pytest.raises(
         ConfigSourceError,
-        match=f"An unknown error happened while loading '{str(c_file)}'",
+        match=re.escape(f"An unknown error happened while loading '{str(c_file)}'"),
     ):
         ConfigManager(
             name="test_parser",
@@ -229,7 +232,7 @@ def test_missing_config_file(tmp_path):
     config_file = tmp_path / "config.toml"
     with raises(
         ConfigSourceError,
-        match=f"The config file '{config_file}' does not exist",
+        match=re.escape(f"The config file '{config_file}' does not exist"),
     ):
         ConfigManager(name="test", file_path=config_file).read_config()
 
