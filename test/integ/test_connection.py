@@ -1207,6 +1207,7 @@ def test_disable_query_context_cache(conn_cnx) -> None:
         assert conn.query_context_cache is None
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "mode",
     ("file", "env"),
