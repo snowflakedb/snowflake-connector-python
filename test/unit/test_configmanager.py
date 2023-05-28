@@ -62,9 +62,11 @@ def test_incorrect_config_read(tmp_files):
     )
     config_file = tmp_folder / "config.toml"
     with raises(
-            ConfigSourceError,
-            match=re.escape(f"An unknown error happened while loading '{str(config_file)}'"),
-    ) as ex:
+        ConfigSourceError,
+        match=re.escape(
+            f"An unknown error happened while loading '{str(config_file)}'"
+        ),
+    ):
         ConfigManager(name="test", file_path=config_file).read_config()
 
 
