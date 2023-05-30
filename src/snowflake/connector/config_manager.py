@@ -231,8 +231,15 @@ class ConfigManager:
                 f"The config file '{self.file_path}' does not exist"
             )
         if (
+            # Same check as openssh does for permissions
+            #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
             self.file_path.stat().st_mode & READABLE_BY_OTHERS != 0
-            or self.file_path.stat().st_uid != os.getuid()
+            or (
+                # TODO: Windows doesn't have getuid, skip checking
+                hasattr(os, "getuid")
+                and self.file_path.stat().st_uid != 0
+                and self.file_path.stat().st_uid != os.getuid()
+            )
         ):
             warn(f"Bad owner or permissions on {self.file_path}")
         LOGGER.debug(f"reading configuration file from {str(self.file_path)}")
