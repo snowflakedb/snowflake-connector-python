@@ -647,7 +647,7 @@ class ArrowResultBatch(ResultBatch):
             logger.error(f"Encountered exception when parsing Arrow chunk: {e}")
             import pickle
 
-            def dump_to_tmp_file(name: str, content: bytes, prefix:str):
+            def dump_to_tmp_file(name: str, content: bytes, prefix: str):
                 import os
                 import tempfile
 
@@ -662,9 +662,12 @@ class ArrowResultBatch(ResultBatch):
                     os.remove(path)
                     logger.error(f"Logging the content instead... {name}: {content}")
 
-
             dump_to_tmp_file("content of chunk", response.content, f"Chunk_{self.id}_")
-            dump_to_tmp_file("pickled ArrowResultBatch", pickle.dumps(self), f"ArrowResultBatch_{self.id}_")
+            dump_to_tmp_file(
+                "pickled ArrowResultBatch",
+                pickle.dumps(self),
+                f"ArrowResultBatch_{self.id}_",
+            )
 
             raise
 
