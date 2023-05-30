@@ -18,6 +18,8 @@ from unittest import mock
 import pytest
 from pytest import raises
 
+from snowflake.connector.compat import IS_WINDOWS
+
 try:
     from snowflake.connector.config_manager import ConfigManager, ConfigOption
     from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
@@ -310,6 +312,7 @@ def test_config_file_resolution_non_sfdirs(monkeypatch):
         assert not isinstance(_resolve_platform_dirs(), SFPlatformDirs)
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="no getuid on Windows")
 def test_warn_config_file_owner(tmp_path, monkeypatch):
     c_file = tmp_path / "config.toml"
     c1 = ConfigManager(file_path=c_file, name="root_parser")
