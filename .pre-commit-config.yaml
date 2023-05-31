@@ -95,6 +95,7 @@ repos:
                 | util_text
                 | url_util
                 | version
+                | config_parser
             ).py$
         additional_dependencies:
             - types-requests

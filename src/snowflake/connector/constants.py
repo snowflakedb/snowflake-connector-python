@@ -10,10 +10,23 @@ from enum import Enum, auto, unique
 from typing import TYPE_CHECKING, Any, Callable, DefaultDict, NamedTuple
 
 from .options import pyarrow as pa
+from .sf_dirs import _resolve_platform_dirs
 
 if TYPE_CHECKING:
     from pyarrow import DataType
 
+# Snowflake's central platform dependent directories, if the folder
+# ~/.snowflake/ (customizable by the environment variable SNOWFLAKE_HOME) exists
+# we use that folder for everything. Otherwise, we fall back to platformdirs
+# defaults. Please see comments in sf_dir.py for more information.
+DIRS = _resolve_platform_dirs()
+
+# Snowflake's central configuration file. By default, platformdirs will resolve
+# them to these places depending on OS:
+#   * Linux: `~/.config/snowflake/config.toml` but can be updated with XDG vars
+#   * Windows: `%USERPROFILE%\AppData\Local\snowflake\config.toml`
+#   * Mac: `~/Library/Application Support/$appname/config.toml`
+CONFIG_FILE = DIRS.user_config_path / "config.toml"
 
 DBAPI_TYPE_STRING = 0
 DBAPI_TYPE_BINARY = 1
