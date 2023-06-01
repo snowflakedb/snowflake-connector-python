@@ -488,7 +488,7 @@ class TestSFDictFileCache:
             [
                 sys.executable if sys.executable else "python",
                 "-m",
-                f"{os.getcwd()}/subprocess_cache",
+                "subprocess_cache",
                 tmpdir.strpath,
             ]
         )
