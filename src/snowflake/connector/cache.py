@@ -530,8 +530,8 @@ class SFDictFileCache(SFDictCache):
                     # however, using os.write(tmp_file, bytes) causes seg fault during garbage collection when exiting
                     # python program.
                     # thus we fall back to the approach using the normal open() method to open a file and write.
-                    os.close(tmp_file)
-                    with open(tmp_file_path, "wb") as w_file:
+                    # os.close(tmp_file)
+                    with open(tmp_file, "wb") as w_file:
                         # note: during garbage collection when exiting python program, open will raise not defined
                         # error as it has been released, we depend on this behavior to exit the program gracefully
                         pickle.dump(self, w_file)
