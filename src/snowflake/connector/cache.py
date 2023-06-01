@@ -524,10 +524,16 @@ class SFDictFileCache(SFDictCache):
                         prefix=fname,
                         dir=_dir,
                     )
-                    os.write(tmp_file, pickle.dumps(self))
-                    os.close(
-                        tmp_file
-                    )  # tmp_file is already an open handle, we close it after writing
+                    # tmp_file is an opened OS level handle, to avoid opening twice which will further
+                    # hold the file descriptor from unlinking the file, thus we use the low level os.close
+                    # to close the file descriptor first.
+                    os.close(tmp_file)
+                    # we do not use os.write here, because this _save method will be called
+                    # during garbage collection, and calling os.write will cause seg fault.
+                    # instead, we call a normal open here, replying on the error behavior that open
+                    # will be garbage collected and raise a normal error to exit the _save method call.
+                    with open(tmp_file_path, "wb") as w_file:
+                        pickle.dump(self, w_file)
                     # We write to a tmp file and then move it to have atomic write
                     os.replace(tmp_file_path, self.file_path)
                     self.last_loaded = datetime.datetime.fromtimestamp(
