@@ -487,7 +487,8 @@ class TestSFDictFileCache:
         sub_process = subprocess.run(
             [
                 sys.executable if sys.executable else "python",
-                f"{os.getcwd()}/subprocess_cache.py",
+                "-m",
+                f"{os.getcwd()}/subprocess_cache",
                 tmpdir.strpath,
             ]
         )
