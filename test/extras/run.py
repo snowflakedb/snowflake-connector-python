@@ -28,13 +28,14 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
         ocsp_cache_dir_path = pathlib.Path(
             snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.file_path
         ).parent
-        cache_files = os.listdir(ocsp_cache_dir_path)
+        cache_files = set(os.listdir(ocsp_cache_dir_path))
+        # This is to test SNOW-79940, making sure tmp files are removed
         # Windows does not have ocsp_response_validation_cache.lock
-        assert cache_files == [
+        assert cache_files == {
             "ocsp_response_validation_cache.lock",
             "ocsp_response_validation_cache",
             "ocsp_response_cache.json",
-        ] or cache_files == [
+        } or cache_files == {
             "ocsp_response_validation_cache",
             "ocsp_response_cache.json",
-        ]
+        }
