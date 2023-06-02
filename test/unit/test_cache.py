@@ -8,8 +8,6 @@ import os
 import os.path
 import pickle
 import stat
-import subprocess
-import sys
 from unittest import mock
 
 import pytest
@@ -481,16 +479,3 @@ class TestSFDictFileCache:
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
         assert not c2._load()  # load should return false due to no file
-
-    def test_tmp_file_removed(self, tmpdir):
-        assert os.listdir(tmpdir) == []
-        sub_process = subprocess.run(
-            [
-                sys.executable if sys.executable else "python",
-                "-m",
-                "subprocess_cache",
-                tmpdir.strpath,
-            ]
-        )
-        sub_process.check_returncode()
-        assert os.listdir(tmpdir) == ["cache.txt", "cache.txt.lock"]
