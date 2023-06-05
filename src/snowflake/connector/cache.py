@@ -524,7 +524,16 @@ class SFDictFileCache(SFDictCache):
                         prefix=fname,
                         dir=_dir,
                     )
+                    # tmp_file is an opened OS level handle, which means we need to close it manually.
+                    # https://docs.python.org/3/library/tempfile.html#tempfile.mkstemp
+                    # ideally we shall just use the tmp_file fd to write,
+                    # however, using os.write(tmp_file, bytes) causes seg fault during garbage collection when exiting
+                    # python program.
+                    # thus we fall back to the approach using the normal open() method to open a file and write.
+                    # os.close(tmp_file)
                     with open(tmp_file, "wb") as w_file:
+                        # note: during garbage collection when exiting python program, open will raise not defined
+                        # error as it has been released, we depend on this behavior to exit the program gracefully
                         pickle.dump(self, w_file)
                     # We write to a tmp file and then move it to have atomic write
                     os.replace(tmp_file_path, self.file_path)
