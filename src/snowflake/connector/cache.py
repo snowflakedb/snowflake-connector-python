@@ -530,13 +530,7 @@ class SFDictFileCache(SFDictCache):
                     # however, using os.write(tmp_file, bytes) causes seg fault during garbage collection when exiting
                     # python program.
                     # thus we fall back to the approach using the normal open() method to open a file and write.
-                    os.close(tmp_file)
-                    with open(tmp_file_path, "wb") as w_file:
-                        # note: when exiting python program, garbage collection will kick in
-                        # leading to `open` being garbage collected,
-                        # calling open raises NameError, the `finally` logic will clean up the created tmp files.
-                        # this is also the reason why we need os.close(tmp_file) to close the tmp fd as `open` is
-                        # not reliable during garbage collection
+                    with open(tmp_file, "wb") as w_file:
                         pickle.dump(self, w_file)
                     # We write to a tmp file and then move it to have atomic write
                     os.replace(tmp_file_path, self.file_path)
@@ -544,6 +538,14 @@ class SFDictFileCache(SFDictCache):
                         getmtime(self.file_path),
                     )
                     return True
+                except NameError:
+                    # note: when exiting python program, garbage collection will kick in
+                    # leading to `open` being garbage collected,
+                    # calling `open` raises NameError, we close the tmp file fd here to release the tmp file fd
+                    try:
+                        os.close(tmp_file)
+                    except OSError:
+                        pass
                 except OSError as o_err:
                     raise PermissionError(
                         o_err.errno,
