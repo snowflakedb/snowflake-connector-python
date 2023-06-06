@@ -3,10 +3,10 @@
 #
 import os
 import pathlib
+import platform
 import subprocess
 import sys
 
-import snowflake.connector.compat
 import snowflake.connector.ocsp_snowflake
 
 # This script run every Python file in this directory other than this
@@ -39,12 +39,12 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
                 "ocsp_response_validation_cache",
                 "ocsp_response_cache.json",
             }
-            and not snowflake.connector.compat.IS_WINDOWS
+            and not platform.system() == "Windows"
         ) or (
             cache_files
             == {
                 "ocsp_response_validation_cache",
                 "ocsp_response_cache.json",
             }
-            and snowflake.connector.compat.IS_WINDOWS
+            and platform.system() == "Windows"
         )
