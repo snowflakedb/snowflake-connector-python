@@ -6,6 +6,7 @@ import pathlib
 import subprocess
 import sys
 
+import snowflake.connector.compat
 import snowflake.connector.ocsp_snowflake
 
 # This script run every Python file in this directory other than this
@@ -31,11 +32,19 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
         cache_files = set(os.listdir(ocsp_cache_dir_path))
         # This is to test SNOW-79940, making sure tmp files are removed
         # Windows does not have ocsp_response_validation_cache.lock
-        assert cache_files == {
-            "ocsp_response_validation_cache.lock",
-            "ocsp_response_validation_cache",
-            "ocsp_response_cache.json",
-        } or cache_files == {
-            "ocsp_response_validation_cache",
-            "ocsp_response_cache.json",
-        }
+        assert (
+            cache_files
+            == {
+                "ocsp_response_validation_cache.lock",
+                "ocsp_response_validation_cache",
+                "ocsp_response_cache.json",
+            }
+            and not snowflake.connector.compat.IS_WINDOWS
+        ) or (
+            cache_files
+            == {
+                "ocsp_response_validation_cache",
+                "ocsp_response_cache.json",
+            }
+            and snowflake.connector.compat.IS_WINDOWS
+        )
