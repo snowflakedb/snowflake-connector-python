@@ -216,6 +216,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # Whether to force the JSON content to be decoded in utf-8, it is only effective when result format is JSON
+    "server_session_keep_alive": (
+        False,
+        bool,
+    ),  # Whether to keep session alive after connector shuts down
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -280,6 +284,8 @@ class SnowflakeConnection:
         json_result_force_utf8_decoding: When true, json result will be decoded in utf-8,
           when false, the encoding of the content is auto-detected. Default value is false.
           This parameter is only effective when the result format is JSON.
+        server_session_keep_alive: When true, the connector does not destroy the session on the Snowflake server side
+          before the connector shuts down. Default value is false.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -623,7 +629,10 @@ class SnowflakeConnection:
             # close telemetry first, since it needs rest to send remaining data
             logger.info("closed")
             self._telemetry.close(send_on_close=retry)
-            if self._all_async_queries_finished():
+            if (
+                self._all_async_queries_finished()
+                and not self._server_session_keep_alive
+            ):
                 logger.info("No async queries seem to be running, deleting session")
                 self.rest.delete_session(retry=retry)
             else:
