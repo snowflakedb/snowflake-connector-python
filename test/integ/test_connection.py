@@ -1256,6 +1256,7 @@ def test_not_found_connection_name():
         snowflake.connector.connect(connection_name=connection_name)
 
 
+@pytest.mark.skipolddriver
 def test_server_session_keep_alive(conn_cnx):
     mock_delete_session = mock.MagicMock()
     with conn_cnx(server_session_keep_alive=True) as conn:

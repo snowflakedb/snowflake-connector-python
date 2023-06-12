@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.0.5(TBD)
   - Added the ability to read Snowflake's central configuration file.
   - Improved OCSP response caching to remove tmp cache files on Windows.
+  - Added a parameter ``server_session_keep_alive`` in ``Connection`` that skips session deletion when client connection closes.
 
 - v3.0.4(May 23,2023)
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
