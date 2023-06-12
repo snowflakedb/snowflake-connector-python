@@ -1254,3 +1254,16 @@ def test_not_found_connection_name():
         match=f"Invalid connection_name '{connection_name}', known ones are",
     ):
         snowflake.connector.connect(connection_name=connection_name)
+
+
+@pytest.mark.skipolddriver
+def test_server_session_keep_alive(conn_cnx):
+    mock_delete_session = mock.MagicMock()
+    with conn_cnx(server_session_keep_alive=True) as conn:
+        conn.rest.delete_session = mock_delete_session
+    mock_delete_session.assert_not_called()
+
+    mock_delete_session = mock.MagicMock()
+    with conn_cnx() as conn:
+        conn.rest.delete_session = mock_delete_session
+    mock_delete_session.assert_called_once()
