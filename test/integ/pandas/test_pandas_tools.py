@@ -48,13 +48,20 @@ sf_connector_version_df = LazyVar(
 )
 
 
-def test_fix_snow_746341(conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]):
+def test_fix_snow_746341(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]
+):
     cat = '"cat"'
     df = pandas.DataFrame([[1], [2]], columns=[f"col_'{cat}'"])
     table_name = random_string(5, "snow746341_")
     with conn_cnx() as conn:
-        write_pandas(conn, df, table_name, auto_create_table=True, table_type="temporary")
-        assert conn.cursor().execute(f'select * from "{table_name}"').fetchall() == [(1,),(2,)]
+        write_pandas(
+            conn, df, table_name, auto_create_table=True, table_type="temporary"
+        )
+        assert conn.cursor().execute(f'select * from "{table_name}"').fetchall() == [
+            (1,),
+            (2,),
+        ]
 
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])
