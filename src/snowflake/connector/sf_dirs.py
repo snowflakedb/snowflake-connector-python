@@ -23,7 +23,6 @@ def _resolve_platform_dirs() -> PlatformDirsABC:
     platformdir_kwargs = {
         "appname": "snowflake",
         "appauthor": False,
-        "ensure_exists": True,
     }
     snowflake_home = os.path.expanduser(
         os.environ.get("SNOWFLAKE_HOME", "~/.snowflake/"),
