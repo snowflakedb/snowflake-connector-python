@@ -390,11 +390,20 @@ def test_drop_create_user(conn_cnx, db_parameters):
         exe("use {}".format(db_parameters["database"]))
         exe("create or replace role snowdog_role")
         exe("grant role snowdog_role to user snowdog")
-        exe(
-            "grant all on database {} to role snowdog_role".format(
-                db_parameters["database"]
+        try:
+            # This statement will be partially executed because REFERENCE_USAGE
+            # will not be granted.
+            exe(
+                "grant all on database {} to role snowdog_role".format(
+                    db_parameters["database"]
+                )
             )
-        )
+        except ProgrammingError as error:
+            err_str = (
+                "Grant partially executed: privileges [REFERENCE_USAGE] not granted."
+            )
+            assert 3011 == error.errno
+            assert error.msg.find(err_str) != -1
         exe(
             "grant all on schema {} to role snowdog_role".format(
                 db_parameters["schema"]
