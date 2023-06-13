@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.0.5(TBD)
+
+- v3.0.5(June 16,2023)
+
+   - 48aa932a SNOW-799408: Close temp file handle before removing temp cache file (#1582) f2d398a6 SNOW-826794 fix mac tests (#1583) 678f09a7 SNOW-802807 ConfigManager and config file support (#1549) Revert changes related to raw json (#1577)
+
   - Added the ability to read Snowflake's central configuration file.
   - Improved OCSP response caching to remove tmp cache files on Windows.
   - Added a parameter `server_session_keep_alive` in `SnowflakeConnection` that skips session deletion when client connection closes.
