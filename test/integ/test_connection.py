@@ -390,11 +390,20 @@ def test_drop_create_user(conn_cnx, db_parameters):
         exe("use {}".format(db_parameters["database"]))
         exe("create or replace role snowdog_role")
         exe("grant role snowdog_role to user snowdog")
-        exe(
-            "grant all on database {} to role snowdog_role".format(
-                db_parameters["database"]
+        try:
+            # This statement will be partially executed because REFERENCE_USAGE
+            # will not be granted.
+            exe(
+                "grant all on database {} to role snowdog_role".format(
+                    db_parameters["database"]
+                )
             )
-        )
+        except ProgrammingError as error:
+            err_str = (
+                "Grant partially executed: privileges [REFERENCE_USAGE] not granted."
+            )
+            assert 3011 == error.errno
+            assert error.msg.find(err_str) != -1
         exe(
             "grant all on schema {} to role snowdog_role".format(
                 db_parameters["schema"]
@@ -1254,3 +1263,16 @@ def test_not_found_connection_name():
         match=f"Invalid connection_name '{connection_name}', known ones are",
     ):
         snowflake.connector.connect(connection_name=connection_name)
+
+
+@pytest.mark.skipolddriver
+def test_server_session_keep_alive(conn_cnx):
+    mock_delete_session = mock.MagicMock()
+    with conn_cnx(server_session_keep_alive=True) as conn:
+        conn.rest.delete_session = mock_delete_session
+    mock_delete_session.assert_not_called()
+
+    mock_delete_session = mock.MagicMock()
+    with conn_cnx() as conn:
+        conn.rest.delete_session = mock_delete_session
+    mock_delete_session.assert_called_once()
