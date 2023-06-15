@@ -1,0 +1,68 @@
+name: Bug Report 🐞
+description: Something isn't working as expected? Here is the right place to report.
+labels: ["bug", "needs triage"]
+
+body:
+  - type: markdown
+    attributes:
+      value: Please answer these questions before submitting your issue. Thanks!
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: Output of `python --version --version`
+    validations:
+      required: true
+  - type: input
+    id: os-architecture
+    attributes:
+      label: Operating system and processor architecture
+      description: Output of `python -c 'import platform; print(platform.platform())'`
+    validations:
+      required: true
+  - type: textarea
+    id: installed-packages
+    attributes:
+      label: Installed packages
+      description: Output of `python -m pip freeze`
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: what-do
+    attributes:
+      label: What did you do?
+      description: |
+        If possible, provide a recipe for reproducing the error.
+        A complete runnable program is good.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: what-happen
+    attributes:
+      label: What did you expect to see?
+      description: What should have happened and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logging
+    attributes:
+      label: Can you set logging to DEBUG and collect the logs?
+      value: |
+        import logging
+        import os
+        
+        for logger_name in ('snowflake.connector',):
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(logging.DEBUG)
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.DEBUG)
+            ch.setFormatter(logging.Formatter('%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s'))
+            logger.addHandler(ch)
+      render: bash
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: If you need urgent assistance reach out to support for escalated issue processing https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge
