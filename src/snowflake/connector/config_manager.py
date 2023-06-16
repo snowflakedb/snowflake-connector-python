@@ -339,6 +339,7 @@ CONFIG_PARSER.add_option(
 )
 
 __all__ = [
+    "ConfigOption",
     "ConfigManager",
     "CONFIG_PARSER",
 ]
