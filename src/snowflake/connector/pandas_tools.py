@@ -192,7 +192,7 @@ def write_pandas(
         name=random_string(),
         quote_identifiers=quote_identifiers,
     )
-    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location}"
+    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
     logger.debug(f"creating stage with '{create_stage_sql}'")
     cursor.execute(create_stage_sql, _is_internal=True).fetchall()
 
