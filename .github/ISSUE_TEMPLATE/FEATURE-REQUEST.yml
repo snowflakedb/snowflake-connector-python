@@ -1,0 +1,27 @@
+name: Feature Request 💡
+description: Suggest a new idea for the project.
+labels: ["feature", "needs triage"]
+
+body:
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: What is the current behavior?
+    validations:
+      required: true
+  - type: textarea
+    id: desired-behavior
+    attributes:
+      label: What is the desired behavior?
+    validations:
+      required: true
+  - type: textarea
+    id: how-improve
+    attributes:
+      label: How would this improve `snowflake-connector-python`?
+    validations:
+      required: true
+  - type: textarea
+    id: others
+    attributes:
+      label: References and other background
