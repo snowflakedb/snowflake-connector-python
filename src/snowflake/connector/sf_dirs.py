@@ -134,3 +134,8 @@ class SFPlatformDirs(PlatformDirsABC):
     def user_videos_dir(self) -> str:
         """videos directory tied to the user"""
         return self.user_data_dir
+
+    @property
+    def user_downloads_dir(self) -> str:
+        """downloads directory tied to the user"""
+        return self.user_data_dir
