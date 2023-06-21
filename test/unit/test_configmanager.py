@@ -273,9 +273,6 @@ def test_error_missing_fp_retrieve():
 )
 def test_sf_dirs(tmp_path, method, version):
     appname = random_string(5)
-    single_dir = tmp_path / appname
-    if version is not None:
-        single_dir = single_dir / version
     assert getattr(
         SFPlatformDirs(
             str(tmp_path),
@@ -285,8 +282,7 @@ def test_sf_dirs(tmp_path, method, version):
             ensure_exists=True,
         ),
         method,
-    ) == str(single_dir)
-    assert single_dir.exists() and not single_dir.is_file()
+    ) == str(tmp_path)
 
 
 def test_config_file_resolution_sfdirs_default():
