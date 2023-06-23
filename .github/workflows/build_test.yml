@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.7", "3.8", "3.9", "3.10", "3.11" ]
+        python-version: [ "3.8", "3.9", "3.10", "3.11" ]
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python
@@ -80,11 +80,11 @@ jobs:
             id: macosx_x86_64
           - image: macos-latest
             id: macosx_arm64
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
         exclude:
           - os:
               id: macosx_arm64
-            python-version: 3.7
+            python-version: 3.8
     name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
     runs-on: ${{ matrix.os.image }}
     steps:
@@ -128,7 +128,7 @@ jobs:
            download_name: macosx_x86_64
          - image_name: windows-2019
            download_name: win_amd64
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
         cloud-provider: [aws, azure, gcp]
     steps:
       - uses: actions/checkout@v3
@@ -185,7 +185,7 @@ jobs:
         os:
          - image_name: ubuntu-latest
            download_name: linux
-        python-version: [3.7]
+        python-version: [3.8]
         cloud-provider: [aws]
     steps:
       - uses: actions/checkout@v3
@@ -215,7 +215,7 @@ jobs:
         shell: bash
 
   test-fips:
-    name: Test FIPS linux-3.7-${{ matrix.cloud-provider }}
+    name: Test FIPS linux-3.8-${{ matrix.cloud-provider }}
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -234,7 +234,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v3
         with:
-          name: manylinux_x86_64_py3.7
+          name: manylinux_x86_64_py3.8
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -242,14 +242,14 @@ jobs:
       - name: Run tests
         run: ./ci/test_fips_docker.sh
         env:
-          PYTHON_VERSION: 3.7
+          PYTHON_VERSION: 3.8
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
-          name: coverage_linux-fips-3.7-${{ matrix.cloud-provider }}
+          name: coverage_linux-fips-3.8-${{ matrix.cloud-provider }}
           path: |
             .coverage
             coverage.xml
@@ -267,7 +267,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
+          python-version: '3.8'
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip

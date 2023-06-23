@@ -3,11 +3,11 @@
 # Build Snowflake Python Connector on Linux
 # NOTES:
 #   - This is designed to ONLY be called in our build docker image
-#   - To compile only a specific version(s) pass in versions like: `./build_linux.sh "3.7 3.8"`
+#   - To compile only a specific version(s) pass in versions like: `./build_linux.sh "3.8 3.9"`
 set -o pipefail
 
 U_WIDTH=16
-PYTHON_VERSIONS="${1:-3.7 3.8 3.9 3.10 3.11}"
+PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11}"
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 DIST_DIR="${CONNECTOR_DIR}/dist"
