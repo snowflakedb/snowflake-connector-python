@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import importlib
-import sys
 import warnings
+from importlib.metadata import distributions
 from logging import getLogger
 from types import ModuleType
 from typing import Union
@@ -14,11 +14,6 @@ from typing import Union
 from packaging.requirements import Requirement
 
 from . import errors
-
-if sys.version_info >= (3, 8):
-    from importlib.metadata import distributions
-else:
-    from importlib_metadata import distributions
 
 logger = getLogger(__name__)
 

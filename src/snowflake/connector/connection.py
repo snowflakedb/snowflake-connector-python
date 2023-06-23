@@ -1685,10 +1685,7 @@ class SnowflakeConnection:
         if not self._async_sfqids:
             return True
 
-        if sys.version_info >= (3, 8):
-            queries = list(reversed(self._async_sfqids.keys()))
-        else:
-            queries = list(reversed(list(self._async_sfqids.keys())))
+        queries = list(reversed(self._async_sfqids.keys()))
 
         num_workers = min(self.client_prefetch_threads, len(queries))
         found_unfinished_query = False

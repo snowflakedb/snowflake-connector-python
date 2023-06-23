@@ -10,12 +10,11 @@ import stat
 from collections.abc import Iterable
 from operator import methodcaller
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 from warnings import warn
 
 import tomlkit
 from tomlkit.items import Table
-from typing_extensions import Literal
 
 from snowflake.connector.constants import CONFIG_FILE
 from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
