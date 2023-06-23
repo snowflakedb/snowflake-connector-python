@@ -73,7 +73,7 @@ class SFPlatformDirs(PlatformDirsABC):
     @property
     def user_data_dir(self) -> str:
         """data directory tied to to the user"""
-        return self._append_app_name_and_version(self.single_dir)
+        return self.single_dir
 
     @property
     def site_data_dir(self) -> str:
