@@ -14,6 +14,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Improved OCSP response caching to remove tmp cache files on Windows.
   - Added a parameter `server_session_keep_alive` in `SnowflakeConnection` that skips session deletion when client connection closes.
   - Tightened our pinning of platformdirs, to prevent their new releases breaking us.
+  - Remove dependencies on Cryptodome and oscrypto and remove the `use_openssl_only` parameter. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
 
 - v3.0.4(May 23,2023)
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
