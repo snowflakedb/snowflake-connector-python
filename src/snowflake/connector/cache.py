@@ -343,7 +343,6 @@ class SFDictCache(Generic[K, V]):
 
 
 class SFDictFileCache(SFDictCache):
-
     # This number decides the chance of saving after writing (probability: 1/n+1)
     MAX_RAND_INT = 9
     _ATTRIBUTES_TO_PICKLE = (

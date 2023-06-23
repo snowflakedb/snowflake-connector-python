@@ -845,7 +845,6 @@ class SnowflakeFileTransferAgent:
                         )
 
     def _parse_command(self) -> None:
-
         if "data" not in self._ret:
             Error.errorhandler_wrapper(
                 self._cursor.connection,

@@ -1701,7 +1701,6 @@ class SnowflakeConnection:
         with ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="async_query_check_"
         ) as tpe:  # We should upgrade to using cancel_futures=True once supporting 3.9+
-
             futures = (tpe.submit(async_query_check_helper, sfqid) for sfqid in queries)
             for f in as_completed(futures):
                 if f.result():

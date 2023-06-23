@@ -768,7 +768,6 @@ def test_callproc_overload(conn_cnx, paramstyle):
     name_sp = random_string(5, "test_stored_procedure_")
     with conn_cnx(paramstyle=paramstyle) as cnx:
         with cnx.cursor() as cursor:
-
             cursor.execute(
                 f"""
                 create or replace temporary procedure {name_sp}(p1 varchar, p2 int, p3 date)

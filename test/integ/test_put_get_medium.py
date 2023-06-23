@@ -190,7 +190,6 @@ def test_put_copy_brotli_compressed(conn_cnx, db_parameters, from_path, file_src
         return cnx.cursor().execute(sql).fetchall()
 
     with conn_cnx() as cnx:
-
         run(cnx, "create or replace table {name} (value string)")
         for rec in put(
             cnx.cursor(),
