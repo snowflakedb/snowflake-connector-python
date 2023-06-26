@@ -85,10 +85,11 @@ def _create_temp_stage(
     auto_create_table: bool,
     overwrite: bool,
 ) -> str:
+    stage_name = random_string()
     stage_location = build_location_helper(
         database=database,
         schema=schema,
-        name=random_string(),
+        name=stage_name,
         quote_identifiers=quote_identifiers,
     )
     try:
@@ -101,7 +102,7 @@ def _create_temp_stage(
         logger.debug(
             f"creating stage {stage_location} failed. Exception {str(e)}. Fall back to use current schema"
         )
-        stage_location = random_string()
+        stage_location = stage_name
         _do_create_temp_stage(
             cursor, stage_location, compression, auto_create_table, overwrite
         )
@@ -128,10 +129,11 @@ def _create_temp_file_format(
     quote_identifiers: bool,
     compression: str,
 ) -> str:
+    file_format_name = random_string()
     file_format_location = build_location_helper(
         database=database,
         schema=schema,
-        name=random_string(),
+        name=file_format_name,
         quote_identifiers=quote_identifiers,
     )
     try:
@@ -142,7 +144,7 @@ def _create_temp_file_format(
         logger.debug(
             f"creating stage {file_format_location} failed. Exception {str(e)}. Fall back to use current schema"
         )
-        file_format_location = random_string()
+        file_format_location = file_format_name
         _do_create_temp_file_format(cursor, file_format_location, compression)
 
     return file_format_location
