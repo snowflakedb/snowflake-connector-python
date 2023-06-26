@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Callable, Generator
+from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
 
 import numpy.random
 import pytest
 
 from snowflake.connector import DictCursor
+from snowflake.connector.cursor import SnowflakeCursor
 from snowflake.connector.errors import ProgrammingError
 
 try:
@@ -46,6 +47,20 @@ sf_connector_version_df = LazyVar(
         sf_connector_version_data, columns=["name", "newest_version"]
     )
 )
+
+
+def assert_result_equals(
+    cnx: SnowflakeConnection,
+    num_of_chunks: int,
+    sql: str,
+    expected_data: list[tuple[Any, ...]],
+):
+    if num_of_chunks == 1:
+        # Note: since we used one chunk order is conserved
+        assert cnx.cursor().execute(sql).fetchall() == expected_data
+    else:
+        # Note: since we used more than one chunk order is NOT conserved
+        assert set(cnx.cursor().execute(sql).fetchall()) == set(expected_data)
 
 
 def test_fix_snow_746341(
@@ -239,17 +254,9 @@ def test_write_pandas(
                 index=index,
             )
 
-            if num_of_chunks == 1:
-                # Note: since we used one chunk order is conserved
-                assert (
-                    cnx.cursor().execute(select_sql).fetchall()
-                    == sf_connector_version_data
-                )
-            else:
-                # Note: since we used more than one chunk order is NOT conserved
-                assert set(cnx.cursor().execute(select_sql).fetchall()) == set(
-                    sf_connector_version_data
-                )
+            assert_result_equals(
+                cnx, num_of_chunks, select_sql, sf_connector_version_data
+            )
 
             # Make sure all files were loaded and no error occurred
             assert success
@@ -328,15 +335,7 @@ def test_write_non_range_index_pandas(
                 index=index,
             )
 
-            if num_of_chunks == 1:
-                # Note: since we used one chunk order is conserved
-                assert cnx.cursor().execute(select_sql).fetchall() == pandas_df_data
-            else:
-                # Note: since we used more than one chunk order is NOT conserved,
-                # also the index is not stored.
-                assert set(cnx.cursor().execute(select_sql).fetchall()) == set(
-                    pandas_df_data
-                )
+            assert_result_equals(cnx, num_of_chunks, select_sql, pandas_df_data)
 
             # Make sure all files were loaded and no error occurred
             assert success
@@ -854,3 +853,55 @@ def test_all_pandas_types(
                         assert row[c] in data
         finally:
             cnx.execute_string(drop_sql)
+
+
+@pytest.mark.parametrize("object_type", ["STAGE", "FILE FORMAT"])
+def test_no_create_internal_object_privilege_in_target_schema(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    caplog,
+    object_type,
+):
+    source_schema = random_string(5, "source_schema_")
+    target_schema = random_string(5, "target_schema_no_create_")
+    table = random_string(5, "table_")
+    select_sql = f"select * from {target_schema}.{table}"
+
+    with conn_cnx() as cnx:
+        try:
+            cnx.execute_string(f"create or replace schema {source_schema}")
+            cnx.execute_string(f"create or replace schema {target_schema}")
+            original_execute = SnowflakeCursor.execute
+
+            def mock_execute(*args, **kwargs):
+                if (
+                    f"CREATE TEMP {object_type}" in args[0]
+                    and "target_schema_no_create_" in args[0]
+                ):
+                    raise ProgrammingError("Cannot create temp object in target schema")
+                cursor = cnx.cursor()
+                original_execute(cursor, *args, **kwargs)
+                return cursor
+
+            with mock.patch(
+                "snowflake.connector.cursor.SnowflakeCursor.execute",
+                side_effect=mock_execute,
+            ):
+                with caplog.at_level("DEBUG"):
+                    success, num_of_chunks, _, _ = write_pandas(
+                        cnx,
+                        sf_connector_version_df.get(),
+                        table,
+                        database=cnx.database,
+                        schema=target_schema,
+                        auto_create_table=True,
+                        quote_identifiers=False,
+                    )
+
+            assert "Fall back to use current schema" in caplog.text
+            assert success
+            assert_result_equals(
+                cnx, num_of_chunks, select_sql, sf_connector_version_data
+            )
+        finally:
+            cnx.execute_string(f"drop schema if exists {source_schema}")
+            cnx.execute_string(f"drop schema if exists {target_schema}")
