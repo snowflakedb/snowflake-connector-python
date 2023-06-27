@@ -75,10 +75,9 @@ class OCSPResponseValidationResult(NamedTuple):
 
 
 # use _get_ocsp_response_validation_cache instead of the module variable for lazy evaluation
-OCSP_RESPONSE_VALIDATION_CACHE: None | (
-    SFDictFileCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult]
-    | SFDictCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult]
-) = None
+OCSP_RESPONSE_VALIDATION_CACHE: SFDictFileCache[
+    tuple[bytes, bytes, bytes], OCSPResponseValidationResult
+] | SFDictCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult] | None = None
 
 
 def _get_ocsp_response_validation_cache():
