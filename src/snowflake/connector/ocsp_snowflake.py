@@ -74,38 +74,50 @@ class OCSPResponseValidationResult(NamedTuple):
     validated: bool = False
 
 
-try:
-    OCSP_RESPONSE_VALIDATION_CACHE: SFDictFileCache[
-        tuple[bytes, bytes, bytes],
-        OCSPResponseValidationResult,
-    ] = SFDictFileCache(
-        entry_lifetime=constants.DAY_IN_SECONDS,
-        file_path={
-            "linux": os.path.join(
-                "~", ".cache", "snowflake", "ocsp_response_validation_cache"
-            ),
-            "darwin": os.path.join(
-                "~", "Library", "Caches", "Snowflake", "ocsp_response_validation_cache"
-            ),
-            "windows": os.path.join(
-                "~",
-                "AppData",
-                "Local",
-                "Snowflake",
-                "Caches",
-                "ocsp_response_validation_cache",
-            ),
-        },
-    )
-except OSError:
-    # In case we run into some read/write permission error fall back onto
-    #  in memory caching
-    OCSP_RESPONSE_VALIDATION_CACHE: SFDictCache[
-        tuple[bytes, bytes, bytes],
-        OCSPResponseValidationResult,
-    ] = SFDictCache(
-        entry_lifetime=constants.DAY_IN_SECONDS,
-    )
+# use _get_ocsp_response_validation_cache instead of the module variable for lazy evaluation
+OCSP_RESPONSE_VALIDATION_CACHE: None | (
+    SFDictFileCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult]
+    | SFDictCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult]
+) = None
+
+
+def _get_ocsp_response_validation_cache():
+    global OCSP_RESPONSE_VALIDATION_CACHE
+    if OCSP_RESPONSE_VALIDATION_CACHE is None:
+        try:
+            # SFDictFileCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult]
+            OCSP_RESPONSE_VALIDATION_CACHE = SFDictFileCache(
+                entry_lifetime=constants.DAY_IN_SECONDS,
+                file_path={
+                    "linux": os.path.join(
+                        "~", ".cache", "snowflake", "ocsp_response_validation_cache"
+                    ),
+                    "darwin": os.path.join(
+                        "~",
+                        "Library",
+                        "Caches",
+                        "Snowflake",
+                        "ocsp_response_validation_cache",
+                    ),
+                    "windows": os.path.join(
+                        "~",
+                        "AppData",
+                        "Local",
+                        "Snowflake",
+                        "Caches",
+                        "ocsp_response_validation_cache",
+                    ),
+                },
+            )
+        except OSError:
+            # In case we run into some read/write permission error fall back onto
+            #  in memory caching
+            # SFDictCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult]
+            OCSP_RESPONSE_VALIDATION_CACHE = SFDictCache(
+                entry_lifetime=constants.DAY_IN_SECONDS,
+            )
+    return OCSP_RESPONSE_VALIDATION_CACHE
+
 
 logger = getLogger(__name__)
 
@@ -364,7 +376,8 @@ class OCSPServer:
                 # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
                 logger.debug(
-                    "# of certificates: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+                    "# of certificates: %s",
+                    len(_get_ocsp_response_validation_cache()._cache),
                 )
             except RevocationCheckError as rce:
                 logger.debug(
@@ -524,7 +537,8 @@ class OCSPCache:
         # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
         # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
         logger.debug(
-            "OCSP_VALIDATION_CACHE size: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+            "OCSP_VALIDATION_CACHE size: %s",
+            len(_get_ocsp_response_validation_cache()._cache),
         )
 
     @staticmethod
@@ -565,7 +579,7 @@ class OCSPCache:
                 logger.debug(
                     "Read OCSP response cache file: %s, count=%s",
                     filename,
-                    len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
+                    len(_get_ocsp_response_validation_cache()._cache),
                 )
             else:
                 logger.debug(
@@ -585,9 +599,10 @@ class OCSPCache:
             1. file for OCSP_RESPONSE_VALIDATION_CACHE which keeps ocsp response validation result
             2. ocsp_response_cache.json, the file in the same format as the one downloaded from snowflake cache service
         """
+        ocsp_response_validation_cache = _get_ocsp_response_validation_cache()
         if OCSPCache.CACHE_UPDATED:
-            if isinstance(OCSP_RESPONSE_VALIDATION_CACHE, SFDictFileCache):
-                OCSP_RESPONSE_VALIDATION_CACHE._save()
+            if isinstance(ocsp_response_validation_cache, SFDictFileCache):
+                ocsp_response_validation_cache._save()
             OCSPCache.update_ocsp_response_cache_file(
                 ocsp, OCSPCache.OCSP_RESPONSE_CACHE_URI
             )
@@ -704,11 +719,12 @@ class OCSPCache:
             "cache_key", ocsp.decode_cert_id_key(cert_id)
         )
         lock_cache: bool = kwargs.get("lock_cache", True)
+        ocsp_response_validation_cache = _get_ocsp_response_validation_cache()
         try:
             ocsp_response_validation_result = (
-                OCSP_RESPONSE_VALIDATION_CACHE[cache_key]
+                ocsp_response_validation_cache[cache_key]
                 if lock_cache
-                else OCSP_RESPONSE_VALIDATION_CACHE._getitem_non_locking(cache_key)
+                else ocsp_response_validation_cache._getitem_non_locking(cache_key)
             )
             try:
                 # is_valid_time can raise exception if the cache
@@ -739,11 +755,12 @@ class OCSPCache:
             "cache_key", ocsp.decode_cert_id_key(cert_id)
         )
         lock_cache: bool = kwargs.get("lock_cache", True)
+        ocsp_response_validation_cache = _get_ocsp_response_validation_cache()
         try:
             if lock_cache:
-                del OCSP_RESPONSE_VALIDATION_CACHE[cache_key]
+                del ocsp_response_validation_cache[cache_key]
             else:
-                OCSP_RESPONSE_VALIDATION_CACHE._delitem(cache_key)
+                ocsp_response_validation_cache._delitem(cache_key)
             OCSPCache.CACHE_UPDATED = True
         except KeyError:
             pass
@@ -794,12 +811,12 @@ class OCSPCache:
     @staticmethod
     def clear_cache() -> None:
         """Clears cache."""
-        OCSP_RESPONSE_VALIDATION_CACHE.clear()
+        _get_ocsp_response_validation_cache().clear()
 
     @staticmethod
     def cache_size():
         """Returns the cache's size."""
-        return len(OCSP_RESPONSE_VALIDATION_CACHE)
+        return len(_get_ocsp_response_validation_cache())
 
 
 # Reset OCSP cache directory
@@ -916,7 +933,7 @@ class SnowflakeOCSP:
         4. After validating all the certs, we save OCSP_RESPONSE_VALIDATION_CACHE and ocsp response json
          onto disk.
         """
-        if not OCSP_RESPONSE_VALIDATION_CACHE:
+        if not _get_ocsp_response_validation_cache():
             SnowflakeOCSP.OCSP_CACHE.read_file(self)
 
     def validate_certfile(self, cert_filename, no_exception: bool = False):
@@ -1175,10 +1192,11 @@ class SnowflakeOCSP:
                 str(ex),
             )
 
+        ocsp_response_validation_cache = _get_ocsp_response_validation_cache()
         for issuer, subject in cert_data:
             cert_id, _ = self.create_ocsp_request(issuer=issuer, subject=subject)
             cache_key = self.decode_cert_id_key(cert_id)
-            ocsp_response_validation_result = OCSP_RESPONSE_VALIDATION_CACHE.get(
+            ocsp_response_validation_result = ocsp_response_validation_cache.get(
                 cache_key
             )
             if (
@@ -1193,7 +1211,7 @@ class SnowflakeOCSP:
                     do_retry=do_retry,
                     cache_key=cache_key,
                 )
-                OCSP_RESPONSE_VALIDATION_CACHE[
+                ocsp_response_validation_cache[
                     cache_key
                 ] = OCSPResponseValidationResult(
                     *r,
@@ -1587,7 +1605,8 @@ class SnowflakeOCSP:
     def decode_ocsp_response_cache(self, ocsp_response_cache_json):
         """Decodes OCSP response cache from JSON."""
         try:
-            with OCSP_RESPONSE_VALIDATION_CACHE._lock:
+            ocsp_response_validation_cache = _get_ocsp_response_validation_cache()
+            with ocsp_response_validation_cache._lock:
                 new_cache_dict = {}
                 for cert_id_base64, (
                     ts,
@@ -1615,7 +1634,7 @@ class SnowflakeOCSP:
                             self, cert_id, cache_key=cache_key, lock_cache=False
                         )
             if new_cache_dict:
-                OCSP_RESPONSE_VALIDATION_CACHE._update(new_cache_dict)
+                ocsp_response_validation_cache._update(new_cache_dict)
                 OCSPCache.CACHE_UPDATED = True
         except Exception as ex:
             logger.debug("Caught here - %s", ex)
@@ -1632,7 +1651,7 @@ class SnowflakeOCSP:
         for (
             cache_key,
             ocsp_response_validation_result,
-        ) in OCSP_RESPONSE_VALIDATION_CACHE.items():
+        ) in _get_ocsp_response_validation_cache().items():
             k = self.encode_cert_id_base64(cache_key)
             v = b64encode(ocsp_response_validation_result.ocsp_response).decode("ascii")
             ocsp_response_cache_json[k] = (ocsp_response_validation_result.ts, v)

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import gc
+import importlib
 import logging
 import os
 import pathlib
@@ -1276,3 +1277,20 @@ def test_server_session_keep_alive(conn_cnx):
     with conn_cnx() as conn:
         conn.rest.delete_session = mock_delete_session
     mock_delete_session.assert_called_once()
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_in_secure(db_parameters):
+    import snowflake.connector.ocsp_snowflake
+
+    importlib.reload(snowflake.connector.ocsp_snowflake)
+    assert snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE is None
+    with snowflake.connector.connect(**db_parameters, insecure_mode=True) as _:
+        # with insecure mode, the module level cache object should not be instantiated
+        assert snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE is None
+
+    with snowflake.connector.connect(**db_parameters) as _:
+        assert (
+            snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
+            is not None
+        )

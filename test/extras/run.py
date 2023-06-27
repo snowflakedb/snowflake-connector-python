@@ -27,7 +27,7 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
         )
         sub_process.check_returncode()
         ocsp_cache_dir_path = pathlib.Path(
-            snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.file_path
+            snowflake.connector.ocsp_snowflake._get_ocsp_response_validation_cache().file_path
         ).parent
         cache_files = set(os.listdir(ocsp_cache_dir_path))
         # This is to test SNOW-79940, making sure tmp files are removed
