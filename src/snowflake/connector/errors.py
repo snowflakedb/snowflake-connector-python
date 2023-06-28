@@ -536,6 +536,19 @@ class MethodNotAllowed(Error):
         )
 
 
+class TooManyRequests(Error):
+    """Exception for 429 HTTP error for retry."""
+
+    def __init__(self, **kwargs) -> None:
+        Error.__init__(
+            self,
+            msg=kwargs.get("msg") or "HTTP 429: Too Many Requests",
+            errno=kwargs.get("errno"),
+            sqlstate=kwargs.get("sqlstate"),
+            sfqid=kwargs.get("sfqid"),
+        )
+
+
 class OtherHTTPRetryableError(Error):
     """Exception for other HTTP error for retry."""
 

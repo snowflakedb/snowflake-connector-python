@@ -6,14 +6,17 @@
 from __future__ import annotations
 
 import errno
+import json
 import logging
 import os
 import time
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from uuid import uuid4
 
 import OpenSSL.SSL
 import pytest
 
+import snowflake.connector
 from snowflake.connector.compat import (
     BAD_GATEWAY,
     BAD_REQUEST,
@@ -31,6 +34,7 @@ from snowflake.connector.errors import (
     ForbiddenError,
     InterfaceError,
     OtherHTTPRetryableError,
+    TooManyRequests,
 )
 from snowflake.connector.network import (
     STATUS_TO_EXCEPTION,
@@ -46,6 +50,114 @@ except ImportError:  # pragma: no cover
     import urllib3
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+
+
+class Cnt:
+    def __init__(self):
+        self.c = 0
+
+    def set(self, cnt):
+        self.c = cnt
+
+    def reset(self):
+        self.set(0)
+
+
+def fake_connector() -> snowflake.connector.SnowflakeConnection:
+    return snowflake.connector.connect(
+        user="user",
+        account="account",
+        password="testpassword",
+        database="TESTDB",
+        warehouse="TESTWH",
+    )
+
+
+@patch("snowflake.connector.network.SnowflakeRestful._request_exec")
+def test_retry_reason(mockRequestExec):
+    url = ""
+    cnt = Cnt()
+
+    def mock_exec(session, method, full_url, headers, data, token, **kwargs):
+        # take actions based on data["sqlText"]
+        nonlocal url
+        url = full_url
+        data = json.loads(data)
+        sql = data.get("sqlText", "default")
+        success_result = {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+        cnt.c += 1
+        if "retry" in sql:
+            # error = HTTP Error 429
+            if cnt.c < 3:  # retry twice for 429 error
+                raise RetryRequest(TooManyRequests(errno=429))
+            return success_result
+        elif "unknown error" in sql:
+            # Raise unknown http error
+            if cnt.c == 1:  # retry once for 100 error
+                raise RetryRequest(OtherHTTPRetryableError(errno=100))
+            return success_result
+        elif "flip" in sql:
+            if cnt.c == 1:  # retry first with 100
+                raise RetryRequest(OtherHTTPRetryableError(errno=100))
+            elif cnt.c == 2:  # then with 429
+                raise RetryRequest(TooManyRequests(errno=429))
+            return success_result
+
+        return success_result
+
+    conn = fake_connector()
+    mockRequestExec.side_effect = mock_exec
+
+    # ensure query requests don't have the retryReason if retryCount == 0
+    cnt.reset()
+    conn.cmd_query("success", 0, uuid4())
+    assert "retryReason" not in url
+    assert "retryCount" not in url
+
+    # ensure query requests have correct retryReason when retry reason is sent by server
+    cnt.reset()
+    conn.cmd_query("retry", 0, uuid4())
+    assert "retryReason=429" in url
+    assert "retryCount=2" in url
+
+    cnt.reset()
+    conn.cmd_query("unknown error", 0, uuid4())
+    assert "retryReason=100" in url
+    assert "retryCount=1" in url
+
+    # ensure query requests have retryReason reset to 0 when no reason is given
+    cnt.reset()
+    conn.cmd_query("success", 0, uuid4())
+    assert "retryReason" not in url
+    assert "retryCount" not in url
+
+    # ensure query requests have retryReason gets updated with updated error code
+    cnt.reset()
+    conn.cmd_query("flip", 0, uuid4())
+    assert "retryReason=429" in url
+    assert "retryCount=2" in url
+
+    # ensure that disabling works and only suppresses retryReason
+    conn._disable_retry_reason_in_query_response = True
+
+    cnt.reset()
+    conn.cmd_query("retry", 0, uuid4())
+    assert "retryReason" not in url
+    assert "retryCount=2" in url
+
+    cnt.reset()
+    conn.cmd_query("unknown error", 0, uuid4())
+    assert "retryReason" not in url
+    assert "retryCount=1" in url
 
 
 def test_request_exec():
@@ -163,16 +275,6 @@ def test_fetch():
     rest = SnowflakeRestful(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
-
-    class Cnt:
-        def __init__(self):
-            self.c = 0
-
-        def set(self, cnt):
-            self.c = cnt
-
-        def reset(self):
-            self.set(0)
 
     cnt = Cnt()
     default_parameters = {

@@ -82,6 +82,7 @@ from .errors import (
     OtherHTTPRetryableError,
     ProgrammingError,
     ServiceUnavailableError,
+    TooManyRequests,
 )
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
@@ -173,6 +174,7 @@ STATUS_TO_EXCEPTION: dict[int, type[Error]] = {
     BAD_REQUEST: BadRequest,
     BAD_GATEWAY: BadGatewayError,
     METHOD_NOT_ALLOWED: MethodNotAllowed,
+    TOO_MANY_REQUESTS: TooManyRequests,
 }
 
 DEFAULT_AUTHENTICATOR = "SNOWFLAKE"  # default authenticator name
@@ -784,15 +786,31 @@ class SnowflakeRestful:
         """Carry out API request with session management."""
 
         class RetryCtx:
-            def __init__(self, timeout, _include_retry_params: bool = False) -> None:
+            def __init__(
+                self,
+                timeout,
+                _include_retry_params: bool = False,
+                _include_retry_reason: bool = False,
+            ) -> None:
                 self.total_timeout = timeout
                 self.timeout = timeout
                 self.cnt = 0
+                self.reason = 0
                 self.sleeping_time = 1
                 self.start_time = get_time_millis()
                 self._include_retry_params = _include_retry_params
+                self._include_retry_reason = _include_retry_reason
                 # backoff between 1 and 16 seconds
                 self._backoff = DecorrelateJitterBackoff(1, 16)
+
+            def increment_retry(self, reason: int = 0) -> None:
+                """Increment retry count and update the reason for retry
+
+                Args:
+                    reason: HTTP response code that caused retry. Defaults to 0.
+                """
+                self.cnt += 1
+                self.reason = reason
 
             def next_sleep(self) -> int:
                 self.sleeping_time = self._backoff.next_sleep(
@@ -802,18 +820,25 @@ class SnowflakeRestful:
 
             def add_retry_params(self, full_url: str) -> str:
                 if self._include_retry_params and self.cnt > 0:
-                    suffix = urlencode(
-                        {"clientStartTime": self.start_time, "retryCount": self.cnt}
-                    )
+                    retry_params = {
+                        "clientStartTime": self.start_time,
+                        "retryCount": self.cnt,
+                    }
+                    if self._include_retry_reason:
+                        retry_params.update({"retryReason": self.reason})
+                    suffix = urlencode(retry_params)
                     sep = "&" if urlparse(full_url).query else "?"
                     return full_url + sep + suffix
                 else:
                     return full_url
 
+        include_retry_reason = (
+            not self._connection._disable_retry_reason_in_query_response
+        )
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
         with self._use_requests_session(full_url) as session:
-            retry_ctx = RetryCtx(timeout, include_retry_params)
+            retry_ctx = RetryCtx(timeout, include_retry_params, include_retry_reason)
             while True:
                 ret = self._request_exec_wrapper(
                     session, method, full_url, headers, data, retry_ctx, **kwargs
@@ -932,7 +957,7 @@ class SnowflakeRestful:
                 sleeping_time,
             )
             time.sleep(sleeping_time)
-            retry_ctx.cnt += 1
+            retry_ctx.increment_retry(reason=getattr(cause, "errno", 0))
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= sleeping_time
             return None  # retry
