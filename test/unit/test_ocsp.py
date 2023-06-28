@@ -448,3 +448,30 @@ def test_building_new_retry():
     )
 
     del os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
+
+
+def test_file_is_not_updated(tmpdir):
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
+    tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
+    cache = SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
+    cache["key"] = "value"
+    cache.save()  # this save call will dump cache to file because item was added
+    updated_time = os.path.getmtime(tmp_cache_file)
+    cache.save()  # this save call will be a no-op since there is no update
+    assert os.path.getmtime(tmp_cache_file) == updated_time
+    cache["key"] = "value2"
+    cache.save()  # this save call will dump cache to file
+    second_updated_time = os.path.getmtime(tmp_cache_file)
+    assert second_updated_time > updated_time
+    assert cache["key"] == "value2"
+    cache.save()  # this save call will be a no-op since there is no update
+    assert os.path.getmtime(tmp_cache_file) == second_updated_time
+    time.sleep(1)
+    cache.save()  # this save call will dump cache because cache item is expired
+    assert os.path.getmtime(tmp_cache_file) > second_updated_time
+
+    cache3 = SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
+    assert len(cache3) == 0
+    os.unlink(tmp_cache_file)

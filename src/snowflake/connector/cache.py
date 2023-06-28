@@ -58,6 +58,9 @@ class SFDictCache(Generic[K, V]):
         self._cache: dict[K, CacheEntry[V]] = {}
         self._lock = Lock()
         self._reset_telemetry()
+        # indicate whether the cache is modified or not, this variable is for
+        # SFDictFileCache to determine whether to dump cache to file when _save is called
+        self._cache_modified = False
 
     def __len__(self) -> int:
         with self._lock:
@@ -238,7 +241,8 @@ class SFDictCache(Generic[K, V]):
         else:
             raise TypeError
         self._cache.update(to_insert)
-        self._add_or_remove()
+        if to_insert:
+            self._add_or_remove()
         return len(to_insert) > 0
 
     def update(
@@ -275,12 +279,16 @@ class SFDictCache(Generic[K, V]):
             )
 
     def _clear_expired_entries(self) -> None:
+        cache_updated = False
         for k in list(self._cache.keys()):
             try:
                 self._getitem(k, should_record_hits=False)
             except KeyError:
-                continue
-        self._add_or_remove()
+                # the only case KeyError raised in this method
+                # is that k is expired
+                cache_updated = True
+        if cache_updated:
+            self._add_or_remove()
 
     def clear_expired_entries(self) -> None:
         """Remove expired entries from the cache."""
@@ -340,6 +348,7 @@ class SFDictCache(Generic[K, V]):
         called from contexts where the lock is already held.
         """
         self.telemetry["size"] = len(self._cache)
+        self._cache_modified = True
 
 
 class SFDictFileCache(SFDictCache):
@@ -420,6 +429,9 @@ class SFDictFileCache(SFDictCache):
         self.last_loaded: datetime.datetime | None = None
         if os.path.exists(self.file_path):
             self._load()
+        # indicate whether the cache is modified or not, this variable is for
+        # SFDictFileCache to determine whether to dump cache to file when _save is called
+        self._cache_modified = False
 
     def _getitem_non_locking(
         self,
@@ -492,10 +504,6 @@ class SFDictFileCache(SFDictCache):
             if currently_holding:
                 self._lock.release()
 
-    def _setitem(self, k: K, v: V) -> None:
-        super()._setitem(k, v)
-        self._save_if_should()
-
     def _load(self) -> bool:
         """Load cache from disk if possible, returns whether it was able to load."""
         try:
@@ -514,6 +522,9 @@ class SFDictFileCache(SFDictCache):
     def _save(self, load_first: bool = True) -> bool:
         """Save cache to disk if possible, returns whether it was able to save."""
         self._clear_expired_entries()
+        if not self._cache_modified:
+            # cache is not updated, so there is no need to dump cache to file, we just return
+            return True
         try:
             with self._file_lock:
                 if load_first:
@@ -537,6 +548,8 @@ class SFDictFileCache(SFDictCache):
                     self.last_loaded = datetime.datetime.fromtimestamp(
                         getmtime(self.file_path),
                     )
+                    # after update, reset self._cache_modified to indicate it's up-to-update to avoid unnecessary flush
+                    self._cache_modified = False
                     return True
                 except NameError:
                     # note: when exiting python program, garbage collection will kick in
@@ -571,6 +584,10 @@ class SFDictFileCache(SFDictCache):
         if self._should_save():
             return self._save()
         return False
+
+    def save(self, load_first: bool = True):
+        with self._lock:
+            self._save(load_first=load_first)
 
     def _load_if_should(self) -> bool:
         """Load file to disk if necessary and returns whether it loaded.

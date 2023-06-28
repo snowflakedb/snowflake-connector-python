@@ -1285,8 +1285,11 @@ def test_ocsp_mode_in_secure(db_parameters):
 
     importlib.reload(snowflake.connector.ocsp_snowflake)
     assert snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE is None
-    with snowflake.connector.connect(**db_parameters, insecure_mode=True) as _:
+    with snowflake.connector.connect(
+        **db_parameters, insecure_mode=True
+    ) as conn, conn.cursor() as cur:
         # with insecure mode, the module level cache object should not be instantiated
+        assert cur.execute("select 1").fetchall() == [(1,)]
         assert snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE is None
 
     with snowflake.connector.connect(**db_parameters) as _:
