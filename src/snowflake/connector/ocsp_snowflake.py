@@ -80,12 +80,19 @@ OCSP_RESPONSE_VALIDATION_CACHE: SFDictFileCache[
 ] | SFDictCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult] | None = None
 
 
+class _NoAutoSaveUponSetSFDictCache(SFDictFileCache):
+    # inhert in ocsp_snowflake for file cache to have full control over the timing of dumping cache
+    def _setitem(self, k, v) -> None:
+        # calling SFDictCache._setitem which does not try to save
+        super(SFDictFileCache, self)._setitem(k, v)
+
+
 def _get_ocsp_response_validation_cache():
     global OCSP_RESPONSE_VALIDATION_CACHE
     if OCSP_RESPONSE_VALIDATION_CACHE is None:
         try:
             # SFDictFileCache[tuple[bytes, bytes, bytes], OCSPResponseValidationResult]
-            OCSP_RESPONSE_VALIDATION_CACHE = SFDictFileCache(
+            OCSP_RESPONSE_VALIDATION_CACHE = _NoAutoSaveUponSetSFDictCache(
                 entry_lifetime=constants.DAY_IN_SECONDS,
                 file_path={
                     "linux": os.path.join(

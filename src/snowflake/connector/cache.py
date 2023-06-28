@@ -504,6 +504,10 @@ class SFDictFileCache(SFDictCache):
             if currently_holding:
                 self._lock.release()
 
+    def _setitem(self, k: K, v: V) -> None:
+        super()._setitem(k, v)
+        self._save_if_should()
+
     def _load(self) -> bool:
         """Load cache from disk if possible, returns whether it was able to load."""
         try:
