@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
-//
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -305,6 +301,8 @@ class EmptyArrayStream {
 
   static void release_wrapper(struct ArrowArrayStream* stream) {
     delete reinterpret_cast<EmptyArrayStream*>(stream->private_data);
+    stream->release = nullptr;
+    stream->private_data = nullptr;
   }
 };
 

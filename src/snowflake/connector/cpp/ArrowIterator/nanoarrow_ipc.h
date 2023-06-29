@@ -39,12 +39,12 @@
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderDecodeHeader)
 #define ArrowIpcDecoderDecodeSchema \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderDecodeSchema)
+#define ArrowIpcDecoderDecodeArrayView \
+  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderDecodeArrayView)
 #define ArrowIpcDecoderDecodeArray \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderDecodeArray)
 #define ArrowIpcDecoderDecodeArrayFromShared \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderDecodeArrayFromShared)
-#define ArrowIpcDecoderValidateArray \
-  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderValidateArray)
 #define ArrowIpcDecoderSetSchema \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderSetSchema)
 #define ArrowIpcDecoderSetEndianness \
@@ -267,6 +267,23 @@ ArrowErrorCode ArrowIpcDecoderSetSchema(struct ArrowIpcDecoder* decoder,
 ArrowErrorCode ArrowIpcDecoderSetEndianness(struct ArrowIpcDecoder* decoder,
                                             enum ArrowIpcEndianness endianness);
 
+/// \brief Decode an ArrowArrayView
+///
+/// After a successful call to ArrowIpcDecoderDecodeHeader(), deserialize the content
+/// of body into an internally-managed ArrowArrayView and return it. Note that field index
+/// does not equate to column index if any columns contain nested types. Use a value of -1
+/// to decode the entire array into a struct. The pointed-to ArrowArrayView is owned by
+/// the ArrowIpcDecoder and must not be released.
+///
+/// For streams that match system endianness and do not use compression, this operation
+/// will not perform any heap allocations; however, the buffers referred to by the
+/// returned ArrowArrayView are only valid as long as the buffer referred to by body stays
+/// valid.
+ArrowErrorCode ArrowIpcDecoderDecodeArrayView(struct ArrowIpcDecoder* decoder,
+                                              struct ArrowBufferView body, int64_t i,
+                                              struct ArrowArrayView** out,
+                                              struct ArrowError* error);
+
 /// \brief Decode an ArrowArray
 ///
 /// After a successful call to ArrowIpcDecoderDecodeHeader(), assemble an ArrowArray given
@@ -281,6 +298,7 @@ ArrowErrorCode ArrowIpcDecoderSetEndianness(struct ArrowIpcDecoder* decoder,
 ArrowErrorCode ArrowIpcDecoderDecodeArray(struct ArrowIpcDecoder* decoder,
                                           struct ArrowBufferView body, int64_t i,
                                           struct ArrowArray* out,
+                                          enum ArrowValidationLevel validation_level,
                                           struct ArrowError* error);
 
 /// \brief Decode an ArrowArray from an owned buffer
@@ -290,19 +308,10 @@ ArrowErrorCode ArrowIpcDecoderDecodeArray(struct ArrowIpcDecoder* decoder,
 /// more calls to ArrowIpcDecoderDecodeArrayFromShared(). If
 /// ArrowIpcSharedBufferIsThreadSafe() returns 0, out must not be released by another
 /// thread.
-ArrowErrorCode ArrowIpcDecoderDecodeArrayFromShared(struct ArrowIpcDecoder* decoder,
-                                                    struct ArrowIpcSharedBuffer* shared,
-                                                    int64_t i, struct ArrowArray* out,
-                                                    struct ArrowError* error);
-
-/// \brief Validate a decoded ArrowArray
-///
-/// Verifies buffer lengths and contents depending on validation_level. Users
-/// are reccomended to use NANOARROW_VALIDATION_LEVEL_FULL as any lesser value
-/// may result in some types of corrupted data crashing a process on read.
-ArrowErrorCode ArrowIpcDecoderValidateArray(struct ArrowArray* decoded,
-                                            enum ArrowValidationLevel validation_level,
-                                            struct ArrowError* error);
+ArrowErrorCode ArrowIpcDecoderDecodeArrayFromShared(
+    struct ArrowIpcDecoder* decoder, struct ArrowIpcSharedBuffer* shared, int64_t i,
+    struct ArrowArray* out, enum ArrowValidationLevel validation_level,
+    struct ArrowError* error);
 
 /// \brief An user-extensible input data source
 struct ArrowIpcInputStream {
