@@ -19,6 +19,8 @@ from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 from snowflake.connector.util_text import random_string
 
+from .cursor import SnowflakeCursor
+
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
 
@@ -60,6 +62,92 @@ def build_location_helper(
             + name
         )
     return location
+
+
+def _do_create_temp_stage(
+    cursor: SnowflakeCursor,
+    stage_location: str,
+    compression: str,
+    auto_create_table: bool,
+    overwrite: bool,
+) -> None:
+    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
+    logger.debug(f"creating stage with '{create_stage_sql}'")
+    cursor.execute(create_stage_sql, _is_internal=True).fetchall()
+
+
+def _create_temp_stage(
+    cursor: SnowflakeCursor,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    compression: str,
+    auto_create_table: bool,
+    overwrite: bool,
+) -> str:
+    stage_name = random_string()
+    stage_location = build_location_helper(
+        database=database,
+        schema=schema,
+        name=stage_name,
+        quote_identifiers=quote_identifiers,
+    )
+    try:
+        _do_create_temp_stage(
+            cursor, stage_location, compression, auto_create_table, overwrite
+        )
+    except ProgrammingError as e:
+        # User may not have the privilege to create stage on the target schema, so fall back to use current schema as
+        # the old behavior.
+        logger.debug(
+            f"creating stage {stage_location} failed. Exception {str(e)}. Fall back to use current schema"
+        )
+        stage_location = stage_name
+        _do_create_temp_stage(
+            cursor, stage_location, compression, auto_create_table, overwrite
+        )
+
+    return stage_location
+
+
+def _do_create_temp_file_format(
+    cursor: SnowflakeCursor, file_format_location: str, compression: str
+) -> None:
+    file_format_sql = (
+        f"CREATE TEMP FILE FORMAT {file_format_location} "
+        f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+        f"TYPE=PARQUET COMPRESSION={compression}"
+    )
+    logger.debug(f"creating file format with '{file_format_sql}'")
+    cursor.execute(file_format_sql, _is_internal=True)
+
+
+def _create_temp_file_format(
+    cursor: SnowflakeCursor,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    compression: str,
+) -> str:
+    file_format_name = random_string()
+    file_format_location = build_location_helper(
+        database=database,
+        schema=schema,
+        name=file_format_name,
+        quote_identifiers=quote_identifiers,
+    )
+    try:
+        _do_create_temp_file_format(cursor, file_format_location, compression)
+    except ProgrammingError as e:
+        # User may not have the privilege to create file format on the target schema, so fall back to use current schema
+        # as the old behavior.
+        logger.debug(
+            f"creating stage {file_format_location} failed. Exception {str(e)}. Fall back to use current schema"
+        )
+        file_format_location = file_format_name
+        _do_create_temp_file_format(cursor, file_format_location, compression)
+
+    return file_format_location
 
 
 def write_pandas(
@@ -186,15 +274,15 @@ def write_pandas(
         )
 
     cursor = conn.cursor()
-    stage_location = build_location_helper(
-        database=database,
-        schema=schema,
-        name=random_string(),
-        quote_identifiers=quote_identifiers,
+    stage_location = _create_temp_stage(
+        cursor,
+        database,
+        schema,
+        quote_identifiers,
+        compression,
+        auto_create_table,
+        overwrite,
     )
-    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
-    logger.debug(f"creating stage with '{create_stage_sql}'")
-    cursor.execute(create_stage_sql, _is_internal=True).fetchall()
 
     with TemporaryDirectory() as tmp_folder:
         for i, chunk in chunk_helper(df, chunk_size):
@@ -233,20 +321,9 @@ def write_pandas(
         cursor.execute(drop_sql, _is_internal=True)
 
     if auto_create_table or overwrite:
-        file_format_location = build_location_helper(
-            database=database,
-            schema=schema,
-            name=random_string(),
-            quote_identifiers=quote_identifiers,
+        file_format_location = _create_temp_file_format(
+            cursor, database, schema, quote_identifiers, compression_map[compression]
         )
-        file_format_sql = (
-            f"CREATE TEMP FILE FORMAT {file_format_location} "
-            f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-            f"TYPE=PARQUET COMPRESSION={compression_map[compression]}"
-        )
-        logger.debug(f"creating file format with '{file_format_sql}'")
-        cursor.execute(file_format_sql, _is_internal=True)
-
         infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@{stage_location}', file_format=>'{file_format_location}'))"
         logger.debug(f"inferring schema with '{infer_schema_sql}'")
         column_type_mapping = dict(

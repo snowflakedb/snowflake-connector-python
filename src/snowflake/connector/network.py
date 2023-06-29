@@ -957,7 +957,8 @@ class SnowflakeRestful:
                 sleeping_time,
             )
             time.sleep(sleeping_time)
-            retry_ctx.increment_retry(reason=getattr(cause, "errno", 0))
+            reason = getattr(cause, "errno", 0)
+            retry_ctx.increment_retry(reason)
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= sleeping_time
             return None  # retry
