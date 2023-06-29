@@ -18,6 +18,10 @@ Please [open a new issue](https://github.com/snowflakedb/snowflake-connector-pyt
 We encourage everyone to first open an issue to discuss any feature work or bug fixes with one of the maintainers.
 This should help guide contributors through potential pitfalls.
 
+## Contributor License Agreement ("CLA")
+
+We require our contributors to sign a CLA, available at https://github.com/snowflakedb/CLA/blob/main/README.md. A Github Actions bot will assist you when you open a pull request.
+
 ### Setup a development environment
 
 What is a development environment? It's a [virtualenv](https://virtualenv.pypa.io) that has all of necessary
