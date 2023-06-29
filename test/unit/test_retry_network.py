@@ -34,7 +34,6 @@ from snowflake.connector.errors import (
     ForbiddenError,
     InterfaceError,
     OtherHTTPRetryableError,
-    TooManyRequests,
 )
 from snowflake.connector.network import (
     STATUS_TO_EXCEPTION,
@@ -98,7 +97,7 @@ def test_retry_reason(mockRequestExec):
         if "retry" in sql:
             # error = HTTP Error 429
             if cnt.c < 3:  # retry twice for 429 error
-                raise RetryRequest(TooManyRequests(errno=429))
+                raise RetryRequest(OtherHTTPRetryableError(errno=429))
             return success_result
         elif "unknown error" in sql:
             # Raise unknown http error
@@ -109,7 +108,7 @@ def test_retry_reason(mockRequestExec):
             if cnt.c == 1:  # retry first with 100
                 raise RetryRequest(OtherHTTPRetryableError(errno=100))
             elif cnt.c == 2:  # then with 429
-                raise RetryRequest(TooManyRequests(errno=429))
+                raise RetryRequest(OtherHTTPRetryableError(errno=429))
             return success_result
 
         return success_result
