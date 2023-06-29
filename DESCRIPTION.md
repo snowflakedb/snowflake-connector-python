@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added the ability to read Snowflake's central configuration file.
   - Bumped cryptography dependency from <41.0.0,>=3.1.0 to >=3.1.0,<42.0.0.
   - Improved OCSP response caching to remove tmp cache files on Windows.
+  - Improved OCSP response caching to reduce the times of disk writing.
   - Added a parameter `server_session_keep_alive` in `SnowflakeConnection` that skips session deletion when client connection closes.
   - Tightened our pinning of platformdirs, to prevent their new releases breaking us.
   - Fixed a bug where SFPlatformDirs would incorrectly append application_name/version to its path.
