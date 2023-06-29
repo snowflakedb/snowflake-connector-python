@@ -333,7 +333,10 @@ class TestSFDictFileCache:
         c2 = pickle.loads(pickle.dumps(c))
         with c2._file_lock:
             with caplog.at_level(logging.DEBUG, logger="snowflake.connector.cache"):
-                assert c._save() is False
+                # c will dump cache to file every time an item is set as it's AlwaysSaveSFDictFileCache
+                # so the program exeucted at this point, c._cache_modified is false as it has the latest cache
+                # changes, we set force_flush to True
+                assert c._save(force_flush=True) is False
             assert caplog.record_tuples == [
                 (
                     "snowflake.connector.cache",

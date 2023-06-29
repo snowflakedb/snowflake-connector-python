@@ -523,10 +523,10 @@ class SFDictFileCache(SFDictCache):
             logger.debug("Fail to read cache from disk due to error: %s", e)
             return False
 
-    def _save(self, load_first: bool = True) -> bool:
+    def _save(self, load_first: bool = True, force_flush: bool = False) -> bool:
         """Save cache to disk if possible, returns whether it was able to save."""
         self._clear_expired_entries()
-        if not self._cache_modified:
+        if not self._cache_modified and not force_flush:
             # cache is not updated, so there is no need to dump cache to file, we just return
             return True
         try:
@@ -643,7 +643,7 @@ class SFDictFileCache(SFDictCache):
         with self._file_lock:
             if os.path.exists(self.file_path) and os.path.isfile(self.file_path):
                 os.unlink(self.file_path)
-        self._save(load_first=False)
+        self._save(load_first=False, force_flush=True)
 
     # Custom pickling implementation
 
