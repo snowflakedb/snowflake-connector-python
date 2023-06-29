@@ -370,6 +370,8 @@ class SFDictFileCache(SFDictCache):
         file_path: str | dict[str, str],
         entry_lifetime: int = constants.DAY_IN_SECONDS,
         file_timeout: int = 0,
+        *,
+        try_saving_when_set_item: bool = True,
     ) -> None:
         """Inits an SFDictFileCache with path, lifetime.
 
@@ -432,6 +434,11 @@ class SFDictFileCache(SFDictCache):
         # indicate whether the cache is modified or not, this variable is for
         # SFDictFileCache to determine whether to dump cache to file when _save is called
         self._cache_modified = False
+        # by default, set item will trigger try saving logic, however, there are scenarios that callers set items in
+        # batch (e.g., setting hundreds items in a for loop),
+        # in this case, we optimize by providing option not to try saving each time we set, callers can manually
+        # save after batch set.
+        self._try_saving_when_set_item = try_saving_when_set_item
 
     def _getitem_non_locking(
         self,
@@ -506,7 +513,8 @@ class SFDictFileCache(SFDictCache):
 
     def _setitem(self, k: K, v: V) -> None:
         super()._setitem(k, v)
-        self._save_if_should()
+        if self._try_saving_when_set_item:
+            self._save_if_should()
 
     def _load(self) -> bool:
         """Load cache from disk if possible, returns whether it was able to load."""

@@ -17,7 +17,6 @@ from snowflake.connector.compat import IS_WINDOWS
 
 try:
     import snowflake.connector.cache as cache
-    from snowflake.connector.ocsp_snowflake import _NoAutoSaveUponSetSFDictCache
 except ImportError:
     cache = None
 
@@ -488,7 +487,9 @@ class TestSFDictFileCache:
 
 def test_file_is_not_updated(tmpdir):
     tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
-    sfcache = _NoAutoSaveUponSetSFDictCache(file_path=tmp_cache_file, entry_lifetime=1)
+    sfcache = cache.SFDictFileCache(
+        file_path=tmp_cache_file, entry_lifetime=1, try_saving_when_set_item=False
+    )
     sfcache["key"] = "value"
     assert sfcache._cache_modified
     sfcache.save()  # this save call will dump cache to file because item was added
@@ -520,7 +521,7 @@ def test_file_is_not_updated(tmpdir):
 
 def test_cache_do_not_write_while_set_item(tmpdir):
     tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
-    sfcache = _NoAutoSaveUponSetSFDictCache(tmp_cache_file)
+    sfcache = cache.SFDictFileCache(tmp_cache_file, try_saving_when_set_item=False)
     for i in range(1000):
         sfcache[i] = i
     # there should be no file created as setting item won't trigger creation
@@ -530,7 +531,7 @@ def test_cache_do_not_write_while_set_item(tmpdir):
     assert not sfcache._cache_modified
     assert os.path.exists(tmp_cache_file)
     file_modified_time = os.path.getmtime(tmp_cache_file)
-    sfcache2 = _NoAutoSaveUponSetSFDictCache(tmp_cache_file)
+    sfcache2 = cache.SFDictFileCache(tmp_cache_file, try_saving_when_set_item=False)
     time.sleep(0.01)
     for i in range(1000):
         assert sfcache2[i] == i
