@@ -833,7 +833,7 @@ class SnowflakeRestful:
                     return full_url
 
         include_retry_reason = (
-            not self._connection._disable_retry_reason_in_query_response
+            not self._connection._enable_retry_reason_in_query_response
         )
         include_retry_params = kwargs.pop("_include_retry_params", False)
 

@@ -146,7 +146,7 @@ def test_retry_reason(mockRequestExec):
     assert "retryCount=2" in url
 
     # ensure that disabling works and only suppresses retryReason
-    conn._disable_retry_reason_in_query_response = True
+    conn._enable_retry_reason_in_query_response = False
 
     cnt.reset()
     conn.cmd_query("retry", 0, uuid4())
