@@ -488,22 +488,29 @@ class TestSFDictFileCache:
 
 def test_file_is_not_updated(tmpdir):
     tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
-    sfcache = cache.SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
+    sfcache = _NoAutoSaveUponSetSFDictCache(file_path=tmp_cache_file, entry_lifetime=1)
     sfcache["key"] = "value"
+    assert sfcache._cache_modified
     sfcache.save()  # this save call will dump cache to file because item was added
+    assert not sfcache._cache_modified
     updated_time = os.path.getmtime(tmp_cache_file)
     sfcache.save()  # this save call will be a no-op since there is no update
     assert os.path.getmtime(tmp_cache_file) == updated_time
     sfcache["key"] = "value2"
+    assert sfcache._cache_modified
     time.sleep(0.1)  # sleep 0.1 to avoid flushing too fast
     sfcache.save()  # this save call will dump cache to file
+    assert not sfcache._cache_modified
     second_updated_time = os.path.getmtime(tmp_cache_file)
     assert second_updated_time > updated_time
     assert sfcache["key"] == "value2"
+    assert not sfcache._cache_modified
     sfcache.save()  # this save call will be a no-op since there is no update
+    assert not sfcache._cache_modified
     assert os.path.getmtime(tmp_cache_file) == second_updated_time
     time.sleep(1)
     sfcache.save()  # this save call will dump cache because cache item is expired
+    assert not sfcache._cache_modified
     assert os.path.getmtime(tmp_cache_file) > second_updated_time
 
     cache3 = cache.SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
@@ -517,13 +524,16 @@ def test_cache_do_not_write_while_set_item(tmpdir):
     for i in range(1000):
         sfcache[i] = i
     # there should be no file created as setting item won't trigger creation
+    assert sfcache._cache_modified
     assert not os.path.exists(tmp_cache_file)
     sfcache.save()
+    assert not sfcache._cache_modified
     assert os.path.exists(tmp_cache_file)
     file_modified_time = os.path.getmtime(tmp_cache_file)
     sfcache2 = _NoAutoSaveUponSetSFDictCache(tmp_cache_file)
     time.sleep(0.01)
     for i in range(1000):
         assert sfcache2[i] == i
+    assert not sfcache2._cache_modified
     sfcache2.save()  # this save should be a no-op since there is no change
     assert os.path.getmtime(tmp_cache_file) == file_modified_time
