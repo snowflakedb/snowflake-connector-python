@@ -602,15 +602,22 @@ class SnowflakeConnection:
                 connection_diag.run_test()
                 self.__open_connection()
                 connection_diag.cursor = self.cursor()
-            except Exception as e:
-                logger.warning(f"Exception during connection test: {e}")
-
+            except Exception:
+                exceptions_dict["connection_test"] = traceback.format_exc()
+                logger.warning(
+                    f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
+                )
             try:
                 connection_diag.run_post_test()
-            except Exception as e:
-                logger.warning(f"Exception during post connection test: {e}")
+            except Exception:
+                exceptions_dict["post_test"] = traceback.format_exc()
+                logger.warning(
+                    f"""Exception during post connection test:\n{exceptions_dict["post_test"]} """
+                )
             finally:
                 connection_diag.generate_report()
+                if exceptions_dict:
+                    raise Exception(str(exceptions_dict))
         else:
             self.__open_connection()
 
