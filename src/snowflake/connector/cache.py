@@ -363,6 +363,7 @@ class SFDictFileCache(SFDictCache):
         "file_timeout",
         "_file_lock_path",
         "last_loaded",
+        "_try_saving_when_set_item",
     )
 
     def __init__(
@@ -664,5 +665,9 @@ class SFDictFileCache(SFDictCache):
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
+        # backward compatibility when loading pickled cache that doesn't support _try_saving_when_set_item
+        if "_try_saving_when_set_item" not in state:
+            self._try_saving_when_set_item = True
+        self._cache_modified = False
         self._lock = Lock()
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
