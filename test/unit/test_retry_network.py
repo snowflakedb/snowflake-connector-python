@@ -73,7 +73,8 @@ def fake_connector() -> snowflake.connector.SnowflakeConnection:
 
 
 @patch("snowflake.connector.network.SnowflakeRestful._request_exec")
-def test_retry_reason(mockRequestExec):
+@patch("snowflake.connector.network.DecorrelateJitterBackoff.next_sleep")
+def test_retry_reason(mockNextSleep, mockRequestExec):
     url = ""
     cnt = Cnt()
 
@@ -114,6 +115,7 @@ def test_retry_reason(mockRequestExec):
         return success_result
 
     conn = fake_connector()
+    mockNextSleep.side_effect = lambda cnt, sleep: 0
     mockRequestExec.side_effect = mock_exec
 
     # ensure query requests don't have the retryReason if retryCount == 0
