@@ -1289,11 +1289,8 @@ def test_ocsp_mode_in_secure(db_parameters):
     ) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
         # with insecure mode, the module level cache object should not be instantiated
-        assert snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE is None
+    assert snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE is None
 
     with snowflake.connector.connect(**db_parameters) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        assert (
-            snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
-            is not None
-        )
+    assert len(snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE) > 0
