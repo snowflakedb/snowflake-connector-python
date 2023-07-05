@@ -220,6 +220,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # Whether to keep session alive after connector shuts down
+    "enable_retry_reason_in_query_response": (
+        True,
+        bool,
+    ),  # Enable sending retryReason in response header for query-requests
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
