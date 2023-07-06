@@ -23,7 +23,6 @@ from snowflake.connector.compat import (
     OK,
     REQUEST_TIMEOUT,
     SERVICE_UNAVAILABLE,
-    TOO_MANY_REQUESTS,
     UNAUTHORIZED,
 )
 from snowflake.connector.errorcode import (
@@ -42,6 +41,7 @@ from snowflake.connector.errors import (
 )
 
 try:
+    from snowflake.connector.compat import TOO_MANY_REQUESTS
     from snowflake.connector.errors import TooManyRequests
     from snowflake.connector.result_batch import MAX_DOWNLOAD_RETRY, JSONResultBatch
     from snowflake.connector.vendored import requests  # NOQA
@@ -52,6 +52,7 @@ except ImportError:
     JSONResultBatch = None
     REQUEST_MODULE_PATH = "requests"
     TooManyRequests = None
+    TOO_MANY_REQUESTS = None
 from snowflake.connector.sqlstate import (
     SQLSTATE_CONNECTION_REJECTED,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
