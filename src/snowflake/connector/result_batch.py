@@ -662,7 +662,11 @@ class ArrowResultBatch(ResultBatch):
                     os.remove(path)
                     logger.error(f"Logging the content instead... {name}: {content}")
 
-            dump_to_tmp_file("pickled GET Chunk Response", pickle.dumps(response), f"Chunk_{self.id}_")
+            dump_to_tmp_file(
+                "pickled GET Chunk Response",
+                pickle.dumps(response),
+                f"Chunk_{self.id}_",
+            )
             dump_to_tmp_file(
                 "pickled ArrowResultBatch",
                 pickle.dumps(self),
