@@ -8,6 +8,7 @@
 #include "Util/time.hpp"
 #include <memory>
 #include <string>
+#include <cstring>
 #include <vector>
 #include <iostream>
 
