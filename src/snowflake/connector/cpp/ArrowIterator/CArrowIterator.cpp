@@ -36,13 +36,13 @@ CArrowIterator::CArrowIterator(char* arrow_bytes, int64_t arrow_bytes_size)
       m_ipcArrowArrayVec.push_back(std::move(newUniqueArray));
 
       ArrowError error;
-      int returnCode = ArrowArrayViewInitFromSchema(
+      returnCode = ArrowArrayViewInitFromSchema(
       newUniqueArrayView.get(), m_ipcArrowSchema.get(), &error);
-      SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s", ArrowErrorMessage(&error));
+      SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
 
       returnCode = ArrowArrayViewSetArray(
         newUniqueArrayView.get(), newUniqueArray.get(), &error);
-      SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error setting ArrowArrayView from array : %s", ArrowErrorMessage(&error));
+      SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error setting ArrowArrayView from array : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
       m_ipcArrowArrayViewVec.push_back(std::move(newUniqueArrayView));
     } else {
       break;

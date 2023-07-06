@@ -305,7 +305,7 @@ ThreeFieldTimeStampTZConverter::ThreeFieldTimeStampTZConverter(
     if (schema->schema->n_children != 3) {
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] arrow schema field number does not match, "
-            "expected 2 but got %d instead",
+            "expected 3 but got %d instead",
             schema->schema->n_children);
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());

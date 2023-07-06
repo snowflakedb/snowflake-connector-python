@@ -114,7 +114,7 @@ void CArrowChunkIterator::initColumnConverters()
 
     returnCode = ArrowSchemaViewInit(
         &columnSchemaView, columnSchema, &error);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowSchemaView: %s", ArrowErrorMessage(&error));
+    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowSchemaView: %s, error code: %d", ArrowErrorMessage(&error), returnCode);
 
     ArrowArrayView* array = m_ipcArrowArrayViewVec[m_currentBatchIndex]->children[i];
 
