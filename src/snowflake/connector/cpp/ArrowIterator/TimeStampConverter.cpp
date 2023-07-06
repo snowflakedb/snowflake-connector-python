@@ -52,6 +52,13 @@ struct FormatArgs3 {
 
 namespace sf
 {
+
+Logger* TwoFieldTimeStampNTZConverter::logger = new Logger("snowflake.connector.TwoFieldTimeStampNTZConverter");
+Logger* NumpyTwoFieldTimeStampNTZConverter::logger = new Logger("snowflake.connector.NumpyTwoFieldTimeStampNTZConverter");
+Logger* TwoFieldTimeStampLTZConverter::logger = new Logger("snowflake.connector.TwoFieldTimeStampLTZConverter");
+Logger* TwoFieldTimeStampTZConverter::logger = new Logger("snowflake.connector.TwoFieldTimeStampTZConverter");
+Logger* ThreeFieldTimeStampTZConverter::logger = new Logger("snowflake.connector.ThreeFieldTimeStampTZConverter");
+
 TimeStampBaseConverter::TimeStampBaseConverter(PyObject* context, int32_t scale)
 : m_context(context), m_scale(scale)
 {
@@ -103,7 +110,13 @@ TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 2) {
-        // TODO raise error
+      std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] arrow schema field number does not match, "
+            "expected 2 but got %d instead",
+            schema->schema->n_children);
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        return;
     }
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
@@ -112,7 +125,7 @@ TwoFieldTimeStampNTZConverter::TwoFieldTimeStampNTZConverter(
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
             m_fraction = m_array->children[i];
         } else {
-            //TODO raise error: unrecognized fields
+            // do nothing
         }
     }
 }
@@ -140,7 +153,13 @@ NumpyTwoFieldTimeStampNTZConverter::NumpyTwoFieldTimeStampNTZConverter(
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 2) {
-        // TODO raise error
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] arrow schema field number does not match, "
+            "expected 2 but got %d instead",
+            schema->schema->n_children);
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        return;
     }
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
@@ -149,7 +168,7 @@ NumpyTwoFieldTimeStampNTZConverter::NumpyTwoFieldTimeStampNTZConverter(
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
             m_fraction = m_array->children[i];
         } else {
-            //TODO raise error: unrecognized fields
+          // do nothing
         }
     }
 }
@@ -197,7 +216,13 @@ TwoFieldTimeStampLTZConverter::TwoFieldTimeStampLTZConverter(
   m_array(array)
 {
     if (schema->schema->n_children != 2) {
-        // TODO raise error
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] arrow schema field number does not match, "
+            "expected 2 but got %d instead",
+            schema->schema->n_children);
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        return;
     }
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
@@ -206,7 +231,7 @@ TwoFieldTimeStampLTZConverter::TwoFieldTimeStampLTZConverter(
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
             m_fraction = m_array->children[i];
         } else {
-            //TODO raise error: unrecognized fields
+          // do nothing
         }
     }
 }
@@ -234,7 +259,13 @@ TwoFieldTimeStampTZConverter::TwoFieldTimeStampTZConverter(
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 2) {
-        // TODO raise error
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] arrow schema field number does not match, "
+            "expected 2 but got %d instead",
+            schema->schema->n_children);
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        return;
     }
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
@@ -243,7 +274,7 @@ TwoFieldTimeStampTZConverter::TwoFieldTimeStampTZConverter(
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_TIME_ZONE.c_str()) == 0){
             m_timezone = m_array->children[i];
         } else {
-            //TODO raise error: unrecognized fields
+          // do nothing
         }
     }
 }
@@ -272,7 +303,13 @@ ThreeFieldTimeStampTZConverter::ThreeFieldTimeStampTZConverter(
 : TimeStampBaseConverter(context, scale), m_array(array)
 {
     if (schema->schema->n_children != 3) {
-        // TODO raise error
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] arrow schema field number does not match, "
+            "expected 2 but got %d instead",
+            schema->schema->n_children);
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        return;
     }
     for(int i = 0; i < schema->schema->n_children; i += 1) {
         ArrowSchema* c_schema = schema->schema->children[i];
@@ -283,7 +320,7 @@ ThreeFieldTimeStampTZConverter::ThreeFieldTimeStampTZConverter(
         } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0){
             m_fraction = m_array->children[i];
         } else {
-            //TODO raise error: unrecognized fields
+          // do nothing
         }
     }
 }

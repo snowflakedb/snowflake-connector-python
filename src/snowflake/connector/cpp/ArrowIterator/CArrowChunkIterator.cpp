@@ -64,6 +64,7 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
   }
   else
   {
+    SF_CHECK_PYTHON_ERR();
     m_currentBatchIndex++;
     if (m_currentBatchIndex < m_batchCount)
     {
@@ -113,20 +114,15 @@ void CArrowChunkIterator::initColumnConverters()
 
     returnCode = ArrowSchemaViewInit(
         &columnSchemaView, columnSchema, &error);
-    if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] error initializing ArrowSchemaView : %s",
-            ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-    }
+    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowSchemaView: %s", ArrowErrorMessage(&error));
 
     ArrowArrayView* array = m_ipcArrowArrayViewVec[m_currentBatchIndex]->children[i];
 
     ArrowStringView snowflakeLogicalType;
     const char* metadata = m_ipcArrowSchema->children[i]->metadata;
-    ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
+    returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
+    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'logicalType' from Arrow metadata, error code: %d", returnCode);
+
     SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
         std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
     );
@@ -140,8 +136,10 @@ void CArrowChunkIterator::initColumnConverters()
         int scale = 0;
         int precision = 38;
         if(metadata != nullptr) {
-            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            ArrowMetadataGetValue(metadata, ArrowCharView("precision"), &precisionString);
+            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
+            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("precision"), &precisionString);
+            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'precision' from Arrow metadata, error code: %d", returnCode);
             scale = std::stoi(scaleString.data);
             precision = std::stoi(precisionString.data);
         }
@@ -274,7 +272,8 @@ void CArrowChunkIterator::initColumnConverters()
         int scale = 9;
         if(metadata != nullptr) {
             ArrowStringView scaleString;
-            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
             scale = std::stoi(scaleString.data);
         }
         switch (columnSchemaView.type)
@@ -307,7 +306,8 @@ void CArrowChunkIterator::initColumnConverters()
         int scale = 9;
         if(metadata != nullptr) {
             ArrowStringView scaleString;
-            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
             scale = std::stoi(scaleString.data);
         }
         switch (columnSchemaView.type)
@@ -365,7 +365,8 @@ void CArrowChunkIterator::initColumnConverters()
         int scale = 9;
         if(metadata != nullptr) {
             ArrowStringView scaleString;
-            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
             scale = std::stoi(scaleString.data);
         }
         switch (columnSchemaView.type)
@@ -407,8 +408,10 @@ void CArrowChunkIterator::initColumnConverters()
         int scale = 9;
         int byteLength = 16;
         if(metadata != nullptr) {
-            ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            ArrowMetadataGetValue(metadata, ArrowCharView("byteLength"), &byteLengthString);
+            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
+            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
+            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("byteLength"), &byteLengthString);
+            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'byteLength' from Arrow metadata, error code: %d", returnCode);
             scale = std::stoi(scaleString.data);
             byteLength = std::stoi(byteLengthString.data);
         }
