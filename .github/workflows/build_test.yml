@@ -81,10 +81,6 @@ jobs:
           - image: macos-latest
             id: macosx_arm64
         python-version: ["3.8", "3.9", "3.10", "3.11"]
-        exclude:
-          - os:
-              id: macosx_arm64
-            python-version: 3.8
     name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
     runs-on: ${{ matrix.os.image }}
     steps:
