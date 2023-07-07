@@ -76,14 +76,14 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
 
     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
 
-    from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
-
     log.debug(
         "OCSP Mode: %s, " "OCSP response cache file name: %s",
         FEATURE_OCSP_MODE.name,
         FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
     )
     if FEATURE_OCSP_MODE != OCSPMode.INSECURE:
+        from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
+
         v = SFOCSP(
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN,

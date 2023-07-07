@@ -58,9 +58,6 @@ class SFDictCache(Generic[K, V]):
         self._cache: dict[K, CacheEntry[V]] = {}
         self._lock = Lock()
         self._reset_telemetry()
-        # indicate whether the cache is modified or not, this variable is for
-        # SFDictFileCache to determine whether to dump cache to file when _save is called
-        self._cache_modified = False
 
     def __len__(self) -> int:
         with self._lock:
@@ -348,7 +345,6 @@ class SFDictCache(Generic[K, V]):
         called from contexts where the lock is already held.
         """
         self.telemetry["size"] = len(self._cache)
-        self._cache_modified = True
 
 
 class SFDictFileCache(SFDictCache):
@@ -537,7 +533,7 @@ class SFDictFileCache(SFDictCache):
         self._clear_expired_entries()
         if not self._cache_modified and not force_flush:
             # cache is not updated, so there is no need to dump cache to file, we just return
-            return True
+            return False
         try:
             with self._file_lock:
                 if load_first:
@@ -597,10 +593,6 @@ class SFDictFileCache(SFDictCache):
         if self._should_save():
             return self._save()
         return False
-
-    def save(self, load_first: bool = True):
-        with self._lock:
-            self._save(load_first=load_first)
 
     def _load_if_should(self) -> bool:
         """Load file to disk if necessary and returns whether it loaded.
@@ -671,3 +663,12 @@ class SFDictFileCache(SFDictCache):
         self._cache_modified = False
         self._lock = Lock()
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
+
+    def _add_or_remove(self) -> None:
+        """This function gets called when an element is added, or removed.
+
+        Note that while this function does not interact with lock, but it's only
+        called from contexts where the lock is already held.
+        """
+        super()._add_or_remove()
+        self._cache_modified = True
