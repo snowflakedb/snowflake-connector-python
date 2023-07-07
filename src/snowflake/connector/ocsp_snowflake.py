@@ -590,8 +590,7 @@ class OCSPCache:
         """
         if OCSPCache.CACHE_UPDATED:
             if isinstance(OCSP_RESPONSE_VALIDATION_CACHE, SFDictFileCache):
-                with OCSP_RESPONSE_VALIDATION_CACHE._lock:
-                    OCSP_RESPONSE_VALIDATION_CACHE._save()
+                OCSP_RESPONSE_VALIDATION_CACHE._save()
             OCSPCache.update_ocsp_response_cache_file(
                 ocsp, OCSPCache.OCSP_RESPONSE_CACHE_URI
             )
@@ -1216,9 +1215,6 @@ class SnowflakeOCSP:
                         ocsp_response_validation_result.ocsp_response,
                     )
                 )
-        if isinstance(OCSP_RESPONSE_VALIDATION_CACHE, SFDictFileCache):
-            with OCSP_RESPONSE_VALIDATION_CACHE._lock:
-                OCSP_RESPONSE_VALIDATION_CACHE._save()
         return results
 
     def _check_ocsp_response_cache_server(
