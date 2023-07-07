@@ -14,15 +14,19 @@ Logger* CArrowIterator::logger = new Logger("snowflake.connector.CArrowIterator"
 
 CArrowIterator::CArrowIterator(char* arrow_bytes, int64_t arrow_bytes_size)
 {
-
+  int returnCode = 0;
   ArrowBuffer input_buffer;
   ArrowBufferInit(&input_buffer);
-  ArrowBufferAppend(&input_buffer, arrow_bytes, arrow_bytes_size);
+  returnCode = ArrowBufferAppend(&input_buffer, arrow_bytes, arrow_bytes_size);
+  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error loading arrow bytes, error code: %d", returnCode);
   ArrowIpcInputStream input;
-  ArrowIpcInputStreamInitBuffer(&input, &input_buffer);
+  returnCode = ArrowIpcInputStreamInitBuffer(&input, &input_buffer);
+  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowIpcInputStream, error code: %d", returnCode);
   ArrowArrayStream stream;
-  ArrowIpcArrayStreamReaderInit(&stream, &input, nullptr);
-  stream.get_schema(&stream, m_ipcArrowSchema.get());
+  returnCode = ArrowIpcArrayStreamReaderInit(&stream, &input, nullptr);
+  SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error initializing ArrowIpcArrayStreamReader, error code: %d", returnCode);
+  returnCode = stream.get_schema(&stream, m_ipcArrowSchema.get());
+  SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error getting schema from stream, error code: %d", returnCode);
 
   while(true) {
     nanoarrow::UniqueArray newUniqueArray;
@@ -32,27 +36,13 @@ CArrowIterator::CArrowIterator(char* arrow_bytes, int64_t arrow_bytes_size)
       m_ipcArrowArrayVec.push_back(std::move(newUniqueArray));
 
       ArrowError error;
-      int returnCode = ArrowArrayViewInitFromSchema(
+      returnCode = ArrowArrayViewInitFromSchema(
       newUniqueArrayView.get(), m_ipcArrowSchema.get(), &error);
-      if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] error initializing ArrowArrayView from schema : %s",
-          ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      }
+      SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
 
       returnCode = ArrowArrayViewSetArray(
         newUniqueArrayView.get(), newUniqueArray.get(), &error);
-      if (returnCode != NANOARROW_OK) {
-        std::string errorInfo = Logger::formatString(
-          "[Snowflake Exception] error setting ArrowArrayView from array : %s",
-          ArrowErrorMessage(&error)
-        );
-        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-      }
+      SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error setting ArrowArrayView from array : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
       m_ipcArrowArrayViewVec.push_back(std::move(newUniqueArrayView));
     } else {
       break;
