@@ -56,9 +56,8 @@ static const char* NANOARROW_TYPE_ENUM_STRING[] = {
     "NANOARROW_TYPE_INTERVAL_MONTH_DAY_NANO"
 };
 
-
 #define SF_CHECK_ARROW_RC(arrow_status, format_string, ...) \
-  if (!arrow_status.ok()) \
+  if (arrow_status != NANOARROW_OK) \
   { \
     std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
@@ -67,12 +66,22 @@ static const char* NANOARROW_TYPE_ENUM_STRING[] = {
   }
 
 #define SF_CHECK_ARROW_RC_AND_RETURN(arrow_status, ret_val, format_string, ...) \
-  if (!arrow_status.ok()) \
+  if (arrow_status != NANOARROW_OK) \
   { \
     std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
     logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
     PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
     return ret_val; \
+  }
+
+#define SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(arrow_status, stream, format_string, ...) \
+  if (arrow_status != NANOARROW_OK) \
+  { \
+    std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
+    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
+    PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
+    stream.release(&stream); \
+    return; \
   }
 
 namespace sf
