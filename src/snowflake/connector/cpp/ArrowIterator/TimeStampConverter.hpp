@@ -9,6 +9,7 @@
 #include "Python/Common.hpp"
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
+#include "logging.hpp"
 #include "nanoarrow.h"
 #include <memory>
 
@@ -66,6 +67,8 @@ private:
   ArrowArrayView* m_array;
   ArrowArrayView* m_epoch;
   ArrowArrayView* m_fraction;
+
+  static Logger* logger;
 };
 
 
@@ -81,6 +84,8 @@ private:
   ArrowArrayView* m_array;
   ArrowArrayView* m_epoch;
   ArrowArrayView* m_fraction;
+
+  static Logger* logger;
 };
 
 class OneFieldTimeStampLTZConverter : public TimeStampBaseConverter
@@ -107,6 +112,8 @@ private:
   ArrowArrayView* m_array;
   ArrowArrayView* m_epoch;
   ArrowArrayView* m_fraction;
+
+  static Logger* logger;
 };
 
 class TwoFieldTimeStampTZConverter : public TimeStampBaseConverter
@@ -121,6 +128,8 @@ private:
   ArrowArrayView* m_array;
   ArrowArrayView* m_epoch;
   ArrowArrayView* m_timezone;
+
+  static Logger* logger;
 };
 
 class ThreeFieldTimeStampTZConverter : public TimeStampBaseConverter
@@ -136,6 +145,8 @@ private:
   ArrowArrayView* m_epoch;
   ArrowArrayView* m_fraction;
   ArrowArrayView* m_timezone;
+
+  static Logger* logger;
 };
 
 }  // namespace sf
