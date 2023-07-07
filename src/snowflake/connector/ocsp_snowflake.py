@@ -96,6 +96,7 @@ try:
                 "ocsp_response_validation_cache",
             ),
         },
+        try_saving_when_set_item=False,
     )
 except OSError:
     # In case we run into some read/write permission error fall back onto
@@ -106,7 +107,6 @@ except OSError:
     ] = SFDictCache(
         entry_lifetime=constants.DAY_IN_SECONDS,
     )
-
 
 logger = getLogger(__name__)
 
@@ -866,8 +866,6 @@ class SnowflakeOCSP:
 
     # MAX number of connection retry attempts with Cache Server
     OCSP_CACHE_SERVER_MAX_RETRY = 1
-
-    _OCSP_RESPONSE_VALIDATION_CACHE = None
 
     def __init__(
         self,
