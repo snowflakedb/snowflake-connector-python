@@ -1279,7 +1279,7 @@ def test_server_session_keep_alive(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_in_secure(db_parameters, caplog):
+def test_ocsp_mode_in_secure(db_parameters, is_public_test, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with snowflake.connector.connect(
         **db_parameters, insecure_mode=True
@@ -1290,4 +1290,7 @@ def test_ocsp_mode_in_secure(db_parameters, caplog):
 
     with snowflake.connector.connect(**db_parameters) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        assert "snowflake.connector.ocsp_snowflake" in caplog.text
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
