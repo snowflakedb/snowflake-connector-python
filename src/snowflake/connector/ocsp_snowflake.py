@@ -587,7 +587,7 @@ class OCSPCache:
         """
         if OCSPCache.CACHE_UPDATED:
             if isinstance(OCSP_RESPONSE_VALIDATION_CACHE, SFDictFileCache):
-                OCSP_RESPONSE_VALIDATION_CACHE._save()
+                OCSP_RESPONSE_VALIDATION_CACHE.save()
             OCSPCache.update_ocsp_response_cache_file(
                 ocsp, OCSPCache.OCSP_RESPONSE_CACHE_URI
             )

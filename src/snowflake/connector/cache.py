@@ -519,7 +519,10 @@ class SFDictFileCache(SFDictCache):
             return False
 
     def _save(self, load_first: bool = True, force_flush: bool = False) -> bool:
-        """Save cache to disk if possible, returns whether it was able to save."""
+        """Save cache to disk if possible, returns whether it was able to save.
+
+        This function is non-locking when it comes to self._lock.
+        """
         self._clear_expired_entries()
         if not self._cache_modified and not force_flush:
             # cache is not updated, so there is no need to dump cache to file, we just return
@@ -575,6 +578,15 @@ class SFDictFileCache(SFDictCache):
             logger.debug("Fail to write cache to disk due to error: %s", e)
         return False
 
+    def save(self, load_first: bool = True) -> bool:
+        """Save cache to disk if possible, returns whether it was able to save.
+
+        This is the public version of _save, it makes sure that all the
+        necessary locks are acquired.
+        """
+        with self._lock:
+            return self._save(load_first)
+
     def _save_if_should(self) -> bool:
         """Saves file to disk if necessary and returns whether it saved.
 
@@ -626,7 +638,8 @@ class SFDictFileCache(SFDictCache):
 
     def clear_expired_entries(self) -> None:
         super().clear_expired_entries()
-        self._save_if_should()
+        with self._lock:
+            self._save_if_should()
 
     def clear(self) -> None:
         super().clear()
@@ -634,7 +647,8 @@ class SFDictFileCache(SFDictCache):
         with self._file_lock:
             if os.path.exists(self.file_path) and os.path.isfile(self.file_path):
                 os.unlink(self.file_path)
-        self._save(load_first=False, force_flush=True)
+        with self._lock:
+            self._save(load_first=False, force_flush=True)
 
     # Custom pickling implementation
 
