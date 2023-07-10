@@ -531,7 +531,7 @@ class SFDictFileCache(SFDictCache):
                     # python program.
                     # thus we fall back to the approach using the normal open() method to open a file and write.
                     with open(tmp_file, "wb") as w_file:
-                        pickle.dump(self, w_file)
+                        w_file.write(pickle.dumps(self))
                     # We write to a tmp file and then move it to have atomic write
                     os.replace(tmp_file_path, self.file_path)
                     self.last_loaded = datetime.datetime.fromtimestamp(
