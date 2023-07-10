@@ -469,7 +469,7 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenReadingPickleObject()
-        assert c1._save()
+        assert c1._save(force_flush=True)
         assert os.path.exists(cache_path) and os.path.isfile(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
@@ -478,7 +478,7 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache2.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenWritingPickleObject()
-        assert not c1._save()
+        assert not c1._save(force_flush=True)
         assert not os.path.exists(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
