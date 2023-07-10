@@ -365,7 +365,7 @@ class OCSPServer:
                 # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
                 logger.debug(
-                    "# of certificates: %s",
+                    "# of certificates: %u",
                     len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
                 )
             except RevocationCheckError as rce:
@@ -526,7 +526,7 @@ class OCSPCache:
         # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
         # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
         logger.debug(
-            "OCSP_VALIDATION_CACHE size: %s",
+            "OCSP_VALIDATION_CACHE size: %u",
             len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
         )
 
