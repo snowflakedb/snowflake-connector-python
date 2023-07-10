@@ -17,6 +17,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where SFPlatformDirs would incorrectly append application_name/version to its path.
   - Added retry reason for queries that are retried by the client.
   - Fixed a bug where `write_pandas` fails when user does not have the privilege to create stage or file format in the target schema, but has the right privilege for the current schema.
+  - Remove Python 3.7 support.
 
 - v3.0.4(May 23,2023)
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.

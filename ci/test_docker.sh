@@ -1,13 +1,13 @@
 #!/bin/bash -e
 # Test Snowflake Python Connector in Docker
 # NOTES:
-#   - By default this script runs Python 3.7 tests, as these are installed in dev vms
-#   - To compile only a specific version(s) pass in versions like: `./test_docker.sh "3.7 3.8"`
+#   - By default this script runs Python 3.8 tests, as these are installed in dev vms
+#   - To compile only a specific version(s) pass in versions like: `./test_docker.sh "3.8 3.9"`
 
 set -o pipefail
 
 # In case this is ran from dev-vm
-PYTHON_ENV=${1:-3.7}
+PYTHON_ENV=${1:-3.8}
 
 # Set constants
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

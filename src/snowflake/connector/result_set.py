@@ -39,7 +39,7 @@ def result_set_iterator(
     final: Callable[[], None],
     prefetch_thread_num: int,
     **kw: Any,
-) -> (Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]):
+) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
     """Creates an iterator over some other iterators.
 
     Very similar to itertools.chain but we need some keywords to be propagated to

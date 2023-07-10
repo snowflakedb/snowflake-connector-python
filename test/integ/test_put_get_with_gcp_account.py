@@ -660,7 +660,6 @@ def test_put_overwrite_with_downscope(
         )
 
     with conn_cnx() as cnx:
-
         tmp_dir = str(tmpdir.mkdir("data"))
         test_data = os.path.join(tmp_dir, "data.txt")
         with open(test_data, "w") as f:

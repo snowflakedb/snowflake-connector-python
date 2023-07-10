@@ -869,7 +869,6 @@ class SnowflakeRestful:
         token=NO_TOKEN,
         **kwargs,
     ):
-
         conn = self._connection
         logger.debug(
             "remaining request timeout: %s, retry cnt: %s",
