@@ -1618,7 +1618,7 @@ class SnowflakeOCSP:
                             self, cert_id, cache_key=cache_key, lock_cache=False
                         )
             if new_cache_dict:
-                OCSP_RESPONSE_VALIDATION_CACHE._update(new_cache_dict)
+                OCSP_RESPONSE_VALIDATION_CACHE.update(new_cache_dict)
                 OCSPCache.CACHE_UPDATED = True
         except Exception as ex:
             logger.debug("Caught here - %s", ex)

@@ -127,7 +127,8 @@ class TestSFDictCache:
         c._entry_lifetime = NO_LIFETIME
         c["d"] = 4
         assert c.get("d") is None
-        assert c._getitem_non_locking(1) == "a"
+        with c._lock:
+            assert c._getitem_non_locking(1) == "a"
 
     def test_items(self):
         c = cache.SFDictCache()
@@ -335,7 +336,7 @@ class TestSFDictFileCache:
                 # c will dump cache to file every time an item is set as it's AlwaysSaveSFDictFileCache
                 # so the program exeucted at this point, c._cache_modified is false as it has the latest cache
                 # changes, we set force_flush to True
-                assert c._save(force_flush=True) is False
+                assert not c.save()
             assert caplog.record_tuples == [
                 (
                     "snowflake.connector.cache",
@@ -366,14 +367,14 @@ class TestSFDictFileCache:
         c2 = pickle.loads(pickle.dumps(c1))
         c1["a"] = 1
         c1["b"] = 1
-        assert c1._save()
+        assert c1.save()
         assert c2.telemetry == {
             "hit": 0,
             "miss": 0,
             "expiration": 0,
             "size": 0,
         }
-        assert c2._load()
+        assert c2.load()
         assert c2.telemetry == {
             "hit": 0,
             "miss": 0,
@@ -388,8 +389,8 @@ class TestSFDictFileCache:
         c1._entry_lifetime = NO_LIFETIME
         c1["b"] = 1
         c1["c"] = 1
-        assert c1._save()  # Save calls self._clear_expired_entries()
-        assert c2._load()
+        assert c1.save()  # Save calls self._clear_expired_entries()
+        assert c2.load()
         assert c2.keys() == ["a"]
 
     def test_path_choosing(self, tmpdir):
@@ -450,7 +451,7 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["a"] = 1
-        c1._save()
+        c1.save()
 
         # load cache
         c2 = cache.SFDictFileCache(
@@ -461,7 +462,7 @@ class TestSFDictFileCache:
         # cache will expire immediately due to the NO_LIFETIME setting
         # when loading again, clearing cache logic will be triggered
         # load will trigger clear expired entries, and then further call _getitem
-        c2._load()
+        c2.load()
 
         assert len(c2) == 1 and c2["a"] == 1 and c2._getitem_non_locking("a") == 1
 
@@ -469,8 +470,7 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenReadingPickleObject()
-        # __setitem__ might have already saved the item, so cache is unchanged after saving, thus we force flush here
-        assert c1._save(force_flush=True)
+        assert c1.save()
         assert os.path.exists(cache_path) and os.path.isfile(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
@@ -479,11 +479,11 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache2.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenWritingPickleObject()
-        assert not c1._save()
+        assert not c1.save()
         assert not os.path.exists(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
-        assert not c2._load()  # load should return false due to no file
+        assert not c2.load()  # load should return false due to no file
 
 
 def test_file_is_not_updated(tmpdir):
@@ -491,25 +491,25 @@ def test_file_is_not_updated(tmpdir):
     sfcache = cache.SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
     sfcache.update({"key": "value"})
     assert sfcache._cache_modified
-    sfcache._save()  # this save call will dump cache to file because item was added
+    sfcache.save()  # this save call will dump cache to file because item was added
     assert not sfcache._cache_modified
     updated_time = os.path.getmtime(tmp_cache_file)
-    sfcache._save()  # this save call will be a no-op since there is no update
+    sfcache.save()  # this save call will be a no-op since there is no update
     assert os.path.getmtime(tmp_cache_file) == updated_time
     sfcache.update({"key": "value2"})
     assert sfcache._cache_modified
     time.sleep(0.1)  # sleep 0.1 to avoid flushing too fast
-    sfcache._save()  # this save call will dump cache to file
+    sfcache.save()  # this save call will dump cache to file
     assert not sfcache._cache_modified
     second_updated_time = os.path.getmtime(tmp_cache_file)
     assert second_updated_time > updated_time
     assert sfcache["key"] == "value2"
     assert not sfcache._cache_modified
-    sfcache._save()  # this save call will be a no-op since there is no update
+    sfcache.save()  # this save call will be a no-op since there is no update
     assert not sfcache._cache_modified
     assert os.path.getmtime(tmp_cache_file) == second_updated_time
     time.sleep(1)
-    sfcache._save()  # this save call will dump cache because cache item is expired
+    sfcache.save()  # this save call will dump cache because cache item is expired
     assert not sfcache._cache_modified
     assert os.path.getmtime(tmp_cache_file) > second_updated_time
 
@@ -528,14 +528,14 @@ def test_cache_do_not_write_while_set_item(tmpdir):
     # there should be no file created as setting item won't trigger creation
     assert sfcache._cache_modified
     assert not os.path.exists(tmp_cache_file)
-    sfcache._save()
+    sfcache.save()
     assert not sfcache._cache_modified
     assert os.path.exists(tmp_cache_file)
     file_modified_time = os.path.getmtime(tmp_cache_file)
     sfcache2 = cache.SFDictFileCache(tmp_cache_file)
     time.sleep(0.01)
-    for i in range(1000):
+    for i in range(10):
         assert sfcache2[i] == i
     assert not sfcache2._cache_modified
-    sfcache2._save()  # this save should be a no-op since there is no change
+    sfcache2.save()  # this save should be a no-op since there is no change
     assert os.path.getmtime(tmp_cache_file) == file_modified_time

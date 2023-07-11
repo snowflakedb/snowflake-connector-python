@@ -435,7 +435,8 @@ class SFDictFileCache(SFDictCache):
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
         self.last_loaded: datetime.datetime | None = None
         if os.path.exists(self.file_path):
-            self._load()
+            with self._lock:
+                self._load()
         # indicate whether the cache is modified or not, this variable is for
         # SFDictFileCache to determine whether to dump cache to file when _save is called
         self._cache_modified = False
@@ -483,10 +484,7 @@ class SFDictFileCache(SFDictCache):
         currently_holding = True
         try:
             if k not in self._cache:
-                self._lock.release()
-                currently_holding = False
                 loaded = self._load_if_should()
-                self._lock.acquire()
                 currently_holding = True
                 if (not loaded) or k not in self._cache:
                     self._miss(k)
@@ -520,15 +518,31 @@ class SFDictFileCache(SFDictCache):
         try:
             with open(self.file_path, "rb") as r_file:
                 other = pickle.load(r_file)
-            self._update(
-                other,
+            # Since we want to know whether we are dirty after loading
+            #  we have to know whether the file could learn anything from self
+            #  so instead of calling self.update we call other.update and swap
+            #  the 2 underlying caches after.
+            cache_file_learnt = other.update(
+                self,
                 update_newer_only=True,
             )
+            self._cache, other._cache = other._cache, self._cache
+            self.telemetry.update(other.telemetry)
+            self._cache_modified = cache_file_learnt
             self.last_loaded = now()
             return True
         except Exception as e:
             logger.debug("Fail to read cache from disk due to error: %s", e)
             return False
+
+    def load(self) -> bool:
+        """Load cache from disk if possible, returns whether it was able to load.
+
+        This is the public version of _load, it makes sure that all the
+        necessary locks are acquired.
+        """
+        with self._lock:
+            return self._load()
 
     def _save(self, load_first: bool = True, force_flush: bool = False) -> bool:
         """Save cache to disk if possible, returns whether it was able to save.
