@@ -75,8 +75,7 @@ class SFDictCache(Generic[K, V]):
         the dictionary provided.
         """
         cache = cls(**kw)
-        for k, v in _dict.items():
-            cache[k] = v
+        cache.update(_dict)
         return cache
 
     def _getitem(
