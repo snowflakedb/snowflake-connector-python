@@ -469,7 +469,8 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenReadingPickleObject()
-        assert c1._save()
+        # __setitem__ might have already saved the item, so cache is unchanged after saving, thus we force flush here
+        assert c1._save(force_flush=True)
         assert os.path.exists(cache_path) and os.path.isfile(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
