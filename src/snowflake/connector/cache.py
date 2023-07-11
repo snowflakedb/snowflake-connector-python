@@ -104,14 +104,8 @@ class SFDictCache(Generic[K, V]):
             self._hit(k)
         return v
 
-    def _getitem_non_locking(
-        self,
-        k: K,
-        *,
-        should_record_hits: bool = True,
-    ) -> V:
-        # aliasing _getitem to unify the api with SFDictFileCache
-        return self._getitem(k, should_record_hits=should_record_hits)
+    # aliasing _getitem to unify the api with SFDictFileCache
+    _getitem_non_locking = _getitem
 
     def _setitem(self, k: K, v: V) -> None:
         """Non-locking version of __setitem__.
