@@ -1276,3 +1276,19 @@ def test_server_session_keep_alive(conn_cnx):
     with conn_cnx() as conn:
         conn.rest.delete_session = mock_delete_session
     mock_delete_session.assert_called_once()
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure(conn_cnx, is_public_test, caplog):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        caplog.clear()
+
+    with conn_cnx() as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text

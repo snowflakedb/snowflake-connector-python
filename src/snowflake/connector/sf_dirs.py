@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import os
+from typing import Literal
 
 from platformdirs import PlatformDirs, PlatformDirsABC
-from typing_extensions import Literal
 
 
 def _resolve_platform_dirs() -> PlatformDirsABC:

@@ -96,6 +96,7 @@ try:
                 "ocsp_response_validation_cache",
             ),
         },
+        try_saving_when_set_item=False,
     )
 except OSError:
     # In case we run into some read/write permission error fall back onto
@@ -121,7 +122,6 @@ def generate_cache_key(
 
 
 class OCSPTelemetryData:
-
     CERTIFICATE_EXTRACTION_FAILED = "CertificateExtractionFailed"
     OCSP_URL_MISSING = "OCSPURLMissing"
     OCSP_RESPONSE_UNAVAILABLE = "OCSPResponseUnavailable"
@@ -364,7 +364,8 @@ class OCSPServer:
                 # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
                 logger.debug(
-                    "# of certificates: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+                    "# of certificates: %u",
+                    len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
                 )
             except RevocationCheckError as rce:
                 logger.debug(
@@ -446,7 +447,6 @@ class OCSPServer:
 
 
 class OCSPCache:
-
     # OCSP cache lock
     CACHE_LOCK = Lock()
 
@@ -524,7 +524,8 @@ class OCSPCache:
         # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
         # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
         logger.debug(
-            "OCSP_VALIDATION_CACHE size: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+            "OCSP_VALIDATION_CACHE size: %u",
+            len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
         )
 
     @staticmethod
@@ -870,7 +871,6 @@ class SnowflakeOCSP:
         use_post_method: bool = True,
         use_fail_open: bool = True,
     ) -> None:
-
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
 
         if self.test_mode == "true":
@@ -943,15 +943,18 @@ class SnowflakeOCSP:
         hostname: str | None,
         connection: Connection,
         no_exception: bool = False,
-    ) -> list[
-        tuple[
-            Exception | None,
-            Certificate,
-            Certificate,
-            CertId,
-            str | bytes,
+    ) -> (
+        list[
+            tuple[
+                Exception | None,
+                Certificate,
+                Certificate,
+                CertId,
+                str | bytes,
+            ]
         ]
-    ] | None:
+        | None
+    ):
         """Validates the certificate is not revoked using OCSP."""
         logger.debug("validating certificate: %s", hostname)
 

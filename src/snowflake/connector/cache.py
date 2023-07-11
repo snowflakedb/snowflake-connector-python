@@ -238,7 +238,8 @@ class SFDictCache(Generic[K, V]):
         else:
             raise TypeError
         self._cache.update(to_insert)
-        self._add_or_remove()
+        if to_insert:
+            self._add_or_remove()
         return len(to_insert) > 0
 
     def update(
@@ -275,12 +276,16 @@ class SFDictCache(Generic[K, V]):
             )
 
     def _clear_expired_entries(self) -> None:
+        cache_updated = False
         for k in list(self._cache.keys()):
             try:
                 self._getitem(k, should_record_hits=False)
             except KeyError:
-                continue
-        self._add_or_remove()
+                # the only case KeyError raised in this method
+                # is that k is expired
+                cache_updated = True
+        if cache_updated:
+            self._add_or_remove()
 
     def clear_expired_entries(self) -> None:
         """Remove expired entries from the cache."""
@@ -343,7 +348,6 @@ class SFDictCache(Generic[K, V]):
 
 
 class SFDictFileCache(SFDictCache):
-
     # This number decides the chance of saving after writing (probability: 1/n+1)
     MAX_RAND_INT = 9
     _ATTRIBUTES_TO_PICKLE = (
@@ -354,6 +358,7 @@ class SFDictFileCache(SFDictCache):
         "file_timeout",
         "_file_lock_path",
         "last_loaded",
+        "_try_saving_when_set_item",
     )
 
     def __init__(
@@ -361,6 +366,8 @@ class SFDictFileCache(SFDictCache):
         file_path: str | dict[str, str],
         entry_lifetime: int = constants.DAY_IN_SECONDS,
         file_timeout: int = 0,
+        *,
+        try_saving_when_set_item: bool = True,
     ) -> None:
         """Inits an SFDictFileCache with path, lifetime.
 
@@ -420,6 +427,14 @@ class SFDictFileCache(SFDictCache):
         self.last_loaded: datetime.datetime | None = None
         if os.path.exists(self.file_path):
             self._load()
+        # indicate whether the cache is modified or not, this variable is for
+        # SFDictFileCache to determine whether to dump cache to file when _save is called
+        self._cache_modified = False
+        # by default, set item will trigger try saving logic, however, there are scenarios that callers set items in
+        # batch (e.g., setting hundreds items in a for loop),
+        # in this case, we optimize by providing option not to try saving each time we set, callers can manually
+        # save after batch set.
+        self._try_saving_when_set_item = try_saving_when_set_item
 
     def _getitem_non_locking(
         self,
@@ -494,7 +509,8 @@ class SFDictFileCache(SFDictCache):
 
     def _setitem(self, k: K, v: V) -> None:
         super()._setitem(k, v)
-        self._save_if_should()
+        if self._try_saving_when_set_item:
+            self._save_if_should()
 
     def _load(self) -> bool:
         """Load cache from disk if possible, returns whether it was able to load."""
@@ -511,9 +527,12 @@ class SFDictFileCache(SFDictCache):
             logger.debug("Fail to read cache from disk due to error: %s", e)
             return False
 
-    def _save(self, load_first: bool = True) -> bool:
+    def _save(self, load_first: bool = True, force_flush: bool = False) -> bool:
         """Save cache to disk if possible, returns whether it was able to save."""
         self._clear_expired_entries()
+        if not self._cache_modified and not force_flush:
+            # cache is not updated, so there is no need to dump cache to file, we just return
+            return False
         try:
             with self._file_lock:
                 if load_first:
@@ -537,6 +556,8 @@ class SFDictFileCache(SFDictCache):
                     self.last_loaded = datetime.datetime.fromtimestamp(
                         getmtime(self.file_path),
                     )
+                    # after update, reset self._cache_modified to indicate it's up-to-update to avoid unnecessary flush
+                    self._cache_modified = False
                     return True
                 except NameError:
                     # note: when exiting python program, garbage collection will kick in
@@ -622,7 +643,7 @@ class SFDictFileCache(SFDictCache):
         with self._file_lock:
             if os.path.exists(self.file_path) and os.path.isfile(self.file_path):
                 os.unlink(self.file_path)
-        self._save(load_first=False)
+        self._save(load_first=False, force_flush=True)
 
     # Custom pickling implementation
 
@@ -635,5 +656,18 @@ class SFDictFileCache(SFDictCache):
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
+        # backward compatibility when loading pickled cache that doesn't support _try_saving_when_set_item
+        if "_try_saving_when_set_item" not in state:
+            self._try_saving_when_set_item = True
+        self._cache_modified = False
         self._lock = Lock()
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
+
+    def _add_or_remove(self) -> None:
+        """This function gets called when an element is added, or removed.
+
+        Note that while this function does not interact with lock, but it's only
+        called from contexts where the lock is already held.
+        """
+        super()._add_or_remove()
+        self._cache_modified = True

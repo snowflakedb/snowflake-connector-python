@@ -2,10 +2,10 @@
 #
 # Test Snowflake Connector on a Darwin Jenkins slave
 # NOTES:
-#   - Versions to be tested should be passed in as the first argument, e.g: "3.7 3.8". If omitted 3.7-3.11 will be assumed.
+#   - Versions to be tested should be passed in as the first argument, e.g: "3.8 3.9". If omitted 3.8-3.11 will be assumed.
 #   - This script uses .. to download the newest wheel files from S3
 
-PYTHON_VERSIONS="${1:-3.7 3.8 3.9 3.10 3.11}"
+PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/public"
@@ -19,7 +19,7 @@ PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
 [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
-python3.7 -m venv venv
+python3.8 -m venv venv
 . venv/bin/activate
 pip install tox tox-external_wheels
 
