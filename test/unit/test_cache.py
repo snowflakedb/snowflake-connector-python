@@ -8,6 +8,7 @@ import os
 import os.path
 import pickle
 import stat
+import time
 from unittest import mock
 
 import pytest
@@ -331,7 +332,10 @@ class TestSFDictFileCache:
         c2 = pickle.loads(pickle.dumps(c))
         with c2._file_lock:
             with caplog.at_level(logging.DEBUG, logger="snowflake.connector.cache"):
-                assert c._save() is False
+                # c will dump cache to file every time an item is set as it's AlwaysSaveSFDictFileCache
+                # so the program exeucted at this point, c._cache_modified is false as it has the latest cache
+                # changes, we set force_flush to True
+                assert c._save(force_flush=True) is False
             assert caplog.record_tuples == [
                 (
                     "snowflake.connector.cache",
@@ -465,7 +469,7 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenReadingPickleObject()
-        assert c1._save()
+        assert c1._save(force_flush=True)
         assert os.path.exists(cache_path) and os.path.isfile(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
@@ -474,8 +478,63 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache2.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenWritingPickleObject()
-        assert not c1._save()
+        assert not c1._save(force_flush=True)
         assert not os.path.exists(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
         assert not c2._load()  # load should return false due to no file
+
+
+def test_file_is_not_updated(tmpdir):
+    tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
+    sfcache = cache.SFDictFileCache(
+        file_path=tmp_cache_file, entry_lifetime=1, try_saving_when_set_item=False
+    )
+    sfcache["key"] = "value"
+    assert sfcache._cache_modified
+    sfcache._save()  # this save call will dump cache to file because item was added
+    assert not sfcache._cache_modified
+    updated_time = os.path.getmtime(tmp_cache_file)
+    sfcache._save()  # this save call will be a no-op since there is no update
+    assert os.path.getmtime(tmp_cache_file) == updated_time
+    sfcache["key"] = "value2"
+    assert sfcache._cache_modified
+    time.sleep(0.1)  # sleep 0.1 to avoid flushing too fast
+    sfcache._save()  # this save call will dump cache to file
+    assert not sfcache._cache_modified
+    second_updated_time = os.path.getmtime(tmp_cache_file)
+    assert second_updated_time > updated_time
+    assert sfcache["key"] == "value2"
+    assert not sfcache._cache_modified
+    sfcache._save()  # this save call will be a no-op since there is no update
+    assert not sfcache._cache_modified
+    assert os.path.getmtime(tmp_cache_file) == second_updated_time
+    time.sleep(1)
+    sfcache._save()  # this save call will dump cache because cache item is expired
+    assert not sfcache._cache_modified
+    assert os.path.getmtime(tmp_cache_file) > second_updated_time
+
+    cache3 = cache.SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
+    assert len(cache3) == 0
+    os.unlink(tmp_cache_file)
+
+
+def test_cache_do_not_write_while_set_item(tmpdir):
+    tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
+    sfcache = cache.SFDictFileCache(tmp_cache_file, try_saving_when_set_item=False)
+    for i in range(1000):
+        sfcache[i] = i
+    # there should be no file created as setting item won't trigger creation
+    assert sfcache._cache_modified
+    assert not os.path.exists(tmp_cache_file)
+    sfcache._save()
+    assert not sfcache._cache_modified
+    assert os.path.exists(tmp_cache_file)
+    file_modified_time = os.path.getmtime(tmp_cache_file)
+    sfcache2 = cache.SFDictFileCache(tmp_cache_file, try_saving_when_set_item=False)
+    time.sleep(0.01)
+    for i in range(1000):
+        assert sfcache2[i] == i
+    assert not sfcache2._cache_modified
+    sfcache2._save()  # this save should be a no-op since there is no change
+    assert os.path.getmtime(tmp_cache_file) == file_modified_time

@@ -96,6 +96,7 @@ try:
                 "ocsp_response_validation_cache",
             ),
         },
+        try_saving_when_set_item=False,
     )
 except OSError:
     # In case we run into some read/write permission error fall back onto
@@ -363,7 +364,8 @@ class OCSPServer:
                 # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
                 logger.debug(
-                    "# of certificates: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+                    "# of certificates: %u",
+                    len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
                 )
             except RevocationCheckError as rce:
                 logger.debug(
@@ -522,7 +524,8 @@ class OCSPCache:
         # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
         # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
         logger.debug(
-            "OCSP_VALIDATION_CACHE size: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+            "OCSP_VALIDATION_CACHE size: %u",
+            len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
         )
 
     @staticmethod
