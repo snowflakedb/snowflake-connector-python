@@ -90,6 +90,9 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
+        assert (
+            self._lock.locked()
+        ), "The mutex self._lock should be locked by this thread"
         try:
             t, v = self._cache[k]
         except KeyError:
@@ -116,6 +119,9 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
+        assert (
+            self._lock.locked()
+        ), "The mutex self._lock should be locked by this thread"
         self._cache[k] = CacheEntry(
             expiry=now() + self._entry_lifetime,
             entry=v,
@@ -182,6 +188,9 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
+        assert (
+            self._lock.locked()
+        ), "The mutex self._lock should be locked by this thread"
         del self._cache[key]
         self._add_or_remove()
 
@@ -209,6 +218,9 @@ class SFDictCache(Generic[K, V]):
         other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
         update_newer_only: bool = False,
     ) -> bool:
+        assert (
+            self._lock.locked()
+        ), "The mutex self._lock should be locked by this thread"
         to_insert: dict[K, CacheEntry[V]]
         self._clear_expired_entries()
         if isinstance(other, (list, dict)):
@@ -219,6 +231,9 @@ class SFDictCache(Generic[K, V]):
                 g = iter(other.items())
             to_insert = {k: CacheEntry(expiry=expiry, entry=v) for k, v in g}
         elif isinstance(other, SFDictCache):
+            assert (
+                other._lock.locked()
+            ), "The mutex other._lock should be locked by this thread"
             other._clear_expired_entries()
             others_items = list(other._cache.items())
             # Only accept values from another cache if their key is not in self,
@@ -276,6 +291,9 @@ class SFDictCache(Generic[K, V]):
             )
 
     def _clear_expired_entries(self) -> None:
+        assert (
+            self._lock.locked()
+        ), "The mutex self._lock should be locked by this thread"
         cache_updated = False
         for k in list(self._cache.keys()):
             try:
@@ -523,6 +541,9 @@ class SFDictFileCache(SFDictCache):
 
         This function is non-locking when it comes to self._lock.
         """
+        assert (
+            self._lock.locked()
+        ), "The mutex self._lock should be locked by this thread"
         self._clear_expired_entries()
         if not self._cache_modified and not force_flush:
             # cache is not updated, so there is no need to dump cache to file, we just return
