@@ -96,7 +96,6 @@ try:
                 "ocsp_response_validation_cache",
             ),
         },
-        try_saving_when_set_item=False,
     )
 except OSError:
     # In case we run into some read/write permission error fall back onto
@@ -1178,12 +1177,14 @@ class SnowflakeOCSP:
                 str(ex),
             )
 
+        to_update_cache_dict = {}
         for issuer, subject in cert_data:
             cert_id, _ = self.create_ocsp_request(issuer=issuer, subject=subject)
             cache_key = self.decode_cert_id_key(cert_id)
             ocsp_response_validation_result = OCSP_RESPONSE_VALIDATION_CACHE.get(
                 cache_key
             )
+
             if (
                 ocsp_response_validation_result is None
                 or not ocsp_response_validation_result.validated
@@ -1196,9 +1197,7 @@ class SnowflakeOCSP:
                     do_retry=do_retry,
                     cache_key=cache_key,
                 )
-                OCSP_RESPONSE_VALIDATION_CACHE[
-                    cache_key
-                ] = OCSPResponseValidationResult(
+                to_update_cache_dict[cache_key] = OCSPResponseValidationResult(
                     *r,
                     ts=int(time.time()),
                     validated=True,
@@ -1215,6 +1214,7 @@ class SnowflakeOCSP:
                         ocsp_response_validation_result.ocsp_response,
                     )
                 )
+        OCSP_RESPONSE_VALIDATION_CACHE.update(to_update_cache_dict)
         return results
 
     def _check_ocsp_response_cache_server(

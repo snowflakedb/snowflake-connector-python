@@ -469,7 +469,7 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenReadingPickleObject()
-        assert c1._save(force_flush=True)
+        assert c1._save()
         assert os.path.exists(cache_path) and os.path.isfile(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
@@ -478,7 +478,7 @@ class TestSFDictFileCache:
         cache_path = os.path.join(tmpdir, "cache2.txt")
         c1 = cache.SFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenWritingPickleObject()
-        assert not c1._save(force_flush=True)
+        assert not c1._save()
         assert not os.path.exists(cache_path)
 
         c2 = cache.SFDictFileCache(file_path=cache_path)
@@ -487,9 +487,7 @@ class TestSFDictFileCache:
 
 def test_file_is_not_updated(tmpdir):
     tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
-    sfcache = cache.SFDictFileCache(
-        file_path=tmp_cache_file, entry_lifetime=1, try_saving_when_set_item=False
-    )
+    sfcache = cache.SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
     sfcache["key"] = "value"
     assert sfcache._cache_modified
     sfcache._save()  # this save call will dump cache to file because item was added
@@ -521,9 +519,11 @@ def test_file_is_not_updated(tmpdir):
 
 def test_cache_do_not_write_while_set_item(tmpdir):
     tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
-    sfcache = cache.SFDictFileCache(tmp_cache_file, try_saving_when_set_item=False)
+    sfcache = cache.SFDictFileCache(tmp_cache_file)
+    to_update_dict = {}
     for i in range(1000):
-        sfcache[i] = i
+        to_update_dict[i] = i
+    sfcache.update(to_update_dict)
     # there should be no file created as setting item won't trigger creation
     assert sfcache._cache_modified
     assert not os.path.exists(tmp_cache_file)
@@ -531,7 +531,7 @@ def test_cache_do_not_write_while_set_item(tmpdir):
     assert not sfcache._cache_modified
     assert os.path.exists(tmp_cache_file)
     file_modified_time = os.path.getmtime(tmp_cache_file)
-    sfcache2 = cache.SFDictFileCache(tmp_cache_file, try_saving_when_set_item=False)
+    sfcache2 = cache.SFDictFileCache(tmp_cache_file)
     time.sleep(0.01)
     for i in range(1000):
         assert sfcache2[i] == i
