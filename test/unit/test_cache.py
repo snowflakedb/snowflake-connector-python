@@ -468,21 +468,21 @@ class TestSFDictFileCache:
 
     def test_broken_pickle_objects(self, tmpdir):
         cache_path = os.path.join(tmpdir, "cache.txt")
-        c1 = cache.SFDictFileCache(file_path=cache_path)
+        c1 = NeverSaveSFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenReadingPickleObject()
         assert c1.save()
         assert os.path.exists(cache_path) and os.path.isfile(cache_path)
 
-        c2 = cache.SFDictFileCache(file_path=cache_path)
+        c2 = NeverSaveSFDictFileCache(file_path=cache_path)
         assert not c2._load()  # load should return false due to ModuleNotFound error
 
         cache_path = os.path.join(tmpdir, "cache2.txt")
-        c1 = cache.SFDictFileCache(file_path=cache_path)
+        c1 = NeverSaveSFDictFileCache(file_path=cache_path)
         c1["key"] = BrokenWritingPickleObject()
         assert not c1.save()
         assert not os.path.exists(cache_path)
 
-        c2 = cache.SFDictFileCache(file_path=cache_path)
+        c2 = NeverSaveSFDictFileCache(file_path=cache_path)
         assert not c2.load()  # load should return false due to no file
 
 
