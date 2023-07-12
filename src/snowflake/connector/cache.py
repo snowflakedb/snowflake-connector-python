@@ -229,10 +229,8 @@ class SFDictCache(Generic[K, V]):
                 g = iter(other.items())
             to_insert = {k: CacheEntry(expiry=expiry, entry=v) for k, v in g}
         elif isinstance(other, SFDictCache):
-            assert (
-                other._lock.locked()
-            ), "The mutex other._lock should be locked by this thread"
-            other._clear_expired_entries()
+            with other._lock:
+                other._clear_expired_entries()
             others_items = list(other._cache.items())
             # Only accept values from another cache if their key is not in self,
             #  or if expiry is later the self known one
@@ -490,7 +488,6 @@ class SFDictFileCache(SFDictCache):
         try:
             if k not in self._cache:
                 loaded = self._load_if_should()
-                currently_holding = True
                 if (not loaded) or k not in self._cache:
                     self._miss(k)
                     raise KeyError
@@ -527,10 +524,12 @@ class SFDictFileCache(SFDictCache):
             #  we have to know whether the file could learn anything from self
             #  so instead of calling self.update we call other.update and swap
             #  the 2 underlying caches after.
+            self._lock.release()
             cache_file_learnt = other.update(
                 self,
                 update_newer_only=True,
             )
+            self._lock.acquire()
             self._cache, other._cache = other._cache, self._cache
             self.telemetry.update(other.telemetry)
             self._cache_modified = cache_file_learnt
