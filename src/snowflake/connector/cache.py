@@ -536,6 +536,8 @@ class SFDictFileCache(SFDictCache):
             self._cache_modified = cache_file_learnt
             self.last_loaded = now()
             return True
+        except AssertionError:
+            raise
         except Exception as e:
             logger.debug("Fail to read cache from disk due to error: %s", e)
             return False
@@ -608,6 +610,8 @@ class SFDictFileCache(SFDictCache):
             logger.debug(
                 f"acquiring {self._file_lock_path} timed out, skipping saving..."
             )
+        except AssertionError:
+            raise
         except Exception as e:
             logger.debug("Fail to write cache to disk due to error: %s", e)
         return False
