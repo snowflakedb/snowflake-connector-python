@@ -39,6 +39,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Remove Python 3.7 support.
   - Worked around a segfault which sometimes occurred during cache serialization in multi-threaded scenarios.
   - Improved error handling of connection reset error.
+  - Fixed a bug where pickle.dump segfaults during cache serialization in multi-threaded scenarios.
 
 - v3.0.4(May 23,2023)
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
