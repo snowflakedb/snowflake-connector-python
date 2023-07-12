@@ -372,9 +372,7 @@ def test_secret_masking(caplog):
     assert ret == {}
 
 
-def test_retry_connection_reset_error(is_public_test, caplog):
-    if not is_public_test:
-        pytest.skip("non public test does not use pyopenssl")
+def test_retry_connection_reset_error(caplog):
     connection = MagicMock()
     connection.errorhandler = Mock(return_value=None)
 
