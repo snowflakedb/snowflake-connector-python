@@ -25,7 +25,7 @@ DIRS = _resolve_platform_dirs()
 # them to these places depending on OS:
 #   * Linux: `~/.config/snowflake/config.toml` but can be updated with XDG vars
 #   * Windows: `%USERPROFILE%\AppData\Local\snowflake\config.toml`
-#   * Mac: `~/Library/Application Support/$appname/config.toml`
+#   * Mac: `~/Library/Application Support/snowflake/config.toml`
 CONFIG_FILE = DIRS.user_config_path / "config.toml"
 
 DBAPI_TYPE_STRING = 0
