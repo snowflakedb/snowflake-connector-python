@@ -211,6 +211,11 @@ class SFDictCache(Generic[K, V]):
         other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
         update_newer_only: bool = False,
     ) -> bool:
+        """Non-locking version of update.
+
+        This should only be used by internal functions when already
+        holding self._lock and other._lock.
+        """
         assert (
             self._lock.locked()
         ), "The mutex self._lock should be locked by this thread"
@@ -253,6 +258,7 @@ class SFDictCache(Generic[K, V]):
     def update(
         self,
         other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
+        update_newer_only: bool = False,
     ) -> bool:
         """Insert multiple values at the same time, if self could learn from the other.
 
@@ -270,7 +276,7 @@ class SFDictCache(Generic[K, V]):
         into the other caches.
         """
         with self._lock:
-            return self._update(other)
+            return self._update(other, update_newer_only)
 
     def update_newer(
         self,
