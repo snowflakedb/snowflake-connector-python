@@ -958,6 +958,21 @@ class SnowflakeRestful:
             retry_ctx.increment_retry(reason)
             if retry_ctx.timeout is not None:
                 retry_ctx.timeout -= sleeping_time
+            if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
+                # connection is reset by the server, the underlying connection is broken and can not be reused
+                # we need a new urllib3 http(s) connection in this case.
+                # We need to first close the old one so that urllib3 pool manager can create a new connection
+                # for new requests
+                try:
+                    logger.debug(
+                        "shutting down requests session adapter due to connection aborted"
+                    )
+                    session.get_adapter(full_url).close()
+                except Exception as close_adapter_exc:
+                    logger.debug(
+                        "Ignored error caused by closing https connection failure: %s",
+                        close_adapter_exc,
+                    )
             return None  # retry
         except Exception as e:
             if not no_retry:
