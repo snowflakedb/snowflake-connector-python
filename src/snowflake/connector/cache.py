@@ -20,6 +20,7 @@ from filelock import FileLock, Timeout
 from typing_extensions import NamedTuple, Self
 
 from . import constants
+from .constants import ENV_VAR_TEST_MODE
 
 now = datetime.datetime.now
 getmtime = os.path.getmtime
@@ -27,6 +28,8 @@ getmtime = os.path.getmtime
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+
+test_mode = os.getenv(ENV_VAR_TEST_MODE, "").lower() == "true"
 
 
 class CacheEntry(NamedTuple, Generic[T]):
@@ -89,9 +92,10 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
-        assert (
-            self._lock.locked()
-        ), "The mutex self._lock should be locked by this thread"
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         try:
             t, v = self._cache[k]
         except KeyError:
@@ -112,9 +116,10 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
-        assert (
-            self._lock.locked()
-        ), "The mutex self._lock should be locked by this thread"
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         self._cache[k] = CacheEntry(
             expiry=now() + self._entry_lifetime,
             entry=v,
@@ -181,9 +186,10 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
-        assert (
-            self._lock.locked()
-        ), "The mutex self._lock should be locked by this thread"
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         del self._cache[key]
         self._add_or_remove()
 
@@ -216,9 +222,10 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock and other._lock.
         """
-        assert (
-            self._lock.locked()
-        ), "The mutex self._lock should be locked by this thread"
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         to_insert: dict[K, CacheEntry[V]]
         self._clear_expired_entries()
         if isinstance(other, (list, dict)):
@@ -288,9 +295,10 @@ class SFDictCache(Generic[K, V]):
             )
 
     def _clear_expired_entries(self) -> None:
-        assert (
-            self._lock.locked()
-        ), "The mutex self._lock should be locked by this thread"
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         cache_updated = False
         for k in list(self._cache.keys()):
             try:
@@ -555,9 +563,10 @@ class SFDictFileCache(SFDictCache):
 
         This function is non-locking when it comes to self._lock.
         """
-        assert (
-            self._lock.locked()
-        ), "The mutex self._lock should be locked by this thread"
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         self._clear_expired_entries()
         if not self._cache_modified and not force_flush:
             # cache is not updated, so there is no need to dump cache to file, we just return
