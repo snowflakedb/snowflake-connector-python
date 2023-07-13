@@ -9,7 +9,25 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.0.5(TBD)
-  - Added the ability to read Snowflake's central configuration file.
+  - Added a feature that lets you add connection definitions to the `config.toml` configuration file. A connection definition refers to a collection of connection parameters. The connection configuration name must begin with **connections**, similar to the following that defines the parameters for the `prod` connection:
+
+    ```toml
+    [connections.prod]
+    account = "my_account"
+    user = "my_user"
+    password = "my_password"
+    ```
+    By default, we look for the `config.toml` file in the location specified in the `SNOWFLAKE_HOME` environment variable (default: `~/.snowflake`). If this folder does not exist, the Python connector looks for the file in the `platformdirs` location, as follows:
+
+    - On Linux: `~/.config/snowflake/`,  but follows XDG settings
+    - On Mac: `~/Library/Application Support/snowflake/`
+    - On Windows: `%USERPROFILE%\AppData\Local\snowflake\`
+
+    You can determine which file is used by running the following command:
+
+    ```
+    python -c "from snowflake.connector.constants import CONFIG_FILE; print(str(CONFIG_FILE))"
+    ```
   - Bumped cryptography dependency from <41.0.0,>=3.1.0 to >=3.1.0,<42.0.0.
   - Improved OCSP response caching to remove tmp cache files on Windows.
   - Improved OCSP response caching to reduce the times of disk writing.
