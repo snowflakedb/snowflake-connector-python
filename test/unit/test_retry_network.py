@@ -43,6 +43,7 @@ from snowflake.connector.network import (
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
+    import snowflake.connector.vendored.urllib3.contrib.pyopenssl
     from snowflake.connector.vendored import requests, urllib3
 except ImportError:  # pragma: no cover
     import requests
@@ -369,3 +370,45 @@ def test_secret_masking(caplog):
     assert '"TOKEN": "****' in caplog.text
     assert '"PASSWORD": "****' in caplog.text
     assert ret == {}
+
+
+def test_retry_connection_reset_error(caplog):
+    connection = MagicMock()
+    connection.errorhandler = Mock(return_value=None)
+
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    data = (
+        '{"code": 12345,'
+        ' "data": {"TOKEN": "_Y1ZNETTn5/qfUWj3Jedb", "PASSWORD": "dummy_pass"}'
+        "}"
+    )
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": data,
+    }
+
+    def error_recv_into(*args, **kwargs):
+        raise OSError(104, "ECONNRESET")
+
+    with patch.object(
+        snowflake.connector.vendored.urllib3.contrib.pyopenssl.WrappedSocket,
+        "recv_into",
+        new=error_recv_into,
+    ):
+        with caplog.at_level(logging.DEBUG):
+            rest.fetch(timeout=10, **default_parameters)
+
+        assert (
+            "shutting down requests session adapter due to connection aborted"
+            in caplog.text
+        )
+        assert (
+            "Ignored error caused by closing https connection failure"
+            not in caplog.text
+        )
+        assert caplog.text.count("Starting new HTTPS connection") > 1
