@@ -100,6 +100,7 @@ from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
+from .version import VERSION
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -371,9 +372,19 @@ class SnowflakeConnection:
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
-
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        # in the future we won't need this if the backend supports prerelease versions
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_IS_PRERELEASE.value: TelemetryData.FALSE
+                    if str(VERSION[2]).isdigit()
+                    else TelemetryData.TRUE
+                },
+                timestamp=get_time_millis(),
+            )
+        )
 
     def __del__(self) -> None:  # pragma: no cover
         try:
