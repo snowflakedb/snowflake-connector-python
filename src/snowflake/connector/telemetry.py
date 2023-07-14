@@ -50,6 +50,7 @@ class TelemetryField(Enum):
     KEY_SQLSTATE = "sql_state"
     KEY_DRIVER_TYPE = "driver_type"
     KEY_DRIVER_VERSION = "driver_version"
+    KEY_IS_PRERELEASE = "is_prerelease"
     KEY_REASON = "reason"
     KEY_VALUE = "value"
     KEY_EXCEPTION = "exception"
