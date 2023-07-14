@@ -527,7 +527,7 @@ class SFDictFileCache(SFDictCache):
         """Load cache from disk if possible, returns whether it was able to load."""
         try:
             with open(self.file_path, "rb") as r_file:
-                other = pickle.load(r_file)
+                other: SFDictFileCache = pickle.load(r_file)
             # Since we want to know whether we are dirty after loading
             #  we have to know whether the file could learn anything from self
             #  so instead of calling self.update we call other.update and swap
@@ -539,7 +539,7 @@ class SFDictFileCache(SFDictCache):
             )
             self._lock.acquire()
             self._cache, other._cache = other._cache, self._cache
-            self.telemetry.update(other.telemetry)
+            self.telemetry["size"] = other.telemetry["size"]
             self._cache_modified = cache_file_learnt
             self.last_loaded = now()
             return True
