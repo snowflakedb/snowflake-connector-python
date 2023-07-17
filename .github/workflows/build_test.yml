@@ -250,10 +250,50 @@ jobs:
             .coverage
             coverage.xml
 
+  test-lambda:
+    name: Test AWS Lambda linux-3.8-${{ matrix.cloud-provider }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud-provider: [aws]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Download wheel(s)
+        uses: actions/download-artifact@v3
+        with:
+          name: manylinux_x86_64_py3.8
+          path: dist
+      - name: Show wheels downloaded
+        run: ls -lh dist
+        shell: bash
+      - name: Run tests
+        run: ./ci/test_lambda_docker.sh
+        env:
+          PYTHON_VERSION: 3.8
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      - uses: actions/upload-artifact@v3
+        with:
+          name: coverage_linux-lambda-3.8-${{ matrix.cloud-provider }}
+          path: |
+            .coverage
+            coverage.xml
+
   combine-coverage:
     if: ${{ success() || failure() }}
     name: Combine coverage
-    needs: [lint, test, test-fips]
+    needs: [lint, test, test-fips, test-lambda]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
