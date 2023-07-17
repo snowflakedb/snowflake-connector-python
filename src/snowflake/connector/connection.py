@@ -1107,8 +1107,10 @@ class SnowflakeConnection:
             # binding parameters. This is for qmarks paramstyle.
             data["bindings"] = binding_params
         if not _no_results:
-            # not an async query
-            data["queryContext"] = self.get_query_context()
+            # not an async query.
+            queryContext = self.get_query_context()
+            #  Here queryContextDTO should be a dict object field, same with `parameters` field
+            data["queryContextDTO"] = queryContext
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
@@ -1647,10 +1649,10 @@ class SnowflakeConnection:
         if not self.is_query_context_cache_disabled:
             self.query_context_cache = QueryContextCache(self.query_context_cache_size)
 
-    def get_query_context(self) -> str | None:
+    def get_query_context(self) -> dict | None:
         if self.is_query_context_cache_disabled:
             return None
-        return self.query_context_cache.serialize_to_json()
+        return self.query_context_cache.serialize_to_dict()
 
     def set_query_context(self, data: dict) -> None:
         if not self.is_query_context_cache_disabled:
