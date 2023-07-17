@@ -408,7 +408,7 @@ def test_serialization_deserialization_with_null_context(
 
     qcc_with_data_null_context.clear_cache()
     assert len(qcc_with_data_null_context) == 0
-    
+
     data = json.loads(data)  # convert JSON to dict
     qcc_with_data_null_context.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
@@ -422,7 +422,7 @@ def test_serialization_deserialization(
     data = serialize_to_json(qcc_with_data)
     qcc_with_data.clear_cache()
     assert len(qcc_with_data) == 0
-    
+
     data = json.loads(data)  # convert JSON to dict
     qcc_with_data.deserialize_json_dict(data)
     assert_cache_with_data(qcc_with_data, expected_data)

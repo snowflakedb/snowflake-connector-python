@@ -1111,7 +1111,6 @@ class SnowflakeConnection:
             queryContext = self.get_query_context()
             if(queryContext is not None):
                 data["queryContextDTO"] = queryContext
-            print(data["queryContextDTO"])
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:

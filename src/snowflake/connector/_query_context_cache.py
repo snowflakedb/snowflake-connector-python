@@ -259,6 +259,7 @@ class QueryContextCache:
                         entry.get("priority"),
                         context,
                     )
+                    
                 # Sync the priority map at the end of for loop insert.
                 self._sync_priority_map()
             except Exception as e:
