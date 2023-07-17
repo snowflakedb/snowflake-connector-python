@@ -236,8 +236,7 @@ class SFDictCache(Generic[K, V]):
                 g = iter(other.items())
             to_insert = {k: CacheEntry(expiry=expiry, entry=v) for k, v in g}
         elif isinstance(other, SFDictCache):
-            with other._lock:
-                other._clear_expired_entries()
+            other.clear_expired_entries()
             others_items = list(other._cache.items())
             # Only accept values from another cache if their key is not in self,
             #  or if expiry is later the self known one
