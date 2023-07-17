@@ -461,10 +461,10 @@ def pd_writer(
     """This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
 
         Notes:
-            Please note that when specifying column names of lower cases of a pandas DataFrame, column names need to
-            be enquoted otherwise ProgrammingError of invalid identifier will be raised.
+            Please note that when column names in the pandas DataFrame are consist of strictly lower case letters, column names need to
+            be enquoted, otherwise `ProgrammingError` will be raised.
 
-            This is because column names of lower cases created by the snowflake-sqlalchemy are not enquoted while
+            This is because `snowflake-sqlalchemy` does not enquote lower case column names when creating the table, but `pd_writer` enquotes the columns by default.
             the copy into command looks for enquoted column names.
 
             Future improvements will be made in the snowflake-sqlalchemy library.
@@ -476,7 +476,7 @@ def pd_writer(
             sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
             sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
 
-            # when the column names are of lower cases, enquote the column names
+            # when the column names are consist of only lower case letters, enquote the column names
             sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['"name"', '"newest_version"'])
             sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
 
