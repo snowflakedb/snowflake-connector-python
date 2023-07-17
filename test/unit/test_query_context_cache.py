@@ -51,9 +51,11 @@ class ExpectedQCCData:
         self.priorities = [BASE_PRIORITY + i for i in range(self.capacity)]
 
 
-# This function is used for testing the deserialize_to_dict function is correct. Note that `QueryContextCache::serialize_to_dict` function is used in sending the query context back to GS.
-# It has slight difference with this function on `context` field.
 def serialize_to_json(qcc: QueryContextCache) -> str:
+    """
+    This function is used for testing the deserialize_to_dict function is correct. Note that `QueryContextCache::serialize_to_dict` function is used in sending the query context back to GS.
+    It has slight difference with this function on `context` field.
+    """
     with qcc._lock:
         qcc.log_cache_entries()
 
@@ -76,7 +78,7 @@ def serialize_to_json(qcc: QueryContextCache) -> str:
             serialized_data = json.dumps(data)
 
             return serialized_data
-        except Exception as e:
+        except Exception:
             return ""
 
 

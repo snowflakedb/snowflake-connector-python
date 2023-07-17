@@ -1107,9 +1107,10 @@ class SnowflakeConnection:
             # binding parameters. This is for qmarks paramstyle.
             data["bindings"] = binding_params
         if not _no_results:
-            # not an async query. Here queryContextDTO should be a dict object field, same with `parameters` field
+            # not an async query.
             queryContext = self.get_query_context()
             if queryContext is not None:
+                #  Here queryContextDTO should be a dict object field, same with `parameters` field
                 data["queryContextDTO"] = queryContext
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
