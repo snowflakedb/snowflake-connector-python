@@ -110,7 +110,7 @@ def create_batches_from_response(
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
     if "chunks" in data:
         chunks = data["chunks"]
-        logger.debug(f"chunk size={len(chunks)}")
+        logger.info(f"chunk size={len(chunks)}")
         # prepare the downloader for further fetch
         qrmk = data.get("qrmk")
         chunk_headers: dict[str, Any] = {}
@@ -119,11 +119,11 @@ def create_batches_from_response(
             for header_key, header_value in data["chunkHeaders"].items():
                 chunk_headers[header_key] = header_value
                 if "encryption" not in header_key:
-                    logger.debug(
+                    logger.info(
                         f"added chunk header: key={header_key}, value={header_value}"
                     )
         elif qrmk is not None:
-            logger.debug(f"qrmk={SecretDetector.mask_secrets(qrmk)}")
+            logger.info(f"qrmk={SecretDetector.mask_secrets(qrmk)}")
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 
@@ -287,7 +287,7 @@ class ResultBatch(abc.ABC):
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
-                    logger.debug(f"started downloading result batch id: {self.id}")
+                    logger.info(f"started downloading result batch id: {self.id}")
                     chunk_url = self._remote_chunk_info.url
                     request_data = {
                         "url": chunk_url,
@@ -297,18 +297,18 @@ class ResultBatch(abc.ABC):
                     # Try to reuse a connection if possible
                     if connection and connection._rest is not None:
                         with connection._rest._use_requests_session() as session:
-                            logger.debug(
+                            logger.info(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
                     else:
-                        logger.debug(
+                        logger.info(
                             f"downloading result batch id: {self.id} with new session"
                         )
                         response = requests.get(**request_data)
 
                     if response.status_code == OK:
-                        logger.debug(
+                        logger.info(
                             f"successfully downloaded result batch id: {self.id}"
                         )
                         break
@@ -443,7 +443,7 @@ class JSONResultBatch(ResultBatch):
         self, downloaded_data
     ) -> list[dict | Exception] | list[tuple | Exception]:
         """Parses downloaded data into its final form."""
-        logger.debug(f"parsing for result batch id: {self.id}")
+        logger.info(f"parsing for result batch id: {self.id}")
         result_list = []
         if self._use_dict_result:
             for row in downloaded_data:
@@ -505,10 +505,10 @@ class JSONResultBatch(ResultBatch):
             return iter(self._data)
         response = self._download(connection=connection)
         # Load data to a intermediate form
-        logger.debug(f"started loading result batch id: {self.id}")
+        logger.info(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
             downloaded_data = self._load(response)
-        logger.debug(f"finished loading result batch id: {self.id}")
+        logger.info(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         with TimerContextManager() as parse_metric:
@@ -638,7 +638,7 @@ class ArrowResultBatch(ResultBatch):
         if self._local:
             return self._from_data(self._data, iter_unit)
         response = self._download(connection=connection)
-        logger.debug(f"started loading result batch id: {self.id}")
+        logger.info(f"started loading result batch id: {self.id}")
 
         try:
             with TimerContextManager() as load_metric:
@@ -675,7 +675,7 @@ class ArrowResultBatch(ResultBatch):
 
             raise
 
-        logger.debug(f"finished loading result batch id: {self.id}")
+        logger.info(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
 
