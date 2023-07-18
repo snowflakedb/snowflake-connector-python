@@ -70,9 +70,9 @@ def handler(events, context):
     test_result_log = run_tests()
 
     # parse result output
-    # test_status = parse_test_xml_output()
+    test_status = parse_test_xml_output()
 
     response["statusCode"] = 200
-    # response["testStatus"] = test_status
+    response["testStatus"] = test_status
     response["testLog"] = test_result_log
     return response

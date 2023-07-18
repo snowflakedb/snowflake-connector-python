@@ -36,9 +36,10 @@ docker run --network=host \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 &
 
-# sleep for sometime to make sure docker run is setup
+# sleep for sometime to make sure docker run is up and running
 sleep 5
 
+# call the lambda function
 curl -XPOST "http://localhost:8080/2015-03-31/functions/function/invocations" -d '{}'
 
 # stop all docker processes
