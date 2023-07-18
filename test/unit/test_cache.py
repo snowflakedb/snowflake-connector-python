@@ -256,8 +256,11 @@ if cache is not None:
 
 class TestSFDictFileCache:
     # Since the __getitem__ is overwritten copied over tests to test it
-    def test_simple_usage(self):
-        c = cache.SFDictCache.from_dict({1: "a", 2: "b"})
+    def test_simple_usage(self, tmpdir):
+        c = cache.SFDictFileCache.from_dict(
+            {1: "a", 2: "b"},
+            file_path=os.path.join(tmpdir, "c.txt"),
+        )
         assert 1 in c and 2 in c
         assert c[1] == "a"
         assert c[2] == "b"
@@ -268,9 +271,10 @@ class TestSFDictFileCache:
             "size": 2,
         }
 
-    def test_miss(self):
-        c = cache.SFDictCache.from_dict(
+    def test_miss(self, tmpdir):
+        c = cache.SFDictFileCache.from_dict(
             {"a": 1},
+            file_path=os.path.join(tmpdir, "c.txt"),
         )
         with pytest.raises(KeyError):
             c["b"]
@@ -361,7 +365,8 @@ class TestSFDictFileCache:
                 # c will dump cache to file every time an item is set as it's AlwaysSaveSFDictFileCache
                 # so the program exeucted at this point, c._cache_modified is false as it has the latest cache
                 # changes, we set force_flush to True
-                assert not c._save(force_flush=True)
+                with c._lock:
+                    assert not c._save(force_flush=True)
             assert caplog.record_tuples == [
                 (
                     "snowflake.connector.cache",
@@ -513,7 +518,7 @@ class TestSFDictFileCache:
 
 def test_file_is_not_updated(tmpdir):
     tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
-    sfcache = cache.SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
+    sfcache = NeverSaveSFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
     sfcache.update({"key": "value"})
     assert sfcache._cache_modified
     sfcache.save()  # this save call will dump cache to file because item was added
@@ -538,14 +543,14 @@ def test_file_is_not_updated(tmpdir):
     assert not sfcache._cache_modified
     assert os.path.getmtime(tmp_cache_file) > second_updated_time
 
-    cache3 = cache.SFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
+    cache3 = NeverSaveSFDictFileCache(file_path=tmp_cache_file, entry_lifetime=1)
     assert len(cache3) == 0
     os.unlink(tmp_cache_file)
 
 
 def test_cache_do_not_write_while_set_item(tmpdir):
     tmp_cache_file = os.path.join(tmpdir, "tmp_cache")
-    sfcache = cache.SFDictFileCache(tmp_cache_file)
+    sfcache = NeverSaveSFDictFileCache(tmp_cache_file)
     to_update_dict = {}
     for i in range(1000):
         to_update_dict[i] = i
@@ -557,7 +562,7 @@ def test_cache_do_not_write_while_set_item(tmpdir):
     assert not sfcache._cache_modified
     assert os.path.exists(tmp_cache_file)
     file_modified_time = os.path.getmtime(tmp_cache_file)
-    sfcache2 = cache.SFDictFileCache(tmp_cache_file)
+    sfcache2 = NeverSaveSFDictFileCache(tmp_cache_file)
     time.sleep(0.01)
     for i in range(1000):
         assert sfcache2[i] == i
