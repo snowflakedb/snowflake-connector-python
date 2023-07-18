@@ -21,6 +21,8 @@ def run_tests():
             f"py{PY_SHORT_VER}{{-lambda}}-ci",
             "-c",
             f"{REPO_PATH}/tox.ini",
+            "--workdir",
+            REPO_PATH,
             "--external_wheels",
             f"{REPO_PATH}/dist/*.whl",
         ],

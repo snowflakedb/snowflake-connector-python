@@ -40,7 +40,14 @@ docker run --network=host \
 sleep 5
 
 # call the lambda function
-curl -XPOST "http://localhost:8080/2015-03-31/functions/function/invocations" -d '{}'
+lambda_result=$(curl -XPOST "http://localhost:8080/2015-03-31/functions/function/invocations" -d '{}')
+echo "Lambda result:$lambda_result"
 
 # stop all docker processes
 docker stop $(docker ps -a -q)
+
+# reflect status of the test on the job
+status=$(echo "$lambda_result" | grep SUCCESS)
+if [[ -z "$status" ]]; then
+    exit 1
+fi
