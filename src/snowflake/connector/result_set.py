@@ -178,19 +178,23 @@ class ResultSet(Iterable[list]):
         Snowflake's back-end.
         """
         self._can_create_arrow_iter()
-        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas")
+        return self._create_iter(
+            iter_unit=IterUnit.TABLE_UNIT, structure="pandas", **kwargs
+        )
 
     def _fetch_pandas_all(self, **kwargs) -> DataFrame:
         """Fetches a single Pandas dataframe."""
-        dataframes = list(self._fetch_pandas_batches())
+        dataframes = list(self._fetch_pandas_batches(**kwargs))
         if dataframes:
+            concat_kwargs = kwargs
+            concat_kwargs.pop("types_mapper", None)
             return pandas.concat(
                 dataframes,
                 ignore_index=True,  # Don't keep in result batch indexes
-                **kwargs,
+                **concat_kwargs,
             )
         # Empty dataframe
-        return self.batches[0].to_pandas()
+        return self.batches[0].to_pandas(**kwargs)
 
     def _get_metrics(self) -> dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""
