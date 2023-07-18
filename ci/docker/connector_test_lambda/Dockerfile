@@ -1,9 +1,11 @@
-FROM public.ecr.aws/lambda/python:3.8
+FROM public.ecr.aws/lambda/python:3.8-x86_64
 
 RUN yum install -y git
 
-WORKDIR /home/user
-RUN chmod 777 /home/user
+WORKDIR /home/user/snowflake-connector-python
+RUN chmod 777 /home/user/snowflake-connector-python
 ENV PATH="${PATH}:/opt/python/cp38-cp38/bin/"
 
-RUN pip3 install --upgrade pip setuptools wheel tox
+RUN pip3 install -U pip setuptools wheel tox tox-external_wheels
+
+CMD [ "/home/user/snowflake-connector-python/ci/docker/connector_test_lambda/app.handler" ]

@@ -14,10 +14,11 @@ cd $THIS_DIR/docker/connector_test_lambda
 
 CONTAINER_NAME=test_lambda_connector
 
-echo "[Info] Start building docker image"
+echo "[Info] Start building lambda docker image"
 docker build -t ${CONTAINER_NAME}:1.0 -f Dockerfile .
 
 user_id=$(id -u $USER)
+
 docker run --network=host \
     -e LANG=en_US.UTF-8 \
     -e TERM=vt102 \
@@ -33,5 +34,12 @@ docker run --network=host \
     -e PYTEST_ADDOPTS \
     -e GITHUB_ACTIONS \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
-    ${CONTAINER_NAME}:1.0 \
-    /home/user/snowflake-connector-python/ci/test_lambda.sh
+    ${CONTAINER_NAME}:1.0 &
+
+# sleep for sometime to make sure docker run is setup
+sleep 5
+
+curl -XPOST "http://localhost:8080/2015-03-31/functions/function/invocations" -d '{}'
+
+# stop all docker processes
+docker stop $(docker ps -a -q)

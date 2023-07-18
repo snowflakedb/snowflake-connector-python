@@ -251,7 +251,7 @@ jobs:
             coverage.xml
 
   test-lambda:
-    name: Test AWS Lambda linux-3.8-${{ matrix.cloud-provider }}
+    name: Test Lambda linux-3.8-${{ matrix.cloud-provider }}
     needs: build
     runs-on: ubuntu-latest
     strategy:
