@@ -486,37 +486,8 @@ class SFDictFileCache(SFDictCache):
 
     def __getitem__(self, k: K) -> V:
         """Returns an element if it hasn't expired yet in a thread-safe way."""
-        self._lock.acquire()
-        # TODO: This variable could be replaced by a wrapper class that keeps track
-        #  of whether the lock is locked, but unless this function gets extended I
-        #  feel like it's an overkill. Make sure to change the bool right after
-        #  self._lock.acquire() and self._lock.release().
-        currently_holding = True
-        try:
-            if k not in self._cache:
-                loaded = self._load_if_should()
-                if (not loaded) or k not in self._cache:
-                    self._miss(k)
-                    raise KeyError
-            t, v = self._cache[k]
-            if is_expired(t):
-                self._lock.release()
-                currently_holding = False
-                loaded = self._load_if_should()
-                self._lock.acquire()
-                currently_holding = True
-                expire_item = True
-                if loaded:
-                    t, v = self._cache[k]
-                    expire_item = is_expired(t)
-                if expire_item:
-                    # Raises KeyError
-                    self._expire(k)
-            self._hit(k)
-            return v
-        finally:
-            if currently_holding:
-                self._lock.release()
+        with self._lock:
+            return self._getitem_non_locking(k)
 
     def _setitem(self, k: K, v: V) -> None:
         super()._setitem(k, v)
@@ -542,7 +513,7 @@ class SFDictFileCache(SFDictCache):
             self._cache_modified = cache_file_learnt
             self.last_loaded = now()
             return True
-        except AssertionError:
+        except (AssertionError, RuntimeError):
             raise
         except Exception as e:
             logger.debug("Fail to read cache from disk due to error: %s", e)
@@ -617,7 +588,7 @@ class SFDictFileCache(SFDictCache):
             logger.debug(
                 f"acquiring {self._file_lock_path} timed out, skipping saving..."
             )
-        except AssertionError:
+        except (AssertionError, RuntimeError):
             raise
         except Exception as e:
             logger.debug("Fail to write cache to disk due to error: %s", e)
@@ -681,19 +652,24 @@ class SFDictFileCache(SFDictCache):
             # At tear-down time builtins module might be already gone, ignore every error
             pass
 
-    def clear_expired_entries(self) -> None:
-        super().clear_expired_entries()
-        with self._lock:
-            self._save_if_should()
-
     def clear(self) -> None:
         super().clear()
         # This unlink prevents us from loading just before saving
         with self._file_lock:
             if os.path.exists(self.file_path) and os.path.isfile(self.file_path):
                 os.unlink(self.file_path)
+        # TODO: is this necessary?
         with self._lock:
             self._save(load_first=False, force_flush=True)
+
+    def _update(
+        self,
+        other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
+        update_newer_only: bool = False,
+    ) -> bool:
+        updated = super()._update(other, update_newer_only=update_newer_only)
+        self._save_if_should()
+        return updated
 
     # Custom pickling implementation
 

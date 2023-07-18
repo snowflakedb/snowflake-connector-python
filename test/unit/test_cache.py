@@ -281,10 +281,12 @@ class TestSFDictFileCache:
             "size": 1,
         }
 
-    def test_expiration(self):
-        c = cache.SFDictCache.from_dict(
+    def test_expiration(self, tmpdir):
+        tmp_file = os.path.join(tmpdir, "c.txt")
+        c = NeverSaveSFDictFileCache.from_dict(
             {"a": 1},
             entry_lifetime=0,
+            file_path=tmp_file,
         )
         with pytest.raises(KeyError):
             c["a"]
@@ -294,6 +296,29 @@ class TestSFDictFileCache:
             "expiration": 1,
             "size": 0,
         }
+        c2 = AlwaysSaveSFDictFileCache(file_path=tmp_file)
+        c["a"] = 1
+        c2["a"] = 2
+        assert c2["a"] == 2
+        assert c["a"] == 2
+
+    def test_expiration2(self, tmpdir):
+        tmp_file = os.path.join(tmpdir, "c.txt")
+        c = AlwaysSaveSFDictFileCache.from_dict(
+            {"a": 1},
+            entry_lifetime=0,
+            file_path=tmp_file,
+        )
+        with pytest.raises(KeyError):
+            c["a"]
+        c2 = AlwaysSaveSFDictFileCache.from_dict(
+            {"a": 2},
+            file_path=tmp_file,
+        )
+        c["a"] = 1
+        c2["a"] = 2
+        assert c2["a"] == 2
+        assert c["a"] == 2
 
     # The rest of the tests test the file cache portion
 
@@ -336,7 +361,7 @@ class TestSFDictFileCache:
                 # c will dump cache to file every time an item is set as it's AlwaysSaveSFDictFileCache
                 # so the program exeucted at this point, c._cache_modified is false as it has the latest cache
                 # changes, we set force_flush to True
-                assert not c.save()
+                assert not c._save(force_flush=True)
             assert caplog.record_tuples == [
                 (
                     "snowflake.connector.cache",
@@ -534,7 +559,7 @@ def test_cache_do_not_write_while_set_item(tmpdir):
     file_modified_time = os.path.getmtime(tmp_cache_file)
     sfcache2 = cache.SFDictFileCache(tmp_cache_file)
     time.sleep(0.01)
-    for i in range(10):
+    for i in range(1000):
         assert sfcache2[i] == i
     assert not sfcache2._cache_modified
     sfcache2.save()  # this save should be a no-op since there is no change
