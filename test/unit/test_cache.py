@@ -306,24 +306,6 @@ class TestSFDictFileCache:
         assert c2["a"] == 2
         assert c["a"] == 2
 
-    def test_expiration2(self, tmpdir):
-        tmp_file = os.path.join(tmpdir, "c.txt")
-        c = AlwaysSaveSFDictFileCache.from_dict(
-            {"a": 1},
-            entry_lifetime=0,
-            file_path=tmp_file,
-        )
-        with pytest.raises(KeyError):
-            c["a"]
-        c2 = AlwaysSaveSFDictFileCache.from_dict(
-            {"a": 2},
-            file_path=tmp_file,
-        )
-        c["a"] = 1
-        c2["a"] = 2
-        assert c2["a"] == 2
-        assert c["a"] == 2
-
     # The rest of the tests test the file cache portion
 
     def test_simple_miss(self, tmpdir):
