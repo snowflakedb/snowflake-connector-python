@@ -1,11 +1,12 @@
 import logging
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from subprocess import PIPE, Popen
 
 LOGGER = logging.getLogger(__name__)
 REPO_PATH = "/home/user/snowflake-connector-python"
-PY_SHORT_VER = "38"  # 38, 39, 310
+PY_SHORT_VER = sys.version_info[0] + sys.version_info[1]
 ARCH = "x86"  # x86, aarch64
 
 
