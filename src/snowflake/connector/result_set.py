@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections import deque
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -184,17 +185,20 @@ class ResultSet(Iterable[list]):
 
     def _fetch_pandas_all(self, **kwargs) -> DataFrame:
         """Fetches a single Pandas dataframe."""
-        dataframes = list(self._fetch_pandas_batches(**kwargs))
+        concat_args = list(inspect.signature(pandas.concat).parameters)
+        concat_kwargs = {k: kwargs.pop(k) for k in dict(kwargs) if k in concat_args}
+        to_pandas_kwargs = dict(kwargs.items() - concat_kwargs.items())
+        dataframes = list(self._fetch_pandas_batches(**to_pandas_kwargs))
         if dataframes:
-            concat_kwargs = kwargs
-            concat_kwargs.pop("types_mapper", None)
+            # concat_kwargs = kwargs
+            # concat_kwargs.pop("types_mapper", None)
             return pandas.concat(
                 dataframes,
                 ignore_index=True,  # Don't keep in result batch indexes
                 **concat_kwargs,
             )
         # Empty dataframe
-        return self.batches[0].to_pandas(**kwargs)
+        return self.batches[0].to_pandas(**to_pandas_kwargs)
 
     def _get_metrics(self) -> dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""
