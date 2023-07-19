@@ -260,6 +260,11 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
         cloud-provider: [aws]
     steps:
+      - name: Set shortver
+        run: echo "shortver=${longver//./}" >> $GITHUB_ENV
+        env:
+          longver: ${{ matrix.python-version }}
+        shell: bash
       - uses: actions/checkout@v3
       - name: Setup parameters file
         shell: bash
@@ -288,8 +293,8 @@ jobs:
         with:
           name: coverage_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
-            .coverage
-            coverage.xml
+            .tox/.coverage.py${{ env.shortver }}-lambda-ci
+            .tox/junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
   combine-coverage:
     if: ${{ success() || failure() }}
