@@ -293,8 +293,8 @@ jobs:
         with:
           name: coverage_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
-            .tox/.coverage.py${{ env.shortver }}-lambda-ci
-            .tox/junit.py${{ env.shortver }}-lambda-ci-dev.xml
+            .coverage.py${{ env.shortver }}-lambda-ci
+            junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
   combine-coverage:
     if: ${{ success() || failure() }}
