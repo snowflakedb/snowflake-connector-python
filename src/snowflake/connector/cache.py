@@ -662,15 +662,6 @@ class SFDictFileCache(SFDictCache):
         with self._lock:
             self._save(load_first=False, force_flush=True)
 
-    def _update(
-        self,
-        other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
-        update_newer_only: bool = False,
-    ) -> bool:
-        updated = super()._update(other, update_newer_only=update_newer_only)
-        self._save_if_should()
-        return updated
-
     # Custom pickling implementation
 
     def __getstate__(self) -> dict:
