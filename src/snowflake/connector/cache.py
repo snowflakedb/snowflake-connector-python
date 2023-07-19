@@ -257,6 +257,7 @@ class SFDictCache(Generic[K, V]):
         self._cache.update(to_insert)
         if to_insert:
             self._add_or_remove()
+        # TODO: this should really save_if_should
         return len(to_insert) > 0
 
     def update(
