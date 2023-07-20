@@ -78,7 +78,6 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
           }
           if (scale > 0 && columnSchemaView.type != ArrowType::NANOARROW_TYPE_DECIMAL128)
           {
-            // TODO: this log is causing seg fault
             logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
               scale, columnSchemaView.type);
             convertScaledFixedNumberColumn_nanoarrow(
