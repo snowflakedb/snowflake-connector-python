@@ -187,18 +187,15 @@ class ResultSet(Iterable[list]):
         """Fetches a single Pandas dataframe."""
         concat_args = list(inspect.signature(pandas.concat).parameters)
         concat_kwargs = {k: kwargs.pop(k) for k in dict(kwargs) if k in concat_args}
-        to_pandas_kwargs = dict(kwargs.items() - concat_kwargs.items())
-        dataframes = list(self._fetch_pandas_batches(**to_pandas_kwargs))
+        dataframes = list(self._fetch_pandas_batches(**kwargs))
         if dataframes:
-            # concat_kwargs = kwargs
-            # concat_kwargs.pop("types_mapper", None)
             return pandas.concat(
                 dataframes,
                 ignore_index=True,  # Don't keep in result batch indexes
                 **concat_kwargs,
             )
         # Empty dataframe
-        return self.batches[0].to_pandas(**to_pandas_kwargs)
+        return self.batches[0].to_pandas(**kwargs)
 
     def _get_metrics(self) -> dict[str, int]:
         """Sum up all the chunks' metrics and show them together."""
