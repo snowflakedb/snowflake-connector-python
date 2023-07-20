@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 # distutils: language = c++
@@ -213,12 +213,12 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.unit = 'table'
         self.nanoarrow_Table = self.cIterator.getArrowArrayPtrs()
         self.nanoarrow_Schema = self.cIterator.getArrowSchemaPtrs()
-        cdef vector[PyObject] py_batches
-        batches = []
-        for i in range(self.nanoarrow_Table.size()):
-            array_ptr = self.nanoarrow_Table[i]
-            schema_ptr = self.nanoarrow_Schema[i]
-            batch = pyarrow.RecordBatch._import_from_c(array_ptr, schema_ptr)
-            batches.append(batch)
-        self.pyarrow_table = pyarrow.Table.from_batches(batches=batches)
+        self.pyarrow_table = pyarrow.Table.from_batches(
+            batches=[
+                pyarrow.RecordBatch._import_from_c(
+                    self.nanoarrow_Table[i],
+                    self.nanoarrow_Schema[i]
+                ) for i in range(self.nanoarrow_Table.size())
+            ]
+        )
         snow_logger.debug(msg=f"Batches read: {self.nanoarrow_Table.size()}", path_name=__file__, func_name="init_table_unit")
