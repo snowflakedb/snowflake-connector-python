@@ -70,11 +70,11 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
         case SnowflakeType::Type::FIXED:
         {
           int scale = 0;
-          ArrowStringView scaleString;
+          struct ArrowStringView scaleString = ArrowCharView(nullptr);
           if(metadata != nullptr) {
               returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
               SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-              scale = std::stoi(scaleString.data);
+              scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
           }
           if (scale > 0 && columnSchemaView.type != ArrowType::NANOARROW_TYPE_DECIMAL128)
           {
@@ -110,10 +110,10 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
         {
             int scale = 9;
             if(metadata != nullptr) {
-                ArrowStringView scaleString;
+                struct ArrowStringView scaleString = ArrowCharView(nullptr);
                 returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
                 SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-                scale = std::stoi(scaleString.data);
+                scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
             }
 
           convertTimeColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale);
@@ -124,10 +124,10 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
         {
           int scale = 9;
           if(metadata != nullptr) {
-            ArrowStringView scaleString;
+            struct ArrowStringView scaleString = ArrowCharView(nullptr);
             returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
             SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-            scale = std::stoi(scaleString.data);
+            scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
           }
           convertTimestampColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale);
           break;
@@ -137,10 +137,10 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
         {
             int scale = 9;
             if(metadata != nullptr) {
-                ArrowStringView scaleString;
+                struct ArrowStringView scaleString = ArrowCharView(nullptr);
                 returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
                 SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-                scale = std::stoi(scaleString.data);
+                scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
             }
 
           convertTimestampColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale,  m_timezone);
@@ -149,8 +149,8 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
 
         case SnowflakeType::Type::TIMESTAMP_TZ:
         {
-            ArrowStringView scaleString;
-            ArrowStringView byteLengthString;
+            struct ArrowStringView scaleString = ArrowCharView(nullptr);
+            struct ArrowStringView byteLengthString = ArrowCharView(nullptr);
             int scale = 9;
             int byteLength = 16;
             if(metadata != nullptr) {
@@ -158,8 +158,8 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
                 SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
                 returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("byteLength"), &byteLengthString);
                 SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'byteLength' from Arrow metadata, error code: %d", returnCode);
-                scale = std::stoi(scaleString.data);
-                byteLength = std::stoi(byteLengthString.data);
+                scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
+                byteLength = std::stoi(std::string(byteLengthString.data, byteLengthString.size_bytes));
             }
 
           convertTimestampTZColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale, byteLength, m_timezone);
