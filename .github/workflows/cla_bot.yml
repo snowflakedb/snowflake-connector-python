@@ -22,7 +22,7 @@ jobs:
           PERSONAL_ACCESS_TOKEN : ${{ secrets.CLA_BOT_TOKEN }}
         with:
           path-to-signatures: 'signatures/version1.json'
-          path-to-document: 'https://github.com/Snowflake-Labs/CLA/blob/main/README.md'
+          path-to-document: 'https://github.com/snowflakedb/CLA/blob/main/README.md'
           branch: 'main'
           allowlist: 'dependabot[bot],github-actions,Jenkins User,sfc-gh-snyk-sca-sa'
           remote-organization-name: 'snowflakedb'
