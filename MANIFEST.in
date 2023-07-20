@@ -21,7 +21,6 @@ prune ci
 prune benchmark
 prune test
 prune tested_requirements
-prune stress
 prune src/snowflake/connector/cpp/scripts
 prune __pycache__
 prune samples
