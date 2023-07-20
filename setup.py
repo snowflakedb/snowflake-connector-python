@@ -54,7 +54,6 @@ except ImportError:
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
 if _ABLE_TO_COMPILE_EXTENSIONS:
-
     extensions = cythonize(
         [
             Extension(
