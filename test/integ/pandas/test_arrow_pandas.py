@@ -1038,7 +1038,6 @@ def test_simple_async_arrow(conn_cnx):
     ],
 )
 def test_number_iter_retrieve_type(conn_cnx, use_decimal: bool, expected: type):
-
     with conn_cnx(arrow_number_to_decimal=use_decimal) as con:
         with con.cursor() as cur:
             cur.execute("SELECT 12345600.87654301::NUMBER(18, 8) a")
