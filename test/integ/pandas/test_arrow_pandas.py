@@ -1283,3 +1283,46 @@ def test_time_interval_microsecond(conn_cnx, timestamp_type):
                 f"SELECT TO_{timestamp_type}('2010-06-25 12:15:30.747000')+INTERVAL '8999999999999999 MICROSECONDS'"
             ).fetchone()
             assert res[0].microsecond == 746999
+
+
+def test_fetch_with_pandas_nullable_types(conn_cnx):
+    # use several float values to test nullable types. Nullable types can preserve both nan and null in float
+    sql_text = """
+    select 1.0::float, 'NaN'::float, Null::float;
+    """
+    # https://arrow.apache.org/docs/python/pandas.html#nullable-types
+    dtype_mapping = {
+        pyarrow.int8(): pandas.Int8Dtype(),
+        pyarrow.int16(): pandas.Int16Dtype(),
+        pyarrow.int32(): pandas.Int32Dtype(),
+        pyarrow.int64(): pandas.Int64Dtype(),
+        pyarrow.uint8(): pandas.UInt8Dtype(),
+        pyarrow.uint16(): pandas.UInt16Dtype(),
+        pyarrow.uint32(): pandas.UInt32Dtype(),
+        pyarrow.uint64(): pandas.UInt64Dtype(),
+        pyarrow.bool_(): pandas.BooleanDtype(),
+        pyarrow.float32(): pandas.Float32Dtype(),
+        pyarrow.float64(): pandas.Float64Dtype(),
+        pyarrow.string(): pandas.StringDtype(),
+    }
+
+    expected_dtypes = pandas.Series(
+        [pandas.Float64Dtype(), pandas.Float64Dtype(), pandas.Float64Dtype()],
+        index=["1.0::FLOAT", "'NAN'::FLOAT", "NULL::FLOAT"],
+    )
+    expected_df_to_string = """   1.0::FLOAT  'NAN'::FLOAT  NULL::FLOAT
+0         1.0           NaN         <NA>"""
+    with conn_cnx() as cnx_table:
+        # fetch dataframe with new arrow support
+        cursor_table = cnx_table.cursor()
+        cursor_table.execute(SQL_ENABLE_ARROW)
+        cursor_table.execute(sql_text)
+        # test fetch_pandas_batches
+        for df in cursor_table.fetch_pandas_batches(types_mapper=dtype_mapping.get):
+            pandas._testing.assert_series_equal(df.dtypes, expected_dtypes)
+            print(df)
+            assert df.to_string() == expected_df_to_string
+        # test fetch_pandas_all
+        df = cursor_table.fetch_pandas_all(types_mapper=dtype_mapping.get)
+        pandas._testing.assert_series_equal(df.dtypes, expected_dtypes)
+        assert df.to_string() == expected_df_to_string
