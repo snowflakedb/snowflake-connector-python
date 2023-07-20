@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.1.0a1(TBD)
+  - Version 3.1.0a1 is our first efforts to build snowflake-connector-python based on apache nanoarrow projects, which
+reduces the package size as well as removes a hard dependency on a specific version of pyarrow.
+
 - v3.0.5(TBD)
   - Added a feature that lets you add connection definitions to the `config.toml` configuration file. A connection definition refers to a collection of connection parameters. The connection configuration name must begin with **connections**, similar to the following that defines the parameters for the `prod` connection:
 
