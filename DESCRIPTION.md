@@ -26,7 +26,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     You can determine which file is used by running the following command:
 
     ```
-    python -c "from snowflake.connector.constants import CONFIG_FILE; print(str(CONFIG_FILE))"
+    python -c "from snowflake.connector.constants import CONNECTIONS_FILE; print(str(CONNECTIONS_FILE))"
     ```
   - Bumped cryptography dependency from <41.0.0,>=3.1.0 to >=3.1.0,<42.0.0.
   - Improved OCSP response caching to remove tmp cache files on Windows.

@@ -16,7 +16,7 @@ from warnings import warn
 import tomlkit
 from tomlkit.items import Table
 
-from snowflake.connector.constants import CONFIG_FILE
+from snowflake.connector.constants import CONNECTIONS_FILES
 from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
 
 _T = TypeVar("_T")
@@ -330,7 +330,7 @@ class ConfigManager:
 
 CONFIG_PARSER = ConfigManager(
     name="CONFIG_PARSER",
-    file_path=CONFIG_FILE,
+    file_path=CONNECTIONS_FILES,
 )
 CONFIG_PARSER.add_option(
     name="connections",
