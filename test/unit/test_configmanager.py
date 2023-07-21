@@ -121,7 +121,7 @@ def test_simple_config_read(tmp_files):
     assert TEST_PARSER["settings"]["output_format"] == "yaml"
 
 
-def test_multiple_files(tmp_files):
+def test_simple_config_read_sliced(tmp_files):
     """Same test_simple_config_read, but rerads part of the config from another file."""
     tmp_folder = tmp_files(
         {
@@ -219,7 +219,7 @@ def test_missing_value(tmp_files):
         TEST_PARSER["settings"]["output_format"]
 
 
-def test_multiple_files_missing_value(tmp_files):
+def test_missing_value_sliced(tmp_files):
     """Test that we handle a missing configuration option gracefully across multiple files."""
     tmp_folder = tmp_files(
         {
@@ -412,7 +412,7 @@ def test_missing_config_file(tmp_path):
         cm["output_format"]
 
 
-def test_missing_config_files(tmp_path):
+def test_missing_config_files_sliced(tmp_path):
     config_file = tmp_path / "config.toml"
     connections_file = tmp_path / "connections.toml"
     cm = ConfigManager(
