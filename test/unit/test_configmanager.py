@@ -21,7 +21,11 @@ from pytest import raises
 from snowflake.connector.compat import IS_WINDOWS
 
 try:
-    from snowflake.connector.config_manager import ConfigManager, ConfigOption
+    from snowflake.connector.config_manager import (
+        ConfigFileOptions,
+        ConfigManager,
+        ConfigOption,
+    )
     from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
     from snowflake.connector.sf_dirs import SFPlatformDirs, _resolve_platform_dirs
 except ImportError:
@@ -81,6 +85,9 @@ def test_simple_config_read(tmp_files):
                 account = "snowflake"
                 user = "snowball"
                 password = "password"
+
+                [settings]
+                output_format = "yaml"
                 """
             )
         }
@@ -96,6 +103,14 @@ def test_simple_config_read(tmp_files):
         name="connections",
         parse_str=parse,
     )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -103,6 +118,58 @@ def test_simple_config_read(tmp_files):
             "password": "password",
         }
     }
+    assert TEST_PARSER["settings"]["output_format"] == "yaml"
+
+
+def test_multiple_files(tmp_files):
+    """Same test_simple_config_read, but rerads part of the config from another file."""
+    tmp_folder = tmp_files(
+        {
+            "config.toml": dedent(
+                """\
+                [settings]
+                output_format = "json"
+                """
+            ),
+            "connections.toml": dedent(
+                """\
+                [snowflake]
+                account = "snowflake"
+                user = "snowball"
+                password = "password"
+                """
+            ),
+        }
+    )
+    TEST_PARSER = ConfigManager(
+        name="root_parser",
+        file_path=(
+            (tmp_folder / "config.toml", ConfigFileOptions(), None),
+            (tmp_folder / "connections.toml", ConfigFileOptions(), "connections"),
+        ),
+    )
+    from tomlkit import parse
+
+    TEST_PARSER.add_option(
+        name="connections",
+        parse_str=parse,
+    )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
+    assert TEST_PARSER["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+    assert TEST_PARSER["settings"]["output_format"] == "json"
 
 
 def test_simple_nesting(monkeypatch, tmp_path):
@@ -234,11 +301,35 @@ def test_error_missing_fp():
 
 def test_missing_config_file(tmp_path):
     config_file = tmp_path / "config.toml"
+    cm = ConfigManager(name="test", file_path=config_file)
+    cm.add_option(name="output_format", choices=("json", "yaml"))
     with raises(
         ConfigSourceError,
         match=re.escape(f"The config file '{config_file}' does not exist"),
     ):
-        ConfigManager(name="test", file_path=config_file).read_config()
+        cm["output_format"]
+
+
+def test_missing_config_files(tmp_path):
+    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "connections.toml"
+    cm = ConfigManager(
+        name="test",
+        file_path=(
+            (config_file, ConfigFileOptions(), None),
+            (connections_file, ConfigFileOptions(), "connections"),
+        ),
+    )
+    cm.add_option(
+        name="connections",
+    )
+    with raises(
+        ConfigSourceError,
+        match=re.escape(
+            f"None of the config files: {config_file}, {connections_file} exist"
+        ),
+    ):
+        cm["connections"]
 
 
 def test_error_missing_fp_retrieve():

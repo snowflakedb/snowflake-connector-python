@@ -9,15 +9,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.0.5(TBD)
-  - Added a feature that lets you add connection definitions to the `config.toml` configuration file. A connection definition refers to a collection of connection parameters. The connection configuration name must begin with **connections**, similar to the following that defines the parameters for the `prod` connection:
+  - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, similar to the following that defines the parameters for the `prod` connection:
 
     ```toml
-    [connections.prod]
+    [prod]
     account = "my_account"
     user = "my_user"
     password = "my_password"
     ```
-    By default, we look for the `config.toml` file in the location specified in the `SNOWFLAKE_HOME` environment variable (default: `~/.snowflake`). If this folder does not exist, the Python connector looks for the file in the `platformdirs` location, as follows:
+    By default, we look for the `connections.toml` file in the location specified in the `SNOWFLAKE_HOME` environment variable (default: `~/.snowflake`). If this folder does not exist, the Python connector looks for the file in the `platformdirs` location, as follows:
 
     - On Linux: `~/.config/snowflake/`,  but follows XDG settings
     - On Mac: `~/Library/Application Support/snowflake/`

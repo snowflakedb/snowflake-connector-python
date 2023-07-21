@@ -5,24 +5,31 @@
 from __future__ import annotations
 
 import logging
+import operator
 import os
 import stat
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from operator import methodcaller
 from pathlib import Path
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Callable, Literal, NamedTuple, TypeVar
 from warnings import warn
 
 import tomlkit
 from tomlkit.items import Table
 
-from snowflake.connector.constants import CONNECTIONS_FILES
+from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
 from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
 
 _T = TypeVar("_T")
 
 LOGGER = logging.getLogger(__name__)
 READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
+
+
+class ConfigFileOptions(NamedTuple):
+    """Class that defines settings individual configuration files."""
+
+    check_permissions: bool = True
 
 
 class ConfigOption:
@@ -138,10 +145,9 @@ class ConfigOption:
 
     def _get_config(self) -> Any:
         """Get value from the cached config file."""
-        if self._root_manager.conf_file_cache is None and (
-            self._root_manager.file_path is not None
-            and self._root_manager.file_path.exists()
-            and self._root_manager.file_path.is_file()
+        if (
+            self._root_manager.conf_file_cache is None
+            and self._root_manager.file_path is not None
         ):
             self._root_manager.read_config()
         e = self._root_manager.conf_file_cache
@@ -189,7 +195,9 @@ class ConfigManager:
         self,
         *,
         name: str,
-        file_path: Path | None = None,
+        file_path: Path
+        | Sequence[tuple[Path, ConfigFileOptions, str | None]]
+        | None = None,
     ):
         """Create a new ConfigManager.
 
@@ -199,7 +207,10 @@ class ConfigManager:
               for all child parsers.
         """
         self.name = name
-        self.file_path = file_path
+        if isinstance(file_path, Path):
+            self.file_path = ((file_path, ConfigFileOptions(), None),)
+        else:
+            self.file_path = file_path
         # Objects holding subparsers and options
         self._options: dict[str, ConfigOption] = dict()
         self._sub_parsers: dict[str, ConfigManager] = dict()
@@ -225,29 +236,47 @@ class ConfigManager:
                 "ConfigManager is trying to read config file, but it doesn't "
                 "have one"
             )
-        if not self.file_path.exists():
-            raise ConfigSourceError(
-                f"The config file '{self.file_path}' does not exist"
-            )
-        if (
-            # Same check as openssh does for permissions
-            #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
-            self.file_path.stat().st_mode & READABLE_BY_OTHERS != 0
-            or (
-                # TODO: Windows doesn't have getuid, skip checking
-                hasattr(os, "getuid")
-                and self.file_path.stat().st_uid != 0
-                and self.file_path.stat().st_uid != os.getuid()
-            )
+        elif isinstance(self.file_path, Sequence) and not any(
+            map(lambda e: e[0].exists(), self.file_path)
         ):
-            warn(f"Bad owner or permissions on {self.file_path}")
-        LOGGER.debug(f"reading configuration file from {str(self.file_path)}")
-        try:
-            self.conf_file_cache = tomlkit.parse(self.file_path.read_text())
-        except Exception as e:
-            raise ConfigSourceError(
-                "An unknown error happened while loading " f"'{str(self.file_path)}'"
-            ) from e
+            if len(self.file_path) == 1:
+                raise ConfigSourceError(
+                    f"The config file '{str(self.file_path[0][0])}' does not exist"
+                )
+            else:
+                raise ConfigSourceError(
+                    f"None of the config files: {', '.join(list(map(str, map(operator.itemgetter(0), self.file_path))))} exist"
+                )
+        # Read in all of the config files
+        read_config_file = tomlkit.TOMLDocument()
+        for filep, fileoptions, section in self.file_path:
+            if not filep.exists():
+                continue
+            if (
+                fileoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                # Same check as openssh does for permissions
+                #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
+                and filep.stat().st_mode & READABLE_BY_OTHERS != 0
+                or (
+                    # Windows doesn't have getuid, skip checking
+                    hasattr(os, "getuid")
+                    and filep.stat().st_uid != 0
+                    and filep.stat().st_uid != os.getuid()
+                )
+            ):
+                warn(f"Bad owner or permissions on {str(filep)}")
+            LOGGER.debug(f"reading configuration file from {str(filep)}")
+            try:
+                read_config_piece = tomlkit.parse(filep.read_text())
+            except Exception as e:
+                raise ConfigSourceError(
+                    "An unknown error happened while loading " f"'{str(filep)}'"
+                ) from e
+            if section is None:
+                read_config_file = read_config_piece
+            else:
+                read_config_file[section] = read_config_piece
+        self.conf_file_cache = read_config_file
 
     def add_option(
         self,
@@ -330,7 +359,22 @@ class ConfigManager:
 
 CONFIG_PARSER = ConfigManager(
     name="CONFIG_PARSER",
-    file_path=CONNECTIONS_FILES,
+    file_path=(
+        (  # Main config file
+            CONFIG_FILE,
+            ConfigFileOptions(
+                check_permissions=True  # connections could live here, check permissions
+            ),
+            None,
+        ),
+        (  # Optional connections file to read in connections from
+            CONNECTIONS_FILE,
+            ConfigFileOptions(
+                check_permissions=True  # connections could live here, check permissions
+            ),
+            "connections",
+        ),
+    ),
 )
 CONFIG_PARSER.add_option(
     name="connections",
