@@ -156,7 +156,15 @@ class ConfigOption:
                 f"Root parser '{self._root_manager.name}' is missing file_path",
             )
         for k in self._nest_path[1:]:
-            e = e[k]
+            try:
+                e = e[k]
+            except tomlkit.exceptions.NonExistentKey:
+                raise ConfigSourceError(
+                    f"Configuration option {self.option_name} is not defined anywhere, "
+                    "have you forgotten to set it in a configuration file, "
+                    "or environmental variable?"
+                )
+
         if isinstance(e, (Table, tomlkit.TOMLDocument)):
             # If we got a TOML table we probably want it in dictionary form
             return e.value

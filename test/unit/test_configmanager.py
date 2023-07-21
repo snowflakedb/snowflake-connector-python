@@ -172,6 +172,108 @@ def test_multiple_files(tmp_files):
     assert TEST_PARSER["settings"]["output_format"] == "json"
 
 
+def test_missing_value(tmp_files):
+    """Test that we handle a missing configuration option gracefully."""
+    tmp_folder = tmp_files(
+        {
+            "config.toml": dedent(
+                """\
+                [connections.snowflake]
+                account = "snowflake"
+                user = "snowball"
+                password = "password"
+                """
+            ),
+        }
+    )
+    TEST_PARSER = ConfigManager(
+        name="root_parser",
+        file_path=tmp_folder / "config.toml",
+    )
+    TEST_PARSER.add_option(
+        name="connections",
+    )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
+    assert TEST_PARSER["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+    with pytest.raises(
+        ConfigSourceError,
+        match=re.escape(
+            "Configuration option settings.output_format is not defined anywhere, "
+            "have you forgotten to set it in a configuration file, or "
+            "environmental variable?"
+        ),
+    ):
+        TEST_PARSER["settings"]["output_format"]
+
+
+def test_multiple_files_missing_value(tmp_files):
+    """Test that we handle a missing configuration option gracefully across multiple files."""
+    tmp_folder = tmp_files(
+        {
+            "config.toml": dedent(
+                """\
+                [settings]
+                """
+            ),
+            "connections.toml": dedent(
+                """\
+                [snowflake]
+                account = "snowflake"
+                user = "snowball"
+                password = "password"
+                """
+            ),
+        }
+    )
+    TEST_PARSER = ConfigManager(
+        name="root_parser",
+        file_path=(
+            (tmp_folder / "config.toml", ConfigFileOptions(), None),
+            (tmp_folder / "connections.toml", ConfigFileOptions(), "connections"),
+        ),
+    )
+    TEST_PARSER.add_option(
+        name="connections",
+    )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
+    assert TEST_PARSER["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+    with pytest.raises(
+        ConfigSourceError,
+        match=re.escape(
+            "Configuration option settings.output_format is not defined anywhere, "
+            "have you forgotten to set it in a configuration file, or "
+            "environmental variable?"
+        ),
+    ):
+        TEST_PARSER["settings"]["output_format"]
+
+
 def test_simple_nesting(monkeypatch, tmp_path):
     c1 = ConfigManager(name="test", file_path=tmp_path / "config.toml")
     c2 = ConfigManager(name="sb")
