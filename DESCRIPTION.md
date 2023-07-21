@@ -22,7 +22,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Cherry-picked https://github.com/urllib3/urllib3/commit/fd2759aa16b12b33298900c77d29b3813c6582de onto vendored urllib3 (v1.26.15) to enable enforce_content_length by default.
   - Fixed a bug in tag generation of OOB telemetry event.
 
-- v3.1.0(July 31,2023)
+- v3.1.0(July 31, 2023)
 
   - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, for example, if you wanted to define a connection named `prod``:
 
@@ -59,6 +59,44 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where pickle.dump segfaults during cache serialization in multi-threaded scenarios.
   - Improved retry logic for okta authentication to refresh token if authentication gets throttled.
   - Note that this release does not include the changes introduced in the previous 3.1.0a1 release. Those will be released at a later time.
+
+- v3.1.0a1(July 24, 2023)
+  - Version 3.1.0a1 is our first efforts to build snowflake-connector-python based on apache nanoarrow project, which
+reduces the package size as well as removes a hard dependency on a specific version of pyarrow.
+  - This version also includes the following features and bug fixes from the unreleased v3.0.5:
+    - Added a feature that lets you add connection definitions to the `config.toml` configuration file. A connection definition refers to a collection of connection parameters. The connection configuration name must begin with **connections**, similar to the following that defines the parameters for the `prod` connection:
+
+      ```toml
+      [connections.prod]
+      account = "my_account"
+      user = "my_user"
+      password = "my_password"
+      ```
+      By default, we look for the `config.toml` file in the location specified in the `SNOWFLAKE_HOME` environment variable (default: `~/.snowflake`). If this folder does not exist, the Python connector looks for the file in the `platformdirs` location, as follows:
+
+      - On Linux: `~/.config/snowflake/`,  but follows XDG settings
+      - On Mac: `~/Library/Application Support/snowflake/`
+      - On Windows: `%USERPROFILE%\AppData\Local\snowflake\`
+
+      You can determine which file is used by running the following command:
+
+      ```
+      python -c "from snowflake.connector.constants import CONFIG_FILE; print(str(CONFIG_FILE))"
+      ```
+    - Bumped cryptography dependency from <41.0.0,>=3.1.0 to >=3.1.0,<42.0.0.
+    - Improved OCSP response caching to remove tmp cache files on Windows.
+    - Improved OCSP response caching to reduce the times of disk writing.
+    - Added a parameter `server_session_keep_alive` in `SnowflakeConnection` that skips session deletion when client connection closes.
+    - Tightened our pinning of platformdirs, to prevent their new releases breaking us.
+    - Fixed a bug where SFPlatformDirs would incorrectly append application_name/version to its path.
+    - Added retry reason for queries that are retried by the client.
+    - Fixed a bug where `write_pandas` fails when user does not have the privilege to create stage or file format in the target schema, but has the right privilege for the current schema.
+    - Remove Python 3.7 support.
+    - Worked around a segfault which sometimes occurred during cache serialization in multi-threaded scenarios.
+    - Improved error handling of connection reset error.
+    - Fixed a bug about deleting the temporary files happened when running PUT command.
+    - Allowed to pass `type_mapper` to `fetch_pandas_batches()` and `fetch_pandas_all()`.
+    - Fixed a bug where pickle.dump segfaults during cache serialization in multi-threaded scenarios.
 
 - v3.0.4(May 23,2023)
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
