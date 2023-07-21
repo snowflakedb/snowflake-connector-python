@@ -2,6 +2,16 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
+"""
+This script is used for end-to-end performance test.
+It tracks the processing time from cursor fetching data till all data are converted to python objects.
+
+There are two scenarios:
+
+- row data conversion: fetch data and call `fetchall` on the cursor
+- table data conversion: fetch data and call `fetch_arrow_batches` on the cursor
+"""
+
 import argparse
 
 import util as stress_util
@@ -65,14 +75,18 @@ INSERT INTO {test_table_name} SELECT
         )
 
 
-def task_fetch_rows(cursor, table_name):
-    ret = cursor.execute(f"select * from {table_name}").fetchall()
+def task_fetch_rows(cursor, table_name, row_count_limit=50000):
+    ret = cursor.execute(
+        f"select * from {table_name} limit {row_count_limit}"
+    ).fetchall()
     for _ in ret:
         pass
 
 
-def task_fetch_arrow_batches(cursor, table_name):
-    ret = cursor.execute(f"select * from {table_name}").fetch_arrow_batches()
+def task_fetch_arrow_batches(cursor, table_name, row_count_limit=50000):
+    ret = cursor.execute(
+        f"select * from {table_name} limit {row_count_limit}"
+    ).fetch_arrow_batches()
     for _ in ret:
         pass
 
@@ -84,10 +98,24 @@ def execute_task(task, cursor, table_name, iteration_cnt):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iteration_cnt", type=int, default=5000)
-    parser.add_argument("--data_file", type=str, default="test_data")
-    parser.add_argument("--row_count", type=int, default=100)
-    parser.add_argument("--test_table_name", type=str, default="ARROW_TEST_TABLE")
+    parser.add_argument(
+        "--iteration_cnt",
+        type=int,
+        default=5000,
+        help="how many times to run the test function, default is 5000",
+    )
+    parser.add_argument(
+        "--row_count",
+        type=int,
+        default=100,
+        help="how man rows of data to insert into the temp test able if test_table_name is not provided",
+    )
+    parser.add_argument(
+        "--test_table_name",
+        type=str,
+        default="ARROW_TEST_TABLE",
+        help="an existing test table that has data prepared, by default the it looks for 'ARROW_TEST_TABLE'",
+    )
     args = parser.parse_args()
 
     test_table_name = "TEMP_ARROW_TEST_TABLE"

@@ -2,6 +2,16 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
+"""
+This script is used for PyArrowIterator performance test.
+It tracks the processing time of PyArrowIterator converting data to python objects.
+
+There are two scenarios:
+
+- row data conversion: PyArrowIterator convert data into list of tuple of python primitive objects
+- table data conversion: PyArrowIterator converts data into pyarrow table
+"""
+
 import argparse
 import base64
 import io
@@ -64,8 +74,18 @@ def execute_task(task, bytes_data, create_iterator_method, iteration_cnt):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iteration_cnt", type=int, default=100000)
-    parser.add_argument("--data_file", type=str, default="test_data")
+    parser.add_argument(
+        "--iteration_cnt",
+        type=int,
+        default=100000,
+        help="how many times to run the test function, default is 100000",
+    )
+    parser.add_argument(
+        "--data_file",
+        type=str,
+        default="test_data",
+        help="a local file to read data from, the file contains base64 encoded string returned from snowflake",
+    )
     args = parser.parse_args()
 
     with open(args.data_file) as f:
