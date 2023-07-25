@@ -157,7 +157,7 @@ retweeted string, lang string)
             )
             cur.execute(
                 """
-copy into tweets from s3://sfc-dev1-data/twitter/O1k/tweets/
+copy into tweets from s3://sfc-eng-data/twitter/O1k/tweets/
 credentials=(AWS_KEY_ID={aws_access_key_id}
 AWS_SECRET_KEY={aws_secret_access_key})
 file_format=(skip_header=1 null_if=('') field_optionally_enclosed_by='"')
@@ -169,7 +169,7 @@ file_format=(skip_header=1 null_if=('') field_optionally_enclosed_by='"')
             assert cur.rowcount == 1, "copy into tweets did not set rowcount to 1"
             results = cur.fetchall()
             assert (
-                results[0][0] == "s3://sfc-dev1-data/twitter/O1k/tweets/1.csv.gz"
+                results[0][0] == "s3://sfc-eng-data/twitter/O1k/tweets/1.csv.gz"
             ), "ls @%tweets failed"
             cur.execute("drop table tweets")
 
