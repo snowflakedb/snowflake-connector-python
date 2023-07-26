@@ -8,12 +8,12 @@ from __future__ import annotations
 import logging
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
-import snowflake.connector.vendored.requests.sessions
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
 
 try:  # pragma: no cover
+    import snowflake.connector.vendored.requests.sessions
     from snowflake.connector.auth import AuthByOkta
 except ImportError:
     from snowflake.connector.auth_okta import AuthByOkta
@@ -176,6 +176,7 @@ def test_auth_okta_step3_negative():
     assert rest._connection.errorhandler.called  # auth failure error
 
 
+@pytest.mark.skipolddriver
 def test_auth_okta_step4_negative(caplog):
     """Authentication by OKTA step4 negative test case."""
     authenticator = "https://testsso.snowflake.net/"
