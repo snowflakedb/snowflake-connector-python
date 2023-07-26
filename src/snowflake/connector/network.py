@@ -81,6 +81,7 @@ from .errors import (
     OperationalError,
     OtherHTTPRetryableError,
     ProgrammingError,
+    RefreshToken,
     ServiceUnavailableError,
     TooManyRequests,
 )
@@ -1054,6 +1055,7 @@ class SnowflakeRestful:
         is_raw_binary: bool = False,
         binary_data_handler=None,
         socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+        is_okta_authentication: bool = False,
     ):
         if socket_timeout > DEFAULT_SOCKET_CONNECT_TIMEOUT:
             # socket timeout should not be more than the default.
@@ -1104,6 +1106,10 @@ class SnowflakeRestful:
                     error = get_http_retryable_error(raw_ret.status_code)
                     logger.debug(f"{error}. Retrying...")
                     # retryable server exceptions
+                    if is_okta_authentication:
+                        raise RefreshToken(
+                            msg="OKTA authentication requires token refresh."
+                        )
                     raise RetryRequest(error)
 
                 elif (
