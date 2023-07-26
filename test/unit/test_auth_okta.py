@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
+import pytest
+
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
