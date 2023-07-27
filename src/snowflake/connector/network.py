@@ -81,7 +81,7 @@ from .errors import (
     OperationalError,
     OtherHTTPRetryableError,
     ProgrammingError,
-    RefreshToken,
+    RefreshTokenError,
     ServiceUnavailableError,
     TooManyRequests,
 )
@@ -1107,7 +1107,7 @@ class SnowflakeRestful:
                     logger.debug(f"{error}. Retrying...")
                     # retryable server exceptions
                     if is_okta_authentication:
-                        raise RefreshToken(
+                        raise RefreshTokenError(
                             msg="OKTA authentication requires token refresh."
                         )
                     raise RetryRequest(error)

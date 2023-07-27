@@ -549,7 +549,7 @@ class TooManyRequests(Error):
         )
 
 
-class RefreshToken(Error):
+class RefreshTokenError(Error):
     def __init__(self, **kwargs) -> None:
         Error.__init__(
             self,

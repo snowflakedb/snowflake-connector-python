@@ -19,7 +19,7 @@ from ..constants import (
     HTTP_HEADER_USER_AGENT,
 )
 from ..errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
-from ..errors import DatabaseError, Error, RefreshToken
+from ..errors import DatabaseError, Error, RefreshTokenError
 from ..network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from . import Auth
@@ -273,16 +273,15 @@ class AuthByOkta(AuthByPlugin):
         conn: SnowflakeConnection,
         generate_one_time_token: Callable,
         sso_url: str,
-    ):
+    ) -> dict[Any, Any]:
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
-        one_time_token = generate_one_time_token()
         timeout_time = time.time() + conn.login_timeout if conn.login_timeout else None
         response_html = {}
         while timeout_time is None or time.time() < timeout_time:
             try:
                 url_parameters = {
                     "RelayState": "/some/deep/link",
-                    "onetimetoken": one_time_token,
+                    "onetimetoken": generate_one_time_token(),
                 }
                 sso_url = sso_url + "?" + urlencode(url_parameters)
                 headers = {
@@ -299,9 +298,8 @@ class AuthByOkta(AuthByPlugin):
                     is_okta_authentication=True,
                 )
                 break
-            except RefreshToken:
+            except RefreshTokenError:
                 logger.debug("step4: refresh token for re-authentication")
-                one_time_token = generate_one_time_token()
         return response_html
 
     def _step5(
