@@ -231,7 +231,7 @@ ratio number(6,2))
 """
         )
         user_bucket = os.getenv(
-            "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
+            "SF_AWS_USER_BUCKET", f"sfc-eng-regression/{getuser()}/reg"
         )
         cnx.cursor().execute(
             f"""
@@ -321,7 +321,7 @@ ratio number(6,2))
 """
         )
         user_bucket = os.getenv(
-            "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
+            "SF_AWS_USER_BUCKET", f"sfc-eng-regression/{getuser()}/reg"
         )
         cnx.cursor().execute(
             f"""
@@ -420,7 +420,7 @@ def test_get_data_user_stage(
         pytest.skip("This test requires to change the internal parameter")
 
     default_s3bucket = os.getenv(
-        "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
+        "SF_AWS_USER_BUCKET", f"sfc-eng-regression/{getuser()}/reg"
     )
     test_data = [
         {

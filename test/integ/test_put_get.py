@@ -83,7 +83,7 @@ def create_test_data(
         warehouse_name=warehouse_name,
         database_name=database_name,
         user_bucket=os.getenv(
-            "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
+            "SF_AWS_USER_BUCKET", f"sfc-eng-regression/{getuser()}/reg"
         ),
         connection=connection,
     )

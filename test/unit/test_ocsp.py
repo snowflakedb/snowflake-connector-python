@@ -51,7 +51,7 @@ TARGET_HOSTS = [
     "sqs.us-west-2.amazonaws.com",
     "sfcsupport.us-east-1.snowflakecomputing.com",
     "sfcsupport.eu-central-1.snowflakecomputing.com",
-    "sfc-dev1-regression.s3.amazonaws.com",
+    "sfc-eng-regression.s3.amazonaws.com",
     "sfctest0.snowflakecomputing.com",
     "sfc-ds2-customer-stage.s3.amazonaws.com",
     "snowflake.okta.com",

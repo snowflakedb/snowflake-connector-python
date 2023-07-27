@@ -73,7 +73,7 @@ def create_test_data(request, db_parameters, connection):
             self.database_name = database_name
             self.connection = connection
             self.user_bucket = os.getenv(
-                "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
+                "SF_AWS_USER_BUCKET", f"sfc-eng-regression/{getuser()}/reg"
             )
 
     ret = TestData()
@@ -189,7 +189,7 @@ create or replace table pytest_putget_t1 (c1 STRING, c2 STRING, c3 STRING,
 c4 STRING, c5 STRING, c6 STRING, c7 STRING, c8 STRING, c9 STRING)
 stage_file_format = (field_delimiter = '|' error_on_column_count_mismatch=false)
 stage_copy_options = (purge=false)
-stage_location = (url = 's3://sfc-dev1-regression/jenkins/{stage_name}'
+stage_location = (url = 's3://sfc-eng-regression/jenkins/{stage_name}'
 credentials = (
 AWS_KEY_ID={aws_access_key_id}
 AWS_SECRET_KEY={aws_secret_access_key}))
