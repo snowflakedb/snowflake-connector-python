@@ -646,13 +646,6 @@ class SFDictFileCache(SFDictCache):
             )
         return False
 
-    def __del__(self) -> None:
-        try:
-            self._save()
-        except Exception:
-            # At tear-down time builtins module might be already gone, ignore every error
-            pass
-
     def clear(self) -> None:
         super().clear()
         # This unlink prevents us from loading just before saving
