@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
-import operator
 import os
 import stat
 from collections.abc import Iterable, Sequence
@@ -18,7 +18,11 @@ import tomlkit
 from tomlkit.items import Table
 
 from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
-from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
+from snowflake.connector.errors import (
+    ConfigManagerError,
+    ConfigSourceError,
+    MissingConfigOptionError,
+)
 
 _T = TypeVar("_T")
 
@@ -26,10 +30,17 @@ LOGGER = logging.getLogger(__name__)
 READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
 
 
-class ConfigFileOptions(NamedTuple):
+class ConfigSliceOptions(NamedTuple):
     """Class that defines settings individual configuration files."""
 
     check_permissions: bool = True
+    only_in_slice: bool = False
+
+
+class ConfigSlice(NamedTuple):
+    path: Path
+    options: ConfigSliceOptions
+    section: str
 
 
 class ConfigOption:
@@ -159,8 +170,8 @@ class ConfigOption:
             try:
                 e = e[k]
             except tomlkit.exceptions.NonExistentKey:
-                raise ConfigSourceError(
-                    f"Configuration option {self.option_name} is not defined anywhere, "
+                raise MissingConfigOptionError(  # TOOO: maybe a child Exception for missing option?
+                    f"Configuration option '{self.option_name}' is not defined anywhere, "
                     "have you forgotten to set it in a configuration file, "
                     "or environmental variable?"
                 )
@@ -203,9 +214,8 @@ class ConfigManager:
         self,
         *,
         name: str,
-        file_path: Path
-        | Sequence[tuple[Path, ConfigFileOptions, str | None]]
-        | None = None,
+        file_path: Path | None = None,
+        _slices: Sequence[ConfigSlice] | None = None,
     ):
         """Create a new ConfigManager.
 
@@ -214,11 +224,11 @@ class ConfigManager:
             file_path: File this parser should read values from. Can be omitted
               for all child parsers.
         """
+        if _slices is None:
+            _slices = list()
         self.name = name
-        if isinstance(file_path, Path):
-            self.file_path = ((file_path, ConfigFileOptions(), None),)
-        else:
-            self.file_path = file_path
+        self.file_path = file_path
+        self._slices = _slices
         # Objects holding subparsers and options
         self._options: dict[str, ConfigOption] = dict()
         self._sub_parsers: dict[str, ConfigManager] = dict()
@@ -244,24 +254,19 @@ class ConfigManager:
                 "ConfigManager is trying to read config file, but it doesn't "
                 "have one"
             )
-        elif isinstance(self.file_path, Sequence) and not any(
-            map(lambda e: e[0].exists(), self.file_path)
-        ):
-            if len(self.file_path) == 1:
-                raise ConfigSourceError(
-                    f"The config file '{str(self.file_path[0][0])}' does not exist"
-                )
-            else:
-                raise ConfigSourceError(
-                    f"None of the config files: {', '.join(list(map(str, map(operator.itemgetter(0), self.file_path))))} exist"
-                )
-        # Read in all of the config files
         read_config_file = tomlkit.TOMLDocument()
-        for filep, fileoptions, section in self.file_path:
+
+        # Read in all of the config slices
+        for filep, sliceoptions, section in itertools.chain(
+            ((self.file_path, ConfigSliceOptions(), None),),
+            self._slices,
+        ):
+            if sliceoptions.only_in_slice:
+                del read_config_file[section]
             if not filep.exists():
                 continue
             if (
-                fileoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
                 # Same check as openssh does for permissions
                 #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0
@@ -281,8 +286,10 @@ class ConfigManager:
                     "An unknown error happened while loading " f"'{str(filep)}'"
                 ) from e
             if section is None:
+                assert len(read_config_file) == 0
                 read_config_file = read_config_piece
             else:
+                assert section not in read_config_file
                 read_config_file[section] = read_config_piece
         self.conf_file_cache = read_config_file
 
@@ -367,17 +374,11 @@ class ConfigManager:
 
 CONFIG_PARSER = ConfigManager(
     name="CONFIG_PARSER",
-    file_path=(
-        (  # Main config file
-            CONFIG_FILE,
-            ConfigFileOptions(
-                check_permissions=True  # connections could live here, check permissions
-            ),
-            None,
-        ),
+    file_path=CONFIG_FILE,
+    _slices=(
         (  # Optional connections file to read in connections from
             CONNECTIONS_FILE,
-            ConfigFileOptions(
+            ConfigSliceOptions(
                 check_permissions=True  # connections could live here, check permissions
             ),
             "connections",
