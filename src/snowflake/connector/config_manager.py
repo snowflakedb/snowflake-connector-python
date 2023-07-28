@@ -8,7 +8,7 @@ import itertools
 import logging
 import os
 import stat
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from operator import methodcaller
 from pathlib import Path
 from typing import Any, Callable, Literal, NamedTuple, TypeVar
@@ -215,7 +215,7 @@ class ConfigManager:
         *,
         name: str,
         file_path: Path | None = None,
-        _slices: Sequence[ConfigSlice] | None = None,
+        _slices: list[ConfigSlice] | None = None,
     ):
         """Create a new ConfigManager.
 
@@ -373,16 +373,15 @@ class ConfigManager:
 CONFIG_PARSER = ConfigManager(
     name="CONFIG_PARSER",
     file_path=CONFIG_FILE,
-    _slices=(
-        (  # Optional connections file to read in connections from
+    _slices=[
+        ConfigSlice(  # Optional connections file to read in connections from
             CONNECTIONS_FILE,
             ConfigSliceOptions(
                 check_permissions=True,  # connections could live here, check permissions
-                only_in_slice=True,
             ),
             "connections",
         ),
-    ),
+    ],
 )
 CONFIG_PARSER.add_option(
     name="connections",
