@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+import time
+from functools import partial
+from typing import TYPE_CHECKING, Any, Callable
 
 from ..compat import unescape, urlencode, urlsplit
 from ..constants import (
@@ -17,7 +19,7 @@ from ..constants import (
     HTTP_HEADER_USER_AGENT,
 )
 from ..errorcode import ER_IDP_CONNECTION_ERROR, ER_INCORRECT_DESTINATION
-from ..errors import DatabaseError, Error
+from ..errors import DatabaseError, Error, RefreshTokenError
 from ..network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from . import Auth
@@ -133,8 +135,11 @@ class AuthByOkta(AuthByPlugin):
             user,
         )
         self._step2(conn, authenticator, sso_url, token_url)
-        one_time_token = self._step3(conn, headers, token_url, user, password)
-        response_html = self._step4(conn, one_time_token, sso_url)
+        response_html = self._step4(
+            conn,
+            partial(self._step3, conn, headers, token_url, user, password),
+            sso_url,
+        )
         self._step5(conn, response_html)
 
     def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
@@ -266,26 +271,35 @@ class AuthByOkta(AuthByPlugin):
     @staticmethod
     def _step4(
         conn: SnowflakeConnection,
-        one_time_token: str,
+        generate_one_time_token: Callable,
         sso_url: str,
-    ):
+    ) -> dict[Any, Any]:
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
-        url_parameters = {
-            "RelayState": "/some/deep/link",
-            "onetimetoken": one_time_token,
-        }
-        sso_url = sso_url + "?" + urlencode(url_parameters)
-        headers = {
-            HTTP_HEADER_ACCEPT: "*/*",
-        }
-        response_html = conn._rest.fetch(
-            "get",
-            sso_url,
-            headers,
-            timeout=conn.login_timeout,
-            socket_timeout=conn.login_timeout,
-            is_raw_text=True,
-        )
+        timeout_time = time.time() + conn.login_timeout if conn.login_timeout else None
+        response_html = {}
+        while timeout_time is None or time.time() < timeout_time:
+            try:
+                url_parameters = {
+                    "RelayState": "/some/deep/link",
+                    "onetimetoken": generate_one_time_token(),
+                }
+                sso_url = sso_url + "?" + urlencode(url_parameters)
+                headers = {
+                    HTTP_HEADER_ACCEPT: "*/*",
+                }
+                remaining_timeout = timeout_time - time.time() if timeout_time else None
+                response_html = conn._rest.fetch(
+                    "get",
+                    sso_url,
+                    headers,
+                    timeout=remaining_timeout,
+                    socket_timeout=remaining_timeout,
+                    is_raw_text=True,
+                    is_okta_authentication=True,
+                )
+                break
+            except RefreshTokenError:
+                logger.debug("step4: refresh token for re-authentication")
         return response_html
 
     def _step5(
