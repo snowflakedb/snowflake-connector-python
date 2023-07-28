@@ -286,10 +286,8 @@ class ConfigManager:
                     "An unknown error happened while loading " f"'{str(filep)}'"
                 ) from e
             if section is None:
-                assert len(read_config_file) == 0
                 read_config_file = read_config_piece
             else:
-                assert section not in read_config_file
                 read_config_file[section] = read_config_piece
         self.conf_file_cache = read_config_file
 
@@ -379,7 +377,8 @@ CONFIG_PARSER = ConfigManager(
         (  # Optional connections file to read in connections from
             CONNECTIONS_FILE,
             ConfigSliceOptions(
-                check_permissions=True  # connections could live here, check permissions
+                check_permissions=True,  # connections could live here, check permissions
+                only_in_slice=True,
             ),
             "connections",
         ),
