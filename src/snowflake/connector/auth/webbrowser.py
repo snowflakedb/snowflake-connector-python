@@ -282,6 +282,7 @@ class AuthByWebBrowser(AuthByPlugin):
         else:
             msg = f"""
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<link rel="icon" href="data:,">
 <title>SAML Response for Snowflake</title></head>
 <body>
 Your identity was confirmed and propagated to Snowflake {self._application}.
