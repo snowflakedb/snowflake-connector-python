@@ -297,7 +297,7 @@ class SnowflakeConnection:
     def __init__(
         self,
         connection_name: str | None = None,
-        config_file_path: pathlib.Path | None = None,
+        connections_file_path: pathlib.Path | None = None,
         **kwargs,
     ) -> None:
         self._lock_sequence_counter = Lock()
@@ -332,10 +332,13 @@ class SnowflakeConnection:
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
-        if config_file_path is not None:
+        if connections_file_path is not None:
             # Change config file path and force update cache
-            CONFIG_PARSER.file_path = config_file_path
-            CONFIG_PARSER.read_config()
+            for i, s in enumerate(CONFIG_PARSER._slices):
+                if s.section == "connections":
+                    CONFIG_PARSER._slices[i] = s._replace(path=connections_file_path)
+                    CONFIG_PARSER.read_config()
+                    break
         if connection_name is not None:
             connections = CONFIG_PARSER["connections"]
             if connection_name not in connections:
@@ -366,7 +369,8 @@ class SnowflakeConnection:
         return self._ocsp_fail_open
 
     def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSECURE, FAIL_OPEN or FAIL_CLOSED."""
+        """OCSP mode. INSEC
+        URE, FAIL_OPEN or FAIL_CLOSED."""
         if self.insecure_mode:
             return OCSPMode.INSECURE
         elif self.ocsp_fail_open:

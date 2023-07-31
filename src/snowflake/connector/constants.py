@@ -21,11 +21,12 @@ if TYPE_CHECKING:
 # defaults. Please see comments in sf_dir.py for more information.
 DIRS = _resolve_platform_dirs()
 
-# Snowflake's central configuration file. By default, platformdirs will resolve
+# Snowflake's configuration files. By default, platformdirs will resolve
 # them to these places depending on OS:
-#   * Linux: `~/.config/snowflake/config.toml` but can be updated with XDG vars
-#   * Windows: `%USERPROFILE%\AppData\Local\snowflake\config.toml`
-#   * Mac: `~/Library/Application Support/snowflake/config.toml`
+#   * Linux: `~/.config/snowflake/filename` but can be updated with XDG vars
+#   * Windows: `%USERPROFILE%\AppData\Local\snowflake\filename`
+#   * Mac: `~/Library/Application Support/snowflake/filename`
+CONNECTIONS_FILE = DIRS.user_config_path / "connections.toml"
 CONFIG_FILE = DIRS.user_config_path / "config.toml"
 
 DBAPI_TYPE_STRING = 0

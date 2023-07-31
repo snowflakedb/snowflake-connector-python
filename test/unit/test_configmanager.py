@@ -21,8 +21,17 @@ from pytest import raises
 from snowflake.connector.compat import IS_WINDOWS
 
 try:
-    from snowflake.connector.config_manager import ConfigManager, ConfigOption
-    from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
+    from snowflake.connector.config_manager import (
+        ConfigManager,
+        ConfigOption,
+        ConfigSlice,
+        ConfigSliceOptions,
+    )
+    from snowflake.connector.errors import (
+        ConfigManagerError,
+        ConfigSourceError,
+        MissingConfigOptionError,
+    )
     from snowflake.connector.sf_dirs import SFPlatformDirs, _resolve_platform_dirs
 except ImportError:
     # olddriver tests
@@ -81,6 +90,9 @@ def test_simple_config_read(tmp_files):
                 account = "snowflake"
                 user = "snowball"
                 password = "password"
+
+                [settings]
+                output_format = "yaml"
                 """
             )
         }
@@ -96,6 +108,14 @@ def test_simple_config_read(tmp_files):
         name="connections",
         parse_str=parse,
     )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -103,6 +123,209 @@ def test_simple_config_read(tmp_files):
             "password": "password",
         }
     }
+    assert TEST_PARSER["settings"]["output_format"] == "yaml"
+
+
+def test_simple_config_read_sliced(tmp_files):
+    """Same test_simple_config_read, but rerads part of the config from another file."""
+    tmp_folder = tmp_files(
+        {
+            "config.toml": dedent(
+                """\
+                [settings]
+                output_format = "json"
+                """
+            ),
+            "connections.toml": dedent(
+                """\
+                [snowflake]
+                account = "snowflake"
+                user = "snowball"
+                password = "password"
+                """
+            ),
+        }
+    )
+    TEST_PARSER = ConfigManager(
+        name="root_parser",
+        file_path=tmp_folder / "config.toml",
+        _slices=(
+            ConfigSlice(
+                tmp_folder / "connections.toml", ConfigSliceOptions(), "connections"
+            ),
+        ),
+    )
+    from tomlkit import parse
+
+    TEST_PARSER.add_option(
+        name="connections",
+        parse_str=parse,
+    )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
+    assert TEST_PARSER["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+    assert TEST_PARSER["settings"]["output_format"] == "json"
+
+
+def test_missing_value(tmp_files):
+    """Test that we handle a missing configuration option gracefully."""
+    tmp_folder = tmp_files(
+        {
+            "config.toml": dedent(
+                """\
+                [connections.snowflake]
+                account = "snowflake"
+                user = "snowball"
+                password = "password"
+                """
+            ),
+        }
+    )
+    TEST_PARSER = ConfigManager(
+        name="root_parser",
+        file_path=tmp_folder / "config.toml",
+    )
+    TEST_PARSER.add_option(
+        name="connections",
+    )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
+    assert TEST_PARSER["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+    with pytest.raises(
+        MissingConfigOptionError,
+        match=re.escape(
+            "Configuration option 'settings.output_format' is not defined anywhere, "
+            "have you forgotten to set it in a configuration file, or "
+            "environmental variable?"
+        ),
+    ):
+        TEST_PARSER["settings"]["output_format"]
+
+
+def test_missing_value_sliced(tmp_files):
+    """Test that we handle a missing configuration option gracefully across multiple files."""
+    tmp_folder = tmp_files(
+        {
+            "config.toml": dedent(
+                """\
+                [settings]
+                """
+            ),
+            "connections.toml": dedent(
+                """\
+                [snowflake]
+                account = "snowflake"
+                user = "snowball"
+                password = "password"
+                """
+            ),
+        }
+    )
+    TEST_PARSER = ConfigManager(
+        name="root_parser",
+        file_path=tmp_folder / "config.toml",
+        _slices=(
+            ConfigSlice(
+                tmp_folder / "connections.toml", ConfigSliceOptions(), "connections"
+            ),
+        ),
+    )
+    TEST_PARSER.add_option(
+        name="connections",
+    )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
+    assert TEST_PARSER["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+    with pytest.raises(
+        MissingConfigOptionError,
+        match=re.escape(
+            "Configuration option 'settings.output_format' is not defined anywhere, "
+            "have you forgotten to set it in a configuration file, or "
+            "environmental variable?"
+        ),
+    ):
+        TEST_PARSER["settings"]["output_format"]
+
+
+def test_only_in_slice(tmp_files):
+    tmp_folder = tmp_files(
+        {
+            "config.toml": dedent(
+                """\
+                [settings]
+                [connections.snowflake]
+                account = "snowflake"
+                user = "snowball"
+                password = "password"
+                """
+            ),
+        }
+    )
+    TEST_PARSER = ConfigManager(
+        name="root_parser",
+        file_path=tmp_folder / "config.toml",
+        _slices=(
+            ConfigSlice(
+                tmp_folder / "connections.toml",
+                ConfigSliceOptions(
+                    only_in_slice=True,
+                ),
+                "connections",
+            ),
+        ),
+    )
+    TEST_PARSER.add_option(
+        name="connections",
+    )
+    settings_parser = ConfigManager(
+        name="settings",
+    )
+    settings_parser.add_option(
+        name="output_format",
+        choices=("json", "yaml", "toml"),
+    )
+    TEST_PARSER.add_subparser(settings_parser)
+    with pytest.raises(
+        ConfigSourceError,
+        match="Configuration option 'connections' is not defined.*",
+    ):
+        TEST_PARSER["connections"]
 
 
 def test_simple_nesting(monkeypatch, tmp_path):
@@ -216,7 +439,7 @@ def test_error_missing_item():
     )
     with pytest.raises(
         ConfigSourceError,
-        match="No ConfigManager, or ConfigOption can be found with the" " name 'asd'",
+        match="No ConfigManager, or ConfigOption can be found with the name 'asd'",
     ):
         tp["asd"]
 
@@ -234,11 +457,31 @@ def test_error_missing_fp():
 
 def test_missing_config_file(tmp_path):
     config_file = tmp_path / "config.toml"
+    cm = ConfigManager(name="test", file_path=config_file)
+    cm.add_option(name="output_format", choices=("json", "yaml"))
     with raises(
-        ConfigSourceError,
-        match=re.escape(f"The config file '{config_file}' does not exist"),
+        MissingConfigOptionError,
+        match="Configuration option 'output_format' is not defined anywhere.*",
     ):
-        ConfigManager(name="test", file_path=config_file).read_config()
+        cm["output_format"]
+
+
+def test_missing_config_files_sliced(tmp_path):
+    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "connections.toml"
+    cm = ConfigManager(
+        name="test",
+        file_path=config_file,
+        _slices=(ConfigSlice(connections_file, ConfigSliceOptions(), "connections"),),
+    )
+    cm.add_option(
+        name="connections",
+    )
+    with raises(
+        MissingConfigOptionError,
+        match="Configuration option 'connections' is not defined anywhere.*",
+    ):
+        cm["connections"]
 
 
 def test_error_missing_fp_retrieve():

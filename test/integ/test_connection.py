@@ -1231,18 +1231,16 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
         # If anything unexpected fails here, don't want to expose password
         for k, v in db_parameters.items():
             default_con[k] = v
+        doc["default"] = default_con
         with monkeypatch.context() as m:
             if mode == "env":
-                doc["default"] = default_con
                 m.setenv("SF_CONNECTIONS", tomlkit.dumps(doc))
             else:
-                doc["connections"] = tomlkit.table()
-                doc["connections"]["default"] = default_con
-                tmp_config_file = tmp_path / "config.toml"
+                tmp_config_file = tmp_path / "connections.toml"
                 tmp_config_file.write_text(tomlkit.dumps(doc))
             with snowflake.connector.connect(
                 connection_name="default",
-                config_file_path=tmp_config_file,
+                connections_file_path=tmp_config_file,
             ) as conn:
                 with conn.cursor() as cur:
                     assert cur.execute("select 1;").fetchall() == [

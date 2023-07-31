@@ -4,25 +4,43 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
 import os
 import stat
 from collections.abc import Iterable
 from operator import methodcaller
 from pathlib import Path
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Callable, Literal, NamedTuple, TypeVar
 from warnings import warn
 
 import tomlkit
 from tomlkit.items import Table
 
-from snowflake.connector.constants import CONFIG_FILE
-from snowflake.connector.errors import ConfigManagerError, ConfigSourceError
+from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
+from snowflake.connector.errors import (
+    ConfigManagerError,
+    ConfigSourceError,
+    MissingConfigOptionError,
+)
 
 _T = TypeVar("_T")
 
 LOGGER = logging.getLogger(__name__)
 READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
+
+
+class ConfigSliceOptions(NamedTuple):
+    """Class that defines settings individual configuration files."""
+
+    check_permissions: bool = True
+    only_in_slice: bool = False
+
+
+class ConfigSlice(NamedTuple):
+    path: Path
+    options: ConfigSliceOptions
+    section: str
 
 
 class ConfigOption:
@@ -138,10 +156,9 @@ class ConfigOption:
 
     def _get_config(self) -> Any:
         """Get value from the cached config file."""
-        if self._root_manager.conf_file_cache is None and (
-            self._root_manager.file_path is not None
-            and self._root_manager.file_path.exists()
-            and self._root_manager.file_path.is_file()
+        if (
+            self._root_manager.conf_file_cache is None
+            and self._root_manager.file_path is not None
         ):
             self._root_manager.read_config()
         e = self._root_manager.conf_file_cache
@@ -150,7 +167,15 @@ class ConfigOption:
                 f"Root parser '{self._root_manager.name}' is missing file_path",
             )
         for k in self._nest_path[1:]:
-            e = e[k]
+            try:
+                e = e[k]
+            except tomlkit.exceptions.NonExistentKey:
+                raise MissingConfigOptionError(  # TOOO: maybe a child Exception for missing option?
+                    f"Configuration option '{self.option_name}' is not defined anywhere, "
+                    "have you forgotten to set it in a configuration file, "
+                    "or environmental variable?"
+                )
+
         if isinstance(e, (Table, tomlkit.TOMLDocument)):
             # If we got a TOML table we probably want it in dictionary form
             return e.value
@@ -190,6 +215,7 @@ class ConfigManager:
         *,
         name: str,
         file_path: Path | None = None,
+        _slices: list[ConfigSlice] | None = None,
     ):
         """Create a new ConfigManager.
 
@@ -198,8 +224,11 @@ class ConfigManager:
             file_path: File this parser should read values from. Can be omitted
               for all child parsers.
         """
+        if _slices is None:
+            _slices = list()
         self.name = name
         self.file_path = file_path
+        self._slices = _slices
         # Objects holding subparsers and options
         self._options: dict[str, ConfigOption] = dict()
         self._sub_parsers: dict[str, ConfigManager] = dict()
@@ -225,29 +254,42 @@ class ConfigManager:
                 "ConfigManager is trying to read config file, but it doesn't "
                 "have one"
             )
-        if not self.file_path.exists():
-            raise ConfigSourceError(
-                f"The config file '{self.file_path}' does not exist"
-            )
-        if (
-            # Same check as openssh does for permissions
-            #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
-            self.file_path.stat().st_mode & READABLE_BY_OTHERS != 0
-            or (
-                # TODO: Windows doesn't have getuid, skip checking
-                hasattr(os, "getuid")
-                and self.file_path.stat().st_uid != 0
-                and self.file_path.stat().st_uid != os.getuid()
-            )
+        read_config_file = tomlkit.TOMLDocument()
+
+        # Read in all of the config slices
+        for filep, sliceoptions, section in itertools.chain(
+            ((self.file_path, ConfigSliceOptions(), None),),
+            self._slices,
         ):
-            warn(f"Bad owner or permissions on {self.file_path}")
-        LOGGER.debug(f"reading configuration file from {str(self.file_path)}")
-        try:
-            self.conf_file_cache = tomlkit.parse(self.file_path.read_text())
-        except Exception as e:
-            raise ConfigSourceError(
-                "An unknown error happened while loading " f"'{str(self.file_path)}'"
-            ) from e
+            if sliceoptions.only_in_slice:
+                del read_config_file[section]
+            if not filep.exists():
+                continue
+            if (
+                sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                # Same check as openssh does for permissions
+                #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
+                and filep.stat().st_mode & READABLE_BY_OTHERS != 0
+                or (
+                    # Windows doesn't have getuid, skip checking
+                    hasattr(os, "getuid")
+                    and filep.stat().st_uid != 0
+                    and filep.stat().st_uid != os.getuid()
+                )
+            ):
+                warn(f"Bad owner or permissions on {str(filep)}")
+            LOGGER.debug(f"reading configuration file from {str(filep)}")
+            try:
+                read_config_piece = tomlkit.parse(filep.read_text())
+            except Exception as e:
+                raise ConfigSourceError(
+                    "An unknown error happened while loading " f"'{str(filep)}'"
+                ) from e
+            if section is None:
+                read_config_file = read_config_piece
+            else:
+                read_config_file[section] = read_config_piece
+        self.conf_file_cache = read_config_file
 
     def add_option(
         self,
@@ -331,6 +373,15 @@ class ConfigManager:
 CONFIG_PARSER = ConfigManager(
     name="CONFIG_PARSER",
     file_path=CONFIG_FILE,
+    _slices=[
+        ConfigSlice(  # Optional connections file to read in connections from
+            CONNECTIONS_FILE,
+            ConfigSliceOptions(
+                check_permissions=True,  # connections could live here, check permissions
+            ),
+            "connections",
+        ),
+    ],
 )
 CONFIG_PARSER.add_option(
     name="connections",

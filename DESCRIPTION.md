@@ -9,15 +9,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.0.5(TBD)
-  - Added a feature that lets you add connection definitions to the `config.toml` configuration file. A connection definition refers to a collection of connection parameters. The connection configuration name must begin with **connections**, similar to the following that defines the parameters for the `prod` connection:
-
+  - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, for example, if you wanted to define a connection named `prod``:
     ```toml
-    [connections.prod]
+    [prod]
     account = "my_account"
     user = "my_user"
     password = "my_password"
     ```
-    By default, we look for the `config.toml` file in the location specified in the `SNOWFLAKE_HOME` environment variable (default: `~/.snowflake`). If this folder does not exist, the Python connector looks for the file in the `platformdirs` location, as follows:
+    By default, we look for the `connections.toml` file in the location specified in the `SNOWFLAKE_HOME` environment variable (default: `~/.snowflake`). If this folder does not exist, the Python connector looks for the file in the [platformdirs](https://github.com/platformdirs/platformdirs/blob/main/README.rst) location, as follows:
 
     - On Linux: `~/.config/snowflake/`,  but follows XDG settings
     - On Mac: `~/Library/Application Support/snowflake/`
@@ -26,7 +25,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     You can determine which file is used by running the following command:
 
     ```
-    python -c "from snowflake.connector.constants import CONFIG_FILE; print(str(CONFIG_FILE))"
+    python -c "from snowflake.connector.constants import CONNECTIONS_FILE; print(str(CONNECTIONS_FILE))"
     ```
   - Bumped cryptography dependency from <41.0.0,>=3.1.0 to >=3.1.0,<42.0.0.
   - Improved OCSP response caching to remove tmp cache files on Windows.

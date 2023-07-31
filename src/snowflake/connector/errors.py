@@ -612,6 +612,13 @@ class ConfigSourceError(Error):
     """
 
 
+class MissingConfigOptionError(ConfigSourceError):
+    """When a configuration option is missing from the final, resolved configurations.
+
+    This is a special-case of ConfigSourceError.
+    """
+
+
 class ConfigManagerError(Error):
     """Configuration parser related errors.
 
