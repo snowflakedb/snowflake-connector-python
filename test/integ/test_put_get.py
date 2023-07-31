@@ -83,7 +83,7 @@ def create_test_data(
         warehouse_name=warehouse_name,
         database_name=database_name,
         user_bucket=os.getenv(
-            "SF_AWS_USER_BUCKET", f"sfc-dev1-regression/{getuser()}/reg"
+            "SF_AWS_USER_BUCKET", f"sfc-eng-regression/{getuser()}/reg"
         ),
         connection=connection,
     )
@@ -165,7 +165,7 @@ retweeted string, lang string)"""
             )
             cur.execute(
                 f"""
-copy into tweets from s3://sfc-dev1-data/twitter/O1k/tweets/
+copy into tweets from s3://sfc-eng-data/twitter/O1k/tweets/
 credentials=(
 AWS_KEY_ID={test_data.AWS_ACCESS_KEY_ID}
 AWS_SECRET_KEY={test_data.AWS_SECRET_ACCESS_KEY})
@@ -177,7 +177,7 @@ file_format=(
             )
             assert cur.rowcount == 1, "copy into tweets did not set rowcount to 1"
             results = cur.fetchall()
-            assert results[0][0] == ("s3://sfc-dev1-data/twitter/O1k/tweets/1.csv.gz")
+            assert results[0][0] == ("s3://sfc-eng-data/twitter/O1k/tweets/1.csv.gz")
             cur.execute("drop table tweets")
 
 
