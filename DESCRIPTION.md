@@ -44,6 +44,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Allowed to pass `type_mapper` to `fetch_pandas_batches()` and `fetch_pandas_all()`.
   - Fixed a bug where pickle.dump segfaults during cache serialization in multi-threaded scenarios.
   - Improved retry logic for okta authentication to refresh token if authentication gets throttled.
+  - Note that this release does not include the changes introduced in the previous 3.1.0a1 release. Those will be released at a later time.
 
 - v3.0.4(May 23,2023)
   - Fixed a bug in which `cursor.execute()` could modify the argument statement_params dictionary object when executing a multistatement query.
