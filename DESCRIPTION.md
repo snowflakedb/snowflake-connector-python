@@ -8,48 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.5(TBD)
-
-- v3.0.5(August 03,2023)
-
-   - e3ead72a Update pytest requirement from <7.4.0 to <7.5.0 (#1619)
-   - e4c11095 SNOW-862388: improve okta authentication retry logic (#1668)
-   - 523e5b13 SNOW-877652: remove cache.__del__ (#1669)
-   - 85df67cf Update CLA document link (#1622)
-   - 8ecd68f6 SNOW-856569 making save actions thread-safe (#1635)
-   - ea8d7337 SNOW-767903: Resolve the race condition of deleting temp file when running PUT (#1561)
-   - 5c168313 SNOW-823926: Upload test coverage for lambda tests (#1651)
-   - 429efcc7 SNOW-870322 Allow pass type_mapper to arrow to_pandas() (#1649)
-   - 90ee69da SNOW-862917: Trigger lambda tests on GHA (#1647)
-   - Update query context cache response body to align with JDBC (#1646)
-   - 783732d7 SNOW-735220: update documentation of pd_writer (#1642)
-   - ac81f876 SNOW-847497: recreate session connection if reset by server (#1639)
-   - 7e9bdf68 SNOW-830394 adding better configuration file changelog entry (#1638)
-   - 9f14bb81 SNOW-833713: revert try setting item when saving parameter (#1636)
-   - 7ac23578 SNOW-856569 mitigate a segfault by avoiding pickle.dump() in favor of pickle.dumps() (#1633)
-   - 398d1ea7 SNOW-833713 snow sql performance issue with ocsp validation in 1 2 26 (#1618)
-   - 88d5a9ce SNOW-847655 dropping python 3.7 support (#1615)
-   - 985cad88 fix old driver test (#1631)
-   - 6c365ab5 SNOW-736326: Add retry reason for retried queries (#1621)
-   - 320dbcee SNOW-851522: pin pre-commit to use py38 as isort in precommit doesn't support py37 anymore (#1620)
-   - d57f29a0 Update keyring requirement from !=16.1.0,<24.0.0 to !=16.1.0,<25.0.0 (#1608)
-   - f8be62d4 SNOW-834366 Fall back to use current schema for temp objects in write… (#1617)
-   - c26e6de4 Update platformdirs requirement from <3.7.0,>=2.6.0 to >=2.6.0,<3.9.0 (#1613)
-   - c21f8197 Update numpy requirement from <1.25.0 to <1.26.0 (#1606)
-   - 48d8d3fe SNOW-802807 SNOWFLAKE_HOME config file resolution bug (#1611)
-   - 51749d29 fixing platformdirs incompatibility (#1609)
-   - 695fcb63 switching issue templates to forms (#1602)
-   - ea65f44a SNOW-746341 Add file format specification to create temp stage SQL in pd_writer (#1594)
-   - 228e8f37 SNOW-802807 adding missing reference to config_manager.py __all__ (#1603)
-   - 6af61ea1 Update cryptography requirement from <41.0.0,>=3.1.0 to >=3.1.0,<42.0.0 (#1590)
-   - a40cf2b9 SNOW-834415 Dont auto create config folder (#1599)
-   - Fix test by adding exception handling for grant query (#1597)
-   - d78a8da9 SNOW-756493 Add param to keep server session alive (#1595)
-   - 48aa932a SNOW-799408: Close temp file handle before removing temp cache file (#1582)
-   - f2d398a6 SNOW-826794 fix mac tests (#1583)
-   - 678f09a7 SNOW-802807 ConfigManager and config file support (#1549)
-   - Revert changes related to raw json (#1577)
-   -
+- v3.0.5(July 31,2023)
 
   - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, for example, if you wanted to define a connection named `prod``:
 
