@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import socket
+import select
 import time
 import webbrowser
 from types import ModuleType
@@ -200,12 +201,14 @@ class AuthByWebBrowser(AuthByPlugin):
         while True:
             socket_client, _ = socket_connection.accept()
             try:
-                # Receive the data in small chunks and retransmit it
-                data = socket_client.recv(BUF_SIZE).decode("utf-8").split("\r\n")
+                read_sockets, _write_sockets, _exception_sockets = select.select([socket_client], [], [])
 
-                if not self._process_options(data, socket_client):
-                    self._process_receive_saml_token(conn, data, socket_client)
-                    break
+                if read_sockets[0] is not None:
+                    # Receive the data in small chunks and retransmit it
+                    data = socket_client.recv(BUF_SIZE).decode("utf-8").split("\r\n")
+                    if not self._process_options(data, socket_client):
+                        self._process_receive_saml_token(conn, data, socket_client)
+                        break
             finally:
                 socket_client.shutdown(socket.SHUT_RDWR)
                 socket_client.close()

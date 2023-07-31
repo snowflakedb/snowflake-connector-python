@@ -42,9 +42,9 @@ def mock_webserver(target_instance, application, port):
 
 
 def test_auth_webbrowser_get():
+
     """Authentication by WebBrowser positive test case."""
     ref_token = "MOCK_TOKEN"
-
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock webbrowser
@@ -67,26 +67,28 @@ def test_auth_webbrowser_get():
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)
 
-    auth = AuthByWebBrowser(
-        application=APPLICATION,
-        webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
-    )
-    auth.prepare(
-        conn=rest._connection,
-        authenticator=AUTHENTICATOR,
-        service_name=SERVICE_NAME,
-        account=ACCOUNT,
-        user=USER,
-        password=PASSWORD,
-    )
-    assert not rest._connection.errorhandler.called  # no error
-    assert auth.assertion_content == ref_token
-    body = {"data": {}}
-    auth.update_body(body)
-    assert body["data"]["TOKEN"] == ref_token
-    assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
-    assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+    # Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_instance], [], [])):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+        body = {"data": {}}
+        auth.update_body(body)
+        assert body["data"]["TOKEN"] == ref_token
+        assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
 
 
 def test_auth_webbrowser_post():
@@ -118,26 +120,28 @@ def test_auth_webbrowser_post():
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)
 
-    auth = AuthByWebBrowser(
-        application=APPLICATION,
-        webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
-    )
-    auth.prepare(
-        conn=rest._connection,
-        authenticator=AUTHENTICATOR,
-        service_name=SERVICE_NAME,
-        account=ACCOUNT,
-        user=USER,
-        password=PASSWORD,
-    )
-    assert not rest._connection.errorhandler.called  # no error
-    assert auth.assertion_content == ref_token
-    body = {"data": {}}
-    auth.update_body(body)
-    assert body["data"]["TOKEN"] == ref_token
-    assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
-    assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+    # Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_instance], [], [])):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+        body = {"data": {}}
+        auth.update_body(body)
+        assert body["data"]["TOKEN"] == ref_token
+        assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
 
 
 @pytest.mark.parametrize(
@@ -225,29 +229,31 @@ def test_auth_webbrowser_fail_webserver(capsys):
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
     mock_socket = Mock(return_value=mock_socket_instance)
 
-    # case 1: invalid HTTP request
-    auth = AuthByWebBrowser(
-        application=APPLICATION,
-        webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
-    )
-    auth.prepare(
-        conn=rest._connection,
-        authenticator=AUTHENTICATOR,
-        service_name=SERVICE_NAME,
-        account=ACCOUNT,
-        user=USER,
-        password=PASSWORD,
-    )
-    captured = capsys.readouterr()
-    assert captured.out == (
-        "Initiating login request with your identity provider. A browser window "
-        "should have opened for you to complete the login. If you can't see it, "
-        "check existing browser windows, or your OS settings. Press CTRL+C to "
-        f"abort and try again...\nGoing to open: {REF_SSO_URL} to authenticate...\n"
-    )
-    assert rest._connection.errorhandler.called  # an error
-    assert auth.assertion_content is None
+    # Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_instance], [], [])):
+        # case 1: invalid HTTP request
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        captured = capsys.readouterr()
+        assert captured.out == (
+            "Initiating login request with your identity provider. A browser window "
+            "should have opened for you to complete the login. If you can't see it, "
+            "check existing browser windows, or your OS settings. Press CTRL+C to "
+            f"abort and try again...\nGoing to open: {REF_SSO_URL} to authenticate...\n"
+        )
+        assert rest._connection.errorhandler.called  # an error
+        assert auth.assertion_content is None
 
 
 def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
