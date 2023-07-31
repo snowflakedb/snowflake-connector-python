@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.0.5(July 31,2023)
+- v3.1.0(July 31,2023)
 
   - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, for example, if you wanted to define a connection named `prod``:
 
