@@ -199,16 +199,28 @@ class AuthByWebBrowser(AuthByPlugin):
     def _receive_saml_token(self, conn: SnowflakeConnection, socket_connection) -> None:
         """Receives SAML token from web browser."""
         while True:
-            socket_client, _ = socket_connection.accept()
             try:
-                read_sockets, _write_sockets, _exception_sockets = select.select([socket_client], [], [])
+                attempts = 0
+                raw_data = bytearray()
+                socket_client = None
 
-                if read_sockets[0] is not None:
-                    # Receive the data in small chunks and retransmit it
-                    data = socket_client.recv(BUF_SIZE).decode("utf-8").split("\r\n")
-                    if not self._process_options(data, socket_client):
-                        self._process_receive_saml_token(conn, data, socket_client)
-                        break
+                # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array
+                #   an immediate successive call to socket_client.recv gets the actual data 
+                while len(raw_data) == 0 and attempts < 5:
+                    attempts += 1
+                    read_sockets, _write_sockets, _exception_sockets = select.select([socket_connection], [], [])
+
+                    if read_sockets[0] is not None:
+                        # Receive the data in small chunks and retransmit it
+                        socket_client, _ = socket_connection.accept()
+                        raw_data = socket_client.recv(BUF_SIZE)
+
+                data = raw_data.decode("utf-8").split("\r\n")
+
+                if not self._process_options(data, socket_client):
+                    self._process_receive_saml_token(conn, data, socket_client)
+                    break
+
             finally:
                 socket_client.shutdown(socket.SHUT_RDWR)
                 socket_client.close()

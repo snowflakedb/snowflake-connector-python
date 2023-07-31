@@ -34,45 +34,49 @@ REF_PROOF_KEY = "MOCK_PROOF_KEY"
 REF_SSO_URL = "https://testsso.snowflake.net/sso"
 INVALID_SSO_URL = "this is an invalid URL"
 
-
 def mock_webserver(target_instance, application, port):
     _ = application
     _ = port
     target_instance._webserver_status = True
 
+def successful_web_callback(token):
+    return (
+        "\r\n".join(
+            [
+                f"GET /?token={token}&confirm=true HTTP/1.1",
+                "User-Agent: snowflake-agent",
+            ]
+        )
+    ).encode("utf-8")
+
+def _init_socket(recv_return_list):
+    mock_socket_instance = MagicMock()
+    mock_socket_instance.getsockname.return_value = [None, 12345]
+
+    mock_socket_client = MagicMock()
+    mock_socket_client.recv.side_effect = recv_return_list
+    mock_socket_instance.accept.return_value = (mock_socket_client, None)
+
+    return Mock(return_value=mock_socket_instance)
 
 def test_auth_webbrowser_get():
-
     """Authentication by WebBrowser positive test case."""
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_return_list = [ successful_web_callback(ref_token) ])
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, 12345]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(
-            [
-                f"GET /?token={ref_token}&confirm=true HTTP/1.1",
-                "User-Agent: snowflake-agent",
-            ]
-        )
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
-
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_instance], [], [])):
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
-            socket_pkg=mock_socket,
+            socket_pkg=mock_socket_pkg,
         )
         auth.prepare(
             conn=rest._connection,
@@ -90,42 +94,114 @@ def test_auth_webbrowser_get():
         assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
         assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
 
-
-def test_auth_webbrowser_post():
-    """Authentication by WebBrowser positive test case with POST."""
+def test_auth_webbrowser_socket_recv_retries_up_to_5_times_on_empty_bytearray():
+    """Authentication by WebBrowser retries on empty bytearray response from socket.recv"""
     ref_token = "MOCK_TOKEN"
-
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_return_list = [ 
+        bytearray(),
+        bytearray(),
+        bytearray(),
+        bytearray(),
+        successful_web_callback(ref_token) 
+    ])
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, 12345]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(
-            [
-                "POST / HTTP/1.1",
-                "User-Agent: snowflake-agent",
-                "Host: localhost:12345",
-                "",
-                f"token={ref_token}&confirm=true",
-            ]
-        )
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
-
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_instance], [], [])):
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
-            socket_pkg=mock_socket,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+        body = {"data": {}}
+        auth.update_body(body)
+        assert body["data"]["TOKEN"] == ref_token
+        assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+
+def test_auth_webbrowser_socket_recv_loop_fails_after_5_attempts():
+    """Authentication by WebBrowser stops trying after 5 consective socket.recv emty bytearray returns."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_return_list = [ 
+        bytearray(),
+        bytearray(),
+        bytearray(),
+        bytearray(),
+        bytearray(), # 5th return is empty byte array
+        successful_web_callback(ref_token) # successful_web_callback will never be fetched from recv
+    ])
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
+
+    # Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert rest._connection.errorhandler.called  # an error
+        assert auth.assertion_content is None
+
+def test_auth_webbrowser_post():
+    """Authentication by WebBrowser positive test case with POST."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_return_list = [ 
+        (
+            "\r\n".join(
+                [
+                    "POST / HTTP/1.1",
+                    "User-Agent: snowflake-agent",
+                    "Host: localhost:12345",
+                    "",
+                    f"token={ref_token}&confirm=true",
+                ]
+            )
+        ).encode("utf-8")
+    ])
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
+
+    # Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
         )
         auth.prepare(
             conn=rest._connection,
@@ -160,25 +236,17 @@ def test_auth_webbrowser_fail_webbrowser(
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
     ref_token = "MOCK_TOKEN"
 
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_return_list = [ successful_web_callback(ref_token) ])
+
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = False
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, 12345]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(["GET /?token=MOCK_TOKEN HTTP/1.1", "User-Agent: snowflake-agent"])
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
-
     auth = AuthByWebBrowser(
         application=APPLICATION,
         webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
+        socket_pkg=mock_socket_pkg,
     )
     with patch("builtins.input", return_value=input_text):
         auth.prepare(
@@ -214,28 +282,24 @@ def test_auth_webbrowser_fail_webserver(capsys):
     """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_return_list = [ 
+        (
+            "\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])
+        ).encode("utf-8")
+    ])
+
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, 12345]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
-
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_instance], [], [])):
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
         # case 1: invalid HTTP request
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
-            socket_pkg=mock_socket,
+            socket_pkg=mock_socket_pkg,
         )
         auth.prepare(
             conn=rest._connection,
@@ -288,7 +352,6 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
     rest._post_request = post_request
     connection._rest = rest
     return rest
-
 
 def test_idtoken_reauth():
     """This test makes sure that AuthByIdToken reverts to AuthByWebBrowser.
