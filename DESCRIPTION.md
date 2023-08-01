@@ -22,6 +22,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Cherry-picked https://github.com/urllib3/urllib3/commit/fd2759aa16b12b33298900c77d29b3813c6582de onto vendored urllib3 (v1.26.15) to enable enforce_content_length by default.
   - Fixed a bug in tag generation of OOB telemetry event.
 
+- v3.1.0a2(Aug 1, 2023)
+  - Version 3.1.0a2 is built on top of 3.1.0a1, including all the latest changes in the released GA version 3.1.0.
+
 - v3.1.0(July 31, 2023)
 
   - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, for example, if you wanted to define a connection named `prod``:
