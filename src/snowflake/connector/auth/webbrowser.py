@@ -203,17 +203,37 @@ class AuthByWebBrowser(AuthByPlugin):
                 attempts = 0
                 raw_data = bytearray()
                 socket_client = None
+                max_attempts = 15
+                msg_dont_wait = os.getenv("SF_AUTH_SOCKET_MSG_DONTWAIT", "false").lower() == 'true'
 
                 # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array
-                #   an immediate successive call to socket_client.recv gets the actual data 
-                while len(raw_data) == 0 and attempts < 5:
+                #   an immediate successive call to socket_client.recv gets the actual data
+                while len(raw_data) == 0 and attempts < max_attempts:
                     attempts += 1
                     read_sockets, _write_sockets, _exception_sockets = select.select([socket_connection], [], [])
 
                     if read_sockets[0] is not None:
                         # Receive the data in small chunks and retransmit it
                         socket_client, _ = socket_connection.accept()
-                        raw_data = socket_client.recv(BUF_SIZE)
+
+                        try:
+                            if msg_dont_wait:
+                                # WSL containerized environment sometimes causes socket_client.recv to hang indefinetly
+                                #   To avoid this, passing the socket.MSG_DONTWAIT flag which raises BlockingIOError if
+                                #   operation would block
+                                logger.debug('Calling socket_client.recv with MSG_DONTWAIT flag due to SF_AUTH_SOCKET_MESSAGE_DONTWAIT env var')
+                                raw_data = socket_client.recv(BUF_SIZE, socket.MSG_DONTWAIT)
+                            else:
+                                raw_data = socket_client.recv(BUF_SIZE)
+
+                        except BlockingIOError:
+                            logger.debug(f'BlockingIOError raised from socket.recv while attempting to retrieve callback token request')
+                            if attempts < max_attempts:
+                                sleep_time = 0.25
+                                logger.debug(f'Waiting {sleep_time} seconds before trying again')
+                                time.sleep(sleep_time)
+                            else:
+                                logger.debug('Exceeded retry count')
 
                 data = raw_data.decode("utf-8").split("\r\n")
 
