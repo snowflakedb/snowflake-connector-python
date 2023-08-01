@@ -9,6 +9,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+- v3.1.0a2(Aug 1, 2023)
+  - Version 3.1.0a2 is built on top of 3.1.0a1, including all the latest changes in the released GA version 3.1.0.
+
 - v3.1.0(July 31, 2023)
 
   - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, for example, if you wanted to define a connection named `prod``:
