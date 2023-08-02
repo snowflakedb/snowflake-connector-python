@@ -278,8 +278,35 @@ class ResultBatch(abc.ABC):
         """
         return self.create_iter()
 
+    def _download_stream(self, connection: SnowflakeConnection | None = None, **kwargs) -> bytes:
+        response = self._download(connection, stream=True, **kwargs)
+        import gzip
+        if response.raw and response.raw.data:
+            expected_length = response.headers.get('Content-Length')
+            if expected_length is not None:
+                actual_length = response.raw.tell()
+                expected_length = int(expected_length)
+                if actual_length < expected_length:
+                    raise IOError(
+                        'incomplete read ({} bytes read, {} more expected)'.format(
+                            actual_length,
+                            expected_length - actual_length
+                        )
+                    )
+            logger.info(f"Successfully read {expected_length} bytes for batch id: {self.id}")
+            assert self.compressed_size == expected_length, f"Mismatch: expected {self.compressed_size} bytes in compressed size, received {expected_length} bytes"
+            content = gzip.decompress(response.raw.data)
+            assert self.uncompressed_size == len(
+                content), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {len(content)} bytes"
+            return content
+        else:
+            assert self.uncompressed_size == len(
+                response.content), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {response.content} bytes"
+            return response.content
+
+
     def _download(
-        self, connection: SnowflakeConnection | None = None, **kwargs
+        self, connection: SnowflakeConnection | None = None, stream=False, **kwargs
     ) -> Response:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
@@ -300,19 +327,18 @@ class ResultBatch(abc.ABC):
                             logger.info(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
-                            response = session.request("get", **request_data)
+                            response = session.request("get", **request_data, stream=stream)
                     else:
                         logger.info(
                             f"downloading result batch id: {self.id} with new session"
                         )
-                        response = requests.get(**request_data)
+                        response = requests.get(**request_data, stream=stream)
 
                     if response.status_code == OK:
                         logger.info(
                             f"successfully downloaded result batch id: {self.id}"
                         )
                         break
-
                     # Raise error here to correctly go in to exception clause
                     if is_retryable_http_code(response.status_code):
                         # retryable server exceptions
@@ -556,7 +582,7 @@ class ArrowResultBatch(ResultBatch):
         return f"ArrowResultChunk({self.id})"
 
     def _load(
-        self, response: Response, row_unit: IterUnit
+        self, content: bytes, row_unit: IterUnit
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` from a response.
 
@@ -567,7 +593,7 @@ class ArrowResultBatch(ResultBatch):
 
         iter = PyArrowIterator(
             None,
-            io.BytesIO(response.content),
+            io.BytesIO(content),
             self._context,
             self._use_dict_result,
             self._numpy,
@@ -637,12 +663,12 @@ class ArrowResultBatch(ResultBatch):
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
             return self._from_data(self._data, iter_unit)
-        response = self._download(connection=connection)
+        content = self._download_stream(connection=connection)
         logger.info(f"started loading result batch id: {self.id}")
 
         try:
             with TimerContextManager() as load_metric:
-                loaded_data = self._load(response, iter_unit)
+                loaded_data = self._load(content, iter_unit)
         except OperationalError as e:
             logger.error(f"Encountered exception when parsing Arrow chunk: {e}")
             import pickle
@@ -663,8 +689,8 @@ class ArrowResultBatch(ResultBatch):
                     logger.error(f"Logging the content instead... {name}: {content}")
 
             dump_to_tmp_file(
-                "pickled GET Chunk Response",
-                pickle.dumps(response),
+                "pickled GET Chunk content",
+                pickle.dumps(content),
                 f"Chunk_{self.id}_",
             )
             dump_to_tmp_file(
