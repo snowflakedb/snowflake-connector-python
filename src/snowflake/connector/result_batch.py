@@ -278,32 +278,39 @@ class ResultBatch(abc.ABC):
         """
         return self.create_iter()
 
-    def _download_stream(self, connection: SnowflakeConnection | None = None, **kwargs) -> bytes:
+    def _download_stream(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> bytes:
         response = self._download(connection, stream=True, **kwargs)
         import gzip
+
         if response.raw and response.raw.data:
-            expected_length = response.headers.get('Content-Length')
+            expected_length = response.headers.get("Content-Length")
             if expected_length is not None:
                 actual_length = response.raw.tell()
                 expected_length = int(expected_length)
                 if actual_length < expected_length:
-                    raise IOError(
-                        'incomplete read ({} bytes read, {} more expected)'.format(
-                            actual_length,
-                            expected_length - actual_length
+                    raise OSError(
+                        "incomplete read ({} bytes read, {} more expected)".format(
+                            actual_length, expected_length - actual_length
                         )
                     )
-            logger.info(f"Successfully read {expected_length} bytes for batch id: {self.id}")
-            assert self.compressed_size == expected_length, f"Mismatch: expected {self.compressed_size} bytes in compressed size, received {expected_length} bytes"
+            logger.info(
+                f"Successfully read {expected_length} bytes for batch id: {self.id}"
+            )
+            assert (
+                self.compressed_size == expected_length
+            ), f"Mismatch: expected {self.compressed_size} bytes in compressed size, received {expected_length} bytes"
             content = gzip.decompress(response.raw.data)
             assert self.uncompressed_size == len(
-                content), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {len(content)} bytes"
+                content
+            ), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {len(content)} bytes"
             return content
         else:
             assert self.uncompressed_size == len(
-                response.content), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {response.content} bytes"
+                response.content
+            ), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {response.content} bytes"
             return response.content
-
 
     def _download(
         self, connection: SnowflakeConnection | None = None, stream=False, **kwargs
@@ -327,7 +334,9 @@ class ResultBatch(abc.ABC):
                             logger.info(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
-                            response = session.request("get", **request_data, stream=stream)
+                            response = session.request(
+                                "get", **request_data, stream=stream
+                            )
                     else:
                         logger.info(
                             f"downloading result batch id: {self.id} with new session"
