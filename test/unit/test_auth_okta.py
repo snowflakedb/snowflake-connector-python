@@ -216,6 +216,8 @@ def test_auth_okta_step4_negative(caplog):
     # the first time, when step4 gets executed, we return 429
     # the second time when step4 gets retried, we return 200
     def mock_session_request(*args, **kwargs):
+        url = kwargs.get("url")
+        assert url.count("onetimetoken") == 1
         nonlocal raise_token_refresh_error
         if raise_token_refresh_error:
             raise_token_refresh_error = False
