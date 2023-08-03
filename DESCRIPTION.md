@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.1.1(TBD)
+
+  - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
+
 - v3.1.0(July 31,2023)
 
   - Added a feature that lets you add connection definitions to the `connections.toml` configuration file. A connection definition refers to a collection of connection parameters, for example, if you wanted to define a connection named `prod``:
