@@ -282,10 +282,10 @@ class ResultBatch(abc.ABC):
         self, connection: SnowflakeConnection | None = None, **kwargs
     ) -> bytes:
         response = self._download(connection, stream=True, **kwargs)
+        expected_length = response.headers.get("Content-Length")
+        logger.info(f"Batch id: {self.id} Content-Length: {expected_length}")
         import gzip
-
         if response.raw and response.raw.data:
-            expected_length = response.headers.get("Content-Length")
             actual_length = response.raw.tell()
             if expected_length is not None:
                 expected_length = int(expected_length)
@@ -304,7 +304,7 @@ class ResultBatch(abc.ABC):
             content = gzip.decompress(response.raw.data)
             assert self.uncompressed_size == len(
                 content
-            ), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {len(content)} bytes"
+            ), f"Mismatch: expected {self.uncompressed_size} bytes in uncompressed size, received {len(content)} bytes"
             return content
         else:
             assert self.uncompressed_size == len(
