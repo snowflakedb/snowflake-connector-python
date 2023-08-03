@@ -61,7 +61,7 @@ class ConfigOption:
           supplied, we'll construct this. False disables reading from
           environmental variables, None uses the auto generated variable name
           and explicitly provided string overwrites the default one.
-        _root_manager: Reference to the root parser. Used to efficiently
+        _root_manager: Reference to the root manager. Used to efficiently
           refer to cached config file. Is supplied by the parent
           ConfigManager.
         _nest_path: The names of the ConfigManagers that this option is
@@ -173,7 +173,7 @@ class ConfigOption:
         e = self._root_manager.conf_file_cache
         if e is None:
             raise ConfigManagerError(
-                f"Root parser '{self._root_manager.name}' is missing file_path",
+                f"Root manager '{self._root_manager.name}' is missing file_path",
             )
         for k in self._nest_path[1:]:
             try:
@@ -199,12 +199,12 @@ class ConfigManager:
     As an example, think of not allowing to provide passwords by command line arguments.
 
     This class is updatable at run-time, allowing other libraries to add their
-    own configuration options and sub-parsers before resolution.
+    own configuration options and sub-managers before resolution.
 
     This class can simply be thought of as nestable containers for ConfigOptions.
     It holds extra information necessary for efficient nesting purposes.
 
-    Sub-parsers allow option groups to exist, e.g. the group "snowflake.cli.output"
+    Sub-managers allow option groups to exist, e.g. the group "snowflake.cli.output"
     could have 2 options in it: debug (boolean flag) and format (a string like "json",
     or "csv").
 
@@ -217,15 +217,17 @@ class ConfigManager:
           useful error messages.
         file_path: Path to the file where this and all child ConfigManagers
           should read their values out of. Can be omitted for all child
-          parsers. Root parser could also miss this value, but this will
+          managers. Root manager could also miss this value, but this will
           result in an exception when a value is read that isn't available from
           a preceding config source.
         conf_file_cache: Cache to store what we read from the TOML file.
-        _sub_parsers: List of ConfigManagers that are nested under the current manager.
+        _sub_managers: List of ConfigManagers that are nested under the current manager.
+        _sub_parsers: Alias for the old name of _sub_managers in the first release, please use
+          the new name now, as this might get deprecated in the future.
         _options: List of ConfigOptions that are under the current manager.
         _root_manager: Reference to the root manager. Used to efficiently propagate to
           child options.
-        _nest_path: The names of the ConfigManagers that this parser is nested
+        _nest_path: The names of the ConfigManagers that this manager is nested
           under. Used to efficiently propagate to child options.
         _slices: List of config slices, where optional sections could be read from.
           Note that this feature might become deprecated soon.
@@ -242,8 +244,8 @@ class ConfigManager:
 
         Args:
             name: Name of this ConfigManager.
-            file_path: File this parser should read values from. Can be omitted
-              for all child parsers.
+            file_path: File this manager should read values from. Can be omitted
+              for all child managers.
             _slices: List of ConfigSlices to consider. A configuration file's slice is a
               section that can optionally reside in a different file. Note that this
               feature might get deprecated soon.
@@ -253,9 +255,12 @@ class ConfigManager:
         self.name = name
         self.file_path = file_path
         self._slices = _slices
-        # Objects holding subparsers and options
+        # Objects holding sub-managers and options
         self._options: dict[str, ConfigOption] = dict()
-        self._sub_parsers: dict[str, ConfigManager] = dict()
+        self._sub_managers: dict[str, ConfigManager] = dict()
+        # Alias for the old name of _sub_managers in the first release, please use the
+        #  new name, as this might get deprecated in the future.
+        self._sub_parsers = self._sub_managers
         # Dictionary to cache read in config file
         self.conf_file_cache: tomlkit.TOMLDocument | None = None
         # Information necessary to be able to nest elements
@@ -337,17 +342,17 @@ class ConfigManager:
         self._options[new_option.name] = new_option
 
     def _check_child_conflict(self, name: str) -> None:
-        """Check if a sub-parser, or ConfigOption conflicts with given name.
+        """Check if a sub-manager, or ConfigOption conflicts with given name.
 
         Args:
             name: Name to check against children.
         """
-        if name in (self._options.keys() | self._sub_parsers.keys()):
+        if name in (self._options.keys() | self._sub_managers.keys()):
             raise ConfigManagerError(
-                f"'{name}' subparser, or option conflicts with a child element of '{self.name}'"
+                f"'{name}' sub-manager, or option conflicts with a child element of '{self.name}'"
             )
 
-    def add_subparser(self, new_child: ConfigManager) -> None:
+    def add_submanager(self, new_child: ConfigManager) -> None:
         """Nest another ConfigManager under this one.
 
         This function recursively updates _nest_path and _root_manager of all
@@ -357,17 +362,17 @@ class ConfigManager:
             new_child: The ConfigManager to be nested under the current one.
         Notes:
             We currently don't support re-nesting a ConfigManager. Only nest a
-            parser under another one once.
+            manager under another one once.
         """
         self._check_child_conflict(new_child.name)
-        self._sub_parsers[new_child.name] = new_child
+        self._sub_managers[new_child.name] = new_child
 
         def _root_setter_helper(node: ConfigManager):
             # Deal with ConfigManagers
             node._root_manager = self._root_manager
             node._nest_path = self._nest_path + node._nest_path
-            for sub_parser in node._sub_parsers.values():
-                _root_setter_helper(sub_parser)
+            for sub_manager in node._sub_managers.values():
+                _root_setter_helper(sub_manager)
             # Deal with ConfigOptions
             for option in node._options.values():
                 option._root_manager = self._root_manager
@@ -375,8 +380,12 @@ class ConfigManager:
 
         _root_setter_helper(new_child)
 
+    # Alias for the old name of add_submanager in the first release, please use the
+    #  new name, as this might get deprecated in the future.
+    add_subparser = add_submanager
+
     def __getitem__(self, name: str) -> ConfigOption | ConfigManager:
-        """Get either sub-parser, or option in this parser with name.
+        """Get either sub-manager, or option in this manager with name.
 
         If an option is retrieved, we call get() on it to return its value instead.
 
@@ -385,16 +394,16 @@ class ConfigManager:
         """
         if name in self._options:
             return self._options[name].value()
-        if name not in self._sub_parsers:
+        if name not in self._sub_managers:
             raise ConfigSourceError(
                 "No ConfigManager, or ConfigOption can be found"
                 f" with the name '{name}'"
             )
-        return self._sub_parsers[name]
+        return self._sub_managers[name]
 
 
 CONFIG_MANAGER = ConfigManager(
-    name="CONFIG_PARSER",
+    name="CONFIG_MANAGER",
     file_path=CONFIG_FILE,
     _slices=[
         ConfigSlice(  # Optional connections file to read in connections from
@@ -411,8 +420,8 @@ CONFIG_MANAGER.add_option(
     parse_str=tomlkit.parse,
 )
 
-# Alias for the old name of CONFIG_MANAGER in the first release, please use the actual name
-#  This might get deprecated in the future.
+# Alias for the old name of CONFIG_MANAGER in the first release, please use the
+#  new name, as this might get deprecated in the future.
 CONFIG_PARSER = CONFIG_MANAGER
 
 __all__ = [

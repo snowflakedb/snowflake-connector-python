@@ -394,7 +394,7 @@ def test_error_child_conflict():
     cp.add_subparser(ConfigManager(name="b"))
     with pytest.raises(
         ConfigManagerError,
-        match="'b' subparser, or option conflicts with a child element of 'test_parser'",
+        match="'b' sub-manager, or option conflicts with a child element of 'test_parser'",
     ):
         cp.add_option(name="b")
 
@@ -491,7 +491,7 @@ def test_error_missing_fp_retrieve():
     tp.add_option(name="option")
     with pytest.raises(
         ConfigManagerError,
-        match="Root parser 'test_parser' is missing file_path",
+        match="Root manager 'test_parser' is missing file_path",
     ):
         tp["option"]
 
