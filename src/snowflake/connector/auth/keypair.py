@@ -129,8 +129,7 @@ class AuthByKeyPair(AuthByPlugin):
         else:
             raise TypeError(self._private_key)
 
-        public_key = private_key.public_key()
-        public_key_fp = self.calculate_public_key_fingerprint(public_key)
+        public_key_fp = self.calculate_public_key_fingerprint(private_key)
 
         self._jwt_token_exp = now + self._lifetime
         payload = {
@@ -155,9 +154,9 @@ class AuthByKeyPair(AuthByPlugin):
         return {"success": False}
 
     @staticmethod
-    def calculate_public_key_fingerprint(public_key):
+    def calculate_public_key_fingerprint(private_key):
         # get public key bytes
-        public_key_der = public_key.public_bytes(
+        public_key_der = private_key.public_key().public_bytes(
             Encoding.DER, PublicFormat.SubjectPublicKeyInfo
         )
 
