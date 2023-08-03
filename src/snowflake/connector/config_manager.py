@@ -163,7 +163,7 @@ class ConfigOption:
         """Get value from the cached config file if possible.
 
         Since this is the last resource for retrieving the value it raises
-        an MissingConfigOptionError if it's unable to find this option.
+        a MissingConfigOptionError if it's unable to find this option.
         """
         if (
             self._root_manager.conf_file_cache is None
@@ -192,7 +192,7 @@ class ConfigOption:
 
 
 class ConfigManager:
-    """Reads a TOML configuration file with managed multi-source precedence.
+    """Read a TOML configuration file with managed multi-source precedence.
 
     Note that multi-source precedence is actually implemented by ConfigOption.
     This is done to make sure that special handling can be done for special options.
