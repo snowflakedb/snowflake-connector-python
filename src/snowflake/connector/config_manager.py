@@ -370,7 +370,7 @@ class ConfigManager:
         return self._sub_parsers[name]
 
 
-CONFIG_PARSER = ConfigManager(
+CONFIG_MANAGER = ConfigManager(
     name="CONFIG_PARSER",
     file_path=CONFIG_FILE,
     _slices=[
@@ -383,13 +383,18 @@ CONFIG_PARSER = ConfigManager(
         ),
     ],
 )
-CONFIG_PARSER.add_option(
+CONFIG_MANAGER.add_option(
     name="connections",
     parse_str=tomlkit.parse,
 )
 
+# Alias for the old name of CONFIG_MANAGER in the first release, please use the actual name
+#  This might get deprecated in the future.
+CONFIG_PARSER = CONFIG_MANAGER
+
 __all__ = [
     "ConfigOption",
     "ConfigManager",
+    "CONFIG_MANAGER",
     "CONFIG_PARSER",
 ]
