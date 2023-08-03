@@ -46,8 +46,10 @@ class ConfigSlice(NamedTuple):
 class ConfigOption:
     """ConfigOption represents a flag/setting.
 
-    The class knows how to read the value out of all sources and implements
+    This class knows how to read the value out of all different sources and implements
     order of precedence between them.
+
+    It also provides value parsing and verification.
 
     Attributes:
         name: Name of this ConfigOption.
@@ -57,14 +59,14 @@ class ConfigOption:
           this option.
         env_name: Environmental variable value should be read from, if not
           supplied, we'll construct this. False disables reading from
-          environmental variable, None uses the auto generated variable name
+          environmental variables, None uses the auto generated variable name
           and explicitly provided string overwrites the default one.
         _root_manager: Reference to the root parser. Used to efficiently
           refer to cached config file. Is supplied by the parent
           ConfigManager.
         _nest_path: The names of the ConfigManagers that this option is
-          nested in. Used be able to efficiently resolve where to grab
-          value out of configuration file and construct environment
+          nested in. Used to be able to efficiently resolve where to retrieve
+          value out of the configuration file and construct environment
           variable name. This is supplied by the parent ConfigManager.
     """
 
@@ -78,14 +80,17 @@ class ConfigOption:
         _root_manager: ConfigManager | None = None,
         _nest_path: list[str] | None,
     ) -> None:
-        """Create a config option that can read values from different locations.
+        """Create a config option that can read values from different sources.
 
         Args:
             name: Name to assign to this ConfigOption.
-            parse_str: String parser function for this ConfigOption.
-            choices: List of possible values for this ConfigOption.
+            parse_str: String parser function for this instance.
+            choices: List of possible values for this instance.
             env_name: Environmental variable name value should be read from.
-            _root_manager: Reference to the root parser. Should be supplied by
+              Providing a string will use that env variable, False disables reading
+              value from environmental variables and the default None generates an
+              environmental variable name for it using the _nest_path and name.
+            _root_manager: Reference to the root manager. Should be supplied by
               the parent ConfigManager.
             _nest_path: The names of the ConfigManagers that this option is
               nested in. This is supplied by the parent ConfigManager.
@@ -155,7 +160,11 @@ class ConfigOption:
         return True, loaded_var
 
     def _get_config(self) -> Any:
-        """Get value from the cached config file."""
+        """Get value from the cached config file if possible.
+
+        Since this is the last resource for retrieving the value it raises
+        an MissingConfigOptionError if it's unable to find this option.
+        """
         if (
             self._root_manager.conf_file_cache is None
             and self._root_manager.file_path is not None
@@ -183,13 +192,21 @@ class ConfigOption:
 
 
 class ConfigManager:
-    """Read TOML configuration file with managed multi-source precedence.
+    """Reads a TOML configuration file with managed multi-source precedence.
 
-     This class is updatable at run-time, allowing other libraries to add their
-    own configuration options and sub-parsers. Sub-parsers allow
-     options groups to exist, e.g. the group "snowflake.cli.output" could have
-     2 options in it: debug (boolean flag) and format (a string like "json", or
-     "csv").
+    Note that multi-source precedence is actually implemented by ConfigOption.
+    This is done to make sure that special handling can be done for special options.
+    As an example, think of not allowing to provide passwords by command line arguments.
+
+    This class is updatable at run-time, allowing other libraries to add their
+    own configuration options and sub-parsers before resolution.
+
+    This class can simply be thought of as nestable containers for ConfigOptions.
+    It holds extra information necessary for efficient nesting purposes.
+
+    Sub-parsers allow option groups to exist, e.g. the group "snowflake.cli.output"
+    could have 2 options in it: debug (boolean flag) and format (a string like "json",
+    or "csv").
 
     When a ConfigManager tries to retrieve ConfigOptions' value the _root_manager
     will read and cache the TOML file from the file it's pointing at, afterwards
@@ -200,14 +217,18 @@ class ConfigManager:
           useful error messages.
         file_path: Path to the file where this and all child ConfigManagers
           should read their values out of. Can be omitted for all child
-          parsers.
+          parsers. Root parser could also miss this value, but this will
+          result in an exception when a value is read that isn't available from
+          a preceding config source.
         conf_file_cache: Cache to store what we read from the TOML file.
-        _sub_parsers: List of ConfigManagers that are nested under us.
-        _options: List of ConfigOptions that are our children.
-        _root_manager: Reference to root parser. Used to efficiently propagate to
+        _sub_parsers: List of ConfigManagers that are nested under the current manager.
+        _options: List of ConfigOptions that are under the current manager.
+        _root_manager: Reference to the root manager. Used to efficiently propagate to
           child options.
         _nest_path: The names of the ConfigManagers that this parser is nested
           under. Used to efficiently propagate to child options.
+        _slices: List of config slices, where optional sections could be read from.
+          Note that this feature might become deprecated soon.
     """
 
     def __init__(
@@ -217,12 +238,15 @@ class ConfigManager:
         file_path: Path | None = None,
         _slices: list[ConfigSlice] | None = None,
     ):
-        """Create a new ConfigManager.
+        """Creates a new ConfigManager.
 
         Args:
             name: Name of this ConfigManager.
             file_path: File this parser should read values from. Can be omitted
               for all child parsers.
+            _slices: List of ConfigSlices to consider. A configuration file's slice is a
+              section that can optionally reside in a different file. Note that this
+              feature might get deprecated soon.
         """
         if _slices is None:
             _slices = list()
@@ -242,12 +266,11 @@ class ConfigManager:
     def read_config(
         self,
     ) -> None:
-        """Read and cache config file.
+        """Read and cache config file contents.
 
-        This function should be called if the ConfigManager's cache is outdated.
-        Maybe in the case when we want to replace the file_path assigned to a
-        ConfigManager, or if one's doing development and are interactively
-        adding new options to their configuration files.
+        This function should be explicitly called if the ConfigManager's cache is
+        outdated. Most likely when someone's doing development and are interactively
+        adding new options to their configuration file.
         """
         if self.file_path is None:
             raise ConfigManagerError(
@@ -297,10 +320,10 @@ class ConfigManager:
         option_cls: type[ConfigOption] = ConfigOption,
         **kwargs,
     ) -> None:
-        """Add an ConfigOption to this ConfigManager.
+        """Add a ConfigOption to this ConfigManager.
 
         Args:
-            option_cls: The class that should be instantiated. This is class
+            option_cls: The class that should be instantiated. This class
               should be a child class of ConfigOption. Mainly useful for cases
               where the default ConfigOption needs to be extended, for example
               if a new configuration option source needs to be supported.
@@ -355,7 +378,7 @@ class ConfigManager:
     def __getitem__(self, name: str) -> ConfigOption | ConfigManager:
         """Get either sub-parser, or option in this parser with name.
 
-        If option is retrieved, we call get() on it to return its value instead.
+        If an option is retrieved, we call get() on it to return its value instead.
 
         Args:
             name: Name to retrieve.
