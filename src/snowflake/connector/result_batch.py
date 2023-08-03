@@ -285,6 +285,7 @@ class ResultBatch(abc.ABC):
         expected_length = response.headers.get("Content-Length")
         logger.info(f"Batch id: {self.id} Content-Length: {expected_length}")
         import gzip
+
         if response.raw and response.raw.data:
             actual_length = response.raw.tell()
             if expected_length is not None:
