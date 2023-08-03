@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from pytest import raises
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 from cryptography.hazmat.backends import default_backend
@@ -13,6 +12,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import load_der_private_key
+from pytest import raises
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.constants import OCSPMode
@@ -99,8 +99,10 @@ def test_auth_keypair_bad_type():
     """Simple Key Pair test using abstraction layer."""
     account = "testaccount"
     user = "testuser"
+
     class Bad:
         pass
+
     auth_instance = AuthByKeyPair(private_key=Bad())
     with raises(TypeError) as ex:
         auth_instance.handle_timeout(
@@ -110,7 +112,7 @@ def test_auth_keypair_bad_type():
             user=user,
             password=None,
         )
-    assert 'Bad' in str(ex)
+    assert "Bad" in str(ex)
 
 
 def _init_rest(application, post_requset):
