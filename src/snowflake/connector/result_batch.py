@@ -286,8 +286,8 @@ class ResultBatch(abc.ABC):
 
         if response.raw and response.raw.data:
             expected_length = response.headers.get("Content-Length")
+            actual_length = response.raw.tell()
             if expected_length is not None:
-                actual_length = response.raw.tell()
                 expected_length = int(expected_length)
                 if actual_length < expected_length:
                     raise OSError(
@@ -296,11 +296,11 @@ class ResultBatch(abc.ABC):
                         )
                     )
             logger.info(
-                f"Successfully read {expected_length} bytes for batch id: {self.id}"
+                f"Successfully read {actual_length} bytes for batch id: {self.id}"
             )
             assert (
-                self.compressed_size == expected_length
-            ), f"Mismatch: expected {self.compressed_size} bytes in compressed size, received {expected_length} bytes"
+                self.compressed_size == actual_length
+            ), f"Mismatch: expected {self.compressed_size} bytes in compressed size, received {actual_length} bytes"
             content = gzip.decompress(response.raw.data)
             assert self.uncompressed_size == len(
                 content
@@ -309,7 +309,7 @@ class ResultBatch(abc.ABC):
         else:
             assert self.uncompressed_size == len(
                 response.content
-            ), f"Mismatch: expected {self.compressed_size} bytes in uncompressed size, received {response.content} bytes"
+            ), f"Mismatch: expected {self.uncompressed_size} bytes in uncompressed size, received {response.content} bytes"
             return response.content
 
     def _download(
