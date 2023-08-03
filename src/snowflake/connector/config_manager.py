@@ -87,9 +87,9 @@ class ConfigOption:
             parse_str: String parser function for this instance.
             choices: List of possible values for this instance.
             env_name: Environmental variable name value should be read from.
-              Providing a string will use that env variable, False disables reading
-              value from environmental variables and the default None generates an
-              environmental variable name for it using the _nest_path and name.
+              Providing a string will use that environment variable, False disables
+              reading value from environmental variables and the default None generates
+              an environmental variable name for it using the _nest_path and name.
             _root_manager: Reference to the root manager. Should be supplied by
               the parent ConfigManager.
             _nest_path: The names of the ConfigManagers that this option is
