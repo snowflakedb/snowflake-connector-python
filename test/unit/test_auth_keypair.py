@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from pytest import raises
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 from cryptography.hazmat.backends import default_backend
@@ -92,6 +93,24 @@ def test_auth_keypair_abc():
     assert not rest._connection.errorhandler.called  # not error
     assert rest.token == "TOKEN"
     assert rest.master_token == "MASTER_TOKEN"
+
+
+def test_auth_keypair_bad_type():
+    """Simple Key Pair test using abstraction layer."""
+    account = "testaccount"
+    user = "testuser"
+    class Bad:
+        pass
+    auth_instance = AuthByKeyPair(private_key=Bad())
+    with raises(TypeError) as ex:
+        auth_instance.handle_timeout(
+            authenticator="SNOWFLAKE_JWT",
+            service_name=None,
+            account=account,
+            user=user,
+            password=None,
+        )
+    assert 'Bad' in str(ex)
 
 
 def _init_rest(application, post_requset):
