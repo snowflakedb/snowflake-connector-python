@@ -124,8 +124,10 @@ class AuthByKeyPair(AuthByPlugin):
                     "object",
                     errno=ER_INVALID_PRIVATE_KEY,
                 )
-        else:
+        elif isinstance(self._private_key, RSAPrivateKey):
             private_key = self._private_key
+        else:
+            raise TypeError(self._private_key)
 
         public_key = private_key.public_key()
         public_key_fp = self.calculate_public_key_fingerprint(public_key)
