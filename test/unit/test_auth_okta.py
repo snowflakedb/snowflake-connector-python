@@ -209,15 +209,26 @@ def test_auth_okta_step4_negative(caplog):
         nonlocal second_token_generated
         if raise_token_refresh_error:
             assert not second_token_generated
+            return "1token1"
         else:
             second_token_generated = True
-        return "1token1"
+            return "2token2"
 
     # the first time, when step4 gets executed, we return 429
     # the second time when step4 gets retried, we return 200
     def mock_session_request(*args, **kwargs):
+        nonlocal second_token_generated
         url = kwargs.get("url")
-        assert url.count("onetimetoken") == 1
+        if not second_token_generated:
+            assert (
+                url
+                == "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=1token1"
+            )
+        else:
+            assert (
+                url
+                == "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=2token2"
+            )
         nonlocal raise_token_refresh_error
         if raise_token_refresh_error:
             raise_token_refresh_error = False
