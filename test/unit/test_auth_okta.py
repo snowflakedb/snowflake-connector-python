@@ -219,16 +219,11 @@ def test_auth_okta_step4_negative(caplog):
     def mock_session_request(*args, **kwargs):
         nonlocal second_token_generated
         url = kwargs.get("url")
-        if not second_token_generated:
-            assert (
-                url
-                == "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=1token1"
-            )
-        else:
-            assert (
-                url
-                == "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=2token2"
-            )
+        assert url == (
+            "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=1token1"
+            if not second_token_generated
+            else "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=2token2"
+        )
         nonlocal raise_token_refresh_error
         if raise_token_refresh_error:
             raise_token_refresh_error = False
