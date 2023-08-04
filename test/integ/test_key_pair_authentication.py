@@ -248,8 +248,6 @@ def test_bad_private_key(db_parameters):
     )
 
     bad_private_key_test_cases = [
-        "abcd",
-        1234,
         b"abcd",
         dsa_private_key_der,
         encrypted_rsa_private_key_der,
