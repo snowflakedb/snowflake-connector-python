@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.1.1(TBD)
 
+  - Fixed a bug in retry logic for okta authentication to refresh token.
   - Support `RSAPublicKey` when constructing `AuthByKeyPair` in addition to raw bytes.
 
 - v3.1.0(July 31,2023)
