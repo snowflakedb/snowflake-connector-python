@@ -103,16 +103,17 @@ def test_auth_keypair_bad_type():
     class Bad:
         pass
 
-    auth_instance = AuthByKeyPair(private_key=Bad())
-    with raises(TypeError) as ex:
-        auth_instance.handle_timeout(
-            authenticator="SNOWFLAKE_JWT",
-            service_name=None,
-            account=account,
-            user=user,
-            password=None,
-        )
-    assert "Bad" in str(ex)
+    for bad_private_key in ("abcd", 1234, Bad()):
+        auth_instance = AuthByKeyPair(private_key=bad_private_key)
+        with raises(TypeError) as ex:
+            auth_instance.handle_timeout(
+                authenticator="SNOWFLAKE_JWT",
+                service_name=None,
+                account=account,
+                user=user,
+                password=None,
+            )
+        assert str(type(bad_private_key)) in str(ex)
 
 
 def _init_rest(application, post_requset):
