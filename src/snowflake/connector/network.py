@@ -26,7 +26,6 @@ from snowflake.connector.vendored.urllib3.connectionpool import (
     HTTPConnectionPool,
     HTTPSConnectionPool,
 )
-from snowflake.connector.vendored.urllib3.contrib.socks import SOCKSProxyManager
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -269,9 +268,16 @@ class ProxySupportAdapter(HTTPAdapter):
                 )
             proxy_manager = self.proxy_manager_for(proxy)
 
-            if not isinstance(proxy_manager, SOCKSProxyManager):
+            try:
                 # Add Host to proxy header SNOW-232777
                 proxy_manager.proxy_headers["Host"] = parsed_url.hostname
+            except AttributeError:
+                # log that the type proxy_manager not having attribute proxy_headers
+                logger.debug(
+                    f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
+                    f" it does not have attribute 'proxy_headers'."
+                )
+
             conn = proxy_manager.connection_from_url(url)
         else:
             # Only scheme should be lower case
