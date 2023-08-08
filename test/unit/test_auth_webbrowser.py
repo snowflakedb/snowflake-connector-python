@@ -291,6 +291,107 @@ def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(mo
         assert sleep.call_count == 14
         assert sleep_times == [ 0.25 ] * 14
 
+def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
+    """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token )]))
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
+
+    monkeypatch.setenv('SF_AUTH_SOCKET_REUSEPORT', 'true')
+
+    #Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert mock_socket_pkg.return_value.setsockopt.call_count == 1
+        assert mock_socket_pkg.return_value.setsockopt.call_args.args == (socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+
+def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(monkeypatch):
+    """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token )]))
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
+
+    monkeypatch.setenv('SF_AUTH_SOCKET_REUSEPORT', 'false')
+
+    #Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert mock_socket_pkg.return_value.setsockopt.call_count == 0
+
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+
+def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(monkeypatch):
+    """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token )]))
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
+
+    #Mock select.select to return socket client
+    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert mock_socket_pkg.return_value.setsockopt.call_count == 0
+
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+
 def test_auth_webbrowser_post():
     """Authentication by WebBrowser positive test case with POST."""
     ref_token = "MOCK_TOKEN"

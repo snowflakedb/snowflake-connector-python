@@ -114,6 +114,10 @@ class AuthByWebBrowser(AuthByPlugin):
         logger.debug("authenticating by Web Browser")
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        if os.getenv("SF_AUTH_SOCKET_REUSEPORT", 'False').lower() == 'true':
+            socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+
         try:
             try:
                 socket_connection.bind(
