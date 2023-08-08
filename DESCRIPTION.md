@@ -8,6 +8,19 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.2.1(TBD)
+
+  - Improved `externalbrowser` auth in containerized environments
+    - Instruct browser to not fetch `/favicon` on success page
+    - Simple retry strategy on empty socket.recv
+    - Add `SF_AUTH_SOCKET_REUSEPORT` flag (usage: `SF_AUTH_SOCKET_REUSEPORT=true`) to set the underlying socket's `SO_REUSEPORT` flag (described in the [socket man page](https://man7.org/linux/man-pages/man7/socket.7.html))
+      - Useful when the randomized port used in the localhost callback url is being followed before the container engine completes port forwarding to host
+      - Statically map a port between your host and container and allow that port to be reused in rapid succession with:
+         `SF_AUTH_SOCKET_PORT=3037 SF_AUTH_SOCKET_REUSEPORT=true poetry run python somescript.py`
+    - Add `SF_AUTH_SOCKET_MSG_DONTWAIT` flag (usage: `SF_AUTH_SOCKET_MSG_DONTWAINT=true`) to make a non-blocking socket.recv call and retry on Error
+      - Consider using this if running in a containerized environment and externalbrowser auth frequently hangs while waiting for callback
+      - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
+
 - v3.2.0(September 06,2023)
 
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
