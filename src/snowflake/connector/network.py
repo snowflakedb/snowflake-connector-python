@@ -111,6 +111,7 @@ from .vendored.requests.exceptions import (
 )
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError
+from .vendored.urllib3.poolmanager import ProxyManager
 from .vendored.urllib3.util.url import parse_url
 
 if TYPE_CHECKING:
@@ -268,16 +269,14 @@ class ProxySupportAdapter(HTTPAdapter):
                 )
             proxy_manager = self.proxy_manager_for(proxy)
 
-            try:
+            if isinstance(proxy_manager, ProxyManager):
                 # Add Host to proxy header SNOW-232777
                 proxy_manager.proxy_headers["Host"] = parsed_url.hostname
-            except AttributeError:
-                # log that the type proxy_manager not having attribute proxy_headers
+            else:
                 logger.debug(
                     f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
                     f" it does not have attribute 'proxy_headers'."
                 )
-
             conn = proxy_manager.connection_from_url(url)
         else:
             # Only scheme should be lower case

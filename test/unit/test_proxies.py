@@ -13,6 +13,7 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector.errors import OperationalError
+from snowflake.connector.vendored.urllib3.poolmanager import ProxyManager
 
 
 def test_set_proxies():
@@ -50,14 +51,19 @@ def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
         def connection_from_url(self, url):
             pass
 
-    def mock_proxy_manager_fox(*args, **kwargs):
+    def mock_proxy_manager_for_url_no_header(*args, **kwargs):
         return MockSOCKSProxyManager()
+
+    def mock_proxy_manager_for_url_wiht_header(*args, **kwargs):
+        return ProxyManager("testurl")
 
     # connection
     caplog.set_level(logging.DEBUG, "snowflake.connector")
+
+    # bad path
     with unittest.mock.patch(
         "snowflake.connector.network.ProxySupportAdapter.proxy_manager_for",
-        mock_proxy_manager_fox,
+        mock_proxy_manager_for_url_no_header,
     ):
         with pytest.raises(OperationalError):
             snowflake.connector.connect(
@@ -68,4 +74,22 @@ def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
                 warehouse="TESTWH",
             )
     assert "Unable to set 'Host' to proxy manager of type" in caplog.text
+
+    caplog.clear()
+
+    # happy path
+    with unittest.mock.patch(
+        "snowflake.connector.network.ProxySupportAdapter.proxy_manager_for",
+        mock_proxy_manager_for_url_wiht_header,
+    ):
+        with pytest.raises(OperationalError):
+            snowflake.connector.connect(
+                account="testaccount",
+                user="testuser",
+                password="testpassword",
+                database="TESTDB",
+                warehouse="TESTWH",
+            )
+    assert "Unable to set 'Host' to proxy manager of type" not in caplog.text
+
     del os.environ["HTTPS_PROXY"]
