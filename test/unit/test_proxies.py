@@ -13,7 +13,6 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector.errors import OperationalError
-from snowflake.connector.vendored.urllib3.poolmanager import ProxyManager
 
 
 def test_set_proxies():
@@ -41,7 +40,10 @@ def test_set_proxies():
     del os.environ["HTTPS_PROXY"]
 
 
+@pytest.mark.skipolddriver
 def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
+    from snowflake.connector.vendored.urllib3.poolmanager import ProxyManager
+
     os.environ["HTTPS_PROXY"] = "socks5://localhost:8080"
 
     class MockSOCKSProxyManager:
