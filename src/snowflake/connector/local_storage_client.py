@@ -28,7 +28,7 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         chunk_size: int,
         use_s3_regional_url: bool = False,
     ) -> None:
-        super().__init__(meta, stage_info, chunk_size)
+        super().__init__(meta, stage_info, chunk_size, chunked_transfer=False)
         self.data_file = meta.src_file_name
         self.full_dst_file_name: str = os.path.join(
             stage_info["location"], os.path.basename(meta.dst_file_name)
@@ -55,7 +55,7 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
                 os.path.join(
                     self.meta.local_location, os.path.basename(self.meta.dst_file_name)
                 ),
-                "wb",
+                "rb+",
             ) as tfd:
                 tfd.seek(chunk_id * self.chunk_size)
                 sfd.seek(chunk_id * self.chunk_size)
@@ -79,7 +79,7 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
             self.num_of_chunks = ceil(self.meta.upload_size / self.chunk_size)
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
-        with open(self.full_dst_file_name, "wb") as tfd:
+        with open(self.full_dst_file_name, "rb+") as tfd:
             tfd.seek(chunk_id * self.chunk_size)
             tfd.write(chunk)
 
