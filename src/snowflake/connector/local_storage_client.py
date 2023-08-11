@@ -28,7 +28,7 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         chunk_size: int,
         use_s3_regional_url: bool = False,
     ) -> None:
-        super().__init__(meta, stage_info, chunk_size, chunked_transfer=False)
+        super().__init__(meta, stage_info, chunk_size)
         self.data_file = meta.src_file_name
         self.full_dst_file_name: str = os.path.join(
             stage_info["location"], os.path.basename(meta.dst_file_name)
