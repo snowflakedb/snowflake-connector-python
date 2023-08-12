@@ -29,10 +29,11 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
     ) -> None:
         super().__init__(meta, stage_info, chunk_size)
         self.data_file = meta.src_file_name
-        self.stage_file_name: str = os.path.join(
+        self.full_dst_file_name: str = os.path.join(
             stage_info["location"], os.path.basename(meta.dst_file_name)
         )
         if meta.local_location:
+            self.stage_file_name = self.full_dst_file_name
             self.full_dst_file_name = os.path.join(
                 meta.local_location, meta.dst_file_name
             )
@@ -72,11 +73,11 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
 
     def prepare_upload(self) -> None:
         super().prepare_upload()
-        with open(self.stage_file_name, "wb+") as fd:
+        with open(self.full_dst_file_name, "wb+") as fd:
             fd.truncate(self.meta.upload_size)
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
-        with open(self.stage_file_name, "rb+") as tfd:
+        with open(self.full_dst_file_name, "rb+") as tfd:
             tfd.seek(chunk_id * self.chunk_size)
             tfd.write(chunk)
 
