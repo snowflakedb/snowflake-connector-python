@@ -10,12 +10,15 @@ import tempfile
 
 import pytest
 
-from snowflake.connector.constants import LOCAL_FS
+try:
+    from snowflake.connector.constants import LOCAL_FS
+except ImportError:
+    LOCAL_FS = None
+
 from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
 from snowflake.connector.local_storage_client import SnowflakeLocalStorageClient
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("multipart_threshold", [0, 67108864])
 def test_multi_chunk_upload(multipart_threshold):
     file_content = "".join(
@@ -50,7 +53,6 @@ def test_multi_chunk_upload(multipart_threshold):
         shutil.rmtree(local_dir, ignore_errors=True)
 
 
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("multipart_threshold", [0, 67108864])
 def test_multi_chunk_download(multipart_threshold):
     file_content = "".join(
