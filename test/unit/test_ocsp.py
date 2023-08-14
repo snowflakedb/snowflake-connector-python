@@ -308,6 +308,22 @@ def test_ocsp_with_invalid_cache_file():
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
+@mock.patch(
+    "snowflake.connector.ocsp_snowflake.SnowflakeOCSP._fetch_ocsp_response",
+    side_effect=BrokenPipeError("fake error"),
+)
+def test_ocsp_cache_when_server_is_down(mock_fetch_ocsp_response, tmpdir):
+    ocsp = SFOCSP()
+
+    """Attempts to use outdated OCSP response cache file."""
+    cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+
+    # reading cache file
+    OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
+    cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
+    assert not cache_data, "no cache should present because of broken pipe"
+
+
 def test_concurrent_ocsp_requests(tmpdir):
     """Run OCSP revocation checks in parallel. The memory and file caches are deleted randomly."""
     cache_file_name = path.join(str(tmpdir), "cache_file.txt")
