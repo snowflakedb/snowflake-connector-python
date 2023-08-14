@@ -12,11 +12,12 @@ import pytest
 
 try:
     from snowflake.connector.constants import LOCAL_FS
+    from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
+    from snowflake.connector.local_storage_client import SnowflakeLocalStorageClient
 except ImportError:
     LOCAL_FS = None
-
-from snowflake.connector.file_transfer_agent import SnowflakeFileMeta
-from snowflake.connector.local_storage_client import SnowflakeLocalStorageClient
+    SnowflakeFileMeta = None
+    SnowflakeLocalStorageClient = None
 
 
 @pytest.mark.parametrize("multipart_threshold", [0, 67108864])
