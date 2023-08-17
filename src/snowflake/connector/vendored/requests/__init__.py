@@ -66,10 +66,10 @@ def check_compatibility(urllib3_version, chardet_version, charset_normalizer_ver
     # Check urllib3 for compatibility.
     major, minor, patch = urllib3_version  # noqa: F811
     major, minor, patch = int(major), int(minor), int(patch)
-    # urllib3 >= 1.21.1, <= 1.26
-    assert major == 1
-    assert minor >= 21
-    assert minor <= 26
+    # urllib3 >= 1.21.1
+    assert major >= 1
+    if major == 1:
+        assert minor >= 21
 
     # Check charset_normalizer for compatibility.
     if chardet_version:
@@ -114,19 +114,29 @@ except (AssertionError, ValueError):
         RequestsDependencyWarning,
     )
 
-# Attempt to enable urllib3's SNI support, if possible
+# Attempt to enable urllib3's fallback for SNI support
+# if the standard library doesn't support SNI or the
+# 'ssl' library isn't available.
 try:
-    from ..urllib3.contrib import pyopenssl
-    pyopenssl.inject_into_urllib3()
+    try:
+        import ssl
+    except ImportError:
+        ssl = None
 
-    # Check cryptography version
-    from cryptography import __version__ as cryptography_version
-    _check_cryptography(cryptography_version)
+    if not getattr(ssl, "HAS_SNI", False):
+        from urllib3.contrib import pyopenssl
+
+        pyopenssl.inject_into_urllib3()
+
+        # Check cryptography version
+        from cryptography import __version__ as cryptography_version
+
+        _check_cryptography(cryptography_version)
 except ImportError:
     pass
 
 # urllib3's DependencyWarnings should be silenced.
-from ..urllib3.exceptions import DependencyWarning
+from urllib3.exceptions import DependencyWarning
 
 warnings.simplefilter("ignore", DependencyWarning)
 
@@ -134,7 +144,7 @@ warnings.simplefilter("ignore", DependencyWarning)
 import logging
 from logging import NullHandler
 
-from . import utils
+from . import packages, utils
 from .__version__ import (
     __author__,
     __author_email__,

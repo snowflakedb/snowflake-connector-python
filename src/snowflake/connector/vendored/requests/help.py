@@ -6,7 +6,7 @@ import ssl
 import sys
 
 import idna
-from .. import urllib3
+import urllib3
 
 from . import __version__ as requests_version
 
@@ -21,7 +21,7 @@ except ImportError:
     chardet = None
 
 try:
-    from ..urllib3.contrib import pyopenssl
+    from urllib3.contrib import pyopenssl
 except ImportError:
     pyopenssl = None
     OpenSSL = None

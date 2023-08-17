@@ -298,6 +298,10 @@ class ResultBatch(abc.ABC):
                         response = requests.get(**request_data)
 
                     if response.status_code == OK:
+                        assert response.raw.tell() == self.compressed_size
+                        assert (
+                            len(response.content) == self.uncompressed_size
+                        ), f"{len(response.content)} != {self.uncompressed_size}"
                         logger.debug(
                             f"successfully downloaded result batch id: {self.id}"
                         )
@@ -314,7 +318,7 @@ class ResultBatch(abc.ABC):
                     else:
                         raise_failed_request_error(None, chunk_url, "get", response)
 
-            except (RetryRequest, Exception) as e:
+            except RetryRequest as e:
                 if retry == MAX_DOWNLOAD_RETRY - 1:
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
