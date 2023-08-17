@@ -283,7 +283,7 @@ class ConfigManager:
                 read_config_piece = tomlkit.parse(filep.read_text())
             except Exception as e:
                 raise ConfigSourceError(
-                    "An unknown error happened while loading " f"'{str(filep)}'"
+                    "An error happened while loading " f"'{str(filep)}': {e}"
                 ) from e
             if section is None:
                 read_config_file = read_config_piece
