@@ -124,7 +124,7 @@ try:
         ssl = None
 
     if not getattr(ssl, "HAS_SNI", False):
-        from urllib3.contrib import pyopenssl
+        from ..urllib3.contrib import pyopenssl
 
         pyopenssl.inject_into_urllib3()
 
@@ -136,7 +136,7 @@ except ImportError:
     pass
 
 # urllib3's DependencyWarnings should be silenced.
-from urllib3.exceptions import DependencyWarning
+from ..urllib3.exceptions import DependencyWarning
 
 warnings.simplefilter("ignore", DependencyWarning)
 
