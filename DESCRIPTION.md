@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.1.1(TBD)
 
+- v3.1.1(August 21,2023)
+
+   - 20f1efb5 SNOW-874210 Fix localfs chunked upload/download (#1692) 32d3c4b6 SNOW-890625 Do not write cache when we have no OCSP response (#1690) 44a91a72 SNOW-810810: Fix 'SOCKSProxyManager' object has no attribute 'proxy_headers' error (#1551) 9b586d4c SNOW-862388: fix okta retry bug (#1674) db8e2651 Add support for specifying 'RSAPublicKey' instance instead of raw bytes (#1477)
+
+
   - Fixed a bug in retry logic for okta authentication to refresh token.
   - Support `RSAPublicKey` when constructing `AuthByKeyPair` in addition to raw bytes.
   - Fixed a bug when connecting through SOCKS5 proxy, the attribute `proxy_header` is missing on `SOCKSProxyManager`.
