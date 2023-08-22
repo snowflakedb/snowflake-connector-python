@@ -959,6 +959,7 @@ class SnowflakeOCSP:
 
         do_retry = SnowflakeOCSP.get_ocsp_retry_choice()
 
+        # prevent the connector from running OCSP checks for other applications
         m = not SnowflakeOCSP.OCSP_WHITELIST.match(hostname)
         if m or hostname.startswith("ocspssd"):
             logger.debug("skipping OCSP check: %s", hostname)
