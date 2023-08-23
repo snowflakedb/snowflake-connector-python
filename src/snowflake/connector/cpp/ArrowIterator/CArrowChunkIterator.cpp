@@ -39,6 +39,9 @@ namespace sf
 CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy)
 : CArrowIterator(arrow_bytes, arrow_bytes_size), m_latestReturnedRow(nullptr), m_context(context)
 {
+  if (py::checkPyError()) {
+    return;
+  }
   m_currentBatchIndex = -1;
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
@@ -54,6 +57,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, i
 
 std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
 {
+  SF_CHECK_PYTHON_ERR()
   m_rowIndexInBatch++;
 
   if (m_rowIndexInBatch < m_rowCountInBatch)
