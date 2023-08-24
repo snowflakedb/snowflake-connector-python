@@ -1723,9 +1723,10 @@ class SnowflakeConnection:
         if self._log_imported_packages_in_telemetry:
             # filter out duplicates caused by submodules
             # and internal modules with names starting with an underscore
+            sys_modules_copy = sys.modules.copy()
             imported_modules = {
                 k.split(".", maxsplit=1)[0]
-                for k in sys.modules.keys()
+                for k in sys_modules_copy.keys()
                 if not k.startswith("_")
             }
             ts = get_time_millis()
