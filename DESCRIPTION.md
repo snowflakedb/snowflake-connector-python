@@ -13,6 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug in retry logic for okta authentication to refresh token.
   - Support `RSAPublicKey` when constructing `AuthByKeyPair` in addition to raw bytes.
   - Fixed a bug when connecting through SOCKS5 proxy, the attribute `proxy_header` is missing on `SOCKSProxyManager`.
+  - Fixed a bug when SnowflakeConnection fails due to a race condition when multiple threads are importing packages and reading the content of `sys.modules` simultaneously.
 
 - v3.1.0(July 31,2023)
 
