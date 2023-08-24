@@ -1725,7 +1725,7 @@ class SnowflakeConnection:
             # and internal modules with names starting with an underscore
             imported_modules = {
                 k.split(".", maxsplit=1)[0]
-                for k in sys.modules.keys()
+                for k in list(sys.modules)
                 if not k.startswith("_")
             }
             ts = get_time_millis()
