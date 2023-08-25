@@ -45,7 +45,7 @@ extern "C" {
 #include <stdint.h>
 #endif
 
-#if PORTABLE_UNALIGNED_ACCESS 
+#if PORTABLE_UNALIGNED_ACCESS
 
 #define unaligned_read_16(p) (*(uint16_t*)(p))
 #define unaligned_read_32(p) (*(uint32_t*)(p))

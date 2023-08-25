@@ -82,4 +82,3 @@
 #pragma clang diagnostic ignored "-Wc++11-extensions"
 #endif
 #endif
-

@@ -5,4 +5,3 @@
 #endif
 
 #include "flatcc/portable/pdiagnostic_pop.h"
-
