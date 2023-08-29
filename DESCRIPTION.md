@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.1.2(TBD)
 
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
+  - Added support for default values for ConfigOptions
 
 - v3.1.1(August 28,2023)
 

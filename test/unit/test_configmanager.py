@@ -8,6 +8,7 @@ import os.path
 import re
 import shutil
 import stat
+import string
 import warnings
 from pathlib import Path
 from test.randomize import random_string
@@ -653,3 +654,26 @@ def test_deprecationwarning_config_parser():
         == "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead"
     )
     assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
+
+
+def test_configoption_default_value(tmp_path, monkeypatch):
+    env_name = random_string(
+        5,
+        "SF_TEST_OPTION_",
+        choices=string.ascii_uppercase,
+    )
+    conf_val = random_string(5)
+    cm = ConfigManager(
+        name="test_manager",
+        file_path=tmp_path / "config.toml",
+    )
+    cm.add_option(
+        name="test_option",
+        env_name=env_name,
+        default=conf_val,
+    )
+    assert cm["test_option"] == conf_val
+    env_value = random_string(5)
+    with monkeypatch.context() as c:
+        c.setenv(env_name, env_value)
+        assert cm["test_option"] == env_value
