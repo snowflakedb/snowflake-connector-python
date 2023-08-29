@@ -54,7 +54,7 @@ def telemetry_setup(request):
 def test_telemetry_oob_simple_flush(telemetry_setup, caplog):
     """Tests capturing and sending a simple OCSP Exception message."""
     telemetry = TelemetryService.get_instance()
-
+    telemetry.flush()  # clear the buffer first
     telemetry.log_ocsp_exception(
         event_type, telemetry_data, exception=exception, stack_trace=stack_trace
     )
