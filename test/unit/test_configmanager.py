@@ -677,3 +677,37 @@ def test_configoption_default_value(tmp_path, monkeypatch):
     with monkeypatch.context() as c:
         c.setenv(env_name, env_value)
         assert cm["test_option"] == env_value
+
+
+def test_defaultconnectionname(tmp_path, monkeypatch):
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        assert CONFIG_MANAGER["default_connection_name"] == "default"
+    env_val = random_string(5, "DEF_CONN_")
+    with monkeypatch.context() as m:
+        m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", env_val)
+        assert CONFIG_MANAGER["default_connection_name"] == env_val
+    assert CONFIG_MANAGER.file_path is not None
+    con_name = random_string(5, "conn_")
+    c_file = tmp_path / "config.toml"
+    c_file.write_text(
+        dedent(
+            f"""\
+            default_connection_name = "{con_name}"
+
+            [connections.{con_name}]
+            user="testuser"
+            account="testaccount"
+            password="testpassword"
+            """
+        )
+    )
+    old_path = CONFIG_MANAGER.file_path
+    try:
+        # re-cache config file from disk
+        CONFIG_MANAGER.file_path = c_file
+        CONFIG_MANAGER.conf_file_cache = None
+        assert CONFIG_MANAGER["default_connection_name"] == con_name
+    finally:
+        CONFIG_MANAGER.file_path = old_path
+        CONFIG_MANAGER.read_config()

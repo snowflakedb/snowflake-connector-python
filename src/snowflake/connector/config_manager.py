@@ -450,6 +450,10 @@ CONFIG_MANAGER.add_option(
     name="connections",
     parse_str=tomlkit.parse,
 )
+CONFIG_MANAGER.add_option(
+    name="default_connection_name",
+    default="default",
+)
 
 
 def __getattr__(name):
