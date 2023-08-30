@@ -8,9 +8,17 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.1.1(TBD)
+- v3.1.2(TBD)
 
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
+
+- v3.1.1(August 28,2023)
+
+  - Fixed a bug in retry logic for okta authentication to refresh token.
+  - Support `RSAPublicKey` when constructing `AuthByKeyPair` in addition to raw bytes.
+  - Fixed a bug when connecting through SOCKS5 proxy, the attribute `proxy_header` is missing on `SOCKSProxyManager`.
+  - Cherry-picked https://github.com/urllib3/urllib3/commit/fd2759aa16b12b33298900c77d29b3813c6582de onto vendored urllib3 (v1.26.15) to enable enforce_content_length by default.
+  - Fixed a bug in tag generation of OOB telemetry event.
 
 - v3.1.0(July 31,2023)
 

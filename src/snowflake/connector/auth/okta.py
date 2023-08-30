@@ -277,13 +277,14 @@ class AuthByOkta(AuthByPlugin):
         logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
         timeout_time = time.time() + conn.login_timeout if conn.login_timeout else None
         response_html = {}
+        origin_sso_url = sso_url
         while timeout_time is None or time.time() < timeout_time:
             try:
                 url_parameters = {
                     "RelayState": "/some/deep/link",
                     "onetimetoken": generate_one_time_token(),
                 }
-                sso_url = sso_url + "?" + urlencode(url_parameters)
+                sso_url = origin_sso_url + "?" + urlencode(url_parameters)
                 headers = {
                     HTTP_HEADER_ACCEPT: "*/*",
                 }

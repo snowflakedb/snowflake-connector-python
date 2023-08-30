@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 import os
+import shutil
 from logging import getLogger
-from math import ceil
 from typing import TYPE_CHECKING, Any
 
-from .constants import ResultStatus
+from .constants import FileHeader, ResultStatus
 from .storage_client import SnowflakeStorageClient
 from .vendored import requests
 
@@ -26,42 +26,45 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         meta: SnowflakeFileMeta,
         stage_info: dict[str, Any],
         chunk_size: int,
-        use_s3_regional_url: bool = False,
     ) -> None:
         super().__init__(meta, stage_info, chunk_size)
         self.data_file = meta.src_file_name
         self.full_dst_file_name: str = os.path.join(
             stage_info["location"], os.path.basename(meta.dst_file_name)
         )
+        if meta.local_location:
+            self.stage_file_name = self.full_dst_file_name
+            self.full_dst_file_name = os.path.join(
+                meta.local_location, meta.dst_file_name
+            )
 
-    def get_file_header(self, filename: str) -> None:
+    def get_file_header(self, filename: str) -> FileHeader | None:
         """
         Notes:
             Checks whether the file exits in specified directory, does not return FileHeader
         """
-        # TODO return a FileHeader sometime
-        target_dir = os.path.join(
-            os.path.expanduser(self.stage_info["location"]),
-            filename,
-        )
-        if os.path.isfile(target_dir):
-            self.meta.result_status = ResultStatus.UPLOADED
-        else:
-            self.meta.result_status = ResultStatus.NOT_FOUND_FILE
+        if os.path.isfile(filename):
+            return FileHeader(None, os.stat(filename).st_size, None)
+        return None
 
     def download_chunk(self, chunk_id: int) -> None:
-        with open(self.full_dst_file_name, "rb") as sfd:
+        with open(self.stage_file_name, "rb") as sfd:
             with open(
                 os.path.join(
-                    self.meta.local_location, os.path.basename(self.meta.dst_file_name)
+                    self.meta.local_location,
+                    os.path.basename(self.intermediate_dst_path),
                 ),
-                "wb",
+                "rb+",
             ) as tfd:
-                tfd.seek(chunk_id * self.chunk_size)
-                sfd.seek(chunk_id * self.chunk_size)
-                tfd.write(sfd.read(self.chunk_size))
+                if self.num_of_chunks == 1:
+                    tfd.write(sfd.read())
+                else:
+                    tfd.seek(chunk_id * self.chunk_size)
+                    sfd.seek(chunk_id * self.chunk_size)
+                    tfd.write(sfd.read(self.chunk_size))
 
     def finish_download(self) -> None:
+        shutil.copyfile(self.intermediate_dst_path, self.full_dst_file_name)
         self.meta.dst_file_size = os.stat(self.full_dst_file_name).st_size
         self.meta.result_status = ResultStatus.DOWNLOADED
 
@@ -70,16 +73,11 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
 
     def prepare_upload(self) -> None:
         super().prepare_upload()
-        if (
-            self.meta.upload_size < self.meta.multipart_threshold
-            or not self.chunked_transfer
-        ):
-            self.num_of_chunks = 1
-        else:
-            self.num_of_chunks = ceil(self.meta.upload_size / self.chunk_size)
+        with open(self.full_dst_file_name, "wb+") as fd:
+            fd.truncate(self.meta.upload_size)
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
-        with open(self.full_dst_file_name, "wb") as tfd:
+        with open(self.full_dst_file_name, "rb+") as tfd:
             tfd.seek(chunk_id * self.chunk_size)
             tfd.write(chunk)
 

@@ -1189,6 +1189,7 @@ class SnowflakeOCSP:
                 ocsp_response_validation_result is None
                 or not ocsp_response_validation_result.validated
             ):
+                # r is a tuple of (err, issuer, subject, cert_id, ocsp_response)
                 r = self.validate_by_direct_connection(
                     issuer,
                     subject,
@@ -1197,12 +1198,18 @@ class SnowflakeOCSP:
                     do_retry=do_retry,
                     cache_key=cache_key,
                 )
-                to_update_cache_dict[cache_key] = OCSPResponseValidationResult(
-                    *r,
-                    ts=int(time.time()),
-                    validated=True,
-                )
-                OCSPCache.CACHE_UPDATED = True
+
+                # When OCSP server is down, the validation fails and the oscp_response will be None, and in fail open
+                # case, we will also reset err to None.
+                # In this case we don't need to write the response to cache because there is no information from a
+                # connection error.
+                if r[0] is not None or r[4] is not None:
+                    to_update_cache_dict[cache_key] = OCSPResponseValidationResult(
+                        *r,
+                        ts=int(time.time()),
+                        validated=True,
+                    )
+                    OCSPCache.CACHE_UPDATED = True
                 results.append(r)
             else:
                 results.append(

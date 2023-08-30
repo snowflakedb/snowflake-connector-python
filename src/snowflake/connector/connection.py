@@ -25,6 +25,8 @@ from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 from uuid import UUID
 
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
 from .auth import (
@@ -146,7 +148,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # network timeout (infinite by default)
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
-    "private_key": (None, (type(None), str)),
+    "private_key": (None, (type(None), str, RSAPrivateKey)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -1723,7 +1725,7 @@ class SnowflakeConnection:
             # and internal modules with names starting with an underscore
             imported_modules = {
                 k.split(".", maxsplit=1)[0]
-                for k in sys.modules.keys()
+                for k in list(sys.modules)
                 if not k.startswith("_")
             }
             ts = get_time_millis()
