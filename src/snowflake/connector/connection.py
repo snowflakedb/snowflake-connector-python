@@ -41,7 +41,7 @@ from .auth import (
 from .auth.idtoken import AuthByIdToken
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
-from .config_manager import CONFIG_PARSER
+from .config_manager import CONFIG_MANAGER
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     ENV_VAR_PARTNER,
@@ -334,13 +334,13 @@ class SnowflakeConnection:
         self.query_context_cache_size = 5
         if connections_file_path is not None:
             # Change config file path and force update cache
-            for i, s in enumerate(CONFIG_PARSER._slices):
+            for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
-                    CONFIG_PARSER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_PARSER.read_config()
+                    CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
+                    CONFIG_MANAGER.read_config()
                     break
         if connection_name is not None:
-            connections = CONFIG_PARSER["connections"]
+            connections = CONFIG_MANAGER["connections"]
             if connection_name not in connections:
                 raise Error(
                     f"Invalid connection_name '{connection_name}',"

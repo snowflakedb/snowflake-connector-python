@@ -8,6 +8,7 @@ import itertools
 import logging
 import os
 import stat
+import warnings
 from collections.abc import Iterable
 from operator import methodcaller
 from pathlib import Path
@@ -258,15 +259,27 @@ class ConfigManager:
         # Objects holding sub-managers and options
         self._options: dict[str, ConfigOption] = dict()
         self._sub_managers: dict[str, ConfigManager] = dict()
-        # Alias for the old name of _sub_managers in the first release, please use the
-        #  new name, as this might get deprecated in the future.
-        self._sub_parsers = self._sub_managers
         # Dictionary to cache read in config file
         self.conf_file_cache: tomlkit.TOMLDocument | None = None
         # Information necessary to be able to nest elements
         #  and add options in O(1)
         self._root_manager: ConfigManager = self
         self._nest_path = [name]
+
+    @property
+    def _sub_parsers(self) -> dict[str, ConfigManager]:
+        """
+        Alias for the old name of ``_sub_managers``.
+
+        This used to be the original name  in the first release, please use the
+        new name, as this might get deprecated in the future.
+        """
+        warnings.warn(
+            "_sub_parsers has been deprecated, use _sub_managers instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._sub_managers
 
     def read_config(
         self,
@@ -380,9 +393,13 @@ class ConfigManager:
 
         _root_setter_helper(new_child)
 
-    # Alias for the old name of add_submanager in the first release, please use the
-    #  new name, as this might get deprecated in the future.
-    add_subparser = add_submanager
+    def add_subparser(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "add_subparser has been deprecated, use add_submanager instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.add_submanager(*args, **kwargs)
 
     def __getitem__(self, name: str) -> ConfigOption | ConfigManager:
         """Get either sub-manager, or option in this manager with name.
@@ -420,11 +437,19 @@ CONFIG_MANAGER.add_option(
     parse_str=tomlkit.parse,
 )
 
-# Alias for the old name of CONFIG_MANAGER in the first release, please use the
-#  new name, as this might get deprecated in the future.
-CONFIG_PARSER = CONFIG_MANAGER
 
-__all__ = [
+def __getattr__(name):
+    if name == "CONFIG_PARSER":
+        warnings.warn(
+            "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return CONFIG_MANAGER
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [  # noqa: F822
     "ConfigOption",
     "ConfigManager",
     "CONFIG_MANAGER",

@@ -611,3 +611,45 @@ def test_configoption_missing_nest_path():
             _nest_path=None,
             _root_manager=ConfigManager(name="test_manager"),
         )
+
+
+def test_deprecationwarning_sub_parsers():
+    with warnings.catch_warnings(record=True) as w:
+        assert ConfigManager(name="test_cm")._sub_managers == {}
+        assert len(w) == 0
+        assert ConfigManager(name="test_cm")._sub_parsers == {}
+    assert len(w) == 1
+    assert issubclass(w[-1].category, DeprecationWarning)
+    assert (
+        str(w[-1].message)
+        == "_sub_parsers has been deprecated, use _sub_managers instead"
+    )
+
+
+def test_deprecationwarning_add_subparser():
+    with warnings.catch_warnings(record=True) as w:
+        ConfigManager(name="test_cm").add_submanager(ConfigManager(name="test_cm2"))
+        assert len(w) == 0
+        ConfigManager(name="test_cm").add_subparser(ConfigManager(name="test_cm3"))
+    assert len(w) == 1
+    assert issubclass(w[-1].category, DeprecationWarning)
+    assert (
+        str(w[-1].message)
+        == "add_subparser has been deprecated, use add_submanager instead"
+    )
+
+
+def test_deprecationwarning_config_parser():
+    from snowflake.connector import config_manager
+
+    with warnings.catch_warnings(record=True) as w:
+        config_manager.CONFIG_MANAGER
+        assert len(w) == 0
+        config_manager.CONFIG_PARSER
+    assert len(w) == 1
+    assert issubclass(w[-1].category, DeprecationWarning)
+    assert (
+        str(w[-1].message)
+        == "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead"
+    )
+    assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
