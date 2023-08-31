@@ -20,7 +20,6 @@ from typing import (
     Sequence,
     TypeVar,
 )
-from pandas.api.types import is_datetime64tz_dtype
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
@@ -297,8 +296,8 @@ def write_pandas(
 
     # use_logical_type should be True when dataframe contains datetimes with timezone.
     # https://github.com/snowflakedb/snowflake-connector-python/issues/1687
-    if use_logical_type is not True and any(
-        [is_datetime64tz_dtype(df[c]) for c in df.columns]
+    if not use_logical_type and any(
+        [pandas.api.types.is_datetime64tz_dtype(df[c]) for c in df.columns]
     ):
         warnings.warn(
             "Dataframe contains a datetime with timezone column, but "
@@ -422,7 +421,12 @@ def write_pandas(
             f"COPY INTO {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
             f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
-            f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}{sql_use_logical_type}) "
+            f"FILE_FORMAT=("
+            f"TYPE=PARQUET "
+            f"COMPRESSION={compression_map[compression]}"
+            f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}"
+            f"{sql_use_logical_type}"
+            f") "
             f"PURGE=TRUE ON_ERROR={on_error}"
         )
         logger.debug(f"copying into with '{copy_into_sql}'")
