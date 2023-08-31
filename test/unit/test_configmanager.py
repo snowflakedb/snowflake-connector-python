@@ -8,6 +8,7 @@ import os.path
 import re
 import shutil
 import stat
+import string
 import warnings
 from pathlib import Path
 from test.randomize import random_string
@@ -22,6 +23,7 @@ from snowflake.connector.compat import IS_WINDOWS
 
 try:
     from snowflake.connector.config_manager import (
+        CONFIG_MANAGER,
         ConfigManager,
         ConfigOption,
         ConfigSlice,
@@ -653,3 +655,57 @@ def test_deprecationwarning_config_parser():
         == "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead"
     )
     assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
+
+
+def test_configoption_default_value(tmp_path, monkeypatch):
+    env_name = random_string(
+        5,
+        "SF_TEST_OPTION_",
+        choices=string.ascii_uppercase,
+    )
+    conf_val = random_string(5)
+    cm = ConfigManager(
+        name="test_manager",
+        file_path=tmp_path / "config.toml",
+    )
+    cm.add_option(
+        name="test_option",
+        env_name=env_name,
+        default=conf_val,
+    )
+    assert cm["test_option"] == conf_val
+    env_value = random_string(5)
+    with monkeypatch.context() as c:
+        c.setenv(env_name, env_value)
+        assert cm["test_option"] == env_value
+
+
+def test_defaultconnectionname(tmp_path, monkeypatch):
+    c_file = tmp_path / "config.toml"
+    old_path = CONFIG_MANAGER.file_path
+    CONFIG_MANAGER.file_path = c_file
+    CONFIG_MANAGER.conf_file_cache = None
+    try:
+        with monkeypatch.context() as m:
+            m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+            assert CONFIG_MANAGER["default_connection_name"] == "default"
+        env_val = random_string(5, "DEF_CONN_")
+        with monkeypatch.context() as m:
+            m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", env_val)
+            assert CONFIG_MANAGER["default_connection_name"] == env_val
+        assert CONFIG_MANAGER.file_path is not None
+        con_name = random_string(5, "conn_")
+        c_file.write_text(
+            dedent(
+                f"""\
+                default_connection_name = "{con_name}"
+                """
+            )
+        )
+        # re-cache config file from disk
+        CONFIG_MANAGER.file_path = c_file
+        CONFIG_MANAGER.conf_file_cache = None
+        assert CONFIG_MANAGER["default_connection_name"] == con_name
+    finally:
+        CONFIG_MANAGER.file_path = old_path
+        CONFIG_MANAGER.conf_file_cache = None

@@ -62,6 +62,9 @@ class ConfigOption:
           supplied, we'll construct this. False disables reading from
           environmental variables, None uses the auto generated variable name
           and explicitly provided string overwrites the default one.
+        default: The value we should resolve to when the option is not defined
+          in any of the sources. When it's None we treat that as there's no
+          default value.
         _root_manager: Reference to the root manager. Used to efficiently
           refer to cached config file. Is supplied by the parent
           ConfigManager.
@@ -78,6 +81,7 @@ class ConfigOption:
         parse_str: Callable[[str], _T] | None = None,
         choices: Iterable[Any] | None = None,
         env_name: str | None | Literal[False] = None,
+        default: Any | None = None,
         _root_manager: ConfigManager | None = None,
         _nest_path: list[str] | None,
     ) -> None:
@@ -91,6 +95,8 @@ class ConfigOption:
               Providing a string will use that environment variable, False disables
               reading value from environmental variables and the default None generates
               an environmental variable name for it using the _nest_path and name.
+            default: Default value for the option. Used in case the value is
+              is not defined in any of the sources.
             _root_manager: Reference to the root manager. Should be supplied by
               the parent ConfigManager.
             _nest_path: The names of the ConfigManagers that this option is
@@ -106,6 +112,7 @@ class ConfigOption:
         self._nest_path = _nest_path + [name]
         self._root_manager: ConfigManager = _root_manager
         self.env_name = env_name
+        self.default = default
 
     def value(self) -> Any:
         """Retrieve a value of option.
@@ -115,8 +122,15 @@ class ConfigOption:
         source = "environment variable"
         loaded_env, value = self._get_env()
         if not loaded_env:
-            source = "configuration file"
-            value = self._get_config()
+            try:
+                value = self._get_config()
+                source = "configuration file"
+            except MissingConfigOptionError:
+                if self.default:
+                    source = "default_value"
+                    value = self.default
+                else:
+                    raise
         if self.choices and value not in self.choices:
             raise ConfigSourceError(
                 f"The value of {self.option_name} read from "
@@ -435,6 +449,10 @@ CONFIG_MANAGER = ConfigManager(
 CONFIG_MANAGER.add_option(
     name="connections",
     parse_str=tomlkit.parse,
+)
+CONFIG_MANAGER.add_option(
+    name="default_connection_name",
+    default="default",
 )
 
 
