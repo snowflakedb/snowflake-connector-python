@@ -620,7 +620,7 @@ class MissingConfigOptionError(ConfigSourceError):
 
 
 class ConfigManagerError(Error):
-    """Configuration parser related errors.
+    """Configuration manager related errors.
 
-    These mean that ConfigManager is misused by a developer.
+    This means that ConfigManager is misused by a developer.
     """
