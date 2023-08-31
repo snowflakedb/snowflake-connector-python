@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
 
