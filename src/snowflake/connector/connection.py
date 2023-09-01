@@ -308,7 +308,7 @@ class SnowflakeConnection:
         snowflake.connector.constants.CONNECTIONS_FILE.
 
         When connection_name is supplied we will first load that connection
-        and then overwrite any other values supplied.
+        and then override any other values supplied.
 
         When no arguments are given (other than connection_file_path) the
         default connection will be loaded first. Note that no overwriting is
@@ -339,7 +339,7 @@ class SnowflakeConnection:
             setattr(self, f"_{name}", value)
 
         self.heartbeat_thread = None
-        empty_kwargs = not bool(kwargs)
+        is_kwargs_empty = not kwargs
 
         if "application" not in kwargs:
             if ENV_VAR_PARTNER in os.environ.keys():
@@ -365,7 +365,7 @@ class SnowflakeConnection:
                     f" known ones are {list(connections.keys())}"
                 )
             kwargs = {**connections[connection_name], **kwargs}
-        elif empty_kwargs:
+        elif is_kwargs_empty:
             # connection_name is None and kwargs was empty when called
             def_connection_name = CONFIG_MANAGER["default_connection_name"]
             connections = CONFIG_MANAGER["connections"]
