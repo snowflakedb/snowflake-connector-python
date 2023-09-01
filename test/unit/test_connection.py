@@ -13,6 +13,9 @@ from unittest.mock import patch
 import pytest
 
 import snowflake.connector
+from snowflake.connector.errors import Error
+
+from ..randomize import random_string
 
 try:
     from snowflake.connector.auth import (
@@ -21,6 +24,7 @@ try:
         AuthByOkta,
         AuthByWebBrowser,
     )
+    from snowflake.connector.config_manager import CONFIG_MANAGER
 except ImportError:
     from unittest.mock import MagicMock
 
@@ -211,3 +215,17 @@ def test_negative_custom_auth(auth_class):
             user="user",
             auth_class=auth_class,
         )
+
+
+def test_missing_default_connection(monkeypatch):
+    connections = CONFIG_MANAGER["connections"]
+    connection_name = None
+    while connection_name is None or connection_name in connections:
+        connection_name = random_string(5)
+    with monkeypatch.context() as m:
+        m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", connection_name)
+        with pytest.raises(
+            Error,
+            match=f"Default connection with name '{connection_name}' cannot be found, known ones are .*",
+        ):
+            snowflake.connector.connect()

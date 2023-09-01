@@ -302,6 +302,21 @@ class SnowflakeConnection:
         connections_file_path: pathlib.Path | None = None,
         **kwargs,
     ) -> None:
+        """Create a new SnowflakeConnection.
+
+        Connections can be loaded from the TOML file located at
+        snowflake.connector.constants.CONNECTIONS_FILE.
+
+        When connection_name is supplied we will first load that connection
+        and then overwrite any other values supplied.
+
+        When no arguments are given (other than connection_file_path) the
+        default connection will be loaded first. Note that no overwriting is
+        supported in this case.
+
+        If overwriting values from the default connection is desirable, supply
+        the name explicitly.
+        """
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
@@ -324,6 +339,7 @@ class SnowflakeConnection:
             setattr(self, f"_{name}", value)
 
         self.heartbeat_thread = None
+        empty_kwargs = not bool(kwargs)
 
         if "application" not in kwargs:
             if ENV_VAR_PARTNER in os.environ.keys():
@@ -349,6 +365,17 @@ class SnowflakeConnection:
                     f" known ones are {list(connections.keys())}"
                 )
             kwargs = {**connections[connection_name], **kwargs}
+        elif empty_kwargs:
+            # connection_name is None and kwargs was empty when called
+            def_connection_name = CONFIG_MANAGER["default_connection_name"]
+            connections = CONFIG_MANAGER["connections"]
+            if def_connection_name not in connections:
+                raise Error(
+                    f"Default connection with name '{def_connection_name}' "
+                    "cannot be found, known ones are "
+                    f"{list(connections.keys())}"
+                )
+            kwargs = {**connections[def_connection_name]}
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
