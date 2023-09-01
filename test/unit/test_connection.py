@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from textwrap import dedent
 from unittest.mock import patch
 
 import pytest
@@ -31,10 +32,11 @@ except ImportError:
 
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByUsrPwdMfa
+    from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"
-    QueryStatus = None
+    QueryStatus = CONFIG_MANAGER = None
 
     class AuthByUsrPwdMfa(AuthByDefault):
         def __init__(self, password: str, mfa_token: str) -> None:
@@ -216,13 +218,101 @@ def test_negative_custom_auth(auth_class):
         )
 
 
-def test_missing_default_connection(monkeypatch):
-    connection_name = random_string(5)
+def test_missing_default_connection(monkeypatch, tmp_path):
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
     with monkeypatch.context() as m:
-        m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", connection_name)
-        m.setenv("SNOWFLAKE_CONNECTIONS", "")
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
+        with pytest.raises(
+            Error,
+            match="Default connection with name 'default' cannot be found, known ones are \\[\\]",
+        ):
+            snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_missing_default_connection_conf_file(monkeypatch, tmp_path):
+    connection_name = random_string(5)
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        dedent(
+            f"""\
+            default_connection_name = "{connection_name}"
+            """
+        )
+    )
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
         with pytest.raises(
             Error,
             match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\[\\]",
         ):
-            snowflake.connector.connect()
+            snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_missing_default_connection_conn_file(monkeypatch, tmp_path):
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
+    connections_file.write_text(
+        dedent(
+            """\
+            [con_a]
+            user = "test user"
+            account = "test account"
+            password = "test password"
+            """
+        )
+    )
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
+        with pytest.raises(
+            Error,
+            match="Default connection with name 'default' cannot be found, known ones are \\['con_a'\\]",
+        ):
+            snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
+    connection_name = random_string(5)
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        dedent(
+            f"""\
+            default_connection_name = "{connection_name}"
+            """
+        )
+    )
+    connections_file.write_text(
+        dedent(
+            """\
+            [con_a]
+            user = "test user"
+            account = "test account"
+            password = "test password"
+            """
+        )
+    )
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
+        with pytest.raises(
+            Error,
+            match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\['con_a'\\]",
+        ):
+            snowflake.connector.connect(connections_file_path=connections_file)
