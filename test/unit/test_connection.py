@@ -220,9 +220,9 @@ def test_missing_default_connection(monkeypatch):
     connection_name = random_string(5)
     with monkeypatch.context() as m:
         m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", connection_name)
-        m.setenv("SNOWFLAKE_CONNECTIONS", "[connections]")
+        m.setenv("SNOWFLAKE_CONNECTIONS", "")
         with pytest.raises(
             Error,
-            match=f"Default connection with name '{connection_name}' cannot be found, known ones are .*",
+            match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\[\\]",
         ):
             snowflake.connector.connect()
