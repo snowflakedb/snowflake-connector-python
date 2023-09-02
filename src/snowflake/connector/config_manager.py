@@ -126,7 +126,7 @@ class ConfigOption:
                 value = self._get_config()
                 source = "configuration file"
             except MissingConfigOptionError:
-                if self.default:
+                if self.default is not None:
                     source = "default_value"
                     value = self.default
                 else:
@@ -166,8 +166,8 @@ class ConfigOption:
         env_var = os.environ.get(env_name)
         if env_var is None:
             return False, None
-        loaded_var: str | _T | None = env_var
-        if env_var and self.parse_str is not None:
+        loaded_var: str | _T = env_var
+        if self.parse_str is not None:
             loaded_var = self.parse_str(env_var)
         if isinstance(loaded_var, (Table, tomlkit.TOMLDocument)):
             # If we got a TOML table we probably want it in dictionary form
@@ -449,6 +449,7 @@ CONFIG_MANAGER = ConfigManager(
 CONFIG_MANAGER.add_option(
     name="connections",
     parse_str=tomlkit.parse,
+    default=dict(),
 )
 CONFIG_MANAGER.add_option(
     name="default_connection_name",
