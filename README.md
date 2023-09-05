@@ -52,3 +52,4 @@ These tools are integrated into `tox` to allow us to easily set them up universa
 * **coverage**: Runs `coverage.py` to combine generated coverage data files. Useful when multiple categories were run
   and we would like to have an overall coverage data file created for them.
 * **flake8**: (Deprecated) Similar to `fix_lint`, but only runs `flake8` checks.
+* test
