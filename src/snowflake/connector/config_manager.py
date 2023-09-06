@@ -458,7 +458,7 @@ CONFIG_MANAGER.add_option(
 )
 
 
-def get_default_connection_params() -> dict[str, Any]:
+def _get_default_connection_params() -> dict[str, Any]:
     def_connection_name = CONFIG_MANAGER["default_connection_name"]
     connections = CONFIG_MANAGER["connections"]
     if def_connection_name not in connections:
