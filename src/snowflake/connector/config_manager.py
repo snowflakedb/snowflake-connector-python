@@ -22,6 +22,7 @@ from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
 from snowflake.connector.errors import (
     ConfigManagerError,
     ConfigSourceError,
+    Error,
     MissingConfigOptionError,
 )
 
@@ -455,6 +456,18 @@ CONFIG_MANAGER.add_option(
     name="default_connection_name",
     default="default",
 )
+
+
+def _get_default_connection_params() -> dict[str, Any]:
+    def_connection_name = CONFIG_MANAGER["default_connection_name"]
+    connections = CONFIG_MANAGER["connections"]
+    if def_connection_name not in connections:
+        raise Error(
+            f"Default connection with name '{def_connection_name}' "
+            "cannot be found, known ones are "
+            f"{list(connections.keys())}"
+        )
+    return {**connections[def_connection_name]}
 
 
 def __getattr__(name):
