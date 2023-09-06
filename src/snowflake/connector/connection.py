@@ -43,7 +43,7 @@ from .auth import (
 from .auth.idtoken import AuthByIdToken
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
-from .config_manager import CONFIG_MANAGER
+from .config_manager import CONFIG_MANAGER, get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     ENV_VAR_PARTNER,
@@ -367,15 +367,7 @@ class SnowflakeConnection:
             kwargs = {**connections[connection_name], **kwargs}
         elif is_kwargs_empty:
             # connection_name is None and kwargs was empty when called
-            def_connection_name = CONFIG_MANAGER["default_connection_name"]
-            connections = CONFIG_MANAGER["connections"]
-            if def_connection_name not in connections:
-                raise Error(
-                    f"Default connection with name '{def_connection_name}' "
-                    "cannot be found, known ones are "
-                    f"{list(connections.keys())}"
-                )
-            kwargs = {**connections[def_connection_name]}
+            kwargs = get_default_connection_params()
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
