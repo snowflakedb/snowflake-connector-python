@@ -8,18 +8,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.1.2(TBD)
-
 - v3.2.0(September 09,2023)
-
-   - 6a2dfd0f SNOW-891470: Refactor reading default connection into a function  (#1722)
-   - 86c0a116 SNOW-891470 adding implementation for default_connection_name (#1721)
-   - da1ae4ed SNOW-902097 adding default_connection_name and default value to ConfigOption (#1718)
-   - 8f2dcbff SNOW-878611 renaming and aliasing CONFIG_PARSER to CONFIG_MANAGER (#1680)
-   - 58e20362 SNOW-901898: fix flaky oob test (#1714)
-   -
-
-
+  
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
   - Added support for default values for ConfigOptions
   - Added default_connection_name to config.toml file
