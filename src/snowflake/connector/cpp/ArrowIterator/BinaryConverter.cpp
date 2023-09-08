@@ -20,7 +20,7 @@ PyObject* BinaryConverter::toPyObject(int64_t rowIndex) const
     Py_RETURN_NONE;
   }
   ArrowStringView stringView = ArrowArrayViewGetStringUnsafe(m_array, rowIndex);
-    return PyByteArray_FromStringAndSize(stringView.data, stringView.size_bytes);
+  return PyByteArray_FromStringAndSize(stringView.data, stringView.size_bytes);
 }
 
 }  // namespace sf

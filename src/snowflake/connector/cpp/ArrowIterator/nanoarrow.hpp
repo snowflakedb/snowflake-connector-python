@@ -16,8 +16,8 @@
 // under the License.
 
 #include <stdexcept>
-#include <vector>
 #include <string>
+#include <vector>
 
 #include "nanoarrow.h"
 

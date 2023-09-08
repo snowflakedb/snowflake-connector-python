@@ -39,6 +39,7 @@ cdef extern from "CArrowIterator.hpp" namespace "sf":
 
     cdef cppclass CArrowIterator:
         shared_ptr[ReturnVal] next() except +;
+        shared_ptr[ReturnVal] checkInitializationStatus() except +;
         vector[uintptr_t] getArrowArrayPtrs();
         vector[uintptr_t] getArrowSchemaPtrs();
 
@@ -114,11 +115,11 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             object use_dict_result,
             object numpy,
             object number_to_decimal,
-
+            object is_table_unit = False,
     ):
         self.context = arrow_context
         self.cIterator = NULL
-        self.unit = ''
+        self.unit = IterUnit.TABLE_UNIT.value if is_table_unit else IterUnit.ROW_UNIT.value
         self.use_dict_result = use_dict_result
         self.cursor = cursor
         self.use_numpy = numpy
@@ -128,6 +129,11 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.arrow_bytes = <char*>arrow_bytes
         self.arrow_bytes_size = len(arrow_bytes)
         self.python_bytes = arrow_bytes
+
+        if self.unit == IterUnit.TABLE_UNIT.value:
+            self.init_table_unit()
+        else:
+            self.init_row_unit()
 
     def __dealloc__(self):
         del self.cIterator
@@ -174,6 +180,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.unit = iter_unit
 
     def init_row_unit(self) -> None:
+        if self.cIterator is not NULL:
+            return
+
         self.cIterator = new CArrowChunkIterator(
             <PyObject *> self.context,
             self.arrow_bytes,
@@ -187,6 +196,16 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             self.arrow_bytes_size,
             <PyObject *> self.use_numpy
             )
+        self.cret = self.cIterator.checkInitializationStatus()
+        if self.cret.get().exception:
+            Error.errorhandler_wrapper(
+                self.cursor.connection if self.cursor is not None else None,
+                self.cursor,
+                OperationalError,
+                {
+                    'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
+                    'errno': ER_FAILED_TO_READ_ARROW_STREAM
+                })
         snow_logger.debug(msg=f"Batches read: {self.cIterator.getArrowArrayPtrs().size()}", path_name=__file__, func_name="init_row_unit")
 
     def init_table_unit(self) -> None:
@@ -202,13 +221,25 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                 },
             )
 
+        if self.cIterator is not NULL:
+            return
+
         self.cIterator = new CArrowTableIterator(
             <PyObject *> self.context,
             self.arrow_bytes,
             self.arrow_bytes_size,
             self.number_to_decimal,
         )
-
+        self.cret = self.cIterator.checkInitializationStatus()
+        if self.cret.get().exception:
+            Error.errorhandler_wrapper(
+                self.cursor.connection if self.cursor is not None else None,
+                self.cursor,
+                OperationalError,
+                {
+                    'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
+                    'errno': ER_FAILED_TO_READ_ARROW_STREAM
+                })
         self.cret = self.cIterator.next()
         self.unit = 'table'
         self.nanoarrow_Table = self.cIterator.getArrowArrayPtrs()

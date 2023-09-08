@@ -25,7 +25,7 @@ extern "C" {
 * `FLATCC_NO_ASSERT`.
 */
 
-#ifdef FLATCC_NO_ASSERT 
+#ifdef FLATCC_NO_ASSERT
 /* NOTE: This will not affect inclusion of <assert.h> for static assertions. */
 #undef FLATCC_ASSERT
 #define FLATCC_ASSERT(x) ((void)0)

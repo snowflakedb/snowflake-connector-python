@@ -45,11 +45,18 @@ CArrowIterator::CArrowIterator(char* arrow_bytes, int64_t arrow_bytes_size)
       SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(returnCode, stream, "[Snowflake Exception] error setting ArrowArrayView from array : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
       m_ipcArrowArrayViewVec.push_back(std::move(newUniqueArrayView));
     } else {
+      SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(retcode, stream, "[Snowflake Exception] error getting schema from stream, error code: %d", returnCode);
       break;
     }
   }
   stream.release(&stream);
   logger->debug(__FILE__, __func__, __LINE__, "Arrow BatchSize: %d", m_ipcArrowArrayVec.size());
+}
+
+std::shared_ptr<ReturnVal> CArrowIterator::checkInitializationStatus()
+{
+    SF_CHECK_PYTHON_ERR()
+    return std::make_shared<ReturnVal>(nullptr, nullptr);
 }
 
 }

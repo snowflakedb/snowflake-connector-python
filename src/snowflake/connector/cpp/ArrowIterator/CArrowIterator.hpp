@@ -77,11 +77,26 @@ static const char* NANOARROW_TYPE_ENUM_STRING[] = {
 #define SF_CHECK_ARROW_RC_AND_RELEASE_ARROW_STREAM(arrow_status, stream, format_string, ...) \
   if (arrow_status != NANOARROW_OK) \
   { \
-    std::string errorInfo = Logger::formatString(format_string, ##__VA_ARGS__); \
-    logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str()); \
-    PyErr_SetString(PyExc_Exception, errorInfo.c_str()); \
+    std::string errorInfo = std::string(format_string) + std::string(", error info: ") + std::string(stream.get_last_error(&stream)); \
+    std::string fullErrorInfo = Logger::formatString(errorInfo.c_str(), ##__VA_ARGS__); \
+    logger->error(__FILE__, __func__, __LINE__, fullErrorInfo.c_str()); \
+    PyErr_SetString(PyExc_Exception, fullErrorInfo.c_str()); \
     stream.release(&stream); \
     return; \
+  }
+
+#define SF_CHECK_PYTHON_ERR() \
+  if (py::checkPyError())\
+  {\
+    PyObject *type, * val, *traceback;\
+    PyErr_Fetch(&type, &val, &traceback);\
+    PyErr_Clear();\
+    m_currentPyException.reset(val);\
+\
+    Py_XDECREF(type);\
+    Py_XDECREF(traceback);\
+\
+    return std::make_shared<ReturnVal>(nullptr, m_currentPyException.get());\
   }
 
 namespace sf
@@ -122,6 +137,9 @@ public:
   virtual std::vector<uintptr_t> getArrowArrayPtrs() { return {}; };
   virtual std::vector<uintptr_t> getArrowSchemaPtrs() { return {}; };
 
+  /** check whether initialization succeeded or encountered error */
+  std::shared_ptr<ReturnVal> checkInitializationStatus();
+
 protected:
   static Logger* logger;
 
@@ -129,6 +147,9 @@ protected:
   std::vector<nanoarrow::UniqueArray> m_ipcArrowArrayVec;
   std::vector<nanoarrow::UniqueArrayView> m_ipcArrowArrayViewVec;
   nanoarrow::UniqueSchema m_ipcArrowSchema;
+
+  /** pointer to the current python exception object */
+  py::UniqueRef m_currentPyException;
 };
 }
 

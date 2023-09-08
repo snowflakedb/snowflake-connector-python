@@ -573,10 +573,8 @@ class ArrowResultBatch(ResultBatch):
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            row_unit == IterUnit.TABLE_UNIT,
         )
-        if row_unit == IterUnit.TABLE_UNIT:
-            iter.init_table_unit()
-
         return iter
 
     def _from_data(
@@ -599,11 +597,8 @@ class ArrowResultBatch(ResultBatch):
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            iter_unit == IterUnit.TABLE_UNIT,
         )
-        if iter_unit == IterUnit.TABLE_UNIT:
-            _iter.init_table_unit()
-        else:
-            _iter.init_row_unit()
         return _iter
 
     @classmethod
