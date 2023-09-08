@@ -190,6 +190,9 @@ const bool number_to_decimal
 m_context(context),
 m_convert_number_to_decimal(number_to_decimal)
 {
+  if (py::checkPyError()) {
+    return;
+  }
   py::UniqueRef tz(PyObject_GetAttrString(m_context, "_timezone"));
   PyArg_Parse(tz.get(), "s", &m_timezone);
 }

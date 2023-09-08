@@ -2799,10 +2799,8 @@ static int ArrowAssertIncreasingInt32(struct ArrowBufferView view,
   }
 
   for (int64_t i = 1; i < view.size_bytes / (int64_t)sizeof(int32_t); i++) {
-    int32_t diff = view.data.as_int32[i] - view.data.as_int32[i - 1];
-    if (diff < 0) {
-      ArrowErrorSet(error, "[%ld] Expected element size >= 0 but found element size %ld",
-                    (long)i, (long)diff);
+    if (view.data.as_int32[i] < view.data.as_int32[i - 1]) {
+      ArrowErrorSet(error, "[%ld] Expected element size >= 0", (long)i);
       return EINVAL;
     }
   }
@@ -2817,10 +2815,8 @@ static int ArrowAssertIncreasingInt64(struct ArrowBufferView view,
   }
 
   for (int64_t i = 1; i < view.size_bytes / (int64_t)sizeof(int64_t); i++) {
-    int64_t diff = view.data.as_int64[i] - view.data.as_int64[i - 1];
-    if (diff < 0) {
-      ArrowErrorSet(error, "[%ld] Expected element size >= 0 but found element size %ld",
-                    (long)i, (long)diff);
+    if (view.data.as_int64[i] < view.data.as_int64[i - 1]) {
+      ArrowErrorSet(error, "[%ld] Expected element size >= 0", (long)i);
       return EINVAL;
     }
   }

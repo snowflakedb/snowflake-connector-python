@@ -576,6 +576,8 @@ class ArrowResultBatch(ResultBatch):
         )
         if row_unit == IterUnit.TABLE_UNIT:
             iter.init_table_unit()
+        else:
+            iter.init_row_unit()
 
         return iter
 

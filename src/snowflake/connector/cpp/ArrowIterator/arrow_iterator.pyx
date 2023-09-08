@@ -39,6 +39,7 @@ cdef extern from "CArrowIterator.hpp" namespace "sf":
 
     cdef cppclass CArrowIterator:
         shared_ptr[ReturnVal] next() except +;
+        shared_ptr[ReturnVal] checkInitializationStatus() except +;
         vector[uintptr_t] getArrowArrayPtrs();
         vector[uintptr_t] getArrowSchemaPtrs();
 
@@ -129,6 +130,30 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.arrow_bytes_size = len(arrow_bytes)
         self.python_bytes = arrow_bytes
 
+        self.cIterator = new CArrowChunkIterator(
+            <PyObject *> self.context,
+            self.arrow_bytes,
+            self.arrow_bytes_size,
+            <PyObject *> self.use_numpy
+        ) \
+            if not self.use_dict_result \
+            else new DictCArrowChunkIterator(
+            <PyObject *> self.context,
+            self.arrow_bytes,
+            self.arrow_bytes_size,
+            <PyObject *> self.use_numpy
+            )
+        self.cret = self.cIterator.checkInitializationStatus()
+        if self.cret.get().exception:
+            Error.errorhandler_wrapper(
+                self.cursor.connection if self.cursor is not None else None,
+                self.cursor,
+                OperationalError,
+                {
+                    'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
+                    'errno': ER_FAILED_TO_READ_ARROW_STREAM
+                })
+
     def __dealloc__(self):
         del self.cIterator
 
@@ -174,19 +199,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.unit = iter_unit
 
     def init_row_unit(self) -> None:
-        self.cIterator = new CArrowChunkIterator(
-            <PyObject *> self.context,
-            self.arrow_bytes,
-            self.arrow_bytes_size,
-            <PyObject *> self.use_numpy
-        ) \
-            if not self.use_dict_result \
-            else new DictCArrowChunkIterator(
-            <PyObject *> self.context,
-            self.arrow_bytes,
-            self.arrow_bytes_size,
-            <PyObject *> self.use_numpy
-            )
         snow_logger.debug(msg=f"Batches read: {self.cIterator.getArrowArrayPtrs().size()}", path_name=__file__, func_name="init_row_unit")
 
     def init_table_unit(self) -> None:

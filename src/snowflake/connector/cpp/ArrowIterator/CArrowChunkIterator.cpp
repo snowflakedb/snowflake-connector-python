@@ -13,27 +13,10 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
-#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 using namespace std;
-
-
-#define SF_CHECK_PYTHON_ERR() \
-  if (py::checkPyError())\
-  {\
-    PyObject *type, * val, *traceback;\
-    PyErr_Fetch(&type, &val, &traceback);\
-    PyErr_Clear();\
-    m_currentPyException.reset(val);\
-\
-    Py_XDECREF(type);\
-    Py_XDECREF(traceback);\
-\
-    return std::make_shared<ReturnVal>(nullptr, m_currentPyException.get());\
-  }
-
 
 namespace sf
 {
@@ -99,14 +82,11 @@ void CArrowChunkIterator::createRowPyObject()
   m_latestReturnedRow.reset(PyTuple_New(m_columnCount));
   for (int i = 0; i < m_columnCount; i++)
   {
-    cout << "I am setting " << i << endl;
     // PyTuple_SET_ITEM steals a reference to the PyObject returned by toPyObject below
     PyTuple_SET_ITEM(
         m_latestReturnedRow.get(), i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
-    cout << "I finished setting " << i << endl;
   }
-  cout << "I am about to return the whole tuple " << endl;
   return;
 }
 

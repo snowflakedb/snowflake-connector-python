@@ -85,6 +85,20 @@ static const char* NANOARROW_TYPE_ENUM_STRING[] = {
     return; \
   }
 
+#define SF_CHECK_PYTHON_ERR() \
+  if (py::checkPyError())\
+  {\
+    PyObject *type, * val, *traceback;\
+    PyErr_Fetch(&type, &val, &traceback);\
+    PyErr_Clear();\
+    m_currentPyException.reset(val);\
+\
+    Py_XDECREF(type);\
+    Py_XDECREF(traceback);\
+\
+    return std::make_shared<ReturnVal>(nullptr, m_currentPyException.get());\
+  }
+
 namespace sf
 {
 
@@ -123,6 +137,9 @@ public:
   virtual std::vector<uintptr_t> getArrowArrayPtrs() { return {}; };
   virtual std::vector<uintptr_t> getArrowSchemaPtrs() { return {}; };
 
+  /** check whether initialization succeeded or encountered error */
+  std::shared_ptr<ReturnVal> checkInitializationStatus();
+
 protected:
   static Logger* logger;
 
@@ -130,6 +147,9 @@ protected:
   std::vector<nanoarrow::UniqueArray> m_ipcArrowArrayVec;
   std::vector<nanoarrow::UniqueArrayView> m_ipcArrowArrayViewVec;
   nanoarrow::UniqueSchema m_ipcArrowSchema;
+
+  /** pointer to the current python exception object */
+  py::UniqueRef m_currentPyException;
 };
 }
 

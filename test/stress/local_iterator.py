@@ -15,6 +15,9 @@ There are two scenarios:
 import argparse
 import base64
 import io
+import math
+import random
+import secrets
 
 import util as stress_util
 from util import task_memory_decorator, task_time_execution_decorator
@@ -29,6 +32,22 @@ try:
     import matplotlib.pyplot as plt
 except ImportError:
     can_draw = False
+
+
+def remove_bytes(byte_str, num_bytes):
+    """
+    Remove a specified number of random bytes from a byte string.
+    """
+    if num_bytes >= len(byte_str):
+        return (
+            bytearray()
+        )  # Return an empty bytearray if attempting to remove more bytes than available.
+
+    indices_to_remove = random.sample(range(len(byte_str)), num_bytes)
+    new_byte_str = bytearray(
+        byte for idx, byte in enumerate(byte_str) if idx not in indices_to_remove
+    )
+    return new_byte_str
 
 
 def create_pyarrow_iterator(input_data):
@@ -55,15 +74,76 @@ def create_old_pyarrow_iterator(input_data):
     )
 
 
-def task_for_loop_iterator(input_data, create_iterator_method):
+def task_for_loop_iterator(input_data: bytes, create_iterator_method):
     for _ in create_iterator_method(input_data):
         pass
 
 
-def task_for_loop_table_iterator(input_data, create_iterator_method):
+def task_for_loop_table_iterator(input_data: bytes, create_iterator_method):
     iterator = create_iterator_method(input_data)
     iterator.init_table_unit()
     for _ in iterator:
+        pass
+
+
+def task_for_loop_iterator_expected_error(input_data: bytes, create_iterator_method):
+    # case 1: removing the i-th byte in the input_data
+    try:
+        iterator = create_iterator_method(input_data[:10] + input_data[10 + 1 :])
+        for _ in iterator:
+            pass
+    except:  # noqa
+        pass
+
+    # case 2: removing the 2**math.log2(len(decode_bytes) bytes in input_data input
+    try:
+        iterator = create_iterator_method(
+            bytes(remove_bytes(input_data, 2 ** int(math.log2(len(input_data)))))
+        )
+        for _ in iterator:
+            pass
+    except:  # noqa
+        pass
+
+    # case 3: randomly-generated 2*22 bytes
+    try:
+        iterator = create_iterator_method(secrets.token_bytes(2**22))
+        for _ in iterator:
+            pass
+    except:  # noqa
+        pass
+
+
+def task_for_loop_table_iterator_expected_error(
+    input_data: bytes, create_iterator_method
+):
+    # case 1: removing the i-th byte in the input_data
+    try:
+        iterator = create_iterator_method(input_data[:10] + input_data[10 + 1 :])
+        iterator.init_table_unit()
+        for _ in iterator:
+            pass
+    except:  # noqa
+        pass
+
+    # case 2: removing the 2**math.log2(len(decode_bytes) bytes in input_data input
+    try:
+        iterator = create_iterator_method(
+            bytes(remove_bytes(input_data, 2 ** int(math.log2(len(input_data)))))
+        )
+        iterator.init_table_unit()
+        for _ in iterator:
+            pass
+    except:  # noqa
+        pass
+
+    # case 3: randomly-generated 2*22 bytes
+    try:
+        iterator = create_iterator_method(secrets.token_bytes(2**22))
+        iterator.init_table_unit()
+        for _ in iterator:
+            pass
+    except:  # noqa
         pass
 
 

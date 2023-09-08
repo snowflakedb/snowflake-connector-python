@@ -5,10 +5,16 @@
 
 import base64
 import io
+import math
 import os.path
+import random
+import secrets
+
+import pytest
 
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.arrow_iterator import PyArrowIterator
+from snowflake.connector.errors import OperationalError
 from snowflake.connector.version import VERSION
 
 
@@ -43,51 +49,131 @@ create_arrow_iterator_method = (
 )
 
 
-def test_connector_error_base64_stream():
+@pytest.mark.parametrize("use_table_iterator", [False, True])
+def test_connector_error_base64_stream_chunk_remove_single_byte(use_table_iterator):
+    # this test removes single byte from the input bytes
     with open(os.path.join(os.path.dirname(__file__), "test_arrow_data")) as f:
         b64data = f.read()
 
     decode_bytes = base64.b64decode(b64data)
-    last_exc = None
-    result = []
+    exception_result = []
     succeeded_result = []
-    # stop pos, change it to stop at different pos to observe different error code/seg fault
-    stop = len(decode_bytes) - 1
-    for i in range(0, stop):
+    result_array = []
+    for i in range(len(decode_bytes)):
         try:
             # removing the i-th char in the bytes
-            for _ in create_arrow_iterator_method(
+            iterator = create_arrow_iterator_method(
                 decode_bytes[:i] + decode_bytes[i + 1 :]
-            ):
-                pass
+            )
+            if use_table_iterator:
+                iterator.init_table_unit()
+            else:
+                iterator.init_row_unit()
+            for k in iterator:
+                result_array.append(k)
             succeeded_result.append(i)
         except Exception as e:
-            if str(e) != last_exc:
-                result.append((i, str(e)))
-                last_exc = str(e)
+            with pytest.raises(UnboundLocalError):
+                for _ in iterator:
+                    pass
+            exception_result.append((i, str(e), e))
 
-    for k, v in result:
-        print(k, v)
+    # note: nanoarrow and pyarrow exception information doesn't match, but the python
+    # error instance users get should be the same
+    assert len(exception_result)
+    assert all(
+        [isinstance(error, OperationalError) for _, _, error in exception_result]
+    )
+    assert len(succeeded_result) == len(result_array) == 0
 
 
-"""
-vendored arrow error cases:
+@pytest.mark.parametrize("use_table_iterator", [False, True])
+def test_connector_error_base64_stream_chunk_remove_random_length_bytes(
+    use_table_iterator,
+):
+    # this test removes random bytes from the input bytes
+    def remove_bytes(byte_str, num_bytes):
+        """
+        Remove a specified number of random bytes from a byte string.
+        """
+        if num_bytes >= len(byte_str):
+            return (
+                bytearray()
+            )  # Return an empty bytearray if attempting to remove more bytes than available.
 
-0 255005: 255005: Failed to open arrow stream: b'Invalid IPC stream: negative continuation token'
-4 255005: 255005: Failed to open arrow stream: b'Expected to read 268435500 metadata bytes, but only read 32943'
-5 255005: 255005: Failed to open arrow stream: b'Expected to read 268435680 metadata bytes, but only read 32943'
-6 255005: 255005: Failed to open arrow stream: b'Expected to read 268446944 metadata bytes, but only read 32943'
-8 255005: 255005: Failed to open arrow stream: b'Invalid flatbuffers message.'
-9 255005: 255005: Failed to open arrow stream: b'Old metadata version not supported'
-25 255005: 255005: Failed to open arrow stream: b'Invalid flatbuffers message.'
-11484 255005: 255005: Failed to open arrow stream: b'Integers with less than 8 bits not implemented'
-11496 255005: 255005: Failed to read next arrow batch: b'Invalid IPC stream: negative continuation token'
-11500 255005: 255005: Failed to read next arrow batch: b'Expected to read 335544327 metadata bytes, but only read 21447'
-11501 255005: 255005: Failed to read next arrow batch: b'Expected to read 335544472 metadata bytes, but only read 21447'
-11502 255005: 255005: Failed to read next arrow batch: b'Expected to read 335546264 metadata bytes, but only read 21447'
-11504 255005: 255005: Failed to read next arrow batch: b'Invalid flatbuffers message.'
-11505 255005: 255005: Failed to read next arrow batch: b'Old metadata version not supported'
-11525 255005: 255005: Failed to read next arrow batch: b'Invalid flatbuffers message.'
-12840 255005: 255005: Failed to read next arrow batch: b'Expected to be able to read 19504 bytes for message body, got 19503'
+        indices_to_remove = random.sample(range(len(byte_str)), num_bytes)
+        new_byte_str = bytearray(
+            byte for idx, byte in enumerate(byte_str) if idx not in indices_to_remove
+        )
+        return new_byte_str
 
-"""
+    with open(os.path.join(os.path.dirname(__file__), "test_arrow_data")) as f:
+        b64data = f.read()
+
+    decode_bytes = base64.b64decode(b64data)
+    exception_result = []
+    succeeded_result = []
+    result_array = []
+
+    bytes_to_remove_exponent = math.log2(len(decode_bytes))
+    for i in range(1, int(bytes_to_remove_exponent)):
+        # randomly pick 2, 4, ... 2^stop bytes
+        try:
+            # removing the i-th char in the bytes
+            iterator = create_arrow_iterator_method(
+                bytes(remove_bytes(decode_bytes, 2**i))
+            )
+            if use_table_iterator:
+                iterator.init_table_unit()
+            else:
+                iterator.init_row_unit()
+            for k in iterator:
+                result_array.append(k)
+            succeeded_result.append(i)
+        except Exception as e:
+            with pytest.raises(UnboundLocalError):
+                for _ in iterator:
+                    pass
+            exception_result.append((i, str(e), e))
+
+    # note: nanoarrow and pyarrow exception information doesn't match, but the python
+    # error instance users get should be the same
+    assert len(exception_result)
+    assert all(
+        [isinstance(error, OperationalError) for _, _, error in exception_result]
+    )
+    assert len(succeeded_result) == len(result_array) == 0
+
+
+@pytest.mark.parametrize("use_table_iterator", [False, True])
+def test_connector_error_random_input(use_table_iterator):
+    # this test reads randomly generated byte string
+    exception_result = []
+    succeeded_result = []
+    result_array = []
+    for i in range(23):  # create input bytes array of size 0, 1, 2, ... 2^22
+        input_bytes = secrets.token_bytes(2**i)
+        try:
+            iterator = create_arrow_iterator_method(input_bytes)
+            if use_table_iterator:
+                iterator.init_table_unit()
+            else:
+                iterator.init_row_unit()
+            for k in iterator:
+                result_array.append(k)
+            succeeded_result.append(i)
+        except Exception as e:
+            with pytest.raises(UnboundLocalError):
+                # create_arrow_iterator_method will raise error so
+                # iterator is not instantiated at all
+                for _ in iterator:
+                    pass
+            exception_result.append((i, str(e), e))
+
+    # note: nanoarrow and pyarrow exception information doesn't match, but the python
+    # error instance users get should be the same
+    assert len(exception_result)
+    assert all(
+        [isinstance(error, OperationalError) for _, _, error in exception_result]
+    )
+    assert len(succeeded_result) == len(result_array) == 0
