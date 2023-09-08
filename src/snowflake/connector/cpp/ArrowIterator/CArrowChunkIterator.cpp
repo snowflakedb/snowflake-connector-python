@@ -17,28 +17,15 @@
 #include <string>
 #include <vector>
 
-
-#define SF_CHECK_PYTHON_ERR() \
-  if (py::checkPyError())\
-  {\
-    PyObject *type, * val, *traceback;\
-    PyErr_Fetch(&type, &val, &traceback);\
-    PyErr_Clear();\
-    m_currentPyException.reset(val);\
-\
-    Py_XDECREF(type);\
-    Py_XDECREF(traceback);\
-\
-    return std::make_shared<ReturnVal>(nullptr, m_currentPyException.get());\
-  }
-
-
 namespace sf
 {
 
 CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy)
 : CArrowIterator(arrow_bytes, arrow_bytes_size), m_latestReturnedRow(nullptr), m_context(context)
 {
+  if (py::checkPyError()) {
+    return;
+  }
   m_currentBatchIndex = -1;
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;

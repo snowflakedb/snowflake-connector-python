@@ -53,7 +53,7 @@ extern "C" {
 #if defined (__MINGW32__)
 /* MingW does not provide aligned_alloc despite defining _ISOC11_SOURCE */
 #define PORTABLE_C11_ALIGNED_ALLOC 0
-#elif defined (_ISOC11_SOURCE) 
+#elif defined (_ISOC11_SOURCE)
 /* glibc aligned_alloc detection, but MingW is not truthful */
 #define PORTABLE_C11_ALIGNED_ALLOC 1
 #elif defined (__GLIBC__)
@@ -178,7 +178,7 @@ static inline void *__portable_aligned_alloc(size_t alignment, size_t size)
 static inline void __portable_aligned_free(void *p)
 {
     char *raw;
-    
+
     if (p) {
         raw = (char*)((void **)p)[-1];
         free(raw);
