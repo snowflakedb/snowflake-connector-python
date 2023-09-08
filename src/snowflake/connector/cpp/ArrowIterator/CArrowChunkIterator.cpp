@@ -16,7 +16,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-using namespace std;
 
 namespace sf
 {
@@ -42,7 +41,6 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, i
 
 std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
 {
-  SF_CHECK_PYTHON_ERR()
   m_rowIndexInBatch++;
 
   if (m_rowIndexInBatch < m_rowCountInBatch)

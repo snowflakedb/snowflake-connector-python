@@ -50,7 +50,7 @@ def remove_bytes(byte_str, num_bytes):
     return new_byte_str
 
 
-def create_pyarrow_iterator(input_data):
+def create_pyarrow_iterator(input_data, use_table_unit):
     # create nanoarrow based iterator
     return PyArrowIterator(
         None,
@@ -59,12 +59,13 @@ def create_pyarrow_iterator(input_data):
         False,
         False,
         False,
+        use_table_unit,
     )
 
 
-def create_old_pyarrow_iterator(input_data):
+def create_old_pyarrow_iterator(input_data, use_table_unit=False):
     # created vendored arrow based iterator
-    return PyArrowIterator(
+    iterator = PyArrowIterator(
         None,
         io.BytesIO(input_data),
         ArrowConverterContext(session_parameters={"TIMEZONE": "America/Los_Angeles"}),
@@ -72,55 +73,26 @@ def create_old_pyarrow_iterator(input_data):
         False,
         False,
     )
+    if use_table_unit:
+        iterator.init_table_unit()
+    return iterator
 
 
-def task_for_loop_iterator(input_data: bytes, create_iterator_method):
-    for _ in create_iterator_method(input_data):
+def task_for_loop_iterator(
+    input_data: bytes, create_iterator_method, use_table_unit=False
+):
+    for _ in create_iterator_method(input_data, use_table_unit):
         pass
 
 
-def task_for_loop_table_iterator(input_data: bytes, create_iterator_method):
-    iterator = create_iterator_method(input_data)
-    iterator.init_table_unit()
-    for _ in iterator:
-        pass
-
-
-def task_for_loop_iterator_expected_error(input_data: bytes, create_iterator_method):
-    # case 1: removing the i-th byte in the input_data
-    try:
-        iterator = create_iterator_method(input_data[:10] + input_data[10 + 1 :])
-        for _ in iterator:
-            pass
-    except:  # noqa
-        pass
-
-    # case 2: removing the 2**math.log2(len(decode_bytes) bytes in input_data input
-    try:
-        iterator = create_iterator_method(
-            bytes(remove_bytes(input_data, 2 ** int(math.log2(len(input_data)))))
-        )
-        for _ in iterator:
-            pass
-    except:  # noqa
-        pass
-
-    # case 3: randomly-generated 2*22 bytes
-    try:
-        iterator = create_iterator_method(secrets.token_bytes(2**22))
-        for _ in iterator:
-            pass
-    except:  # noqa
-        pass
-
-
-def task_for_loop_table_iterator_expected_error(
-    input_data: bytes, create_iterator_method
+def task_for_loop_iterator_expected_error(
+    input_data: bytes, create_iterator_method, use_table_unit=False
 ):
     # case 1: removing the i-th byte in the input_data
     try:
-        iterator = create_iterator_method(input_data[:10] + input_data[10 + 1 :])
-        iterator.init_table_unit()
+        iterator = create_iterator_method(
+            input_data[:10] + input_data[10 + 1 :], use_table_unit
+        )
         for _ in iterator:
             pass
     except:  # noqa
@@ -129,9 +101,9 @@ def task_for_loop_table_iterator_expected_error(
     # case 2: removing the 2**math.log2(len(decode_bytes) bytes in input_data input
     try:
         iterator = create_iterator_method(
-            bytes(remove_bytes(input_data, 2 ** int(math.log2(len(input_data)))))
+            bytes(remove_bytes(input_data, 2 ** int(math.log2(len(input_data))))),
+            use_table_unit,
         )
-        iterator.init_table_unit()
         for _ in iterator:
             pass
     except:  # noqa
@@ -139,17 +111,18 @@ def task_for_loop_table_iterator_expected_error(
 
     # case 3: randomly-generated 2*22 bytes
     try:
-        iterator = create_iterator_method(secrets.token_bytes(2**22))
-        iterator.init_table_unit()
+        iterator = create_iterator_method(secrets.token_bytes(2**22), use_table_unit)
         for _ in iterator:
             pass
     except:  # noqa
         pass
 
 
-def execute_task(task, bytes_data, create_iterator_method, iteration_cnt):
+def execute_task(
+    task, bytes_data, create_iterator_method, iteration_cnt, use_table_unit=False
+):
     for _ in range(iteration_cnt):
-        task(bytes_data, create_iterator_method)
+        task(bytes_data, create_iterator_method, use_table_unit)
 
 
 if __name__ == "__main__":
@@ -165,6 +138,11 @@ if __name__ == "__main__":
         type=str,
         default="test_data",
         help="a local file to read data from, the file contains base64 encoded string returned from snowflake",
+    )
+    parser.add_argument(
+        "--use_table_unit",
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
 
@@ -185,17 +163,16 @@ if __name__ == "__main__":
     )
 
     perf_check_task_for_loop_iterator = task_time_execution_decorator(
-        task_for_loop_table_iterator
+        task_for_loop_iterator
     )
-    memory_check_task_for_loop_iterator = task_memory_decorator(
-        task_for_loop_table_iterator
-    )
+    memory_check_task_for_loop_iterator = task_memory_decorator(task_for_loop_iterator)
 
     execute_task(
         memory_check_task_for_loop_iterator,
         decode_bytes,
         create_arrow_iterator_method,
         args.iteration_cnt,
+        args.use_table_unit,
     )
     memory_records = stress_util.collect_memory_records()
     execute_task(
@@ -203,6 +180,7 @@ if __name__ == "__main__":
         decode_bytes,
         create_arrow_iterator_method,
         args.iteration_cnt,
+        args.use_table_unit,
     )
     time_records = stress_util.collect_time_execution_records()
 

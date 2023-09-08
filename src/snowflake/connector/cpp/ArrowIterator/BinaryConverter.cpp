@@ -4,7 +4,6 @@
 
 #include "BinaryConverter.hpp"
 #include <memory>
-using namespace std;
 
 namespace sf
 {

@@ -18,7 +18,7 @@ from snowflake.connector.errors import OperationalError
 from snowflake.connector.version import VERSION
 
 
-def create_pyarrow_iterator(input_data):
+def create_pyarrow_iterator(input_data, use_table_iterator):
     # create nanoarrow based iterator
     return PyArrowIterator(
         None,
@@ -27,12 +27,13 @@ def create_pyarrow_iterator(input_data):
         False,
         False,
         False,
+        use_table_iterator,
     )
 
 
-def create_old_pyarrow_iterator(input_data):
+def create_old_pyarrow_iterator(input_data, use_table_iterator):
     # created vendored arrow based iterator
-    return PyArrowIterator(
+    iterator = PyArrowIterator(
         None,
         io.BytesIO(input_data),
         ArrowConverterContext(session_parameters={"TIMEZONE": "America/Los_Angeles"}),
@@ -40,6 +41,8 @@ def create_old_pyarrow_iterator(input_data):
         False,
         False,
     )
+    if use_table_iterator:
+        iterator.init_table_unit()
 
 
 create_arrow_iterator_method = (
@@ -63,12 +66,8 @@ def test_connector_error_base64_stream_chunk_remove_single_byte(use_table_iterat
         try:
             # removing the i-th char in the bytes
             iterator = create_arrow_iterator_method(
-                decode_bytes[:i] + decode_bytes[i + 1 :]
+                decode_bytes[:i] + decode_bytes[i + 1 :], use_table_iterator
             )
-            if use_table_iterator:
-                iterator.init_table_unit()
-            else:
-                iterator.init_row_unit()
             for k in iterator:
                 result_array.append(k)
             succeeded_result.append(i)
@@ -121,7 +120,7 @@ def test_connector_error_base64_stream_chunk_remove_random_length_bytes(
         try:
             # removing the i-th char in the bytes
             iterator = create_arrow_iterator_method(
-                bytes(remove_bytes(decode_bytes, 2**i))
+                bytes(remove_bytes(decode_bytes, 2**i)), use_table_iterator
             )
             if use_table_iterator:
                 iterator.init_table_unit()
@@ -154,7 +153,7 @@ def test_connector_error_random_input(use_table_iterator):
     for i in range(23):  # create input bytes array of size 0, 1, 2, ... 2^22
         input_bytes = secrets.token_bytes(2**i)
         try:
-            iterator = create_arrow_iterator_method(input_bytes)
+            iterator = create_arrow_iterator_method(input_bytes, use_table_iterator)
             if use_table_iterator:
                 iterator.init_table_unit()
             else:
