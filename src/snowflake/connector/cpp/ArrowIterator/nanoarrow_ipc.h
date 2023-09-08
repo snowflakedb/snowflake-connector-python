@@ -222,7 +222,7 @@ ArrowErrorCode ArrowIpcDecoderVerifyHeader(struct ArrowIpcDecoder* decoder,
 /// decoder.codec is set and a successful call can be followed by a call to
 /// ArrowIpcDecoderDecodeArray().
 ///
-/// In almost all cases this should be preceeded by a call to
+/// In almost all cases this should be preceded by a call to
 /// ArrowIpcDecoderVerifyHeader() to ensure decoding does not access data outside of the
 /// specified buffer.
 ///
