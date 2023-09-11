@@ -10,8 +10,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.3.0b1(September 13,2023)
 
-  - Updated arrow-nanoarrow dependency which improved error-handling of Arrow IPC stream.
-  - Aligned error experience with the GA version.
+  - Updated arrow-nanoarrow dependency which improved error handling.
+  - Aligned error experience of corrupted arrow data with the GA versions.
 
 - v3.2.0(September 06,2023)
 
