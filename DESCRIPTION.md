@@ -16,6 +16,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
   - Improved robustness in handling authentication response.
 
+- v3.3.0b1(September 13,2023)
+
+  - Updated arrow-nanoarrow dependency which improved error handling.
+  - Aligned error experience of corrupted arrow data with the GA versions.
+
 - v3.2.0(September 06,2023)
 
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
