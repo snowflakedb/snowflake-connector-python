@@ -231,7 +231,7 @@ class AuthByWebBrowser(AuthByPlugin):
                                 raw_data = socket_client.recv(BUF_SIZE)
 
                         except BlockingIOError:
-                            logger.debug(f'BlockingIOError raised from socket.recv while attempting to retrieve callback token request')
+                            logger.debug('BlockingIOError raised from socket.recv while attempting to retrieve callback token request')
                             if attempts < max_attempts:
                                 sleep_time = 0.25
                                 logger.debug(f'Waiting {sleep_time} seconds before trying again')
