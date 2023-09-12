@@ -17,7 +17,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
       - Useful when the randomized port used in the localhost callback url is being followed before the container engine completes port forwarding to host
       - Statically map a port between your host and container and allow that port to be reused in rapid succession with:
          `SF_AUTH_SOCKET_PORT=3037 SNOWFLAKE_AUTH_SOCKET_REUSE_PORT=true poetry run python somescript.py`
-    - Add `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT` flag (usage: `SF_AUTH_SOCKET_MSG_DONTWAINT=true`) to make a non-blocking socket.recv call and retry on Error
+    - Add `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT` flag (usage: `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT=true`) to make a non-blocking socket.recv call and retry on Error
       - Consider using this if running in a containerized environment and externalbrowser auth frequently hangs while waiting for callback
       - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
 

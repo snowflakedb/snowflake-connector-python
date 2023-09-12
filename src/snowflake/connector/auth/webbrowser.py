@@ -230,7 +230,7 @@ class AuthByWebBrowser(AuthByPlugin):
                                 #   To avoid this, passing the socket.MSG_DONTWAIT flag which raises BlockingIOError if
                                 #   operation would block
                                 logger.debug(
-                                    "Calling socket_client.recv with MSG_DONTWAIT flag due to SF_AUTH_SOCKET_MESSAGE_DONTWAIT env var"
+                                    "Calling socket_client.recv with MSG_DONTWAIT flag due to SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT env var"
                                 )
                                 raw_data = socket_client.recv(
                                     BUF_SIZE, socket.MSG_DONTWAIT
