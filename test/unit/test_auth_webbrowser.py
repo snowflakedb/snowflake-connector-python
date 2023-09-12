@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
+import socket
 from unittest import mock
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
-import socket
 
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.constants import OCSPMode
@@ -35,10 +35,12 @@ REF_PROOF_KEY = "MOCK_PROOF_KEY"
 REF_SSO_URL = "https://testsso.snowflake.net/sso"
 INVALID_SSO_URL = "this is an invalid URL"
 
+
 def mock_webserver(target_instance, application, port):
     _ = application
     _ = port
     target_instance._webserver_status = True
+
 
 def successful_web_callback(token):
     return (
@@ -50,37 +52,44 @@ def successful_web_callback(token):
         )
     ).encode("utf-8")
 
+
 def _init_socket(recv_side_effect_func):
     mock_socket_instance = MagicMock()
     mock_socket_instance.getsockname.return_value = [None, 12345]
 
     mock_socket_client = MagicMock()
 
-
     mock_socket_client.recv.side_effect = recv_side_effect_func
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
 
     return Mock(return_value=mock_socket_instance)
 
+
 class UnexpectedRecvArgs(Exception):
     pass
+
 
 def recv_setup(recv_list):
     recv_call_number = 0
 
     def recv_side_effect(*args):
         nonlocal recv_call_number
-        recv_call_number +=1
+        recv_call_number += 1
 
         # if we should block (default behavior), then the only arg should be BUF_SIZE
         if len(args) == 1:
             return recv_list[recv_call_number - 1]
 
-        raise UnexpectedRecvArgs(f'socket_client.recv call expected a single argeument, but received: {args}')
+        raise UnexpectedRecvArgs(
+            f"socket_client.recv call expected a single argeument, but received: {args}"
+        )
 
     return recv_side_effect
 
-def recv_setup_with_msg_nowait(ref_token, number_of_blocking_io_errors_before_success = 1):
+
+def recv_setup_with_msg_nowait(
+    ref_token, number_of_blocking_io_errors_before_success=1
+):
     call_number = 0
 
     def internally_scoped_function(*args):
@@ -88,15 +97,18 @@ def recv_setup_with_msg_nowait(ref_token, number_of_blocking_io_errors_before_su
         call_number += 1
 
         # if we should NOT block, then the MSG_DONTWAIT flag should be second arg
-        if (len(args) > 1 and args[1] == socket.MSG_DONTWAIT):
+        if len(args) > 1 and args[1] == socket.MSG_DONTWAIT:
             if call_number <= number_of_blocking_io_errors_before_success:
                 raise BlockingIOError()
             else:
                 return successful_web_callback(ref_token)
         else:
-            raise Exception(f'socket_client.recv call expected the second arg to be socket.MSG_DONTWAINT, but received: {args}')
+            raise Exception(
+                f"socket_client.recv call expected the second arg to be socket.MSG_DONTWAINT, but received: {args}"
+            )
 
     return internally_scoped_function
+
 
 def test_auth_webbrowser_get():
     """Authentication by WebBrowser positive test case."""
@@ -104,14 +116,18 @@ def test_auth_webbrowser_get():
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token) ]))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -132,6 +148,7 @@ def test_auth_webbrowser_get():
         assert body["data"]["TOKEN"] == ref_token
         assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
         assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+
 
 def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytearray():
     """Authentication by WebBrowser retries on empty bytearray response from socket.recv"""
@@ -139,18 +156,22 @@ def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytearray()
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup(
-        # 14th return is empty byte array, but 15th call will return successful_web_callback
-        ([bytearray()] * 14) + [ successful_web_callback(ref_token) ]
-    ))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup(
+            # 14th return is empty byte array, but 15th call will return successful_web_callback
+            ([bytearray()] * 14)
+            + [successful_web_callback(ref_token)]
+        )
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])), \
-         mock.patch('time.sleep' ) as sleep:
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch("time.sleep") as sleep:
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -172,6 +193,7 @@ def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytearray()
         assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
         assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
         assert sleep.call_count == 0
+
 
 def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
     """Authentication by WebBrowser stops trying after 15 consective socket.recv emty bytearray returns."""
@@ -179,18 +201,22 @@ def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup(
-        # 15th return is empty byte array, so successful_web_callback will never be fetched from recv
-        ([bytearray()] * 15) + [ successful_web_callback(ref_token) ]
-    ))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup(
+            # 15th return is empty byte array, so successful_web_callback will never be fetched from recv
+            ([bytearray()] * 15)
+            + [successful_web_callback(ref_token)]
+        )
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])), \
-         mock.patch('time.sleep' ) as sleep:
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch("time.sleep") as sleep:
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -208,26 +234,30 @@ def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
         assert auth.assertion_content is None
         assert sleep.call_count == 0
 
+
 def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
 
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
-    monkeypatch.setenv('SF_AUTH_SOCKET_MSG_DONTWAIT', 'true')
+    monkeypatch.setenv("SF_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup_with_msg_nowait(
-                                                            ref_token,
-                                                            number_of_blocking_io_errors_before_success=14))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup_with_msg_nowait(
+            ref_token, number_of_blocking_io_errors_before_success=14
+        )
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])), \
-         mock.patch('time.sleep' ) as sleep:
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch("time.sleep") as sleep:
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -250,28 +280,34 @@ def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypatch):
         assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
         sleep_times = [t[0][0] for t in sleep.call_args_list]
         assert sleep.call_count == 14
-        assert sleep_times == [ 0.25 ] * 14
+        assert sleep_times == [0.25] * 14
 
-def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(monkeypatch):
+
+def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(
+    monkeypatch,
+):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
 
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
-    monkeypatch.setenv('SF_AUTH_SOCKET_MSG_DONTWAIT', 'true')
+    monkeypatch.setenv("SF_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup_with_msg_nowait(
-                                                        ref_token,
-                                                        number_of_blocking_io_errors_before_success=15))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup_with_msg_nowait(
+            ref_token, number_of_blocking_io_errors_before_success=15
+        )
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])), \
-         mock.patch('time.sleep' ) as sleep:
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch("time.sleep") as sleep:
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -289,7 +325,8 @@ def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(mo
         assert auth.assertion_content is None
         sleep_times = [t[0][0] for t in sleep.call_args_list]
         assert sleep.call_count == 14
-        assert sleep_times == [ 0.25 ] * 14
+        assert sleep_times == [0.25] * 14
+
 
 def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
@@ -297,16 +334,20 @@ def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token )]))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    monkeypatch.setenv('SF_AUTH_SOCKET_REUSEPORT', 'true')
+    monkeypatch.setenv("SF_AUTH_SOCKET_REUSEPORT", "true")
 
-    #Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -321,10 +362,15 @@ def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
             password=PASSWORD,
         )
         assert mock_socket_pkg.return_value.setsockopt.call_count == 1
-        assert mock_socket_pkg.return_value.setsockopt.call_args.args == (socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        assert mock_socket_pkg.return_value.setsockopt.call_args.args == (
+            socket.SOL_SOCKET,
+            socket.SO_REUSEPORT,
+            1,
+        )
 
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
+
 
 def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
@@ -332,16 +378,20 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(monkeyp
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token )]))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    monkeypatch.setenv('SF_AUTH_SOCKET_REUSEPORT', 'false')
+    monkeypatch.setenv("SF_AUTH_SOCKET_REUSEPORT", "false")
 
-    #Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -359,6 +409,7 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(monkeyp
 
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
+
 
 def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
@@ -366,14 +417,18 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(monkeypatc
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token )]))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    #Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -392,32 +447,39 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(monkeypatc
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
 
+
 def test_auth_webbrowser_post():
     """Authentication by WebBrowser positive test case with POST."""
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([
-        (
-            "\r\n".join(
-                [
-                    "POST / HTTP/1.1",
-                    "User-Agent: snowflake-agent",
-                    "Host: localhost:12345",
-                    "",
-                    f"token={ref_token}&confirm=true",
-                ]
-            )
-        ).encode("utf-8")
-    ]))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup(
+            [
+                (
+                    "\r\n".join(
+                        [
+                            "POST / HTTP/1.1",
+                            "User-Agent: snowflake-agent",
+                            "Host: localhost:12345",
+                            "",
+                            f"token={ref_token}&confirm=true",
+                        ]
+                    )
+                ).encode("utf-8")
+            ]
+        )
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
@@ -457,7 +519,9 @@ def test_auth_webbrowser_fail_webbrowser(
     ref_token = "MOCK_TOKEN"
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([ successful_web_callback(ref_token) ]))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -503,18 +567,20 @@ def test_auth_webbrowser_fail_webserver(capsys):
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(recv_side_effect_func = recv_setup([
-        (
-            "\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])
-        ).encode("utf-8")
-    ]))
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup(
+            [("\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])).encode("utf-8")]
+        )
+    )
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
     # Mock select.select to return socket client
-    with mock.patch('select.select', return_value=([mock_socket_pkg.return_value], [], [])):
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
         # case 1: invalid HTTP request
         auth = AuthByWebBrowser(
             application=APPLICATION,
@@ -572,6 +638,7 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
     rest._post_request = post_request
     connection._rest = rest
     return rest
+
 
 def test_idtoken_reauth():
     """This test makes sure that AuthByIdToken reverts to AuthByWebBrowser.
