@@ -115,7 +115,7 @@ class AuthByWebBrowser(AuthByPlugin):
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        if os.getenv("SF_AUTH_SOCKET_REUSEPORT", "False").lower() == "true":
+        if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
             socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         try:
@@ -209,7 +209,7 @@ class AuthByWebBrowser(AuthByPlugin):
                 socket_client = None
                 max_attempts = 15
                 msg_dont_wait = (
-                    os.getenv("SF_AUTH_SOCKET_MSG_DONTWAIT", "false").lower() == "true"
+                    os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower() == "true"
                 )
 
                 # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array

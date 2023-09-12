@@ -241,7 +241,7 @@ def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypatch):
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
-    monkeypatch.setenv("SF_AUTH_SOCKET_MSG_DONTWAIT", "true")
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
     # mock socket
     mock_socket_pkg = _init_socket(
@@ -291,7 +291,7 @@ def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
-    monkeypatch.setenv("SF_AUTH_SOCKET_MSG_DONTWAIT", "true")
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
     # mock socket
     mock_socket_pkg = _init_socket(
@@ -342,7 +342,7 @@ def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    monkeypatch.setenv("SF_AUTH_SOCKET_REUSEPORT", "true")
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     # Mock select.select to return socket client
     with mock.patch(
@@ -386,7 +386,7 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(monkeyp
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    monkeypatch.setenv("SF_AUTH_SOCKET_REUSEPORT", "false")
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "false")
 
     # Mock select.select to return socket client
     with mock.patch(
