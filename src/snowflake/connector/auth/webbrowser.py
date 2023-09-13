@@ -209,7 +209,8 @@ class AuthByWebBrowser(AuthByPlugin):
                 socket_client = None
                 max_attempts = 15
                 msg_dont_wait = (
-                    os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower() == "true"
+                    os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower()
+                    == "true"
                 )
 
                 # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array
