@@ -11,6 +11,7 @@ import logging
 import uuid
 from collections import namedtuple
 from queue import Queue
+from threading import Lock
 from typing import Any
 
 from .compat import OK
@@ -152,13 +153,17 @@ class TelemetryMetricEvent(TelemetryEvent):
 
 class TelemetryService:
     __instance = None
+    # prevents race condition from multiple threads creating Snowflake connections
+    __lock_init = Lock()
 
-    @staticmethod
-    def get_instance() -> TelemetryService:
+    @classmethod
+    def get_instance(cls) -> TelemetryService:
         """Static access method."""
-        if TelemetryService.__instance is None:
-            TelemetryService()
-        return TelemetryService.__instance
+        cls.__lock_init.acquire()
+        if cls.__instance is None:
+            cls()
+        cls.__lock_init.release()
+        return cls.__instance
 
     def __init__(self) -> None:
         """Virtually private constructor."""

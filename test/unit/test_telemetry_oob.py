@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 
 import pytest
 
@@ -26,6 +28,8 @@ DEV_CONFIG = {
     "password": "ShouldNotShowUp",
     "protocol": "http",
 }
+TEST_RACE_CONDITION_THREAD_COUNT = 2
+TEST_RACE_CONDITION_DELAY_SECONDS = 1
 telemetry_data = {}
 exception = RevocationCheckError("Test OCSP Revocation error")
 event_type = "Test OCSP Exception"
@@ -198,3 +202,41 @@ def test_generate_telemetry_with_driver_info():
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_VERSION.value: "1.2.3",
         "key": "value",
     }
+
+
+class MockTelemetryService(TelemetryService):
+    """Mocks a delay in the __init__ of TelemetryService to simulate a race condition"""
+
+    def __init__(self, *args, **kwargs):
+        time.sleep(TEST_RACE_CONDITION_DELAY_SECONDS)
+        super().__init__(*args, **kwargs)
+
+
+class MockTelemetryServiceTestThread(threading.Thread):
+    """Catches exceptions in thread and re-raises them"""
+
+    def run(self):
+        self.exc = None
+        try:
+            MockTelemetryService.get_instance()
+        except BaseException as e:
+            self.exc = e
+
+    def join(self):
+        threading.Thread.join(self)
+        if self.exc:
+            raise self.exc
+
+
+def test_get_instance_multithreaded():
+    """Tests thread safety of multithreaded calls to TelemetryService.get_instance()"""
+    TelemetryService._TelemetryService__instance = None
+    threads = [
+        MockTelemetryServiceTestThread()
+        for _ in range(TEST_RACE_CONDITION_THREAD_COUNT)
+    ]
+
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
