@@ -2,10 +2,6 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-#
-# Copyright (c) 2012-2021 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -34,7 +30,7 @@ if IS_WINDOWS:
     import winreg
 
 
-def decode_dict(d):
+def _decode_dict(d):
     result = {}
     for key, value in d.items():
         if isinstance(key, bytes):
@@ -42,7 +38,7 @@ def decode_dict(d):
         if isinstance(value, bytes):
             value = value.decode()
         elif isinstance(value, dict):
-            value = decode_dict(value)
+            value = _decode_dict(value)
         result.update({key: value})
     return result
 
@@ -378,10 +374,10 @@ class ConnectionDiagnostic:
                         )
                 self.__append_message(host_type, f"{host}: Cert info:")
 
-                subject_str = decode_dict(result["subject"])
+                subject_str = _decode_dict(result["subject"])
                 self.__append_message(host_type, f"{host}: subject: {subject_str}")
 
-                issuer_str = decode_dict(result["issuer"])
+                issuer_str = _decode_dict(result["issuer"])
                 self.__append_message(host_type, f"{host}: issuer: {issuer_str}")
                 self.__append_message(
                     host_type, f"{host}: serialNumber: {result['serialNumber']}"
@@ -433,7 +429,7 @@ class ConnectionDiagnostic:
 
     def __get_issuer_string(self, issuer: dict[bytes, bytes]) -> str:
         issuer_str: str = (
-            re.sub('[{}"]', "", json.dumps(decode_dict(issuer)))
+            re.sub('[{}"]', "", json.dumps(_decode_dict(issuer)))
             .replace(": ", "=")
             .replace(",", ";")
         )
