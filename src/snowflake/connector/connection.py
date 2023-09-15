@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import sys
+import traceback
 import uuid
 import warnings
 import weakref
@@ -20,7 +21,6 @@ from functools import partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
-import traceback
 from time import strptime
 from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
