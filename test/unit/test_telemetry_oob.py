@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -208,35 +208,19 @@ class MockTelemetryService(TelemetryService):
     """Mocks a delay in the __init__ of TelemetryService to simulate a race condition"""
 
     def __init__(self, *args, **kwargs):
+        # this delay all but guarantees enough time to catch multiple threads entering __init__
         time.sleep(TEST_RACE_CONDITION_DELAY_SECONDS)
         super().__init__(*args, **kwargs)
-
-
-class MockTelemetryServiceTestThread(threading.Thread):
-    """Catches exceptions in thread and re-raises them"""
-
-    def run(self):
-        self.exc = None
-        try:
-            MockTelemetryService.get_instance()
-        except BaseException as e:
-            self.exc = e
-
-    def join(self):
-        threading.Thread.join(self)
-        if self.exc:
-            raise self.exc
 
 
 def test_get_instance_multithreaded():
     """Tests thread safety of multithreaded calls to TelemetryService.get_instance()"""
     TelemetryService._TelemetryService__instance = None
-    threads = [
-        MockTelemetryServiceTestThread()
-        for _ in range(TEST_RACE_CONDITION_THREAD_COUNT)
-    ]
-
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(MockTelemetryService.get_instance)
+            for _ in range(TEST_RACE_CONDITION_THREAD_COUNT)
+        ]
+        for future in futures:
+            # will error if singleton constraint violated
+            future.result()

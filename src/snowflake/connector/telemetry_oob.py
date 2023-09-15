@@ -159,10 +159,9 @@ class TelemetryService:
     @classmethod
     def get_instance(cls) -> TelemetryService:
         """Static access method."""
-        cls.__lock_init.acquire()
-        if cls.__instance is None:
-            cls()
-        cls.__lock_init.release()
+        with cls.__lock_init:
+            if cls.__instance is None:
+                cls()
         return cls.__instance
 
     def __init__(self) -> None:
