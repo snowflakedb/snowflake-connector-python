@@ -1226,7 +1226,7 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
 
     doc = tomlkit.document()
     default_con = tomlkit.table()
-    tmp_config_file: None | pathlib.Path = None
+    tmp_connections_file: None | pathlib.Path = None
     try:
         # If anything unexpected fails here, don't want to expose password
         for k, v in db_parameters.items():
@@ -1236,12 +1236,38 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
             if mode == "env":
                 m.setenv("SF_CONNECTIONS", tomlkit.dumps(doc))
             else:
-                tmp_config_file = tmp_path / "connections.toml"
-                tmp_config_file.write_text(tomlkit.dumps(doc))
+                tmp_connections_file = tmp_path / "connections.toml"
+                tmp_connections_file.write_text(tomlkit.dumps(doc))
             with snowflake.connector.connect(
                 connection_name="default",
-                connections_file_path=tmp_config_file,
+                connections_file_path=tmp_connections_file,
             ) as conn:
+                with conn.cursor() as cur:
+                    assert cur.execute("select 1;").fetchall() == [
+                        (1,),
+                    ]
+    except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
+        pytest.fail("something failed", pytrace=False)
+
+
+@pytest.mark.skipolddriver
+def test_default_connection_name_loading(monkeypatch, db_parameters):
+    import tomlkit
+
+    doc = tomlkit.document()
+    default_con = tomlkit.table()
+    try:
+        # If anything unexpected fails here, don't want to expose password
+        for k, v in db_parameters.items():
+            default_con[k] = v
+        doc["default"] = default_con
+        with monkeypatch.context() as m:
+            m.setenv("SNOWFLAKE_CONNECTIONS", tomlkit.dumps(doc))
+            m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", "default")
+            with snowflake.connector.connect() as conn:
                 with conn.cursor() as cur:
                     assert cur.execute("select 1;").fetchall() == [
                         (1,),

@@ -124,13 +124,13 @@ class TelemetryEvent(TelemetryEventBase):
 
         telemetry = TelemetryService.get_instance()
         # Add telemetry service generated tags
-        tags[TelemetryField.KEY_OOB_DRIVER] = CLIENT_NAME
-        tags[TelemetryField.KEY_OOB_VERSION] = str(SNOWFLAKE_CONNECTOR_VERSION)
+        tags[TelemetryField.KEY_OOB_DRIVER.value] = CLIENT_NAME
+        tags[TelemetryField.KEY_OOB_VERSION.value] = str(SNOWFLAKE_CONNECTOR_VERSION)
         tags[
-            TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT
+            TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT.value
         ] = telemetry.deployment.name
         tags[
-            TelemetryField.KEY_OOB_CONNECTION_STRING
+            TelemetryField.KEY_OOB_CONNECTION_STRING.value
         ] = telemetry.get_connection_string()
         if telemetry.context and len(telemetry.context) > 0:
             for k, v in telemetry.context.items():

@@ -213,7 +213,7 @@ class HTTPResponse(io.IOBase):
         connection=None,
         msg=None,
         retries=None,
-        enforce_content_length=False,
+        enforce_content_length=True,
         request_method=None,
         request_url=None,
         auto_close=True,

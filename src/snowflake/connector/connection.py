@@ -43,7 +43,7 @@ from .auth import (
 from .auth.idtoken import AuthByIdToken
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
-from .config_manager import CONFIG_PARSER
+from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     ENV_VAR_PARTNER,
@@ -302,6 +302,21 @@ class SnowflakeConnection:
         connections_file_path: pathlib.Path | None = None,
         **kwargs,
     ) -> None:
+        """Create a new SnowflakeConnection.
+
+        Connections can be loaded from the TOML file located at
+        snowflake.connector.constants.CONNECTIONS_FILE.
+
+        When connection_name is supplied we will first load that connection
+        and then override any other values supplied.
+
+        When no arguments are given (other than connection_file_path) the
+        default connection will be loaded first. Note that no overwriting is
+        supported in this case.
+
+        If overwriting values from the default connection is desirable, supply
+        the name explicitly.
+        """
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
@@ -324,6 +339,7 @@ class SnowflakeConnection:
             setattr(self, f"_{name}", value)
 
         self.heartbeat_thread = None
+        is_kwargs_empty = not kwargs
 
         if "application" not in kwargs:
             if ENV_VAR_PARTNER in os.environ.keys():
@@ -336,19 +352,22 @@ class SnowflakeConnection:
         self.query_context_cache_size = 5
         if connections_file_path is not None:
             # Change config file path and force update cache
-            for i, s in enumerate(CONFIG_PARSER._slices):
+            for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
-                    CONFIG_PARSER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_PARSER.read_config()
+                    CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
+                    CONFIG_MANAGER.read_config()
                     break
         if connection_name is not None:
-            connections = CONFIG_PARSER["connections"]
+            connections = CONFIG_MANAGER["connections"]
             if connection_name not in connections:
                 raise Error(
                     f"Invalid connection_name '{connection_name}',"
                     f" known ones are {list(connections.keys())}"
                 )
             kwargs = {**connections[connection_name], **kwargs}
+        elif is_kwargs_empty:
+            # connection_name is None and kwargs was empty when called
+            kwargs = _get_default_connection_params()
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
@@ -1725,7 +1744,7 @@ class SnowflakeConnection:
             # and internal modules with names starting with an underscore
             imported_modules = {
                 k.split(".", maxsplit=1)[0]
-                for k in sys.modules.keys()
+                for k in list(sys.modules)
                 if not k.startswith("_")
             }
             ts = get_time_millis()
