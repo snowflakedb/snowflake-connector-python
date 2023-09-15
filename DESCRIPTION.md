@@ -7,6 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.2.1(TBD)
+  - Fixed issue with connection diagnostics failing to complete certificate checks.
 
 - v3.2.0(September 06,2023)
 
