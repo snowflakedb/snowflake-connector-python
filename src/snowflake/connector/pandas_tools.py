@@ -301,7 +301,7 @@ def write_pandas(
     ):
         warnings.warn(
             "Dataframe contains a datetime with timezone column, but "
-            f"'use_logical_type = {use_logical_type}'. This can result in dateimes "
+            f"'{use_logical_type=}'. This can result in dateimes "
             "being incorrectly written to Snowflake. Consider setting "
             "'use_logical_type = True'",
             UserWarning,
