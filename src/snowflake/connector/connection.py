@@ -149,6 +149,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
+    "private_key_file": (None, (type(None), str)),
+    "private_key_file_pwd": (None, (type(None), str)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -893,7 +895,11 @@ class SnowflakeConnection:
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-            self.auth_class = AuthByKeyPair(private_key=self._private_key)
+            self.auth_class = AuthByKeyPair(
+                private_key=self._private_key,
+                private_key_file=self._private_key_file,
+                private_key_file_pwd=self._private_key_file_pwd,
+            )
         elif self._authenticator == OAUTH_AUTHENTICATOR:
             self.auth_class = AuthByOAuth(oauth_token=self._token)
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
@@ -1035,7 +1041,7 @@ class SnowflakeConnection:
                 {"msg": "User is empty", "errno": ER_NO_USER},
             )
 
-        if self._private_key:
+        if self._private_key or self._private_key_file:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
         if (

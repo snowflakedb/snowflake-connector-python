@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
     load_der_private_key,
+    load_pem_private_key
 )
 
 from ..errorcode import (
@@ -48,6 +49,8 @@ class AuthByKeyPair(AuthByPlugin):
     def __init__(
         self,
         private_key: bytes | RSAPrivateKey,
+        private_key_file: str | None = None,
+        private_key_file_pwd: str | None = None,
         lifetime_in_seconds: int = LIFETIME,
     ) -> None:
         """Inits AuthByKeyPair class with private key.
@@ -55,10 +58,16 @@ class AuthByKeyPair(AuthByPlugin):
         Args:
             private_key: a byte array of der formats of private key, or an
                 object that implements the `RSAPrivateKey` interface.
+            private_key_file: Specifies the path to the private key file for
+                the specified user.
+            private_key_file_pwd: Specifies the passphrase to decrypt the
+                private_key_file for the specified user.
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         super().__init__()
         self._private_key: bytes | RSAPrivateKey | None = private_key
+        self._private_key_file: str | None = private_key_file
+        self._private_key_file_pwd: str | None = private_key_file_pwd
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -126,6 +135,13 @@ class AuthByKeyPair(AuthByPlugin):
                 )
         elif isinstance(self._private_key, RSAPrivateKey):
             private_key = self._private_key
+        elif isinstance(self._private_key_file, str):
+            with open(self._private_key_file, "rb") as key:
+                private_key = load_pem_private_key(
+                    key.read(),
+                    password=self._private_key_file_pwd,
+                    backend=default_backend()
+                )
         else:
             raise TypeError(
                 f"Expected bytes or RSAPrivateKey, got {type(self._private_key)}"
