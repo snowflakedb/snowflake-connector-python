@@ -190,7 +190,6 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     def check_cert_time_validity(
         self, cur_time: datetime, ocsp_cert: Certificate
     ) -> tuple[bool, str | None]:
-
         val_start = ocsp_cert["tbs_certificate"]["validity"]["not_before"].native
         val_end = ocsp_cert["tbs_certificate"]["validity"]["not_after"].native
 

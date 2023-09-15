@@ -635,7 +635,7 @@ class ArrowResultBatch(ResultBatch):
 
     def _create_iter(
         self, iter_unit: IterUnit, connection: SnowflakeConnection | None = None
-    ) -> (Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]):
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
             return self._from_data(self._data, iter_unit)

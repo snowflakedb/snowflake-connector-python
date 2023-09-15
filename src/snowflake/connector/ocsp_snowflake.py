@@ -121,7 +121,6 @@ def generate_cache_key(
 
 
 class OCSPTelemetryData:
-
     CERTIFICATE_EXTRACTION_FAILED = "CertificateExtractionFailed"
     OCSP_URL_MISSING = "OCSPURLMissing"
     OCSP_RESPONSE_UNAVAILABLE = "OCSPResponseUnavailable"
@@ -364,7 +363,8 @@ class OCSPServer:
                 # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
                 logger.debug(
-                    "# of certificates: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+                    "# of certificates: %u",
+                    len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
                 )
             except RevocationCheckError as rce:
                 logger.debug(
@@ -446,7 +446,6 @@ class OCSPServer:
 
 
 class OCSPCache:
-
     # OCSP cache lock
     CACHE_LOCK = Lock()
 
@@ -524,7 +523,8 @@ class OCSPCache:
         # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
         # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
         logger.debug(
-            "OCSP_VALIDATION_CACHE size: %s", len(OCSP_RESPONSE_VALIDATION_CACHE._cache)
+            "OCSP_VALIDATION_CACHE size: %u",
+            len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
         )
 
     @staticmethod
@@ -587,7 +587,7 @@ class OCSPCache:
         """
         if OCSPCache.CACHE_UPDATED:
             if isinstance(OCSP_RESPONSE_VALIDATION_CACHE, SFDictFileCache):
-                OCSP_RESPONSE_VALIDATION_CACHE._save()
+                OCSP_RESPONSE_VALIDATION_CACHE.save()
             OCSPCache.update_ocsp_response_cache_file(
                 ocsp, OCSPCache.OCSP_RESPONSE_CACHE_URI
             )
@@ -870,7 +870,6 @@ class SnowflakeOCSP:
         use_post_method: bool = True,
         use_fail_open: bool = True,
     ) -> None:
-
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
 
         if self.test_mode == "true":
@@ -943,15 +942,18 @@ class SnowflakeOCSP:
         hostname: str | None,
         connection: Connection,
         no_exception: bool = False,
-    ) -> list[
-        tuple[
-            Exception | None,
-            Certificate,
-            Certificate,
-            CertId,
-            str | bytes,
+    ) -> (
+        list[
+            tuple[
+                Exception | None,
+                Certificate,
+                Certificate,
+                CertId,
+                str | bytes,
+            ]
         ]
-    ] | None:
+        | None
+    ):
         """Validates the certificate is not revoked using OCSP."""
         logger.debug("validating certificate: %s", hostname)
 
@@ -1175,16 +1177,19 @@ class SnowflakeOCSP:
                 str(ex),
             )
 
+        to_update_cache_dict = {}
         for issuer, subject in cert_data:
             cert_id, _ = self.create_ocsp_request(issuer=issuer, subject=subject)
             cache_key = self.decode_cert_id_key(cert_id)
             ocsp_response_validation_result = OCSP_RESPONSE_VALIDATION_CACHE.get(
                 cache_key
             )
+
             if (
                 ocsp_response_validation_result is None
                 or not ocsp_response_validation_result.validated
             ):
+                # r is a tuple of (err, issuer, subject, cert_id, ocsp_response)
                 r = self.validate_by_direct_connection(
                     issuer,
                     subject,
@@ -1193,14 +1198,18 @@ class SnowflakeOCSP:
                     do_retry=do_retry,
                     cache_key=cache_key,
                 )
-                OCSP_RESPONSE_VALIDATION_CACHE[
-                    cache_key
-                ] = OCSPResponseValidationResult(
-                    *r,
-                    ts=int(time.time()),
-                    validated=True,
-                )
-                OCSPCache.CACHE_UPDATED = True
+
+                # When OCSP server is down, the validation fails and the oscp_response will be None, and in fail open
+                # case, we will also reset err to None.
+                # In this case we don't need to write the response to cache because there is no information from a
+                # connection error.
+                if r[0] is not None or r[4] is not None:
+                    to_update_cache_dict[cache_key] = OCSPResponseValidationResult(
+                        *r,
+                        ts=int(time.time()),
+                        validated=True,
+                    )
+                    OCSPCache.CACHE_UPDATED = True
                 results.append(r)
             else:
                 results.append(
@@ -1212,6 +1221,7 @@ class SnowflakeOCSP:
                         ocsp_response_validation_result.ocsp_response,
                     )
                 )
+        OCSP_RESPONSE_VALIDATION_CACHE.update(to_update_cache_dict)
         return results
 
     def _check_ocsp_response_cache_server(
@@ -1615,7 +1625,7 @@ class SnowflakeOCSP:
                             self, cert_id, cache_key=cache_key, lock_cache=False
                         )
             if new_cache_dict:
-                OCSP_RESPONSE_VALIDATION_CACHE._update(new_cache_dict)
+                OCSP_RESPONSE_VALIDATION_CACHE.update(new_cache_dict)
                 OCSPCache.CACHE_UPDATED = True
         except Exception as ex:
             logger.debug("Caught here - %s", ex)

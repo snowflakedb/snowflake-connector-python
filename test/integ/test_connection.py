@@ -1226,24 +1226,48 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
 
     doc = tomlkit.document()
     default_con = tomlkit.table()
-    tmp_config_file: None | pathlib.Path = None
+    tmp_connections_file: None | pathlib.Path = None
     try:
         # If anything unexpected fails here, don't want to expose password
         for k, v in db_parameters.items():
             default_con[k] = v
+        doc["default"] = default_con
         with monkeypatch.context() as m:
             if mode == "env":
-                doc["default"] = default_con
                 m.setenv("SF_CONNECTIONS", tomlkit.dumps(doc))
             else:
-                doc["connections"] = tomlkit.table()
-                doc["connections"]["default"] = default_con
-                tmp_config_file = tmp_path / "config.toml"
-                tmp_config_file.write_text(tomlkit.dumps(doc))
+                tmp_connections_file = tmp_path / "connections.toml"
+                tmp_connections_file.write_text(tomlkit.dumps(doc))
             with snowflake.connector.connect(
                 connection_name="default",
-                config_file_path=tmp_config_file,
+                connections_file_path=tmp_connections_file,
             ) as conn:
+                with conn.cursor() as cur:
+                    assert cur.execute("select 1;").fetchall() == [
+                        (1,),
+                    ]
+    except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
+        pytest.fail("something failed", pytrace=False)
+
+
+@pytest.mark.skipolddriver
+def test_default_connection_name_loading(monkeypatch, db_parameters):
+    import tomlkit
+
+    doc = tomlkit.document()
+    default_con = tomlkit.table()
+    try:
+        # If anything unexpected fails here, don't want to expose password
+        for k, v in db_parameters.items():
+            default_con[k] = v
+        doc["default"] = default_con
+        with monkeypatch.context() as m:
+            m.setenv("SNOWFLAKE_CONNECTIONS", tomlkit.dumps(doc))
+            m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", "default")
+            with snowflake.connector.connect() as conn:
                 with conn.cursor() as cur:
                     assert cur.execute("select 1;").fetchall() == [
                         (1,),
@@ -1276,3 +1300,19 @@ def test_server_session_keep_alive(conn_cnx):
     with conn_cnx() as conn:
         conn.rest.delete_session = mock_delete_session
     mock_delete_session.assert_called_once()
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure(conn_cnx, is_public_test, caplog):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        caplog.clear()
+
+    with conn_cnx() as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text

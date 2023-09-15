@@ -637,7 +637,6 @@ class SnowflakeFileTransferAgent:
                 meta,
                 self._stage_info,
                 4 * megabyte,
-                use_s3_regional_url=self._use_s3_regional_url,
             )
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
@@ -845,7 +844,6 @@ class SnowflakeFileTransferAgent:
                         )
 
     def _parse_command(self) -> None:
-
         if "data" not in self._ret:
             Error.errorhandler_wrapper(
                 self._cursor.connection,

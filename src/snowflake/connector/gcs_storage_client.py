@@ -141,9 +141,9 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 }
             )
 
-        def generate_url_and_rest_args() -> tuple[
-            str, dict[str, dict[str | Any, str | None] | bytes]
-        ]:
+        def generate_url_and_rest_args() -> (
+            tuple[str, dict[str, dict[str | Any, str | None] | bytes]]
+        ):
             if not self.presigned_url:
                 upload_url = self.generate_file_url(
                     self.stage_info["location"], meta.dst_file_name.lstrip("/")
@@ -170,9 +170,9 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
     def download_chunk(self, chunk_id: int) -> None:
         meta = self.meta
 
-        def generate_url_and_rest_args() -> tuple[
-            str, dict[str, dict[str, str] | bool]
-        ]:
+        def generate_url_and_rest_args() -> (
+            tuple[str, dict[str, dict[str, str] | bool]]
+        ):
             gcs_headers = {}
             if not self.presigned_url:
                 download_url = self.generate_file_url(

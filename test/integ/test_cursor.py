@@ -301,7 +301,7 @@ def test_insert_timestamp_select(conn, db_parameters):
         result_date_value = []
         result_time_value = []
 
-        for (aa, ts, tstz, tsntz, dt, tm) in c:
+        for aa, ts, tstz, tsntz, dt, tm in c:
             result_numeric_value.append(aa)
             result_timestamp_value.append(ts)
             result_other_timestamp_value.append(tstz)
@@ -388,7 +388,7 @@ def test_insert_timestamp_ltz(conn, db_parameters):
             c.execute("select aa,tsltz from {name}".format(name=db_parameters["name"]))
             result_numeric_value = []
             result_timestamp_value = []
-            for (aa, ts) in c:
+            for aa, ts in c:
                 result_numeric_value.append(aa)
                 result_timestamp_value.append(ts)
 
@@ -434,7 +434,7 @@ def test_struct_time(conn, db_parameters):
             result = cnx.cursor().execute(
                 "select aa, tsltz from {name}".format(name=db_parameters["name"])
             )
-            for (_, _tsltz) in result:
+            for _, _tsltz in result:
                 pass
 
             _tsltz -= _tsltz.tzinfo.utcoffset(_tsltz)
@@ -798,7 +798,6 @@ def test_closed_cursor(conn, db_parameters):
 
 @pytest.mark.skipolddriver
 def test_fetchmany(conn, db_parameters, caplog):
-
     table_name = random_string(5, "test_fetchmany_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -896,7 +895,7 @@ def test_real_decimal(conn, db_parameters):
         c = cnx.cursor()
         fmt = "select aa, pct, ratio from {name}".format(name=db_parameters["name"])
         c.execute(fmt)
-        for (_aa, _pct, _ratio) in c:
+        for _aa, _pct, _ratio in c:
             pass
         assert _aa == 9876, "the integer value"
         assert _pct == 12.3, "the float value"

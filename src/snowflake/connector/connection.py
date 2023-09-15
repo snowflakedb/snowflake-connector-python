@@ -26,6 +26,8 @@ from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
 from uuid import UUID
 
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
 from .auth import (
@@ -42,7 +44,7 @@ from .auth import (
 from .auth.idtoken import AuthByIdToken
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
-from .config_manager import CONFIG_PARSER
+from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     ENV_VAR_PARTNER,
@@ -147,7 +149,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # network timeout (infinite by default)
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
-    "private_key": (None, (type(None), str)),
+    "private_key": (None, (type(None), str, RSAPrivateKey)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -221,6 +223,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # Whether to keep session alive after connector shuts down
+    "enable_retry_reason_in_query_response": (
+        True,
+        bool,
+    ),  # Enable sending retryReason in response header for query-requests
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -294,9 +300,24 @@ class SnowflakeConnection:
     def __init__(
         self,
         connection_name: str | None = None,
-        config_file_path: pathlib.Path | None = None,
+        connections_file_path: pathlib.Path | None = None,
         **kwargs,
     ) -> None:
+        """Create a new SnowflakeConnection.
+
+        Connections can be loaded from the TOML file located at
+        snowflake.connector.constants.CONNECTIONS_FILE.
+
+        When connection_name is supplied we will first load that connection
+        and then override any other values supplied.
+
+        When no arguments are given (other than connection_file_path) the
+        default connection will be loaded first. Note that no overwriting is
+        supported in this case.
+
+        If overwriting values from the default connection is desirable, supply
+        the name explicitly.
+        """
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
@@ -319,6 +340,7 @@ class SnowflakeConnection:
             setattr(self, f"_{name}", value)
 
         self.heartbeat_thread = None
+        is_kwargs_empty = not kwargs
 
         if "application" not in kwargs:
             if ENV_VAR_PARTNER in os.environ.keys():
@@ -329,18 +351,24 @@ class SnowflakeConnection:
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
-        if config_file_path is not None:
+        if connections_file_path is not None:
             # Change config file path and force update cache
-            CONFIG_PARSER.file_path = config_file_path
-            CONFIG_PARSER.read_config()
+            for i, s in enumerate(CONFIG_MANAGER._slices):
+                if s.section == "connections":
+                    CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
+                    CONFIG_MANAGER.read_config()
+                    break
         if connection_name is not None:
-            connections = CONFIG_PARSER["connections"]
+            connections = CONFIG_MANAGER["connections"]
             if connection_name not in connections:
                 raise Error(
                     f"Invalid connection_name '{connection_name}',"
                     f" known ones are {list(connections.keys())}"
                 )
             kwargs = {**connections[connection_name], **kwargs}
+        elif is_kwargs_empty:
+            # connection_name is None and kwargs was empty when called
+            kwargs = _get_default_connection_params()
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
@@ -363,7 +391,8 @@ class SnowflakeConnection:
         return self._ocsp_fail_open
 
     def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSECURE, FAIL_OPEN or FAIL_CLOSED."""
+        """OCSP mode. INSEC
+        URE, FAIL_OPEN or FAIL_CLOSED."""
         if self.insecure_mode:
             return OCSPMode.INSECURE
         elif self.ocsp_fail_open:
@@ -1112,8 +1141,10 @@ class SnowflakeConnection:
             # binding parameters. This is for qmarks paramstyle.
             data["bindings"] = binding_params
         if not _no_results:
-            # not an async query
-            data["queryContext"] = self.get_query_context()
+            # not an async query.
+            queryContext = self.get_query_context()
+            #  Here queryContextDTO should be a dict object field, same with `parameters` field
+            data["queryContextDTO"] = queryContext
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
@@ -1652,10 +1683,10 @@ class SnowflakeConnection:
         if not self.is_query_context_cache_disabled:
             self.query_context_cache = QueryContextCache(self.query_context_cache_size)
 
-    def get_query_context(self) -> str | None:
+    def get_query_context(self) -> dict | None:
         if self.is_query_context_cache_disabled:
             return None
-        return self.query_context_cache.serialize_to_json()
+        return self.query_context_cache.serialize_to_dict()
 
     def set_query_context(self, data: dict) -> None:
         if not self.is_query_context_cache_disabled:
@@ -1690,10 +1721,7 @@ class SnowflakeConnection:
         if not self._async_sfqids:
             return True
 
-        if sys.version_info >= (3, 8):
-            queries = list(reversed(self._async_sfqids.keys()))
-        else:
-            queries = list(reversed(list(self._async_sfqids.keys())))
+        queries = list(reversed(self._async_sfqids.keys()))
 
         num_workers = min(self.client_prefetch_threads, len(queries))
         found_unfinished_query = False
@@ -1709,7 +1737,6 @@ class SnowflakeConnection:
         with ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="async_query_check_"
         ) as tpe:  # We should upgrade to using cancel_futures=True once supporting 3.9+
-
             futures = (tpe.submit(async_query_check_helper, sfqid) for sfqid in queries)
             for f in as_completed(futures):
                 if f.result():
@@ -1726,7 +1753,7 @@ class SnowflakeConnection:
             # and internal modules with names starting with an underscore
             imported_modules = {
                 k.split(".", maxsplit=1)[0]
-                for k in sys.modules.keys()
+                for k in list(sys.modules)
                 if not k.startswith("_")
             }
             ts = get_time_millis()

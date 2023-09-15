@@ -447,7 +447,12 @@ class SnowflakeStorageClient(ABC):
         This function is idempotent."""
         if os.path.exists(self.tmp_dir):
             logger.debug(f"cleaning up tmp dir: {self.tmp_dir}")
-            shutil.rmtree(self.tmp_dir)
+            try:
+                shutil.rmtree(self.tmp_dir)
+            except OSError as ex:
+                # it's ok to ignore the exception here because another thread might
+                # have cleaned up the temp directory
+                logger.debug(f"Failed to delete {self.tmp_dir}: {ex}")
         if self.meta.src_stream and not self.meta.src_stream.closed:
             self.meta.src_stream.close()
 

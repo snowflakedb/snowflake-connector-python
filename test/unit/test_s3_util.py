@@ -57,15 +57,15 @@ MINIMAL_METADATA = SnowflakeFileMeta(
 @pytest.mark.parametrize(
     "input, bucket_name, s3path",
     [
-        ("sfc-dev1-regression/test_sub_dir/", "sfc-dev1-regression", "test_sub_dir/"),
+        ("sfc-eng-regression/test_sub_dir/", "sfc-eng-regression", "test_sub_dir/"),
         (
-            "sfc-dev1-regression/stakeda/test_stg/test_sub_dir/",
-            "sfc-dev1-regression",
+            "sfc-eng-regression/stakeda/test_stg/test_sub_dir/",
+            "sfc-eng-regression",
             "stakeda/test_stg/test_sub_dir/",
         ),
-        ("sfc-dev1-regression/", "sfc-dev1-regression", ""),
-        ("sfc-dev1-regression//", "sfc-dev1-regression", "/"),
-        ("sfc-dev1-regression///", "sfc-dev1-regression", "//"),
+        ("sfc-eng-regression/", "sfc-eng-regression", ""),
+        ("sfc-eng-regression//", "sfc-eng-regression", "/"),
+        ("sfc-eng-regression///", "sfc-eng-regression", "//"),
     ],
 )
 def test_extract_bucket_name_and_path(input, bucket_name, s3path):

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 import snowflake.connector.errorcode
@@ -49,15 +51,20 @@ def telemetry_setup(request):
     telemetry.flush()
 
 
-def test_telemetry_oob_simple_flush(telemetry_setup):
+def test_telemetry_oob_simple_flush(telemetry_setup, caplog):
     """Tests capturing and sending a simple OCSP Exception message."""
     telemetry = TelemetryService.get_instance()
-
+    telemetry.flush()  # clear the buffer first
     telemetry.log_ocsp_exception(
         event_type, telemetry_data, exception=exception, stack_trace=stack_trace
     )
     assert telemetry.size() == 1
+    caplog.set_level(logging.DEBUG, "snowflake.connector.telemetry_oob")
     telemetry.flush()
+    assert (
+        "Failed to generate a JSON dump from the passed in telemetry OOB events"
+        not in caplog.text
+    )
     assert telemetry.size() == 0
 
 
