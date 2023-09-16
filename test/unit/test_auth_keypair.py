@@ -122,7 +122,7 @@ def test_auth_keypair_file():
     private_key_file = NamedTemporaryFile()
 
     private_key = rsa.generate_private_key(
-        backend=default_backend(), public_exponent=65537, key_size=2048
+        backend=default_backend(), public_exponent=65537, key_size=2048,
     )
 
     private_key_pem = private_key.private_bytes(
@@ -137,7 +137,10 @@ def test_auth_keypair_file():
     application = "testapplication"
     account = "testaccount"
     user = "testuser"
-    auth_instance = AuthByKeyPair(private_key=None, private_key_file=private_key_file.name)
+    auth_instance = AuthByKeyPair(
+        private_key=None,
+        private_key_file=private_key_file.name,
+    )
     auth_instance.handle_timeout(
         authenticator="SNOWFLAKE_JWT",
         service_name=None,
