@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
     load_der_private_key,
-    load_pem_private_key
+    load_pem_private_key,
 )
 
 from ..errorcode import (
