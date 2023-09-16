@@ -67,7 +67,9 @@ class AuthByKeyPair(AuthByPlugin):
         super().__init__()
         self._private_key: bytes | RSAPrivateKey | None = private_key
         self._private_key_file: str | None = private_key_file
-        self._private_key_file_pwd: str | None = private_key_file_pwd
+        self._private_key_file_pwd: bytes | None = (
+            private_key_file_pwd.encode() if private_key_file_pwd else None
+        )
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -140,7 +142,7 @@ class AuthByKeyPair(AuthByPlugin):
                 private_key = load_pem_private_key(
                     key.read(),
                     password=self._private_key_file_pwd,
-                    backend=default_backend()
+                    backend=default_backend(),
                 )
         else:
             raise TypeError(
