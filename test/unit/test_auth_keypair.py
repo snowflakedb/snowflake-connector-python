@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import load_der_private_key
 from pytest import raises
+from tempfile import NamedTemporaryFile
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.constants import OCSPMode
@@ -114,6 +115,44 @@ def test_auth_keypair_bad_type():
                 password=None,
             )
         assert str(type(bad_private_key)) in str(ex)
+
+
+def test_auth_keypair_file():
+    """Simple Key Pair file test."""
+    private_key_file = NamedTemporaryFile()
+
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    with open(private_key_file.name, "w") as f:
+        f.write(private_key_pem.decode())
+
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    auth_instance = AuthByKeyPair(private_key=None, private_key_file=private_key_file.name)
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    # success test case
+    rest = _init_rest(application, _create_mock_auth_keypair_rest_response())
+    auth = Auth(rest)
+    auth.authenticate(auth_instance, account, user)
+    assert not rest._connection.errorhandler.called  # not error
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
 
 
 def _init_rest(application, post_requset):
