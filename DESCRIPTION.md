@@ -10,7 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.2.1(TBD)
 
-  - Added thread safety when instantiating multiple connections
+  - Added thread safety in telemetry when instantiating multiple connections concurrently.
 
 - v3.2.0(September 06,2023)
 
