@@ -564,7 +564,7 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
+        from .nanoarrow_arrow_iterator import PyArrowIterator
 
         iter = PyArrowIterator(
             None,
@@ -585,7 +585,7 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
+        from .nanoarrow_arrow_iterator import PyArrowIterator
 
         if len(data) == 0:
             return iter([])

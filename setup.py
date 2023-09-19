@@ -10,7 +10,7 @@ import warnings
 from setuptools import Extension, setup
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
-NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "cpp", "ArrowIterator")
+NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp", "ArrowIterator")
 
 VERSION = (1, 1, 1, None)  # Default
 try:
@@ -57,8 +57,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
     extensions = cythonize(
         [
             Extension(
-                name="snowflake.connector.arrow_iterator",
-                sources=[os.path.join(NANOARROW_SRC_DIR, "arrow_iterator.pyx")],
+                name="snowflake.connector.nanoarrow_arrow_iterator",
+                sources=[
+                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")
+                ],
                 language="c++",
             ),
         ],
@@ -71,35 +73,61 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ext.extra_link_args.append("-g")
             current_dir = os.getcwd()
 
-            if ext.name == "snowflake.connector.arrow_iterator":
-                CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "cpp")
-                ARROW_ITERATOR_SRC_DIR = os.path.join(CPP_SRC_DIR, "ArrowIterator")
-                LOGGING_SRC_DIR = os.path.join(CPP_SRC_DIR, "Logging")
+            if ext.name == "snowflake.connector.nanoarrow_arrow_iterator":
+                NANOARROW_CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp")
+                NANOARROW_ARROW_ITERATOR_SRC_DIR = os.path.join(
+                    NANOARROW_CPP_SRC_DIR, "ArrowIterator"
+                )
+                NANOARROW_LOGGING_SRC_DIR = os.path.join(
+                    NANOARROW_CPP_SRC_DIR, "Logging"
+                )
 
                 ext.sources += [
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "CArrowIterator.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "CArrowChunkIterator.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "CArrowTableIterator.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "SnowflakeType.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "BinaryConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "BooleanConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "DecimalConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "DateConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "FloatConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "IntConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "StringConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "TimeConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "TimeStampConverter.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "Python", "Common.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"),
-                    os.path.join(ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),
-                    LOGGING_SRC_DIR + "/logging.cpp",
-                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow.c"),
-                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow_ipc.c"),
-                    os.path.join(NANOARROW_SRC_DIR, "flatcc.c"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowIterator.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowChunkIterator.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowTableIterator.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "SnowflakeType.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BinaryConverter.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BooleanConverter.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "DecimalConverter.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "DateConverter.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "FloatConverter.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "IntConverter.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "StringConverter.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeConverter.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeStampConverter.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Common.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),
+                    NANOARROW_LOGGING_SRC_DIR + "/logging.cpp",
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow.c"),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow_ipc.c"),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "flatcc.c"),
                 ]
-                ext.include_dirs.append(ARROW_ITERATOR_SRC_DIR)
-                ext.include_dirs.append(LOGGING_SRC_DIR)
+                ext.include_dirs.append(NANOARROW_ARROW_ITERATOR_SRC_DIR)
+                ext.include_dirs.append(NANOARROW_LOGGING_SRC_DIR)
 
                 if sys.platform == "win32":
                     if not any("/std" not in s for s in ext.extra_compile_args):

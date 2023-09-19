@@ -86,7 +86,7 @@ else:
     Table = None
 
 try:
-    from .arrow_iterator import PyArrowIterator  # NOQA
+    from .nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
 
     CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
@@ -119,6 +119,13 @@ LOG_MAX_QUERY_LENGTH = 80
 
 ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
+
+# The USE_NANOARROW_CONVERTER is introduced to control which arrow converter to use.
+# default value is None means it will be decided by the session parameter PYTHON_CONNECTOR_USE_NANOARROW whether
+# to use nanoarrow converter or vendored arrow converter, in which case, PYTHON_CONNECTOR_USE_NANOARROW defaults to True
+# if USE_NANOARROW_CONVERTER set to True to False locally,
+# then the local setting has higher priority than the session parameter.
+USE_NANOARROW_CONVERTER = None
 
 
 class ResultMetadata(NamedTuple):

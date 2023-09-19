@@ -28,7 +28,7 @@ except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator
+    from snowflake.connector.nanoarrow_arrow_iterator import PyArrowIterator
 except ImportError:
     pass
 from snowflake.connector.errors import OperationalError
