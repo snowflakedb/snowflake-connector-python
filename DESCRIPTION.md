@@ -10,6 +10,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.2.1(TBD)
   - Fixed issue with connection diagnostics failing to complete certificate checks.
 
+- v3.2.1(TBD)
+
+  - Added thread safety in telemetry when instantiating multiple connections concurrently.
+
 - v3.2.0(September 06,2023)
 
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
