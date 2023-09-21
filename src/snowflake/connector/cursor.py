@@ -86,7 +86,7 @@ else:
     Table = None
 
 try:
-    from .nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
+    from .arrow_iterator import PyArrowIterator  # NOQA
 
     CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
@@ -126,6 +126,8 @@ ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 # if USE_NANOARROW_CONVERTER set to True to False locally,
 # then the local setting has higher priority than the session parameter.
 USE_NANOARROW_CONVERTER = None
+# server parameter default to use nanoarrow iterator
+_SERVER_USE_NANOARROW_CONVERTER_PARAMETER = True
 
 
 class ResultMetadata(NamedTuple):

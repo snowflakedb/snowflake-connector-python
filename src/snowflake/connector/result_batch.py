@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+import io
 import json
 import time
 from base64 import b64decode
@@ -564,17 +565,36 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .nanoarrow_arrow_iterator import PyArrowIterator
+        import snowflake.connector.cursor
 
-        iter = PyArrowIterator(
-            None,
-            response.content,
-            self._context,
-            self._use_dict_result,
-            self._numpy,
-            self._number_to_decimal,
-            row_unit == IterUnit.TABLE_UNIT,
-        )
+        if snowflake.connector.cursor.USE_NANOARROW_CONVERTER or (
+            snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
+            and snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER
+        ):
+            from .nanoarrow_arrow_iterator import PyArrowIterator
+
+            iter = PyArrowIterator(
+                None,
+                response.content,
+                self._context,
+                self._use_dict_result,
+                self._numpy,
+                self._number_to_decimal,
+                row_unit == IterUnit.TABLE_UNIT,
+            )
+        else:
+            from .arrow_iterator import PyArrowIterator
+
+            iter = PyArrowIterator(
+                None,
+                io.BytesIO(response.content),
+                self._context,
+                self._use_dict_result,
+                self._numpy,
+                self._number_to_decimal,
+            )
+            if row_unit == IterUnit.TABLE_UNIT:
+                iter.init_table_unit()
         return iter
 
     def _from_data(
@@ -585,20 +605,41 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .nanoarrow_arrow_iterator import PyArrowIterator
-
         if len(data) == 0:
             return iter([])
 
-        _iter = PyArrowIterator(
-            None,
-            b64decode(data),
-            self._context,
-            self._use_dict_result,
-            self._numpy,
-            self._number_to_decimal,
-            iter_unit == IterUnit.TABLE_UNIT,
-        )
+        import snowflake.connector.cursor
+
+        if snowflake.connector.cursor.USE_NANOARROW_CONVERTER or (
+            snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
+            and snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER
+        ):
+            from .nanoarrow_arrow_iterator import PyArrowIterator
+
+            _iter = PyArrowIterator(
+                None,
+                b64decode(data),
+                self._context,
+                self._use_dict_result,
+                self._numpy,
+                self._number_to_decimal,
+                iter_unit == IterUnit.TABLE_UNIT,
+            )
+        else:
+            from .arrow_iterator import PyArrowIterator
+
+            _iter = PyArrowIterator(
+                None,
+                io.BytesIO(b64decode(data)),
+                self._context,
+                self._use_dict_result,
+                self._numpy,
+                self._number_to_decimal,
+            )
+            if iter_unit == IterUnit.TABLE_UNIT:
+                _iter.init_table_unit()
+            else:
+                _iter.init_row_unit()
         return _iter
 
     @classmethod
