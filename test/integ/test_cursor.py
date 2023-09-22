@@ -1690,3 +1690,28 @@ def test_decoding_utf8_for_json_result(conn_cnx):
     mock_resp.content = "À".encode("latin1")
     with pytest.raises(Error):
         result_batch._load(mock_resp)
+
+
+@pytest.mark.skipolddriver
+def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
+    origin_value = snowflake.connector.cursor.USE_NANOARROW_CONVERTER
+
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = None
+    with conn_cnx() as con:
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using nanoarrow as the arrow data converter" in caplog.text
+
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = True
+    with conn_cnx() as con:
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using nanoarrow as the arrow data converter" in caplog.text
+
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = False
+    with conn_cnx() as con:
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using vendored arrow as the arrow data converter" in caplog.text
+
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = origin_value

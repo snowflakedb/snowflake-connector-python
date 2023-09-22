@@ -573,6 +573,7 @@ class ArrowResultBatch(ResultBatch):
         ):
             from .nanoarrow_arrow_iterator import PyArrowIterator
 
+            logger.debug("Using nanoarrow as the arrow data converter")
             iter = PyArrowIterator(
                 None,
                 response.content,
@@ -585,6 +586,7 @@ class ArrowResultBatch(ResultBatch):
         else:
             from .arrow_iterator import PyArrowIterator
 
+            logger.debug("Using vendored arrow as the arrow data converter")
             iter = PyArrowIterator(
                 None,
                 io.BytesIO(response.content),
@@ -616,6 +618,7 @@ class ArrowResultBatch(ResultBatch):
         ):
             from .nanoarrow_arrow_iterator import PyArrowIterator
 
+            logger.debug("Using nanoarrow as the arrow data converter")
             _iter = PyArrowIterator(
                 None,
                 b64decode(data),
@@ -628,6 +631,7 @@ class ArrowResultBatch(ResultBatch):
         else:
             from .arrow_iterator import PyArrowIterator
 
+            logger.debug("Using vendored arrow as the arrow data converter")
             _iter = PyArrowIterator(
                 None,
                 io.BytesIO(b64decode(data)),
